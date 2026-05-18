@@ -1,0 +1,657 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Length 1503 >>
+stream
+BT /F2 20 Tf 40 744 Td (CloudLearn Full Simulator Architecture) Tj ET
+BT /F1 10 Tf 40 724 Td (Local-first cloud learning platform with AWS-like workflows, runtime bundles, certification, and persistent state) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+BT /F1 11 Tf 40 700 Td (CloudLearn is a simulator and training platform that behaves like a cloud provider from the) Tj ET
+BT /F1 11 Tf 40 686 Td (user's point of view while staying lightweight and fully local. It uses a custom simulation) Tj ET
+BT /F1 11 Tf 40 672 Td (core, AWS-compatible adapters, and pluggable runtimes instead of recreating AWS internals.) Tj ET
+BT /F2 14 Tf 40 622 Td (Product goals) Tj ET
+BT /F1 11 Tf 40 604 Td (- Run locally on macOS, Windows, and Linux.) Tj ET
+BT /F1 11 Tf 40 588 Td (- Persist workflow state so users can stop and restart.) Tj ET
+BT /F1 11 Tf 40 572 Td (- Expose common AWS APIs and console-style flows.) Tj ET
+BT /F1 11 Tf 40 556 Td (- Drive every UI action through the documented API surface.) Tj ET
+BT /F1 11 Tf 40 540 Td (- Provide turnkey runtimes for Java, .NET, Go, PHP, and Python.) Tj ET
+BT /F1 11 Tf 40 524 Td (- Support certification exercises and scoring.) Tj ET
+BT /F1 11 Tf 40 508 Td (- Export and import infrastructure through Terraform.) Tj ET
+BT /F1 11 Tf 40 492 Td (- Simulate VPC, AZ, and security group behavior with lightweight engines.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 1) Tj ET
+endstream
+endobj
+4 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R >>
+endobj
+5 0 obj
+<< /Length 2500 >>
+stream
+BT /F2 20 Tf 40 744 Td (Top-Level Runtime Stack) Tj ET
+BT /F1 10 Tf 40 724 Td (The simulator is a local control plane that orchestrates adapters, persistence, entitlement, and workload runtimes.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.97 0.97 0.92 rg 0.25 0.32 0.42 RG 36 610 118 66 re B Q
+BT /F2 10 Tf 44 661 Td (User Entry) Tj ET
+BT /F1 8 Tf 44 647 Td (Console) Tj ET
+BT /F1 8 Tf 44 637 Td (CLI) Tj ET
+BT /F1 8 Tf 44 627 Td (SDK) Tj ET
+q 0.94 0.96 0.99 rg 0.25 0.32 0.42 RG 168 610 130 66 re B Q
+BT /F2 10 Tf 176 661 Td (API Gateway) Tj ET
+BT /F1 8 Tf 176 647 Td (AWS-style routing) Tj ET
+BT /F1 8 Tf 176 637 Td (SigV4 acceptance) Tj ET
+BT /F1 8 Tf 176 627 Td (Error translation) Tj ET
+q 0.92 0.97 0.93 rg 0.25 0.32 0.42 RG 314 598 124 78 re B Q
+BT /F2 10 Tf 322 661 Td (Simulation Kernel) Tj ET
+BT /F1 8 Tf 322 647 Td (Resource graph) Tj ET
+BT /F1 8 Tf 322 637 Td (Workflows) Tj ET
+BT /F1 8 Tf 322 627 Td (Lifecycle) Tj ET
+BT /F1 8 Tf 322 617 Td (Latency / failure) Tj ET
+q 0.98 0.95 0.94 rg 0.25 0.32 0.42 RG 454 610 122 66 re B Q
+BT /F2 10 Tf 462 661 Td (Local State) Tj ET
+BT /F1 8 Tf 462 647 Td (SQLite) Tj ET
+BT /F1 8 Tf 462 637 Td (Files) Tj ET
+BT /F1 8 Tf 462 627 Td (Snapshots) Tj ET
+q 0.95 0.94 0.99 rg 0.25 0.32 0.42 RG 168 476 130 66 re B Q
+BT /F2 10 Tf 176 527 Td (Service Adapters) Tj ET
+BT /F1 8 Tf 176 513 Td (S3, IAM, EC2, VPC) Tj ET
+BT /F1 8 Tf 176 503 Td (RDS, Lambda, MQ) Tj ET
+BT /F1 8 Tf 176 493 Td (CloudWatch, CFN) Tj ET
+q 0.94 0.98 0.95 rg 0.25 0.32 0.42 RG 314 476 124 66 re B Q
+BT /F2 10 Tf 322 527 Td (Runtime Manager) Tj ET
+BT /F1 8 Tf 322 513 Td (Launch workloads) Tj ET
+BT /F1 8 Tf 322 503 Td (Restart) Tj ET
+BT /F1 8 Tf 322 493 Td (Logs) Tj ET
+q 0.99 0.98 0.92 rg 0.25 0.32 0.42 RG 454 476 122 66 re B Q
+BT /F2 10 Tf 462 527 Td (Entitlements) Tj ET
+BT /F1 8 Tf 462 513 Td (Credits) Tj ET
+BT /F1 8 Tf 462 503 Td (Tier gating) Tj ET
+BT /F1 8 Tf 462 493 Td (Lockout) Tj ET
+q 0.94 0.97 0.98 rg 0.25 0.32 0.42 RG 314 346 124 66 re B Q
+BT /F2 10 Tf 322 397 Td (Runtime Bundles) Tj ET
+BT /F1 8 Tf 322 383 Td (Java) Tj ET
+BT /F1 8 Tf 322 373 Td (.NET) Tj ET
+BT /F1 8 Tf 322 363 Td (Go) Tj ET
+q 0.96 0.95 0.98 rg 0.25 0.32 0.42 RG 454 346 122 66 re B Q
+BT /F2 10 Tf 462 397 Td (GitHub / TF) Tj ET
+BT /F1 8 Tf 462 383 Td (Deploy source) Tj ET
+BT /F1 8 Tf 462 373 Td (Export IaC) Tj ET
+BT /F1 8 Tf 462 363 Td (Import IaC) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 2) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 1927 >>
+stream
+BT /F2 20 Tf 40 744 Td (Platform Services) Tj ET
+BT /F1 10 Tf 40 724 Td (The control plane adds the product features around the simulator core.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+BT /F2 14 Tf 40 702 Td (Control plane responsibilities) Tj ET
+BT /F1 11 Tf 40 684 Td (- Own simulator startup and shutdown.) Tj ET
+BT /F1 11 Tf 40 668 Td (- Route incoming API and UI actions to the right service adapter.) Tj ET
+BT /F1 11 Tf 40 652 Td (- Store all durable state locally.) Tj ET
+BT /F1 11 Tf 40 636 Td (- Issue entitlement and credit decisions.) Tj ET
+BT /F1 11 Tf 40 620 Td (- Track certification attempts and completions.) Tj ET
+BT /F1 11 Tf 40 604 Td (- Connect GitHub sources to runtime bundles.) Tj ET
+BT /F1 11 Tf 40 588 Td (- Keep service implementations thin by reusing shared engines.) Tj ET
+BT /F2 14 Tf 308 702 Td (Security and licensing) Tj ET
+BT /F1 11 Tf 308 684 Td (- Sign licenses, bundles, and exercise) Tj ET
+BT /F1 11 Tf 320 670 Td (packs.) Tj ET
+BT /F1 11 Tf 308 654 Td (- Detect tampering and quarantine the) Tj ET
+BT /F1 11 Tf 320 640 Td (client.) Tj ET
+BT /F1 11 Tf 308 624 Td (- Require cloud-issued unlock for blocked) Tj ET
+BT /F1 11 Tf 320 610 Td (devices.) Tj ET
+BT /F1 11 Tf 308 594 Td (- Cache entitlements offline when allowed.) Tj ET
+BT /F1 11 Tf 308 578 Td (- Keep UI thin; enforce in backend services.) Tj ET
+BT /F2 14 Tf 40 436 Td (Persistence model) Tj ET
+BT /F1 11 Tf 40 418 Td (- SQLite for structured state and workflow tables.) Tj ET
+BT /F1 11 Tf 40 402 Td (- Local filesystem for uploads, logs, and artifacts.) Tj ET
+BT /F1 11 Tf 40 386 Td (- Event log for replay and audit.) Tj ET
+BT /F1 11 Tf 40 370 Td (- Snapshots for fast stop/start recovery.) Tj ET
+BT /F1 11 Tf 40 354 Td (- Encrypted token store for licenses and GitHub access.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 3) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 2044 >>
+stream
+BT /F2 20 Tf 40 744 Td (Runtime and Deployment) Tj ET
+BT /F1 10 Tf 40 724 Td (The runtime layer turns source code or artifacts into local, cloud-like workloads.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.94 0.98 0.95 rg 0.25 0.32 0.42 RG 36 610 166 76 re B Q
+BT /F2 10 Tf 44 671 Td (Runtime Manager) Tj ET
+BT /F1 8 Tf 44 657 Td (Select bundle) Tj ET
+BT /F1 8 Tf 44 647 Td (Prepare workload) Tj ET
+BT /F1 8 Tf 44 637 Td (Start / stop / restart) Tj ET
+q 0.95 0.97 0.99 rg 0.25 0.32 0.42 RG 224 610 166 76 re B Q
+BT /F2 10 Tf 232 671 Td (Runtime Bundles) Tj ET
+BT /F1 8 Tf 232 657 Td (Language-specific packaging) Tj ET
+BT /F1 8 Tf 232 647 Td (Startup templates) Tj ET
+BT /F1 8 Tf 232 637 Td (Health checks) Tj ET
+q 0.98 0.96 0.94 rg 0.25 0.32 0.42 RG 412 610 164 76 re B Q
+BT /F2 10 Tf 420 671 Td (Local Host) Tj ET
+BT /F1 8 Tf 420 657 Td (Container engine or sandbox) Tj ET
+BT /F1 8 Tf 420 647 Td (Ports) Tj ET
+BT /F1 8 Tf 420 637 Td (Volumes) Tj ET
+BT /F1 8 Tf 420 627 Td (Logs) Tj ET
+BT /F2 14 Tf 40 514 Td (Supported runtime bundles) Tj ET
+BT /F1 11 Tf 40 496 Td (- Java bundle: JDK, Maven/Gradle hooks, Spring Boot / Micronaut / Quarkus-friendly) Tj ET
+BT /F1 11 Tf 52 482 Td (startup.) Tj ET
+BT /F1 11 Tf 40 466 Td (- .NET bundle: dotnet run or published artifact startup.) Tj ET
+BT /F1 11 Tf 40 450 Td (- Go bundle: compile to static binary and run minimal container.) Tj ET
+BT /F1 11 Tf 40 434 Td (- PHP bundle: PHP-FPM or built-in server mode.) Tj ET
+BT /F1 11 Tf 40 418 Td (- Python bundle: uv, pip, virtualenv, uvicorn/gunicorn support.) Tj ET
+BT /F2 14 Tf 40 286 Td (GitHub deployment) Tj ET
+BT /F1 11 Tf 40 268 Td (- GitHub App or scoped OAuth tokens.) Tj ET
+BT /F1 11 Tf 40 252 Td (- Browse repo, branch, tag, and commit.) Tj ET
+BT /F1 11 Tf 40 236 Td (- Build locally and deploy into the selected runtime.) Tj ET
+BT /F1 11 Tf 40 220 Td (- Track deployment history and rollback.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 4) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 9 0 R >>
+endobj
+11 0 obj
+<< /Length 2400 >>
+stream
+BT /F2 20 Tf 40 744 Td (Exercises, Validation, and Portability) Tj ET
+BT /F1 10 Tf 40 724 Td (This is where the platform becomes a learning product rather than a raw simulator.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.94 0.96 0.99 rg 0.25 0.32 0.42 RG 36 610 170 74 re B Q
+BT /F2 10 Tf 44 669 Td (Certification Engine) Tj ET
+BT /F1 8 Tf 44 655 Td (Labs, scoring, hints, time limits) Tj ET
+BT /F1 8 Tf 44 645 Td (Local progress tracking) Tj ET
+BT /F1 8 Tf 44 635 Td (Hidden validation rules) Tj ET
+q 0.98 0.95 0.95 rg 0.25 0.32 0.42 RG 222 610 170 74 re B Q
+BT /F2 10 Tf 230 669 Td (AWS Validation Mode) Tj ET
+BT /F1 8 Tf 230 655 Td (Run same workflow against AWS) Tj ET
+BT /F1 8 Tf 230 645 Td (Compare responses and state) Tj ET
+BT /F1 8 Tf 230 635 Td (Optional and not default) Tj ET
+q 0.95 0.98 0.94 rg 0.25 0.32 0.42 RG 408 610 168 74 re B Q
+BT /F2 10 Tf 416 669 Td (Terraform Bridge) Tj ET
+BT /F1 8 Tf 416 655 Td (Export simulator state to IaC) Tj ET
+BT /F1 8 Tf 416 645 Td (Import IaC into simulator) Tj ET
+BT /F1 8 Tf 416 635 Td (Keep desired state aligned) Tj ET
+BT /F2 14 Tf 40 512 Td (Plan / credit gating) Tj ET
+BT /F1 11 Tf 40 494 Td (- Free, Pro, Max, and Enterprise tiers.) Tj ET
+BT /F1 11 Tf 40 478 Td (- Credits unlock advanced services and exercises.) Tj ET
+BT /F1 11 Tf 40 462 Td (- Capability registry decides what is available.) Tj ET
+BT /F1 11 Tf 40 446 Td (- Entitlement changes are enforced in backend services.) Tj ET
+BT /F2 14 Tf 40 342 Td (Installer and distribution) Tj ET
+BT /F1 11 Tf 40 324 Td (- Native installers for macOS, Windows, and Linux.) Tj ET
+BT /F1 11 Tf 40 308 Td (- Signed packages and update channels.) Tj ET
+BT /F1 11 Tf 40 292 Td (- Background service or tray app if desired.) Tj ET
+BT /F1 11 Tf 40 276 Td (- Local data directories and state initialization.) Tj ET
+BT /F1 11 Tf 40 260 Td (- Optional Docker Compose stack for fast local launch.) Tj ET
+q 0.95 0.98 0.98 rg 0.25 0.32 0.42 RG 360 208 216 72 re B Q
+BT /F2 10 Tf 368 265 Td (Docker Compose Mode) Tj ET
+BT /F1 8 Tf 368 251 Td (Compose brings up the control plane,) Tj ET
+BT /F1 8 Tf 368 241 Td (gateway, runtime manager, and persistence) Tj ET
+BT /F1 8 Tf 368 231 Td (volume.) Tj ET
+BT /F1 8 Tf 368 221 Td (Use it for demos, onboarding, and) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 5) Tj ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 11 0 R >>
+endobj
+13 0 obj
+<< /Length 2506 >>
+stream
+BT /F2 20 Tf 40 744 Td (Service Catalog View) Tj ET
+BT /F1 10 Tf 40 724 Td (The simulator should present a catalog of cloud capabilities rather than expose every internal primitive.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.96 0.98 0.95 rg 0.25 0.32 0.42 RG 36 620 168 62 re B Q
+BT /F2 10 Tf 44 667 Td (Storage) Tj ET
+BT /F1 8 Tf 44 653 Td (S3) Tj ET
+BT /F1 8 Tf 44 643 Td (EBS-like volumes) Tj ET
+BT /F1 8 Tf 44 633 Td (EFS-like shares) Tj ET
+q 0.95 0.97 0.99 rg 0.25 0.32 0.42 RG 222 620 168 62 re B Q
+BT /F2 10 Tf 230 667 Td (Compute) Tj ET
+BT /F1 8 Tf 230 653 Td (EC2) Tj ET
+BT /F1 8 Tf 230 643 Td (Auto Scaling) Tj ET
+BT /F1 8 Tf 230 633 Td (Batch) Tj ET
+q 0.98 0.95 0.96 rg 0.25 0.32 0.42 RG 408 620 168 62 re B Q
+BT /F2 10 Tf 416 667 Td (Networking) Tj ET
+BT /F1 8 Tf 416 653 Td (VPC) Tj ET
+BT /F1 8 Tf 416 643 Td (Route 53) Tj ET
+BT /F1 8 Tf 416 633 Td (API Gateway) Tj ET
+q 0.97 0.95 0.99 rg 0.25 0.32 0.42 RG 36 536 168 62 re B Q
+BT /F2 10 Tf 44 583 Td (Identity) Tj ET
+BT /F1 8 Tf 44 569 Td (IAM) Tj ET
+BT /F1 8 Tf 44 559 Td (identity personas) Tj ET
+BT /F1 8 Tf 44 549 Td (session roles) Tj ET
+q 0.95 0.99 0.97 rg 0.25 0.32 0.42 RG 222 536 168 62 re B Q
+BT /F2 10 Tf 230 583 Td (Data) Tj ET
+BT /F1 8 Tf 230 569 Td (RDS) Tj ET
+BT /F1 8 Tf 230 559 Td (NoSQL) Tj ET
+BT /F1 8 Tf 230 549 Td (cache) Tj ET
+q 0.99 0.98 0.94 rg 0.25 0.32 0.42 RG 408 536 168 62 re B Q
+BT /F2 10 Tf 416 583 Td (Integration) Tj ET
+BT /F1 8 Tf 416 569 Td (Lambda) Tj ET
+BT /F1 8 Tf 416 559 Td (SQS) Tj ET
+BT /F1 8 Tf 416 549 Td (SNS) Tj ET
+q 0.95 0.96 0.99 rg 0.25 0.32 0.42 RG 36 452 168 62 re B Q
+BT /F2 10 Tf 44 499 Td (Observability) Tj ET
+BT /F1 8 Tf 44 485 Td (CloudWatch) Tj ET
+BT /F1 8 Tf 44 475 Td (traces) Tj ET
+BT /F1 8 Tf 44 465 Td (metrics) Tj ET
+q 0.98 0.96 0.94 rg 0.25 0.32 0.42 RG 222 452 168 62 re B Q
+BT /F2 10 Tf 230 499 Td (Infrastructure) Tj ET
+BT /F1 8 Tf 230 485 Td (CloudFormation) Tj ET
+BT /F1 8 Tf 230 475 Td (Terraform bridge) Tj ET
+BT /F1 8 Tf 230 465 Td (drift checks) Tj ET
+q 0.95 0.98 0.96 rg 0.25 0.32 0.42 RG 408 452 168 62 re B Q
+BT /F2 10 Tf 416 499 Td (Containers) Tj ET
+BT /F1 8 Tf 416 485 Td (ECR) Tj ET
+BT /F1 8 Tf 416 475 Td (ECS) Tj ET
+BT /F1 8 Tf 416 465 Td (EKS-aligned flows) Tj ET
+BT /F1 11 Tf 40 370 Td (The service catalog should also attach credit cost, entitlement tier, and certification support to every capability.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 6) Tj ET
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 13 0 R >>
+endobj
+15 0 obj
+<< /Length 1970 >>
+stream
+BT /F2 20 Tf 40 744 Td (Detailed Service Architecture 1) Tj ET
+BT /F1 10 Tf 40 724 Td (S3, IAM, and EC2 are the first services that define the simulator's daily workflow.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.95 0.98 0.95 rg 0.25 0.32 0.42 RG 36 616 168 88 re B Q
+BT /F2 10 Tf 44 689 Td (S3) Tj ET
+BT /F1 8 Tf 44 675 Td (Back end: filesystem or embedded) Tj ET
+BT /F1 8 Tf 44 665 Td (object store.) Tj ET
+BT /F1 8 Tf 44 655 Td (Model: buckets, objects, tags,) Tj ET
+BT /F1 8 Tf 44 645 Td (versions, multipart uploads.) Tj ET
+BT /F1 8 Tf 44 635 Td (Behaviors: create, upload,) Tj ET
+q 0.98 0.95 0.98 rg 0.25 0.32 0.42 RG 222 616 168 88 re B Q
+BT /F2 10 Tf 230 689 Td (IAM) Tj ET
+BT /F1 8 Tf 230 675 Td (Back end: simplified evaluator.) Tj ET
+BT /F1 8 Tf 230 665 Td (Model: users, roles, groups,) Tj ET
+BT /F1 8 Tf 230 655 Td (policies, sessions.) Tj ET
+BT /F1 8 Tf 230 645 Td (Behaviors: allow/deny, personas,) Tj ET
+BT /F1 8 Tf 230 635 Td (role assumption, gating.) Tj ET
+q 0.95 0.97 0.99 rg 0.25 0.32 0.42 RG 408 616 168 88 re B Q
+BT /F2 10 Tf 416 689 Td (EC2) Tj ET
+BT /F1 8 Tf 416 675 Td (Back end: container or sandbox) Tj ET
+BT /F1 8 Tf 416 665 Td (runtime.) Tj ET
+BT /F1 8 Tf 416 655 Td (Model: instances, metadata,) Tj ET
+BT /F1 8 Tf 416 645 Td (storage, security groups.) Tj ET
+BT /F1 8 Tf 416 635 Td (Behaviors: pending, running,) Tj ET
+BT /F2 14 Tf 40 512 Td (EC2 runtime mapping) Tj ET
+BT /F1 11 Tf 40 494 Td (- Target OS and runtime stack become a container template.) Tj ET
+BT /F1 11 Tf 40 478 Td (- AMI maps to an image plus startup and metadata config.) Tj ET
+BT /F1 11 Tf 40 462 Td (- EBS maps to local volumes or bind mounts.) Tj ET
+BT /F1 11 Tf 40 446 Td (- Instance metadata service is provided locally.) Tj ET
+BT /F1 11 Tf 40 430 Td (- Console output and boot scripts are surfaced to the UI.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 7) Tj ET
+endstream
+endobj
+16 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 15 0 R >>
+endobj
+17 0 obj
+<< /Length 1663 >>
+stream
+BT /F2 20 Tf 40 744 Td (Detailed Service Architecture 2) Tj ET
+BT /F1 10 Tf 40 724 Td (VPC, RDS, and Lambda cover network isolation, data services, and code execution.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.95 0.97 0.96 rg 0.25 0.32 0.42 RG 36 616 168 88 re B Q
+BT /F2 10 Tf 44 689 Td (VPC) Tj ET
+BT /F1 8 Tf 44 675 Td (Back end: routing and policy) Tj ET
+BT /F1 8 Tf 44 665 Td (simulation.) Tj ET
+BT /F1 8 Tf 44 655 Td (Model: VPC, subnet, route table,) Tj ET
+BT /F1 8 Tf 44 645 Td (security group, endpoint.) Tj ET
+BT /F1 8 Tf 44 635 Td (Behaviors: ingress/egress,) Tj ET
+q 0.98 0.96 0.94 rg 0.25 0.32 0.42 RG 222 616 168 88 re B Q
+BT /F2 10 Tf 230 689 Td (RDS) Tj ET
+BT /F1 8 Tf 230 675 Td (Back end: local DB or) Tj ET
+BT /F1 8 Tf 230 665 Td (containerized database.) Tj ET
+BT /F1 8 Tf 230 655 Td (Model: instance, parameter group,) Tj ET
+BT /F1 8 Tf 230 645 Td (subnet group, snapshot.) Tj ET
+BT /F1 8 Tf 230 635 Td (Behaviors: create, start, stop,) Tj ET
+q 0.96 0.95 0.99 rg 0.25 0.32 0.42 RG 408 616 168 88 re B Q
+BT /F2 10 Tf 416 689 Td (Lambda) Tj ET
+BT /F1 8 Tf 416 675 Td (Back end: sandboxed process or) Tj ET
+BT /F1 8 Tf 416 665 Td (container.) Tj ET
+BT /F1 8 Tf 416 655 Td (Model: function, handler,) Tj ET
+BT /F1 8 Tf 416 645 Td (timeout, memory, triggers.) Tj ET
+BT /F1 8 Tf 416 635 Td (Behaviors: invoke, log, timeout,) Tj ET
+BT /F1 11 Tf 40 512 Td (These services should be lightweight but workflow-compatible. The user should recognize the control flow even if the internals are custom.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 8) Tj ET
+endstream
+endobj
+18 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 17 0 R >>
+endobj
+19 0 obj
+<< /Length 1682 >>
+stream
+BT /F2 20 Tf 40 744 Td (Detailed Service Architecture 3) Tj ET
+BT /F1 10 Tf 40 724 Td (Queues, messages, logs, and template deployment complete the basic cloud workflow loop.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.96 0.99 0.95 rg 0.25 0.32 0.42 RG 36 616 168 88 re B Q
+BT /F2 10 Tf 44 689 Td (SQS / SNS) Tj ET
+BT /F1 8 Tf 44 675 Td (Back end: in-memory or local) Tj ET
+BT /F1 8 Tf 44 665 Td (broker.) Tj ET
+BT /F1 8 Tf 44 655 Td (Model: queues, topics,) Tj ET
+BT /F1 8 Tf 44 645 Td (subscriptions, messages.) Tj ET
+BT /F1 8 Tf 44 635 Td (Behaviors: enqueue, receive,) Tj ET
+q 0.95 0.96 0.99 rg 0.25 0.32 0.42 RG 222 616 168 88 re B Q
+BT /F2 10 Tf 230 689 Td (CloudWatch) Tj ET
+BT /F1 8 Tf 230 675 Td (Back end: event and metric store.) Tj ET
+BT /F1 8 Tf 230 665 Td (Model: logs, streams, metrics,) Tj ET
+BT /F1 8 Tf 230 655 Td (alarms, dashboards.) Tj ET
+BT /F1 8 Tf 230 645 Td (Behaviors: query, publish, alert,) Tj ET
+BT /F1 8 Tf 230 635 Td (display health.) Tj ET
+q 0.99 0.96 0.94 rg 0.25 0.32 0.42 RG 408 616 168 88 re B Q
+BT /F2 10 Tf 416 689 Td (CloudFormation) Tj ET
+BT /F1 8 Tf 416 675 Td (Back end: template parser and) Tj ET
+BT /F1 8 Tf 416 665 Td (resource graph applier.) Tj ET
+BT /F1 8 Tf 416 655 Td (Model: stacks, changesets,) Tj ET
+BT /F1 8 Tf 416 645 Td (outputs, events.) Tj ET
+BT /F1 8 Tf 416 635 Td (Behaviors: create, update,) Tj ET
+BT /F1 11 Tf 40 512 Td (These services are the glue for certification labs and app workflows. They should drive state changes in the same kernel, not separate subsystems.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 9) Tj ET
+endstream
+endobj
+20 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 19 0 R >>
+endobj
+21 0 obj
+<< /Length 2361 >>
+stream
+BT /F2 20 Tf 40 744 Td (Detailed Service Architecture 4) Tj ET
+BT /F1 10 Tf 40 724 Td (Container and edge services support packaged workloads and local routing.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.95 0.98 0.98 rg 0.25 0.32 0.42 RG 36 616 168 88 re B Q
+BT /F2 10 Tf 44 689 Td (Containers) Tj ET
+BT /F1 8 Tf 44 675 Td (Back end: Podman or Docker engine) Tj ET
+BT /F1 8 Tf 44 665 Td (integration.) Tj ET
+BT /F1 8 Tf 44 655 Td (Model: image, repo, task,) Tj ET
+BT /F1 8 Tf 44 645 Td (service, cluster, deployment.) Tj ET
+BT /F1 8 Tf 44 635 Td (Behaviors: push, pull, run,) Tj ET
+q 0.98 0.95 0.97 rg 0.25 0.32 0.42 RG 222 616 168 88 re B Q
+BT /F2 10 Tf 230 689 Td (API Gateway / Edge) Tj ET
+BT /F1 8 Tf 230 675 Td (Back end: local gateway router.) Tj ET
+BT /F1 8 Tf 230 665 Td (Model: APIs, routes, stages,) Tj ET
+BT /F1 8 Tf 230 655 Td (custom domains, DNS records.) Tj ET
+BT /F1 8 Tf 230 645 Td (Behaviors: route traffic, deploy) Tj ET
+BT /F1 8 Tf 230 635 Td (stage, expose endpoints.) Tj ET
+q 0.97 0.97 0.95 rg 0.25 0.32 0.42 RG 408 616 168 88 re B Q
+BT /F2 10 Tf 416 689 Td (Route 53) Tj ET
+BT /F1 8 Tf 416 675 Td (Back end: local name resolution) Tj ET
+BT /F1 8 Tf 416 665 Td (map.) Tj ET
+BT /F1 8 Tf 416 655 Td (Model: hosted zones, records,) Tj ET
+BT /F1 8 Tf 416 645 Td (aliases.) Tj ET
+BT /F1 8 Tf 416 635 Td (Behaviors: resolve simulator) Tj ET
+BT /F2 14 Tf 40 512 Td (Provider expansion path) Tj ET
+BT /F1 11 Tf 40 494 Td (- AWS first, because the market and training demand are strongest.) Tj ET
+BT /F1 11 Tf 40 478 Td (- Reuse the same kernel for Azure and GCP through provider adapters.) Tj ET
+BT /F1 11 Tf 40 462 Td (- Keep console skins, API facades, and terminology mappings separate from the kernel.) Tj ET
+BT /F1 11 Tf 40 446 Td (- Preserve the same workflow engine and local persistence model.) Tj ET
+BT /F2 14 Tf 40 330 Td (Non-goals) Tj ET
+BT /F1 11 Tf 40 312 Td (- Do not recreate every AWS internal implementation detail.) Tj ET
+BT /F1 11 Tf 40 296 Td (- Do not require cloud hosting for the simulator.) Tj ET
+BT /F1 11 Tf 40 280 Td (- Do not make the UI or frontend enforce licensing.) Tj ET
+BT /F1 11 Tf 40 264 Td (- Do not simulate a real hypervisor when a container is enough.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 10) Tj ET
+endstream
+endobj
+22 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 21 0 R >>
+endobj
+23 0 obj
+<< /Length 3989 >>
+stream
+BT /F2 20 Tf 40 744 Td (Master Layered Architecture) Tj ET
+BT /F1 10 Tf 40 724 Td (This page captures the complete stack used for design and implementation decisions.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.97 0.97 0.92 rg 0.25 0.32 0.42 RG 36 676 330 44 re B Q
+BT /F2 10 Tf 44 705 Td (1. Experience Layer) Tj ET
+BT /F1 8 Tf 44 691 Td (Console, CLI, SDK, labs, and certification views all call the same) Tj ET
+q 0.94 0.96 0.99 rg 0.25 0.32 0.42 RG 36 622 330 44 re B Q
+BT /F2 10 Tf 44 651 Td (2. API Contract Layer) Tj ET
+BT /F1 8 Tf 44 637 Td (Each service exposes request/response shapes, errors, state) Tj ET
+q 0.95 0.98 0.95 rg 0.25 0.32 0.42 RG 36 568 330 44 re B Q
+BT /F2 10 Tf 44 597 Td (3. Routing Layer) Tj ET
+BT /F1 8 Tf 44 583 Td (Resolves service, region, account, resource, and entitlement) Tj ET
+q 0.96 0.95 0.99 rg 0.25 0.32 0.42 RG 36 514 330 44 re B Q
+BT /F2 10 Tf 44 543 Td (4. Simulation Kernel) Tj ET
+BT /F1 8 Tf 44 529 Td (Owns the resource graph, workflow engine, lifecycle transitions,) Tj ET
+q 0.95 0.97 0.99 rg 0.25 0.32 0.42 RG 36 460 330 44 re B Q
+BT /F2 10 Tf 44 489 Td (5. Shared Engines) Tj ET
+BT /F1 8 Tf 44 475 Td (Resource graph, lifecycle, policy, topology, runtime, event, and) Tj ET
+q 0.98 0.95 0.96 rg 0.25 0.32 0.42 RG 36 406 330 44 re B Q
+BT /F2 10 Tf 44 435 Td (6. Service Adapter Layer) Tj ET
+BT /F1 8 Tf 44 421 Td (S3, IAM, EC2, VPC, RDS, Lambda, SQS/SNS, CloudWatch,) Tj ET
+q 0.95 0.98 0.96 rg 0.25 0.32 0.42 RG 36 352 330 44 re B Q
+BT /F2 10 Tf 44 381 Td (7. Runtime Bundle Layer) Tj ET
+BT /F1 8 Tf 44 367 Td (Java, .NET, Go, PHP, and Python bundles provide turnkey local) Tj ET
+q 0.96 0.96 0.94 rg 0.25 0.32 0.42 RG 36 298 330 44 re B Q
+BT /F2 10 Tf 44 327 Td (8. Local Host Layer) Tj ET
+BT /F1 8 Tf 44 313 Td (Containers, sandboxes, ports, volumes, metadata endpoints, and) Tj ET
+q 0.98 0.95 0.94 rg 0.25 0.32 0.42 RG 36 244 330 44 re B Q
+BT /F2 10 Tf 44 273 Td (9. Persistence Layer) Tj ET
+BT /F1 8 Tf 44 259 Td (SQLite, artifacts, encrypted tokens, audit history, event logs,) Tj ET
+q 0.99 0.97 0.92 rg 0.25 0.32 0.42 RG 384 676 192 44 re B Q
+BT /F2 10 Tf 392 705 Td (Governance) Tj ET
+BT /F1 8 Tf 392 691 Td (Credits, tiers, lockout, and signed) Tj ET
+q 0.95 0.97 0.99 rg 0.25 0.32 0.42 RG 384 622 192 44 re B Q
+BT /F2 10 Tf 392 651 Td (Certification) Tj ET
+BT /F1 8 Tf 392 637 Td (Scenario packs, grading, hints, and) Tj ET
+q 0.96 0.95 0.98 rg 0.25 0.32 0.42 RG 384 568 192 44 re B Q
+BT /F2 10 Tf 392 597 Td (GitHub Deploy) Tj ET
+BT /F1 8 Tf 392 583 Td (Connect repos and deploy source into) Tj ET
+q 0.95 0.98 0.94 rg 0.25 0.32 0.42 RG 384 514 192 44 re B Q
+BT /F2 10 Tf 392 543 Td (Terraform) Tj ET
+BT /F1 8 Tf 392 529 Td (Import and export desired) Tj ET
+q 0.98 0.95 0.95 rg 0.25 0.32 0.42 RG 384 460 192 44 re B Q
+BT /F2 10 Tf 392 489 Td (Validation Mode) Tj ET
+BT /F1 8 Tf 392 475 Td (Compare simulator behavior with real) Tj ET
+q 0.97 0.95 0.99 rg 0.25 0.32 0.42 RG 384 406 192 44 re B Q
+BT /F2 10 Tf 392 435 Td (Security) Tj ET
+BT /F1 8 Tf 392 421 Td (Signing, tamper detection, encryption,) Tj ET
+q 0.95 0.96 0.99 rg 0.25 0.32 0.42 RG 384 352 192 44 re B Q
+BT /F2 10 Tf 392 381 Td (Provider Expansion) Tj ET
+BT /F1 8 Tf 392 367 Td (AWS first, then Azure and GCP through) Tj ET
+q 0.95 0.98 0.98 rg 0.25 0.32 0.42 RG 384 298 192 44 re B Q
+BT /F2 10 Tf 392 327 Td (Docker Compose) Tj ET
+BT /F1 8 Tf 392 313 Td (Supported local launch path with) Tj ET
+BT /F2 14 Tf 384 246 Td (Master rule) Tj ET
+BT /F1 10 Tf 384 228 Td (- Keep the user experience cloud-like.) Tj ET
+BT /F1 10 Tf 384 213 Td (- Keep the implementation lightweight.) Tj ET
+BT /F1 10 Tf 384 198 Td (- Keep the core provider-neutral.) Tj ET
+BT /F1 10 Tf 384 183 Td (- Keep state local and restartable.) Tj ET
+BT /F1 10 Tf 384 168 Td (- Keep premium features governed by) Tj ET
+BT /F1 10 Tf 396 155 Td (entitlements.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 11) Tj ET
+endstream
+endobj
+24 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 23 0 R >>
+endobj
+25 0 obj
+<< /Length 1748 >>
+stream
+BT /F2 20 Tf 40 744 Td (Capability Packs and Lazy Activation) Tj ET
+BT /F1 10 Tf 40 724 Td (Capabilities are delivered as signed packs that are downloaded and activated on demand.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+BT /F2 14 Tf 40 702 Td (Pack types) Tj ET
+BT /F1 11 Tf 40 684 Td (- Service packs: S3, IAM, EC2, VPC, Lambda, RDS, queues, observability.) Tj ET
+BT /F1 11 Tf 40 668 Td (- Runtime packs: Java, .NET, Go, PHP, Python.) Tj ET
+BT /F1 11 Tf 40 652 Td (- Exercise packs: guided labs, scoring, hidden checks.) Tj ET
+BT /F1 11 Tf 40 636 Td (- Provider packs: AWS first, then Azure and GCP.) Tj ET
+BT /F2 14 Tf 308 702 Td (Pack lifecycle) Tj ET
+BT /F1 11 Tf 308 684 Td (- Discover from a remote registry.) Tj ET
+BT /F1 11 Tf 308 668 Td (- Check entitlement and credits.) Tj ET
+BT /F1 11 Tf 308 652 Td (- Download the signed artifact.) Tj ET
+BT /F1 11 Tf 308 636 Td (- Verify signature and compatibility.) Tj ET
+BT /F1 11 Tf 308 620 Td (- Activate locally and cache for offline) Tj ET
+BT /F1 11 Tf 320 606 Td (reuse.) Tj ET
+BT /F1 11 Tf 308 590 Td (- Update or roll back by version.) Tj ET
+q 0.95 0.98 0.98 rg 0.25 0.32 0.42 RG 36 364 540 116 re B Q
+BT /F2 10 Tf 44 465 Td (Pack structure) Tj ET
+BT /F1 8 Tf 44 451 Td (manifest.json, adapter code, API schemas, UI metadata, state model, tests, fixtures, and signature data.) Tj ET
+BT /F1 8 Tf 44 441 Td (The pack should be versioned and can include optional runtime hooks or container references.) Tj ET
+BT /F1 8 Tf 44 431 Td (A pack becomes visible in the catalog immediately, but its code only loads when a user or workflow needs it.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 12) Tj ET
+endstream
+endobj
+26 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 25 0 R >>
+endobj
+27 0 obj
+<< /Length 1890 >>
+stream
+BT /F2 20 Tf 40 744 Td (Pack Admission and Cloud-Agnostic Design) Tj ET
+BT /F1 10 Tf 40 724 Td (A pack must speak the simulator API contract and remain cloud-neutral in its core logic.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.98 0.95 0.95 rg 0.25 0.32 0.42 RG 36 620 540 84 re B Q
+BT /F2 10 Tf 44 689 Td (Pack admission rules) Tj ET
+BT /F1 8 Tf 44 675 Td (A pack must provide documented actions, request schemas, response schemas, error mappings, state) Tj ET
+BT /F1 8 Tf 44 665 Td (transitions, and region behavior where relevant.) Tj ET
+BT /F1 8 Tf 44 655 Td (Admission checks include signature validation, version compatibility, entitlement validation, API contract) Tj ET
+BT /F1 8 Tf 44 645 Td (validation, schema validation, and optional contract tests.) Tj ET
+q 0.95 0.96 0.99 rg 0.25 0.32 0.42 RG 36 512 540 84 re B Q
+BT /F2 10 Tf 44 581 Td (Cloud-agnostic pack model) Tj ET
+BT /F1 8 Tf 44 567 Td (The core capability logic should be provider-neutral. AWS, Azure, and GCP become provider adapters and) Tj ET
+BT /F1 8 Tf 44 557 Td (profiles layered on top of the same capability model.) Tj ET
+BT /F1 8 Tf 44 547 Td (The core owns resource behavior, lifecycle, workflow logic, persistence shape, and events. Provider adapters) Tj ET
+BT /F1 8 Tf 44 537 Td (own API names, terminology, and request/response mapping.) Tj ET
+BT /F2 14 Tf 40 410 Td (MVP rule) Tj ET
+BT /F1 11 Tf 40 392 Td (- Reject packs without AWS-like API support.) Tj ET
+BT /F1 11 Tf 40 376 Td (- Reject packs without valid schemas or transitions.) Tj ET
+BT /F1 11 Tf 40 360 Td (- Reject packs that hardcode provider behavior into the core capability logic.) Tj ET
+BT /F1 11 Tf 40 344 Td (- Require AWS first, but define Azure and GCP adapter slots from day one.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 13) Tj ET
+endstream
+endobj
+28 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 27 0 R >>
+endobj
+29 0 obj
+<< /Length 2007 >>
+stream
+BT /F2 20 Tf 40 744 Td (MVP Scope) Tj ET
+BT /F1 10 Tf 40 724 Td (The MVP should be small, fast to install, and still feel like a real cloud workflow simulator.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.95 0.98 0.95 rg 0.25 0.32 0.42 RG 36 620 540 100 re B Q
+BT /F2 10 Tf 44 705 Td (MVP includes) Tj ET
+BT /F1 8 Tf 44 691 Td (Local control plane, AWS-style API-driven actioning, durable local state, Docker Compose deployment, free) Tj ET
+BT /F1 8 Tf 44 681 Td (tier support, signed entitlement flow, capability packs, lazy activation, S3, IAM basics, EC2 basics backed) Tj ET
+BT /F1 8 Tf 44 671 Td (by a local container runtime, VPC basics, one runtime bundle path, GitHub deploy, basic certification) Tj ET
+BT /F1 8 Tf 44 661 Td (exercises, and tier/credit gating.) Tj ET
+BT /F2 14 Tf 40 498 Td (MVP defers) Tj ET
+BT /F1 11 Tf 40 480 Td (- Full service catalog depth.) Tj ET
+BT /F1 11 Tf 40 464 Td (- RDS.) Tj ET
+BT /F1 11 Tf 40 448 Td (- Lambda.) Tj ET
+BT /F1 11 Tf 40 432 Td (- SQS / SNS.) Tj ET
+BT /F1 11 Tf 40 416 Td (- CloudWatch.) Tj ET
+BT /F1 11 Tf 40 400 Td (- CloudFormation.) Tj ET
+BT /F1 11 Tf 40 384 Td (- AWS validation mode.) Tj ET
+BT /F1 11 Tf 40 368 Td (- Terraform import/export at scale.) Tj ET
+BT /F1 11 Tf 40 352 Td (- Azure and GCP provider packs.) Tj ET
+BT /F1 11 Tf 40 336 Td (- Advanced multi-region behavior.) Tj ET
+q 0.98 0.96 0.94 rg 0.25 0.32 0.42 RG 330 180 246 160 re B Q
+BT /F2 10 Tf 338 325 Td (MVP success criteria) Tj ET
+BT /F1 8 Tf 338 311 Td (Users can sign up for Free.) Tj ET
+BT /F1 8 Tf 338 301 Td (Install or start with Docker Compose.) Tj ET
+BT /F1 8 Tf 338 291 Td (Create and manage S3 buckets.) Tj ET
+BT /F1 8 Tf 338 281 Td (Launch a simple EC2-like workload locally.) Tj ET
+BT /F1 8 Tf 338 271 Td (Run a basic lab and resume after restart.) Tj ET
+BT /F1 8 Tf 338 261 Td (Activate packs lazily on first use.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn Full Architecture) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 14) Tj ET
+endstream
+endobj
+30 0 obj
+<< /Type /Page /Parent 31 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 29 0 R >>
+endobj
+31 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R 12 0 R 14 0 R 16 0 R 18 0 R 20 0 R 22 0 R 24 0 R 26 0 R 28 0 R 30 0 R] /Count 14 >>
+endobj
+32 0 obj
+<< /Type /Catalog /Pages 31 0 R >>
+endobj
+xref
+0 33
+0000000000 65535 f 
+0000000015 00000 n 
+0000000085 00000 n 
+0000000160 00000 n 
+0000001714 00000 n 
+0000001851 00000 n 
+0000004402 00000 n 
+0000004539 00000 n 
+0000006517 00000 n 
+0000006654 00000 n 
+0000008749 00000 n 
+0000008887 00000 n 
+0000011339 00000 n 
+0000011478 00000 n 
+0000014036 00000 n 
+0000014175 00000 n 
+0000016197 00000 n 
+0000016336 00000 n 
+0000018051 00000 n 
+0000018190 00000 n 
+0000019924 00000 n 
+0000020063 00000 n 
+0000022476 00000 n 
+0000022615 00000 n 
+0000026656 00000 n 
+0000026795 00000 n 
+0000028595 00000 n 
+0000028734 00000 n 
+0000030676 00000 n 
+0000030815 00000 n 
+0000032874 00000 n 
+0000033013 00000 n 
+0000033161 00000 n 
+trailer
+<< /Size 33 /Root 32 0 R >>
+startxref
+33212
+%%EOF

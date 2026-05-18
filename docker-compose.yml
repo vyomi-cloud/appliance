@@ -1,0 +1,19 @@
+services:
+  simulator:
+    build: .
+    ports:
+      - "9000:9000"
+    environment:
+      CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
+      CLOUDLEARN_LICENSE_SECRET: cloudlearn-dev-secret
+    volumes:
+      - cloudlearn-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:9000/healthz').read().decode())"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  cloudlearn-data:

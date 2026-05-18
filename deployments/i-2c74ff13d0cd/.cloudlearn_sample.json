@@ -1,0 +1,11 @@
+{
+  "id": "hello-web",
+  "name": "Hello Web",
+  "description": "Static web app served from the instance workspace on port 8080.",
+  "runtime": "python",
+  "container_port": 8080,
+  "start_command": "python -m http.server 8080",
+  "kill_pattern": "http.server 8080",
+  "template_dir": "/Users/sudhirganti/Applications/simulator/s3_simulator/sample_apps/hello-web",
+  "badge": "Static site"
+}

@@ -1,0 +1,316 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Length 1797 >>
+stream
+BT /F2 20 Tf 40 744 Td (CloudLearn Simulator - Low Level Design) Tj ET
+BT /F1 10 Tf 40 724 Td (Local-first cloud simulator with AWS-compatible workflows and pluggable runtime bundles) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+BT /F2 14 Tf 40 700 Td (1. Objective) Tj ET
+BT /F1 11 Tf 40 680 Td
+(CloudLearn is a local-first cloud simulator that gives users an AWS-like experience for) Tj
+T* (learning, app validation, and workflow practice without cloud hosting or cloud licenses.) Tj
+ET
+BT /F2 14 Tf 40 612 Td (2. Design Principles) Tj ET
+BT /F1 11 Tf 40 592 Td (- Simulate the workflow, not the internal AWS implementation.) Tj ET
+BT /F1 11 Tf 40 578 Td (- Keep the core provider-neutral so Azure and GCP can be added later.) Tj ET
+BT /F1 11 Tf 40 564 Td (- Prefer lightweight local implementations over heavy emulation.) Tj ET
+BT /F1 11 Tf 40 550 Td (- Persist state locally so simulator restarts preserve workflows.) Tj ET
+BT /F1 11 Tf 40 536 Td (- Expose AWS compatibility at the adapter boundary.) Tj ET
+BT /F1 11 Tf 40 522 Td (- Treat runtime environments as pluggable bundles.) Tj ET
+BT /F2 14 Tf 40 420 Td (3. What the product must do) Tj ET
+BT /F1 11 Tf 40 400 Td (- Run entirely on the user's machine.) Tj ET
+BT /F1 11 Tf 40 386 Td (- Expose AWS-compatible APIs for common workflows.) Tj ET
+BT /F1 11 Tf 40 372 Td (- Provide lightweight runtime environments for Java, .NET, Go, PHP, and Python.) Tj ET
+BT /F1 11 Tf 40 358 Td (- Support local start, stop, and resume with durable state.) Tj ET
+BT /F1 11 Tf 40 344 Td (- Allow optional validation against real AWS.) Tj ET
+BT /F1 11 Tf 40 330 Td (- Export and import desired state through Terraform later.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn LLD) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 1) Tj ET
+endstream
+endobj
+4 0 obj
+<< /Type /Page /Parent 13 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R >>
+endobj
+5 0 obj
+<< /Length 3872 >>
+stream
+BT /F2 20 Tf 40 744 Td (4. Logical Architecture) Tj ET
+BT /F1 10 Tf 40 724 Td (The control plane is local. The cloud behavior is simulated through adapters and runtime bundles.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.96 0.96 0.92 rg 0.3 0.35 0.42 RG 36 610 110 66 re B Q
+BT /F2 10 Tf 44 660 Td (User Entry) Tj ET
+BT /F1 8 Tf 44 646 Td (Console) Tj ET
+BT /F1 8 Tf 44 636 Td (CLI) Tj ET
+BT /F1 8 Tf 44 626 Td (AWS SDK) Tj ET
+q 0.93 0.96 0.99 rg 0.3 0.35 0.42 RG 164 610 120 66 re B Q
+BT /F2 10 Tf 172 660 Td (API Gateway) Tj ET
+BT /F1 8 Tf 172 646 Td (AWS-style routing) Tj ET
+BT /F1 8 Tf 172 636 Td (SigV4 acceptance) Tj ET
+BT /F1 8 Tf 172 626 Td (Error translation) Tj ET
+q 0.91 0.95 0.93 rg 0.3 0.35 0.42 RG 302 600 128 76 re B Q
+BT /F2 10 Tf 310 660 Td (Simulation Kernel) Tj ET
+BT /F1 8 Tf 310 646 Td (Resource lifecycle) Tj ET
+BT /F1 8 Tf 310 636 Td (Workflow engine) Tj ET
+BT /F1 8 Tf 310 626 Td (Failure and latency model) Tj ET
+q 0.98 0.95 0.94 rg 0.3 0.35 0.42 RG 450 610 120 66 re B Q
+BT /F2 10 Tf 458 660 Td (Local State) Tj ET
+BT /F1 8 Tf 458 646 Td (SQLite) Tj ET
+BT /F1 8 Tf 458 636 Td (Artifacts) Tj ET
+BT /F1 8 Tf 458 626 Td (Event log) Tj ET
+q 0.95 0.94 0.99 rg 0.3 0.35 0.42 RG 164 470 120 66 re B Q
+BT /F2 10 Tf 172 520 Td (Service Adapters) Tj ET
+BT /F1 8 Tf 172 506 Td (S3) Tj ET
+BT /F1 8 Tf 172 496 Td (IAM) Tj ET
+BT /F1 8 Tf 172 486 Td (Compute) Tj ET
+q 0.95 0.98 0.95 rg 0.3 0.35 0.42 RG 302 470 128 66 re B Q
+BT /F2 10 Tf 310 520 Td (Runtime Manager) Tj ET
+BT /F1 8 Tf 310 506 Td (Start/stop workloads) Tj ET
+BT /F1 8 Tf 310 496 Td (Inject env vars) Tj ET
+BT /F1 8 Tf 310 486 Td (Health and logs) Tj ET
+q 0.98 0.98 0.92 rg 0.3 0.35 0.42 RG 450 470 120 66 re B Q
+BT /F2 10 Tf 458 520 Td (Validation Mode) Tj ET
+BT /F1 8 Tf 458 506 Td (Optional real AWS) Tj ET
+BT /F1 8 Tf 458 496 Td (Parity checks) Tj ET
+BT /F1 8 Tf 458 486 Td (Workflow compare) Tj ET
+q 0.94 0.97 0.98 rg 0.3 0.35 0.42 RG 302 330 128 66 re B Q
+BT /F2 10 Tf 310 380 Td (Runtime Bundles) Tj ET
+BT /F1 8 Tf 310 366 Td (Java) Tj ET
+BT /F1 8 Tf 310 356 Td (.NET) Tj ET
+BT /F1 8 Tf 310 346 Td (Go) Tj ET
+q 0.95 0.94 0.97 rg 0.3 0.35 0.42 RG 450 330 120 66 re B Q
+BT /F2 10 Tf 458 380 Td (Local Workloads) Tj ET
+BT /F1 8 Tf 458 366 Td (App containers) Tj ET
+BT /F1 8 Tf 458 356 Td (Sandboxed processes) Tj ET
+q 0.96 0.96 0.99 rg 0.3 0.35 0.42 RG 302 190 268 76 re B Q
+BT /F2 10 Tf 310 250 Td (Terraform Bridge) Tj ET
+BT /F1 8 Tf 310 236 Td (Import simulator state into desired infrastructure) Tj ET
+BT /F1 8 Tf 310 226 Td (Export simulator model to Terraform for real cloud) Tj ET
+BT /F1 8 Tf 310 216 Td (rollout) Tj ET
+q 0.25 w 146 643 m 164 643 l S Q
+q 0.25 w 164 643 m 156 639 l S 164 643 m 156 647 l S Q
+q 0.25 w 284 643 m 302 643 l S Q
+q 0.25 w 302 643 m 294 639 l S 302 643 m 294 647 l S Q
+q 0.25 w 430 643 m 450 643 l S Q
+q 0.25 w 450 643 m 442 639 l S 450 643 m 442 647 l S Q
+q 0.25 w 366 600 m 366 536 l S Q
+q 0.25 w 366 536 m 362 544 l S 366 536 m 370 544 l S Q
+q 0.25 w 224 470 m 224 536 l S Q
+q 0.25 w 224 536 m 228 528 l S 224 536 m 220 528 l S Q
+q 0.25 w 366 470 m 366 396 l S Q
+q 0.25 w 366 396 m 362 404 l S 366 396 m 370 404 l S Q
+q 0.25 w 510 470 m 510 396 l S Q
+q 0.25 w 510 396 m 506 404 l S 510 396 m 514 404 l S Q
+q 0.25 w 366 330 m 366 266 l S Q
+q 0.25 w 366 266 m 362 274 l S 366 266 m 370 274 l S Q
+q 0.25 w 450 330 m 510 330 l S Q
+q 0.25 w 510 330 m 502 326 l S 510 330 m 502 334 l S Q
+q 0.25 w 302 230 m 302 230 l S Q
+q 0.25 w 302 230 m 302 230 l S 302 230 m 302 230 l S Q
+BT /F1 10 Tf 40 146 Td
+(The kernel is the source of truth. Adapters translate AWS-like requests into simulator state) Tj
+T* (changes. Runtime bundles are plugged into the runtime manager and provide language-specific) Tj
+T* (execution templates.) Tj
+ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn LLD) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 2) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 13 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 2591 >>
+stream
+BT /F2 20 Tf 40 744 Td (5. Core Workflows) Tj ET
+BT /F1 10 Tf 40 724 Td (Each workflow is stateful and restartable because state is persisted locally.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.98 0.99 0.99 rg 0.3 0.35 0.42 RG 36 608 540 84 re B Q
+BT /F2 10 Tf 44 676 Td (Create Bucket) Tj ET
+BT /F1 8 Tf 44 662 Td (1. User invokes console, CLI, or SDK action.) Tj ET
+BT /F1 8 Tf 44 652 Td (2. Gateway normalizes request and region.) Tj ET
+BT /F1 8 Tf 44 642 Td (3. Kernel validates policy and naming rules.) Tj ET
+BT /F1 8 Tf 44 632 Td (4. S3 adapter updates local state.) Tj ET
+BT /F1 8 Tf 44 622 Td (5. State is flushed to SQLite and event log.) Tj ET
+q 0.98 0.99 0.99 rg 0.3 0.35 0.42 RG 36 508 540 84 re B Q
+BT /F2 10 Tf 44 576 Td (Deploy Lightweight App) Tj ET
+BT /F1 8 Tf 44 562 Td (1. User selects a runtime bundle.) Tj ET
+BT /F1 8 Tf 44 552 Td (2. Runtime manager resolves the bundle.) Tj ET
+BT /F1 8 Tf 44 542 Td (3. Code is mounted or packaged locally.) Tj ET
+BT /F1 8 Tf 44 532 Td (4. Workload starts in a local sandbox or container.) Tj ET
+BT /F1 8 Tf 44 522 Td (5. Simulated endpoints and env vars are injected.) Tj ET
+q 0.98 0.99 0.99 rg 0.3 0.35 0.42 RG 36 408 540 84 re B Q
+BT /F2 10 Tf 44 476 Td (Stop and Resume Simulator) Tj ET
+BT /F1 8 Tf 44 462 Td (1. Simulator stop signal arrives.) Tj ET
+BT /F1 8 Tf 44 452 Td (2. Kernel persists state and artifacts.) Tj ET
+BT /F1 8 Tf 44 442 Td (3. Runtime manager stops active workloads.) Tj ET
+BT /F1 8 Tf 44 432 Td (4. Restart reloads state from local storage.) Tj ET
+BT /F1 8 Tf 44 422 Td (5. UI reconnects to the existing workflow state.) Tj ET
+q 0.98 0.99 0.99 rg 0.3 0.35 0.42 RG 36 308 540 84 re B Q
+BT /F2 10 Tf 44 376 Td (Validate Against Real AWS) Tj ET
+BT /F1 8 Tf 44 362 Td (1. Enable validation mode.) Tj ET
+BT /F1 8 Tf 44 352 Td (2. Run the same workflow against simulator and AWS.) Tj ET
+BT /F1 8 Tf 44 342 Td (3. Compare responses, errors, and state transitions.) Tj ET
+BT /F1 8 Tf 44 332 Td (4. Surface mismatches for training or verification.) Tj ET
+q 0.98 0.99 0.99 rg 0.3 0.35 0.42 RG 36 208 540 84 re B Q
+BT /F2 10 Tf 44 276 Td (Export to Terraform) Tj ET
+BT /F1 8 Tf 44 262 Td (1. Kernel serializes the desired resource graph.) Tj ET
+BT /F1 8 Tf 44 252 Td (2. Bridge maps simulator resources to IaC.) Tj ET
+BT /F1 8 Tf 44 242 Td (3. Exported Terraform can be applied to real AWS later.) Tj ET
+BT /F1 8 Tf 44 232 Td (4. Import can also recreate simulator state from IaC.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn LLD) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 3) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 13 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 2661 >>
+stream
+BT /F2 20 Tf 40 744 Td (6. Data Model and Runtime Contracts) Tj ET
+BT /F1 10 Tf 40 724 Td (Persistence and execution are modeled explicitly so that restart and bundle selection stay deterministic.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+BT /F2 14 Tf 40 702 Td (6.1 Core Tables) Tj ET
+BT /F1 11 Tf 40 682 Td (- accounts) Tj ET
+BT /F1 11 Tf 40 668 Td (- regions) Tj ET
+BT /F1 11 Tf 40 654 Td (- resources) Tj ET
+BT /F1 11 Tf 40 640 Td (- resource_versions) Tj ET
+BT /F1 11 Tf 40 626 Td (- workflow_runs) Tj ET
+BT /F1 11 Tf 40 612 Td (- workflow_steps) Tj ET
+BT /F1 11 Tf 40 598 Td (- runtime_instances) Tj ET
+BT /F1 11 Tf 40 584 Td (- runtime_bundles) Tj ET
+BT /F1 11 Tf 40 570 Td (- events) Tj ET
+BT /F1 11 Tf 40 556 Td (- artifacts) Tj ET
+BT /F1 11 Tf 40 542 Td (- validation_runs) Tj ET
+BT /F1 11 Tf 40 528 Td (- terraform_exports) Tj ET
+BT /F2 14 Tf 230 702 Td (6.2 Resource Graph) Tj ET
+q 0.94 0.98 0.94 rg 0.3 0.35 0.42 RG 224 620 140 62 re B Q
+BT /F2 10 Tf 232 666 Td (Resource Graph) Tj ET
+BT /F1 8 Tf 232 652 Td (bucket -> objects) Tj ET
+BT /F1 8 Tf 232 642 Td (role -> policy attachments) Tj ET
+BT /F1 8 Tf 232 632 Td (instance -> subnet -> vpc) Tj ET
+q 0.94 0.97 0.99 rg 0.3 0.35 0.42 RG 384 620 150 62 re B Q
+BT /F2 10 Tf 392 666 Td (Internal Contract) Tj ET
+BT /F1 8 Tf 392 652 Td (create) Tj ET
+BT /F1 8 Tf 392 642 Td (update) Tj ET
+BT /F1 8 Tf 392 632 Td (delete) Tj ET
+q 0.99 0.97 0.94 rg 0.3 0.35 0.42 RG 224 530 140 62 re B Q
+BT /F2 10 Tf 232 576 Td (Runtime Bundle API) Tj ET
+BT /F1 8 Tf 232 562 Td (supports\(\)) Tj ET
+BT /F1 8 Tf 232 552 Td (prepare\(\)) Tj ET
+BT /F1 8 Tf 232 542 Td (start\(\)) Tj ET
+q 0.97 0.94 0.98 rg 0.3 0.35 0.42 RG 384 530 150 62 re B Q
+BT /F2 10 Tf 392 576 Td (Language Bundles) Tj ET
+BT /F1 8 Tf 392 562 Td (Java) Tj ET
+BT /F1 8 Tf 392 552 Td (.NET) Tj ET
+BT /F1 8 Tf 392 542 Td (Go) Tj ET
+q 0.25 w 364 651 m 384 651 l S Q
+q 0.25 w 384 651 m 376 647 l S 384 651 m 376 655 l S Q
+q 0.25 w 294 620 m 294 592 l S Q
+q 0.25 w 294 592 m 290 600 l S 294 592 m 298 600 l S Q
+q 0.25 w 459 620 m 459 592 l S Q
+q 0.25 w 459 592 m 455 600 l S 459 592 m 463 600 l S Q
+BT /F2 14 Tf 40 424 Td (6.3 Runtime Bundle Contract) Tj ET
+BT /F1 11 Tf 40 404 Td (- Each bundle declares supported languages and frameworks.) Tj ET
+BT /F1 11 Tf 40 390 Td (- Bundles encapsulate startup templates and health checks.) Tj ET
+BT /F1 11 Tf 40 376 Td (- Bundles keep language-specific behavior out of the kernel.) Tj ET
+BT /F1 11 Tf 40 362 Td (- The runtime manager treats all bundles through the same interface.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn LLD) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 4) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 13 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 9 0 R >>
+endobj
+11 0 obj
+<< /Length 2568 >>
+stream
+BT /F2 20 Tf 40 744 Td (7. Deployment and Expansion Path) Tj ET
+BT /F1 10 Tf 40 724 Td (Start local, keep the product offline-capable, and expand provider coverage later.) Tj ET
+q 0.70 0.74 0.80 rg 40 714 532 1.2 re f Q
+q 0.95 0.95 0.98 rg 0.3 0.35 0.42 RG 36 610 168 76 re B Q
+BT /F2 10 Tf 44 670 Td (Local Host) Tj ET
+BT /F1 8 Tf 44 656 Td (Console) Tj ET
+BT /F1 8 Tf 44 646 Td (Kernel) Tj ET
+BT /F1 8 Tf 44 636 Td (State store) Tj ET
+BT /F1 8 Tf 44 626 Td (Runtime manager) Tj ET
+q 0.95 0.98 0.95 rg 0.3 0.35 0.42 RG 224 610 160 76 re B Q
+BT /F2 10 Tf 232 670 Td (Runtime Plane) Tj ET
+BT /F1 8 Tf 232 656 Td (Container sandbox) Tj ET
+BT /F1 8 Tf 232 646 Td (Language bundles) Tj ET
+BT /F1 8 Tf 232 636 Td (Local workloads) Tj ET
+q 0.98 0.95 0.95 rg 0.3 0.35 0.42 RG 404 610 168 76 re B Q
+BT /F2 10 Tf 412 670 Td (Validation / Export) Tj ET
+BT /F1 8 Tf 412 656 Td (Compare with AWS) Tj ET
+BT /F1 8 Tf 412 646 Td (Generate Terraform) Tj ET
+BT /F1 8 Tf 412 636 Td (Import IaC) Tj ET
+q 0.25 w 204 648 m 224 648 l S Q
+q 0.25 w 224 648 m 216 644 l S 224 648 m 216 652 l S Q
+q 0.25 w 384 648 m 404 648 l S Q
+q 0.25 w 404 648 m 396 644 l S 404 648 m 396 652 l S Q
+BT /F2 14 Tf 40 520 Td (Recommended v1 stack) Tj ET
+BT /F1 11 Tf 40 500 Td (- Backend: Python or Java depending on the current implementation path.) Tj ET
+BT /F1 11 Tf 40 486 Td (- Persistence: SQLite plus local files.) Tj ET
+BT /F1 11 Tf 40 472 Td (- Runtime layer: containers or sandboxes.) Tj ET
+BT /F1 11 Tf 40 458 Td (- UI: React console.) Tj ET
+BT /F1 11 Tf 40 444 Td (- Compatibility: AWS-style adapters per service.) Tj ET
+BT /F1 11 Tf 40 430 Td (- Terraform: bidirectional export/import translator.) Tj ET
+BT /F2 14 Tf 40 332 Td (Expansion path) Tj ET
+BT /F1 11 Tf 40 312 Td (- AWS-first simulator with S3, IAM, compute, and runtime bundles.) Tj ET
+BT /F1 11 Tf 40 298 Td (- Add validation mode against real AWS.) Tj ET
+BT /F1 11 Tf 40 284 Td (- Add Terraform export/import parity.) Tj ET
+BT /F1 11 Tf 40 270 Td (- Add Azure provider profile.) Tj ET
+BT /F1 11 Tf 40 256 Td (- Add GCP provider profile.) Tj ET
+BT /F2 14 Tf 300 332 Td (Non-goals) Tj ET
+BT /F1 11 Tf 300 312 Td (- Recreating every AWS internal behavior.) Tj ET
+BT /F1 11 Tf 300 298 Td (- Building a distributed cloud control plane) Tj ET
+BT /F1 11 Tf 314 284 Td (on day one.) Tj ET
+BT /F1 11 Tf 300 270 Td (- Simulating hardware-level VM behavior when) Tj ET
+BT /F1 11 Tf 314 256 Td (a container is enough.) Tj ET
+q 0.82 0.82 0.82 rg 40 28 532 0.8 re f Q
+BT /F1 9 Tf 40 16 Td (CloudLearn LLD) Tj ET
+BT /F1 9 Tf 526 16 Td (Page 5) Tj ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 13 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 11 0 R >>
+endobj
+13 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R 12 0 R] /Count 5 >>
+endobj
+14 0 obj
+<< /Type /Catalog /Pages 13 0 R >>
+endobj
+xref
+0 15
+0000000000 65535 f 
+0000000015 00000 n 
+0000000085 00000 n 
+0000000160 00000 n 
+0000002008 00000 n 
+0000002145 00000 n 
+0000006068 00000 n 
+0000006205 00000 n 
+0000008847 00000 n 
+0000008984 00000 n 
+0000011696 00000 n 
+0000011834 00000 n 
+0000014454 00000 n 
+0000014593 00000 n 
+0000014677 00000 n 
+trailer
+<< /Size 15 /Root 14 0 R >>
+startxref
+14728
+%%EOF

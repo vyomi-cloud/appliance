@@ -1,0 +1,11 @@
+{
+  "id": "hello-api",
+  "name": "Hello API",
+  "description": "Tiny JSON API built with the Python standard library on port 8080.",
+  "runtime": "python",
+  "container_port": 8080,
+  "start_command": "python app.py",
+  "kill_pattern": "app.py",
+  "template_dir": "/Users/sudhirganti/Applications/simulator/s3_simulator/sample_apps/hello-api",
+  "badge": "JSON API"
+}

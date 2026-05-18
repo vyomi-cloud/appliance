@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CloudLearn Hello Web</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #101820, #1e3a5f);
+      color: #f7f7f7;
+      font-family: Arial, sans-serif;
+    }
+    .card {
+      max-width: 640px;
+      padding: 32px;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 16px;
+      background: rgba(0,0,0,0.22);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    }
+    h1 { margin: 0 0 12px; font-size: 36px; }
+    p { line-height: 1.6; margin: 0 0 12px; }
+    code { background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Hello Web</h1>
+    <p>This sample app is deployed inside a Docker-backed EC2 instance.</p>
+    <p>The instance workspace is mounted into the container, so you can edit files from the console and refresh the page.</p>
+    <p>Try the console command <code>dir</code> or <code>type index.html</code>.</p>
+  </div>
+</body>
+</html>
