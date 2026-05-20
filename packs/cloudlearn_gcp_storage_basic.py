@@ -1,0 +1,19 @@
+from __future__ import annotations
+
+from ._shared import build_pack
+
+PACK = build_pack(
+    "cloudlearn.gcp.storage.basic",
+    "service",
+    "1.0.0",
+    "gcp",
+    {
+        "protocol": "gcp-like",
+        "actions": ["Buckets.list", "Buckets.insert", "Buckets.get", "Buckets.delete", "Objects.list", "Objects.insert", "Objects.delete"],
+        "requestSchemas": True,
+        "responseSchemas": True,
+        "errors": True,
+        "pagination": True,
+        "regionAware": True,
+    },
+)

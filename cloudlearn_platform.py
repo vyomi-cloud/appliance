@@ -20,6 +20,8 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
+from pack_catalog import CORE_PACK_IDS
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
@@ -249,6 +251,230 @@ class SimulationKernel:
         self.persist()
         return self.state
 
+
+class FirestoreEngine:
+    def __init__(self, store: SQLiteStateStore, kernel: SimulationKernel):
+        self.store = store
+        self.kernel = kernel
+        self.lock = threading.RLock()
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(str(self.store.db_path), timeout=30, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _ensure_schema(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gcp_firestore_documents (
+                space_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                database_id TEXT NOT NULL,
+                collection_id TEXT NOT NULL,
+                doc_id TEXT NOT NULL,
+                fields_json TEXT NOT NULL,
+                create_time TEXT NOT NULL,
+                update_time TEXT NOT NULL,
+                PRIMARY KEY(space_id, project_id, database_id, collection_id, doc_id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_gcp_firestore_documents_lookup
+            ON gcp_firestore_documents(space_id, project_id, database_id, collection_id, doc_id)
+            """
+        )
+        conn.commit()
+
+    def _space_id(self) -> str:
+        active = self.kernel.get_active_space()
+        return str(active.get("space_id") or "global") if isinstance(active, dict) else "global"
+
+    def _project_id(self, project: str | None) -> str:
+        project = str(project or "").strip()
+        return project or self._space_id()
+
+    def _doc_view(self, project: str, database: str, collection: str, doc_id: str, fields: dict[str, Any], created: str, updated: str) -> dict:
+        root = "https://firestore.googleapis.com/v1"
+        return {
+            "name": f"{root}/projects/{project}/databases/{database}/documents/{collection}/{doc_id}",
+            "fields": copy.deepcopy(fields or {}),
+            "createTime": created,
+            "updateTime": updated,
+        }
+
+    def _row_to_view(self, row: sqlite3.Row, database: str | None = None) -> dict:
+        try:
+            fields = json.loads(row["fields_json"]) if row["fields_json"] else {}
+        except Exception:
+            fields = {}
+        return self._doc_view(
+            row["project_id"],
+            database or row["database_id"],
+            row["collection_id"],
+            row["doc_id"],
+            fields,
+            row["create_time"],
+            row["update_time"],
+        )
+
+    def list_documents(self, project: str, database: str, collection: str) -> list[dict]:
+        project = self._project_id(project)
+        database = str(database or "(default)")
+        collection = str(collection or "").strip()
+        if not collection:
+            return []
+        with self.lock:
+            with self._connect() as conn:
+                self._ensure_schema(conn)
+                rows = conn.execute(
+                    """
+                    SELECT project_id, database_id, collection_id, doc_id, fields_json, create_time, update_time
+                    FROM gcp_firestore_documents
+                    WHERE space_id = ? AND project_id = ? AND database_id = ? AND collection_id = ?
+                    ORDER BY create_time ASC, doc_id ASC
+                    """,
+                    (self._space_id(), project, database, collection),
+                ).fetchall()
+        return [self._row_to_view(row, database) for row in rows]
+
+    def list_root_documents(self, project: str, database: str) -> list[dict]:
+        project = self._project_id(project)
+        database = str(database or "(default)")
+        with self.lock:
+            with self._connect() as conn:
+                self._ensure_schema(conn)
+                rows = conn.execute(
+                    """
+                    SELECT project_id, database_id, collection_id, doc_id, fields_json, create_time, update_time
+                    FROM gcp_firestore_documents
+                    WHERE space_id = ? AND project_id = ? AND database_id = ?
+                    ORDER BY collection_id ASC, create_time ASC, doc_id ASC
+                    """,
+                    (self._space_id(), project, database),
+                ).fetchall()
+        return [self._row_to_view(row, database) for row in rows]
+
+    def get_document(self, project: str, database: str, collection: str, doc_id: str) -> dict | None:
+        project = self._project_id(project)
+        database = str(database or "(default)")
+        collection = str(collection or "").strip()
+        doc_id = str(doc_id or "").strip()
+        if not collection or not doc_id:
+            return None
+        with self.lock:
+            with self._connect() as conn:
+                self._ensure_schema(conn)
+                row = conn.execute(
+                    """
+                    SELECT project_id, database_id, collection_id, doc_id, fields_json, create_time, update_time
+                    FROM gcp_firestore_documents
+                    WHERE space_id = ? AND project_id = ? AND database_id = ? AND collection_id = ? AND doc_id = ?
+                    """,
+                    (self._space_id(), project, database, collection, doc_id),
+                ).fetchone()
+        return self._row_to_view(row, database) if row else None
+
+    def create_document(self, project: str, database: str, collection: str, fields: dict | None = None, doc_id: str | None = None) -> dict:
+        project = self._project_id(project)
+        database = str(database or "(default)")
+        collection = str(collection or "").strip() or "documents"
+        doc_id = str(doc_id or "").strip() or f"doc-{uuid.uuid4().hex[:12]}"
+        created_at = _now()
+        payload = json.dumps(fields or {}, sort_keys=True, default=_json_default)
+        with self.lock:
+            with self._connect() as conn:
+                self._ensure_schema(conn)
+                existing = conn.execute(
+                    """
+                    SELECT create_time FROM gcp_firestore_documents
+                    WHERE space_id = ? AND project_id = ? AND database_id = ? AND collection_id = ? AND doc_id = ?
+                    """,
+                    (self._space_id(), project, database, collection, doc_id),
+                ).fetchone()
+                create_time = existing["create_time"] if existing else created_at
+                update_time = _now()
+                conn.execute(
+                    """
+                    INSERT INTO gcp_firestore_documents(space_id, project_id, database_id, collection_id, doc_id, fields_json, create_time, update_time)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(space_id, project_id, database_id, collection_id, doc_id)
+                    DO UPDATE SET fields_json = excluded.fields_json, update_time = excluded.update_time
+                    """,
+                    (self._space_id(), project, database, collection, doc_id, payload, create_time, update_time),
+                )
+                conn.commit()
+        return self.get_document(project, database, collection, doc_id) or {}
+
+    def update_document(self, project: str, database: str, collection: str, doc_id: str, fields: dict | None = None) -> dict:
+        project = self._project_id(project)
+        database = str(database or "(default)")
+        collection = str(collection or "").strip()
+        doc_id = str(doc_id or "").strip()
+        if not collection or not doc_id:
+            raise KeyError(doc_id)
+        payload = json.dumps(fields or {}, sort_keys=True, default=_json_default)
+        with self.lock:
+            with self._connect() as conn:
+                self._ensure_schema(conn)
+                row = conn.execute(
+                    """
+                    SELECT create_time FROM gcp_firestore_documents
+                    WHERE space_id = ? AND project_id = ? AND database_id = ? AND collection_id = ? AND doc_id = ?
+                    """,
+                    (self._space_id(), project, database, collection, doc_id),
+                ).fetchone()
+                if not row:
+                    raise KeyError(doc_id)
+                conn.execute(
+                    """
+                    UPDATE gcp_firestore_documents
+                    SET fields_json = ?, update_time = ?
+                    WHERE space_id = ? AND project_id = ? AND database_id = ? AND collection_id = ? AND doc_id = ?
+                    """,
+                    (payload, _now(), self._space_id(), project, database, collection, doc_id),
+                )
+                conn.commit()
+        return self.get_document(project, database, collection, doc_id) or {}
+
+    def delete_document(self, project: str, database: str, collection: str, doc_id: str) -> None:
+        project = self._project_id(project)
+        database = str(database or "(default)")
+        collection = str(collection or "").strip()
+        doc_id = str(doc_id or "").strip()
+        with self.lock:
+            with self._connect() as conn:
+                self._ensure_schema(conn)
+                cur = conn.execute(
+                    """
+                    DELETE FROM gcp_firestore_documents
+                    WHERE space_id = ? AND project_id = ? AND database_id = ? AND collection_id = ? AND doc_id = ?
+                    """,
+                    (self._space_id(), project, database, collection, doc_id),
+                )
+                conn.commit()
+                if cur.rowcount <= 0:
+                    raise KeyError(doc_id)
+
+    def run_query(self, project: str, database: str, collection: str = "", field_name: str | None = None, field_value: Any = None, limit: int = 50) -> list[dict]:
+        docs = self.list_documents(project, database, collection)
+        if field_name:
+            docs = [doc for doc in docs if doc.get("fields", {}).get(field_name) == field_value]
+        if limit and limit > 0:
+            docs = docs[:limit]
+        results: list[dict] = []
+        for idx, doc in enumerate(docs):
+            results.append({
+                "document": copy.deepcopy(doc),
+                "readTime": _now(),
+                "done": False,
+            })
+        if not results:
+            results.append({"readTime": _now(), "done": True})
+        else:
+            results[-1]["done"] = True
+        return results
     def evaluate_policy(self, principal: str, action: str, resource: str) -> bool:
         # Simple local simulator policy check: explicit deny wins, otherwise allow.
         policy_graph = self.state.get("iam", {}).get("policies", {})
@@ -275,17 +501,7 @@ class SimulationKernel:
 
     def allowed_capabilities(self, tier: str) -> set[str]:
         tier = tier.lower()
-        base = {
-            "cloudlearn.s3.basic",
-            "cloudlearn.iam.basic",
-            "cloudlearn.ec2.basic",
-            "cloudlearn.vpc.basic",
-            "cloudlearn.apigateway.basic",
-            "cloudlearn.lambda.basic",
-            "cloudlearn.sqs.basic",
-            "cloudlearn.dynamodb.basic",
-            "cloudlearn.runtime.python",
-        }
+        base = set(CORE_PACK_IDS)
         if tier in {"free", "pro", "max", "enterprise"}:
             return base
         return base
@@ -301,8 +517,9 @@ class SimulationKernel:
             raise KeyError(pack_id)
         pack = packs[pack_id]
         api_contract = pack.get("api", {})
-        if api_contract.get("protocol") != "aws-like":
-            raise ValueError("PackRejected: missing AWS-like API contract")
+        protocol = str(api_contract.get("protocol") or "")
+        if not protocol.endswith("-like"):
+            raise ValueError("PackRejected: missing provider-like API contract")
         if not api_contract.get("actions") or not api_contract.get("requestSchemas") or not api_contract.get("responseSchemas"):
             raise ValueError("PackRejected: incomplete API contract")
         pack["active"] = True
@@ -314,20 +531,40 @@ class SimulationKernel:
     def capability_for_path(self, path: str) -> str | None:
         if path == "/" or path.startswith("/ui") or path.startswith("/api/s3"):
             return "cloudlearn.s3.basic"
+        if path.startswith(("/storage/v1/", "/api/gcp/storage/", "/api/gcp/s3")):
+            return "cloudlearn.gcp.storage.basic"
         if path.startswith("/api/iam"):
             return "cloudlearn.iam.basic"
+        if any(token in path for token in (":getIamPolicy", ":setIamPolicy", ":testIamPermissions", "/serviceAccounts")) or path.startswith("/api/gcp/iam"):
+            return "cloudlearn.gcp.iam.basic"
+        if path.startswith(("/compute/v1", "/api/gcp/compute")):
+            return "cloudlearn.gcp.compute.basic"
         if path.startswith("/api/ec2"):
             return "cloudlearn.ec2.basic"
+        if path.startswith("/api/gcp/ec2"):
+            return "cloudlearn.gcp.compute.basic"
         if path.startswith("/api/vpc"):
             return "cloudlearn.vpc.basic"
+        if path.startswith("/compute/v1/projects/") or path.startswith("/api/gcp/vpc"):
+            return "cloudlearn.gcp.vpc.basic"
         if path.startswith("/api/spaces") or path.startswith("/api/cloudsim") or path.startswith("/api/federations"):
             return "cloudlearn.cloudsim.basic"
         if path.startswith("/api/dynamodb") or path.startswith("/dynamodb"):
             return "cloudlearn.dynamodb.basic"
+        if path.startswith(("/firestore/v1/", "/api/gcp/dynamodb")):
+            return "cloudlearn.gcp.firestore.basic"
         if path.startswith("/api/runtime"):
             return "cloudlearn.runtime.python"
         if path.startswith("/api/deployments"):
             return "cloudlearn.runtime.python"
+        if path.startswith(("/sql/v1beta4/", "/api/gcp/rds")):
+            return "cloudlearn.gcp.cloudsql.basic"
+        if path.startswith(("/pubsub/v1/", "/api/gcp/sqs")):
+            return "cloudlearn.gcp.pubsub.basic"
+        if (path.startswith("/api/gcp/lambda") or (path.startswith("/v1/projects/") and "/locations/" in path and "/functions" in path) or ":call" in path):
+            return "cloudlearn.gcp.functions.basic"
+        if path.startswith("/api/gcp/apigateway") or (path.startswith("/v1/projects/") and "/locations/" in path and any(token in path for token in ("/apis", "/apiConfigs", "/gateways"))):
+            return "cloudlearn.gcp.apigateway.basic"
         return None
 
     def ensure_capability(self, path: str) -> None:
@@ -352,6 +589,8 @@ class SimulationKernel:
                 "state": pack.get("state", "available"),
                 "provider": pack.get("provider", "agnostic"),
                 "api": pack.get("api", {}),
+                "fragment_url": pack.get("fragment_url") or f"/api/packs/{pack['id']}/fragment",
+                "html_fragment": pack.get("html_fragment", ""),
             }
             for pack in packs.values()
         ]
@@ -571,6 +810,29 @@ class SimulationKernel:
         if spaces_state.get("active_space_id") == space_id:
             spaces_state["active_space_id"] = next(iter(spaces.keys()), "")
         self.persist()
+
+
+for _kernel_method_name in (
+    "evaluate_policy",
+    "allowed_capabilities",
+    "check_license_for_pack",
+    "activate_pack",
+    "capability_for_path",
+    "ensure_capability",
+    "catalog",
+    "_spaces_state",
+    "list_spaces",
+    "get_active_space",
+    "_space_count",
+    "estimate_space_cost",
+    "create_space",
+    "switch_space",
+    "pause_space",
+    "resume_space",
+    "archive_space",
+    "delete_space",
+):
+    setattr(SimulationKernel, _kernel_method_name, getattr(FirestoreEngine, _kernel_method_name))
 
 
 class CloudSimBridge:
@@ -1118,6 +1380,7 @@ class CloudLearnPlatform:
         self.store = SQLiteStateStore(state_path, legacy_pickle_path)
         self.kernel = SimulationKernel(self.store, default_state_factory)
         self.runtime = RuntimeManager(self.kernel)
+        self.firestore = FirestoreEngine(self.store, self.kernel)
         self.cloudsim = CloudSimBridge(self.kernel, Path(state_path).resolve().parent)
 
     @property
@@ -1250,7 +1513,16 @@ class CloudLearnPlatform:
 
     def cloudsim_current(self) -> dict:
         try:
-            return self.cloudsim.current()
+            payload = self.cloudsim.current()
+            summary = payload.get("summary") if isinstance(payload, dict) else {}
+            if not isinstance(summary, dict):
+                summary = {}
+            cloudsim_state = self.kernel.state.setdefault("cloudsim", {"summary": {}, "events": [], "last_reconcile_at": ""})
+            summary.setdefault("last_reconcile_at", cloudsim_state.get("last_reconcile_at", ""))
+            if not summary.get("last_reconcile_at"):
+                summary["last_reconcile_at"] = cloudsim_state.get("last_reconcile_at", "")
+            payload["summary"] = summary
+            return payload
         except Exception:
             spaces_state = self.kernel.state.setdefault("spaces", {"spaces": {}, "active_space_id": "", "settings": {}})
             active_id = spaces_state.get("active_space_id", "")
@@ -1264,7 +1536,13 @@ class CloudLearnPlatform:
 
     def cloudsim_summary(self) -> dict:
         try:
-            return {"summary": self.cloudsim.summary()}
+            summary = self.cloudsim.summary()
+            if not isinstance(summary, dict):
+                summary = {}
+            cloudsim_state = self.kernel.state.setdefault("cloudsim", {"summary": {}, "events": [], "last_reconcile_at": ""})
+            if not summary.get("last_reconcile_at"):
+                summary["last_reconcile_at"] = cloudsim_state.get("last_reconcile_at", "")
+            return {"summary": summary}
         except Exception:
             spaces_state = self.kernel.state.setdefault("spaces", {"spaces": {}, "active_space_id": "", "settings": {}})
             cloudsim = self.kernel.state.setdefault("cloudsim", {"summary": {}, "events": [], "last_reconcile_at": ""})

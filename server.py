@@ -39,6 +39,7 @@ from collections import deque
 from collections.abc import MutableMapping
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
+from contextvars import ContextVar
 from urllib.parse import parse_qsl
 from urllib.error import HTTPError, URLError
 from urllib.request import Request as URLRequest, urlopen
@@ -56,8 +57,57 @@ from fastapi.routing import APIRouter
 from pydantic import BaseModel
 
 from cloudlearn_platform import CloudLearnPlatform
+from pack_catalog import default_packs as load_default_packs
+from pack_catalog import fragment_for_pack
+from provider_registry import list_providers, normalize_provider as normalize_provider_key
 
 app = FastAPI(title="CloudLearn S3 Simulator", version="2.0.0")
+REQUEST_PROVIDER: ContextVar[str] = ContextVar("cloudlearn_request_provider", default="aws")
+
+
+def _is_gcp_native_path(path: str) -> bool:
+    return path.startswith((
+        "/compute/v1/",
+        "/storage/v1/",
+        "/sql/v1beta4/",
+        "/pubsub/v1/",
+        "/firestore/v1/",
+        "/v1/projects/",
+        "/api/gcp/s3/",
+        "/api/gcp/iam/",
+        "/api/gcp/rds/",
+        "/api/gcp/sqs/",
+        "/api/gcp/dynamodb/",
+        "/api/gcp/lambda/",
+        "/api/gcp/apigateway/",
+        "/api/gcp/vpc/",
+        "/api/gcp/compute/",
+        "/api/gcp/storage/",
+        "/api/gcp/sql/",
+        "/api/gcp/pubsub/",
+        "/api/gcp/firestore/",
+        "/api/gcp/cloudfunctions/",
+    ))
+
+
+@app.middleware("http")
+async def provider_api_alias_middleware(request, call_next):
+    path = request.scope.get("path", "")
+    provider = "gcp" if _is_gcp_native_path(path) or path.startswith(("/ws/gcp/compute/", "/ws/compute/")) else "aws"
+    token = REQUEST_PROVIDER.set(provider)
+    request.state.cloudlearn_provider = provider
+    request.state.cloudlearn_original_path = path
+    if _is_gcp_native_path(path) or path.startswith(("/ws/gcp/compute/", "/ws/compute/")):
+        try:
+            return await call_next(request)
+        finally:
+            REQUEST_PROVIDER.reset(token)
+    if path.startswith("/api/gcp/"):
+        request.scope["path"] = "/api/" + path[len("/api/gcp/"):]
+    try:
+        return await call_next(request)
+    finally:
+        REQUEST_PROVIDER.reset(token)
 
 app.add_middleware(
     CORSMiddleware,
@@ -601,6 +651,26 @@ def _iam_route_action_resource(request: Request) -> tuple[str, str] | None:
             elif tail[:1] == ["sample-apps"] and method == "POST":
                 return ("ec2:RunInstances", resource)
         return None
+    if path.startswith("/api/gcp/compute/"):
+        parts = [p for p in path.split("/") if p]
+        if len(parts) >= 8 and parts[3] == "projects" and parts[5] == "zones" and parts[7] == "instances":
+            project = parts[4]
+            zone = parts[6]
+            if len(parts) == 8:
+                return ({"GET": "compute:ListInstances", "POST": "compute:InsertInstance"}.get(method), f"projects/{project}/zones/{zone}") if method in {"GET", "POST"} else None
+            if len(parts) >= 9:
+                instance_id = parts[8]
+                resource = f"projects/{project}/zones/{zone}/instances/{instance_id}"
+                tail = parts[9:] if len(parts) > 9 else []
+                if not tail:
+                    return ({"GET": "compute:GetInstance", "DELETE": "compute:DeleteInstance"}.get(method), resource) if method in {"GET", "DELETE"} else None
+                if tail == ["start"] and method == "POST":
+                    return ("compute:StartInstance", resource)
+                if tail == ["stop"] and method == "POST":
+                    return ("compute:StopInstance", resource)
+                if tail == ["reset"] and method == "POST":
+                    return ("compute:ResetInstance", resource)
+        return None
     if path.startswith("/api/ec2/"):
         action_map = {
             ("GET", "/api/ec2/amis"): ("ec2:DescribeImages", "*"),
@@ -851,188 +921,7 @@ ET.register_namespace("sqs", SQS_XML_NS)
 
 
 def _default_packs() -> Dict[str, dict]:
-    return {
-        "cloudlearn.s3.basic": {
-            "id": "cloudlearn.s3.basic",
-            "type": "service",
-            "version": "1.0.0",
-            "provider": "agnostic",
-            "coreProviderNeutral": True,
-            "state": "available",
-            "active": False,
-            "api": {
-                "protocol": "aws-like",
-                "actions": ["CreateBucket", "PutObject", "GetObject", "DeleteObject", "ListObjects"],
-                "requestSchemas": True,
-                "responseSchemas": True,
-                "errors": True,
-                "pagination": True,
-                "regionAware": True,
-            },
-        },
-        "cloudlearn.iam.basic": {
-            "id": "cloudlearn.iam.basic",
-            "type": "service",
-            "version": "1.0.0",
-            "provider": "agnostic",
-            "coreProviderNeutral": True,
-            "state": "available",
-            "active": False,
-            "api": {
-                "protocol": "aws-like",
-                "actions": ["CreateUser", "CreateRole", "CreatePolicy", "AttachPolicy"],
-                "requestSchemas": True,
-                "responseSchemas": True,
-                "errors": True,
-                "pagination": False,
-                "regionAware": False,
-            },
-        },
-        "cloudlearn.ec2.basic": {
-            "id": "cloudlearn.ec2.basic",
-            "type": "service",
-            "version": "1.0.0",
-            "provider": "agnostic",
-            "coreProviderNeutral": True,
-            "state": "available",
-            "active": False,
-            "api": {
-                "protocol": "aws-like",
-                "actions": ["RunInstances", "StartInstances", "StopInstances", "TerminateInstances"],
-                "requestSchemas": True,
-                "responseSchemas": True,
-                "errors": True,
-                "pagination": True,
-                "regionAware": True,
-            },
-        },
-        "cloudlearn.vpc.basic": {
-            "id": "cloudlearn.vpc.basic",
-            "type": "service",
-            "version": "1.0.0",
-            "provider": "agnostic",
-            "coreProviderNeutral": True,
-            "state": "available",
-            "active": False,
-            "api": {
-                "protocol": "aws-like",
-                "actions": ["CreateVpc", "CreateSubnet", "CreateSecurityGroup", "CreateRouteTable"],
-                "requestSchemas": True,
-                "responseSchemas": True,
-                "errors": True,
-                "pagination": False,
-                "regionAware": True,
-            },
-        },
-        "cloudlearn.apigateway.basic": {
-            "id": "cloudlearn.apigateway.basic",
-            "type": "service",
-            "version": "1.0.0",
-            "provider": "agnostic",
-            "coreProviderNeutral": True,
-            "state": "available",
-            "active": False,
-            "api": {
-                "protocol": "aws-like",
-                "actions": ["CreateRestApi", "CreateResource", "PutMethod", "PutIntegration", "CreateDeployment", "CreateStage"],
-                "requestSchemas": True,
-                "responseSchemas": True,
-                "errors": True,
-                "pagination": False,
-                "regionAware": True,
-            },
-        },
-        "cloudlearn.runtime.python": {
-            "id": "cloudlearn.runtime.python",
-            "type": "runtime",
-            "version": "1.0.0",
-            "provider": "agnostic",
-            "coreProviderNeutral": True,
-            "state": "available",
-            "active": False,
-            "api": {
-                "protocol": "aws-like",
-                "actions": ["Deploy", "Invoke", "Restart"],
-                "requestSchemas": True,
-                "responseSchemas": True,
-                "errors": True,
-                "pagination": False,
-                "regionAware": False,
-            },
-        },
-        "cloudlearn.lambda.basic": {
-            "id": "cloudlearn.lambda.basic",
-            "type": "service",
-            "version": "1.0.0",
-            "provider": "agnostic",
-            "coreProviderNeutral": True,
-            "state": "available",
-            "active": False,
-            "api": {
-                "protocol": "aws-like",
-                "actions": ["CreateFunction", "ListFunctions", "Invoke", "UpdateFunctionCode", "UpdateFunctionConfiguration", "PublishVersion", "AddPermission", "RemovePermission", "GetPolicy"],
-                "requestSchemas": True,
-                "responseSchemas": True,
-                "errors": True,
-                "pagination": True,
-                "regionAware": True,
-            },
-        },
-        "cloudlearn.sqs.basic": {
-            "id": "cloudlearn.sqs.basic",
-            "type": "service",
-            "version": "1.0.0",
-            "provider": "agnostic",
-            "coreProviderNeutral": True,
-            "state": "available",
-            "active": False,
-            "api": {
-                "protocol": "aws-like",
-                "actions": ["CreateQueue", "ListQueues", "GetQueueUrl", "GetQueueAttributes", "SetQueueAttributes", "SendMessage", "ReceiveMessage", "DeleteMessage", "ChangeMessageVisibility", "PurgeQueue", "TagQueue", "UntagQueue", "ListQueueTags"],
-                "requestSchemas": True,
-                "responseSchemas": True,
-                "errors": True,
-                "pagination": True,
-                "regionAware": True,
-            },
-        },
-        "cloudlearn.dynamodb.basic": {
-            "id": "cloudlearn.dynamodb.basic",
-            "type": "service",
-            "version": "1.0.0",
-            "provider": "agnostic",
-            "coreProviderNeutral": True,
-            "state": "available",
-            "active": False,
-            "api": {
-                "protocol": "aws-like",
-                "actions": ["CreateTable", "ListTables", "DescribeTable", "PutItem", "GetItem", "UpdateItem", "DeleteItem", "Query", "Scan", "BatchGetItem", "BatchWriteItem"],
-                "requestSchemas": True,
-                "responseSchemas": True,
-                "errors": True,
-                "pagination": True,
-                "regionAware": True,
-            },
-        },
-        "cloudlearn.cloudsim.basic": {
-            "id": "cloudlearn.cloudsim.basic",
-            "type": "service",
-            "version": "1.0.0",
-            "provider": "agnostic",
-            "coreProviderNeutral": True,
-            "state": "available",
-            "active": False,
-            "api": {
-                "protocol": "aws-like",
-                "actions": ["GetSummary", "Reconcile", "ListEvents"],
-                "requestSchemas": True,
-                "responseSchemas": True,
-                "errors": True,
-                "pagination": False,
-                "regionAware": True,
-            },
-        },
-    }
+    return load_default_packs()
 
 
 def _default_state() -> dict:
@@ -1416,6 +1305,30 @@ class EC2InstanceRequest(BaseModel):
     command: str = ""
     user_data: str = ""
     sample_app_id: str = ""
+
+
+class GCPComputeInstanceRequest(BaseModel):
+    project: str = "cloudlearn"
+    zone: str = "us-central1-a"
+    name: str = "gcp-instance"
+    machineType: str = "e2-micro"
+    sourceImage: str = "sim-ubuntu-22.04"
+    runtime: str = "python"
+    runtimeBackend: str = ""
+    keyPair: str = ""
+    subnetId: str = ""
+    vpcId: str = ""
+    securityGroupIds: list[str] = []
+    bootDiskSizeGb: int = 8
+    bootDiskType: str = "Balanced persistent disk"
+    assignExternalIp: bool = True
+    serviceAccount: str = "default"
+    shieldedVm: bool = True
+    vtpm: bool = True
+    integrityMonitoring: bool = True
+    startupScript: str = ""
+    startupCommand: str = ""
+    labels: dict[str, str] = {}
 
 
 class EC2ConsoleInputRequest(BaseModel):
@@ -3418,7 +3331,8 @@ async def _capability_middleware(request: Request, call_next):
         })
         if not allowed:
             return _iam_deny_response(request, action, resource, reason)
-    _ensure_capability(request.url.path)
+    capability_path = getattr(request.state, "cloudlearn_original_path", request.url.path)
+    _ensure_capability(capability_path)
     response = await call_next(request)
     if request.method in {"POST", "PUT", "DELETE", "PATCH"}:
         try:
@@ -3433,14 +3347,9 @@ def healthz():
     return {"status": "ok", "tier": STATE["license"].get("tier", "free"), "packs_active": sum(1 for p in STATE["packs"].values() if p.get("active"))}
 
 
-@app.on_event("startup")
-def _startup_reconcile_ec2_state():
-    try:
-        PLATFORM.runtime.start_bootstrap()
-    except Exception:
-        pass
-    for instance_id in _ec2_instance_ids():
-        instance = ec2_state["instances"].get(instance_id)
+def _reconcile_runtime_instances(instances: dict[str, dict]) -> None:
+    for instance_id in list(instances.keys()):
+        instance = instances.get(instance_id)
         if not isinstance(instance, dict):
             continue
         backend = str(instance.get("runtime_backend") or "").strip().lower()
@@ -3464,7 +3373,33 @@ def _startup_reconcile_ec2_state():
                     _stop_sample_app_server(instance_id)
             except Exception:
                 instance["sample_app_status"] = "error"
+
+
+def _prune_expired_terminated_instances_from(instances: dict[str, dict]) -> None:
+    with STATE_LOCK:
+        now = datetime.now(timezone.utc)
+        removed = False
+        for instance_id, instance in list(instances.items()):
+            if not isinstance(instance, dict) or instance.get("state") != "terminated":
+                continue
+            if _terminated_visible(instance, now):
+                continue
+            instances.pop(instance_id, None)
+            removed = True
+        if removed:
+            _persist_state()
+
+
+@app.on_event("startup")
+def _startup_reconcile_ec2_state():
+    try:
+        PLATFORM.runtime.start_bootstrap()
+    except Exception:
+        pass
+    _reconcile_runtime_instances(ec2_state.get("instances", {}))
+    _reconcile_runtime_instances(gcp_compute_state.get("instances", {}))
     _prune_expired_terminated_instances()
+    _prune_expired_terminated_instances_from(gcp_compute_state.get("instances", {}))
 
 # ── In-memory state ─────────────────────────────────────────────────────────
 # buckets   : { name → { region, created, access, versioning, arn, tags:{} } }
@@ -3484,7 +3419,9 @@ class _SpaceScopedDictProxy(MutableMapping):
         space = spaces_state.get("spaces", {}).get(active_id, {}) if active_id else {}
         if isinstance(space, dict):
             service_states = space.setdefault("service_states", {})
-            service_state = service_states.setdefault(self.service_key, self.default_factory())
+            req_provider = str(REQUEST_PROVIDER.get() or "aws").lower().strip()
+            service_key = self.service_key if req_provider == "aws" else f"{req_provider}_{self.service_key}"
+            service_state = service_states.setdefault(service_key, self.default_factory())
         else:
             service_state = STATE.setdefault(self.service_key, self.default_factory())
         return service_state
@@ -3550,6 +3487,15 @@ iam_state.setdefault("attachments", [])
 iam_state.setdefault("identity_providers", {})
 iam_state.setdefault("account_settings", {"password_policy": {"minimum_length": 8, "require_symbols": True, "require_numbers": True, "require_uppercase": True, "require_lowercase": True}})
 ec2_state = _SpaceScopedDictProxy("ec2", lambda: {"instances": {}})
+gcp_compute_state = _SpaceScopedDictProxy("gcp_compute", lambda: {"instances": {}})
+gcp_storage_state = _SpaceScopedDictProxy("gcp_storage", lambda: {"buckets": {}, "objects": {}, "operations": []})
+gcp_sql_state = _SpaceScopedDictProxy("gcp_sql", lambda: {"instances": {}, "operations": []})
+gcp_pubsub_state = _SpaceScopedDictProxy("gcp_pubsub", lambda: {"topics": {}, "subscriptions": {}, "messages": {}, "operations": []})
+gcp_firestore_state = _SpaceScopedDictProxy("gcp_firestore", lambda: {"databases": {}, "documents": {}, "operations": []})
+gcp_functions_state = _SpaceScopedDictProxy("gcp_functions", lambda: {"functions": {}, "versions": {}, "invocations": [], "operations": []})
+gcp_apigw_state = _SpaceScopedDictProxy("gcp_apigateway", lambda: {"apis": {}, "api_configs": {}, "gateways": {}, "operations": [], "logs": []})
+gcp_vpc_state = _SpaceScopedDictProxy("gcp_vpc", lambda: {"networks": {}, "subnetworks": {}, "firewalls": {}, "routes": {}, "operations": []})
+gcp_iam_state = _SpaceScopedDictProxy("gcp_iam", lambda: {"policies": {}, "service_accounts": {}, "bindings": [], "operations": []})
 vpc_state = _SpaceScopedDictProxy("vpc", lambda: {"vpcs": {}, "subnets": {}, "security_groups": {}, "route_tables": {}, "internet_gateways": {}})
 rds_state = _SpaceScopedDictProxy("rds", lambda: {"db_instances": {}, "db_subnet_groups": {}, "db_parameter_groups": {}, "db_snapshots": {}, "events": []})
 apigw_state = _SpaceScopedDictProxy("apigateway", lambda: {"apis": {}, "logs": []})
@@ -3969,19 +3915,7 @@ def _terminated_visible(instance: dict, now: Optional[datetime] = None) -> bool:
 
 
 def _prune_expired_terminated_instances() -> None:
-    now = datetime.now(timezone.utc)
-    removed = False
-    with STATE_LOCK:
-        instances = ec2_state.get("instances", {})
-        for instance_id, instance in list(instances.items()):
-            if not isinstance(instance, dict) or instance.get("state") != "terminated":
-                continue
-            if _terminated_visible(instance, now):
-                continue
-            instances.pop(instance_id, None)
-            removed = True
-        if removed:
-            _persist_state()
+    _prune_expired_terminated_instances_from(ec2_state.get("instances", {}))
 
 
 def _ec2_instance_ids() -> list[str]:
@@ -5095,6 +5029,10 @@ def _runtime_bootstrap_status(backend: str | None = None) -> dict:
 
 def _runtime_bootstrap_target(backend: str | None = None) -> dict:
     return PLATFORM.runtime.bootstrap_target(backend)
+
+
+def _gcp_firestore_engine():
+    return PLATFORM.firestore
 
 
 def _require_lxd_runtime() -> None:
@@ -6589,17 +6527,85 @@ def _spaces_state() -> dict:
     return spaces_state
 
 
+def _federation_space_summary() -> dict:
+    spaces_state = _spaces_state()
+    spaces = spaces_state.get("spaces", {})
+    federations = STATE.setdefault("federations", {"federations": {}, "links": {}, "tests": []})
+    federation_defs = federations.get("federations", {})
+    links = federations.get("links", {})
+    link_values = list(links.values()) if isinstance(links, dict) else list(links) if isinstance(links, list) else []
+    provider_counts: dict[str, int] = {}
+    resource_counts = {
+        "runtime_count": 0,
+        "ec2_count": 0,
+        "lambda_count": 0,
+        "rds_count": 0,
+        "sqs_count": 0,
+        "dynamodb_count": 0,
+    }
+    active_space_ids = {
+        space_id
+        for space_id, space in spaces.items()
+        if isinstance(space, dict) and str(space.get("status", "running")).lower() == "running"
+    }
+    linked_space_ids: set[str] = set()
+    linked_active_space_ids: set[str] = set()
+    link_count = 0
+    for link in link_values:
+        if not isinstance(link, dict):
+            continue
+        src = str(link.get("source_space_id") or link.get("source") or link.get("space_id") or "").strip()
+        dst = str(link.get("target_space_id") or link.get("target") or link.get("peer_space_id") or "").strip()
+        if not src and not dst:
+            continue
+        link_count += 1
+        for sid in (src, dst):
+            if sid:
+                linked_space_ids.add(sid)
+                if sid in active_space_ids:
+                    linked_active_space_ids.add(sid)
+    for space in spaces.values():
+        if not isinstance(space, dict):
+            continue
+        provider = str(space.get("provider") or "aws").lower()
+        provider_counts[provider] = provider_counts.get(provider, 0) + 1
+        for key in resource_counts:
+            resource_counts[key] += int(space.get(key) or 0)
+    return {
+        "federation_count": len(federation_defs) if isinstance(federation_defs, dict) else 0,
+        "link_count": link_count,
+        "linked_spaces": len(linked_space_ids),
+        "active_linked_spaces": len(linked_active_space_ids),
+        "linked_space_ids": sorted(linked_space_ids),
+        "active_linked_space_ids": sorted(linked_active_space_ids),
+        "provider_counts": provider_counts,
+        "resource_counts": resource_counts,
+    }
+
+
 @app.get("/api/spaces")
 def api_list_spaces():
     spaces = PLATFORM.list_spaces()
     spaces_state = _spaces_state()
     active_id = spaces_state.get("active_space_id", "")
+    federation_summary = _federation_space_summary()
     return {
         "spaces": [_space_payload(space) for space in spaces],
         "count": len(spaces),
         "active_space_id": active_id,
         "active_space": _space_payload(spaces_state.get("spaces", {}).get(active_id, {})) if active_id else None,
         "settings": copy.deepcopy(spaces_state.get("settings", {})),
+        "provider_counts": copy.deepcopy(federation_summary.get("provider_counts", {})),
+        "resource_counts": copy.deepcopy(federation_summary.get("resource_counts", {})),
+        "federation_summary": federation_summary,
+    }
+
+
+@app.get("/api/providers")
+def api_list_providers():
+    return {
+        "providers": list_providers(),
+        "default_provider": _spaces_state().get("settings", {}).get("default_provider", "aws"),
     }
 
 
@@ -6716,6 +6722,15 @@ def api_cloudsim_events():
 @app.get("/api/packs")
 def api_list_packs():
     return {"packs": _catalog(), "count": len(STATE["packs"])}
+
+
+@app.get("/api/packs/{pack_id}/fragment")
+def api_pack_fragment(pack_id: str):
+    try:
+        fragment = fragment_for_pack(pack_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="PackNotFound")
+    return Response(content=fragment, media_type="text/html; charset=utf-8")
 
 
 @app.get("/api/ec2/amis")
@@ -7226,10 +7241,10 @@ def _start_runtime_process(instance: dict) -> None:
     raise HTTPException(status_code=503, detail="RuntimeUnavailable")
 
 
-def _queue_runtime_start(instance_id: str) -> None:
+def _queue_runtime_start_for_store(instances_store, instance_id: str) -> None:
     def _worker() -> None:
         with STATE_LOCK:
-            instance = ec2_state["instances"].get(instance_id)
+            instance = instances_store.get(instance_id)
             if not isinstance(instance, dict):
                 return
             instance["launch_status"] = "starting"
@@ -7237,13 +7252,13 @@ def _queue_runtime_start(instance_id: str) -> None:
         try:
             _start_runtime_process(instance)
             with STATE_LOCK:
-                instance = ec2_state["instances"].get(instance_id)
+                instance = instances_store.get(instance_id)
                 if isinstance(instance, dict):
                     instance["launch_status"] = "ready"
                     _persist_state()
         except HTTPException as exc:
             with STATE_LOCK:
-                instance = ec2_state["instances"].get(instance_id)
+                instance = instances_store.get(instance_id)
                 if isinstance(instance, dict):
                     instance["launch_status"] = "error"
                     instance["launch_error"] = str(exc.detail)
@@ -7253,7 +7268,7 @@ def _queue_runtime_start(instance_id: str) -> None:
                     _persist_state()
         except Exception as exc:
             with STATE_LOCK:
-                instance = ec2_state["instances"].get(instance_id)
+                instance = instances_store.get(instance_id)
                 if isinstance(instance, dict):
                     instance["launch_status"] = "error"
                     instance["launch_error"] = str(exc)
@@ -7263,6 +7278,10 @@ def _queue_runtime_start(instance_id: str) -> None:
                     _persist_state()
 
     threading.Thread(target=_worker, name=f"cloudlearn-launch-{instance_id}", daemon=True).start()
+
+
+def _queue_runtime_start(instance_id: str) -> None:
+    _queue_runtime_start_for_store(ec2_state["instances"], instance_id)
 
 
 def _stop_runtime_process(instance: dict) -> None:
@@ -7696,6 +7715,307 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
     return _ec2_success_response("RunInstancesResponse", build)
 
 
+def _gcp_compute_instance_ids() -> list[str]:
+    with STATE_LOCK:
+        return list(gcp_compute_state.get("instances", {}).keys())
+
+
+def _gcp_compute_find_instance(project: str, zone: str, instance_ref: str) -> dict | None:
+    instance = gcp_compute_state.get("instances", {}).get(instance_ref)
+    if not isinstance(instance, dict):
+        for candidate in gcp_compute_state.get("instances", {}).values():
+            if not isinstance(candidate, dict):
+                continue
+            if str(candidate.get("name") or "").strip() == str(instance_ref or "").strip():
+                instance = candidate
+                break
+    if not isinstance(instance, dict):
+        return None
+    if str(instance.get("project") or "").strip() != str(project or "").strip():
+        return None
+    requested_zone = str(zone or "").strip().lower()
+    if requested_zone and requested_zone not in {"-", "*", "_all", "all"}:
+        if str(instance.get("zone") or instance.get("az") or "").strip() != zone:
+            return None
+    return instance
+
+
+def _gcp_compute_state_meta(state: str) -> str:
+    mapping = {
+        "pending": "PROVISIONING",
+        "running": "RUNNING",
+        "stopping": "STOPPING",
+        "stopped": "TERMINATED",
+        "rebooting": "STAGING",
+        "terminated": "TERMINATED",
+    }
+    return mapping.get(str(state or "").strip().lower(), "PROVISIONING")
+
+
+def _gcp_compute_api_root() -> str:
+    return "https://compute.googleapis.com/compute/v1"
+
+
+def _gcp_compute_project_path(project: str) -> str:
+    return f"projects/{project}"
+
+
+def _gcp_compute_zone_path(project: str, zone: str) -> str:
+    return f"projects/{project}/zones/{zone}"
+
+
+def _gcp_compute_instance_path(project: str, zone: str, instance_name: str) -> str:
+    return f"{_gcp_compute_api_root()}/projects/{project}/zones/{zone}/instances/{instance_name}"
+
+
+def _gcp_compute_operation_path(project: str, zone: str, op_name: str) -> str:
+    return f"{_gcp_compute_api_root()}/projects/{project}/zones/{zone}/operations/{op_name}"
+
+
+def _gcp_resource_name(value: Any, default: str = "") -> str:
+    text = str(value or "").strip()
+    if not text:
+        return default
+    return text.rstrip("/").split("/")[-1] or default
+
+
+def _gcp_compute_numeric_id(value: str) -> str:
+    token = hashlib.sha1(str(value or "").encode("utf-8")).hexdigest()[:16]
+    return str(int(token, 16))
+
+
+def _gcp_compute_instance_json(instance: dict) -> dict:
+    project = str(instance.get("project") or "cloudlearn")
+    zone = str(instance.get("zone") or instance.get("az") or "us-central1-a")
+    machine_type = str(instance.get("machine_type") or instance.get("instance_type") or "e2-micro")
+    instance_name = str(instance.get("name") or instance.get("instance_id") or "gcp-instance")
+    status = _gcp_compute_state_meta(instance.get("state", "pending"))
+    resource_id = str(instance.get("gcp_resource_id") or _gcp_compute_numeric_id(instance_name))
+    network_interfaces = [
+        {
+            "name": "nic0",
+            "network": f"{_gcp_compute_api_root()}/projects/{project}/global/networks/{instance.get('vpc_id') or 'default'}",
+            "subnetwork": f"{_gcp_compute_api_root()}/projects/{project}/regions/{zone.rsplit('-', 1)[0] if '-' in zone else 'us-central1'}/subnetworks/{instance.get('subnet_id') or 'default'}",
+            "networkIP": instance.get("private_ip") or "",
+            "accessConfigs": ([{"name": "External NAT", "type": "ONE_TO_ONE_NAT", "natIP": instance.get("public_ip")}] if instance.get("public_ip") else []),
+            "stackType": "IPV4_ONLY",
+        }
+    ]
+    disks = [
+        {
+            "kind": "compute#attachedDisk",
+            "type": "PERSISTENT",
+            "mode": "READ_WRITE",
+            "boot": True,
+            "autoDelete": True,
+            "deviceName": instance_name,
+            "initializeParams": {
+                "sourceImage": f"{_gcp_compute_api_root()}/projects/{project}/global/images/{instance.get('ami') or 'sim-ubuntu-22.04'}",
+                "diskSizeGb": str(instance.get("storage_gb") or 8),
+                "diskType": f"{_gcp_compute_api_root()}/projects/{project}/zones/{zone}/diskTypes/{instance.get('boot_disk_type') or 'pd-balanced'}",
+            },
+        }
+    ]
+    return {
+        "kind": "compute#instance",
+        "id": resource_id,
+        "name": instance_name,
+        "zone": f"{_gcp_compute_api_root()}/projects/{project}/zones/{zone}",
+        "machineType": f"projects/{project}/zones/{zone}/machineTypes/{machine_type}",
+        "status": status,
+        "fingerprint": instance.get("fingerprint", ""),
+        "labelFingerprint": instance.get("label_fingerprint", ""),
+        "tags": {"items": instance.get("tags", []), "fingerprint": instance.get("tag_fingerprint", "")},
+        "metadata": {
+            "kind": "compute#metadata",
+            "fingerprint": instance.get("metadata_fingerprint", ""),
+            "items": [{"key": k, "value": v} for k, v in (instance.get("metadata_items") or {}).items()],
+        },
+        "disks": disks,
+        "networkInterfaces": network_interfaces,
+        "labels": instance.get("labels", {}),
+        "creationTimestamp": instance.get("created", _now()),
+        "selfLink": _gcp_compute_instance_path(project, zone, instance_name),
+        "canIpForward": bool(instance.get("assign_external_ip", True)),
+        "description": instance.get("description", ""),
+        "scheduling": {
+            "automaticRestart": True,
+            "onHostMaintenance": "MIGRATE",
+            "preemptible": False,
+        },
+        "serviceAccounts": [
+            {
+                "email": f"{instance.get('service_account', 'default')}@{project}.iam.gserviceaccount.com",
+                "scopes": ["https://www.googleapis.com/auth/cloud-platform"],
+            }
+        ],
+        "deletionProtection": bool(instance.get("deletion_protection", False)),
+        "shieldedInstanceConfig": {
+            "enableSecureBoot": bool(instance.get("shielded_vm", True)),
+            "enableVtpm": bool(instance.get("vtpm", True)),
+            "enableIntegrityMonitoring": bool(instance.get("integrity_monitoring", True)),
+        },
+        "cpuPlatform": instance.get("cpu_platform", "Intel Skylake"),
+    }
+
+
+def _gcp_compute_operation_json(instance: dict, operation_type: str, status: str = "DONE") -> dict:
+    project = str(instance.get("project") or "cloudlearn")
+    zone = str(instance.get("zone") or instance.get("az") or "us-central1-a")
+    instance_name = str(instance.get("name") or instance.get("instance_id") or "gcp-instance")
+    op_name = f"{operation_type}-{instance_name}"
+    resource_id = str(instance.get("gcp_resource_id") or _gcp_compute_numeric_id(instance_name))
+    return {
+        "kind": "compute#operation",
+        "id": _gcp_compute_numeric_id(op_name),
+        "name": op_name,
+        "status": status,
+        "operationType": operation_type,
+        "targetLink": _gcp_compute_instance_path(project, zone, instance_name),
+        "targetId": resource_id,
+        "zone": _gcp_compute_zone_path(project, zone),
+        "selfLink": _gcp_compute_operation_path(project, zone, op_name),
+        "insertTime": instance.get("created", _now()),
+        "startTime": instance.get("created", _now()),
+        "endTime": _now() if status.upper() == "DONE" else "",
+        "progress": 100 if status.upper() == "DONE" else 0,
+        "user": "cloudlearn",
+    }
+
+
+def _gcp_compute_json_list(project: str, zone: str) -> dict:
+    instances = []
+    zone_key = str(zone or "").strip().lower()
+    for instance in gcp_compute_state.get("instances", {}).values():
+        if not isinstance(instance, dict):
+            continue
+        if str(instance.get("project") or "cloudlearn").strip() != str(project or "cloudlearn").strip():
+            continue
+        instance_zone = str(instance.get("zone") or instance.get("az") or "us-central1-a")
+        if zone_key and zone_key not in {"-", "*", "_all", "all"} and instance_zone != zone:
+            continue
+        instances.append(_gcp_compute_instance_json(instance))
+    return {
+        "kind": "compute#instanceList",
+        "id": f"projects/{project}/zones/{zone}/instances",
+        "selfLink": f"{_gcp_compute_api_root()}/projects/{project}/zones/{zone}/instances",
+        "items": instances,
+    }
+
+
+def _gcp_compute_create_instance_instance(project: str, zone: str, payload: dict[str, Any]) -> dict:
+    instance_id = _id("gce")
+    source_image_ref = str(payload.get("sourceImage") or payload.get("ami") or "sim-ubuntu-22.04")
+    machine_type_ref = str(payload.get("machineType") or payload.get("instance_type") or "e2-micro")
+    boot_disk_type_ref = str(payload.get("bootDiskType") or payload.get("boot_disk_type") or "pd-balanced")
+    profile = _ami_profile(_gcp_resource_name(source_image_ref, "sim-ubuntu-22.04"))
+    runtime_backend = _ec2_choose_runtime_backend(profile, str(payload.get("runtimeBackend") or payload.get("runtime_backend") or ""))
+    workspace = _instance_workspace(instance_id)
+    workspace.mkdir(parents=True, exist_ok=True)
+    runtime_image = profile.get("runtime_image") or (
+        MULTIPASS_RUNTIME_IMAGE if runtime_backend == "multipass" else LXD_RUNTIME_IMAGE
+    )
+    labels = payload.get("labels") if isinstance(payload.get("labels"), dict) else {}
+    network_interfaces_payload = payload.get("networkInterfaces") if isinstance(payload.get("networkInterfaces"), list) else []
+    first_network = network_interfaces_payload[0] if network_interfaces_payload and isinstance(network_interfaces_payload[0], dict) else {}
+    network_ref = first_network.get("network") or f"{_gcp_compute_api_root()}/projects/{project}/global/networks/default"
+    subnetwork_ref = first_network.get("subnetwork") or f"{_gcp_compute_api_root()}/projects/{project}/regions/{zone.rsplit('-', 1)[0] if '-' in zone else 'us-central1'}/subnetworks/default"
+    access_configs = first_network.get("accessConfigs") if isinstance(first_network.get("accessConfigs"), list) else []
+    metadata_items_raw = []
+    metadata = payload.get("metadata")
+    if isinstance(metadata, dict):
+        metadata_items_raw = metadata.get("items", [])
+    metadata_items: dict[str, Any] = {}
+    if isinstance(metadata_items_raw, dict):
+        metadata_items = {str(k): v for k, v in metadata_items_raw.items()}
+    elif isinstance(metadata_items_raw, list):
+        for item in metadata_items_raw:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("key") or "").strip()
+            if not key:
+                continue
+            metadata_items[key] = item.get("value", "")
+    assign_external_ip = bool(payload.get("assignExternalIp", payload.get("assign_external_ip", True)))
+    if not assign_external_ip and access_configs:
+        assign_external_ip = True
+    instance = {
+        "instance_id": instance_id,
+        "id": instance_id,
+        "gcp_resource_id": _gcp_compute_numeric_id(instance_id),
+        "reservation_id": f"r-{instance_id.replace('gce-', '')}",
+        "owner_id": AWS_ACCOUNT_ID,
+        "provider": "gcp",
+        "project": str(project or "cloudlearn"),
+        "zone": str(zone or "us-central1-a"),
+        "name": str(payload.get("name") or "gcp-instance"),
+        "machine_type": _gcp_resource_name(machine_type_ref, "e2-micro"),
+        "machineType": f"{_gcp_compute_api_root()}/projects/{project}/zones/{zone}/machineTypes/{_gcp_resource_name(machine_type_ref, 'e2-micro')}",
+        "ami": _gcp_resource_name(source_image_ref, "sim-ubuntu-22.04"),
+        "ami_name": profile.get("name", _gcp_resource_name(source_image_ref, "sim-ubuntu-22.04")),
+        "os_family": profile.get("os_family", "linux"),
+        "container_image": profile.get("container_image", ""),
+        "runtime_image": runtime_image,
+        "runtime": str(payload.get("runtime") or profile.get("default_runtime") or "python"),
+        "runtime_backend_requested": str(payload.get("runtimeBackend") or payload.get("runtime_backend") or "").strip().lower(),
+        "runtime_backend": runtime_backend,
+        "key_pair": str(payload.get("keyPair") or payload.get("key_pair") or ""),
+        "state": "pending",
+        "launch_status": "queued",
+        "az": str(zone or "us-central1-a"),
+        "vpc_id": _gcp_resource_name(payload.get("vpcId") or payload.get("vpc_id") or network_ref, "default"),
+        "subnet_id": _gcp_resource_name(payload.get("subnetId") or payload.get("subnet_id") or subnetwork_ref, ""),
+        "security_group_ids": [str(v) for v in (payload.get("securityGroupIds") or payload.get("security_group_ids") or []) if str(v).strip()],
+        "storage_gb": int(payload.get("bootDiskSizeGb") or payload.get("storage_gb") or (str((payload.get("disks") or [{}])[0].get("initializeParams", {}).get("diskSizeGb", 8)).strip() or 8)),
+        "boot_disk_type": _gcp_resource_name(boot_disk_type_ref, "pd-balanced"),
+        "private_ip": _private_ip(),
+        "public_ip": _public_ip() if assign_external_ip else None,
+        "command": str(payload.get("startupCommand") or payload.get("command") or ""),
+        "user_data": str(payload.get("startupScript") or payload.get("user_data") or ""),
+        "service_account": str(payload.get("serviceAccount") or payload.get("service_account") or "default"),
+        "assign_external_ip": assign_external_ip,
+        "shielded_vm": bool(payload.get("shieldedVm", payload.get("shielded_vm", True))),
+        "vtpm": bool(payload.get("vtpm", True)),
+        "integrity_monitoring": bool(payload.get("integrityMonitoring", payload.get("integrity_monitoring", True))),
+        "labels": labels,
+        "metadata_items": metadata_items,
+        "created": _now(),
+        "workspace": str(workspace),
+        "deployment_path": str(workspace),
+        "console_state": {"cwd": str(workspace)},
+        "console_log": [],
+        "container_download_state": "pending",
+        "container_name": f"cloudlearn-{instance_id}",
+        "container_id": "",
+        "container_port": DOCKER_CONSOLE_PORT,
+        "host_port": _allocate_host_port(),
+        "endpoint_url": f"gcp://{instance_id}",
+        "container_status": "created",
+        "console_backend": "multipass-ssh" if runtime_backend == "multipass" else f"{runtime_backend}-exec",
+        "console_prompt": _cmd_prompt({"runtime_backend": runtime_backend, "container_name": f"cloudlearn-{instance_id}", "container_id": ""}),
+        "sample_app_id": str(payload.get("sampleAppId") or payload.get("sample_app_id") or ""),
+        "sample_app_name": "",
+        "sample_app_status": "not deployed",
+        "sample_app_command": "",
+        "sample_app_port": DOCKER_CONSOLE_PORT,
+        "network_interfaces": network_interfaces_payload,
+    }
+    if instance["sample_app_id"]:
+        manifest = _sample_app_manifest(instance["sample_app_id"])
+        instance["sample_app_name"] = manifest["name"]
+        instance["sample_app_command"] = manifest["start_command"]
+        instance["sample_app_kill_pattern"] = manifest["kill_pattern"]
+        instance["sample_app_port"] = manifest["container_port"]
+        instance["sample_app_status"] = "deployed"
+        instance["command"] = manifest["start_command"]
+        _copy_sample_app_files(instance["sample_app_id"], workspace)
+    return instance
+
+
+def _gcp_compute_queue_runtime_start(instance_id: str) -> None:
+    _queue_runtime_start_for_store(gcp_compute_state["instances"], instance_id)
+
+
 def _ec2_query_state_change_response(root_name: str, changes: list[tuple[dict, str, str | None]]) -> Response:
     def build(root: ET.Element) -> None:
         instances_set = _ec2_sub(root, "instancesSet")
@@ -7793,13 +8113,104 @@ async def api_ec2_query(request: Request):
     return _ec2_error_response("InvalidAction", f"The action '{action}' is not implemented by the simulator.", 400)
 
 
-@app.websocket("/ws/ec2/instances/{instance_id}/console")
-async def ws_ec2_console(websocket: WebSocket, instance_id: str):
-    instance = ec2_state["instances"].get(instance_id)
-    if not instance:
-        await websocket.close(code=1008)
-        return
+@app.get("/compute/v1/projects/{project}/zones/{zone}/instances")
+@app.get("/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances")
+def api_gcp_compute_list_instances(project: str, zone: str):
+    return _gcp_compute_json_list(project, zone)
 
+
+@app.post("/compute/v1/projects/{project}/zones/{zone}/instances")
+@app.post("/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances")
+async def api_gcp_compute_create_instance(project: str, zone: str, request: Request):
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    try:
+        req = GCPComputeInstanceRequest(**payload)
+    except Exception as exc:
+        raise HTTPException(400, detail=f"InvalidComputeEngineRequest: {exc}")
+    instance = _gcp_compute_create_instance_instance(project, zone, req.dict())
+    gcp_compute_state["instances"][instance["instance_id"]] = instance
+    _gcp_compute_queue_runtime_start(instance["instance_id"])
+    _record_usage("gcp.compute.create_instance", instance)
+    return _gcp_compute_operation_json(instance, "insert", "PENDING")
+
+
+@app.get("/compute/v1/projects/{project}/zones/{zone}/instances/{instance}")
+@app.get("/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{instance}")
+def api_gcp_compute_get_instance(project: str, zone: str, instance: str):
+    instance = _gcp_compute_find_instance(project, zone, instance)
+    if not instance:
+        raise HTTPException(404, detail="NoSuchInstance")
+    return _gcp_compute_instance_json(instance)
+
+
+@app.post("/compute/v1/projects/{project}/zones/{zone}/instances/{instance}/start")
+@app.post("/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{instance}/start")
+def api_gcp_compute_start_instance(project: str, zone: str, instance: str):
+    instance = _gcp_compute_find_instance(project, zone, instance)
+    if not instance:
+        raise HTTPException(404, detail="NoSuchInstance")
+    previous_state = instance.get("state", "stopped")
+    instance["state"] = "pending"
+    instance["launch_status"] = "starting"
+    _gcp_compute_queue_runtime_start(str(instance.get("instance_id", "")))
+    _record_usage("gcp.compute.start_instance", {"instance_id": instance.get("instance_id", ""), "project": project, "zone": zone})
+    return _gcp_compute_operation_json(instance, "start", "PENDING")
+
+
+@app.post("/compute/v1/projects/{project}/zones/{zone}/instances/{instance}/stop")
+@app.post("/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{instance}/stop")
+def api_gcp_compute_stop_instance(project: str, zone: str, instance: str):
+    instance = _gcp_compute_find_instance(project, zone, instance)
+    if not instance:
+        raise HTTPException(404, detail="NoSuchInstance")
+    previous_state = instance.get("state", "running")
+    _stop_runtime_process(instance)
+    instance["state"] = "stopped"
+    instance["stopped_at"] = _now()
+    instance["launch_status"] = "ready"
+    _record_usage("gcp.compute.stop_instance", {"instance_id": instance.get("instance_id", ""), "project": project, "zone": zone})
+    return _gcp_compute_operation_json(instance, "stop", "DONE")
+
+
+@app.post("/compute/v1/projects/{project}/zones/{zone}/instances/{instance}/reset")
+@app.post("/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{instance}/reset")
+def api_gcp_compute_reset_instance(project: str, zone: str, instance: str):
+    instance = _gcp_compute_find_instance(project, zone, instance)
+    if not instance:
+        raise HTTPException(404, detail="NoSuchInstance")
+    previous_state = instance.get("state", "running")
+    if previous_state != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    _reboot_runtime_process(instance)
+    instance["launch_status"] = "ready"
+    _record_usage("gcp.compute.reset_instance", {"instance_id": instance.get("instance_id", ""), "project": project, "zone": zone})
+    return _gcp_compute_operation_json(instance, "reset", "DONE")
+
+
+@app.delete("/compute/v1/projects/{project}/zones/{zone}/instances/{instance}")
+@app.delete("/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{instance}")
+def api_gcp_compute_delete_instance(project: str, zone: str, instance: str):
+    instance = _gcp_compute_find_instance(project, zone, instance)
+    if not instance:
+        raise HTTPException(404, detail="NoSuchInstance")
+    backend = str(instance.get("runtime_backend") or "").strip().lower()
+    if backend == "multipass":
+        _terminate_multipass_instance(instance)
+    elif backend == "lxd":
+        _terminate_docker_instance(instance)
+    else:
+        _terminate_simulated_instance(instance)
+    _record_usage("gcp.compute.delete_instance", {"instance_id": instance.get("instance_id", ""), "project": project, "zone": zone})
+    return _gcp_compute_operation_json(instance, "delete", "DONE")
+
+
+async def _instance_console_ws(websocket: WebSocket, instance: dict, instance_id: str, provider_name: str, empty_message: str) -> None:
     backend = str(instance.get("runtime_backend") or "").strip().lower()
     if backend == "multipass":
         _sync_multipass_instance(instance)
@@ -7808,7 +8219,7 @@ async def ws_ec2_console(websocket: WebSocket, instance_id: str):
 
     await websocket.accept()
     if instance.get("state") != "running":
-        await websocket.send_text("Instance console is not active. Start the instance first.\n")
+        await websocket.send_text(f"{empty_message}\n")
         await websocket.close()
         return
 
@@ -7820,14 +8231,14 @@ async def ws_ec2_console(websocket: WebSocket, instance_id: str):
             console_cmd = instance.get("ssh_command") or "ssh"
             await websocket.send_text(
                 f"{console_cmd}\n"
-                f"Connected to instance {container_name} ({runtime_image})\n"
+                f"Connected to {provider_name} instance {container_name} ({runtime_image})\n"
             )
         else:
             await websocket.send_text(
-                f"Connected to instance {container_name} ({runtime_image})\n"
+                f"Connected to {provider_name} instance {container_name} ({runtime_image})\n"
             )
     else:
-        await websocket.send_text("A runtime sandbox is required for EC2 consoles.\n")
+        await websocket.send_text(f"A runtime sandbox is required for {provider_name} consoles.\n")
         await websocket.close()
         return
 
@@ -7866,9 +8277,2094 @@ async def ws_ec2_console(websocket: WebSocket, instance_id: str):
             pass
 
 
+@app.websocket("/ws/ec2/instances/{instance_id}/console")
+async def ws_ec2_console(websocket: WebSocket, instance_id: str):
+    instance = ec2_state["instances"].get(instance_id)
+    if not instance:
+        await websocket.close(code=1008)
+        return
+    await _instance_console_ws(websocket, instance, instance_id, "EC2", "Instance console is not active. Start the instance first.")
+
+
+@app.websocket("/ws/compute/v1/projects/{project}/zones/{zone}/instances/{instance}/console")
+@app.websocket("/ws/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{instance}/console")
+async def ws_gcp_compute_console(websocket: WebSocket, project: str, zone: str, instance: str):
+    instance = _gcp_compute_find_instance(project, zone, instance)
+    if not instance:
+        await websocket.close(code=1008)
+        return
+    await _instance_console_ws(websocket, instance, str(instance.get("instance_id", instance.get("name", ""))), "Compute Engine", "Compute Engine console is not active. Start the instance first.")
+
+
 @app.websocket("/ws/runtime-console/{instance_id}")
 async def ws_runtime_console(websocket: WebSocket, instance_id: str):
     await ws_ec2_console(websocket, instance_id)
+
+
+def _gcp_storage_bucket_record(project: str, name: str, payload: dict[str, Any] | None = None) -> dict:
+    payload = payload or {}
+    now = _now()
+    return {
+        "project": project,
+        "name": name,
+        "location": str(payload.get("location") or payload.get("region") or "US"),
+        "locationType": str(payload.get("locationType") or "multi-region"),
+        "storageClass": str(payload.get("storageClass") or "STANDARD"),
+        "timeCreated": now,
+        "updated": now,
+        "metageneration": "1",
+        "labels": payload.get("labels", {}) if isinstance(payload.get("labels"), dict) else {},
+        "iamConfiguration": {
+            "uniformBucketLevelAccess": {"enabled": True, "lockedTime": ""},
+            "publicAccessPrevention": "enforced",
+        },
+    }
+
+
+def _gcp_storage_object_record(bucket: str, name: str, payload: dict[str, Any] | None = None) -> dict:
+    payload = payload or {}
+    now = _now()
+    data = payload.get("data", payload.get("content", ""))
+    if isinstance(data, (dict, list)):
+        data = json.dumps(data, default=str)
+    if not isinstance(data, str):
+        data = str(data)
+    content_type = str(payload.get("contentType") or payload.get("content_type") or "application/octet-stream")
+    size = len(data.encode("utf-8"))
+    return {
+        "bucket": bucket,
+        "name": name,
+        "contentType": content_type,
+        "size": size,
+        "timeCreated": now,
+        "updated": now,
+        "storageClass": str(payload.get("storageClass") or "STANDARD"),
+        "metadata": payload.get("metadata", {}) if isinstance(payload.get("metadata"), dict) else {},
+        "data": data,
+        "md5Hash": payload.get("md5Hash", ""),
+        "crc32c": payload.get("crc32c", ""),
+        "etag": payload.get("etag", ""),
+        "mediaLink": f"{_gcp_gcs_root()}/b/{bucket}/o/{name}?alt=media",
+    }
+
+
+def _gcp_sql_instance_record(project: str, payload: dict[str, Any]) -> dict:
+    name = str(payload.get("name") or payload.get("instance") or payload.get("instanceId") or "sql-instance")
+    region = _gcp_location_name(payload.get("region") or payload.get("location") or "us-central1")
+    now = _now()
+    settings = payload.get("settings") if isinstance(payload.get("settings"), dict) else {}
+    if not settings:
+        settings = {
+            "tier": str(payload.get("tier") or "db-f1-micro"),
+            "activationPolicy": "ALWAYS",
+            "dataDiskType": str(payload.get("dataDiskType") or "PD_SSD"),
+            "dataDiskSizeGb": str(payload.get("dataDiskSizeGb") or "10"),
+            "ipConfiguration": {
+                "ipv4Enabled": True,
+                "privateNetwork": str(payload.get("privateNetwork") or ""),
+                "requireSsl": bool(payload.get("requireSsl", False)),
+            },
+        }
+    return {
+        "name": name,
+        "project": project,
+        "region": region,
+        "databaseVersion": str(payload.get("databaseVersion") or "POSTGRES_15"),
+        "backendType": str(payload.get("backendType") or "SECOND_GEN"),
+        "state": str(payload.get("state") or "RUNNABLE"),
+        "instanceType": str(payload.get("instanceType") or "CLOUD_SQL_INSTANCE"),
+        "connectionName": f"{project}:{region}:{name}",
+        "serviceAccountEmailAddress": f"{project}@{project}.iam.gserviceaccount.com",
+        "masterUsername": str(payload.get("master_username") or payload.get("masterUsername") or payload.get("rootUser") or "dbadmin"),
+        "masterUserPassword": str(payload.get("master_user_password") or payload.get("masterUserPassword") or payload.get("rootPassword") or "Password123!"),
+        "description": str(payload.get("description") or ""),
+        "labels": payload.get("labels", {}) if isinstance(payload.get("labels"), dict) else {},
+        "settings": settings,
+        "ipAddresses": payload.get("ipAddresses") or [{"type": "PRIMARY", "ipAddress": _public_ip()}],
+        "serverCaCert": {"cert": "", "commonName": name, "createTime": now, "expirationTime": ""},
+        "createTime": now,
+        "updateTime": now,
+    }
+
+
+def _gcp_pubsub_topic_record(project: str, topic_id: str, payload: dict[str, Any] | None = None) -> dict:
+    payload = payload or {}
+    return {
+        "topicId": topic_id,
+        "project": project,
+        "name": f"projects/{project}/topics/{topic_id}",
+        "labels": payload.get("labels", {}) if isinstance(payload.get("labels"), dict) else {},
+        "messageRetentionDuration": str(payload.get("messageRetentionDuration") or "604800s"),
+        "kmsKeyName": str(payload.get("kmsKeyName") or ""),
+        "schemaSettings": payload.get("schemaSettings", {}) if isinstance(payload.get("schemaSettings"), dict) else {},
+        "createTime": _now(),
+        "updateTime": _now(),
+    }
+
+
+def _gcp_pubsub_subscription_record(project: str, sub_id: str, payload: dict[str, Any] | None = None) -> dict:
+    payload = payload or {}
+    topic = str(payload.get("topic") or "")
+    return {
+        "subscriptionId": sub_id,
+        "project": project,
+        "name": f"projects/{project}/subscriptions/{sub_id}",
+        "topic": topic,
+        "ackDeadlineSeconds": int(payload.get("ackDeadlineSeconds") or 10),
+        "retainAckedMessages": bool(payload.get("retainAckedMessages", False)),
+        "messageRetentionDuration": str(payload.get("messageRetentionDuration") or "604800s"),
+        "labels": payload.get("labels", {}) if isinstance(payload.get("labels"), dict) else {},
+        "createTime": _now(),
+        "updateTime": _now(),
+    }
+
+
+def _gcp_firestore_value_from_json(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        if any(key in value for key in {"nullValue", "booleanValue", "integerValue", "doubleValue", "timestampValue", "stringValue", "bytesValue", "referenceValue", "geoPointValue", "arrayValue", "mapValue"}):
+            return value
+        return {"mapValue": {"fields": {k: _gcp_firestore_value_from_json(v) for k, v in value.items()}}}
+    if isinstance(value, list):
+        return {"arrayValue": {"values": [_gcp_firestore_value_from_json(v) for v in value]}}
+    if isinstance(value, bool):
+        return {"booleanValue": value}
+    if isinstance(value, int) and not isinstance(value, bool):
+        return {"integerValue": str(value)}
+    if isinstance(value, float):
+        return {"doubleValue": value}
+    if value is None:
+        return {"nullValue": None}
+    return {"stringValue": str(value)}
+
+
+def _gcp_firestore_plain_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        if "stringValue" in value:
+            return value.get("stringValue")
+        if "booleanValue" in value:
+            return bool(value.get("booleanValue"))
+        if "integerValue" in value:
+            try:
+                return int(value.get("integerValue"))
+            except Exception:
+                return value.get("integerValue")
+        if "doubleValue" in value:
+            try:
+                return float(value.get("doubleValue"))
+            except Exception:
+                return value.get("doubleValue")
+        if "nullValue" in value:
+            return None
+        if "mapValue" in value:
+            fields = value.get("mapValue", {}).get("fields", {}) if isinstance(value.get("mapValue"), dict) else {}
+            return {str(k): _gcp_firestore_plain_value(v) for k, v in fields.items()} if isinstance(fields, dict) else {}
+        if "arrayValue" in value:
+            values = value.get("arrayValue", {}).get("values", []) if isinstance(value.get("arrayValue"), dict) else []
+            return [_gcp_firestore_plain_value(v) for v in values] if isinstance(values, list) else []
+    return value
+
+
+def _gcp_firestore_normalize_fields(fields: dict[str, Any] | None = None) -> dict:
+    fields = fields or {}
+    return {str(key): _gcp_firestore_value_from_json(value) for key, value in fields.items()}
+
+
+def _gcp_firestore_doc_record(fields: dict[str, Any] | None = None) -> dict:
+    return {
+        "fields": _gcp_firestore_normalize_fields(fields),
+        "createTime": _now(),
+        "updateTime": _now(),
+    }
+
+
+def _gcp_functions_record(project: str, location: str, payload: dict[str, Any]) -> dict:
+    name = str(payload.get("name") or payload.get("functionId") or "cloud-function")
+    runtime = str(payload.get("runtime") or "python311")
+    entry_point = str(payload.get("entryPoint") or payload.get("entry_point") or "handler")
+    return {
+        "name": name,
+        "project": project,
+        "location": location,
+        "description": str(payload.get("description") or ""),
+        "runtime": runtime,
+        "entryPoint": entry_point,
+        "role": str(payload.get("role") or payload.get("serviceAccountEmail") or ""),
+        "code": str(payload.get("code") or payload.get("sourceCode") or payload.get("source", {}).get("code") or ""),
+        "status": "ACTIVE",
+        "buildConfig": {
+            "runtime": runtime,
+            "entryPoint": entry_point,
+            "source": payload.get("source", {}),
+        },
+        "serviceConfig": {
+            "availableMemory": str(payload.get("availableMemory") or "256M"),
+            "timeoutSeconds": int(payload.get("timeoutSeconds") or 60),
+            "ingressSettings": str(payload.get("ingressSettings") or "ALLOW_ALL"),
+        },
+        "httpsTrigger": payload.get("httpsTrigger"),
+        "eventTrigger": payload.get("eventTrigger"),
+        "environmentVariables": payload.get("environmentVariables", {}) if isinstance(payload.get("environmentVariables"), dict) else {},
+        "labels": payload.get("labels", {}) if isinstance(payload.get("labels"), dict) else {},
+        "permissions": payload.get("permissions", []) if isinstance(payload.get("permissions"), list) else [],
+        "versions": payload.get("versions", []) if isinstance(payload.get("versions"), list) else [],
+        "invocations": payload.get("invocations", []) if isinstance(payload.get("invocations"), list) else [],
+        "triggers": payload.get("triggers", []) if isinstance(payload.get("triggers"), list) else [],
+        "createTime": _now(),
+        "updateTime": _now(),
+    }
+
+
+def _gcp_apigw_api_record(project: str, location: str, payload: dict[str, Any]) -> dict:
+    name = str(payload.get("name") or payload.get("apiId") or "api")
+    return {
+        "name": name,
+        "project": project,
+        "location": location,
+        "displayName": str(payload.get("displayName") or payload.get("description") or name),
+        "labels": payload.get("labels", {}) if isinstance(payload.get("labels"), dict) else {},
+        "routeSummary": payload.get("routeSummary", []) if isinstance(payload.get("routeSummary"), list) else [],
+        "createTime": _now(),
+        "updateTime": _now(),
+    }
+
+
+def _gcp_apigw_cfg_record(project: str, location: str, payload: dict[str, Any]) -> dict:
+    name = str(payload.get("name") or payload.get("apiConfigId") or payload.get("path_part") or payload.get("pathPart") or payload.get("method") or "api-config")
+    return {
+        "name": name,
+        "project": project,
+        "location": location,
+        "api": str(payload.get("api") or ""),
+        "parent_id": str(payload.get("parent_id") or payload.get("parentId") or ""),
+        "path_part": str(payload.get("path_part") or payload.get("pathPart") or ""),
+        "http_method": str(payload.get("http_method") or payload.get("method") or ""),
+        "authorization_type": str(payload.get("authorization_type") or payload.get("authorizationType") or ""),
+        "integration_type": str(payload.get("integration_type") or payload.get("integrationType") or ""),
+        "integration_uri": str(payload.get("integration_uri") or payload.get("uri") or ""),
+        "status_code": int(payload.get("status_code") or payload.get("statusCode") or 200),
+        "response_body": str(payload.get("response_body") or payload.get("responseBody") or ""),
+        "content_type": str(payload.get("content_type") or payload.get("contentType") or "application/json"),
+        "openapiDocuments": payload.get("openapiDocuments", []) if isinstance(payload.get("openapiDocuments"), list) else [],
+        "labels": payload.get("labels", {}) if isinstance(payload.get("labels"), dict) else {},
+        "createTime": _now(),
+        "updateTime": _now(),
+    }
+
+
+def _gcp_apigw_gateway_record(project: str, location: str, payload: dict[str, Any]) -> dict:
+    name = str(payload.get("name") or payload.get("gatewayId") or payload.get("stage_name") or payload.get("stageName") or payload.get("apiConfig") or "gateway")
+    return {
+        "name": name,
+        "project": project,
+        "location": location,
+        "apiConfig": str(payload.get("apiConfig") or payload.get("api_config") or ""),
+        "stage_name": str(payload.get("stage_name") or payload.get("stageName") or "prod"),
+        "description": str(payload.get("description") or ""),
+        "labels": payload.get("labels", {}) if isinstance(payload.get("labels"), dict) else {},
+        "defaultHostname": payload.get("defaultHostname", f"{name}-{location}-{project}.cloud.goog"),
+        "createTime": _now(),
+        "updateTime": _now(),
+    }
+
+
+def _gcp_iam_set_policy(project: str, payload: dict[str, Any]) -> dict:
+    policy = {
+        "version": int(payload.get("version") or 1),
+        "etag": str(payload.get("etag") or ""),
+        "bindings": payload.get("bindings", []) if isinstance(payload.get("bindings"), list) else [],
+    }
+    gcp_iam_state.setdefault("policies", {})[project] = policy
+    return policy
+
+
+@app.get("/storage/v1/b")
+@app.get("/api/gcp/storage/v1/b")
+@app.get("/api/gcp/s3/buckets")
+def api_gcp_storage_list_buckets(request: Request):
+    project = _gcp_project_name(request.query_params.get("project"))
+    buckets = []
+    for bucket in gcp_storage_state.get("buckets", {}).values():
+        if str(bucket.get("project") or project) != project:
+            continue
+        buckets.append(_gcp_storage_bucket_view(project, bucket))
+    buckets.sort(key=lambda item: item.get("name", ""))
+    return {"kind": "storage#buckets", "items": buckets, "prefixes": [], "nextPageToken": ""}
+
+
+@app.post("/storage/v1/b")
+@app.post("/api/gcp/storage/v1/b")
+@app.post("/api/gcp/s3/buckets")
+async def api_gcp_storage_create_bucket(request: Request):
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    project = _gcp_project_name(request.query_params.get("project") or payload.get("project") or payload.get("projectId"))
+    name = str(payload.get("name") or payload.get("bucket") or "").strip()
+    if not name:
+        raise HTTPException(400, detail="Bucket name is required")
+    bucket = _gcp_storage_bucket_record(project, name, payload)
+    gcp_storage_state.setdefault("buckets", {})[name] = bucket
+    gcp_storage_state.setdefault("objects", {}).setdefault(name, {})
+    return _gcp_storage_bucket_view(project, bucket)
+
+
+@app.get("/storage/v1/b/{bucket}")
+@app.get("/api/gcp/storage/v1/b/{bucket}")
+@app.get("/api/gcp/s3/buckets/{bucket}")
+def api_gcp_storage_get_bucket(bucket: str):
+    bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
+    if not bucket_rec:
+        raise HTTPException(404, detail="Bucket not found")
+    project = str(bucket_rec.get("project") or "cloudlearn")
+    return _gcp_storage_bucket_view(project, bucket_rec)
+
+
+@app.delete("/storage/v1/b/{bucket}")
+@app.delete("/api/gcp/storage/v1/b/{bucket}")
+@app.delete("/api/gcp/s3/buckets/{bucket}")
+def api_gcp_storage_delete_bucket(bucket: str):
+    if bucket not in gcp_storage_state.get("buckets", {}):
+        raise HTTPException(404, detail="Bucket not found")
+    gcp_storage_state.setdefault("buckets", {}).pop(bucket, None)
+    gcp_storage_state.setdefault("objects", {}).pop(bucket, None)
+    return {"kind": "storage#empty", "deleted": True, "bucket": bucket}
+
+
+@app.get("/storage/v1/b/{bucket}/o")
+@app.get("/api/gcp/storage/v1/b/{bucket}/o")
+@app.get("/api/gcp/s3/buckets/{bucket}/objects")
+def api_gcp_storage_list_objects(bucket: str, request: Request):
+    bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
+    if not bucket_rec:
+        raise HTTPException(404, detail="Bucket not found")
+    prefix = str(request.query_params.get("prefix") or "")
+    objects = []
+    for name, obj in gcp_storage_state.get("objects", {}).get(bucket, {}).items():
+        if prefix and not name.startswith(prefix):
+            continue
+        objects.append(_gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj))
+    objects.sort(key=lambda item: item.get("name", ""))
+    return {"kind": "storage#objects", "items": objects, "prefixes": [], "nextPageToken": ""}
+
+
+@app.post("/storage/v1/b/{bucket}/o")
+@app.post("/upload/storage/v1/b/{bucket}/o")
+@app.post("/api/gcp/storage/v1/b/{bucket}/o")
+@app.post("/api/gcp/s3/buckets/{bucket}/objects")
+async def api_gcp_storage_create_object(bucket: str, request: Request):
+    bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
+    if not bucket_rec:
+        raise HTTPException(404, detail="Bucket not found")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    name = str(payload.get("name") or payload.get("object") or "").strip()
+    if not name:
+        raise HTTPException(400, detail="Object name is required")
+    obj = _gcp_storage_object_record(bucket, name, payload)
+    gcp_storage_state.setdefault("objects", {}).setdefault(bucket, {})[name] = obj
+    return _gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj)
+
+
+@app.get("/storage/v1/b/{bucket}/o/{object_name:path}")
+@app.get("/api/gcp/storage/v1/b/{bucket}/o/{object_name:path}")
+@app.get("/api/gcp/s3/buckets/{bucket}/objects/{object_name:path}")
+def api_gcp_storage_get_object(bucket: str, object_name: str):
+    bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
+    obj = gcp_storage_state.get("objects", {}).get(bucket, {}).get(object_name)
+    if not bucket_rec or not obj:
+        raise HTTPException(404, detail="Object not found")
+    return _gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, object_name, obj)
+
+
+@app.delete("/storage/v1/b/{bucket}/o/{object_name:path}")
+@app.delete("/api/gcp/storage/v1/b/{bucket}/o/{object_name:path}")
+@app.delete("/api/gcp/s3/buckets/{bucket}/objects/{object_name:path}")
+def api_gcp_storage_delete_object(bucket: str, object_name: str):
+    if bucket not in gcp_storage_state.get("objects", {}) or object_name not in gcp_storage_state["objects"][bucket]:
+        raise HTTPException(404, detail="Object not found")
+    del gcp_storage_state["objects"][bucket][object_name]
+    return {"kind": "storage#empty", "deleted": True, "bucket": bucket, "object": object_name}
+
+
+@app.get("/sql/v1beta4/projects/{project}/instances")
+@app.get("/api/gcp/rds/databases")
+def api_gcp_sql_list_instances(project: str, request: Request):
+    project = _gcp_project_name(project)
+    instances = []
+    for inst in gcp_sql_state.get("instances", {}).values():
+        if str(inst.get("project") or project) != project:
+            continue
+        instances.append(_gcp_sql_instance_view(project, inst))
+    instances.sort(key=lambda item: item.get("name", ""))
+    return {"kind": "sql#instancesList", "items": instances, "warnings": []}
+
+
+@app.post("/sql/v1beta4/projects/{project}/instances")
+@app.post("/api/gcp/rds/databases")
+async def api_gcp_sql_create_instance(project: str, request: Request):
+    project = _gcp_project_name(project)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    instance = _gcp_sql_instance_record(project, payload)
+    if instance["name"] in gcp_sql_state.get("instances", {}):
+        raise HTTPException(409, detail="Instance already exists")
+    gcp_sql_state.setdefault("instances", {})[instance["name"]] = instance
+    return _gcp_sql_instance_view(project, instance)
+
+
+@app.get("/sql/v1beta4/projects/{project}/instances/{instance}")
+@app.get("/api/gcp/rds/databases/{instance}")
+def api_gcp_sql_get_instance(project: str, instance: str):
+    project = _gcp_project_name(project)
+    rec = gcp_sql_state.get("instances", {}).get(instance)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Instance not found")
+    return _gcp_sql_instance_view(project, rec)
+
+
+@app.delete("/sql/v1beta4/projects/{project}/instances/{instance}")
+@app.delete("/api/gcp/rds/databases/{instance}")
+def api_gcp_sql_delete_instance(project: str, instance: str):
+    project = _gcp_project_name(project)
+    rec = gcp_sql_state.get("instances", {}).get(instance)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Instance not found")
+    del gcp_sql_state["instances"][instance]
+    return {"kind": "sql#operation", "operationType": "DELETE", "status": "DONE", "targetLink": f"{_gcp_sql_root()}/projects/{project}/instances/{instance}"}
+
+
+@app.post("/sql/v1beta4/projects/{project}/instances/{instance}/restart")
+@app.post("/api/gcp/rds/databases/{instance}/reboot")
+def api_gcp_sql_restart_instance(project: str, instance: str):
+    project = _gcp_project_name(project)
+    rec = gcp_sql_state.get("instances", {}).get(instance)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Instance not found")
+    rec["state"] = "RUNNABLE"
+    rec["updateTime"] = _now()
+    return {"kind": "sql#operation", "operationType": "RESTART", "status": "DONE", "targetLink": f"{_gcp_sql_root()}/projects/{project}/instances/{instance}"}
+
+
+@app.get("/v1/projects/{project}/topics")
+@app.get("/api/gcp/sqs/queues")
+def api_gcp_pubsub_list_topics(project: str):
+    project = _gcp_project_name(project)
+    topics = [_gcp_pubsub_topic_view(project, topic) for topic in gcp_pubsub_state.get("topics", {}).values() if str(topic.get("project") or project) == project]
+    topics.sort(key=lambda item: item.get("topicId", ""))
+    return {"topics": topics, "nextPageToken": "", "kind": "pubsub#topicList"}
+
+
+@app.post("/v1/projects/{project}/topics")
+@app.post("/api/gcp/sqs/queues")
+async def api_gcp_pubsub_create_topic(project: str, request: Request):
+    project = _gcp_project_name(project)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    topic_id = str(payload.get("topicId") or payload.get("name") or payload.get("topic") or "").split("/")[-1].strip()
+    if not topic_id:
+        raise HTTPException(400, detail="Topic id is required")
+    topic = _gcp_pubsub_topic_record(project, topic_id, payload)
+    gcp_pubsub_state.setdefault("topics", {})[topic_id] = topic
+    default_sub_id = str(payload.get("subscriptionId") or topic_id).split("/")[-1].strip()
+    if default_sub_id and default_sub_id not in gcp_pubsub_state.setdefault("subscriptions", {}):
+        default_sub = _gcp_pubsub_subscription_record(project, default_sub_id, {
+            "topic": f"projects/{project}/topics/{topic_id}",
+            "labels": payload.get("labels", {}) if isinstance(payload.get("labels"), dict) else {},
+            "ackDeadlineSeconds": payload.get("ackDeadlineSeconds", 10),
+        })
+        gcp_pubsub_state.setdefault("subscriptions", {})[default_sub_id] = default_sub
+    return _gcp_pubsub_topic_view(project, topic)
+
+
+@app.get("/v1/projects/{project}/topics/{topic}")
+@app.get("/api/gcp/sqs/queues/{topic}")
+def api_gcp_pubsub_get_topic(project: str, topic: str):
+    project = _gcp_project_name(project)
+    rec = gcp_pubsub_state.get("topics", {}).get(topic)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Topic not found")
+    return _gcp_pubsub_topic_view(project, rec)
+
+
+@app.patch("/v1/projects/{project}/topics/{topic}")
+@app.patch("/api/gcp/sqs/queues/{topic}")
+async def api_gcp_pubsub_update_topic(project: str, topic: str, request: Request):
+    project = _gcp_project_name(project)
+    rec = gcp_pubsub_state.get("topics", {}).get(topic)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Topic not found")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    if isinstance(payload.get("labels"), dict):
+        rec["labels"] = payload["labels"]
+    if "messageRetentionDuration" in payload:
+        rec["messageRetentionDuration"] = str(payload.get("messageRetentionDuration") or rec.get("messageRetentionDuration") or "604800s")
+    if "kmsKeyName" in payload:
+        rec["kmsKeyName"] = str(payload.get("kmsKeyName") or "")
+    rec["updateTime"] = _now()
+    gcp_pubsub_state.setdefault("topics", {})[topic] = rec
+    return _gcp_pubsub_topic_view(project, rec)
+
+
+@app.get("/v1/projects/{project}/topics/{topic}/messages")
+def api_gcp_pubsub_list_topic_messages(project: str, topic: str):
+    project = _gcp_project_name(project)
+    rec = gcp_pubsub_state.get("topics", {}).get(topic)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Topic not found")
+    messages = list(gcp_pubsub_state.setdefault("messages", {}).get(topic, []))
+    return {"messages": messages, "kind": "pubsub#messageList"}
+
+
+@app.delete("/v1/projects/{project}/topics/{topic}")
+@app.delete("/api/gcp/sqs/queues/{topic}")
+def api_gcp_pubsub_delete_topic(project: str, topic: str):
+    project = _gcp_project_name(project)
+    rec = gcp_pubsub_state.get("topics", {}).get(topic)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Topic not found")
+    del gcp_pubsub_state["topics"][topic]
+    for sub_id, sub in list(gcp_pubsub_state.get("subscriptions", {}).items()):
+        if str(sub.get("project") or project) == project and str(sub.get("topic") or "") == f"projects/{project}/topics/{topic}":
+            del gcp_pubsub_state["subscriptions"][sub_id]
+            gcp_pubsub_state.get("messages", {}).pop(sub_id, None)
+    gcp_pubsub_state.get("messages", {}).pop(topic, None)
+    return {"done": True}
+
+
+@app.post("/v1/projects/{project}/topics/{topic}:publish")
+@app.post("/api/gcp/sqs/queues/{topic}/messages")
+async def api_gcp_pubsub_publish(project: str, topic: str, request: Request):
+    project = _gcp_project_name(project)
+    rec = gcp_pubsub_state.get("topics", {}).get(topic)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Topic not found")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    messages = payload.get("messages", []) if isinstance(payload, dict) else []
+    if not isinstance(messages, list):
+        messages = []
+    message_ids = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        message_id = _id("msg")
+        entry = {
+            "messageId": message_id,
+            "data": str(message.get("data") or ""),
+            "attributes": message.get("attributes", {}) if isinstance(message.get("attributes"), dict) else {},
+            "publishTime": _now(),
+            "topic": topic,
+        }
+        message_ids.append(message_id)
+        gcp_pubsub_state.setdefault("messages", {}).setdefault(topic, []).append(entry)
+        for sub in gcp_pubsub_state.get("subscriptions", {}).values():
+            if str(sub.get("project") or project) != project or str(sub.get("topic") or "") != f"projects/{project}/topics/{topic}":
+                continue
+            gcp_pubsub_state.setdefault("messages", {}).setdefault(str(sub.get("subscriptionId")), []).append({
+                **entry,
+                "ackId": _id("ack"),
+                "subscription": str(sub.get("subscriptionId")),
+            })
+    return {"messageIds": message_ids}
+
+
+@app.get("/v1/projects/{project}/subscriptions")
+@app.get("/api/gcp/sqs/queues")
+def api_gcp_pubsub_list_subscriptions(project: str):
+    project = _gcp_project_name(project)
+    subs = [_gcp_pubsub_subscription_view(project, sub) for sub in gcp_pubsub_state.get("subscriptions", {}).values() if str(sub.get("project") or project) == project]
+    subs.sort(key=lambda item: item.get("subscriptionId", ""))
+    return {"subscriptions": subs, "nextPageToken": "", "kind": "pubsub#subscriptionList"}
+
+
+@app.post("/v1/projects/{project}/subscriptions")
+@app.post("/api/gcp/sqs/queues/{queue_name}")
+async def api_gcp_pubsub_create_subscription(project: str, request: Request, queue_name: str = ""):
+    project = _gcp_project_name(project)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    sub_id = str(payload.get("subscriptionId") or payload.get("name") or queue_name or "").split("/")[-1].strip()
+    if not sub_id:
+        raise HTTPException(400, detail="Subscription id is required")
+    sub = _gcp_pubsub_subscription_record(project, sub_id, payload)
+    if not sub.get("topic"):
+        raise HTTPException(400, detail="Topic is required")
+    gcp_pubsub_state.setdefault("subscriptions", {})[sub_id] = sub
+    return _gcp_pubsub_subscription_view(project, sub)
+
+
+@app.get("/v1/projects/{project}/subscriptions/{subscription}")
+@app.get("/api/gcp/sqs/queues/{subscription}")
+def api_gcp_pubsub_get_subscription(project: str, subscription: str):
+    project = _gcp_project_name(project)
+    rec = gcp_pubsub_state.get("subscriptions", {}).get(subscription)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Subscription not found")
+    return _gcp_pubsub_subscription_view(project, rec)
+
+
+@app.get("/v1/projects/{project}/subscriptions/{subscription}/messages")
+def api_gcp_pubsub_list_subscription_messages(project: str, subscription: str):
+    project = _gcp_project_name(project)
+    rec = gcp_pubsub_state.get("subscriptions", {}).get(subscription)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Subscription not found")
+    messages = list(gcp_pubsub_state.setdefault("messages", {}).get(subscription, []))
+    return {"receivedMessages": messages, "kind": "pubsub#receivedMessageList"}
+
+
+@app.post("/v1/projects/{project}/subscriptions/{subscription}:purge")
+def api_gcp_pubsub_purge_subscription(project: str, subscription: str):
+    project = _gcp_project_name(project)
+    rec = gcp_pubsub_state.get("subscriptions", {}).get(subscription)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Subscription not found")
+    gcp_pubsub_state.setdefault("messages", {})[subscription] = []
+    return {"done": True}
+
+
+@app.delete("/v1/projects/{project}/subscriptions/{subscription}")
+@app.delete("/api/gcp/sqs/queues/{subscription}")
+def api_gcp_pubsub_delete_subscription(project: str, subscription: str):
+    project = _gcp_project_name(project)
+    rec = gcp_pubsub_state.get("subscriptions", {}).get(subscription)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Subscription not found")
+    del gcp_pubsub_state["subscriptions"][subscription]
+    gcp_pubsub_state.get("messages", {}).pop(subscription, None)
+    return {"done": True}
+
+
+@app.post("/v1/projects/{project}/subscriptions/{subscription}:pull")
+@app.post("/api/gcp/sqs/queues/{subscription}/receive")
+async def api_gcp_pubsub_pull(project: str, subscription: str, request: Request):
+    project = _gcp_project_name(project)
+    rec = gcp_pubsub_state.get("subscriptions", {}).get(subscription)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Subscription not found")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    max_messages = int(payload.get("maxMessages") or payload.get("max_messages") or 10)
+    items = list(gcp_pubsub_state.get("messages", {}).get(subscription, []))[:max_messages]
+    received = []
+    for item in items:
+        received.append({
+            "ackId": item.get("ackId", _id("ack")),
+            "message": {
+                "data": item.get("data", ""),
+                "messageId": item.get("messageId", _id("msg")),
+                "publishTime": item.get("publishTime", _now()),
+                "attributes": item.get("attributes", {}),
+            },
+        })
+    return {"receivedMessages": received}
+
+
+@app.post("/v1/projects/{project}/subscriptions/{subscription}:acknowledge")
+@app.post("/api/gcp/sqs/queues/{subscription}/messages/{receipt_handle}/delete")
+async def api_gcp_pubsub_ack(project: str, subscription: str, request: Request, receipt_handle: str = ""):
+    project = _gcp_project_name(project)
+    if subscription not in gcp_pubsub_state.get("subscriptions", {}):
+        raise HTTPException(404, detail="Subscription not found")
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    ack_ids = body.get("ackIds") if isinstance(body, dict) else []
+    if not isinstance(ack_ids, list):
+        ack_ids = []
+    queue = gcp_pubsub_state.setdefault("messages", {}).get(subscription, [])
+    gcp_pubsub_state.setdefault("messages", {})[subscription] = [item for item in queue if item.get("ackId") not in set(map(str, ack_ids)) and item.get("ackId") != receipt_handle]
+    return {"acknowledged": True}
+
+
+@app.post("/v1/projects/{project}/subscriptions/{subscription}:modifyAckDeadline")
+async def api_gcp_pubsub_modify_ack_deadline(project: str, subscription: str, request: Request):
+    project = _gcp_project_name(project)
+    if subscription not in gcp_pubsub_state.get("subscriptions", {}):
+        raise HTTPException(404, detail="Subscription not found")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    ack_ids = payload.get("ackIds") if isinstance(payload, dict) else []
+    if not isinstance(ack_ids, list):
+        ack_ids = []
+    ack_ids = [str(ack_id) for ack_id in ack_ids if ack_id]
+    deadline = int(payload.get("ackDeadlineSeconds") or 0) if isinstance(payload, dict) else 0
+    queue = gcp_pubsub_state.setdefault("messages", {}).get(subscription, [])
+    if deadline == 0:
+        for item in queue:
+            if item.get("ackId") in ack_ids:
+                item["visibleAt"] = _now()
+                item["inFlight"] = False
+    return {}
+
+
+@app.get("/v1/projects/{project}/topics/{topic}/subscriptions")
+def api_gcp_pubsub_list_topic_subscriptions(project: str, topic: str):
+    project = _gcp_project_name(project)
+    topic_name = f"projects/{project}/topics/{topic}"
+    subscriptions = []
+    for sub in gcp_pubsub_state.get("subscriptions", {}).values():
+        if str(sub.get("project") or project) != project:
+            continue
+        if str(sub.get("topic") or "") != topic_name:
+            continue
+        subscriptions.append(f"projects/{project}/subscriptions/{sub.get('subscriptionId') or sub.get('name')}")
+    subscriptions.sort()
+    return {"subscriptions": subscriptions, "nextPageToken": ""}
+
+
+@app.get("/firestore/v1/projects/{project}/databases/{database}/documents")
+@app.get("/api/gcp/dynamodb/tables")
+def api_gcp_firestore_list_root_documents(project: str, database: str):
+    project = _gcp_project_name(project)
+    database = str(database or "(default)")
+    docs = _gcp_firestore_engine().list_root_documents(project, database)
+    return {"documents": docs, "nextPageToken": "", "kind": "firestore#documents"}
+
+
+@app.get("/firestore/v1/projects/{project}/databases/{database}/documents/{collection}")
+@app.get("/api/gcp/dynamodb/tables/{collection}/items")
+def api_gcp_firestore_list_documents(project: str, database: str, collection: str):
+    project = _gcp_project_name(project)
+    database = str(database or "(default)")
+    docs = _gcp_firestore_engine().list_documents(project, database, collection)
+    return {"documents": docs, "nextPageToken": "", "kind": "firestore#documents"}
+
+
+@app.post("/firestore/v1/projects/{project}/databases/{database}/documents/{collection}")
+@app.post("/api/gcp/dynamodb/tables/{collection}/items")
+async def api_gcp_firestore_create_document(project: str, database: str, collection: str, request: Request):
+    project = _gcp_project_name(project)
+    database = str(database or "(default)")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    doc_id = str(payload.get("name") or payload.get("documentId") or _id("doc"))
+    if "/" in doc_id:
+        doc_id = doc_id.rsplit("/", 1)[-1]
+    fields = payload.get("fields", {}) if isinstance(payload.get("fields"), dict) else {}
+    doc = _gcp_firestore_engine().create_document(project, database, collection, _gcp_firestore_normalize_fields(fields), doc_id)
+    return doc
+
+
+@app.get("/firestore/v1/projects/{project}/databases/{database}/documents/{collection}/{doc_id}")
+@app.get("/api/gcp/dynamodb/tables/{collection}/items/{doc_id}")
+def api_gcp_firestore_get_document(project: str, database: str, collection: str, doc_id: str):
+    project = _gcp_project_name(project)
+    database = str(database or "(default)")
+    doc = _gcp_firestore_engine().get_document(project, database, collection, doc_id)
+    if not doc:
+        raise HTTPException(404, detail="Document not found")
+    return doc
+
+
+@app.delete("/firestore/v1/projects/{project}/databases/{database}/documents/{collection}/{doc_id}")
+@app.delete("/api/gcp/dynamodb/tables/{collection}/items/{doc_id}")
+def api_gcp_firestore_delete_document(project: str, database: str, collection: str, doc_id: str):
+    project = _gcp_project_name(project)
+    database = str(database or "(default)")
+    try:
+        _gcp_firestore_engine().delete_document(project, database, collection, doc_id)
+    except KeyError:
+        raise HTTPException(404, detail="Document not found")
+    return {"done": True}
+
+
+@app.post("/v1/projects/{project}/databases/{database}/documents/{collection}/{doc_id}")
+@app.put("/v1/projects/{project}/databases/{database}/documents/{collection}/{doc_id}")
+@app.put("/api/gcp/dynamodb/tables/{collection}/items/{doc_id}")
+async def api_gcp_firestore_update_document(project: str, database: str, collection: str, doc_id: str, request: Request):
+    project = _gcp_project_name(project)
+    database = str(database or "(default)")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    fields = payload.get("fields") if isinstance(payload.get("fields"), dict) else {}
+    try:
+        doc = _gcp_firestore_engine().update_document(project, database, collection, doc_id, _gcp_firestore_normalize_fields(fields))
+    except KeyError:
+        raise HTTPException(404, detail="Document not found")
+    return doc
+
+
+@app.post("/firestore/v1/projects/{project}/databases/{database}/documents:runQuery")
+@app.post("/api/gcp/dynamodb/tables/{collection}/query")
+async def api_gcp_firestore_run_query(project: str, database: str, request: Request, collection: str = ""):
+    project = _gcp_project_name(project)
+    database = str(database or "(default)")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    query = payload.get("structuredQuery", {}) if isinstance(payload, dict) else {}
+    if not isinstance(query, dict):
+        query = {}
+    selectors = query.get("from", [])
+    if collection:
+        collection_id = collection
+    elif isinstance(selectors, list) and selectors and isinstance(selectors[0], dict):
+        collection_id = str(selectors[0].get("collectionId") or "")
+    else:
+        collection_id = ""
+    limit = int(query.get("limit") or payload.get("limit") or 50)
+    where = query.get("where") if isinstance(query.get("where"), dict) else {}
+    field_name = ""
+    field_value = None
+    if isinstance(where, dict):
+        field_filter = where.get("fieldFilter") if isinstance(where.get("fieldFilter"), dict) else {}
+        if isinstance(field_filter, dict):
+            field = field_filter.get("field") if isinstance(field_filter.get("field"), dict) else {}
+            field_name = str(field.get("fieldPath") or "")
+            field_value = _gcp_firestore_plain_value(field_filter.get("value")) if field_name else None
+    results = _gcp_firestore_engine().run_query(project, database, collection_id, field_name=field_name, field_value=field_value, limit=limit)
+    return results
+
+
+@app.get("/v1/projects/{project}/locations/{location}/functions")
+@app.get("/api/gcp/lambda/functions")
+def api_gcp_functions_list(project: str, location: str = "us-central1"):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location)
+    functions = []
+    for fn in gcp_functions_state.get("functions", {}).values():
+        if str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
+            continue
+        functions.append(_gcp_functions_view(project, location, fn))
+    functions.sort(key=lambda item: item.get("name", ""))
+    return {"functions": functions, "nextPageToken": "", "kind": "cloudfunctions#listFunctionsResponse"}
+
+
+@app.post("/v1/projects/{project}/locations/{location}/functions")
+@app.post("/api/gcp/lambda/functions")
+async def api_gcp_functions_create(project: str, request: Request, location: str = "us-central1"):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location)
+    payload = {}
+    if request is not None:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    fn = _gcp_functions_record(project, location, payload)
+    gcp_functions_state.setdefault("functions", {})[fn["name"]] = fn
+    return _gcp_functions_view(project, location, fn)
+
+
+@app.patch("/v1/projects/{project}/locations/{location}/functions/{function}")
+@app.patch("/api/gcp/lambda/functions/{function}/configuration")
+@app.put("/api/gcp/lambda/functions/{function}/code")
+async def api_gcp_functions_update(project: str, location: str, function: str, request: Request):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location)
+    fn = gcp_functions_state.get("functions", {}).get(function)
+    if not fn or str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
+        raise HTTPException(404, detail="Function not found")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    if "code" in payload:
+        fn["code"] = str(payload.get("code") or "")
+    if "runtime" in payload:
+        fn["runtime"] = str(payload.get("runtime") or fn.get("runtime") or "python311")
+        fn.setdefault("buildConfig", {})["runtime"] = fn["runtime"]
+    if "handler" in payload:
+        fn["entryPoint"] = str(payload.get("handler") or payload.get("entryPoint") or fn.get("entryPoint") or "handler")
+        fn.setdefault("buildConfig", {})["entryPoint"] = fn["entryPoint"]
+    if "description" in payload:
+        fn["description"] = str(payload.get("description") or "")
+    if "role" in payload:
+        fn["role"] = str(payload.get("role") or "")
+    if "timeout" in payload or "timeoutSeconds" in payload:
+        timeout = int(payload.get("timeout") or payload.get("timeoutSeconds") or fn.get("serviceConfig", {}).get("timeoutSeconds") or 60)
+        fn.setdefault("serviceConfig", {})["timeoutSeconds"] = timeout
+        fn["timeout"] = timeout
+    if "memory_size" in payload or "availableMemory" in payload:
+        memory = str(payload.get("memory_size") or payload.get("availableMemory") or fn.get("serviceConfig", {}).get("availableMemory") or "256M")
+        fn.setdefault("serviceConfig", {})["availableMemory"] = memory if memory.endswith("M") or memory.endswith("Mi") else f"{memory}M"
+        fn["memory_size"] = int(str(memory).rstrip("MmIi")) if str(memory).rstrip("MmIi").isdigit() else 256
+    if isinstance(payload.get("environmentVariables"), dict):
+        fn["environmentVariables"] = payload["environmentVariables"]
+    if isinstance(payload.get("labels"), dict):
+        fn["labels"] = payload["labels"]
+    fn["updateTime"] = _now()
+    gcp_functions_state.setdefault("functions", {})[function] = fn
+    return _gcp_functions_view(project, location, fn)
+
+
+@app.post("/v1/projects/{project}/locations/{location}/functions/{function}")
+@app.post("/api/gcp/lambda/functions/{function}/versions")
+async def api_gcp_functions_publish_version(project: str, location: str, function: str, request: Request):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location)
+    fn = gcp_functions_state.get("functions", {}).get(function)
+    if not fn or str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
+        raise HTTPException(404, detail="Function not found")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    version_id = str(len(fn.get("versions", [])) + 1)
+    version = {
+        "version": version_id,
+        "state": "Active",
+        "description": str(payload.get("description") or ""),
+        "created": _now(),
+        "code_sha256": _id("sha"),
+        "is_latest": True,
+    }
+    versions = [v for v in fn.get("versions", []) if isinstance(v, dict)]
+    for item in versions:
+        item["is_latest"] = False
+    versions.append(version)
+    fn["versions"] = versions
+    fn["updateTime"] = _now()
+    gcp_functions_state.setdefault("functions", {})[function] = fn
+    return {"version": version}
+
+
+@app.get("/v1/projects/{project}/locations/{location}/functions/{function}/versions")
+@app.get("/api/gcp/lambda/functions/{function}/versions")
+def api_gcp_functions_list_versions(project: str, location: str, function: str):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location)
+    fn = gcp_functions_state.get("functions", {}).get(function)
+    if not fn or str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
+        raise HTTPException(404, detail="Function not found")
+    return {"versions": list(fn.get("versions", []) if isinstance(fn.get("versions"), list) else [])}
+
+
+@app.get("/v1/projects/{project}/locations/{location}/functions/{function}/invocations")
+@app.get("/api/gcp/lambda/functions/{function}/invocations")
+def api_gcp_functions_list_invocations(project: str, location: str, function: str):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location)
+    fn = gcp_functions_state.get("functions", {}).get(function)
+    if not fn or str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
+        raise HTTPException(404, detail="Function not found")
+    return {"invocations": list(fn.get("invocations", []) if isinstance(fn.get("invocations"), list) else [])}
+
+
+@app.get("/v1/projects/{project}/locations/{location}/functions/{function}:getIamPolicy")
+@app.get("/api/gcp/lambda/functions/{function}/policy")
+def api_gcp_functions_get_policy(project: str, location: str, function: str):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location)
+    fn = gcp_functions_state.get("functions", {}).get(function)
+    if not fn or str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
+        raise HTTPException(404, detail="Function not found")
+    policy = {"version": 1, "etag": "", "bindings": fn.get("permissions", []) if isinstance(fn.get("permissions"), list) else []}
+    return policy
+
+
+@app.post("/v1/projects/{project}/locations/{location}/functions/{function}:setIamPolicy")
+@app.post("/api/gcp/lambda/functions/{function}/policy")
+async def api_gcp_functions_set_policy(project: str, location: str, function: str, request: Request):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location)
+    fn = gcp_functions_state.get("functions", {}).get(function)
+    if not fn or str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
+        raise HTTPException(404, detail="Function not found")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    bindings = payload.get("bindings", []) if isinstance(payload.get("bindings"), list) else []
+    fn["permissions"] = bindings
+    fn["updateTime"] = _now()
+    return {"version": int(payload.get("version") or 1), "etag": str(payload.get("etag") or ""), "bindings": bindings}
+
+
+@app.get("/v1/projects/{project}/locations/{location}/functions/{function}")
+@app.get("/api/gcp/lambda/functions/{function}")
+def api_gcp_functions_get(project: str, location: str, function: str):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location)
+    fn = gcp_functions_state.get("functions", {}).get(function)
+    if not fn or str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
+        raise HTTPException(404, detail="Function not found")
+    return _gcp_functions_view(project, location, fn)
+
+
+@app.delete("/v1/projects/{project}/locations/{location}/functions/{function}")
+@app.delete("/api/gcp/lambda/functions/{function}")
+def api_gcp_functions_delete(project: str, location: str, function: str):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location)
+    fn = gcp_functions_state.get("functions", {}).get(function)
+    if not fn or str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
+        raise HTTPException(404, detail="Function not found")
+    del gcp_functions_state["functions"][function]
+    return {"done": True}
+
+
+@app.post("/v1/projects/{project}/locations/{location}/functions/{function}:call")
+@app.post("/api/gcp/lambda/functions/{function}/invoke")
+async def api_gcp_functions_call(project: str, location: str, function: str, request: Request):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location)
+    fn = gcp_functions_state.get("functions", {}).get(function)
+    if not fn or str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
+        raise HTTPException(404, detail="Function not found")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    execution_id = _id("exec")
+    response = {
+        "executionId": execution_id,
+        "result": json.dumps({"message": f"Hello from {function}", "input": payload}, default=str),
+    }
+    gcp_functions_state.setdefault("operations", []).append({"type": "call", "function": function, "executionId": execution_id, "at": _now()})
+    gcp_functions_state.setdefault("invocations", []).append({"function": function, "payload": payload, "executionId": execution_id, "timestamp": _now()})
+    return response
+
+
+@app.get("/v1/projects/{project}/locations/{location}/apis")
+@app.get("/api/gcp/apigateway/apis")
+def api_gcp_apigw_list_apis(project: str, location: str = "global"):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location, "global")
+    apis = []
+    for api in gcp_apigw_state.get("apis", {}).values():
+        if str(api.get("project") or project) != project or str(api.get("location") or location) != location:
+            continue
+        apis.append(_gcp_apigateway_api_view(project, location, api))
+    apis.sort(key=lambda item: item.get("name", ""))
+    return {"apis": apis, "nextPageToken": "", "kind": "apigateway#listApisResponse"}
+
+
+@app.post("/v1/projects/{project}/locations/{location}/apis")
+@app.post("/api/gcp/apigateway/apis")
+async def api_gcp_apigw_create_api(project: str, request: Request, location: str = "global"):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location, "global")
+    payload = {}
+    if request is not None:
+      try:
+        payload = await request.json()
+      except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    api_rec = _gcp_apigw_api_record(project, location, payload)
+    gcp_apigw_state.setdefault("apis", {})[api_rec["name"]] = api_rec
+    return _gcp_apigateway_api_view(project, location, api_rec)
+
+
+@app.get("/v1/projects/{project}/locations/{location}/apis/{api}")
+@app.get("/api/gcp/apigateway/apis/{api}")
+def api_gcp_apigw_get_api(project: str, location: str, api: str):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location, "global")
+    rec = gcp_apigw_state.get("apis", {}).get(api)
+    if not rec or str(rec.get("project") or project) != project or str(rec.get("location") or location) != location:
+        raise HTTPException(404, detail="API not found")
+    return _gcp_apigateway_api_view(project, location, rec)
+
+
+@app.delete("/v1/projects/{project}/locations/{location}/apis/{api}")
+@app.delete("/api/gcp/apigateway/apis/{api}")
+def api_gcp_apigw_delete_api(project: str, location: str, api: str):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location, "global")
+    rec = gcp_apigw_state.get("apis", {}).get(api)
+    if not rec or str(rec.get("project") or project) != project or str(rec.get("location") or location) != location:
+        raise HTTPException(404, detail="API not found")
+    del gcp_apigw_state["apis"][api]
+    return {"done": True}
+
+
+@app.get("/v1/projects/{project}/locations/{location}/apiConfigs")
+@app.get("/api/gcp/apigateway/apis/{api}/resources")
+def api_gcp_apigw_list_configs(project: str, location: str = "global", api: str = ""):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location, "global")
+    configs = []
+    for cfg in gcp_apigw_state.get("api_configs", {}).values():
+        if str(cfg.get("project") or project) != project or str(cfg.get("location") or location) != location:
+            continue
+        if api and str(cfg.get("api") or "") != api:
+            continue
+        configs.append(_gcp_apigateway_config_view(project, location, cfg))
+    configs.sort(key=lambda item: item.get("name", ""))
+    return {"apiConfigs": configs, "nextPageToken": "", "kind": "apigateway#listApiConfigsResponse"}
+
+
+@app.post("/v1/projects/{project}/locations/{location}/apiConfigs")
+@app.post("/api/gcp/apigateway/apis/{api}/resources")
+async def api_gcp_apigw_create_config(project: str, request: Request, location: str = "global", api: str = ""):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location, "global")
+    payload = {}
+    if request is not None:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    if api and not payload.get("api"):
+        payload["api"] = api
+    cfg = _gcp_apigw_cfg_record(project, location, payload)
+    gcp_apigw_state.setdefault("api_configs", {})[cfg["name"]] = cfg
+    return _gcp_apigateway_config_view(project, location, cfg)
+
+
+@app.get("/v1/projects/{project}/locations/{location}/gateways")
+@app.get("/api/gcp/apigateway/apis/{api}/deployments")
+def api_gcp_apigw_list_gateways(project: str, location: str = "global", api: str = ""):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location, "global")
+    gateways = []
+    for gw in gcp_apigw_state.get("gateways", {}).values():
+        if str(gw.get("project") or project) != project or str(gw.get("location") or location) != location:
+            continue
+        if api and str(gw.get("api") or "") != api and str(gw.get("apiConfig") or "") != api:
+            continue
+        gateways.append(_gcp_apigateway_gateway_view(project, location, gw))
+    gateways.sort(key=lambda item: item.get("name", ""))
+    return {"gateways": gateways, "nextPageToken": "", "kind": "apigateway#listGatewaysResponse"}
+
+
+@app.post("/v1/projects/{project}/locations/{location}/gateways")
+@app.post("/api/gcp/apigateway/apis/{api}/stages")
+async def api_gcp_apigw_create_gateway(project: str, request: Request, location: str = "global", api: str = ""):
+    project = _gcp_project_name(project)
+    location = _gcp_location_name(location, "global")
+    payload = {}
+    if request is not None:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    if api and not payload.get("apiConfig"):
+        payload["apiConfig"] = api
+    gw = _gcp_apigw_gateway_record(project, location, payload)
+    gcp_apigw_state.setdefault("gateways", {})[gw["name"]] = gw
+    return _gcp_apigateway_gateway_view(project, location, gw)
+
+
+@app.get("/compute/v1/projects/{project}/global/networks")
+@app.get("/api/gcp/vpc/networks")
+@app.get("/api/gcp/vpc/vpcs")
+def api_gcp_vpc_list_networks(project: str):
+    project = _gcp_project_name(project)
+    networks = []
+    for network in gcp_vpc_state.get("networks", {}).values():
+        if str(network.get("project") or project) != project:
+            continue
+        network_name = str(network.get("name") or "")
+        networks.append({
+            "kind": "compute#network",
+            "id": str(network.get("id") or _gcp_compute_numeric_id(f"{project}:{network_name}")),
+            "creationTimestamp": network.get("createTime", _now()),
+            "name": network_name,
+            "description": network.get("description", ""),
+            "IPv4Range": network.get("IPv4Range", ""),
+            "gatewayIPv4": network.get("gatewayIPv4", ""),
+            "selfLink": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}",
+            "selfLinkWithId": network.get("selfLinkWithId", f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}?id={network.get('id') or _gcp_compute_numeric_id(f'{project}:{network_name}')}"),
+            "autoCreateSubnetworks": bool(network.get("autoCreateSubnetworks", True)),
+            "subnetworks": network.get("subnetworks", []),
+            "peerings": network.get("peerings", []),
+            "routingConfig": {"routingMode": network.get("routingMode", "REGIONAL")},
+        })
+    return {"kind": "compute#networkList", "items": networks}
+
+
+@app.post("/compute/v1/projects/{project}/global/networks")
+@app.post("/api/gcp/vpc/networks")
+@app.post("/api/gcp/vpc/vpcs")
+async def api_gcp_vpc_create_network(project: str, request: Request):
+    project = _gcp_project_name(project)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    name = str(payload.get("name") or payload.get("network") or "").strip()
+    if not name:
+        raise HTTPException(400, detail="Network name is required")
+    rec = {
+        "id": _gcp_compute_numeric_id(f"{project}:{name}"),
+        "name": name,
+        "project": project,
+        "description": str(payload.get("description") or ""),
+        "IPv4Range": str(payload.get("IPv4Range") or ""),
+        "gatewayIPv4": str(payload.get("gatewayIPv4") or ""),
+        "autoCreateSubnetworks": bool(payload.get("autoCreateSubnetworks", True)),
+        "routingMode": str(payload.get("routingMode") or "REGIONAL"),
+        "subnetworks": payload.get("subnetworks", []) if isinstance(payload.get("subnetworks"), list) else [],
+        "peerings": payload.get("peerings", []) if isinstance(payload.get("peerings"), list) else [],
+        "createTime": _now(),
+    }
+    gcp_vpc_state.setdefault("networks", {})[name] = rec
+    return {
+        "kind": "compute#network",
+        "id": rec["id"],
+        "creationTimestamp": rec["createTime"],
+        "name": name,
+        "description": rec["description"],
+        "IPv4Range": rec["IPv4Range"],
+        "gatewayIPv4": rec["gatewayIPv4"],
+        "selfLink": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{name}",
+        "selfLinkWithId": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{name}?id={rec['id']}",
+        "autoCreateSubnetworks": rec["autoCreateSubnetworks"],
+        "subnetworks": rec["subnetworks"],
+        "peerings": rec["peerings"],
+        "routingConfig": {"routingMode": rec["routingMode"]},
+    }
+
+
+@app.get("/compute/v1/projects/{project}/global/networks/{network}")
+@app.get("/api/gcp/vpc/networks/{network}")
+@app.get("/api/gcp/vpc/vpcs/{network}")
+def api_gcp_vpc_get_network(project: str, network: str):
+    project = _gcp_project_name(project)
+    rec = gcp_vpc_state.get("networks", {}).get(network)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Network not found")
+    return {
+        "kind": "compute#network",
+        "id": rec.get("id", _gcp_compute_numeric_id(f"{project}:{network}")),
+        "creationTimestamp": rec.get("createTime", _now()),
+        "name": rec["name"],
+        "description": rec.get("description", ""),
+        "IPv4Range": rec.get("IPv4Range", ""),
+        "gatewayIPv4": rec.get("gatewayIPv4", ""),
+        "selfLink": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{network}",
+        "selfLinkWithId": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{network}?id={rec.get('id', _gcp_compute_numeric_id(f'{project}:{network}'))}",
+        "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks", True)),
+        "subnetworks": rec.get("subnetworks", []),
+        "peerings": rec.get("peerings", []),
+        "routingConfig": {"routingMode": rec.get("routingMode", "REGIONAL")},
+    }
+
+
+@app.delete("/compute/v1/projects/{project}/global/networks/{network}")
+@app.delete("/api/gcp/vpc/networks/{network}")
+@app.delete("/api/gcp/vpc/vpcs/{network}")
+def api_gcp_vpc_delete_network(project: str, network: str):
+    project = _gcp_project_name(project)
+    rec = gcp_vpc_state.get("networks", {}).get(network)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Network not found")
+    del gcp_vpc_state["networks"][network]
+    return {"done": True}
+
+
+@app.get("/compute/v1/projects/{project}/regions/{region}/subnetworks")
+@app.get("/api/gcp/vpc/subnetworks")
+@app.get("/api/gcp/vpc/subnets")
+def api_gcp_vpc_list_subnetworks(project: str, region: str):
+    project = _gcp_project_name(project)
+    subnetworks = []
+    for subnet in gcp_vpc_state.get("subnetworks", {}).values():
+        if str(subnet.get("project") or project) != project or str(subnet.get("region") or region) != region:
+            continue
+        subnetworks.append({
+            "kind": "compute#subnetwork",
+            "id": str(subnet.get("id") or _gcp_compute_numeric_id(f"{project}:{subnet['name']}")),
+            "creationTimestamp": subnet.get("createTime", _now()),
+            "name": subnet["name"],
+            "description": subnet.get("description", ""),
+            "region": region,
+            "network": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{subnet.get('network','default')}",
+            "ipCidrRange": subnet.get("ipCidrRange", "10.0.0.0/24"),
+            "reservedInternalRange": subnet.get("reservedInternalRange", ""),
+            "gatewayAddress": subnet.get("gatewayAddress", ""),
+            "privateIpGoogleAccess": bool(subnet.get("privateIpGoogleAccess", False)),
+            "secondaryIpRanges": subnet.get("secondaryIpRanges", []),
+            "purpose": subnet.get("purpose", ""),
+            "role": subnet.get("role", ""),
+            "stackType": subnet.get("stackType", "IPV4_ONLY"),
+            "state": subnet.get("state", "READY"),
+            "selfLink": f"{_gcp_compute_network_root()}/projects/{project}/regions/{region}/subnetworks/{subnet['name']}",
+        })
+    return {"kind": "compute#subnetworkList", "items": subnetworks}
+
+
+@app.post("/compute/v1/projects/{project}/regions/{region}/subnetworks")
+@app.post("/api/gcp/vpc/subnetworks")
+@app.post("/api/gcp/vpc/subnets")
+async def api_gcp_vpc_create_subnetwork(project: str, region: str, request: Request):
+    project = _gcp_project_name(project)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, detail="Subnetwork name is required")
+    rec = {
+        "id": _gcp_compute_numeric_id(f"{project}:{name}"),
+        "name": name,
+        "description": str(payload.get("description") or ""),
+        "project": project,
+        "region": region,
+        "network": str(payload.get("network") or "default").split("/")[-1],
+        "ipCidrRange": str(payload.get("ipCidrRange") or "10.0.0.0/24"),
+        "reservedInternalRange": str(payload.get("reservedInternalRange") or ""),
+        "gatewayAddress": str(payload.get("gatewayAddress") or ""),
+        "privateIpGoogleAccess": bool(payload.get("privateIpGoogleAccess", False)),
+        "secondaryIpRanges": payload.get("secondaryIpRanges", []) if isinstance(payload.get("secondaryIpRanges"), list) else [],
+        "purpose": str(payload.get("purpose") or ""),
+        "role": str(payload.get("role") or ""),
+        "stackType": str(payload.get("stackType") or "IPV4_ONLY"),
+        "state": str(payload.get("state") or "READY"),
+        "createTime": _now(),
+    }
+    gcp_vpc_state.setdefault("subnetworks", {})[name] = rec
+    return {
+        "kind": "compute#subnetwork",
+        "id": rec["id"],
+        "creationTimestamp": rec["createTime"],
+        "name": name,
+        "description": rec["description"],
+        "region": region,
+        "network": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{rec['network']}",
+        "ipCidrRange": rec["ipCidrRange"],
+        "reservedInternalRange": rec["reservedInternalRange"],
+        "gatewayAddress": rec["gatewayAddress"],
+        "privateIpGoogleAccess": rec["privateIpGoogleAccess"],
+        "secondaryIpRanges": rec["secondaryIpRanges"],
+        "purpose": rec["purpose"],
+        "role": rec["role"],
+        "stackType": rec["stackType"],
+        "state": rec["state"],
+        "selfLink": f"{_gcp_compute_network_root()}/projects/{project}/regions/{region}/subnetworks/{name}",
+    }
+
+
+@app.get("/compute/v1/projects/{project}/global/firewalls")
+@app.get("/api/gcp/vpc/firewalls")
+@app.get("/api/gcp/vpc/security-groups")
+def api_gcp_vpc_list_firewalls(project: str):
+    project = _gcp_project_name(project)
+    firewalls = []
+    for fw in gcp_vpc_state.get("firewalls", {}).values():
+        if str(fw.get("project") or project) != project:
+            continue
+        firewalls.append({
+            "kind": "compute#firewall",
+            "id": str(fw.get("id") or _gcp_compute_numeric_id(f"{project}:{fw['name']}")),
+            "creationTimestamp": fw.get("createTime", _now()),
+            "name": fw["name"],
+            "description": fw.get("description", ""),
+            "network": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{fw.get('network','default')}",
+            "priority": int(fw.get("priority") or 1000),
+            "direction": fw.get("direction", "INGRESS"),
+            "allowed": fw.get("allowed", [{"IPProtocol": "tcp", "ports": ["22"]}]),
+            "denied": fw.get("denied", []),
+            "sourceRanges": fw.get("sourceRanges", ["0.0.0.0/0"]),
+            "destinationRanges": fw.get("destinationRanges", []),
+            "sourceTags": fw.get("sourceTags", []),
+            "targetTags": fw.get("targetTags", []),
+            "sourceServiceAccounts": fw.get("sourceServiceAccounts", []),
+            "targetServiceAccounts": fw.get("targetServiceAccounts", []),
+            "disabled": bool(fw.get("disabled", False)),
+            "logConfig": fw.get("logConfig", {}),
+            "selfLink": f"{_gcp_compute_network_root()}/projects/{project}/global/firewalls/{fw['name']}",
+        })
+    return {"kind": "compute#firewallList", "items": firewalls}
+
+
+@app.post("/compute/v1/projects/{project}/global/firewalls")
+@app.post("/api/gcp/vpc/firewalls")
+@app.post("/api/gcp/vpc/security-groups")
+async def api_gcp_vpc_create_firewall(project: str, request: Request):
+    project = _gcp_project_name(project)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, detail="Firewall name is required")
+    rec = {
+        "id": _gcp_compute_numeric_id(f"{project}:{name}"),
+        "name": name,
+        "description": str(payload.get("description") or ""),
+        "project": project,
+        "network": str(payload.get("network") or "default").split("/")[-1],
+        "priority": int(payload.get("priority") or 1000),
+        "direction": str(payload.get("direction") or "INGRESS"),
+        "allowed": payload.get("allowed") if isinstance(payload.get("allowed"), list) else [{"IPProtocol": "tcp", "ports": ["22"]}],
+        "denied": payload.get("denied") if isinstance(payload.get("denied"), list) else [],
+        "sourceRanges": payload.get("sourceRanges") if isinstance(payload.get("sourceRanges"), list) else ["0.0.0.0/0"],
+        "destinationRanges": payload.get("destinationRanges") if isinstance(payload.get("destinationRanges"), list) else [],
+        "sourceTags": payload.get("sourceTags") if isinstance(payload.get("sourceTags"), list) else [],
+        "targetTags": payload.get("targetTags") if isinstance(payload.get("targetTags"), list) else [],
+        "sourceServiceAccounts": payload.get("sourceServiceAccounts") if isinstance(payload.get("sourceServiceAccounts"), list) else [],
+        "targetServiceAccounts": payload.get("targetServiceAccounts") if isinstance(payload.get("targetServiceAccounts"), list) else [],
+        "disabled": bool(payload.get("disabled", False)),
+        "logConfig": payload.get("logConfig") if isinstance(payload.get("logConfig"), dict) else {},
+        "createTime": _now(),
+    }
+    gcp_vpc_state.setdefault("firewalls", {})[name] = rec
+    return {
+        "kind": "compute#firewall",
+        "id": rec["id"],
+        "creationTimestamp": rec["createTime"],
+        "name": name,
+        "description": rec["description"],
+        "network": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{rec['network']}",
+        "priority": rec["priority"],
+        "direction": rec["direction"],
+        "allowed": rec["allowed"],
+        "denied": rec["denied"],
+        "sourceRanges": rec["sourceRanges"],
+        "destinationRanges": rec["destinationRanges"],
+        "sourceTags": rec["sourceTags"],
+        "targetTags": rec["targetTags"],
+        "sourceServiceAccounts": rec["sourceServiceAccounts"],
+        "targetServiceAccounts": rec["targetServiceAccounts"],
+        "disabled": rec["disabled"],
+        "logConfig": rec["logConfig"],
+        "selfLink": f"{_gcp_compute_network_root()}/projects/{project}/global/firewalls/{name}",
+    }
+
+
+@app.get("/v1/projects/{project}:getIamPolicy")
+@app.get("/api/gcp/iam/policy")
+def api_gcp_iam_get_policy(project: str):
+    project = _gcp_project_name(project)
+    return _gcp_iam_policy_view(project)
+
+
+@app.post("/v1/projects/{project}:setIamPolicy")
+@app.post("/api/gcp/iam/policy")
+async def api_gcp_iam_set_policy(project: str, request: Request):
+    project = _gcp_project_name(project)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    policy = _gcp_iam_set_policy(project, payload.get("policy", payload) if isinstance(payload.get("policy"), dict) else payload)
+    return policy
+
+
+@app.post("/v1/projects/{project}:testIamPermissions")
+@app.post("/api/gcp/iam/test-permissions")
+async def api_gcp_iam_test_permissions(project: str, request: Request):
+    project = _gcp_project_name(project)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    permissions = payload.get("permissions", []) if isinstance(payload, dict) else []
+    return {"permissions": permissions if isinstance(permissions, list) else []}
+
+
+@app.get("/v1/projects/{project}/serviceAccounts")
+@app.get("/api/gcp/iam/service-accounts")
+def api_gcp_iam_list_service_accounts(project: str):
+    project = _gcp_project_name(project)
+    sas = []
+    for sa in gcp_iam_state.setdefault("service_accounts", {}).get(project, {}).values():
+        sas.append({
+            "name": sa["name"],
+            "projectId": project,
+            "uniqueId": sa.get("uniqueId", _gcp_compute_numeric_id(f"{project}:{sa['name']}")),
+            "email": sa["email"],
+            "displayName": sa.get("displayName", sa["name"]),
+            "description": sa.get("description", ""),
+            "oauth2ClientId": sa.get("oauth2ClientId", ""),
+            "disabled": bool(sa.get("disabled", False)),
+            "createTime": sa.get("createTime", _now()),
+            "etag": sa.get("etag", ""),
+        })
+    return {"accounts": sas, "nextPageToken": "", "kind": "iam#serviceAccountList"}
+
+
+@app.post("/v1/projects/{project}/serviceAccounts")
+@app.post("/api/gcp/iam/service-accounts")
+async def api_gcp_iam_create_service_account(project: str, request: Request):
+    project = _gcp_project_name(project)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    sa_id = str(payload.get("accountId") or payload.get("serviceAccountId") or payload.get("name") or _id("sa")).split("/")[-1].strip()
+    display_name = str(payload.get("displayName") or payload.get("display_name") or sa_id)
+    email = f"{sa_id}@{project}.iam.gserviceaccount.com"
+    rec = {"name": sa_id, "project": project, "uniqueId": _gcp_compute_numeric_id(f"{project}:{sa_id}"), "email": email, "displayName": display_name, "description": str(payload.get("description") or ""), "oauth2ClientId": _id("oauth"), "disabled": bool(payload.get("disabled", False)), "createTime": _now(), "etag": _id("etag")}
+    gcp_iam_state.setdefault("service_accounts", {}).setdefault(project, {})[sa_id] = rec
+    return {"name": f"projects/{project}/serviceAccounts/{email}", "projectId": project, "uniqueId": rec["uniqueId"], "email": email, "displayName": display_name, "description": rec["description"], "oauth2ClientId": rec["oauth2ClientId"], "disabled": rec["disabled"], "etag": rec["etag"]}
+
+
+@app.delete("/v1/projects/{project}/serviceAccounts/{account}")
+@app.delete("/api/gcp/iam/service-accounts/{account}")
+def api_gcp_iam_delete_service_account(project: str, account: str):
+    project = _gcp_project_name(project)
+    accounts = gcp_iam_state.setdefault("service_accounts", {}).setdefault(project, {})
+    target = None
+    for key, rec in accounts.items():
+        if account in {key, rec.get("email", ""), rec.get("name", "")}:
+            target = key
+            break
+    if not target:
+        raise HTTPException(404, detail="Service account not found")
+    del accounts[target]
+    return {"done": True}
+
+
+@app.get("/api/gcp/iam/users")
+def api_gcp_iam_list_users():
+    project = _gcp_project_name(None)
+    users = list(gcp_iam_state.setdefault("users", {}).get(project, {}).values())
+    return {"users": users, "count": len(users)}
+
+
+@app.post("/api/gcp/iam/users")
+async def api_gcp_iam_create_user(request: Request):
+    project = _gcp_project_name(None)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    name = str(payload.get("user_name") or payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, detail="User name is required")
+    rec = {"user_id": _id("user"), "user_name": name, "arn": f"{_gcp_iam_root()}/projects/{project}/users/{name}", "policies": [], "groups": [], "created": _now()}
+    gcp_iam_state.setdefault("users", {}).setdefault(project, {})[rec["user_id"]] = rec
+    return rec
+
+
+@app.delete("/api/gcp/iam/users/{user_id}")
+def api_gcp_iam_delete_user(user_id: str):
+    project = _gcp_project_name(None)
+    users = gcp_iam_state.setdefault("users", {}).setdefault(project, {})
+    if user_id not in users:
+        raise HTTPException(404, detail="User not found")
+    del users[user_id]
+    return {"deleted": True, "user_id": user_id}
+
+
+@app.get("/api/gcp/iam/groups")
+def api_gcp_iam_list_groups():
+    project = _gcp_project_name(None)
+    groups = list(gcp_iam_state.setdefault("groups", {}).get(project, {}).values())
+    return {"groups": groups, "count": len(groups)}
+
+
+@app.post("/api/gcp/iam/groups")
+async def api_gcp_iam_create_group(request: Request):
+    project = _gcp_project_name(None)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    name = str(payload.get("group_name") or payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, detail="Group name is required")
+    rec = {"group_id": _id("group"), "group_name": name, "path": str(payload.get("path") or "/"), "users": [], "policies": [], "created": _now()}
+    gcp_iam_state.setdefault("groups", {}).setdefault(project, {})[rec["group_id"]] = rec
+    return rec
+
+
+@app.delete("/api/gcp/iam/groups/{group_id}")
+def api_gcp_iam_delete_group(group_id: str):
+    project = _gcp_project_name(None)
+    groups = gcp_iam_state.setdefault("groups", {}).setdefault(project, {})
+    if group_id not in groups:
+        raise HTTPException(404, detail="Group not found")
+    del groups[group_id]
+    return {"deleted": True, "group_id": group_id}
+
+
+@app.get("/api/gcp/iam/roles")
+def api_gcp_iam_list_roles():
+    project = _gcp_project_name(None)
+    roles = list(gcp_iam_state.setdefault("roles", {}).get(project, {}).values())
+    return {"roles": roles, "count": len(roles)}
+
+
+@app.post("/api/gcp/iam/roles")
+async def api_gcp_iam_create_role(request: Request):
+    project = _gcp_project_name(None)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    name = str(payload.get("role_name") or payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, detail="Role name is required")
+    rec = {"role_id": _id("role"), "role_name": name, "policies": [], "created": _now()}
+    gcp_iam_state.setdefault("roles", {}).setdefault(project, {})[rec["role_id"]] = rec
+    return rec
+
+
+@app.delete("/api/gcp/iam/roles/{role_id}")
+def api_gcp_iam_delete_role(role_id: str):
+    project = _gcp_project_name(None)
+    roles = gcp_iam_state.setdefault("roles", {}).setdefault(project, {})
+    if role_id not in roles:
+        raise HTTPException(404, detail="Role not found")
+    del roles[role_id]
+    return {"deleted": True, "role_id": role_id}
+
+
+@app.get("/api/gcp/iam/policies")
+def api_gcp_iam_list_policies():
+    project = _gcp_project_name(None)
+    policies = list(gcp_iam_state.setdefault("policies", {}).get(project, {}).values())
+    return {"policies": policies, "count": len(policies)}
+
+
+@app.post("/api/gcp/iam/policies")
+async def api_gcp_iam_create_policy(request: Request):
+    project = _gcp_project_name(None)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    name = str(payload.get("policy_name") or payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, detail="Policy name is required")
+    rec = {"policy_id": _id("policy"), "policy_name": name, "document": payload.get("document") or {}, "created": _now()}
+    gcp_iam_state.setdefault("policies", {}).setdefault(project, {})[rec["policy_id"]] = rec
+    return rec
+
+
+@app.delete("/api/gcp/iam/policies/{policy_id}")
+def api_gcp_iam_delete_policy(policy_id: str):
+    project = _gcp_project_name(None)
+    policies = gcp_iam_state.setdefault("policies", {}).setdefault(project, {})
+    if policy_id not in policies:
+        raise HTTPException(404, detail="Policy not found")
+    del policies[policy_id]
+    return {"deleted": True, "policy_id": policy_id}
+
+
+@app.get("/api/gcp/iam/account-settings")
+def api_gcp_iam_get_account_settings():
+    project = _gcp_project_name(None)
+    account_settings = gcp_iam_state.setdefault("account_settings", {}).setdefault(project, {"password_policy": {"minimum_length": 8, "require_symbols": True, "require_numbers": True, "require_uppercase": True, "require_lowercase": True}})
+    return {"account_settings": account_settings}
+
+
+@app.put("/api/gcp/iam/account-settings")
+async def api_gcp_iam_update_account_settings(request: Request):
+    project = _gcp_project_name(None)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    account_settings = payload.get("account_settings") if isinstance(payload.get("account_settings"), dict) else payload
+    gcp_iam_state.setdefault("account_settings", {})[project] = account_settings
+    return {"account_settings": account_settings}
+
+
+@app.get("/api/gcp/iam/identity-providers")
+def api_gcp_iam_list_identity_providers():
+    project = _gcp_project_name(None)
+    providers = list(gcp_iam_state.setdefault("identity_providers", {}).get(project, {}).values())
+    return {"identity_providers": providers, "count": len(providers)}
+
+
+@app.post("/api/gcp/iam/identity-providers")
+async def api_gcp_iam_create_identity_provider(request: Request):
+    project = _gcp_project_name(None)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    name = str(payload.get("provider_name") or payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, detail="Provider name is required")
+    rec = {"provider_id": _id("idp"), "provider_name": name, "provider_type": str(payload.get("provider_type") or "SAML"), "url": str(payload.get("url") or ""), "created": _now()}
+    gcp_iam_state.setdefault("identity_providers", {}).setdefault(project, {})[rec["provider_id"]] = rec
+    return rec
+
+
+@app.delete("/api/gcp/iam/identity-providers/{provider_id}")
+def api_gcp_iam_delete_identity_provider(provider_id: str):
+    project = _gcp_project_name(None)
+    providers = gcp_iam_state.setdefault("identity_providers", {}).setdefault(project, {})
+    if provider_id not in providers:
+        raise HTTPException(404, detail="Identity provider not found")
+    del providers[provider_id]
+    return {"deleted": True, "provider_id": provider_id}
+
+
+def _gcp_project_name(project: str | None) -> str:
+    return str(project or "cloudlearn").strip() or "cloudlearn"
+
+
+def _gcp_location_name(location: str | None, default: str = "us-central1") -> str:
+    return str(location or default).strip() or default
+
+
+def _gcp_gcs_root() -> str:
+    return "https://storage.googleapis.com/storage/v1"
+
+
+def _gcp_sql_root() -> str:
+    return "https://sqladmin.googleapis.com/sql/v1beta4"
+
+
+def _gcp_pubsub_root() -> str:
+    return "https://pubsub.googleapis.com/v1"
+
+
+def _gcp_firestore_root() -> str:
+    return "https://firestore.googleapis.com/v1"
+
+
+def _gcp_functions_root() -> str:
+    return "https://cloudfunctions.googleapis.com/v1"
+
+
+def _gcp_apigateway_root() -> str:
+    return "https://apigateway.googleapis.com/v1"
+
+
+def _gcp_iam_root() -> str:
+    return "https://iam.googleapis.com/v1"
+
+
+def _gcp_compute_network_root() -> str:
+    return "https://compute.googleapis.com/compute/v1"
+
+
+def _gcp_storage_bucket_view(project: str, bucket: dict) -> dict:
+    name = str(bucket.get("name") or "")
+    project_number = str(bucket.get("projectNumber") or _gcp_compute_numeric_id(f"{project}:{name}"))
+    return {
+        "kind": "storage#bucket",
+        "id": name,
+        "selfLink": f"{_gcp_gcs_root()}/b/{name}",
+        "projectNumber": project_number,
+        "name": name,
+        "location": bucket.get("location", "US"),
+        "locationType": bucket.get("locationType", "multi-region"),
+        "storageClass": bucket.get("storageClass", "STANDARD"),
+        "timeCreated": bucket.get("timeCreated", _now()),
+        "updated": bucket.get("updated", _now()),
+        "metageneration": bucket.get("metageneration", "1"),
+        "defaultEventBasedHold": bool(bucket.get("defaultEventBasedHold", False)),
+        "defaultObjectAcl": bucket.get("defaultObjectAcl", []),
+        "labels": bucket.get("labels", {}),
+        "iamConfiguration": bucket.get("iamConfiguration", {
+            "uniformBucketLevelAccess": {"enabled": True, "lockedTime": ""},
+            "publicAccessPrevention": "enforced",
+        }),
+        "etag": bucket.get("etag", ""),
+    }
+
+
+def _gcp_storage_object_view(project: str, bucket: str, name: str, obj: dict) -> dict:
+    return {
+        "kind": "storage#object",
+        "id": f"{bucket}/{name}",
+        "selfLink": f"{_gcp_gcs_root()}/b/{bucket}/o/{name}",
+        "bucket": bucket,
+        "name": name,
+        "generation": str(obj.get("generation") or _gcp_compute_numeric_id(f"{bucket}/{name}")),
+        "metageneration": str(obj.get("metageneration") or "1"),
+        "contentType": obj.get("contentType", "application/octet-stream"),
+        "size": str(obj.get("size", 0)),
+        "timeCreated": obj.get("timeCreated", _now()),
+        "updated": obj.get("updated", _now()),
+        "storageClass": obj.get("storageClass", "STANDARD"),
+        "metadata": obj.get("metadata", {}),
+        "md5Hash": obj.get("md5Hash", ""),
+        "crc32c": obj.get("crc32c", ""),
+        "etag": obj.get("etag", ""),
+        "mediaLink": obj.get("mediaLink", ""),
+    }
+
+
+def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
+    name = str(instance.get("name") or "")
+    region = str(instance.get("region") or "us-central1")
+    return {
+        "kind": "sql#instance",
+        "id": str(instance.get("id") or _gcp_compute_numeric_id(f"{project}:{name}")),
+        "project": project,
+        "name": name,
+        "region": region,
+        "gceZone": instance.get("gceZone", ""),
+        "databaseVersion": instance.get("databaseVersion", "POSTGRES_15"),
+        "backendType": instance.get("backendType", "SECOND_GEN"),
+        "state": instance.get("state", "RUNNABLE"),
+        "instanceType": instance.get("instanceType", "CLOUD_SQL_INSTANCE"),
+        "connectionName": instance.get("connectionName", f"{project}:{region}:{name}"),
+        "serviceAccountEmailAddress": instance.get("serviceAccountEmailAddress", f"{project}@{project}.iam.gserviceaccount.com"),
+        "selfLink": f"{_gcp_sql_root()}/projects/{project}/instances/{name}",
+        "databaseInstalledVersion": instance.get("databaseInstalledVersion", ""),
+        "maintenanceVersion": instance.get("maintenanceVersion", ""),
+        "settings": instance.get("settings", {
+            "tier": "db-f1-micro",
+            "activationPolicy": "ALWAYS",
+            "dataDiskType": "PD_SSD",
+            "dataDiskSizeGb": "10",
+            "availabilityType": "ZONAL",
+            "pricingPlan": "PER_USE",
+            "ipConfiguration": {
+                "ipv4Enabled": True,
+                "privateNetwork": "",
+                "requireSsl": False,
+            },
+        }),
+        "ipAddresses": instance.get("ipAddresses", [{"type": "PRIMARY", "ipAddress": instance.get("ipAddress", _public_ip())}]),
+        "serverCaCert": instance.get("serverCaCert", {"cert": "", "commonName": name, "createTime": _now(), "expirationTime": ""}),
+        "createTime": instance.get("createTime", _now()),
+        "updateTime": instance.get("updateTime", _now()),
+    }
+
+
+def _gcp_pubsub_topic_view(project: str, topic: dict) -> dict:
+    name = str(topic.get("name") or "")
+    return {
+        "name": f"projects/{project}/topics/{name}",
+        "labels": topic.get("labels", {}),
+        "messageStoragePolicy": topic.get("messageStoragePolicy", {
+            "allowedPersistenceRegions": [],
+            "enforceInTransit": False,
+        }),
+        "kmsKeyName": topic.get("kmsKeyName", ""),
+        "messageRetentionDuration": topic.get("messageRetentionDuration", "604800s"),
+        "schemaSettings": topic.get("schemaSettings", {}),
+        "satisfiesPzs": bool(topic.get("satisfiesPzs", False)),
+        "state": topic.get("state", "ACTIVE"),
+        "ingestionDataSourceSettings": topic.get("ingestionDataSourceSettings", {}),
+        "messageTransforms": topic.get("messageTransforms", []),
+    }
+
+
+def _gcp_pubsub_subscription_view(project: str, subscription: dict) -> dict:
+    name = str(subscription.get("name") or "")
+    return {
+        "name": f"projects/{project}/subscriptions/{name}",
+        "topic": subscription.get("topic", ""),
+        "ackDeadlineSeconds": subscription.get("ackDeadlineSeconds", 10),
+        "retainAckedMessages": subscription.get("retainAckedMessages", False),
+        "messageRetentionDuration": subscription.get("messageRetentionDuration", "604800s"),
+        "labels": subscription.get("labels", {}),
+        "filter": subscription.get("filter", ""),
+        "enableMessageOrdering": bool(subscription.get("enableMessageOrdering", False)),
+        "enableExactlyOnceDelivery": bool(subscription.get("enableExactlyOnceDelivery", False)),
+        "state": subscription.get("state", "ACTIVE"),
+        "deadLetterPolicy": subscription.get("deadLetterPolicy", {}),
+        "retryPolicy": subscription.get("retryPolicy", {}),
+        "expirationPolicy": subscription.get("expirationPolicy", {}),
+    }
+
+
+def _gcp_firestore_document_view(project: str, database: str, collection: str, doc_id: str, document: dict) -> dict:
+    return {
+        "name": f"{_gcp_firestore_root()}/projects/{project}/databases/{database}/documents/{collection}/{doc_id}",
+        "fields": _gcp_firestore_normalize_fields(document.get("fields", {}) if isinstance(document, dict) else {}),
+        "createTime": document.get("createTime", _now()),
+        "updateTime": document.get("updateTime", _now()),
+    }
+
+
+def _gcp_functions_view(project: str, location: str, function: dict) -> dict:
+    name = str(function.get("name") or "")
+    uri = function.get("serviceConfig", {}).get("uri") or f"https://{name}-{location}-{project}.cloudfunctions.net/{name}"
+    return {
+        "name": f"{_gcp_functions_root()}/projects/{project}/locations/{location}/functions/{name}",
+        "description": function.get("description", ""),
+        "status": function.get("status", "ACTIVE"),
+        "entryPoint": function.get("entryPoint", "handler"),
+        "runtime": function.get("runtime", "python311"),
+        "code": function.get("code", ""),
+        "role": function.get("role", ""),
+        "timeout": function.get("timeout", function.get("serviceConfig", {}).get("timeoutSeconds", 60)),
+        "memory_size": function.get("memory_size", int(str(function.get("serviceConfig", {}).get("availableMemory", "256M")).rstrip("MmIi")) if str(function.get("serviceConfig", {}).get("availableMemory", "256M")).rstrip("MmIi").isdigit() else 256),
+        "buildConfig": function.get("buildConfig", {
+            "runtime": function.get("runtime", "python311"),
+            "entryPoint": function.get("entryPoint", "handler"),
+            "source": function.get("source", {}),
+        }),
+        "serviceConfig": function.get("serviceConfig", {
+            "availableMemory": "256M",
+            "timeoutSeconds": 60,
+            "ingressSettings": "ALLOW_ALL",
+            "uri": uri,
+        }),
+        "eventTrigger": function.get("eventTrigger"),
+        "httpsTrigger": function.get("httpsTrigger", {"url": uri}),
+        "environmentVariables": function.get("environmentVariables", {}),
+        "labels": function.get("labels", {}),
+        "permissions": function.get("permissions", []),
+        "versions": function.get("versions", []),
+        "invocations": function.get("invocations", []),
+        "triggers": function.get("triggers", []),
+        "versionId": function.get("versionId", "1"),
+        "sourceUploadUrl": function.get("sourceUploadUrl", ""),
+        "buildName": function.get("buildName", ""),
+        "buildId": function.get("buildId", ""),
+        "network": function.get("network", ""),
+        "vpcConnector": function.get("vpcConnector", ""),
+        "minInstances": function.get("minInstances", 0),
+        "maxInstances": function.get("maxInstances", 1),
+        "createTime": function.get("createTime", _now()),
+        "updateTime": function.get("updateTime", _now()),
+    }
+
+
+def _gcp_apigateway_api_view(project: str, location: str, api: dict) -> dict:
+    name = str(api.get("name") or "")
+    return {
+        "name": f"{_gcp_apigateway_root()}/projects/{project}/locations/{location}/apis/{name}",
+        "displayName": api.get("displayName", name),
+        "managedService": api.get("managedService", f"{name}.apigateway.googleapis.com"),
+        "state": api.get("state", "ACTIVE"),
+        "labels": api.get("labels", {}),
+        "createTime": api.get("createTime", _now()),
+        "updateTime": api.get("updateTime", _now()),
+    }
+
+
+def _gcp_apigateway_config_view(project: str, location: str, cfg: dict) -> dict:
+    name = str(cfg.get("name") or "")
+    return {
+        "name": f"{_gcp_apigateway_root()}/projects/{project}/locations/{location}/apiConfigs/{name}",
+        "displayName": cfg.get("displayName", name),
+        "api": cfg.get("api", ""),
+        "parent_id": cfg.get("parent_id", ""),
+        "path_part": cfg.get("path_part", ""),
+        "http_method": cfg.get("http_method", ""),
+        "authorization_type": cfg.get("authorization_type", ""),
+        "integration_type": cfg.get("integration_type", ""),
+        "integration_uri": cfg.get("integration_uri", ""),
+        "status_code": cfg.get("status_code", 200),
+        "response_body": cfg.get("response_body", ""),
+        "content_type": cfg.get("content_type", "application/json"),
+        "openapiDocuments": cfg.get("openapiDocuments", []),
+        "labels": cfg.get("labels", {}),
+        "gatewayServiceAccount": cfg.get("gatewayServiceAccount", ""),
+        "state": cfg.get("state", "ACTIVE"),
+        "createTime": cfg.get("createTime", _now()),
+        "updateTime": cfg.get("updateTime", _now()),
+    }
+
+
+def _gcp_apigateway_gateway_view(project: str, location: str, gw: dict) -> dict:
+    name = str(gw.get("name") or "")
+    return {
+        "name": f"{_gcp_apigateway_root()}/projects/{project}/locations/{location}/gateways/{name}",
+        "displayName": gw.get("displayName", name),
+        "apiConfig": gw.get("apiConfig", ""),
+        "stage_name": gw.get("stage_name", "prod"),
+        "description": gw.get("description", ""),
+        "labels": gw.get("labels", {}),
+        "state": gw.get("state", "ACTIVE"),
+        "defaultHostname": gw.get("defaultHostname", f"{name}-{location}-{project}.cloud.goog"),
+        "createTime": gw.get("createTime", _now()),
+        "updateTime": gw.get("updateTime", _now()),
+    }
+
+
+def _gcp_iam_policy_view(project: str) -> dict:
+    policy = gcp_iam_state.setdefault("policies", {}).setdefault(project, {"bindings": [], "etag": "", "version": 1})
+    return {
+        "version": policy.get("version", 1),
+        "etag": policy.get("etag", ""),
+        "bindings": policy.get("bindings", []),
+    }
 
 
 @app.get("/api/vpc/vpcs")
