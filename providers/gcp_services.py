@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import time
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -9,6 +11,16 @@ def _server():
     import server as server_module
 
     return server_module
+
+
+def _gcp_vpc_enforce_reconcile(s) -> None:
+    """Re-apply VPC firewall enforcement after a rule change (no-op unless the
+    active space has enforce_vpc on)."""
+    try:
+        if s._gcp_active_space_dict().get("enforce_vpc"):
+            s._gcp_vpc_reconcile()
+    except Exception:
+        pass
 
 
 def _strip_action_suffix(value: str, *suffixes: str) -> str:
@@ -43,6 +55,7 @@ TARGETS = [
     "api_gcp_pubsub_list_subscriptions",
     "api_gcp_pubsub_create_subscription",
     "api_gcp_pubsub_get_subscription",
+    "api_gcp_pubsub_patch_subscription",
     "api_gcp_pubsub_list_subscription_messages",
     "api_gcp_pubsub_purge_subscription",
     "api_gcp_pubsub_delete_subscription",
@@ -59,6 +72,10 @@ TARGETS = [
     "api_gcp_firestore_get_document",
     "api_gcp_firestore_delete_document",
     "api_gcp_firestore_update_document",
+    "api_gcp_firestore_doc_get",
+    "api_gcp_firestore_doc_post",
+    "api_gcp_firestore_doc_delete",
+    "api_gcp_firestore_doc_put",
     "api_gcp_firestore_run_query",
     "api_gcp_firestore_list_indexes",
     "api_gcp_firestore_create_index",
@@ -90,6 +107,8 @@ TARGETS = [
     "api_gcp_vpc_create_subnetwork",
     "api_gcp_vpc_list_firewalls",
     "api_gcp_vpc_create_firewall",
+    "api_gcp_vpc_update_firewall",
+    "api_gcp_vpc_delete_firewall",
 ]
 
 
@@ -116,6 +135,13 @@ async def api_gcp_storage_create_bucket(request: Request):
     bucket = s._gcp_storage_bucket_record(project, name, payload)
     s.gcp_storage_state.setdefault("buckets", {})[name] = bucket
     s.gcp_storage_state.setdefault("objects", {}).setdefault(name, {})
+    # Mirror the bucket into the byte store so object uploads have a home.
+    try:
+        from core import gcp_gcs_store as gcs
+        if gcs.available():
+            gcs.ensure_bucket(name)
+    except Exception:
+        pass
     return s._gcp_storage_bucket_view(project, bucket)
 
 
@@ -157,26 +183,76 @@ async def api_gcp_storage_create_object(bucket: str, request: Request):
     bucket_rec = s.gcp_storage_state.get("buckets", {}).get(bucket)
     if not bucket_rec:
         raise HTTPException(404, detail="Bucket not found")
+    project = str(bucket_rec.get("project") or "cloudlearn")
+    ctype = request.headers.get("content-type", "") if request is not None else ""
+    qp = request.query_params if request is not None else {}
+    upload_type = str(qp.get("uploadType") or "")
+    raw = await request.body() if request is not None else b""
     try:
-        payload = await request.json() if request is not None else {}
+        from core import gcp_gcs_store as gcs
+        gcs_ok = gcs.available()
     except Exception:
-        payload = {}
-    payload = payload if isinstance(payload, dict) else {}
-    # Real GCS uploads pass the object name as the `?name=` query param (uploadType=media);
-    # accept that in addition to a name in the JSON body.
-    name = str(payload.get("name") or payload.get("object") or request.query_params.get("name") or "").strip()
-    if not name:
-        raise HTTPException(400, detail="Object name is required")
-    obj = s._gcp_storage_object_record(bucket, name, payload)
-    s.gcp_storage_state.setdefault("objects", {}).setdefault(bucket, {})[name] = obj
-    return s._gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj)
+        gcs_ok = False
+    meta: dict = {}
+    name = ""
+    is_sdk_upload = upload_type in ("media", "multipart", "resumable") or "multipart/" in ctype or bool(qp.get("name"))
+    if gcs_ok and is_sdk_upload:
+        # Real SDK / gsutil upload: proxy the raw bytes to the byte store, which
+        # handles media/multipart and returns the GCS object metadata.
+        try:
+            _status, body = gcs.upload(bucket, str(request.url.query), raw, ctype)
+            meta = json.loads(body.decode("utf-8")) if body else {}
+            name = str(meta.get("name") or qp.get("name") or "")
+        except Exception as exc:
+            raise HTTPException(502, detail=f"Object upload failed: {str(exc)[:160]}")
+    else:
+        # Console / Terraform JSON-body upload: {name, data, contentType}.
+        try:
+            payload = json.loads(raw.decode("utf-8")) if raw else {}
+        except Exception:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        name = str(payload.get("name") or payload.get("object") or (qp.get("name") if qp else "") or "").strip()
+        if not name:
+            raise HTTPException(400, detail="Object name is required")
+        data = payload.get("data", payload.get("content", ""))
+        if not isinstance(data, str):
+            data = json.dumps(data, default=str)
+        ct = str(payload.get("contentType") or "text/plain")
+        if gcs_ok:
+            try:
+                gcs.put_text(bucket, name, data, ct)
+            except Exception:
+                pass
+        meta = {"size": str(len(data.encode("utf-8"))), "contentType": ct}
+    rec = s._gcp_storage_object_record(bucket, name, {
+        "contentType": meta.get("contentType") or "application/octet-stream",
+        "size": meta.get("size"),
+        "md5Hash": meta.get("md5Hash", ""),
+        "crc32c": meta.get("crc32c", ""),
+    })
+    s.gcp_storage_state.setdefault("objects", {}).setdefault(bucket, {})[name] = rec
+    return s._gcp_storage_object_view(project, bucket, name, rec)
 
 
-def api_gcp_storage_get_object(bucket: str, object_name: str):
+def api_gcp_storage_get_object(bucket: str, object_name: str, request: Request = None):
     s = _server()
     bucket_rec = s.gcp_storage_state.get("buckets", {}).get(bucket)
+    if not bucket_rec:
+        raise HTTPException(404, detail="Object not found")
+    qp = request.query_params if request is not None else {}
+    if str(qp.get("alt") or "") == "media":
+        # Stream the real object bytes back from the byte store.
+        try:
+            from core import gcp_gcs_store as gcs
+            from starlette.responses import Response
+            data, ctype = gcs.download(bucket, object_name)
+            return Response(content=data, media_type=ctype)
+        except Exception as exc:
+            raise HTTPException(404, detail=f"Object media not available: {str(exc)[:120]}")
     obj = s.gcp_storage_state.get("objects", {}).get(bucket, {}).get(object_name)
-    if not bucket_rec or not obj:
+    if not obj:
         raise HTTPException(404, detail="Object not found")
     return s._gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, object_name, obj)
 
@@ -185,6 +261,11 @@ def api_gcp_storage_delete_object(bucket: str, object_name: str):
     s = _server()
     if bucket not in s.gcp_storage_state.get("objects", {}) or object_name not in s.gcp_storage_state["objects"][bucket]:
         raise HTTPException(404, detail="Object not found")
+    try:
+        from core import gcp_gcs_store as gcs
+        gcs.delete(bucket, object_name)
+    except Exception:
+        pass
     del s.gcp_storage_state["objects"][bucket][object_name]
     return {"kind": "storage#empty", "deleted": True, "bucket": bucket, "object": object_name}
 
@@ -209,6 +290,24 @@ async def api_gcp_sql_create_instance(project: str, request: Request):
     instance = s._gcp_sql_instance_record(project, payload)
     if instance["name"] in s.gcp_sql_state.get("instances", {}):
         raise HTTPException(409, detail="Instance already exists")
+    # Provision a real database on the backing OSS engine so applications can
+    # connect over the normal wire protocol. Degrade to metadata-only if the
+    # engine is unreachable (mirrors Compute Engine's simulated fallback).
+    try:
+        from core import gcp_sql_engine
+        space_id = s._spaces_state().get("active_space_id", "")
+        host = request.headers.get("host", "") if request is not None else ""
+        endpoint = gcp_sql_engine.provision(
+            space_id, project, instance["name"], instance.get("databaseVersion", ""),
+            instance.get("masterUsername", "dbadmin"), instance.get("masterUserPassword", ""),
+            host,
+        )
+        instance["_backend"] = endpoint
+        instance["ipAddresses"] = [{"type": "PRIMARY", "ipAddress": endpoint["host"]}]
+        instance["state"] = "RUNNABLE"
+    except Exception as exc:
+        instance["_backend"] = None
+        instance["_backend_error"] = str(exc)[:200]
     s.gcp_sql_state.setdefault("instances", {})[instance["name"]] = instance
     return s._gcp_sql_instance_view(project, instance)
 
@@ -228,6 +327,12 @@ def api_gcp_sql_delete_instance(project: str, instance: str):
     rec = s.gcp_sql_state.get("instances", {}).get(instance)
     if not rec or str(rec.get("project") or project) != project:
         raise HTTPException(404, detail="Instance not found")
+    try:
+        from core import gcp_sql_engine
+        space_id = s._spaces_state().get("active_space_id", "")
+        gcp_sql_engine.deprovision(space_id, project, instance, rec.get("databaseVersion", ""))
+    except Exception:
+        pass
     del s.gcp_sql_state["instances"][instance]
     return {"kind": "sql#operation", "operationType": "DELETE", "status": "DONE", "targetLink": f"{s._gcp_sql_root()}/projects/{project}/instances/{instance}"}
 
@@ -342,7 +447,7 @@ async def api_gcp_pubsub_publish(project: str, topic: str, request: Request):
         if not isinstance(message, dict):
             continue
         message_id = s._id("msg")
-        entry = {"messageId": message_id, "data": str(message.get("data") or ""), "attributes": message.get("attributes", {}) if isinstance(message.get("attributes"), dict) else {}, "publishTime": s._now(), "topic": topic}
+        entry = {"messageId": message_id, "data": str(message.get("data") or ""), "attributes": message.get("attributes", {}) if isinstance(message.get("attributes"), dict) else {}, "publishTime": s._now(), "topic": topic, "orderingKey": str(message.get("orderingKey") or ""), "_publishedAt": time.time()}
         message_ids.append(message_id)
         s.gcp_pubsub_state.setdefault("messages", {}).setdefault(topic, []).append(entry)
         for sub in s.gcp_pubsub_state.get("subscriptions", {}).values():
@@ -385,6 +490,34 @@ def api_gcp_pubsub_get_subscription(project: str, subscription: str):
     return s._gcp_pubsub_subscription_view(project, rec)
 
 
+async def api_gcp_pubsub_patch_subscription(project: str, subscription: str, request: Request):
+    """PATCH .../subscriptions/{sub} — update delivery settings on an existing subscription."""
+    s = _server()
+    project = s._gcp_project_name(project)
+    subscription = _strip_action_suffix(subscription, ":purge", ":pull", ":acknowledge", ":modifyAckDeadline")
+    rec = s.gcp_pubsub_state.get("subscriptions", {}).get(subscription)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Subscription not found")
+    payload = await request.json() if request is not None else {}
+    payload = payload if isinstance(payload, dict) else {}
+    # Real GCP wraps the changes under "subscription" alongside an updateMask.
+    body = payload.get("subscription") if isinstance(payload.get("subscription"), dict) else payload
+    if "ackDeadlineSeconds" in body:
+        try:
+            rec["ackDeadlineSeconds"] = int(body.get("ackDeadlineSeconds"))
+        except (TypeError, ValueError):
+            pass
+    if "messageRetentionDuration" in body and body.get("messageRetentionDuration"):
+        rec["messageRetentionDuration"] = str(body.get("messageRetentionDuration"))
+    if "retainAckedMessages" in body:
+        rec["retainAckedMessages"] = bool(body.get("retainAckedMessages"))
+    if isinstance(body.get("labels"), dict):
+        rec["labels"] = body["labels"]
+    rec["updateTime"] = s._now()
+    s.gcp_pubsub_state.setdefault("subscriptions", {})[subscription] = rec
+    return s._gcp_pubsub_subscription_view(project, rec)
+
+
 def api_gcp_pubsub_list_subscription_messages(project: str, subscription: str):
     s = _server()
     project = s._gcp_project_name(project)
@@ -419,6 +552,29 @@ def api_gcp_pubsub_delete_subscription(project: str, subscription: str):
     return {"done": True}
 
 
+def _parse_duration_seconds(dur: str) -> int:
+    dur = str(dur or "").strip()
+    if not dur:
+        return 0
+    try:
+        return int(float(dur[:-1] if dur.endswith("s") else dur))
+    except Exception:
+        return 0
+
+
+def _gcp_pubsub_retention_seconds(s, sub_rec: dict) -> int:
+    """Resolve message retention (seconds) from the subscription, else its topic.
+    0 = no expiry (default), so retention only applies when explicitly set."""
+    dur = str(sub_rec.get("messageRetentionDuration") or "")
+    if not dur:
+        topic_path = str(sub_rec.get("topic") or "")
+        topic_id = topic_path.split("/")[-1]
+        topics = s.gcp_pubsub_state.get("topics", {})
+        topic = topics.get(topic_id) or topics.get(topic_path) or {}
+        dur = str(topic.get("messageRetentionDuration") or "")
+    return _parse_duration_seconds(dur)
+
+
 async def api_gcp_pubsub_pull(project: str, subscription: str, request: Request):
     s = _server()
     project = s._gcp_project_name(project)
@@ -429,10 +585,48 @@ async def api_gcp_pubsub_pull(project: str, subscription: str, request: Request)
     payload = await request.json() if request is not None else {}
     payload = payload if isinstance(payload, dict) else {}
     max_messages = int(payload.get("maxMessages") or payload.get("max_messages") or 10)
-    items = list(s.gcp_pubsub_state.get("messages", {}).get(subscription, []))[:max_messages]
+    # Lease messages for the ack deadline: a pulled-but-unacked message is hidden
+    # until its deadline expires, then redelivered (with an incremented delivery
+    # attempt). Acked messages are removed entirely. This gives real at-least-once
+    # delivery with deadline-based redelivery instead of returning the same set.
+    now = time.time()
+    deadline = int(rec.get("ackDeadlineSeconds") or 10)
+    queue = s.gcp_pubsub_state.get("messages", {}).get(subscription, [])
+    # Retention: drop messages older than the topic's messageRetentionDuration.
+    retention = _gcp_pubsub_retention_seconds(s, rec)
+    if retention > 0:
+        kept = [m for m in queue if not (m.get("_publishedAt") and (now - float(m["_publishedAt"])) > retention)]
+        if len(kept) != len(queue):
+            queue[:] = kept
     received = []
-    for item in items:
-        received.append({"ackId": item.get("ackId", s._id("ack")), "message": {"data": item.get("data", ""), "messageId": item.get("messageId", s._id("msg")), "publishTime": item.get("publishTime", s._now()), "attributes": item.get("attributes", {})}})
+    blocked_keys: set[str] = set()
+    for item in queue:
+        if len(received) >= max_messages:
+            break
+        # Ordering: per orderingKey deliver one-at-a-time in publish order — a
+        # later message for a key is held until the earlier one is acked.
+        key = str(item.get("orderingKey") or "")
+        if key and key in blocked_keys:
+            continue
+        if float(item.get("_visibleAt") or 0) > now:
+            if key:
+                blocked_keys.add(key)  # head is leased -> hold the rest of this key
+            continue
+        item["_visibleAt"] = now + deadline
+        item["_deliveryAttempt"] = int(item.get("_deliveryAttempt") or 0) + 1
+        if key:
+            blocked_keys.add(key)
+        received.append({
+            "ackId": item.get("ackId") or s._id("ack"),
+            "deliveryAttempt": item["_deliveryAttempt"],
+            "message": {
+                "data": item.get("data", ""),
+                "messageId": item.get("messageId") or s._id("msg"),
+                "publishTime": item.get("publishTime") or s._now(),
+                "attributes": item.get("attributes", {}),
+                "orderingKey": key,
+            },
+        })
     return {"receivedMessages": received}
 
 
@@ -466,11 +660,12 @@ async def api_gcp_pubsub_modify_ack_deadline(project: str, subscription: str, re
     ack_ids = [str(ack_id) for ack_id in ack_ids if ack_id]
     deadline = int(payload.get("ackDeadlineSeconds") or 0) if isinstance(payload, dict) else 0
     queue = s.gcp_pubsub_state.setdefault("messages", {}).get(subscription, [])
-    if deadline == 0:
-        for item in queue:
-            if item.get("ackId") in ack_ids:
-                item["visibleAt"] = s._now()
-                item["inFlight"] = False
+    # Re-lease the named messages: deadline>0 extends the lease, deadline==0 makes
+    # them immediately visible again (nack -> instant redelivery).
+    now = time.time()
+    for item in queue:
+        if item.get("ackId") in ack_ids:
+            item["_visibleAt"] = now + deadline
     return {}
 
 
@@ -523,7 +718,8 @@ async def api_gcp_firestore_create_document(project: str, database: str, collect
     database = str(database or "(default)")
     payload = await request.json() if request is not None else {}
     payload = payload if isinstance(payload, dict) else {}
-    doc_id = str(payload.get("name") or payload.get("documentId") or s._id("doc"))
+    query_doc_id = request.query_params.get("documentId") if request is not None else ""
+    doc_id = str(payload.get("name") or payload.get("documentId") or query_doc_id or s._id("doc"))
     if "/" in doc_id:
         doc_id = doc_id.rsplit("/", 1)[-1]
     fields = payload.get("fields", {}) if isinstance(payload.get("fields"), dict) else {}
@@ -565,6 +761,46 @@ async def api_gcp_firestore_update_document(project: str, database: str, collect
     return doc
 
 
+def _fs_path_parts(fs_path: str) -> list[str]:
+    return [p for p in str(fs_path or "").split("/") if p]
+
+
+def api_gcp_firestore_doc_get(project: str, database: str, fs_path: str):
+    """GET a Firestore path: odd segment count = collection (list), even = document.
+    Supports subcollections, e.g. users/alice/orders (list) or users/alice (get)."""
+    parts = _fs_path_parts(fs_path)
+    if not parts:
+        return api_gcp_firestore_list_root_documents(project, database)
+    if len(parts) % 2 == 1:
+        return api_gcp_firestore_list_documents(project, database, "/".join(parts))
+    return api_gcp_firestore_get_document(project, database, "/".join(parts[:-1]), parts[-1])
+
+
+async def api_gcp_firestore_doc_post(project: str, database: str, fs_path: str, request: Request):
+    """POST to a collection path creates a document (handles nested subcollections)."""
+    if str(fs_path or "").endswith(":runQuery"):
+        return await api_gcp_firestore_run_query(project, database, request, collection="/".join(_fs_path_parts(fs_path[:-len(":runQuery")])))
+    parts = _fs_path_parts(fs_path)
+    if parts and len(parts) % 2 == 1:
+        return await api_gcp_firestore_create_document(project, database, "/".join(parts), request)
+    # even path -> treat as an update of that document
+    return await api_gcp_firestore_update_document(project, database, "/".join(parts[:-1]), parts[-1], request)
+
+
+def api_gcp_firestore_doc_delete(project: str, database: str, fs_path: str):
+    parts = _fs_path_parts(fs_path)
+    if len(parts) >= 2 and len(parts) % 2 == 0:
+        return api_gcp_firestore_delete_document(project, database, "/".join(parts[:-1]), parts[-1])
+    raise HTTPException(400, detail="Path does not address a document")
+
+
+async def api_gcp_firestore_doc_put(project: str, database: str, fs_path: str, request: Request):
+    parts = _fs_path_parts(fs_path)
+    if len(parts) >= 2 and len(parts) % 2 == 0:
+        return await api_gcp_firestore_update_document(project, database, "/".join(parts[:-1]), parts[-1], request)
+    raise HTTPException(400, detail="Path does not address a document")
+
+
 async def api_gcp_firestore_run_query(project: str, database: str, request: Request, collection: str = ""):
     s = _server()
     project = s._gcp_project_name(project)
@@ -582,15 +818,34 @@ async def api_gcp_firestore_run_query(project: str, database: str, request: Requ
         collection_id = ""
     limit = int(query.get("limit") or payload.get("limit") or 50)
     where = query.get("where") if isinstance(query.get("where"), dict) else {}
-    field_name = ""
-    field_value = None
+    filters: list = []
+
+    def _add_field_filter(ff):
+        if not isinstance(ff, dict):
+            return
+        field = ff.get("field") if isinstance(ff.get("field"), dict) else {}
+        fpath = str(field.get("fieldPath") or "")
+        if not fpath:
+            return
+        filters.append({"field": fpath, "op": str(ff.get("op") or "EQUAL"),
+                        "value": s._gcp_firestore_plain_value(ff.get("value"))})
+
     if isinstance(where, dict):
-        field_filter = where.get("fieldFilter") if isinstance(where.get("fieldFilter"), dict) else {}
-        if isinstance(field_filter, dict):
-            field = field_filter.get("field") if isinstance(field_filter.get("field"), dict) else {}
-            field_name = str(field.get("fieldPath") or "")
-            field_value = s._gcp_firestore_plain_value(field_filter.get("value")) if field_name else None
-    result = s._gcp_firestore_engine().run_query(project, database, collection_id, field_name=field_name, field_value=field_value, limit=limit)
+        _add_field_filter(where.get("fieldFilter"))
+        composite = where.get("compositeFilter") if isinstance(where.get("compositeFilter"), dict) else {}
+        for sub in (composite.get("filters") or []):
+            if isinstance(sub, dict):
+                _add_field_filter(sub.get("fieldFilter"))
+    order_by = None
+    order_dir = "ASCENDING"
+    order_specs = query.get("orderBy")
+    if isinstance(order_specs, list) and order_specs and isinstance(order_specs[0], dict):
+        of = order_specs[0].get("field") if isinstance(order_specs[0].get("field"), dict) else {}
+        order_by = str(of.get("fieldPath") or "") or None
+        order_dir = str(order_specs[0].get("direction") or "ASCENDING")
+    field_name = filters[0]["field"] if filters else ""
+    result = s._gcp_firestore_engine().run_query(project, database, collection_id, limit=limit,
+                                                 filters=filters, order_by=order_by, order_dir=order_dir)
     if collection_id and field_name:
         index_key = f"{project}:{database}:{collection_id}:{field_name}:{query.get('orderBy', 'ASCENDING')}"
         s.gcp_firestore_state.setdefault("indexes", {}).setdefault(index_key, s._gcp_firestore_index_record(project, database, collection_id, {
@@ -802,9 +1057,25 @@ async def api_gcp_functions_call(project: str, location: str, function: str, req
         raise HTTPException(404, detail="Function not found")
     payload = await request.json() if request is not None else {}
     payload = payload if isinstance(payload, dict) else {}
-    invocation = {"id": s._id("inv"), "timestamp": s._now(), "request": payload, "response": {"ok": True}, "status": "SUCCESS"}
+    # Actually execute the uploaded source with the request payload.
+    event = payload.get("data") if isinstance(payload.get("data"), (dict, list)) else payload
+    try:
+        from core import gcp_function_runtime
+        timeout = int(fn.get("serviceConfig", {}).get("timeoutSeconds") or fn.get("timeout") or 30)
+        outcome = gcp_function_runtime.execute(
+            fn.get("code", ""), fn.get("entryPoint", "handler"), fn.get("runtime", "python311"),
+            event, timeout=min(max(timeout, 1), 120),
+        )
+    except Exception as exc:
+        outcome = {"status": "ERROR", "error": str(exc)[:300], "result": None, "logs": ""}
+    invocation = {
+        "id": s._id("inv"), "timestamp": s._now(), "request": payload,
+        "response": outcome.get("result"), "status": outcome.get("status", "SUCCESS"),
+        "error": outcome.get("error", ""), "logs": outcome.get("logs", ""),
+    }
     fn.setdefault("invocations", []).append(invocation)
-    return {"executionId": invocation["id"], "result": invocation["response"]}
+    return {"executionId": invocation["id"], "status": invocation["status"],
+            "result": invocation["response"], "error": invocation["error"], "logs": invocation["logs"]}
 
 
 def api_gcp_apigw_list_apis(project: str, location: str = "global"):
@@ -981,4 +1252,63 @@ async def api_gcp_vpc_create_firewall(project: str, request: Request):
         raise HTTPException(400, detail="Firewall name is required")
     rec = {"id": s._gcp_compute_numeric_id(f"{project}:{name}"), "name": name, "description": str(payload.get("description") or ""), "project": project, "network": str(payload.get("network") or "default").split("/")[-1], "priority": int(payload.get("priority") or 1000), "direction": str(payload.get("direction") or "INGRESS"), "allowed": payload.get("allowed") if isinstance(payload.get("allowed"), list) else [{"IPProtocol": "tcp", "ports": ["22"]}], "denied": payload.get("denied") if isinstance(payload.get("denied"), list) else [], "sourceRanges": payload.get("sourceRanges") if isinstance(payload.get("sourceRanges"), list) else ["0.0.0.0/0"], "destinationRanges": payload.get("destinationRanges") if isinstance(payload.get("destinationRanges"), list) else [], "sourceTags": payload.get("sourceTags") if isinstance(payload.get("sourceTags"), list) else [], "targetTags": payload.get("targetTags") if isinstance(payload.get("targetTags"), list) else [], "sourceServiceAccounts": payload.get("sourceServiceAccounts") if isinstance(payload.get("sourceServiceAccounts"), list) else [], "targetServiceAccounts": payload.get("targetServiceAccounts") if isinstance(payload.get("targetServiceAccounts"), list) else [], "disabled": bool(payload.get("disabled", False)), "logConfig": payload.get("logConfig") if isinstance(payload.get("logConfig"), dict) else {}, "createTime": s._now()}
     s.gcp_vpc_state.setdefault("firewalls", {})[name] = rec
-    return {"kind": "compute#firewall", "id": rec["id"], "creationTimestamp": rec["createTime"], "name": name, "description": rec["description"], "network": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{rec['network']}", "priority": rec["priority"], "direction": rec["direction"], "allowed": rec["allowed"], "denied": rec["denied"], "sourceRanges": rec["sourceRanges"], "destinationRanges": rec["destinationRanges"], "sourceTags": rec["sourceTags"], "targetTags": rec["targetTags"], "sourceServiceAccounts": rec["sourceServiceAccounts"], "targetServiceAccounts": rec["targetServiceAccounts"], "disabled": rec["disabled"], "logConfig": rec["logConfig"], "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/firewalls/{name}"}
+    _gcp_vpc_enforce_reconcile(s)
+    return _gcp_firewall_view(s, project, rec)
+
+
+def _gcp_firewall_view(s, project: str, rec: dict) -> dict:
+    name = rec["name"]
+    return {"kind": "compute#firewall", "id": rec["id"], "creationTimestamp": rec.get("createTime"), "name": name, "description": rec.get("description", ""), "network": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{rec.get('network', 'default')}", "priority": rec.get("priority", 1000), "direction": rec.get("direction", "INGRESS"), "allowed": rec.get("allowed", []), "denied": rec.get("denied", []), "sourceRanges": rec.get("sourceRanges", []), "destinationRanges": rec.get("destinationRanges", []), "sourceTags": rec.get("sourceTags", []), "targetTags": rec.get("targetTags", []), "sourceServiceAccounts": rec.get("sourceServiceAccounts", []), "targetServiceAccounts": rec.get("targetServiceAccounts", []), "disabled": rec.get("disabled", False), "logConfig": rec.get("logConfig", {}), "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/firewalls/{name}"}
+
+
+def _gcp_firewall_lookup(s, project: str, firewall: str):
+    """Resolve a firewall record in the active project by name (last path segment)."""
+    fw_id = str(firewall or "").split("/")[-1].strip()
+    firewalls = s.gcp_vpc_state.setdefault("firewalls", {})
+    rec = firewalls.get(fw_id)
+    if rec and str(rec.get("project") or project) == project:
+        return fw_id, rec, firewalls
+    return fw_id, None, firewalls
+
+
+def api_gcp_vpc_delete_firewall(project: str, firewall: str):
+    s = _server()
+    project = s._gcp_project_name(project)
+    fw_id, rec, firewalls = _gcp_firewall_lookup(s, project, firewall)
+    if not rec:
+        raise HTTPException(404, detail="Firewall not found")
+    del firewalls[fw_id]
+    _gcp_vpc_enforce_reconcile(s)
+    return {"kind": "compute#operation", "operationType": "delete", "status": "DONE", "targetLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/firewalls/{fw_id}", "name": f"operation-delete-{fw_id}"}
+
+
+async def api_gcp_vpc_update_firewall(project: str, firewall: str, request: Request):
+    s = _server()
+    project = s._gcp_project_name(project)
+    fw_id, rec, firewalls = _gcp_firewall_lookup(s, project, firewall)
+    if not rec:
+        raise HTTPException(404, detail="Firewall not found")
+    payload = await request.json() if request is not None else {}
+    payload = payload if isinstance(payload, dict) else {}
+    if "description" in payload:
+        rec["description"] = str(payload.get("description") or "")
+    if "network" in payload and payload.get("network"):
+        rec["network"] = str(payload.get("network")).split("/")[-1]
+    if "priority" in payload:
+        try:
+            rec["priority"] = int(payload.get("priority"))
+        except (TypeError, ValueError):
+            pass
+    if "direction" in payload and payload.get("direction"):
+        rec["direction"] = str(payload.get("direction")).upper()
+    for key in ("allowed", "denied", "sourceRanges", "destinationRanges", "sourceTags", "targetTags", "sourceServiceAccounts", "targetServiceAccounts"):
+        if key in payload and isinstance(payload.get(key), list):
+            rec[key] = payload[key]
+    if "disabled" in payload:
+        rec["disabled"] = bool(payload.get("disabled"))
+    if isinstance(payload.get("logConfig"), dict):
+        rec["logConfig"] = payload["logConfig"]
+    rec["updateTime"] = s._now()
+    firewalls[fw_id] = rec
+    _gcp_vpc_enforce_reconcile(s)
+    return _gcp_firewall_view(s, project, rec)

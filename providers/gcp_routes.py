@@ -17,6 +17,7 @@ _TARGET_OVERRIDES = {
     "api_gcp_iam_test_permissions": gcp_iam.api_gcp_iam_test_permissions,
     "api_gcp_iam_list_service_accounts": gcp_iam.api_gcp_iam_list_service_accounts,
     "api_gcp_iam_create_service_account": gcp_iam.api_gcp_iam_create_service_account,
+    "api_gcp_iam_patch_service_account": gcp_iam.api_gcp_iam_patch_service_account,
     "api_gcp_iam_delete_service_account": gcp_iam.api_gcp_iam_delete_service_account,
     "api_gcp_iam_list_users": gcp_iam.api_gcp_iam_list_users,
     "api_gcp_iam_create_user": gcp_iam.api_gcp_iam_create_user,
@@ -148,6 +149,27 @@ def _add_route(app, method: str, path: str, target_name: str, signature: str, *,
 
 
 def register(app, h) -> None:
+    # Operation pollers (Cloud SQL + Cloud Functions) — return empty lists so the
+    # console's background polling does not 404 (which surfaced a "Not Found" toast).
+    @app.get("/sql/v1beta4/projects/{project}/operations")
+    @app.get("/api/gcp/sql/v1beta4/projects/{project}/operations")
+    def api_gcp_sql_list_operations(project: str):
+        return {"kind": "sql#operationsList", "items": []}
+
+    @app.get("/v1/projects/{project}/locations/{location}/operations")
+    @app.get("/api/gcp/v1/projects/{project}/locations/{location}/operations")
+    def api_gcp_functions_list_operations(project: str, location: str):
+        return {"operations": []}
+
+    # API Gateway request routing: a call to a deployed gateway is routed to its
+    # backend (a Cloud Function or upstream URL) and returns the real response.
+    @app.api_route("/api/gcp/apigateway/invoke/{gateway}/{path:path}",
+                   methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
+    @app.api_route("/api/gcp/apigateway/invoke/{gateway}",
+                   methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
+    async def api_gcp_apigateway_invoke(gateway: str, request: Request, path: str = ""):
+        return await _server().api_gcp_apigw_invoke(gateway, path, request)
+
     @app.get("/api/providers/gcp/gcloud")
     def api_provider_gcp_gcloud():
         return tool_response("gcloud")
@@ -201,9 +223,9 @@ def register(app, h) -> None:
         ("POST", "/upload/storage/v1/b/{bucket}/o", "api_gcp_storage_create_object", "(bucket: str, request: Request)"),
         ("POST", "/api/gcp/storage/v1/b/{bucket}/o", "api_gcp_storage_create_object", "(bucket: str, request: Request)"),
         ("POST", "/api/gcp/s3/buckets/{bucket}/objects", "api_gcp_storage_create_object", "(bucket: str, request: Request)"),
-        ("GET", "/storage/v1/b/{bucket}/o/{object_name:path}", "api_gcp_storage_get_object", "(bucket: str, object_name: str)"),
-        ("GET", "/api/gcp/storage/v1/b/{bucket}/o/{object_name:path}", "api_gcp_storage_get_object", "(bucket: str, object_name: str)"),
-        ("GET", "/api/gcp/s3/buckets/{bucket}/objects/{object_name:path}", "api_gcp_storage_get_object", "(bucket: str, object_name: str)"),
+        ("GET", "/storage/v1/b/{bucket}/o/{object_name:path}", "api_gcp_storage_get_object", "(bucket: str, object_name: str, request: Request)"),
+        ("GET", "/api/gcp/storage/v1/b/{bucket}/o/{object_name:path}", "api_gcp_storage_get_object", "(bucket: str, object_name: str, request: Request)"),
+        ("GET", "/api/gcp/s3/buckets/{bucket}/objects/{object_name:path}", "api_gcp_storage_get_object", "(bucket: str, object_name: str, request: Request)"),
         ("DELETE", "/storage/v1/b/{bucket}/o/{object_name:path}", "api_gcp_storage_delete_object", "(bucket: str, object_name: str)"),
         ("DELETE", "/api/gcp/storage/v1/b/{bucket}/o/{object_name:path}", "api_gcp_storage_delete_object", "(bucket: str, object_name: str)"),
         ("DELETE", "/api/gcp/s3/buckets/{bucket}/objects/{object_name:path}", "api_gcp_storage_delete_object", "(bucket: str, object_name: str)"),
@@ -252,6 +274,8 @@ def register(app, h) -> None:
         ("PUT", "/api/gcp/pubsub/v1/projects/{project}/topics/{topic}", "api_gcp_pubsub_put_topic", "(project: str, topic: str, request: Request)"),
         ("PUT", "/v1/projects/{project}/subscriptions/{subscription}", "api_gcp_pubsub_put_subscription", "(project: str, subscription: str, request: Request)"),
         ("PUT", "/api/gcp/pubsub/v1/projects/{project}/subscriptions/{subscription}", "api_gcp_pubsub_put_subscription", "(project: str, subscription: str, request: Request)"),
+        ("PATCH", "/v1/projects/{project}/subscriptions/{subscription}", "api_gcp_pubsub_patch_subscription", "(project: str, subscription: str, request: Request)"),
+        ("PATCH", "/api/gcp/pubsub/v1/projects/{project}/subscriptions/{subscription}", "api_gcp_pubsub_patch_subscription", "(project: str, subscription: str, request: Request)"),
         ("POST", "/api/gcp/sqs/queues", "api_gcp_pubsub_create_topic", "(project: str, request: Request)"),
         ("GET", "/v1/projects/{project}/topics/{topic}", "api_gcp_pubsub_get_topic", "(project: str, topic: str)"),
         ("GET", "/api/gcp/sqs/queues/{topic}", "api_gcp_pubsub_get_topic", "(project: str, topic: str)"),
@@ -287,16 +311,18 @@ def register(app, h) -> None:
         # Firestore
         ("GET", "/firestore/v1/projects/{project}/databases/{database}/documents", "api_gcp_firestore_list_root_documents", "(project: str, database: str)"),
         ("GET", "/api/gcp/dynamodb/tables", "api_gcp_firestore_list_root_documents", "(project: str, database: str)"),
-        ("GET", "/firestore/v1/projects/{project}/databases/{database}/documents/{collection}", "api_gcp_firestore_list_documents", "(project: str, database: str, collection: str)"),
+        # Native Firestore document API uses path-segment parity to distinguish a
+        # collection (odd) from a document (even) — enables nested subcollections.
+        ("GET", "/firestore/v1/projects/{project}/databases/{database}/documents/{fs_path:path}", "api_gcp_firestore_doc_get", "(project: str, database: str, fs_path: str)"),
+        ("POST", "/firestore/v1/projects/{project}/databases/{database}/documents/{fs_path:path}", "api_gcp_firestore_doc_post", "(project: str, database: str, fs_path: str, request: Request)"),
+        ("DELETE", "/firestore/v1/projects/{project}/databases/{database}/documents/{fs_path:path}", "api_gcp_firestore_doc_delete", "(project: str, database: str, fs_path: str)"),
+        ("PUT", "/firestore/v1/projects/{project}/databases/{database}/documents/{fs_path:path}", "api_gcp_firestore_doc_put", "(project: str, database: str, fs_path: str, request: Request)"),
+        ("PATCH", "/firestore/v1/projects/{project}/databases/{database}/documents/{fs_path:path}", "api_gcp_firestore_doc_put", "(project: str, database: str, fs_path: str, request: Request)"),
+        # DynamoDB-style flat aliases (single collection, no nesting).
         ("GET", "/api/gcp/dynamodb/tables/{collection}/items", "api_gcp_firestore_list_documents", "(project: str, database: str, collection: str)"),
-        ("POST", "/firestore/v1/projects/{project}/databases/{database}/documents/{collection}", "api_gcp_firestore_create_document", "(project: str, database: str, collection: str, request: Request)"),
         ("POST", "/api/gcp/dynamodb/tables/{collection}/items", "api_gcp_firestore_create_document", "(project: str, database: str, collection: str, request: Request)"),
-        ("GET", "/firestore/v1/projects/{project}/databases/{database}/documents/{collection}/{doc_id}", "api_gcp_firestore_get_document", "(project: str, database: str, collection: str, doc_id: str)"),
         ("GET", "/api/gcp/dynamodb/tables/{collection}/items/{doc_id}", "api_gcp_firestore_get_document", "(project: str, database: str, collection: str, doc_id: str)"),
-        ("DELETE", "/firestore/v1/projects/{project}/databases/{database}/documents/{collection}/{doc_id}", "api_gcp_firestore_delete_document", "(project: str, database: str, collection: str, doc_id: str)"),
         ("DELETE", "/api/gcp/dynamodb/tables/{collection}/items/{doc_id}", "api_gcp_firestore_delete_document", "(project: str, database: str, collection: str, doc_id: str)"),
-        ("POST", "/firestore/v1/projects/{project}/databases/{database}/documents/{collection}/{doc_id}", "api_gcp_firestore_update_document", "(project: str, database: str, collection: str, doc_id: str, request: Request)"),
-        ("PUT", "/firestore/v1/projects/{project}/databases/{database}/documents/{collection}/{doc_id}", "api_gcp_firestore_update_document", "(project: str, database: str, collection: str, doc_id: str, request: Request)"),
         ("PUT", "/api/gcp/dynamodb/tables/{collection}/items/{doc_id}", "api_gcp_firestore_update_document", "(project: str, database: str, collection: str, doc_id: str, request: Request)"),
         ("POST", "/firestore/v1/projects/{project}/databases/{database}/documents:runQuery", "api_gcp_firestore_run_query", "(project: str, database: str, request: Request, collection: str = \"\")"),
         ("POST", "/api/gcp/dynamodb/tables/{collection}/query", "api_gcp_firestore_run_query", "(project: str, database: str, request: Request, collection: str = \"\")"),
@@ -372,6 +398,12 @@ def register(app, h) -> None:
         ("POST", "/compute/v1/projects/{project}/global/firewalls", "api_gcp_vpc_create_firewall", "(project: str, request: Request)"),
         ("POST", "/api/gcp/vpc/firewalls", "api_gcp_vpc_create_firewall", "(project: str, request: Request)"),
         ("POST", "/api/gcp/vpc/security-groups", "api_gcp_vpc_create_firewall", "(project: str, request: Request)"),
+        ("PATCH", "/compute/v1/projects/{project}/global/firewalls/{firewall}", "api_gcp_vpc_update_firewall", "(project: str, firewall: str, request: Request)"),
+        ("PUT", "/compute/v1/projects/{project}/global/firewalls/{firewall}", "api_gcp_vpc_update_firewall", "(project: str, firewall: str, request: Request)"),
+        ("PATCH", "/api/gcp/vpc/firewalls/{firewall}", "api_gcp_vpc_update_firewall", "(project: str, firewall: str, request: Request)"),
+        ("DELETE", "/compute/v1/projects/{project}/global/firewalls/{firewall}", "api_gcp_vpc_delete_firewall", "(project: str, firewall: str)"),
+        ("DELETE", "/api/gcp/vpc/firewalls/{firewall}", "api_gcp_vpc_delete_firewall", "(project: str, firewall: str)"),
+        ("DELETE", "/api/gcp/vpc/security-groups/{firewall}", "api_gcp_vpc_delete_firewall", "(project: str, firewall: str)"),
         # IAM
         ("GET", "/v1/projects/{project}:getIamPolicy", "api_gcp_iam_get_policy", "(project: str)"),
         ("POST", "/v1/projects/{project}:getIamPolicy", "api_gcp_iam_get_policy", "(project: str)"),
@@ -384,6 +416,9 @@ def register(app, h) -> None:
         ("GET", "/api/gcp/iam/service-accounts", "api_gcp_iam_list_service_accounts", "(project: str)"),
         ("POST", "/v1/projects/{project}/serviceAccounts", "api_gcp_iam_create_service_account", "(project: str, request: Request)"),
         ("POST", "/api/gcp/iam/service-accounts", "api_gcp_iam_create_service_account", "(project: str, request: Request)"),
+        ("PATCH", "/v1/projects/{project}/serviceAccounts/{account}", "api_gcp_iam_patch_service_account", "(project: str, account: str, request: Request)"),
+        ("PUT", "/v1/projects/{project}/serviceAccounts/{account}", "api_gcp_iam_patch_service_account", "(project: str, account: str, request: Request)"),
+        ("PATCH", "/api/gcp/iam/service-accounts/{account}", "api_gcp_iam_patch_service_account", "(project: str, account: str, request: Request)"),
         ("DELETE", "/v1/projects/{project}/serviceAccounts/{account}", "api_gcp_iam_delete_service_account", "(project: str, account: str)"),
         ("DELETE", "/api/gcp/iam/service-accounts/{account}", "api_gcp_iam_delete_service_account", "(project: str, account: str)"),
         ("GET", "/api/gcp/iam/users", "api_gcp_iam_list_users", "()"),

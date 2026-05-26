@@ -475,24 +475,93 @@ class FirestoreEngine:
                 if cur.rowcount <= 0:
                     raise KeyError(doc_id)
 
-    def run_query(self, project: str, database: str, collection: str = "", field_name: str | None = None, field_value: Any = None, limit: int = 50) -> list[dict]:
+    @staticmethod
+    def _plain_value(value: Any) -> Any:
+        """Reduce a (possibly Firestore-typed) field value to a comparable Python value."""
+        if isinstance(value, dict):
+            for key in ("nullValue", "booleanValue", "integerValue", "doubleValue", "stringValue", "timestampValue", "bytesValue", "referenceValue"):
+                if key in value:
+                    raw = value[key]
+                    if key == "nullValue":
+                        return None
+                    if key == "integerValue":
+                        try:
+                            return int(raw)
+                        except Exception:
+                            return raw
+                    if key == "doubleValue":
+                        try:
+                            return float(raw)
+                        except Exception:
+                            return raw
+                    return raw
+            if "arrayValue" in value:
+                return [FirestoreEngine._plain_value(v) for v in (value.get("arrayValue", {}) or {}).get("values", [])]
+            if "mapValue" in value:
+                return {k: FirestoreEngine._plain_value(v) for k, v in (value.get("mapValue", {}) or {}).get("fields", {}).items()}
+        return value
+
+    @staticmethod
+    def _matches(field_val: Any, op: str, query_val: Any) -> bool:
+        op = str(op or "EQUAL").upper()
+        try:
+            if op in ("EQUAL", "=="):
+                return field_val == query_val
+            if op in ("NOT_EQUAL", "!="):
+                return field_val != query_val
+            if op in ("LESS_THAN", "<"):
+                return field_val is not None and field_val < query_val
+            if op in ("LESS_THAN_OR_EQUAL", "<="):
+                return field_val is not None and field_val <= query_val
+            if op in ("GREATER_THAN", ">"):
+                return field_val is not None and field_val > query_val
+            if op in ("GREATER_THAN_OR_EQUAL", ">="):
+                return field_val is not None and field_val >= query_val
+            if op == "ARRAY_CONTAINS":
+                return isinstance(field_val, list) and query_val in field_val
+            if op == "ARRAY_CONTAINS_ANY":
+                return isinstance(field_val, list) and isinstance(query_val, list) and any(v in field_val for v in query_val)
+            if op == "IN":
+                return isinstance(query_val, list) and field_val in query_val
+            if op == "NOT_IN":
+                return isinstance(query_val, list) and field_val not in query_val
+        except TypeError:
+            return False
+        return field_val == query_val
+
+    def run_query(self, project: str, database: str, collection: str = "", field_name: str | None = None,
+                  field_value: Any = None, limit: int = 50, filters: list | None = None,
+                  order_by: str | None = None, order_dir: str = "ASCENDING") -> list[dict]:
         docs = self.list_documents(project, database, collection)
-        if field_name:
-            docs = [doc for doc in docs if doc.get("fields", {}).get(field_name) == field_value]
+        # Backward-compatible: a single equality filter via field_name/field_value.
+        if filters is None:
+            filters = [{"field": field_name, "op": "EQUAL", "value": field_value}] if field_name else []
+
+        def field_of(doc, path):
+            return self._plain_value(doc.get("fields", {}).get(path))
+
+        for flt in filters:
+            fpath = flt.get("field")
+            if not fpath:
+                continue
+            docs = [doc for doc in docs if self._matches(field_of(doc, fpath), flt.get("op", "EQUAL"), flt.get("value"))]
+        if order_by:
+            try:
+                docs.sort(key=lambda d: (field_of(d, order_by) is None, field_of(d, order_by)),
+                          reverse=str(order_dir or "").upper().startswith("DESC"))
+            except TypeError:
+                pass
         if limit and limit > 0:
             docs = docs[:limit]
         results: list[dict] = []
-        for idx, doc in enumerate(docs):
-            results.append({
-                "document": copy.deepcopy(doc),
-                "readTime": _now(),
-                "done": False,
-            })
+        for doc in docs:
+            results.append({"document": copy.deepcopy(doc), "readTime": _now(), "done": False})
         if not results:
             results.append({"readTime": _now(), "done": True})
         else:
             results[-1]["done"] = True
         return results
+
     def evaluate_policy(self, principal: str, action: str, resource: str) -> bool:
         # Simple local simulator policy check: explicit deny wins, otherwise allow.
         policy_graph = self.state.get("iam", {}).get("policies", {})

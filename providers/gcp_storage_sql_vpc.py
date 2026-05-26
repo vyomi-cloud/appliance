@@ -217,6 +217,24 @@ async def api_gcp_sql_create_instance(project: str, request: Request):
     instance = s._gcp_sql_instance_record(project, payload)
     if instance["name"] in s.gcp_sql_state.get("instances", {}):
         raise HTTPException(409, detail="Instance already exists")
+    # Provision a real database on the backing OSS engine so applications can
+    # connect over the normal wire protocol. Degrade to metadata-only if the
+    # engine is unreachable (mirrors Compute Engine's simulated fallback).
+    try:
+        from core import gcp_sql_engine
+        space_id = s._spaces_state().get("active_space_id", "")
+        host = request.headers.get("host", "") if request is not None else ""
+        endpoint = gcp_sql_engine.provision(
+            space_id, project, instance["name"], instance.get("databaseVersion", ""),
+            instance.get("masterUsername", "dbadmin"), instance.get("masterUserPassword", ""),
+            host,
+        )
+        instance["_backend"] = endpoint
+        instance["ipAddresses"] = [{"type": "PRIMARY", "ipAddress": endpoint["host"]}]
+        instance["state"] = "RUNNABLE"
+    except Exception as exc:
+        instance["_backend"] = None
+        instance["_backend_error"] = str(exc)[:200]
     s.gcp_sql_state.setdefault("instances", {})[instance["name"]] = instance
     return s._gcp_sql_instance_view(project, instance)
 
@@ -236,6 +254,12 @@ def api_gcp_sql_delete_instance(project: str, instance: str):
     rec = s.gcp_sql_state.get("instances", {}).get(instance)
     if not rec or str(rec.get("project") or project) != project:
         raise HTTPException(404, detail="Instance not found")
+    try:
+        from core import gcp_sql_engine
+        space_id = s._spaces_state().get("active_space_id", "")
+        gcp_sql_engine.deprovision(space_id, project, instance, rec.get("databaseVersion", ""))
+    except Exception:
+        pass
     del s.gcp_sql_state["instances"][instance]
     return {"kind": "sql#operation", "operationType": "DELETE", "status": "DONE", "targetLink": f"{s._gcp_sql_root()}/projects/{project}/instances/{instance}"}
 

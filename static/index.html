@@ -833,7 +833,7 @@
     .gcp-list-shell.stacked .gcp-panel{border-radius:14px;box-shadow:0 6px 24px rgba(26,115,232,.05);border:1px solid #d2e3fc}
     .gcp-list-shell.stacked .gcp-details{border-left:1px solid #d2e3fc}
     .gcp-list-shell.stacked .gcp-table-wrap{overflow:auto;max-height:calc(100vh - 420px);padding:0 0 16px !important;border-bottom:1px solid #d2e3fc;box-sizing:border-box}
-    .gcp-list-shell.stacked .gcp-table{min-width:1180px;border-bottom:1px solid #d2e3fc}
+    .gcp-list-shell.stacked .gcp-table{min-width:0;border-bottom:1px solid #d2e3fc}
     .gcp-page-head{margin-bottom:16px}
     .gcp-page-breadcrumb-card,.gcp-page-title-card{width:100%;background:#fff;border:1px solid #d2e3fc;border-radius:14px;box-shadow:0 6px 24px rgba(26,115,232,.05);overflow:hidden}
     .gcp-page-breadcrumb-card{padding:12px 16px;margin-bottom:12px}
@@ -846,61 +846,78 @@
     .gcp-list-shell .gcp-table thead th{background:#f8fbff}
     .gcp-list-toolbar{padding:12px 16px;border-bottom:1px solid #d2e3fc;background:#f8fbff;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
     .gcp-list-wrap{overflow:auto}
-    .gcp-table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:1280px}
-    .gcp-list-shell.stacked .gcp-table{min-width:1460px}
+    /* Fluid, fit-to-container tables: width 100%, fixed layout distributes
+       columns by percentage so any column count fits without trimming; long
+       cells ellipsis. A modest min-width lets very narrow windows scroll. */
+    /* min-width:max-content lets wide grids grow to their natural column width and
+       scroll horizontally, while narrow grids still fill the panel. */
+    .gcp-table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:max-content}
+    .gcp-list-shell.stacked .gcp-table{min-width:max-content}
     .gcp-compute-tabs-card{display:flex;align-items:center;justify-content:flex-end;gap:8px;width:100%;min-height:28px}
     .gcp-compute-tabs-card .btn-grp{margin-left:auto}
-    .gcp-table th{position:sticky;top:0;background:#fff;padding:10px 12px;text-align:left;font-size:12px;font-weight:700;color:#5f6368;border-bottom:1px solid #d2e3fc;white-space:nowrap}
-    .gcp-table td{padding:10px 12px;border-bottom:1px solid #e8f0fe;font-size:13px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:clip}
+    .gcp-table th{position:sticky;top:0;background:#fff;padding:10px 12px;text-align:left;font-size:12px;font-weight:700;color:#5f6368;border-bottom:1px solid #d2e3fc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .gcp-table td{padding:10px 12px;border-bottom:1px solid #e8f0fe;font-size:13px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .gcp-table tbody tr:hover td{background:#f8fbff}
     .gcp-table tbody tr.active td{background:#e8f0fe}
-    .gcp-table th:first-child,.gcp-table td:first-child{width:280px;text-align:left;white-space:normal;overflow:visible}
-    .gcp-table th:nth-child(2),.gcp-table td:nth-child(2){width:160px}
-    .gcp-table th:nth-child(3),.gcp-table td:nth-child(3){width:160px}
-    .gcp-table th:nth-child(4),.gcp-table td:nth-child(4){width:180px}
-    .gcp-table th:nth-child(5),.gcp-table td:nth-child(5){width:180px}
-    .gcp-table th:nth-child(6),.gcp-table td:nth-child(6){width:480px}
+    /* Generic columns: comfortable fixed widths so multi-column grids (e.g. Cloud
+       SQL) scroll instead of trimming, with a roomy trailing actions column. */
+    .gcp-table th:first-child,.gcp-table td:first-child{width:220px;text-align:left}
+    .gcp-table td:first-child{white-space:normal}
+    .gcp-table th:nth-child(2),.gcp-table td:nth-child(2){width:150px}
+    .gcp-table th:nth-child(3),.gcp-table td:nth-child(3){width:150px}
+    .gcp-table th:nth-child(4),.gcp-table td:nth-child(4){width:160px}
+    .gcp-table th:nth-child(5),.gcp-table td:nth-child(5){width:150px}
+    .gcp-table th:nth-child(6),.gcp-table td:nth-child(6){width:150px}
+    .gcp-table th:nth-child(7),.gcp-table td:nth-child(7){width:150px}
+    .gcp-table th:last-child,.gcp-table td:last-child{width:330px}
+    /* Action cells stay on one line, never clip, and their buttons keep natural
+       size (no wrap) — covers both gcp-row-actions and btn-grp action columns. */
+    .gcp-table td.gcp-row-actions,.gcp-table td.btn-grp{overflow:visible;text-overflow:clip;white-space:nowrap;vertical-align:middle}
+    /* btn-grp is normally display:flex; inside a table cell that drops the cell
+       from the table layout (missing bottom border / wrong width), so keep it a
+       table-cell and lay the buttons out inline instead. */
+    .gcp-table td.btn-grp{display:table-cell}
+    .gcp-table .gcp-row-actions-inner{display:flex;gap:6px;align-items:center}
+    .gcp-table td.gcp-row-actions .btn{flex:0 0 auto;white-space:nowrap;width:auto;min-width:0}
+    .gcp-table td.btn-grp .btn{display:inline-flex;align-items:center;gap:4px;vertical-align:middle;white-space:nowrap;width:auto;margin-left:6px}
+    .gcp-table td.btn-grp .btn:first-child{margin-left:0}
     .gcp-table.gcp-table-disks th,.gcp-table.gcp-table-disks td{padding-left:14px;padding-right:14px}
-    .gcp-table.gcp-table-disks th:first-child,.gcp-table.gcp-table-disks td:first-child{width:260px}
-    .gcp-table.gcp-table-disks th:nth-child(2),.gcp-table.gcp-table-disks td:nth-child(2){width:150px}
-    .gcp-table.gcp-table-disks th:nth-child(3),.gcp-table.gcp-table-disks td:nth-child(3){width:170px}
-    .gcp-table.gcp-table-disks th:nth-child(4),.gcp-table.gcp-table-disks td:nth-child(4){width:130px}
-    .gcp-table.gcp-table-disks th:nth-child(5),.gcp-table.gcp-table-disks td:nth-child(5){width:210px}
-    .gcp-table.gcp-table-disks th:nth-child(6),.gcp-table.gcp-table-disks td:nth-child(6){width:170px;text-align:center}
-    .gcp-table.gcp-table-disks th:nth-child(7),.gcp-table.gcp-table-disks td:nth-child(7){width:128px;text-align:center}
-    .gcp-table.gcp-table-disks td.gcp-row-actions{min-width:128px;width:128px}
+    .gcp-table.gcp-table-disks th:first-child,.gcp-table.gcp-table-disks td:first-child{width:22%}
+    .gcp-table.gcp-table-disks th:last-child,.gcp-table.gcp-table-disks td:last-child{width:12%;text-align:center}
+    .gcp-table.gcp-table-disks td.gcp-row-actions{text-align:center}
     .gcp-table.gcp-table-disks .gcp-row-actions-inner{justify-content:center}
+    /* Comfortable fixed widths; total exceeds the panel so the wrap shows a
+       horizontal scrollbar rather than trimming columns. */
+    .gcp-table.gcp-table-compute-instances{min-width:1380px}
     .gcp-table.gcp-table-compute-instances th,.gcp-table.gcp-table-compute-instances td{padding-left:10px;padding-right:10px}
-    .gcp-table.gcp-table-compute-instances th:first-child,.gcp-table.gcp-table-compute-instances td:first-child{width:210px;padding-right:6px}
-    .gcp-table.gcp-table-compute-instances th:nth-child(2),.gcp-table.gcp-table-compute-instances td:nth-child(2){width:140px;padding-left:6px}
-    .gcp-table.gcp-table-compute-instances th:nth-child(3),.gcp-table.gcp-table-compute-instances td:nth-child(3){width:160px}
+    .gcp-table.gcp-table-compute-instances th:first-child,.gcp-table.gcp-table-compute-instances td:first-child{width:150px;padding-right:6px}
+    .gcp-table.gcp-table-compute-instances th:nth-child(2),.gcp-table.gcp-table-compute-instances td:nth-child(2){width:240px;padding-left:6px;white-space:normal}
+    .gcp-table.gcp-table-compute-instances th:nth-child(3),.gcp-table.gcp-table-compute-instances td:nth-child(3){width:150px}
     .gcp-table.gcp-table-compute-instances th:nth-child(4),.gcp-table.gcp-table-compute-instances td:nth-child(4){width:170px}
     .gcp-table.gcp-table-compute-instances th:nth-child(5),.gcp-table.gcp-table-compute-instances td:nth-child(5){width:170px}
-    .gcp-table.gcp-table-compute-instances th:nth-child(6),.gcp-table.gcp-table-compute-instances td:nth-child(6){width:240px;text-align:right}
-    .gcp-table.gcp-table-compute-instances td.gcp-row-actions{min-width:240px;width:240px}
+    .gcp-table.gcp-table-compute-instances th:nth-child(6),.gcp-table.gcp-table-compute-instances td:nth-child(6){width:170px}
+    .gcp-table.gcp-table-compute-instances th:last-child,.gcp-table.gcp-table-compute-instances td:last-child{width:320px;text-align:right}
+    .gcp-table.gcp-table-compute-instances td.gcp-row-actions{text-align:right}
     .gcp-table.gcp-table-compute-instances .gcp-row-actions-inner{justify-content:flex-end}
     .gcp-table.gcp-table-compute-instances tbody tr.active td{background:#cfe2ff !important}
     .gcp-table.gcp-table-compute-instances tbody tr.active td:first-child .gcp-link{color:#0f4c81;font-weight:800}
     .gcp-table.gcp-table-compute-instances tbody tr.active td .fh{color:#0f4c81}
     .gcp-table.gcp-table-compute-instances tbody tr:hover td{background:#f8fbff}
+    .gcp-table.gcp-table-storage-buckets{min-width:1180px}
     .gcp-table.gcp-table-storage-buckets th,.gcp-table.gcp-table-storage-buckets td{padding-left:10px;padding-right:10px}
-    .gcp-table.gcp-table-storage-buckets th:first-child,.gcp-table.gcp-table-storage-buckets td:first-child{width:260px;padding-right:6px}
-    .gcp-table.gcp-table-storage-buckets th:nth-child(2),.gcp-table.gcp-table-storage-buckets td:nth-child(2){width:160px;padding-left:6px}
+    .gcp-table.gcp-table-storage-buckets th:first-child,.gcp-table.gcp-table-storage-buckets td:first-child{width:240px;padding-right:6px}
+    .gcp-table.gcp-table-storage-buckets th:nth-child(2),.gcp-table.gcp-table-storage-buckets td:nth-child(2){width:160px}
     .gcp-table.gcp-table-storage-buckets th:nth-child(3),.gcp-table.gcp-table-storage-buckets td:nth-child(3){width:150px}
-    .gcp-table.gcp-table-storage-buckets th:nth-child(4),.gcp-table.gcp-table-storage-buckets td:nth-child(4){width:150px}
-    .gcp-table.gcp-table-storage-buckets th:nth-child(5),.gcp-table.gcp-table-storage-buckets td:nth-child(5){width:160px}
+    .gcp-table.gcp-table-storage-buckets th:nth-child(4),.gcp-table.gcp-table-storage-buckets td:nth-child(4){width:180px}
+    .gcp-table.gcp-table-storage-buckets th:nth-child(5),.gcp-table.gcp-table-storage-buckets td:nth-child(5){width:150px}
     .gcp-table.gcp-table-storage-buckets th:nth-child(6),.gcp-table.gcp-table-storage-buckets td:nth-child(6){width:170px}
-    .gcp-table.gcp-table-storage-buckets th:nth-child(7),.gcp-table.gcp-table-storage-buckets td:nth-child(7){width:128px;text-align:center}
-    .gcp-table.gcp-table-storage-buckets td.gcp-row-actions{min-width:128px;width:128px}
+    .gcp-table.gcp-table-storage-buckets th:last-child,.gcp-table.gcp-table-storage-buckets td:last-child{width:130px;text-align:center}
+    .gcp-table.gcp-table-storage-buckets td.gcp-row-actions{text-align:center}
     .gcp-table.gcp-table-storage-buckets .gcp-row-actions-inner{justify-content:center}
     .gcp-table.gcp-table-gcp-resource th,.gcp-table.gcp-table-gcp-resource td{padding-left:14px;padding-right:14px}
-    .gcp-table.gcp-table-gcp-resource th:first-child,.gcp-table.gcp-table-gcp-resource td:first-child{width:260px}
-    .gcp-table.gcp-table-gcp-resource th:nth-child(2),.gcp-table.gcp-table-gcp-resource td:nth-child(2){width:180px}
-    .gcp-table.gcp-table-gcp-resource th:nth-child(3),.gcp-table.gcp-table-gcp-resource td:nth-child(3){width:140px}
-    .gcp-table.gcp-table-gcp-resource th:nth-child(4),.gcp-table.gcp-table-gcp-resource td:nth-child(4){width:170px}
-    .gcp-table.gcp-table-gcp-resource th:nth-child(5),.gcp-table.gcp-table-gcp-resource td:nth-child(5){width:170px}
-    .gcp-table.gcp-table-gcp-resource th:nth-child(6),.gcp-table.gcp-table-gcp-resource td:nth-child(6){width:128px}
-    .gcp-table.gcp-table-gcp-resource td.gcp-row-actions{min-width:128px;width:128px}
+    .gcp-table.gcp-table-gcp-resource th:first-child,.gcp-table.gcp-table-gcp-resource td:first-child{width:24%}
+    .gcp-table.gcp-table-gcp-resource th:last-child,.gcp-table.gcp-table-gcp-resource td:last-child{width:13%;text-align:center}
+    .gcp-table.gcp-table-gcp-resource td.gcp-row-actions{text-align:center}
     .gcp-table.gcp-table-gcp-resource .gcp-row-actions-inner{justify-content:center}
     .gcp-table-wrap{position:relative}
     .gcp-empty-overlay{position:absolute;left:16px;right:16px;top:52px;bottom:16px;display:flex;align-items:center;justify-content:center;pointer-events:none}
@@ -950,7 +967,7 @@
     /* Tabs: no border/box around the tab row, and no gap below it */
     .gcp-page-utility-card{border:none !important;border-radius:0 !important;box-shadow:none !important;background:transparent !important;padding:0 !important;margin:0 !important}
     .gcp-tabstrip,.gcp-compute-tabs{border-bottom:1px solid #dadce0 !important}
-    .gcp-console-main .gcp-shell,.gcp-list-shell .gcp-shell{margin-top:16px !important}
+    .gcp-console-main .gcp-shell,.gcp-list-shell .gcp-shell{margin-top:16px !important;border-top:none !important}
     .gcp-page-title-card{padding-bottom:0 !important}
     .gcp-page-head{margin-bottom:0 !important}
     /* White content background behind the grid/panels (remove the light blue tint) */
@@ -2289,8 +2306,8 @@ const GCPCompute = {
 };
 
 const GCPStorage = {
-  listBuckets: () => api('GET', '/storage/v1/b'),
-  createBucket: (payload) => api('POST', '/storage/v1/b', payload),
+  listBuckets: (project) => api('GET', `/storage/v1/b?project=${encodeURIComponent(project || gcpProjectDefault())}`),
+  createBucket: (payload, project) => api('POST', `/storage/v1/b?project=${encodeURIComponent(project || gcpProjectDefault())}`, payload),
   getBucket: (name) => api('GET', `/storage/v1/b/${encodeURIComponent(name)}`),
   deleteBucket: (name) => api('DELETE', `/storage/v1/b/${encodeURIComponent(name)}`),
   listObjects: (bucket) => api('GET', `/storage/v1/b/${encodeURIComponent(bucket)}/o`),
@@ -2308,19 +2325,19 @@ const GCPStorage = {
 };
 
 const GCPCloudSQL = {
-  listInstances: (project) => api('GET', `/v1/projects/${encodeURIComponent(project)}/instances`),
-  createInstance: (project, payload) => api('POST', `/v1/projects/${encodeURIComponent(project)}/instances`, payload),
-  getInstance: (project, name) => api('GET', `/v1/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(name)}`),
-  deleteInstance: (project, name) => api('DELETE', `/v1/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(name)}`),
-  startInstance: (project, name) => api('POST', `/v1/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(name)}/start`),
-  stopInstance: (project, name) => api('POST', `/v1/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(name)}/stop`),
-  restartInstance: (project, name) => api('POST', `/v1/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(name)}/restart`),
-  listOperations: (project) => api('GET', `/v1/projects/${encodeURIComponent(project)}/operations`),
-  listBackups: (project, instance='') => api('GET', `/v1/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(instance)}/backups`),
-  createBackup: (project, instance, payload) => api('POST', `/v1/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(instance)}/backups`, payload),
-  deleteBackup: (project, instance, name) => api('DELETE', `/v1/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(instance)}/backups/${encodeURIComponent(name)}`),
-  listInsights: (project, instance='') => api('GET', `/v1/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(instance)}/queryInsights`),
-  createInsight: (project, instance, payload) => api('POST', `/v1/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(instance)}/queryInsights`, payload),
+  listInstances: (project) => api('GET', `/sql/v1beta4/projects/${encodeURIComponent(project)}/instances`),
+  createInstance: (project, payload) => api('POST', `/sql/v1beta4/projects/${encodeURIComponent(project)}/instances`, payload),
+  getInstance: (project, name) => api('GET', `/sql/v1beta4/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(name)}`),
+  deleteInstance: (project, name) => api('DELETE', `/sql/v1beta4/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(name)}`),
+  startInstance: (project, name) => api('POST', `/sql/v1beta4/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(name)}/restart`),
+  stopInstance: (project, name) => api('POST', `/sql/v1beta4/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(name)}/restart`),
+  restartInstance: (project, name) => api('POST', `/sql/v1beta4/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(name)}/restart`),
+  listOperations: (project) => api('GET', `/sql/v1beta4/projects/${encodeURIComponent(project)}/operations`),
+  listBackups: (project, instance='') => api('GET', `/sql/v1beta4/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(instance)}/backups`),
+  createBackup: (project, instance, payload) => api('POST', `/sql/v1beta4/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(instance)}/backups`, payload),
+  deleteBackup: (project, instance, name) => api('DELETE', `/sql/v1beta4/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(instance)}/backups/${encodeURIComponent(name)}`),
+  listInsights: (project, instance='') => api('GET', `/sql/v1beta4/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(instance)}/queryInsights`),
+  createInsight: (project, instance, payload) => api('POST', `/sql/v1beta4/projects/${encodeURIComponent(project)}/instances/${encodeURIComponent(instance)}/queryInsights`, payload),
 };
 
 const GCPPubSub = {
@@ -2333,6 +2350,7 @@ const GCPPubSub = {
   listSubscriptions: (project) => api('GET', `/v1/projects/${encodeURIComponent(project)}/subscriptions`),
   createSubscription: (project, payload) => api('POST', `/v1/projects/${encodeURIComponent(project)}/subscriptions`, payload),
   getSubscription: (project, name) => api('GET', `/v1/projects/${encodeURIComponent(project)}/subscriptions/${encodeURIComponent(name)}`),
+  updateSubscription: (project, name, payload) => api('PATCH', `/v1/projects/${encodeURIComponent(project)}/subscriptions/${encodeURIComponent(name)}`, payload),
   deleteSubscription: (project, name) => api('DELETE', `/v1/projects/${encodeURIComponent(project)}/subscriptions/${encodeURIComponent(name)}`),
   pull: (project, name, payload) => api('POST', `/v1/projects/${encodeURIComponent(project)}/subscriptions/${encodeURIComponent(name)}:pull`, payload),
   acknowledge: (project, name, payload) => api('POST', `/v1/projects/${encodeURIComponent(project)}/subscriptions/${encodeURIComponent(name)}:acknowledge`, payload),
@@ -2359,6 +2377,7 @@ const GCPFunctions = {
   create: (project, location, payload) => api('POST', `/v1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(location)}/functions`, payload),
   get: (project, location, name) => api('GET', `/v1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(location)}/functions/${encodeURIComponent(name)}`),
   remove: (project, location, name) => api('DELETE', `/v1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(location)}/functions/${encodeURIComponent(name)}`),
+  update: (project, location, name, payload) => api('PATCH', `/v1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(location)}/functions/${encodeURIComponent(name)}`, payload),
   call: (project, location, name, payload) => api('POST', `/v1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(location)}/functions/${encodeURIComponent(name)}:call`, payload),
   operations: (project, location) => api('GET', `/v1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(location)}/operations`),
 };
@@ -2384,6 +2403,7 @@ const GCPVPC = {
   createSubnetwork: (project, region, payload) => api('POST', `/compute/v1/projects/${encodeURIComponent(project)}/regions/${encodeURIComponent(region)}/subnetworks`, payload),
   listFirewalls: (project) => api('GET', `/compute/v1/projects/${encodeURIComponent(project)}/global/firewalls`),
   createFirewall: (project, payload) => api('POST', `/compute/v1/projects/${encodeURIComponent(project)}/global/firewalls`, payload),
+  updateFirewall: (project, name, payload) => api('PATCH', `/compute/v1/projects/${encodeURIComponent(project)}/global/firewalls/${encodeURIComponent(name)}`, payload),
   deleteFirewall: (project, name) => api('DELETE', `/compute/v1/projects/${encodeURIComponent(project)}/global/firewalls/${encodeURIComponent(name)}`),
 };
 
@@ -2394,6 +2414,7 @@ const GCPIAM = {
   listServiceAccounts: (project) => api('GET', `/v1/projects/${encodeURIComponent(project)}/serviceAccounts`),
   createServiceAccount: (project, payload) => api('POST', `/v1/projects/${encodeURIComponent(project)}/serviceAccounts`, payload),
   getServiceAccount: (project, email) => api('GET', `/v1/projects/${encodeURIComponent(project)}/serviceAccounts/${encodeURIComponent(email)}`),
+  updateServiceAccount: (project, email, payload) => api('PATCH', `/v1/projects/${encodeURIComponent(project)}/serviceAccounts/${encodeURIComponent(email)}`, payload),
   deleteServiceAccount: (project, email) => api('DELETE', `/v1/projects/${encodeURIComponent(project)}/serviceAccounts/${encodeURIComponent(email)}`),
 };
 
@@ -3027,9 +3048,10 @@ const gcpLastPath = (value='') => {
   const parts = String(value || '').split('/').filter(Boolean);
   return parts.length ? parts[parts.length - 1] : '';
 };
-const gcpComputeProjectDefault = () => window.localStorage.getItem('cloudlearn.gcp.project') || 'cloudlearn';
+// space = project: every GCP view resolves to the active space's project.
+const gcpProjectDefault = () => window.localStorage.getItem('cloudlearn.active.space') || window.localStorage.getItem('cloudlearn.gcp.project') || 'cloudlearn';
+const gcpComputeProjectDefault = () => gcpProjectDefault();
 const gcpComputeZoneDefault = () => window.localStorage.getItem('cloudlearn.gcp.zone') || 'us-central1-a';
-const gcpProjectDefault = () => window.localStorage.getItem('cloudlearn.active.space') || gcpComputeProjectDefault();
 const gcpLocationDefault = () => window.localStorage.getItem('cloudlearn.gcp.location') || 'us-central1';
 const gcpRegionDefault = () => window.localStorage.getItem('cloudlearn.gcp.region') || 'us-central1';
 const gcpFirestoreDatabaseDefault = () => window.localStorage.getItem('cloudlearn.gcp.firestore.database') || '(default)';
@@ -3171,13 +3193,20 @@ function GCPConsoleSidebar({activeRoute = '', onOpen, onBack, collapsed = false,
   const cloudsim = useCloudSimCurrent();
   const graph = useMemo(() => buildCloudSimResourceGraph(cloudsim.current, 'gcp'), [cloudsim.current]);
   const provider = graph.providers.find(item => item.provider === 'gcp') || graph.providers[0] || null;
-  const serviceCounts = useMemo(() => {
-    const map = new Map();
-    (provider?.services || []).forEach(service => {
-      map.set(service.service, Number(service.resourceCount || service.nodes?.length || 0));
-    });
-    return map;
-  }, [provider]);
+  // Counters read from the Internal DB (source of truth), scoped to the active
+  // space's project, so they always equal the grids. Keyed by full service id.
+  const [serviceCounts, setServiceCounts] = useState({});
+  useEffect(() => {
+    let alive = true;
+    const loadCounts = () => api('GET', `/api/gcp/console/summary?project=${encodeURIComponent(gcpProjectDefault())}`)
+      .then(d => { if (alive) setServiceCounts(d.services || {}); })
+      .catch(() => {});
+    loadCounts();
+    const onRefresh = () => loadCounts();
+    window.addEventListener('cloudlearn:cloudsim-refresh', onRefresh);
+    const timer = setInterval(loadCounts, 12000);
+    return () => { alive = false; window.removeEventListener('cloudlearn:cloudsim-refresh', onRefresh); clearInterval(timer); };
+  }, []);
   const query = search.trim().toLowerCase();
   const services = useMemo(() => GCP_CONSOLE_SERVICES.filter(item => {
     if (!query) return true;
@@ -3196,18 +3225,14 @@ function GCPConsoleSidebar({activeRoute = '', onOpen, onBack, collapsed = false,
               <span>Google Cloud</span>
             </div>
           </div>
-          <GcpSidebarToggleButton collapsed={collapsed} onClick={onToggleSidebar} />
         </div>
-      </div>
-      <div className="gcp-console-search">
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search services" />
       </div>
       <div className="gcp-console-sidebar-section">
         <div className="gcp-console-sidebar-title">Services</div>
         {services.length === 0 ? (
           <div className="gcp-empty-card" style={{margin:8}}>No matching services.</div>
         ) : services.map(item => {
-          const count = Number(serviceCounts.get(item.id.replace(/^gcp-/, '')) || 0);
+          const count = Number(serviceCounts[item.id] || 0);
           const isActive = activeRoute === item.route;
           return (
             <div key={item.id} className={`gcp-console-nav-item${isActive ? ' active' : ''}`} onClick={() => onOpen?.(item.route)}>
@@ -5093,6 +5118,20 @@ function GCPConsoleView({onOpen, onBack, notify, onExportTerraform}) {
     services: {},
     savings: {estimatedMonthly: 0, idleCompute: 0, idleSql: 0, emptyBuckets: 0, unusedTopics: 0, cleanup: 0},
   });
+  // Authoritative per-service counts from the Internal DB (same source as the
+  // sidebar) so the dashboard tiles always match the counters and the grids.
+  const [summaryCounts, setSummaryCounts] = useState({});
+  useEffect(() => {
+    let alive = true;
+    const loadCounts = () => api('GET', `/api/gcp/console/summary?project=${encodeURIComponent(gcpProjectDefault())}`)
+      .then(d => { if (alive) setSummaryCounts(d.services || {}); })
+      .catch(() => {});
+    loadCounts();
+    const onRefresh = () => loadCounts();
+    window.addEventListener('cloudlearn:cloudsim-refresh', onRefresh);
+    const timer = setInterval(loadCounts, 12000);
+    return () => { alive = false; window.removeEventListener('cloudlearn:cloudsim-refresh', onRefresh); clearInterval(timer); };
+  }, []);
   const cloudsim = useCloudSimCurrent();
   const resourceGraph = useMemo(() => buildCloudSimResourceGraph(cloudsim.current, 'gcp'), [cloudsim.current]);
   const resourceGraphCounts = useMemo(() => {
@@ -5248,6 +5287,18 @@ function GCPConsoleView({onOpen, onBack, notify, onExportTerraform}) {
   }, [database, location, notify, project, region, zone]);
 
   useEffect(() => { load(); }, [load]);
+  // space = project: one-time consolidation so any legacy resources scattered
+  // across other project labels surface under this space's project. Idempotent.
+  useEffect(() => {
+    api('POST', '/api/gcp/console/consolidate', {project: gcpProjectDefault()})
+      .then(res => {
+        if (res && Number(res.updated || 0) > 0) {
+          load();
+          window.dispatchEvent(new Event('cloudlearn:cloudsim-refresh'));
+        }
+      })
+      .catch(() => {});
+  }, []);
   const {series: cpuSeries, snapshot: cpuSnapshot} = useHostCpuSeries();
   const gcpCpu = useMemo(() => estimateGcpSpaceCpuSeries(metrics, cpuSeries, cpuSnapshot), [metrics, cpuSeries, cpuSnapshot]);
   const [footprintMode, setFootprintMode] = useState('cpu');
@@ -5396,6 +5447,7 @@ function GCPConsoleView({onOpen, onBack, notify, onExportTerraform}) {
                       <span className="gcp-console-footprint-cell-mode">{footprintMode.toUpperCase()} · {share}%</span>
                     </div>
                     <div className="gcp-console-footprint-cell-title">{service.title}</div>
+                    <div className="gcp-console-footprint-cell-count">{Number(summaryCounts[service.id] || 0)}</div>
                     <div className="gcp-console-footprint-cell-note">{loading ? 'Refreshing live counts…' : stat.note || service.section || ''}</div>
                   </div>
                 </button>
@@ -5722,11 +5774,11 @@ function GCPListShell({
   showHeaderMeta = true,
   titleCardChips = null,
 }) {
-  const selected = items.find(item => selectedId && selectedId === (item.id || item.name || item.key || item.email || item.displayName)) || null;
+  const selected = items.find(item => selectedId && [item.id, item.name, item.key, item.email, item.displayName].some(k => k !== undefined && k !== null && String(k) === String(selectedId))) || null;
   const stacked = layout === 'stacked';
   const [sidebarCollapsed, setSidebarCollapsed] = useGcpSidebarCollapsed(false);
 
-  const selectedLabel = selected ? (selected.displayName || selected.name || selected.title || selected.key || selected.email || 'Resource details') : detailsTitle;
+  const selectedLabel = selected ? gcpLastPath(selected.displayName || selected.name || selected.title || selected.key || selected.email || 'Resource details') : detailsTitle;
   const selectedSummary = selected ? detailsSubtitle || 'Inspect resource details and local simulator metadata.' : 'Select a resource to see details.';
   const activeRoute = sidebarActiveRoute || (() => {
     const label = String(title || '').toLowerCase();
@@ -13842,15 +13894,25 @@ function GCPComputeView({notify, onBack, onOpen}) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await GCPCompute.list(project, zone);
-      const items = Array.isArray(res.items) ? res.items : [];
+      // VM instances list spans all zones (like the real console) so the grid
+      // matches the project-wide counter.
+      const zonesToScan = gcpZones.filter(z => z !== 'All zones');
+      const perZone = await Promise.all(zonesToScan.map(z =>
+        GCPCompute.list(project, z).then(r => Array.isArray(r.items) ? r.items : []).catch(() => [])
+      ));
+      const seen = new Set();
+      const items = [];
+      perZone.flat().forEach(it => {
+        const key = it.name || it.id;
+        if (key && !seen.has(key)) { seen.add(key); items.push(it); }
+      });
       setInstances(items);
     } catch (e) {
       notify(e.message, 'error');
     } finally {
       setLoading(false);
     }
-  }, [project, zone, notify]);
+  }, [project, notify]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -14646,14 +14708,10 @@ function GCPComputeView({notify, onBack, onOpen}) {
             <div className="gcp-sidebar-head-title">
               <div className="gcp-brand"><span className="gcp-brand-badge">G</span><span>Google Cloud</span></div>
             </div>
-            <GcpSidebarToggleButton collapsed={sidebarCollapsed} onClick={() => setSidebarCollapsed(v => !v)} />
           </div>
         </div>
           <div style={{padding:'12px 16px 0'}}>
             <button className="btn gcp-btn-s" onClick={onBack} type="button">Back to dashboard</button>
-          </div>
-          <div className="gcp-sidebar-search">
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search VM instances" />
           </div>
           <div className="gcp-nav">
             <div className="gcp-nav-title">Compute Engine</div>
@@ -14670,7 +14728,7 @@ function GCPComputeView({notify, onBack, onOpen}) {
             <div className="gcp-header-title"><span className="gcp-brand-badge" style={{width:24,height:24,fontSize:13}}>G</span><strong>Google Cloud</strong><span>Compute Engine</span></div>
             <div className="gcp-header-project">
               <div className="gcp-header-input" style={{maxWidth:240}}>
-                <input value={project} onChange={e => setProject(e.target.value.trim() || 'cloudlearn')} placeholder="Project" />
+                <input value={project} readOnly title="Project is set by the active space (space = project)" placeholder="Project" />
               </div>
               <div className="gcp-header-input" style={{maxWidth:220}}>
                 <select className="gcp-filter" value={zone} onChange={e => setZone(e.target.value)}>
@@ -15823,14 +15881,10 @@ function GCPStorageView({notify, onBack, onOpen}) {
             <div className="gcp-sidebar-head-title">
               <div className="gcp-brand"><span className="gcp-brand-badge">G</span><span>Google Cloud</span></div>
             </div>
-            <GcpSidebarToggleButton collapsed={sidebarCollapsed} onClick={() => setSidebarCollapsed(v => !v)} />
           </div>
         </div>
         <div style={{padding:'12px 16px 0'}}>
           <button className="btn gcp-btn-s" onClick={onBack} type="button">Back to dashboard</button>
-        </div>
-        <div className="gcp-sidebar-search">
-          <input value="" readOnly placeholder="Cloud Storage Buckets" />
         </div>
         <div className="gcp-nav">
           <div className="gcp-nav-title">Cloud Storage</div>
@@ -16253,7 +16307,7 @@ function GCPCloudSQLView({notify, onBack, onOpen}) {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setDetailsTab('overview'); }, [selectedId]);
 
-  const selected = items.find(item => item.name === selectedId) || items[0];
+  const selected = items.find(item => item.name === selectedId || String(item.id || '') === String(selectedId)) || items[0];
 
   useEffect(() => {
     if (resourceTab === 'instances') return;
@@ -16329,6 +16383,15 @@ function GCPCloudSQLView({notify, onBack, onOpen}) {
               <button className="btn gcp-btn-s" onClick={(e) => { e.stopPropagation(); updateState('start', item.name); }}>Start</button>
               <button className="btn gcp-btn-s" onClick={(e) => { e.stopPropagation(); updateState('stop', item.name); }}>Stop</button>
               <button className="btn gcp-btn-s" onClick={(e) => { e.stopPropagation(); updateState('restart', item.name); }}>Restart</button>
+              <button className="btn btn-d" onClick={async (e) => {
+                e.stopPropagation();
+                try {
+                  await GCPCloudSQL.deleteInstance(project, item.name);
+                  notify('Cloud SQL instance deleted', 'success');
+                  setSelectedId('');
+                  await load();
+                } catch (err) { notify(err.message, 'error'); }
+              }}>Delete</button>
             </td>
           </tr>
         )}
@@ -16370,8 +16433,27 @@ function GCPCloudSQLView({notify, onBack, onOpen}) {
                       ['Availability type', item.settings?.availabilityType || 'ZONAL'],
                     ].map(([k, v]) => <dl key={k} className="gcp-kv"><dt>{k}</dt><dd>{String(v)}</dd></dl>)}
                   </div>
-                  <div className="gcp-details-section-title">Connection guidance</div>
-                  <div className="gcp-empty-card" style={{margin:0}}>Connectivity remains close to the selected instance and avoids the multi-panel noise.</div>
+                  <div className="gcp-details-section-title">Connect your application</div>
+                  {item.connection ? (
+                    <>
+                      <div className="gcp-kv-grid">
+                        {[
+                          ['Engine', item.connection.engine],
+                          ['Host', item.connection.host],
+                          ['Port', item.connection.port],
+                          ['Database', item.connection.database],
+                          ['User', item.connection.user],
+                          ['Password', item.connection.password],
+                        ].map(([k, v]) => <dl key={k} className="gcp-kv"><dt>{k}</dt><dd>{String(v)}</dd></dl>)}
+                      </div>
+                      <div className="gcp-details-section-title">Connection string</div>
+                      <pre className="gcp-doc-code" style={{marginTop:8, whiteSpace:'pre-wrap'}}>{item.connection.engine === 'MYSQL'
+                        ? `mysql://${item.connection.user}:${item.connection.password}@${item.connection.host}:${item.connection.port}/${item.connection.database}`
+                        : `postgresql://${item.connection.user}:${item.connection.password}@${item.connection.host}:${item.connection.port}/${item.connection.database}`}</pre>
+                    </>
+                  ) : (
+                    <div className="gcp-empty-card" style={{margin:0}}>Backing database engine unavailable — this instance is metadata-only. Start the bundled Postgres/MySQL services to enable live connections.</div>
+                  )}
                 </>
               )}
               {detailsTab === 'security' && (
@@ -16856,7 +16938,7 @@ function GCPPubSubView({notify, onBack, onOpen}) {
 
   useEffect(() => { load(); }, [load]);
 
-  const selected = items.find(item => item.name === selectedId) || items[0];
+  const selected = items.find(item => item.name === selectedId || String(item.id || '') === String(selectedId)) || items[0];
   const selectedName = selected ? gcpLastPath(selected.name) : '';
   const selectedTopic = selected ? gcpLastPath(selected.topic) : '';
   const isSchemas = tab === 'schemas';
@@ -16909,7 +16991,33 @@ function GCPPubSubView({notify, onBack, onOpen}) {
             <td>{tab === 'topics' ? (item.kmsKeyName || '—') : (gcpLastPath(item.topic) || '—')}</td>
             <td>{fmtDate(item.updateTime || item.createTime)}</td>
             <td className="btn-grp">
-              <button className="btn gcp-btn-s" onClick={async (e) => { e.stopPropagation(); deleteCurrent(item); }}>Delete</button>
+              {tab === 'subscriptions' && (
+                <button className="btn gcp-btn-s" onClick={async (e) => {
+                  e.stopPropagation();
+                  const form = await openGcpInputDialog({
+                    title: 'Edit subscription',
+                    description: `Update delivery settings for ${gcpLastPath(item.name)}.`,
+                    submitLabel: 'Save subscription',
+                    fields: [
+                      {name: 'ackDeadlineSeconds', label: 'Ack deadline (seconds)', type: 'number', defaultValue: String(item.ackDeadlineSeconds || 10)},
+                      {name: 'messageRetentionDuration', label: 'Message retention (e.g. 600s)', defaultValue: item.messageRetentionDuration || '604800s'},
+                      {name: 'retainAckedMessages', label: 'Retain acked messages (true/false)', defaultValue: String(!!item.retainAckedMessages)},
+                    ],
+                  });
+                  if (!form) return;
+                  const payload = {};
+                  const ack = parseInt(form.ackDeadlineSeconds, 10);
+                  if (!isNaN(ack)) payload.ackDeadlineSeconds = ack;
+                  if (String(form.messageRetentionDuration || '').trim()) payload.messageRetentionDuration = String(form.messageRetentionDuration).trim();
+                  payload.retainAckedMessages = String(form.retainAckedMessages).trim().toLowerCase() === 'true';
+                  try {
+                    await GCPPubSub.updateSubscription(project, gcpLastPath(item.name), payload);
+                    notify('Subscription updated', 'success');
+                    await load();
+                  } catch (err) { notify(err.message, 'error'); }
+                }}>Edit</button>
+              )}
+              <button className="btn btn-d" onClick={async (e) => { e.stopPropagation(); deleteCurrent(item); }}>Delete</button>
             </td>
           </tr>
         )}
@@ -17132,14 +17240,10 @@ function GCPPubSubView({notify, onBack, onOpen}) {
               <div className="gcp-sidebar-head-title">
                 <div className="gcp-brand"><span className="gcp-brand-badge">G</span><span>Google Cloud</span></div>
               </div>
-              <GcpSidebarToggleButton collapsed={sidebarCollapsed} onClick={() => setSidebarCollapsed(v => !v)} />
             </div>
           </div>
         <div style={{padding:'12px 16px 0'}}>
           <button className="btn gcp-btn-s" onClick={onBack} type="button">Back to dashboard</button>
-        </div>
-        <div className="gcp-sidebar-search">
-          <input value={tab} readOnly placeholder="Topics / Subscriptions" />
         </div>
           <div className="gcp-nav">
             <div className="gcp-nav-title">Pub/Sub</div>
@@ -17443,7 +17547,7 @@ function GCPFirestoreView({notify, onBack, onOpen}) {
     return () => { cancelled = true; };
   }, [collectionId, database, indexReload, mode, notify, project]);
 
-  const selected = items.find(item => item.name === selectedId) || items[0];
+  const selected = items.find(item => item.name === selectedId || String(item.id || '') === String(selectedId)) || items[0];
 
   useEffect(() => {
     if (!selected) {
@@ -17543,23 +17647,25 @@ function GCPFirestoreView({notify, onBack, onOpen}) {
         createLabel="Add document"
         emptyText={mode === 'query' ? 'Run a query to populate results here.' : 'No documents yet'}
         toolbarExtra={(
-          <div style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:8}}>
-            <select className="gcp-filter" value={collectionId} onChange={e => {
-              const next = e.target.value;
-              setCollectionId(next);
-              setSelectedId('');
-              setMode('data');
-            }} style={{maxWidth:220}}>
-              {collections.map(coll => <option key={coll} value={coll}>{coll}</option>)}
-            </select>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'stretch',gap:10,flex:'1 1 auto',minWidth:0}}>
+            <div style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:8}}>
+              <select className="gcp-filter" value={collectionId} onChange={e => {
+                const next = e.target.value;
+                setCollectionId(next);
+                setSelectedId('');
+                setMode('data');
+              }} style={{maxWidth:220}}>
+                {collections.map(coll => <option key={coll} value={coll}>{coll}</option>)}
+              </select>
+              <span className="gcp-chip soft">Project: {project}</span>
+              <span className="gcp-chip soft">Database: {database}</span>
+              <span className="gcp-chip soft">Collection: {collectionId}</span>
+            </div>
             <div className="btn-grp">
               <button className={`btn ${mode === 'data' ? 'gcp-btn' : 'gcp-btn-s'}`} onClick={() => setMode('data')}>Data</button>
               <button className={`btn ${mode === 'query' ? 'gcp-btn' : 'gcp-btn-s'}`} onClick={() => setMode('query')}>Query</button>
               <button className={`btn ${mode === 'indexes' ? 'gcp-btn' : 'gcp-btn-s'}`} onClick={() => setMode('indexes')}>Indexes</button>
             </div>
-            <span className="gcp-chip soft">Project: {project}</span>
-            <span className="gcp-chip soft">Database: {database}</span>
-            <span className="gcp-chip soft">Collection: {collectionId}</span>
           </div>
         )}
         detailActions={(
@@ -17584,6 +17690,24 @@ function GCPFirestoreView({notify, onBack, onOpen}) {
               <td>{fieldCount}</td>
               <td className="btn-grp">
                 <button className="btn gcp-btn-s" onClick={async (e) => {
+                  e.stopPropagation();
+                  const form = await openGcpInputDialog({
+                    title: 'Edit document',
+                    description: `Edit fields for ${collectionId}/${docId}. Use Firestore typed JSON, e.g. {"title":{"stringValue":"Hi"},"count":{"integerValue":"3"}}.`,
+                    submitLabel: 'Save document',
+                    fields: [{name: 'fields', label: 'Fields (typed JSON)', type: 'textarea', rows: 12, defaultValue: JSON.stringify(item.fields || {}, null, 2)}],
+                  });
+                  if (!form) return;
+                  let parsed;
+                  try { parsed = JSON.parse(form.fields || '{}'); }
+                  catch (err) { notify('Invalid JSON: ' + err.message, 'error'); return; }
+                  try {
+                    await GCPFirestore.updateDocument(project, database, collectionId, docId, {fields: parsed});
+                    notify('Document updated', 'success');
+                    await load();
+                  } catch (err) { notify(err.message, 'error'); }
+                }}>Edit</button>
+                <button className="btn btn-d" onClick={async (e) => {
                   e.stopPropagation();
                   try {
                     await GCPFirestore.deleteDocument(project, database, collectionId, docId);
@@ -17793,14 +17917,10 @@ function GCPFirestoreView({notify, onBack, onOpen}) {
             <div className="gcp-sidebar-head-title">
               <div className="gcp-brand"><span className="gcp-brand-badge">G</span><span>Google Cloud</span></div>
             </div>
-            <GcpSidebarToggleButton collapsed={sidebarCollapsed} onClick={() => setSidebarCollapsed(v => !v)} />
           </div>
         </div>
         <div style={{padding:'12px 16px 0'}}>
           <button className="btn gcp-btn-s" onClick={onBack} type="button">Back to dashboard</button>
-        </div>
-        <div className="gcp-sidebar-search">
-          <input value={pathInput} onChange={e => setPathInput(e.target.value)} placeholder="Edit path" />
         </div>
         <div className="gcp-nav">
           <div className="gcp-nav-title">Firestore Studio</div>
@@ -18136,7 +18256,7 @@ function GCPFunctionsView({notify, onBack, onOpen}) {
 
   useEffect(() => { load(); }, [load]);
 
-  const selected = items.find(item => item.name === selectedId) || items[0];
+  const selected = items.find(item => item.name === selectedId || String(item.id || '') === String(selectedId)) || items[0];
 
   return (
       <GCPListShell
@@ -18153,39 +18273,77 @@ function GCPFunctionsView({notify, onBack, onOpen}) {
       onCreate={async () => {
         const form = await openGcpInputDialog({
           title: 'Create function',
-          description: 'Create a local Cloud Function in the active location.',
+          description: 'Deploy a local Cloud Function — the source runs for real on invoke.',
           submitLabel: 'Create function',
-          fields: [{name: 'name', label: 'Function name', defaultValue: 'hello-fn', required: true, placeholder: 'hello-fn'}],
+          fields: [
+            {name: 'name', label: 'Function name', defaultValue: 'hello-fn', required: true, placeholder: 'hello-fn'},
+            {name: 'runtime', label: 'Runtime', defaultValue: 'python311', placeholder: 'python311 / nodejs20'},
+            {name: 'entryPoint', label: 'Entry point', defaultValue: 'handler', placeholder: 'handler'},
+            {name: 'code', label: 'Source code', type: 'textarea', rows: 10, defaultValue: 'def handler(event):\n    return {"message": "hello", "echo": event}\n'},
+          ],
         });
         const name = String(form?.name || '').trim();
         if (!name) return;
         try {
-          await GCPFunctions.create(project, location, {name, runtime: 'python312', entryPoint: 'handler'});
+          await GCPFunctions.create(project, location, {name, runtime: form.runtime || 'python311', entryPoint: form.entryPoint || 'handler', code: form.code || ''});
           notify('Cloud Function created', 'success');
           await load();
         } catch (e) { notify(e.message, 'error'); }
       }}
       createLabel="Create function"
       emptyText="No Cloud Functions yet."
+      showHeaderMeta={false}
+      titleCardChips={(
+        <>
+          <span className="gcp-list-head-chip">Project: {project}</span>
+          <span className="gcp-list-head-chip">{items.length} resource{items.length === 1 ? '' : 's'}</span>
+        </>
+      )}
       detailActions={(
         <>
           <button className="btn gcp-btn-s" onClick={async () => {
             try {
-              await GCPFunctions.call(project, location, gcpLastPath(selected?.name || ''), {data: {hello: 'world'}});
-              notify('Cloud Function invoked', 'success');
+              const res = await GCPFunctions.call(project, location, gcpLastPath(selected?.name || ''), {data: {hello: 'world'}});
+              if (res && res.status === 'ERROR') notify('Function error: ' + String(res.error || '').slice(0, 140), 'error');
+              else notify('Result: ' + JSON.stringify(res?.result ?? null).slice(0, 180), 'success');
             } catch (e) { notify(e.message, 'error'); }
           }} disabled={!selected}>Invoke</button>
           <button className="btn gcp-btn-s" onClick={load}>Refresh</button>
         </>
       )}
-      tableHead={['Name', 'Status', 'Memory allocated', 'Actions']}
+      tableHead={['Name', 'Status', 'Memory allocated', 'Last modified', 'Actions']}
       renderRow={(item, selectedRow, select) => (
         <tr key={item.name} className={selectedRow ? 'active' : ''} onClick={select}>
           <td><span className="gcp-link">{gcpLastPath(item.name)}</span><div className="fh">{item.runtime || 'python312'} · {item.entryPoint || 'handler'}</div></td>
           <td>{item.status || 'ACTIVE'}</td>
-          <td>{item.availableMemoryMb || 256} MB</td>
-          <td>
+          <td>{item.memory_size || item.availableMemoryMb || 256} MB</td>
+          <td>{fmtDate(item.updateTime || item.createTime)}</td>
+          <td className="btn-grp">
             <button className="btn gcp-btn-s" onClick={async (e) => {
+              e.stopPropagation();
+              const form = await openGcpInputDialog({
+                title: 'Edit function',
+                description: `Update runtime, entry point, memory, and source for ${gcpLastPath(item.name)}.`,
+                submitLabel: 'Save function',
+                fields: [
+                  {name: 'runtime', label: 'Runtime', defaultValue: item.runtime || 'python312', placeholder: 'python312'},
+                  {name: 'handler', label: 'Entry point', defaultValue: item.entryPoint || 'handler', placeholder: 'handler'},
+                  {name: 'memory_size', label: 'Memory (MB)', type: 'number', defaultValue: String(item.memory_size || item.availableMemoryMb || 256)},
+                  {name: 'code', label: 'Source code (leave blank to keep current)', type: 'textarea', rows: 12, defaultValue: item.code || ''},
+                ],
+              });
+              if (!form) return;
+              const payload = {runtime: String(form.runtime || '').trim() || 'python312', handler: String(form.handler || '').trim() || 'handler'};
+              const mem = parseInt(form.memory_size, 10);
+              if (!isNaN(mem)) payload.memory_size = mem;
+              if (String(form.code || '').trim()) payload.code = form.code;
+              try {
+                await GCPFunctions.update(project, location, gcpLastPath(item.name), payload);
+                notify('Cloud Function updated', 'success');
+                await load();
+              } catch (err) { notify(err.message, 'error'); }
+            }}>Edit</button>
+            <button className="btn btn-d" onClick={async (e) => {
               e.stopPropagation();
               try {
                 await GCPFunctions.remove(project, location, gcpLastPath(item.name));
@@ -18204,13 +18362,16 @@ function GCPFunctionsView({notify, onBack, onOpen}) {
             <dl className="gcp-kv"><dt>Runtime</dt><dd>{item.runtime || 'python312'}</dd></dl>
             <dl className="gcp-kv"><dt>Entry point</dt><dd>{item.entryPoint || 'handler'}</dd></dl>
             <dl className="gcp-kv"><dt>Status</dt><dd>{item.status || 'ACTIVE'}</dd></dl>
+            <dl className="gcp-kv"><dt>Last modified</dt><dd>{fmtDate(item.updateTime || item.createTime)}</dd></dl>
+            <dl className="gcp-kv"><dt>Trigger URL</dt><dd>{`${window.location.origin}/v1/projects/${project}/locations/${location}/functions/${gcpLastPath(item.name)}:call`}</dd></dl>
           </div>
           <div className="gcp-details-section-title">Operations</div>
           <div className="gcp-detail-action-rail">
             <button className="btn gcp-btn-s" onClick={async () => {
               try {
-                await GCPFunctions.call(project, location, gcpLastPath(item.name), {data: {hello: 'world'}});
-                notify('Cloud Function invoked', 'success');
+                const res = await GCPFunctions.call(project, location, gcpLastPath(item.name), {data: {hello: 'world'}});
+                if (res && res.status === 'ERROR') notify('Function error: ' + String(res.error || '').slice(0, 140), 'error');
+                else notify('Result: ' + JSON.stringify(res?.result ?? null).slice(0, 180), 'success');
               } catch (e) { notify(e.message, 'error'); }
             }}>Invoke</button>
             <button className="btn gcp-btn-s" onClick={load}>Refresh</button>
@@ -18808,8 +18969,41 @@ function GCPVPCView({notify, onBack, onOpen}) {
           <td><span className="gcp-link">{item.name}</span><div className="fh">{tab === 'networks' ? (item.subnetMode || 'AUTO') : tab === 'subnetworks' ? (item.region || region) : (item.direction || 'INGRESS')}</div></td>
           <td>{item.creationTimestamp || item.createTime || '—'}</td>
           <td>{item.network || '—'}</td>
-          <td>
-            <button className="btn gcp-btn-s" onClick={async (e) => {
+          <td className="btn-grp">
+            {tab === 'firewalls' && (
+              <button className="btn gcp-btn-s" onClick={async (e) => {
+                e.stopPropagation();
+                const splitList = (v) => String(v || '').split(',').map(x => x.trim()).filter(Boolean);
+                const form = await openGcpInputDialog({
+                  title: 'Edit firewall rule',
+                  description: `Update ingress rule ${item.name}. Changes re-apply to governed instances when VPC enforcement is on.`,
+                  submitLabel: 'Save firewall',
+                  fields: [
+                    {name: 'allowedPorts', label: 'Allowed TCP ports (comma-separated)', defaultValue: (item.allowed || []).flatMap(a => a.ports || []).join(', '), placeholder: '22, 80, 443'},
+                    {name: 'sourceRanges', label: 'Source ranges (comma-separated)', defaultValue: (item.sourceRanges || []).join(', '), placeholder: '0.0.0.0/0'},
+                    {name: 'targetTags', label: 'Target tags (comma-separated)', defaultValue: (item.targetTags || []).join(', '), placeholder: 'web, db'},
+                    {name: 'priority', label: 'Priority', type: 'number', defaultValue: String(item.priority ?? 1000)},
+                    {name: 'disabled', label: 'Disabled (true/false)', defaultValue: String(!!item.disabled)},
+                  ],
+                });
+                if (!form) return;
+                const ports = splitList(form.allowedPorts);
+                const payload = {
+                  allowed: ports.length ? [{IPProtocol: 'tcp', ports}] : [],
+                  sourceRanges: splitList(form.sourceRanges).length ? splitList(form.sourceRanges) : ['0.0.0.0/0'],
+                  targetTags: splitList(form.targetTags),
+                  disabled: String(form.disabled).trim().toLowerCase() === 'true',
+                };
+                const prio = parseInt(form.priority, 10);
+                if (!isNaN(prio)) payload.priority = prio;
+                try {
+                  await GCPVPC.updateFirewall(project, item.name, payload);
+                  notify('Firewall rule updated', 'success');
+                  await load();
+                } catch (err) { notify(err.message, 'error'); }
+              }}>Edit</button>
+            )}
+            <button className="btn btn-d" onClick={async (e) => {
               e.stopPropagation();
               try {
                 if (tab === 'networks') await GCPVPC.deleteNetwork(project, item.name);
@@ -18925,8 +19119,32 @@ function GCPIAMView({notify, onBack, onOpen}) {
           <td><span className="gcp-link">{item.email}</span><div className="fh">{item.displayName || 'Service account'}</div></td>
           <td>{item.disabled ? 'Disabled' : 'Enabled'}</td>
           <td>{item.uniqueId || '—'}</td>
-          <td>
+          <td className="btn-grp">
             <button className="btn gcp-btn-s" onClick={async (e) => {
+              e.stopPropagation();
+              const form = await openGcpInputDialog({
+                title: 'Edit service account',
+                description: `Update ${item.email}.`,
+                submitLabel: 'Save service account',
+                fields: [
+                  {name: 'displayName', label: 'Display name', defaultValue: item.displayName || ''},
+                  {name: 'description', label: 'Description', defaultValue: item.description || ''},
+                  {name: 'disabled', label: 'Disabled (true/false)', defaultValue: String(!!item.disabled)},
+                ],
+              });
+              if (!form) return;
+              const payload = {
+                displayName: String(form.displayName || ''),
+                description: String(form.description || ''),
+                disabled: String(form.disabled).trim().toLowerCase() === 'true',
+              };
+              try {
+                await GCPIAM.updateServiceAccount(project, item.email, payload);
+                notify('Service account updated', 'success');
+                await load();
+              } catch (err) { notify(err.message, 'error'); }
+            }}>Edit</button>
+            <button className="btn btn-d" onClick={async (e) => {
               e.stopPropagation();
               try {
                 await GCPIAM.deleteServiceAccount(project, item.email);

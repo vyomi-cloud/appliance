@@ -12,12 +12,47 @@ services:
       - cloudsim-data:/data
     restart: unless-stopped
 
+  cloudlearn-sql-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: cloudlearn
+    ports:
+      - "5432:5432"
+    volumes:
+      - cloudlearn-sql-pg:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  cloudlearn-sql-mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: cloudlearn
+      MYSQL_ROOT_HOST: "%"
+    ports:
+      - "3306:3306"
+    volumes:
+      - cloudlearn-sql-mysql:/var/lib/mysql
+    restart: unless-stopped
+
+  cloudlearn-gcs:
+    image: fsouza/fake-gcs-server:latest
+    command: ["-scheme", "http", "-port", "4443", "-backend", "filesystem", "-data", "/data"]
+    ports:
+      - "4443:4443"
+    volumes:
+      - cloudlearn-gcs:/data
+    restart: unless-stopped
+
   simulator:
     build: .
     ports:
       - "9000:9000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      - cloudlearn-sql-postgres
+      - cloudlearn-sql-mysql
+      - cloudlearn-gcs
     environment:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
       CLOUDLEARN_LICENSE_SECRET: cloudlearn-dev-secret
@@ -28,6 +63,15 @@ services:
       CLOUDLEARN_PARENT_OS: ${CLOUDLEARN_PARENT_OS:-linux}
       CLOUDLEARN_DISTRIBUTION_MODE: ${CLOUDLEARN_DISTRIBUTION_MODE:-developer}
       CLOUDLEARN_RUNTIME_BRIDGE_URL: ${CLOUDLEARN_RUNTIME_BRIDGE_URL:-http://host.docker.internal:9171}
+      CLOUDLEARN_SQL_PG_HOST: cloudlearn-sql-postgres
+      CLOUDLEARN_SQL_PG_PORT: "5432"
+      CLOUDLEARN_SQL_PG_ADMIN_USER: postgres
+      CLOUDLEARN_SQL_PG_ADMIN_PASSWORD: cloudlearn
+      CLOUDLEARN_SQL_MYSQL_HOST: cloudlearn-sql-mysql
+      CLOUDLEARN_SQL_MYSQL_PORT: "3306"
+      CLOUDLEARN_SQL_MYSQL_ADMIN_USER: root
+      CLOUDLEARN_SQL_MYSQL_ADMIN_PASSWORD: cloudlearn
+      CLOUDLEARN_GCS_URL: http://cloudlearn-gcs:4443
     volumes:
       - cloudlearn-data:/data
       - /var/lib/cloudlearn/deployments:/var/lib/cloudlearn/deployments
@@ -43,3 +87,6 @@ services:
 volumes:
   cloudlearn-data:
   cloudsim-data:
+  cloudlearn-sql-pg:
+  cloudlearn-sql-mysql:
+  cloudlearn-gcs:

@@ -100,6 +100,7 @@ def _is_gcp_native_path(path: str) -> bool:
     return path.startswith((
         "/compute/v1/",
         "/storage/v1/",
+        "/upload/storage/v1/",
         "/sql/v1beta4/",
         "/pubsub/v1/",
         "/firestore/v1/",
@@ -118,18 +119,54 @@ def _is_gcp_native_path(path: str) -> bool:
         "/api/gcp/pubsub/",
         "/api/gcp/firestore/",
         "/api/gcp/cloudfunctions/",
+        "/api/gcp/console/",
     ))
+
+
+def _gcp_iam_enforcement_response(request, path: str):
+    """Return a 403 JSONResponse if IAM enforcement is enabled for the active
+    space and the caller's bindings don't grant the operation; else None.
+    Owners/root bypass, and any failure fails open so enforcement bugs never
+    block the control plane."""
+    try:
+        space = _gcp_active_space_dict()
+        if not (isinstance(space, dict) and space.get("enforce_iam")):
+            return None
+        from core import gcp_iam_policy
+        required = gcp_iam_policy.permission_for_request(path, request.method)
+        if not required:
+            return None
+        principal = request.headers.get("x-cloudlearn-principal") or str(space.get("active_principal") or "root")
+        # space = project: union every stored policy's bindings (one project per space).
+        policies = gcp_iam_state.get("policies", {}) if isinstance(gcp_iam_state.get("policies"), dict) else {}
+        bindings: list = []
+        for policy in policies.values():
+            if isinstance(policy, dict):
+                bindings.extend(policy.get("bindings", []) if isinstance(policy.get("bindings"), list) else [])
+        if gcp_iam_policy.authorize(principal, required, bindings):
+            return None
+        return JSONResponse(status_code=403, content={"error": {
+            "code": 403, "status": "PERMISSION_DENIED",
+            "message": f"Permission '{required}' denied for principal '{principal}'.",
+        }})
+    except Exception:
+        return None
 
 
 @app.middleware("http")
 async def provider_api_alias_middleware(request, call_next):
     path = request.scope.get("path", "")
+    _gcp_capture_public_base(request)
     provider = "gcp" if _is_gcp_native_path(path) or path.startswith(("/ws/gcp/compute/", "/ws/compute/")) else "aws"
     token = REQUEST_PROVIDER.set(provider)
     request.state.cloudlearn_provider = provider
     request.state.cloudlearn_original_path = path
     if _is_gcp_native_path(path) or path.startswith(("/ws/gcp/compute/", "/ws/compute/")):
         try:
+            if not path.startswith(("/ws/", "/api/gcp/console/")):
+                denied = _gcp_iam_enforcement_response(request, path)
+                if denied is not None:
+                    return denied
             return await call_next(request)
         finally:
             REQUEST_PROVIDER.reset(token)
@@ -2188,6 +2225,7 @@ class GCPComputeInstanceRequest(BaseModel):
     zone: str = "us-central1-a"
     name: str = "gcp-instance"
     machineType: str = "e2-micro"
+    tags: dict = {}
     sourceImage: str = "sim-ubuntu-22.04"
     runtime: str = "python"
     runtimeBackend: str = ""
@@ -4206,7 +4244,9 @@ async def _capability_middleware(request: Request, call_next):
     identity = _iam_resolve_identity(principal)
     request.state.iam_identity = identity
     auth = _iam_route_action_resource(request)
-    if auth is not None and not identity.get("is_root"):
+    # GCP-native requests are authorized by the GCP IAM PDP (in the provider
+    # middleware), not the AWS action model — don't double-check them as S3/EC2.
+    if auth is not None and not identity.get("is_root") and not _is_gcp_native_path(request.url.path):
         action, resource = auth
         allowed, reason = _iam_authorize(principal, action, resource, {
             "aws:PrincipalArn": identity.get("arn", ""),
@@ -4382,6 +4422,286 @@ gcp_functions_state = _SpaceScopedDictProxy("gcp_functions", lambda: {"functions
 gcp_apigw_state = _SpaceScopedDictProxy("gcp_apigateway", lambda: {"apis": {}, "api_configs": {}, "gateways": {}, "operations": [], "logs": []})
 gcp_vpc_state = _SpaceScopedDictProxy("gcp_vpc", lambda: {"networks": {}, "subnetworks": {}, "firewalls": {}, "routes": {}, "operations": []})
 gcp_iam_state = _SpaceScopedDictProxy("gcp_iam", lambda: {"policies": {}, "service_accounts": {}, "bindings": [], "operations": []})
+
+# GCP service_state buckets and the record collections inside each, used by the
+# console summary (counter source-of-truth) and the project consolidation. Keys
+# are passed to _cloudsim_service_state(), which also matches the gcp_-prefixed
+# variant (e.g. "gcp_gcp_pubsub") that native-API writes produce. These are the
+# FLAT collections ({id: record} with a "project" field). IAM is handled
+# separately because it nests by project ({project: {key: record}}).
+_GCP_CONSOLE_COLLECTIONS: dict[str, list[str]] = {
+    "gcp_compute": ["instances", "instance_groups", "disks", "snapshots", "images"],
+    "gcp_storage": ["buckets", "folders", "transfers", "policies"],
+    "gcp_sql": ["instances", "backups", "query_insights"],
+    "gcp_pubsub": ["topics", "subscriptions", "schemas"],
+    "gcp_firestore": ["databases", "documents", "indexes"],
+    "gcp_functions": ["functions", "versions"],
+    "gcp_apigateway": ["apis", "api_configs", "configs", "gateways"],
+    "gcp_vpc": ["networks", "subnetworks", "firewalls", "routes"],
+}
+# IAM stores nest by project: {project: {key: record}}.
+_GCP_IAM_NESTED_COLLECTIONS = ["service_accounts", "policies", "users", "groups", "roles"]
+
+
+def _gcp_active_space_dict() -> dict:
+    spaces_state = _spaces_state()
+    active_id = spaces_state.get("active_space_id", "")
+    space = spaces_state.get("spaces", {}).get(active_id, {}) if active_id else {}
+    return space if isinstance(space, dict) else {}
+
+
+def _gcp_record_matches_project(rec: dict, project: str) -> bool:
+    """Mirror the per-service list filter: a falsy stored project matches any."""
+    if not project:
+        return True
+    return str((rec or {}).get("project") or project) == project
+
+
+def _gcp_state_proxies() -> dict:
+    """The space/provider-scoped state proxies, keyed by service. These resolve to
+    the exact same store bucket the grid handlers read, so summary == grid."""
+    return {
+        "gcp_compute": gcp_compute_state,
+        "gcp_storage": gcp_storage_state,
+        "gcp_sql": gcp_sql_state,
+        "gcp_pubsub": gcp_pubsub_state,
+        "gcp_firestore": gcp_firestore_state,
+        "gcp_functions": gcp_functions_state,
+        "gcp_apigateway": gcp_apigw_state,
+        "gcp_vpc": gcp_vpc_state,
+        "gcp_iam": gcp_iam_state,
+    }
+
+
+@app.get("/api/gcp/console/summary")
+def api_gcp_console_summary(project: str = ""):
+    """Per-service GCP resource counts read straight from the Internal DB
+    (the source of truth), scoped to the active space and the project the
+    console is using. Drives the left-nav counters so they always equal the
+    grids."""
+    target = _gcp_project_name(project) if project else ""
+    # Read via the SAME space/provider-scoped proxies the grid handlers use, so the
+    # counter and the grid always resolve the identical store bucket.
+    proxies = _gcp_state_proxies()
+
+    def coll_of(service_key: str, collection: str) -> dict:
+        c = proxies[service_key].get(collection, {})
+        return c if isinstance(c, dict) else {}
+
+    def count(service_key: str, collection: str) -> int:
+        return sum(1 for rec in coll_of(service_key, collection).values()
+                   if isinstance(rec, dict) and _gcp_record_matches_project(rec, target))
+
+    def count_iam(collection: str) -> int:
+        # IAM nests by project: {project: {key: record}}. Count records under the
+        # target project (or all projects when unscoped).
+        coll = coll_of("gcp_iam", collection)
+        if target:
+            sub = coll.get(target, {})
+            return sum(1 for rec in sub.values() if isinstance(rec, dict)) if isinstance(sub, dict) else 0
+        return sum(sum(1 for rec in sub.values() if isinstance(rec, dict))
+                   for sub in coll.values() if isinstance(sub, dict))
+
+    docs = coll_of("gcp_firestore", "documents")
+    collections: set[str] = set()
+    if isinstance(docs, dict):
+        for rec in docs.values():
+            if not (isinstance(rec, dict) and _gcp_record_matches_project(rec, target)):
+                continue
+            name = str(rec.get("name") or rec.get("path") or "")
+            if "/documents/" in name:
+                tail = name.split("/documents/", 1)[1]
+                collections.add(tail.split("/", 1)[0])
+            elif rec.get("collection"):
+                collections.add(str(rec.get("collection")))
+
+    services = {
+        "gcp-compute": count("gcp_compute", "instances"),
+        "gcp-storage": count("gcp_storage", "buckets"),
+        "gcp-cloudsql": count("gcp_sql", "instances"),
+        "gcp-pubsub": count("gcp_pubsub", "topics"),
+        "gcp-firestore": len(collections),
+        "gcp-functions": count("gcp_functions", "functions"),
+        "gcp-apigateway": count("gcp_apigateway", "apis"),
+        "gcp-vpc": count("gcp_vpc", "networks"),
+        "gcp-iam": count_iam("service_accounts"),
+    }
+    return {"project": target, "services": services}
+
+
+@app.post("/api/gcp/console/consolidate")
+async def api_gcp_consolidate_project(request: Request):
+    """Re-key every GCP resource in the active space onto a single canonical
+    project (space = project). Fixes legacy scatter so the project-scoped views
+    surface everything the space owns. Idempotent."""
+    payload = {}
+    if request is not None:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+    payload = payload if isinstance(payload, dict) else {}
+    target = _gcp_project_name(payload.get("project"))
+    proxies = _gcp_state_proxies()
+    updated = 0
+
+    def _retarget(rec: dict, old: str) -> bool:
+        changed = False
+        if rec.get("project") != target:
+            rec["project"] = target
+            changed = True
+        if old and old != target:
+            for field in ("name", "selfLink", "topic", "subscription", "network", "subnetwork", "email"):
+                value = rec.get(field)
+                if isinstance(value, str) and old in value:
+                    if field == "email":
+                        rec[field] = value.replace(f"@{old}.", f"@{target}.")
+                    else:
+                        rec[field] = value.replace(f"projects/{old}/", f"projects/{target}/")
+                    changed = True
+        return changed
+
+    # IAM nests records UNDER a project key ({project: {key: record}}), so merge
+    # every project's records under the canonical project key and retarget them.
+    iam_store = proxies["gcp_iam"]
+    for collection in _GCP_IAM_NESTED_COLLECTIONS:
+        nested = iam_store.get(collection)
+        if not isinstance(nested, dict):
+            continue
+        merged: dict = {}
+        for proj_key, sub in list(nested.items()):
+            if not isinstance(sub, dict):
+                continue
+            for key, rec in sub.items():
+                if not isinstance(rec, dict):
+                    continue  # drops scalar keys injected by earlier runs
+                if _retarget(rec, str(rec.get("project") or proj_key or "")):
+                    updated += 1
+                merged[key] = rec
+        nested.clear()
+        nested[target] = merged
+
+    # Every other GCP service: walk the store and retarget real resource records
+    # (identified by selfLink/kind/uniqueId/email) onto the canonical project.
+    # Records are NOT recursed into, so their nested field dicts are left alone.
+    # A scalar "project" found on a non-record container is corruption injected by
+    # an earlier run (e.g. storage objects-by-bucket) and is stripped.
+    _record_fields = ("selfLink", "kind", "uniqueId", "email")
+
+    def _is_record(node: dict) -> bool:
+        # Stored records carry a top-level "name" string; nested containers key BY
+        # name instead, so they lack one.
+        return isinstance(node.get("name"), str) or any(f in node for f in _record_fields)
+
+    def _walk(node) -> None:
+        nonlocal updated
+        if not isinstance(node, dict):
+            return
+        if _is_record(node):
+            if _retarget(node, str(node.get("project") or "")):
+                updated += 1
+            return
+        if isinstance(node.get("project"), str):
+            node.pop("project", None)
+            updated += 1
+        for value in list(node.values()):
+            _walk(value)
+
+    for service_key in ("gcp_compute", "gcp_storage", "gcp_sql", "gcp_pubsub",
+                        "gcp_firestore", "gcp_functions", "gcp_apigateway", "gcp_vpc"):
+        proxy = proxies[service_key]
+        for collection in list(proxy.keys()):
+            _walk(proxy.get(collection))
+    try:
+        _persist_state()
+    except Exception:
+        pass
+    try:
+        _refresh_cloudsim_gcp_summary()
+    except Exception:
+        pass
+    return {"project": target, "updated": updated}
+
+
+def _gcp_vpc_reconcile() -> dict:
+    """Apply firewall enforcement (or restore full access) on every LXD-backed
+    instance in the active space. Default base stays ACCEPT; only rule-derived
+    DROP/ACCEPT entries are programmed, scoped to instances the rules target."""
+    from core import gcp_vpc_enforce
+    space = _gcp_active_space_dict()
+    enforce = bool(space.get("enforce_vpc"))
+    firewalls = [fw for fw in gcp_vpc_state.get("firewalls", {}).values() if isinstance(fw, dict)]
+    applied: list[str] = []
+    for inst in gcp_compute_state.get("instances", {}).values():
+        if not isinstance(inst, dict) or str(inst.get("runtime_backend") or "") != "lxd":
+            continue
+        container = inst.get("container_name") or (f"cloudlearn-{inst.get('instance_id')}" if inst.get("instance_id") else "")
+        if not container:
+            continue
+        if enforce:
+            tags = inst.get("tags") or []
+            rules = [fw for fw in firewalls if gcp_vpc_enforce.rule_applies(fw, tags)]
+            script = gcp_vpc_enforce.build_script(rules)
+        else:
+            script = gcp_vpc_enforce.clear_script()
+        try:
+            _lxd_run(["exec", container, "--", "sh", "-c", script], timeout=30)
+            applied.append(container)
+        except Exception:
+            pass
+    return {"enforced": enforce, "instances": applied}
+
+
+@app.post("/api/gcp/console/vpc-reconcile")
+def api_gcp_vpc_reconcile():
+    """Re-apply VPC firewall enforcement to all governed instances (used by the
+    console after editing rules)."""
+    return _gcp_vpc_reconcile()
+
+
+@app.get("/api/gcp/console/enforcement")
+def api_gcp_get_enforcement():
+    """Per-space enforcement flags + the principal IAM checks run as."""
+    space = _gcp_active_space_dict()
+    return {
+        "iam": bool(space.get("enforce_iam")),
+        "vpc": bool(space.get("enforce_vpc")),
+        "principal": space.get("active_principal") or "root",
+    }
+
+
+@app.post("/api/gcp/console/enforcement")
+async def api_gcp_set_enforcement(request: Request):
+    payload = {}
+    if request is not None:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+    payload = payload if isinstance(payload, dict) else {}
+    space = _gcp_active_space_dict()
+    if "iam" in payload:
+        space["enforce_iam"] = bool(payload["iam"])
+    if "vpc" in payload:
+        space["enforce_vpc"] = bool(payload["vpc"])
+    if "principal" in payload:
+        space["active_principal"] = str(payload["principal"] or "root")
+    try:
+        _persist_state()
+    except Exception:
+        pass
+    if "vpc" in payload:
+        try:
+            _gcp_vpc_reconcile()
+        except Exception:
+            pass
+    return {
+        "iam": bool(space.get("enforce_iam")),
+        "vpc": bool(space.get("enforce_vpc")),
+        "principal": space.get("active_principal") or "root",
+    }
+
+
 vpc_state = _SpaceScopedDictProxy("vpc", lambda: {"vpcs": {}, "subnets": {}, "security_groups": {}, "route_tables": {}, "internet_gateways": {}})
 rds_state = _SpaceScopedDictProxy("rds", lambda: {"db_instances": {}, "db_subnet_groups": {}, "db_parameter_groups": {}, "db_snapshots": {}, "events": []})
 apigw_state = _SpaceScopedDictProxy("apigateway", lambda: {"apis": {}, "logs": []})
@@ -9011,7 +9331,7 @@ def _gcp_compute_state_meta(state: str) -> str:
 
 
 def _gcp_compute_api_root() -> str:
-    return "https://compute.googleapis.com/compute/v1"
+    return f"{_gcp_public_base()}/compute/v1"
 
 
 def _gcp_compute_project_path(project: str) -> str:
@@ -9297,7 +9617,7 @@ def _gcp_compute_instance_json(instance: dict) -> dict:
         "serviceAccounts": [
             {
                 "email": f"{instance.get('service_account', 'default')}@{project}.iam.gserviceaccount.com",
-                "scopes": ["https://www.googleapis.com/auth/cloud-platform"],
+                "scopes": ["cloud-platform"],
             }
         ],
         "deletionProtection": bool(instance.get("deletion_protection", False)),
@@ -9343,7 +9663,9 @@ def _gcp_compute_json_list(project: str, zone: str) -> dict:
             continue
         if str(instance.get("project") or "cloudlearn").strip() != str(project or "cloudlearn").strip():
             continue
-        instance_zone = str(instance.get("zone") or instance.get("az") or "us-central1-a")
+        # zone may be stored plain ("us-central1-a") or as a self-link URL
+        # (".../zones/us-central1-a"); compare on the trailing segment.
+        instance_zone = str(instance.get("zone") or instance.get("az") or "us-central1-a").rstrip("/").split("/")[-1]
         if zone_key and zone_key not in {"-", "*", "_all", "all"} and instance_zone != zone:
             continue
         instances.append(_gcp_compute_instance_json(instance))
@@ -9425,6 +9747,7 @@ def _gcp_compute_create_instance_instance(project: str, zone: str, payload: dict
         "runtime": str(payload.get("runtime") or profile.get("default_runtime") or "python"),
         "runtime_backend_requested": str(payload.get("runtimeBackend") or payload.get("runtime_backend") or "").strip().lower(),
         "runtime_backend": runtime_backend,
+        "tags": list(payload.get("tags", {}).get("items", []) if isinstance(payload.get("tags"), dict) else (payload.get("tags") if isinstance(payload.get("tags"), list) else [])),
         "key_pair": str(payload.get("keyPair") or payload.get("key_pair") or ""),
         "state": "pending",
         "launch_status": "queued",
@@ -10708,6 +11031,85 @@ def _gcp_apigw_gateway_record(project: str, location: str, payload: dict[str, An
         "createTime": _now(),
         "updateTime": _now(),
     }
+
+
+def _gcp_apigw_resolve_api(gateway_rec: dict) -> str:
+    """Resolve the API a gateway serves (via its apiConfig, else a direct api field)."""
+    apiconf = str(gateway_rec.get("apiConfig") or "")
+    last = apiconf.split("/")[-1]
+    for cfg in gcp_apigw_state.get("configs", {}).values():
+        if isinstance(cfg, dict) and cfg.get("name") in (apiconf, last):
+            return str(cfg.get("api") or "")
+    return str(gateway_rec.get("api") or "")
+
+
+def _gcp_apigw_match_config(api: str, path: str, method: str) -> dict | None:
+    """Match a route config by path + HTTP method (ANY/empty method matches)."""
+    method = str(method or "").upper()
+    want = "/" + str(path or "").strip("/")
+    cands = [c for c in gcp_apigw_state.get("configs", {}).values()
+             if isinstance(c, dict) and (not api or str(c.get("api") or "") == api)]
+    for c in cands:
+        pp = "/" + str(c.get("path_part") or "").strip("/")
+        hm = str(c.get("http_method") or "").upper()
+        if (pp == want or pp == "/") and hm in ("", "ANY", method):
+            return c
+    return cands[0] if cands else None
+
+
+async def api_gcp_apigw_invoke(gateway: str, path: str, request: Request):
+    """Route a request hitting a deployed gateway to its backend (a Cloud Function
+    or an upstream URL) and return the real response, or the configured mock."""
+    gw = gcp_apigw_state.get("gateways", {}).get(gateway)
+    if not gw:
+        for g in gcp_apigw_state.get("gateways", {}).values():
+            if isinstance(g, dict) and g.get("name") == gateway:
+                gw = g
+                break
+    if not gw:
+        raise HTTPException(404, detail="Gateway not found")
+    cfg = _gcp_apigw_match_config(_gcp_apigw_resolve_api(gw), path, request.method)
+    if not cfg:
+        raise HTTPException(404, detail="No matching API config route")
+    raw = await request.body()
+    try:
+        payload = json.loads(raw.decode("utf-8")) if raw else {}
+    except Exception:
+        payload = {}
+    itype = str(cfg.get("integration_type") or "").lower()
+    uri = str(cfg.get("integration_uri") or "")
+    # Cloud Function backend -> execute the function for real.
+    if "function" in itype or "cloudfunctions" in uri or "/functions/" in uri:
+        fn_name = uri.rstrip("/").split("/")[-1]
+        fn = gcp_functions_state.get("functions", {}).get(fn_name)
+        if fn:
+            try:
+                from core import gcp_function_runtime
+                out = gcp_function_runtime.execute(
+                    fn.get("code", ""), fn.get("entryPoint", "handler"),
+                    fn.get("runtime", "python311"), payload, timeout=30,
+                )
+            except Exception as exc:
+                out = {"status": "ERROR", "error": str(exc)[:200], "result": None}
+            if out.get("status") == "SUCCESS":
+                return JSONResponse(content=out.get("result"), status_code=200)
+            return JSONResponse(content={"error": out.get("error"), "logs": out.get("logs", "")}, status_code=500)
+        raise HTTPException(502, detail=f"Backend function '{fn_name}' not found")
+    # HTTP(S) upstream backend -> proxy the request.
+    if uri.startswith(("http://", "https://")):
+        try:
+            up = URLRequest(uri, data=(raw or None), method=request.method,
+                            headers={"Content-Type": request.headers.get("content-type", "application/json")})
+            with urlopen(up, timeout=30) as resp:
+                return Response(content=resp.read(),
+                                media_type=resp.headers.get("Content-Type", "application/json"),
+                                status_code=getattr(resp, "status", 200))
+        except Exception as exc:
+            raise HTTPException(502, detail=f"Upstream error: {str(exc)[:160]}")
+    # Mock integration -> return the configured response.
+    return Response(content=str(cfg.get("response_body") or "{}"),
+                    media_type=str(cfg.get("content_type") or "application/json"),
+                    status_code=int(cfg.get("status_code") or 200))
 
 
 def _gcp_iam_set_policy(project: str, payload: dict[str, Any]) -> dict:
@@ -12169,36 +12571,66 @@ def _gcp_location_name(location: str | None, default: str = "us-central1") -> st
     return str(location or default).strip() or default
 
 
+_GCP_PUBLIC_BASE_ENV = os.environ.get("CLOUDLEARN_PUBLIC_URL", "").rstrip("/")
+_GCP_PUBLIC_BASE_DYNAMIC = ""
+
+
+def _gcp_capture_public_base(request) -> None:
+    """Remember the simulator's externally-visible origin so GCP resource
+    metadata (selfLinks, URIs, hostnames) reflects the simulator rather than
+    *.googleapis.com. Captured from the incoming Host header; an explicit
+    CLOUDLEARN_PUBLIC_URL env var always wins."""
+    global _GCP_PUBLIC_BASE_DYNAMIC
+    if _GCP_PUBLIC_BASE_ENV:
+        return
+    try:
+        host = request.headers.get("host") or request.url.netloc
+        scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "http"
+        if host:
+            _GCP_PUBLIC_BASE_DYNAMIC = f"{scheme}://{host}"
+    except Exception:
+        pass
+
+
+def _gcp_public_base() -> str:
+    return _GCP_PUBLIC_BASE_ENV or _GCP_PUBLIC_BASE_DYNAMIC or "http://localhost:9000"
+
+
+def _gcp_public_host() -> str:
+    """Host:port portion of the simulator origin (no scheme)."""
+    return _gcp_public_base().split("://", 1)[-1]
+
+
 def _gcp_gcs_root() -> str:
-    return "https://storage.googleapis.com/storage/v1"
+    return f"{_gcp_public_base()}/storage/v1"
 
 
 def _gcp_sql_root() -> str:
-    return "https://sqladmin.googleapis.com/sql/v1beta4"
+    return f"{_gcp_public_base()}/sql/v1beta4"
 
 
 def _gcp_pubsub_root() -> str:
-    return "https://pubsub.googleapis.com/v1"
+    return f"{_gcp_public_base()}/v1"
 
 
 def _gcp_firestore_root() -> str:
-    return "https://firestore.googleapis.com/v1"
+    return f"{_gcp_public_base()}/firestore/v1"
 
 
 def _gcp_functions_root() -> str:
-    return "https://cloudfunctions.googleapis.com/v1"
+    return f"{_gcp_public_base()}/v1"
 
 
 def _gcp_apigateway_root() -> str:
-    return "https://apigateway.googleapis.com/v1"
+    return f"{_gcp_public_base()}/v1"
 
 
 def _gcp_iam_root() -> str:
-    return "https://iam.googleapis.com/v1"
+    return f"{_gcp_public_base()}/v1"
 
 
 def _gcp_compute_network_root() -> str:
-    return "https://compute.googleapis.com/compute/v1"
+    return f"{_gcp_public_base()}/compute/v1"
 
 
 def _gcp_storage_bucket_view(project: str, bucket: dict) -> dict:
@@ -12285,6 +12717,10 @@ def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
         "serverCaCert": instance.get("serverCaCert", {"cert": "", "commonName": name, "createTime": _now(), "expirationTime": ""}),
         "createTime": instance.get("createTime", _now()),
         "updateTime": instance.get("updateTime", _now()),
+        # Real connection endpoint for the backing OSS engine (None when the
+        # engine was unreachable and the instance is metadata-only).
+        "connection": instance.get("_backend"),
+        "backendStatus": "live" if instance.get("_backend") else "simulated",
     }
 
 
@@ -12337,7 +12773,13 @@ def _gcp_firestore_document_view(project: str, database: str, collection: str, d
 
 def _gcp_functions_view(project: str, location: str, function: dict) -> dict:
     name = str(function.get("name") or "")
-    uri = function.get("serviceConfig", {}).get("uri") or f"https://{name}-{location}-{project}.cloudfunctions.net/{name}"
+    # Trigger URL points at the simulator (this is where the function actually runs).
+    uri = f"{_gcp_public_base()}/v1/projects/{project}/locations/{location}/functions/{name}:call"
+    service_config = dict(function.get("serviceConfig") or {})
+    service_config["uri"] = uri
+    service_config.setdefault("availableMemory", "256M")
+    service_config.setdefault("timeoutSeconds", 60)
+    service_config.setdefault("ingressSettings", "ALLOW_ALL")
     return {
         "name": f"{_gcp_functions_root()}/projects/{project}/locations/{location}/functions/{name}",
         "description": function.get("description", ""),
@@ -12353,14 +12795,9 @@ def _gcp_functions_view(project: str, location: str, function: dict) -> dict:
             "entryPoint": function.get("entryPoint", "handler"),
             "source": function.get("source", {}),
         }),
-        "serviceConfig": function.get("serviceConfig", {
-            "availableMemory": "256M",
-            "timeoutSeconds": 60,
-            "ingressSettings": "ALLOW_ALL",
-            "uri": uri,
-        }),
+        "serviceConfig": service_config,
         "eventTrigger": function.get("eventTrigger"),
-        "httpsTrigger": function.get("httpsTrigger", {"url": uri}),
+        "httpsTrigger": {"url": uri},
         "environmentVariables": function.get("environmentVariables", {}),
         "labels": function.get("labels", {}),
         "permissions": function.get("permissions", []),
@@ -12385,7 +12822,7 @@ def _gcp_apigateway_api_view(project: str, location: str, api: dict) -> dict:
     return {
         "name": f"{_gcp_apigateway_root()}/projects/{project}/locations/{location}/apis/{name}",
         "displayName": api.get("displayName", name),
-        "managedService": api.get("managedService", f"{name}.apigateway.googleapis.com"),
+        "managedService": f"{name}.apigateway.{_gcp_public_host()}",
         "state": api.get("state", "ACTIVE"),
         "labels": api.get("labels", {}),
         "createTime": api.get("createTime", _now()),
@@ -12427,7 +12864,7 @@ def _gcp_apigateway_gateway_view(project: str, location: str, gw: dict) -> dict:
         "description": gw.get("description", ""),
         "labels": gw.get("labels", {}),
         "state": gw.get("state", "ACTIVE"),
-        "defaultHostname": gw.get("defaultHostname", f"{name}-{location}-{project}.cloud.goog"),
+        "defaultHostname": _gcp_public_host(),
         "createTime": gw.get("createTime", _now()),
         "updateTime": gw.get("updateTime", _now()),
     }

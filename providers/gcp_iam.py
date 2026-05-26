@@ -52,7 +52,20 @@ async def api_gcp_iam_test_permissions(project: str, request):
     except Exception:
         payload = {}
     permissions = payload.get("permissions", []) if isinstance(payload, dict) else []
-    return {"permissions": permissions if isinstance(permissions, list) else []}
+    permissions = permissions if isinstance(permissions, list) else []
+    # Return only the permissions actually granted to the calling principal by
+    # the project's policy bindings (instead of echoing the request).
+    try:
+        from core import gcp_iam_policy
+        space = s._gcp_active_space_dict()
+        principal = request.headers.get("x-cloudlearn-principal") or str(space.get("active_principal") or "root")
+        policies = s.gcp_iam_state.get("policies", {}) if isinstance(s.gcp_iam_state.get("policies"), dict) else {}
+        policy = policies.get(project) or {}
+        bindings = policy.get("bindings", []) if isinstance(policy, dict) else []
+        granted = [p for p in permissions if gcp_iam_policy.authorize(principal, p, bindings)]
+        return {"permissions": granted}
+    except Exception:
+        return {"permissions": permissions}
 
 
 def api_gcp_iam_list_service_accounts(project: str):
@@ -106,6 +119,38 @@ def api_gcp_iam_delete_service_account(project: str, account: str):
         raise HTTPException(404, detail="Service account not found")
     del accounts[target]
     return {"done": True}
+
+
+async def api_gcp_iam_patch_service_account(project: str, account: str, request):
+    """PATCH .../serviceAccounts/{account} — update displayName/description/disabled."""
+    s = _server()
+    project = s._gcp_project_name(project)
+    accounts = s.gcp_iam_state.setdefault("service_accounts", {}).setdefault(project, {})
+    target = None
+    for key, rec in accounts.items():
+        if account in {key, rec.get("email", ""), rec.get("name", "")}:
+            target = key
+            break
+    if not target:
+        raise HTTPException(404, detail="Service account not found")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    # Real GCP nests the new fields under "serviceAccount" with an updateMask.
+    body = payload.get("serviceAccount") if isinstance(payload.get("serviceAccount"), dict) else payload
+    rec = accounts[target]
+    if "displayName" in body:
+        rec["displayName"] = str(body.get("displayName") or "")
+    if "description" in body:
+        rec["description"] = str(body.get("description") or "")
+    if "disabled" in body:
+        rec["disabled"] = bool(body.get("disabled"))
+    accounts[target] = rec
+    return {"name": f"projects/{project}/serviceAccounts/{rec['email']}", "projectId": project, "uniqueId": rec.get("uniqueId", ""), "email": rec["email"], "displayName": rec.get("displayName", ""), "description": rec.get("description", ""), "oauth2ClientId": rec.get("oauth2ClientId", ""), "disabled": rec.get("disabled", False), "etag": rec.get("etag", "")}
 
 
 def api_gcp_iam_list_users():
