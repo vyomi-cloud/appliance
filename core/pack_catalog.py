@@ -31,6 +31,30 @@ CORE_PACK_IDS = [
     "cloudlearn.sqs.basic",
     "cloudlearn.dynamodb.basic",
     "cloudlearn.cloudsim.basic",
+    # P2-A: 7 packs added 2026-06-01 to close per-provider gaps where new
+    # services were added to the catalog but lacked pack metadata.
+    "cloudlearn.rds.basic",
+    "cloudlearn.eventbridge.basic",
+    "cloudlearn.secretsmanager.basic",
+    "cloudlearn.kms.basic",
+    "cloudlearn.gcp.eventarc.basic",
+    "cloudlearn.gcp.secretmanager.basic",
+    "cloudlearn.gcp.kms.basic",
+    # Azure parity — backfilled 2026-06-01 to close the pack-architecture gap.
+    "cloudlearn.azure.vm.basic",
+    "cloudlearn.azure.storage.basic",
+    "cloudlearn.azure.sql.basic",
+    "cloudlearn.azure.servicebus.basic",
+    "cloudlearn.azure.cosmos.basic",
+    "cloudlearn.azure.functionapp.basic",
+    "cloudlearn.azure.apim.basic",
+    "cloudlearn.azure.vnet.basic",
+    "cloudlearn.azure.eventgrid.basic",
+    "cloudlearn.azure.keyvault.basic",
+    "cloudlearn.azure.rbac.basic",
+    "cloudlearn.azure.azcli.basic",
+    "cloudlearn.azure.sdk.java.basic",
+    "cloudlearn.azure.sdk.go.basic",
 ]
 
 _PACK_MODULE_PREFIX = "packs"
@@ -60,6 +84,30 @@ _PACK_FILES = {
     "cloudlearn.gcp.functions.basic": "gcp.cloudlearn_gcp_functions_basic",
     "cloudlearn.gcp.apigateway.basic": "gcp.cloudlearn_gcp_apigateway_basic",
     "cloudlearn.gcp.storage.basic": "gcp.cloudlearn_gcp_storage_basic",
+    # P2-A: 7 additional service packs added 2026-06-01 (AWS rds/eventbridge/
+    # secretsmanager/kms + GCP eventarc/secretmanager/kms).
+    "cloudlearn.rds.basic": "aws.cloudlearn_rds_basic",
+    "cloudlearn.eventbridge.basic": "aws.cloudlearn_eventbridge_basic",
+    "cloudlearn.secretsmanager.basic": "aws.cloudlearn_secretsmanager_basic",
+    "cloudlearn.kms.basic": "aws.cloudlearn_kms_basic",
+    "cloudlearn.gcp.eventarc.basic": "gcp.cloudlearn_gcp_eventarc_basic",
+    "cloudlearn.gcp.secretmanager.basic": "gcp.cloudlearn_gcp_secretmanager_basic",
+    "cloudlearn.gcp.kms.basic": "gcp.cloudlearn_gcp_kms_basic",
+    # Azure pack module files (under packs/azure/).
+    "cloudlearn.azure.vm.basic": "azure.cloudlearn_azure_vm_basic",
+    "cloudlearn.azure.storage.basic": "azure.cloudlearn_azure_storage_basic",
+    "cloudlearn.azure.sql.basic": "azure.cloudlearn_azure_sql_basic",
+    "cloudlearn.azure.servicebus.basic": "azure.cloudlearn_azure_servicebus_basic",
+    "cloudlearn.azure.cosmos.basic": "azure.cloudlearn_azure_cosmos_basic",
+    "cloudlearn.azure.functionapp.basic": "azure.cloudlearn_azure_functionapp_basic",
+    "cloudlearn.azure.apim.basic": "azure.cloudlearn_azure_apim_basic",
+    "cloudlearn.azure.vnet.basic": "azure.cloudlearn_azure_vnet_basic",
+    "cloudlearn.azure.eventgrid.basic": "azure.cloudlearn_azure_eventgrid_basic",
+    "cloudlearn.azure.keyvault.basic": "azure.cloudlearn_azure_keyvault_basic",
+    "cloudlearn.azure.rbac.basic": "azure.cloudlearn_azure_rbac_basic",
+    "cloudlearn.azure.azcli.basic": "azure.cloudlearn_azure_azcli_basic",
+    "cloudlearn.azure.sdk.java.basic": "azure.cloudlearn_azure_sdk_java_basic",
+    "cloudlearn.azure.sdk.go.basic": "azure.cloudlearn_azure_sdk_go_basic",
 }
 
 PROVIDER_PACK_GROUPS = {
@@ -76,6 +124,11 @@ PROVIDER_PACK_GROUPS = {
         "cloudlearn.lambda.basic",
         "cloudlearn.sqs.basic",
         "cloudlearn.dynamodb.basic",
+        # P2-A additions (2026-06-01) — close pack-vs-catalog gap.
+        "cloudlearn.rds.basic",
+        "cloudlearn.eventbridge.basic",
+        "cloudlearn.secretsmanager.basic",
+        "cloudlearn.kms.basic",
     ],
     "gcp": [
         "cloudlearn.gcp.compute.basic",
@@ -90,6 +143,26 @@ PROVIDER_PACK_GROUPS = {
         "cloudlearn.gcp.functions.basic",
         "cloudlearn.gcp.apigateway.basic",
         "cloudlearn.gcp.storage.basic",
+        # P2-A additions (2026-06-01).
+        "cloudlearn.gcp.eventarc.basic",
+        "cloudlearn.gcp.secretmanager.basic",
+        "cloudlearn.gcp.kms.basic",
+    ],
+    "azure": [
+        "cloudlearn.azure.vm.basic",
+        "cloudlearn.azure.storage.basic",
+        "cloudlearn.azure.sql.basic",
+        "cloudlearn.azure.servicebus.basic",
+        "cloudlearn.azure.cosmos.basic",
+        "cloudlearn.azure.functionapp.basic",
+        "cloudlearn.azure.apim.basic",
+        "cloudlearn.azure.vnet.basic",
+        "cloudlearn.azure.eventgrid.basic",
+        "cloudlearn.azure.keyvault.basic",
+        "cloudlearn.azure.rbac.basic",
+        "cloudlearn.azure.azcli.basic",
+        "cloudlearn.azure.sdk.java.basic",
+        "cloudlearn.azure.sdk.go.basic",
     ],
     "other": [
         "cloudlearn.cloudsim.basic",

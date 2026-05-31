@@ -1,0 +1,14 @@
+# Java Maven build artifacts
+**/target/
+
+# Go module cache (use system-level when running tests)
+**/go.sum.lock
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Playwright artifacts (Phase 4)
+e2e/node_modules/
+e2e/playwright-report/
+e2e/test-results/

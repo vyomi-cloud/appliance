@@ -60,6 +60,66 @@ services:
       - "8080:8080"
     restart: unless-stopped
 
+  # MVP P0 backends — fidelity-first: real engines back the simulator's surfaces.
+  # Vault     → AWS KMS + Secrets Manager + GCP Cloud KMS + Secret Manager + Azure Key Vault
+  # NATS      → AWS EventBridge + GCP Eventarc + Azure Event Grid (single broker, 3 surfaces)
+  # MinIO     → AWS S3 (real bytes, SigV4)
+  # DynamoDB  → AWS DynamoDB (official Amazon emulator; real PartiQL)
+  # ElasticMQ → AWS SQS (real FIFO + visibility timeout)
+
+  cloudlearn-vault:
+    image: hashicorp/vault:1.15
+    command: ["server", "-dev", "-dev-root-token-id=cloudlearn-dev-token", "-dev-listen-address=0.0.0.0:8200"]
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: cloudlearn-dev-token
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "8200:8200"
+    restart: unless-stopped
+
+  cloudlearn-nats:
+    image: nats:2-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - cloudlearn-nats:/data
+    restart: unless-stopped
+
+  cloudlearn-minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--address", ":9000", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: cloudlearn
+      MINIO_ROOT_PASSWORD: cloudlearn-dev-secret-key
+    ports:
+      - "9100:9000"
+      - "9101:9001"
+    volumes:
+      - cloudlearn-minio:/data
+    restart: unless-stopped
+
+  cloudlearn-dynamodb:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
+    working_dir: /home/dynamodblocal
+    user: root
+    ports:
+      - "8000:8000"
+    volumes:
+      - cloudlearn-dynamodb:/data
+    restart: unless-stopped
+
+  cloudlearn-elasticmq:
+    image: softwaremill/elasticmq-native:latest
+    ports:
+      - "9324:9324"
+      - "9325:9325"
+    restart: unless-stopped
+
   simulator:
     build: .
     ports:
@@ -72,6 +132,11 @@ services:
       - cloudlearn-gcs
       - cloudlearn-pubsub
       - cloudlearn-firestore
+      - cloudlearn-vault
+      - cloudlearn-nats
+      - cloudlearn-minio
+      - cloudlearn-dynamodb
+      - cloudlearn-elasticmq
     environment:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
       CLOUDLEARN_LICENSE_SECRET: cloudlearn-dev-secret
@@ -96,6 +161,15 @@ services:
       FIRESTORE_EMULATOR_HOST: cloudlearn-firestore:8080
       CLOUDLEARN_PUBSUB_EMULATOR_HOST: cloudlearn-pubsub:8085
       CLOUDLEARN_FIRESTORE_EMULATOR_HOST: cloudlearn-firestore:8080
+      # MVP P0 backends — see compose service block above.
+      CLOUDLEARN_VAULT_URL: http://cloudlearn-vault:8200
+      CLOUDLEARN_VAULT_TOKEN: cloudlearn-dev-token
+      CLOUDLEARN_NATS_URL: nats://cloudlearn-nats:4222
+      CLOUDLEARN_MINIO_URL: http://cloudlearn-minio:9000
+      CLOUDLEARN_MINIO_ACCESS_KEY: cloudlearn
+      CLOUDLEARN_MINIO_SECRET_KEY: cloudlearn-dev-secret-key
+      CLOUDLEARN_DYNAMODB_URL: http://cloudlearn-dynamodb:8000
+      CLOUDLEARN_ELASTICMQ_URL: http://cloudlearn-elasticmq:9324
     volumes:
       - cloudlearn-data:/data
       - /var/lib/cloudlearn/deployments:/var/lib/cloudlearn/deployments
@@ -113,3 +187,6 @@ volumes:
   cloudlearn-sql-pg:
   cloudlearn-sql-mysql:
   cloudlearn-gcs:
+  cloudlearn-nats:
+  cloudlearn-minio:
+  cloudlearn-dynamodb:

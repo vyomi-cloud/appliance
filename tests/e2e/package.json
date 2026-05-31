@@ -1,0 +1,18 @@
+{
+  "name": "cloudlearn-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "End-to-end tests for the CloudLearn simulator's reference web apps (java-orders, go-inventory) — console-pass via Playwright + API-pass via each app's native test harness.",
+  "scripts": {
+    "test": "playwright test",
+    "test:java-orders": "playwright test java-orders",
+    "test:go-inventory": "playwright test go-inventory",
+    "test:ui": "playwright test --ui",
+    "install:browsers": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "@types/node": "^20.16.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -188,4 +188,104 @@ client := s3.NewFromConfig(cfg, func(o *s3.Options) {
     option.WithoutAuthentication(),
 )""",
         }
+    # Azure SDK snippets — added 2026-06-01 for pack-architecture parity.
+    if provider == "azure" and language == "java":
+        return {
+            "provider": "azure",
+            "language": "java",
+            "endpoint": endpoint,
+            "snippet": """AzureProfile profile = new AzureProfile(
+    "tenant-sim", "sub-001", AzureEnvironment.AZURE);
+HttpPipeline pipeline = HttpPipelineProvider.buildHttpPipeline(
+    new AzureCliCredentialBuilder().build(),
+    new AzureProfile(AzureEnvironment.AZURE));
+// Point all ARM clients at the simulator:
+ComputeManager mgr = ComputeManager.authenticate(pipeline, profile);
+mgr.virtualMachines().list();""",
+        }
+    if provider == "azure" and language == "go":
+        return {
+            "provider": "azure",
+            "language": "go",
+            "endpoint": endpoint,
+            "snippet": """cred, _ := azidentity.NewDefaultAzureCredential(nil)
+opts := &arm.ClientOptions{
+    ClientOptions: azcore.ClientOptions{
+        Cloud: cloud.Configuration{
+            Services: map[cloud.ServiceName]cloud.ServiceConfiguration{
+                cloud.ResourceManager: {Endpoint: "http://127.0.0.1:9000",
+                                        Audience: "http://127.0.0.1:9000"},
+            },
+        },
+    },
+}
+client, _ := armcompute.NewVirtualMachinesClient("sub-001", cred, opts)""",
+        }
     return {"provider": provider, "language": language, "endpoint": endpoint, "snippet": "", "status": "planned"}
+
+
+def az_cli_resolve(command: str) -> dict[str, Any]:
+    """Map an ``az <group> <subgroup> <verb>`` command to an ARM operation +
+    route. Mirrors aws_cli_resolve / gcp_gcloud_resolve. Returns the same
+    _result shape so the SPA can render it uniformly.
+    """
+    tokens = shlex.split(command or "")
+    if not tokens or tokens[0] != "az":
+        return _result("azure", "az", command, "", "", "", tokens, "Command must start with `az`.")
+    args = tokens[1:]
+    api = "api-version=2024-03-01"
+    # vm list / show / create / delete / start / deallocate / restart
+    if len(args) >= 2 and args[0] == "vm":
+        verb = args[1]
+        verb_map = {
+            "list": ("VirtualMachines_ListAll",
+                     "GET /subscriptions/{sub}/providers/Microsoft.Compute/virtualMachines"),
+            "show": ("VirtualMachines_Get",
+                     "GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{name}"),
+            "create": ("VirtualMachines_CreateOrUpdate",
+                       "PUT /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{name}"),
+            "delete": ("VirtualMachines_Delete",
+                       "DELETE /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{name}"),
+            "start": ("VirtualMachines_Start",
+                      "POST .../Microsoft.Compute/virtualMachines/{name}/start"),
+            "deallocate": ("VirtualMachines_Deallocate",
+                           "POST .../Microsoft.Compute/virtualMachines/{name}/deallocate"),
+            "restart": ("VirtualMachines_Restart",
+                        "POST .../Microsoft.Compute/virtualMachines/{name}/restart"),
+        }
+        if verb in verb_map:
+            op, route = verb_map[verb]
+            return _result("azure", "az", command, "Microsoft.Compute", op, f"{route}?{api}", args,
+                           "Azure CLI vm command → ARM route. Real az CLI works when ARM endpoint points at simulator.")
+    # storage account list / show / create / delete
+    if len(args) >= 3 and args[0] == "storage" and args[1] == "account":
+        verb = args[2]
+        verb_map = {
+            "list": ("StorageAccounts_List",
+                     "GET /subscriptions/{sub}/providers/Microsoft.Storage/storageAccounts"),
+            "show": ("StorageAccounts_GetProperties",
+                     "GET .../Microsoft.Storage/storageAccounts/{name}"),
+            "create": ("StorageAccounts_Create",
+                       "PUT .../Microsoft.Storage/storageAccounts/{name}"),
+            "delete": ("StorageAccounts_Delete",
+                       "DELETE .../Microsoft.Storage/storageAccounts/{name}"),
+        }
+        if verb in verb_map:
+            op, route = verb_map[verb]
+            return _result("azure", "az", command, "Microsoft.Storage", op, f"{route}?{api}", args,
+                           "Real Blob bytes back this surface via fake-gcs-server bridge.")
+    # sql server list / db create
+    if len(args) >= 2 and args[0] == "sql":
+        if args[1] == "server" and len(args) >= 3:
+            return _result("azure", "az", command, "Microsoft.Sql",
+                           f"Servers_{args[2].title()}", "/subscriptions/{sub}/.../Microsoft.Sql/servers", args, "")
+        if args[1] == "db" and len(args) >= 3:
+            return _result("azure", "az", command, "Microsoft.Sql",
+                           f"Databases_{args[2].title()}", ".../Microsoft.Sql/servers/{srv}/databases", args,
+                           "Backed by real Postgres via gcp_sql_engine.")
+    # generic group/verb fallback so any az command is reflected back.
+    if len(args) >= 2:
+        return _result("azure", "az", command, args[0], args[1], "azure-arm", args,
+                       f"Generic az {args[0]} {args[1]} dispatch. Implement explicitly for stronger mapping.")
+    return _result("azure", "az", command, args[0] if args else "", "", "", args,
+                   "Subcommand required (e.g. `az vm list`).")

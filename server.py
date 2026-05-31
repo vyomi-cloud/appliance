@@ -92,6 +92,111 @@ from core.tooling_simulators import aws_cli_resolve, sdk_snippet
 
 app = FastAPI(title="CloudLearn Cloud Simulator", version="2.0.0", docs_url=None, redoc_url=None)
 
+# MVP P0: register backend-backed routes EARLY (before the S3 catch-all on
+# /{bucket} grabs /v1/projects/... or /azure-data/...). All three modules
+# follow the same shape: REST routes for GCP+Azure get mounted here; AWS
+# X-Amz-Target dispatchers are collected in _aws_xamz_dispatchers and
+# consumed by aws_query_root.
+_aws_xamz_dispatchers: dict = {}
+try:
+    from core import vault_routes as _vault_routes
+    _vault_routes.register(app, aws_dispatchers=_aws_xamz_dispatchers)
+except Exception:  # never break startup
+    pass
+try:
+    from core import nats_routes as _nats_routes
+    _nats_routes.register(app, aws_dispatchers=_aws_xamz_dispatchers)
+except Exception:
+    pass
+try:
+    from core import cedar_routes as _cedar_routes
+    _cedar_routes.register(app)
+except Exception:
+    pass
+
+
+@app.get("/api/runtime/backends", include_in_schema=False)
+def runtime_backends() -> dict:
+    """Status of all MVP P0 backends — what's real vs in-memory mock.
+
+    This is what the console badges + ``cloud-learn doctor`` should call to
+    surface which services are running on a real engine vs a mock.
+    """
+    results: dict = {}
+    try:
+        from core import vault_client as _vc
+        results["vault"] = {
+            "url": _vc._VAULT_URL,
+            "available": _vc.available(),
+            "backs": ["AWS KMS", "AWS Secrets Manager", "GCP Cloud KMS",
+                      "GCP Secret Manager", "Azure Key Vault (keys + secrets)"],
+        }
+    except Exception as exc:
+        results["vault"] = {"available": False, "error": repr(exc)}
+    try:
+        from core import nats_client as _nc
+        results["nats"] = {
+            "url": _nc._NATS_URL,
+            "available": _nc.available(),
+            "backs": ["AWS EventBridge", "GCP Eventarc", "Azure Event Grid"],
+        }
+    except Exception as exc:
+        results["nats"] = {"available": False, "error": repr(exc)}
+    try:
+        from core import minio_mirror as _mm
+        results["minio"] = {
+            "url": _mm._MINIO_URL,
+            "available": _mm.available(),
+            "backs": ["AWS S3 (write-through real bytes)"],
+        }
+    except Exception as exc:
+        results["minio"] = {"available": False, "error": repr(exc)}
+    try:
+        from core import dynamodb_proxy as _dp
+        results["dynamodb-local"] = {
+            "url": _dp._DDB_URL,
+            "available": _dp.available(),
+            "backs": ["AWS DynamoDB (full proxy)"],
+        }
+    except Exception as exc:
+        results["dynamodb-local"] = {"available": False, "error": repr(exc)}
+    try:
+        from core import elasticmq_proxy as _emq
+        results["elasticmq"] = {
+            "url": _emq._EMQ_URL,
+            "available": _emq.available(),
+            "backs": ["AWS SQS (legacy/query protocol; modern JSON-RPC stays in-memory)"],
+        }
+    except Exception as exc:
+        results["elasticmq"] = {"available": False, "error": repr(exc)}
+    try:
+        from core import cedar_engine as _ce
+        results["cedar"] = {
+            "available": _ce.available(),
+            "backs": ["AWS IAM (JSON policies)", "GCP IAM (bindings)",
+                      "Azure RBAC (role assignments)"],
+        }
+    except Exception as exc:
+        results["cedar"] = {"available": False, "error": repr(exc)}
+    try:
+        from core import gcp_sql_engine as _eng
+        results["postgres"] = {
+            "available": _eng.available("postgres"),
+            "backs": ["GCP Cloud SQL Postgres", "Azure Database for PostgreSQL",
+                      "Azure SQL (Microsoft.Sql/servers/databases)"],
+        }
+        results["mysql"] = {
+            "available": _eng.available("mysql"),
+            "backs": ["GCP Cloud SQL MySQL", "Azure Database for MySQL"],
+        }
+    except Exception as exc:
+        results["postgres"] = {"available": False, "error": repr(exc)}
+    summary = {
+        "ready": sum(1 for v in results.values() if v.get("available")),
+        "total": len(results),
+    }
+    return {"backends": results, "summary": summary}
+
 
 def _swagger_html(openapi_url: str, title: str):
     """Swagger UI from locally-bundled assets (works fully offline)."""
@@ -542,6 +647,116 @@ def api_gcp_extras_config_put(stub_path: str, payload: dict[str, Any] | None = N
     slot["seeded"] = True
     _persist_state()
     return {"values": slot["items"]}
+
+
+# ── GCP API Gateway — minimal handlers ──────────────────────────────────────
+# The catalog wires API Gateway endpoints at /api/gcp/apigateway/v1/... but
+# no concrete handlers existed (caught by the SPA loader hitting 404 →
+# NoSuchBucket because the S3 catch-all swallowed the path). These return
+# real-shape responses against per-space state so the GCP console can list +
+# create APIs/configs/gateways without crashing.
+def _gcp_apigateway_state(project: str, kind: str) -> dict:
+    """kind ∈ {apis, configs, gateways, operations}. Per-space state."""
+    spaces_state = PLATFORM.kernel.state.setdefault(
+        "spaces", {"spaces": {}, "active_space_id": "", "settings": {}}
+    )
+    active_id = spaces_state.get("active_space_id", "")
+    space = spaces_state.setdefault("spaces", {}).setdefault(active_id, {})
+    svc_states = space.setdefault("service_states", {})
+    ag = svc_states.setdefault("apigateway", {})
+    proj = ag.setdefault(project, {})
+    return proj.setdefault(kind, {})
+
+
+@app.get("/api/gcp/apigateway/v1/projects/{project}/locations/global/apis", include_in_schema=False)
+def gcp_apigateway_list_apis(project: str):
+    apis = _gcp_apigateway_state(project, "apis")
+    return {
+        "apis": [
+            {
+                "name": f"projects/{project}/locations/global/apis/{name}",
+                "displayName": rec.get("displayName", name),
+                "createTime": rec.get("createTime", ""),
+                "state": rec.get("state", "ACTIVE"),
+                "managedService": rec.get("managedService", f"{name}.apigateway.{project}.cloud.goog"),
+                "labels": rec.get("labels", {}),
+            }
+            for name, rec in apis.items()
+        ],
+    }
+
+
+@app.post("/api/gcp/apigateway/v1/projects/{project}/locations/global/apis", include_in_schema=False)
+async def gcp_apigateway_create_api(project: str, request: Request):
+    api_id = request.query_params.get("apiId", "")
+    body = await request.json() if (await request.body()) else {}
+    name = api_id or body.get("name") or f"api-{uuid.uuid4().hex[:6]}"
+    rec = {
+        "displayName": body.get("displayName", name),
+        "createTime": _now(),
+        "state": "ACTIVE",
+        "managedService": f"{name}.apigateway.{project}.cloud.goog",
+        "labels": body.get("labels", {}),
+    }
+    _gcp_apigateway_state(project, "apis")[name] = rec
+    _persist_state()
+    return {
+        "name": f"projects/{project}/locations/global/operations/op-{uuid.uuid4().hex[:8]}",
+        "metadata": {"@type": "type.googleapis.com/google.cloud.apigateway.v1.OperationMetadata",
+                     "target": f"projects/{project}/locations/global/apis/{name}"},
+        "done": True,
+        "response": {"@type": "type.googleapis.com/google.cloud.apigateway.v1.Api",
+                     "name": f"projects/{project}/locations/global/apis/{name}", **rec},
+    }
+
+
+@app.get("/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{name}", include_in_schema=False)
+def gcp_apigateway_get_api(project: str, name: str):
+    apis = _gcp_apigateway_state(project, "apis")
+    if name not in apis:
+        raise HTTPException(404, detail=f"API '{name}' not found")
+    rec = apis[name]
+    return {
+        "name": f"projects/{project}/locations/global/apis/{name}",
+        "displayName": rec.get("displayName", name),
+        "createTime": rec.get("createTime", ""),
+        "state": rec.get("state", "ACTIVE"),
+        "managedService": rec.get("managedService", f"{name}.apigateway.{project}.cloud.goog"),
+        "labels": rec.get("labels", {}),
+    }
+
+
+@app.delete("/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{name}", include_in_schema=False)
+def gcp_apigateway_delete_api(project: str, name: str):
+    apis = _gcp_apigateway_state(project, "apis")
+    apis.pop(name, None)
+    _persist_state()
+    return {"name": f"projects/{project}/locations/global/operations/op-{uuid.uuid4().hex[:8]}",
+            "done": True}
+
+
+@app.get("/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{api}/configs", include_in_schema=False)
+def gcp_apigateway_list_configs(project: str, api: str):
+    configs = _gcp_apigateway_state(project, "configs").get(api, {})
+    return {"apiConfigs": [
+        {"name": f"projects/{project}/locations/global/apis/{api}/configs/{c}",
+         "displayName": rec.get("displayName", c),
+         "createTime": rec.get("createTime", ""), "state": rec.get("state", "ACTIVE")}
+        for c, rec in configs.items()
+    ]}
+
+
+@app.get("/api/gcp/apigateway/v1/projects/{project}/locations/global/gateways", include_in_schema=False)
+def gcp_apigateway_list_gateways(project: str):
+    gws = _gcp_apigateway_state(project, "gateways")
+    return {"gateways": [
+        {"name": f"projects/{project}/locations/global/gateways/{name}",
+         "displayName": rec.get("displayName", name),
+         "apiConfig": rec.get("apiConfig", ""),
+         "createTime": rec.get("createTime", ""), "state": rec.get("state", "ACTIVE"),
+         "defaultHostname": f"{name}-{uuid.uuid4().hex[:8]}.uc.gateway.dev"}
+        for name, rec in gws.items()
+    ]}
 
 
 # Cross-cloud parity Step 2: standalone GCP console (mirrors /console/azure
@@ -1211,6 +1426,24 @@ def _now() -> str:
 
 def _now_http() -> str:
     return datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+
+def _iso_to_http_date(iso: str) -> str:
+    """Convert ``2026-05-31T19:57:42.000Z`` → ``Sun, 31 May 2026 19:57:42 GMT``.
+
+    Real S3 / Azure Blob / GCS responses use HTTP date format (RFC 1123) for
+    Last-Modified. aws-sdk-go-v2 strictly enforces this and fails to deserialize
+    when the simulator emits ISO 8601. Stored timestamps are ISO (from
+    ``_now()``); convert at the response edge.
+    """
+    if not iso:
+        return _now_http()
+    try:
+        cleaned = iso.rstrip("Z").split(".")[0]
+        dt = datetime.strptime(cleaned, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+        return dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
+    except Exception:
+        return iso  # last resort — return as-is rather than crashing the response
 
 
 def _iam_root_principal() -> str:
@@ -2232,6 +2465,24 @@ def _default_cloudsim_space_policy() -> dict:
     }
 
 
+# P2-C (2026-06-01): single source of truth for runtime bundles. Previously
+# this dict was duplicated in 4 places — _default_state(), the legacy
+# initializer, _cloudsim_runtime_bundle_catalog(), and a 2nd legacy
+# setdefault — so adding a new bundle kind (e.g. "azure_vm") meant updating 4
+# sites and silently desyncing if any was missed. All 4 now reference this
+# constant via copy.deepcopy().
+_DEFAULT_RUNTIME_BUNDLES: dict[str, dict] = {
+    "python":        {"id": "cloudlearn.runtime.python",      "name": "Python Runtime",                  "kind": "language", "provider": "shared", "service": "python",    "installed": True, "active": False},
+    "ec2":           {"id": "cloudlearn.runtime.ec2",         "name": "EC2 Runtime Bundle",              "kind": "vm",       "provider": "aws",    "service": "ec2",       "installed": True, "active": False},
+    "gcp_compute":   {"id": "cloudlearn.runtime.gcp.compute", "name": "Compute Engine Runtime Bundle",   "kind": "vm",       "provider": "gcp",    "service": "compute",   "installed": True, "active": False},
+    "azure_vm":      {"id": "cloudlearn.runtime.azure.vm",    "name": "Azure VM Runtime Bundle",         "kind": "vm",       "provider": "azure",  "service": "vm",        "installed": True, "active": False},
+    "lambda":        {"id": "cloudlearn.runtime.lambda",      "name": "Lambda Runtime Bundle",           "kind": "function", "provider": "aws",    "service": "lambda",    "installed": True, "active": False},
+    "gcp_functions": {"id": "cloudlearn.runtime.gcp.functions","name": "Cloud Functions Runtime Bundle", "kind": "function", "provider": "gcp",    "service": "functions", "installed": True, "active": False},
+    "rds":           {"id": "cloudlearn.runtime.rds",         "name": "RDS Runtime Bundle",              "kind": "database", "provider": "aws",    "service": "rds",       "installed": True, "active": False},
+    "gcp_sql":       {"id": "cloudlearn.runtime.gcp.sql",     "name": "Cloud SQL Runtime Bundle",        "kind": "database", "provider": "gcp",    "service": "sql",       "installed": True, "active": False},
+}
+
+
 def _default_state() -> dict:
     return {
         "schema_version": STATE_VERSION,
@@ -2270,15 +2521,7 @@ def _default_state() -> dict:
             "events": [],
         },
         "runtime": {
-            "bundles": {
-                "python": {"id": "cloudlearn.runtime.python", "name": "Python Runtime", "kind": "language", "provider": "shared", "service": "python", "installed": True, "active": False},
-                "ec2": {"id": "cloudlearn.runtime.ec2", "name": "EC2 Runtime Bundle", "kind": "vm", "provider": "aws", "service": "ec2", "installed": True, "active": False},
-                "gcp_compute": {"id": "cloudlearn.runtime.gcp.compute", "name": "Compute Engine Runtime Bundle", "kind": "vm", "provider": "gcp", "service": "compute", "installed": True, "active": False},
-                "lambda": {"id": "cloudlearn.runtime.lambda", "name": "Lambda Runtime Bundle", "kind": "function", "provider": "aws", "service": "lambda", "installed": True, "active": False},
-                "gcp_functions": {"id": "cloudlearn.runtime.gcp.functions", "name": "Cloud Functions Runtime Bundle", "kind": "function", "provider": "gcp", "service": "functions", "installed": True, "active": False},
-                "rds": {"id": "cloudlearn.runtime.rds", "name": "RDS Runtime Bundle", "kind": "database", "provider": "aws", "service": "rds", "installed": True, "active": False},
-                "gcp_sql": {"id": "cloudlearn.runtime.gcp.sql", "name": "Cloud SQL Runtime Bundle", "kind": "database", "provider": "gcp", "service": "sql", "installed": True, "active": False},
-            },
+            "bundles": copy.deepcopy(_DEFAULT_RUNTIME_BUNDLES),
             "lxd": {"status": "missing", "message": "", "mode": "auto", "last_checked": ""},
             "multipass": {"status": "missing", "message": "", "mode": "auto", "last_checked": ""},
         },
@@ -2374,17 +2617,7 @@ def _migrate_state(state: dict) -> dict:
             inst["console_state"] = {"cwd": str((INSTANCE_WORK_ROOT / instance_id).resolve())}
     runtime = state.setdefault(
         "runtime",
-        {
-            "bundles": {
-                "python": {"id": "cloudlearn.runtime.python", "name": "Python Runtime", "kind": "language", "provider": "shared", "service": "python", "installed": True, "active": False},
-                "ec2": {"id": "cloudlearn.runtime.ec2", "name": "EC2 Runtime Bundle", "kind": "vm", "provider": "aws", "service": "ec2", "installed": True, "active": False},
-                "gcp_compute": {"id": "cloudlearn.runtime.gcp.compute", "name": "Compute Engine Runtime Bundle", "kind": "vm", "provider": "gcp", "service": "compute", "installed": True, "active": False},
-                "lambda": {"id": "cloudlearn.runtime.lambda", "name": "Lambda Runtime Bundle", "kind": "function", "provider": "aws", "service": "lambda", "installed": True, "active": False},
-                "gcp_functions": {"id": "cloudlearn.runtime.gcp.functions", "name": "Cloud Functions Runtime Bundle", "kind": "function", "provider": "gcp", "service": "functions", "installed": True, "active": False},
-                "rds": {"id": "cloudlearn.runtime.rds", "name": "RDS Runtime Bundle", "kind": "database", "provider": "aws", "service": "rds", "installed": True, "active": False},
-                "gcp_sql": {"id": "cloudlearn.runtime.gcp.sql", "name": "Cloud SQL Runtime Bundle", "kind": "database", "provider": "gcp", "service": "sql", "installed": True, "active": False},
-            }
-        },
+        {"bundles": copy.deepcopy(_DEFAULT_RUNTIME_BUNDLES)},
     )
     runtime.setdefault("lxd", {"status": "missing", "message": "", "mode": "auto", "last_checked": ""})
     runtime.setdefault("multipass", {"status": "missing", "message": "", "mode": "auto", "last_checked": ""})
@@ -2650,17 +2883,11 @@ def _cloudsim_active_space_ref() -> dict | None:
 
 
 def _cloudsim_runtime_bundle_catalog() -> dict[str, dict]:
+    """Return the runtime bundle catalog — single source of truth in
+    ``_DEFAULT_RUNTIME_BUNDLES``. Idempotently merges any missing defaults
+    into the on-disk runtime_state without overwriting user-edited fields."""
     bundles = runtime_state.setdefault("bundles", {})
-    defaults = {
-        "python": {"id": "cloudlearn.runtime.python", "name": "Python Runtime", "kind": "language", "provider": "shared", "service": "python", "installed": True, "active": False},
-        "ec2": {"id": "cloudlearn.runtime.ec2", "name": "EC2 Runtime Bundle", "kind": "vm", "provider": "aws", "service": "ec2", "installed": True, "active": False},
-        "gcp_compute": {"id": "cloudlearn.runtime.gcp.compute", "name": "Compute Engine Runtime Bundle", "kind": "vm", "provider": "gcp", "service": "compute", "installed": True, "active": False},
-        "lambda": {"id": "cloudlearn.runtime.lambda", "name": "Lambda Runtime Bundle", "kind": "function", "provider": "aws", "service": "lambda", "installed": True, "active": False},
-        "gcp_functions": {"id": "cloudlearn.runtime.gcp.functions", "name": "Cloud Functions Runtime Bundle", "kind": "function", "provider": "gcp", "service": "functions", "installed": True, "active": False},
-        "rds": {"id": "cloudlearn.runtime.rds", "name": "RDS Runtime Bundle", "kind": "database", "provider": "aws", "service": "rds", "installed": True, "active": False},
-        "gcp_sql": {"id": "cloudlearn.runtime.gcp.sql", "name": "Cloud SQL Runtime Bundle", "kind": "database", "provider": "gcp", "service": "sql", "installed": True, "active": False},
-    }
-    for key, bundle in defaults.items():
+    for key, bundle in _DEFAULT_RUNTIME_BUNDLES.items():
         bundles.setdefault(key, copy.deepcopy(bundle))
     return bundles
 
@@ -2705,6 +2932,118 @@ def _cloudsim_sync_ec2_resource(instance: dict, action: str = "upsert") -> None:
             PLATFORM.delete_resource("ec2", resource_id, region=region)
         else:
             PLATFORM.create_resource("ec2", "instance", resource_id, payload, region=region)
+    except Exception:
+        pass
+
+
+def _cloudsim_sync_gcp_compute_resource(instance: dict, action: str = "upsert") -> None:
+    """CloudSim sync for GCP Compute Engine instances (parity with EC2 + Azure VM).
+
+    GCP Compute VMs were previously visible to CloudSim only via the bulk
+    ``_aggregate_vm_shapes`` walker — that aggregates shapes at reconcile time
+    but doesn't reflect per-resource events (start/stop/delete) incrementally.
+    This function mirrors ``_cloudsim_sync_ec2_resource`` so per-VM lifecycle
+    events push to the same resource_graph the AWS+Azure paths use.
+    """
+    if not isinstance(instance, dict):
+        return
+    resource_id = str(instance.get("instance_id") or instance.get("id") or instance.get("name") or "").strip()
+    if not resource_id:
+        return
+    zone = str(instance.get("zone") or instance.get("active_zone") or "us-central1-a").strip() or "us-central1-a"
+    # Region is derived from zone (e.g. "us-central1-a" → "us-central1").
+    region = zone.rsplit("-", 1)[0] if "-" in zone else zone
+    bundle = _cloudsim_runtime_bundle("gcp_compute")
+    payload = {
+        "name": instance.get("name") or resource_id,
+        "instance_type": instance.get("machine_type") or instance.get("machineType", ""),
+        "ami": instance.get("source_image") or instance.get("sourceImage", ""),
+        "ami_name": instance.get("ami_name", ""),
+        "state": instance.get("status") or instance.get("state", ""),
+        "launch_status": instance.get("launch_status", ""),
+        "runtime_backend": instance.get("runtime_backend", ""),
+        "runtime_bundle_id": bundle.get("id", ""),
+        "runtime_bundle_name": bundle.get("name", ""),
+        "runtime_bundle_kind": bundle.get("kind", ""),
+        "runtime_bundle_provider": bundle.get("provider", ""),
+        "runtime_bundle_service": bundle.get("service", ""),
+        "console_backend": instance.get("console_backend", ""),
+        "endpoint_url": instance.get("endpoint_url", ""),
+        "private_ip": instance.get("private_ip", ""),
+        "public_ip": instance.get("public_ip", ""),
+        "workspace": instance.get("workspace", ""),
+        "updated_at": instance.get("updated_at") or instance.get("created") or _now(),
+    }
+    try:
+        if action == "delete":
+            PLATFORM.delete_resource("gcp_compute", resource_id, region=region)
+        else:
+            PLATFORM.create_resource("gcp_compute", "instance", resource_id, payload, region=region)
+    except Exception:
+        pass
+
+
+def _cloudsim_sync_azure_vm_resource(record: dict, action: str = "upsert") -> None:
+    """CloudSim sync for Azure Microsoft.Compute/virtualMachines (parity with
+    _cloudsim_sync_ec2_resource). Azure VMs are LXD-backed identically to EC2
+    and GCE; without this hook, Azure VMs were invisible to CloudSim Plus —
+    the per-space cloudsim summary showed 0 VMs even when 10 were running.
+
+    Pulls fields from the ARM record shape:
+      record["id"]                                  → resource ID (ARM path)
+      record["name"]                                → VM name
+      record["location"]                            → region
+      record["properties"]["hardwareProfile"]["vmSize"] → instance type
+      record["properties"]["runtime"]["containerName"]  → LXD container name
+      record["properties"]["runtime"]["backend"]        → 'lxd' | 'multipass'
+    """
+    if not isinstance(record, dict):
+        return
+    resource_id = str(record.get("id") or record.get("name") or "").strip()
+    if not resource_id:
+        return
+    region = str(record.get("location") or record.get("region") or "eastus").strip() or "eastus"
+    props = record.get("properties") if isinstance(record.get("properties"), dict) else {}
+    hw = props.get("hardwareProfile") if isinstance(props.get("hardwareProfile"), dict) else {}
+    runtime = props.get("runtime") if isinstance(props.get("runtime"), dict) else {}
+    instance_view = props.get("instanceView") if isinstance(props.get("instanceView"), dict) else {}
+
+    bundle = _cloudsim_runtime_bundle("azure_vm")
+    # Power state: PowerState/running, /deallocated, etc. → simple state string.
+    power_state = ""
+    statuses = instance_view.get("statuses") if isinstance(instance_view, dict) else []
+    if isinstance(statuses, list):
+        for s in statuses:
+            code = str(s.get("code", "")) if isinstance(s, dict) else ""
+            if code.startswith("PowerState/"):
+                power_state = code.split("/", 1)[1]
+                break
+
+    payload = {
+        "name": record.get("name") or resource_id,
+        "instance_type": hw.get("vmSize", ""),
+        "ami": props.get("storageProfile", {}).get("imageReference", {}).get("offer", "") if isinstance(props.get("storageProfile"), dict) else "",
+        "ami_name": props.get("storageProfile", {}).get("imageReference", {}).get("sku", "") if isinstance(props.get("storageProfile"), dict) else "",
+        "state": power_state or str(props.get("provisioningState", "")).lower(),
+        "launch_status": str(props.get("provisioningState", "")),
+        "runtime_backend": runtime.get("backend", ""),
+        "runtime_bundle_id": bundle.get("id", ""),
+        "runtime_bundle_name": bundle.get("name", ""),
+        "runtime_bundle_kind": bundle.get("kind", ""),
+        "runtime_bundle_provider": bundle.get("provider", ""),
+        "runtime_bundle_service": bundle.get("service", ""),
+        "console_backend": runtime.get("backend", ""),
+        "endpoint_url": runtime.get("endpointUrl", ""),
+        "private_ip": runtime.get("privateIp", ""),
+        "public_ip": runtime.get("publicIp", ""),
+        "workspace": runtime.get("containerName", ""),
+        "updated_at": _now(),
+    }
+    try:
+        if action == "delete":
+            PLATFORM.delete_resource("azure_vm", resource_id, region=region)
+        else:
+            PLATFORM.create_resource("azure_vm", "instance", resource_id, payload, region=region)
     except Exception:
         pass
 
@@ -5905,17 +6244,7 @@ sqs_state = _SpaceScopedDictProxy("sqs", lambda: {"queues": {}, "events": []})
 ddb_state = _SpaceScopedDictProxy("dynamodb", lambda: {"tables": {}, "events": []})
 runtime_state = STATE.setdefault(
     "runtime",
-    {
-        "bundles": {
-            "python": {"id": "cloudlearn.runtime.python", "name": "Python Runtime", "kind": "language", "provider": "shared", "service": "python", "installed": True, "active": False},
-            "ec2": {"id": "cloudlearn.runtime.ec2", "name": "EC2 Runtime Bundle", "kind": "vm", "provider": "aws", "service": "ec2", "installed": True, "active": False},
-            "gcp_compute": {"id": "cloudlearn.runtime.gcp.compute", "name": "Compute Engine Runtime Bundle", "kind": "vm", "provider": "gcp", "service": "compute", "installed": True, "active": False},
-            "lambda": {"id": "cloudlearn.runtime.lambda", "name": "Lambda Runtime Bundle", "kind": "function", "provider": "aws", "service": "lambda", "installed": True, "active": False},
-            "gcp_functions": {"id": "cloudlearn.runtime.gcp.functions", "name": "Cloud Functions Runtime Bundle", "kind": "function", "provider": "gcp", "service": "functions", "installed": True, "active": False},
-            "rds": {"id": "cloudlearn.runtime.rds", "name": "RDS Runtime Bundle", "kind": "database", "provider": "aws", "service": "rds", "installed": True, "active": False},
-            "gcp_sql": {"id": "cloudlearn.runtime.gcp.sql", "name": "Cloud SQL Runtime Bundle", "kind": "database", "provider": "gcp", "service": "sql", "installed": True, "active": False},
-        }
-    },
+    {"bundles": copy.deepcopy(_DEFAULT_RUNTIME_BUNDLES)},
 )
 runtime_state.setdefault("lxd", {"status": "missing", "message": "", "mode": "auto", "last_checked": ""})
 github_state = STATE.setdefault("github", {"connections": {}, "repos": {}, "deployments": {}})
@@ -6407,7 +6736,7 @@ def _delete_marker_response(resource: str, last_modified: str, status: int = 405
         status=status,
         extra_headers={
             "x-amz-delete-marker": "true",
-            "Last-Modified": last_modified,
+            "Last-Modified": _iso_to_http_date(last_modified),
         },
     )
 
@@ -6568,6 +6897,18 @@ def _s3_write_object_version(
         versions.insert(0, version)
     entry["versions"] = [copy.deepcopy(v) for v in versions]
     _s3_refresh_object_entry(entry)
+    # MVP P0: write-through to MinIO so real bytes land on disk in the
+    # cloudlearn-minio container. Best-effort; never breaks the S3 surface.
+    try:
+        if not version.get("is_delete_marker") and version.get("data") is not None:
+            from core import minio_mirror as _mm
+            _mm.put_object(
+                bucket, key, version["data"],
+                content_type=version.get("content_type", "application/octet-stream"),
+                metadata=version.get("metadata"),
+            )
+    except Exception:
+        pass
     if event_name:
         _s3_emit_event(bucket, key, event_name, entry.get("versions", [version])[0] if entry.get("versions") else version, source=source)
     return entry
@@ -10206,7 +10547,7 @@ def api_list_provider_packs(provider: str):
 @app.get("/api/providers/{provider}/matrix")
 def api_provider_matrix(provider: str):
     provider_key = normalize_provider_key(provider)
-    if provider_key in {"aws", "gcp"}:
+    if provider_key in {"aws", "gcp", "azure"}:
         matrix = provider_capabilities(provider_key)
     else:
         provider_payload = get_provider(provider_key)
@@ -10316,6 +10657,43 @@ def api_provider_gcp_sdk_java_snippet():
 @app.get("/api/providers/gcp/sdk/go/snippet")
 def api_provider_gcp_sdk_go_snippet():
     return gcp_sdk_go_snippet()
+
+
+# Azure tooling routes — pack-architecture parity with AWS+GCP (2026-06-01).
+# providers/azure.tool_response and core.tooling_simulators.az_cli_resolve
+# back the SPA's Tools tab + ``az`` command resolver.
+@app.get("/api/providers/azure/cli")
+def api_provider_azure_cli():
+    from providers import azure_tool_response
+    return azure_tool_response("cli")
+
+
+@app.get("/api/providers/azure/sdk/java")
+def api_provider_azure_sdk_java():
+    from providers import azure_tool_response
+    return azure_tool_response("sdk/java")
+
+
+@app.get("/api/providers/azure/sdk/go")
+def api_provider_azure_sdk_go():
+    from providers import azure_tool_response
+    return azure_tool_response("sdk/go")
+
+
+@app.post("/api/providers/azure/cli/resolve")
+def api_provider_azure_cli_resolve(payload: dict[str, Any]):
+    from core.tooling_simulators import az_cli_resolve
+    return az_cli_resolve(str(payload.get("command", "")))
+
+
+@app.get("/api/providers/azure/sdk/java/snippet")
+def api_provider_azure_sdk_java_snippet():
+    return sdk_snippet("azure", "java")
+
+
+@app.get("/api/providers/azure/sdk/go/snippet")
+def api_provider_azure_sdk_go_snippet():
+    return sdk_snippet("azure", "go")
 
 
 @app.get("/api/packs/{pack_id}/fragment")
@@ -11885,6 +12263,10 @@ async def api_gcp_compute_create_instance(project: str, zone: str, request: Requ
     instance["runtime_bundle_name"] = _cloudsim_runtime_bundle("gcp_compute").get("name", "")
     instance["runtime_bundle_kind"] = _cloudsim_runtime_bundle("gcp_compute").get("kind", "")
     gcp_compute_state["instances"][instance["instance_id"]] = instance
+    # P2-B: push the new GCE instance into CloudSim's resource_graph (parity
+    # with EC2 + Azure VM). The aggregator still walks service_states for VM
+    # shapes; this just makes per-resource events visible incrementally.
+    _cloudsim_sync_gcp_compute_resource(instance, "upsert")
     disk_specs = instance.get("requested_disks") if isinstance(instance.get("requested_disks"), list) else []
     attached_disk_names: list[str] = []
     if not disk_specs:
@@ -12065,6 +12447,8 @@ def api_gcp_compute_delete_instance(project: str, zone: str, instance: str):
     instance["attached_disk_names"] = []
     instance["instance_groups"] = []
     _gcp_compute_sync_resource_links()
+    # P2-B: remove from CloudSim's resource_graph (parity with EC2 + Azure VM).
+    _cloudsim_sync_gcp_compute_resource(instance, "delete")
     _record_usage("gcp.compute.delete_instance", {"instance_id": instance.get("instance_id", ""), "project": project, "zone": zone})
     return _gcp_compute_operation_json(instance, "delete", "DONE")
 
@@ -17753,7 +18137,20 @@ async def _sqs_json_dispatch(request: Request, action: str) -> Response:
 
 
 async def api_sqs_query(request: Request):
+    # MVP P0: route legacy query-protocol SQS to ElasticMQ for real-broker
+    # semantics (FIFO, visibility timeout, persistence). Modern JSON-RPC
+    # (X-Amz-Target=AmazonSQS.*) stays on the in-memory handler because
+    # elasticmq-native only speaks the query protocol; translating XML
+    # responses to JSON for boto3 was deemed too lossy for MVP.
     target = request.headers.get("x-amz-target", "") or ""
+    if not target:
+        try:
+            from core import elasticmq_proxy as _emq
+            status, body, ctype = await _emq.proxy(request)
+            if status != 502:
+                return Response(content=body, status_code=status, media_type=ctype)
+        except Exception:
+            pass
     if target:
         return await _sqs_json_dispatch(request, target.split(".")[-1].strip())
     params = await _ec2_query_params(request)
@@ -18346,6 +18743,16 @@ def _ddb_error_response(code: str, message: str, status: int = 400) -> Response:
 @app.api_route("/api/dynamodb/aws", methods=["POST"], include_in_schema=False)
 @app.api_route("/dynamodb", methods=["POST"], include_in_schema=False)
 async def api_dynamodb_aws(request: Request):
+    # MVP P0: proxy to amazon/dynamodb-local for real DDB semantics (PartiQL,
+    # secondary indexes, Streams, etc.). Fall back to the legacy in-memory
+    # handler if DDB Local is unreachable so the simulator stays self-contained.
+    try:
+        from core import dynamodb_proxy as _ddbp
+        status, body, ctype = await _ddbp.proxy(request)
+        if status != 502:
+            return Response(content=body, status_code=status, media_type=ctype)
+    except Exception:
+        pass
     return await provider_aws_services._ddb_api_aws(request)
 
 
@@ -18949,6 +19356,15 @@ def _aws_query_target_service(request: Request) -> str:
     target = request.headers.get("x-amz-target", "") or ""
     if "dynamodb" in target.lower():
         return "dynamodb"
+    # KMS uses TrentService.* targets (the historical KMS service name).
+    if target.startswith("TrentService."):
+        return "kms"
+    # Secrets Manager uses secretsmanager.* targets.
+    if target.startswith("secretsmanager."):
+        return "secretsmanager"
+    # EventBridge uses AWSEvents.* targets.
+    if target.startswith("AWSEvents."):
+        return "events"
     return ""
 
 
@@ -19138,6 +19554,35 @@ async def aws_query_root(request: Request) -> Response:
         return await api_iam_query(request)
     if service == "sts":
         return await api_sts_query(request)
+    if service in ("kms", "secretsmanager", "events"):
+        # Backend-backed services. The X-Amz-Target prefix maps to one of the
+        # dispatchers registered in _aws_xamz_dispatchers by vault_routes /
+        # nats_routes / ... at module load time. We never break the control
+        # plane — Vault/NATS down → 500 InternalFailure.
+        target = request.headers.get("x-amz-target", "")
+        prefix = target.split(".", 1)[0] if "." in target else ""
+        dispatch = _aws_xamz_dispatchers.get(prefix)
+        if dispatch is None:
+            return Response(
+                content=json.dumps({"__type": "InvalidAction", "message": f"No dispatcher for X-Amz-Target prefix {prefix!r}"}),
+                status_code=400, media_type="application/x-amz-json-1.1",
+            )
+        body_raw = await request.body()
+        try:
+            body = json.loads(body_raw or b"{}")
+        except Exception:
+            body = {}
+        spaces_state = PLATFORM.kernel.state.setdefault(
+            "spaces", {"spaces": {}, "active_space_id": "", "settings": {}}
+        )
+        space = spaces_state.get("active_space_id", "default")
+        resp = await dispatch(target, body, space)
+        if resp is None:
+            return Response(
+                content=json.dumps({"__type": "InternalFailure", "message": f"{service}/{target} unhandled or backend unavailable"}),
+                status_code=500, media_type="application/x-amz-json-1.1",
+            )
+        return Response(content=json.dumps(resp), media_type="application/x-amz-json-1.1")
     params = await _ec2_query_params(request)
     action = str(params.get("Action", "")).strip()
     return _error_xml("InvalidAction", f"Root dispatch could not route service={service or 'unknown'!r} action={action or 'unknown'!r}.", "/", 400)
@@ -19489,7 +19934,7 @@ async def s3_head_object(bucket: str, key: str, request: Request) -> Response:
         "Content-Length": str(obj["size"]),
         "Content-Type": obj["content_type"],
         "ETag": obj["etag"],
-        "Last-Modified": obj["last_modified"],
+        "Last-Modified": _iso_to_http_date(obj["last_modified"]),
         "x-amz-storage-class": obj.get("storage_class", "STANDARD"),
         "x-amz-version-id": obj.get("version_id", "null"),
     }
@@ -19713,7 +20158,7 @@ async def s3_get_object(bucket: str, key: str, request: Request) -> Response:
     headers = {
         "Content-Type": obj["content_type"],
         "ETag": obj["etag"],
-        "Last-Modified": obj["last_modified"],
+        "Last-Modified": _iso_to_http_date(obj["last_modified"]),
         "Content-Length": str(len(data)),
         "x-amz-storage-class": obj.get("storage_class", "STANDARD"),
         "x-amz-version-id": obj.get("version_id", "null"),

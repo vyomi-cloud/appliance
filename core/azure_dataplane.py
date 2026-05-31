@@ -203,6 +203,9 @@ def on_create(full_type: str, rec: dict, base: str) -> None:
         try:
             import server as _srv
             _srv.provision_azure_vm_runtime(rec)
+            # MVP P0-2: push the Azure VM into CloudSim Plus so the per-space
+            # cloudsim summary reflects Azure compute (parity with EC2 + GCE).
+            _srv._cloudsim_sync_azure_vm_resource(rec, "upsert")
         except Exception:
             pass
         return
@@ -237,6 +240,8 @@ def on_delete(full_type: str, rec: dict) -> None:
         try:
             import server as _srv
             _srv.deprovision_azure_vm_runtime(rec)
+            # MVP P0-2: clean up the CloudSim Plus VM record.
+            _srv._cloudsim_sync_azure_vm_resource(rec, "delete")
         except Exception:
             pass
         return

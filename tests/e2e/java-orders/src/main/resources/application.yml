@@ -1,0 +1,36 @@
+# java-orders configuration. Defaults point at the CloudLearn simulator on the
+# appliance VM; override via env vars to retarget.
+#
+# All AWS_* envs are picked up by AwsConfig.java which builds endpointOverride
+# clients. SECRET_NAME / KMS_KEY_ID / BUCKET / QUEUE_URL are app-specific.
+
+server:
+  port: ${APP_PORT:8080}
+
+cloudlearn:
+  endpoint: ${AWS_ENDPOINT_URL:http://192.168.252.7:9000}
+  region: us-east-1
+  access-key: test
+  secret-key: test
+
+  # Resource names the app expects to exist (created by console-pass or api-pass).
+  secret-name: ${SECRET_NAME:prod/orders/db}
+  kms-key-id: ${KMS_KEY_ID:alias/orders-cc-key}
+  bucket: ${BUCKET:orders-receipts}
+  queue-name: ${QUEUE_NAME:orders-processing-queue}
+  event-bus: ${EVENT_BUS:default}
+  iam-role: ${IAM_ROLE:orders-app-role}
+
+# Real Postgres (RDS analog) — wired in DataConfig from secrets-manager fetch.
+spring:
+  datasource:
+    # url + username are set programmatically once Secrets Manager returns the value.
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 5000
+
+logging:
+  level:
+    cloudlearn.orders: DEBUG
+    software.amazon.awssdk: WARN

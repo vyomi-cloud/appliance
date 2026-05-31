@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    java-orders: a real Spring Boot 3 / Java 17 web app that exercises the
+    FULL AWS surface of the CloudLearn simulator end-to-end.
+
+    Wires (all unmodified AWS SDK v2 clients):
+      RDS Postgres        - orders + line_items tables
+      S3                  - receipt PDF storage (real bytes via MinIO mirror)
+      SQS                 - async OrderProcessing worker queue (legacy query → ElasticMQ)
+      EventBridge         - OrderCreated / OrderShipped events (→ NATS)
+      Secrets Manager     - DB password loaded at startup (→ Vault)
+      KMS                 - encrypts credit card field before insert (→ Vault transit)
+      IAM                 - the app assumes role 'orders-app-role' at boot
+      EC2 (host)          - the deployed app runs in an LXD container
+
+    Two e2e validation passes:
+      1. Console pass    — Playwright drives /console/aws to provision the 8
+                           resources, deploys the app, hits its endpoints.
+      2. API pass        — JUnit test (src/test/) uses aws-sdk-java-v2 directly
+                           to provision, then hits the running app.
+  -->
+
+  <groupId>cloudlearn</groupId>
+  <artifactId>java-orders</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+  <name>java-orders</name>
+  <description>Reference web app exercising AWS surface end-to-end</description>
+
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <spring-boot.version>3.2.5</spring-boot.version>
+    <aws.sdk.version>2.27.0</aws.sdk.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>${aws.sdk.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!-- Spring Boot web + JDBC -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+    </dependency>
+
+    <!-- AWS SDK v2 — one client per service -->
+    <dependency><groupId>software.amazon.awssdk</groupId><artifactId>s3</artifactId></dependency>
+    <dependency><groupId>software.amazon.awssdk</groupId><artifactId>sqs</artifactId></dependency>
+    <dependency><groupId>software.amazon.awssdk</groupId><artifactId>secretsmanager</artifactId></dependency>
+    <dependency><groupId>software.amazon.awssdk</groupId><artifactId>kms</artifactId></dependency>
+    <dependency><groupId>software.amazon.awssdk</groupId><artifactId>eventbridge</artifactId></dependency>
+    <dependency><groupId>software.amazon.awssdk</groupId><artifactId>iam</artifactId></dependency>
+    <dependency><groupId>software.amazon.awssdk</groupId><artifactId>sts</artifactId></dependency>
+
+    <!-- Test scope: real JUnit5 API-pass test against the simulator -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <version>${spring-boot.version}</version>
+        <executions>
+          <execution>
+            <goals><goal>repackage</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
