@@ -1,0 +1,235 @@
+name: Release
+
+# On every v*.*.* tag (or manual dispatch):
+#   1. Build source tarball + per-PM packages (.deb, .rpm, brew formula update)
+#   2. Publish GitHub Release with all artifacts attached
+#   3. Trigger downstream package-manager publishes (brew tap, snap store,
+#      docker-publish.yml, winget, chocolatey)
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version: {description: "Version (e.g. 1.0.0)", required: true}
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # ── source tarball + deb + rpm ──────────────────────────────────────────
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tarball_sha256: ${{ steps.shas.outputs.tarball_sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.14"}
+      - uses: ruby/setup-ruby@v1
+        with: {ruby-version: '3.3'}
+
+      - name: Install fpm (for .deb + .rpm)
+        run: gem install --no-document fpm
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VER="${{ github.event.inputs.version }}"
+          else
+            VER="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "$VER" > VERSION
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Build source tarball
+        run: |
+          mkdir -p dist
+          tar czf "dist/cloud-learn-${{ steps.ver.outputs.version }}.tar.gz" \
+            --exclude='.git' --exclude='__pycache__' --exclude='node_modules' \
+            --exclude='dist' --exclude='**/target' --exclude='**/playwright-report' \
+            --transform "s,^,cloud-learn-${{ steps.ver.outputs.version }}/," \
+            core providers packs server.py static requirements.txt VERSION \
+            Dockerfile docker-compose.yml docker-compose.appliance.yml \
+            .env.example packaging scripts docs \
+            README.md CHANGELOG.md LICENSE
+
+      - name: Build .deb
+        run: bash packaging/debian/build-deb.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Build .rpm via fpm (canonical .spec is in packaging/rpm/)
+        run: |
+          STAGE="$(mktemp -d)"
+          mkdir -p "$STAGE/usr/lib/cloud-learn" "$STAGE/usr/bin" "$STAGE/usr/share/doc/cloud-learn"
+          cp -r core providers packs static scripts \
+                server.py requirements.txt VERSION Dockerfile \
+                docker-compose.yml docker-compose.appliance.yml .env.example \
+                "$STAGE/usr/lib/cloud-learn/"
+          cat > "$STAGE/usr/bin/cloud-learn" <<'EOF'
+          #!/usr/bin/env bash
+          export CLOUD_LEARN_HOME="${CLOUD_LEARN_HOME:-/usr/lib/cloud-learn}"
+          export CLOUDLEARN_DISTRIBUTION_MODE="${CLOUDLEARN_DISTRIBUTION_MODE:-appliance}"
+          exec bash "$CLOUD_LEARN_HOME/scripts/cloud-learn" "$@"
+          EOF
+          chmod 0755 "$STAGE/usr/bin/cloud-learn"
+          cp README.md LICENSE CHANGELOG.md "$STAGE/usr/share/doc/cloud-learn/"
+          fpm -s dir -t rpm \
+            -n cloud-learn -v "${{ steps.ver.outputs.version }}" \
+            --license MIT --architecture noarch \
+            --maintainer "CloudLearn <support@cloudlearn.io>" \
+            --url "https://github.com/cloudlearn/cloud-learn" \
+            --description "Local multi-cloud simulator (AWS/GCP/Azure) with real backends" \
+            --depends bash --depends curl \
+            --chdir "$STAGE" \
+            --package "dist/cloud-learn-${{ steps.ver.outputs.version }}-1.noarch.rpm" \
+            .
+
+      - name: Compute SHA256 of source tarball (for Homebrew + winget bump)
+        id: shas
+        run: |
+          TARBALL_SHA="$(sha256sum dist/cloud-learn-${{ steps.ver.outputs.version }}.tar.gz | awk '{print $1}')"
+          echo "tarball_sha256=$TARBALL_SHA" >> "$GITHUB_OUTPUT"
+          echo "Tarball SHA256: $TARBALL_SHA"
+          # Also compute SHAs for .deb + .rpm so downstream PMs can pin them
+          for f in dist/*; do
+            sha256sum "$f"
+          done > dist/SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist/
+          retention-days: 30
+
+  # ── GitHub Release ──────────────────────────────────────────────────────
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions: {contents: write}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {name: release-artifacts, path: dist}
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          # Extract the section between ## [<version>] and the next ## header
+          VER="${{ needs.build.outputs.version }}"
+          awk -v v="$VER" '
+            /^## \[/ {
+              if (in_section) exit
+              if ($0 ~ "^## \\[" v "\\]") { in_section=1; next }
+            }
+            in_section { print }
+          ' CHANGELOG.md > /tmp/changelog-section.md || true
+          [ -s /tmp/changelog-section.md ] || echo "See CHANGELOG.md" > /tmp/changelog-section.md
+          {
+            echo 'body<<EOF'
+            cat /tmp/changelog-section.md
+            echo
+            echo "---"
+            echo "## Artifacts"
+            echo
+            ls dist | sed 's/^/- /'
+            echo
+            echo "**SHA256 checksums:** see \`SHA256SUMS\` in attached artifacts."
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build.outputs.version }}
+          name: CloudLearn v${{ needs.build.outputs.version }}
+          body: ${{ steps.changelog.outputs.body }}
+          files: dist/*
+
+  # ── Brew tap auto-bump ──────────────────────────────────────────────────
+  # Bumps cloud-learn.rb in the cloudlearn/homebrew-tap repo with the new
+  # url + sha256. Requires HOMEBREW_TAP_TOKEN secret (PAT with `contents:write`
+  # on cloudlearn/homebrew-tap).
+  brew-bump:
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+    steps:
+      - name: Checkout tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: cloudlearn/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Bump formula
+        run: |
+          VER="${{ needs.build.outputs.version }}"
+          SHA="${{ needs.build.outputs.tarball_sha256 }}"
+          F=tap/Formula/cloud-learn.rb
+          sed -i.bak \
+            -e "s|url \".*\"|url \"https://github.com/cloudlearn/cloud-learn/archive/refs/tags/v${VER}.tar.gz\"|" \
+            -e "s|sha256 \".*\"|sha256 \"${SHA}\"|" \
+            -e "s|version \".*\"|version \"${VER}\"|" \
+            "$F"
+          cd tap
+          git config user.email "bot@cloudlearn.io"
+          git config user.name  "CloudLearn Release Bot"
+          git add Formula/cloud-learn.rb
+          git commit -m "cloud-learn ${VER}"
+          git push
+
+  # ── Snap Store publish ──────────────────────────────────────────────────
+  # Requires SNAPCRAFT_STORE_CREDENTIALS secret (`snapcraft export-login`).
+  snap-publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: snapcore/action-build@v1
+        id: build-snap
+        with: {path: packaging/snap}
+      - uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.build-snap.outputs.snap }}
+          release: stable
+
+  # ── Winget submission ───────────────────────────────────────────────────
+  # Opens a PR to microsoft/winget-pkgs with the new version manifest.
+  # Requires WINGET_TOKEN secret (PAT with `public_repo` scope).
+  winget-submit:
+    needs: build
+    runs-on: windows-latest
+    if: ${{ secrets.WINGET_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: vedantmgoyal2009/winget-releaser@v2
+        with:
+          identifier: CloudLearn.CloudLearn
+          version: ${{ needs.build.outputs.version }}
+          installers-regex: '\.msi$'
+          token: ${{ secrets.WINGET_TOKEN }}
+
+  # ── Chocolatey publish ──────────────────────────────────────────────────
+  # Requires CHOCOLATEY_API_KEY secret.
+  choco-publish:
+    needs: build
+    runs-on: windows-latest
+    if: ${{ secrets.CHOCOLATEY_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update nuspec version
+        shell: pwsh
+        run: |
+          $ver = "${{ needs.build.outputs.version }}"
+          (Get-Content packaging/chocolatey/cloud-learn.nuspec) `
+            -replace '<version>.*</version>', "<version>$ver</version>" `
+            | Set-Content packaging/chocolatey/cloud-learn.nuspec
+      - name: Pack
+        run: choco pack packaging/chocolatey/cloud-learn.nuspec --outputdirectory dist
+      - name: Push
+        run: choco push dist/cloud-learn.${{ needs.build.outputs.version }}.nupkg --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}

@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+"""cloudlearn-tier — CLI for the CloudLearn tier API.
+
+Subcommands:
+    status                 — print active tier + license + days until expiry
+    list                   — show all 4 tiers side-by-side as a table
+    signup [opts]          — activate a tier (interactive primary-cloud / seats picker)
+    switch-cloud <cloud>   — Student-only: change primary cloud (1/year limit)
+
+Examples:
+    cloudlearn-tier status
+    cloudlearn-tier list
+    cloudlearn-tier signup --tier free
+    cloudlearn-tier signup --tier student --primary-cloud aws --period annual
+    cloudlearn-tier signup --tier enterprise --seats 10
+    cloudlearn-tier signup            # fully interactive
+
+ENDPOINT env var or --endpoint flag picks the simulator URL.
+Default: http://192.168.252.7:9000 (the appliance VM).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+
+DEFAULT_ENDPOINT = os.environ.get("ENDPOINT", "http://192.168.252.7:9000")
+
+# ANSI styling — disabled when stdout isn't a tty (e.g. piped to a file).
+_TTY = sys.stdout.isatty()
+def _c(text, code):
+    if not _TTY:
+        return text
+    return f"\033[{code}m{text}\033[0m"
+def _bold(t):  return _c(t, "1")
+def _dim(t):   return _c(t, "2")
+def _green(t): return _c(t, "32")
+def _yellow(t):return _c(t, "33")
+def _blue(t):  return _c(t, "34")
+def _red(t):   return _c(t, "31")
+
+
+# ---------------------------------------------------------------------------
+# HTTP helpers — stdlib only.
+# ---------------------------------------------------------------------------
+def _http(method: str, endpoint: str, path: str, body: dict | None = None) -> tuple[int, dict]:
+    url = endpoint.rstrip("/") + path
+    data = json.dumps(body).encode() if body is not None else None
+    headers = {"Content-Type": "application/json"} if data is not None else {}
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.status, json.loads(r.read().decode() or "{}")
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode() or "{}")
+        except Exception:
+            return e.code, {}
+    except Exception as e:
+        print(_red(f"error: {method} {url}: {e}"), file=sys.stderr)
+        sys.exit(2)
+
+
+def _format_tier_limit_error(body: dict) -> str:
+    """Render a 400/403/429 structured body as a single readable line."""
+    inner = body.get("error") or body.get("detail") or body
+    code = inner.get("code", "?")
+    reason = inner.get("reason", str(body))
+    upgrade = inner.get("upgrade_to", "")
+    msg = f"{_red('✗')} {_bold(code)}: {reason}"
+    if upgrade:
+        msg += f" → {_yellow('upgrade to ' + upgrade)}"
+    return msg
+
+
+# ---------------------------------------------------------------------------
+# Subcommands
+# ---------------------------------------------------------------------------
+def cmd_status(args):
+    code, body = _http("GET", args.endpoint, "/api/license/status")
+    if code != 200:
+        print(_format_tier_limit_error(body)); sys.exit(1)
+    tier = body.get("active_tier", "?")
+    primary = body.get("primary_cloud") or _dim("(n/a)")
+    period = body.get("period", "monthly")
+    seats = body.get("seats", 1)
+    expires = body.get("expires_at") or _dim("never")
+    days = body.get("days_until_expiry")
+    grace = body.get("in_grace_period")
+    price_m = body.get("price_inr_monthly")
+    price_y = body.get("price_inr_annual")
+
+    print(_bold("=== CloudLearn License Status ==="))
+    print(f"  Active tier:    {_green(tier)}")
+    print(f"  Primary cloud:  {primary}")
+    print(f"  Billing:        {period} · {seats} seat(s)")
+    if price_m is not None:
+        price_str = f"₹{price_m}/mo"
+        if price_y:
+            price_str += f" · ₹{price_y}/yr"
+        print(f"  Price:          {price_str}")
+    print(f"  Expires:        {expires}", end="")
+    if days is not None:
+        if grace:
+            print(f" {_yellow(f'(in {days}d but in grace period)')}", end="")
+        else:
+            print(f" {_dim(f'({days} days remaining)')}", end="")
+    print()
+
+
+def cmd_list(args):
+    code, body = _http("GET", args.endpoint, "/api/runtime/tier")
+    if code != 200:
+        print(_red(f"error: HTTP {code}")); sys.exit(1)
+    active = body.get("active_tier")
+    tiers = body.get("all_tiers", {})
+    order = ["free", "student", "developer", "enterprise"]
+
+    # 4-column table
+    cols = []
+    for k in order:
+        t = tiers.get(k) or {}
+        col = [
+            _bold(_green(t.get("label", k))) if k == active else _bold(t.get("label", k)),
+            "✓ Current" if k == active else "",
+            f"₹{t.get('price_inr_monthly', 0)}/mo" if k != "enterprise"
+                else f"₹{t.get('price_inr_monthly_per_seat', 99)}/dev/mo",
+            f"₹{t.get('price_inr_annual')}/yr" if t.get("price_inr_annual") else _dim("custom"),
+            f"Spaces: {t.get('max_spaces') if t.get('max_spaces') != -1 else '∞'}",
+            f"VMs/space: {(t.get('per_space_quantities') or {}).get('vm', '?')}",
+            f"DBs/space: {(t.get('per_space_quantities') or {}).get('database', '?')}",
+            f"Storage: {(t.get('storage_bytes_cap') or 0) // (1024**3)} GB"
+                if t.get("storage_bytes_cap") != -1 else "Storage: ∞",
+            "Services: ALL" if t.get("service_categories_unlocked") == "ALL"
+                else f"Services: {len(t.get('service_categories_unlocked', []))} of 12",
+            "Cloud Shell: ✓" if (t.get("features") or {}).get("cloud_shell") else _dim("Cloud Shell: ✗"),
+            "Cedar IAM: ✓"   if (t.get("features") or {}).get("cedar_enforcement") else _dim("Cedar IAM: ✗"),
+            "SSO: ✓"         if (t.get("features") or {}).get("sso") else _dim("SSO: ✗"),
+        ]
+        cols.append(col)
+
+    # render side-by-side
+    rows = max(len(c) for c in cols)
+    widths = [max(len(_strip_ansi(c[i])) for i in range(min(len(c), rows))) + 2 for c in cols]
+    for r in range(rows):
+        line = ""
+        for i, col in enumerate(cols):
+            cell = col[r] if r < len(col) else ""
+            line += cell + " " * (widths[i] - len(_strip_ansi(cell)))
+        print(line)
+
+
+def _strip_ansi(s: str) -> str:
+    import re
+    return re.sub(r"\033\[[0-9;]*m", "", s)
+
+
+def cmd_signup(args):
+    # Interactive defaults if missing.
+    tier = args.tier
+    if not tier:
+        print("Choose a tier:")
+        print("  1) free       — ₹0 forever")
+        print("  2) student    — ₹299/mo or ₹2099/yr · one cloud only")
+        print("  3) developer  — ₹599/mo or ₹5099/yr · all clouds")
+        print("  4) enterprise — ₹99/dev/mo · min 10 seats")
+        choice = input("Tier [1]: ").strip() or "1"
+        tier = {"1": "free", "2": "student", "3": "developer", "4": "enterprise"}.get(choice, "free")
+
+    payload = {
+        "user":          args.user,
+        "email":         args.email,
+        "tier":          tier,
+        "period":        args.period,
+        "seats":         args.seats,
+        "primary_cloud": args.primary_cloud or "",
+        "device_id":     args.device_id,
+    }
+    # Student needs primary_cloud
+    if tier == "student" and not payload["primary_cloud"]:
+        if not sys.stdin.isatty():
+            print(_red("--primary-cloud required for student tier (non-interactive)"))
+            sys.exit(1)
+        c = input("Primary cloud [aws/gcp/azure]: ").strip().lower()
+        if c not in {"aws", "gcp", "azure"}:
+            print(_red("invalid primary cloud")); sys.exit(1)
+        payload["primary_cloud"] = c
+    # Enterprise needs seats >= 10
+    if tier == "enterprise" and payload["seats"] < 10:
+        if not sys.stdin.isatty():
+            print(_red("--seats >= 10 required for enterprise tier (non-interactive)"))
+            sys.exit(1)
+        try:
+            n = int(input("Number of developer seats [10]: ").strip() or "10")
+        except (ValueError, EOFError):
+            n = 10
+        payload["seats"] = max(n, 10)
+
+    code, body = _http("POST", args.endpoint, "/api/license/signup", payload)
+    if code != 200:
+        print(_format_tier_limit_error(body)); sys.exit(1)
+    lic = body.get("license", {})
+    price_str = f"₹{lic.get('price_inr_charged', 0)}"
+    print(_green(f"✓ Signed up: {lic.get('tier')}"), end="")
+    if lic.get("primary_cloud"):
+        print(f" on {lic['primary_cloud']}", end="")
+    if lic.get("seats", 1) > 1:
+        print(f" × {lic['seats']} seats", end="")
+    print(f" · {lic.get('period')} · {price_str}", end="")
+    if lic.get("expires_at"):
+        print(f" · expires {lic['expires_at']}")
+    else:
+        print()
+
+
+def cmd_switch_cloud(args):
+    code, body = _http("POST", args.endpoint, "/api/license/switch-cloud",
+                       {"primary_cloud": args.primary_cloud})
+    if code != 200:
+        print(_format_tier_limit_error(body)); sys.exit(1)
+    print(_green(f"✓ Switched primary cloud: {body.get('old_primary_cloud')} → {body.get('new_primary_cloud')}"))
+    print(_dim(f"  Next change allowed after {body.get('next_change_allowed_after_days', '?')} days"))
+
+
+# ---------------------------------------------------------------------------
+# CLI parser
+# ---------------------------------------------------------------------------
+def main():
+    parser = argparse.ArgumentParser(
+        prog="cloudlearn-tier",
+        description="CLI for the CloudLearn simulator tier API.",
+    )
+    parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT,
+                        help=f"simulator URL (default: {DEFAULT_ENDPOINT})")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("status", help="print active tier + license status")
+    sub.add_parser("list",   help="show all 4 tiers side-by-side")
+
+    p_signup = sub.add_parser("signup", help="activate a tier (interactive if args missing)")
+    p_signup.add_argument("--tier", choices=["free", "student", "developer", "enterprise"])
+    p_signup.add_argument("--user", default="cli-user")
+    p_signup.add_argument("--email", default="cli@cloudlearn")
+    p_signup.add_argument("--period", default="monthly", choices=["monthly", "annual"])
+    p_signup.add_argument("--primary-cloud", default="", choices=["", "aws", "gcp", "azure"])
+    p_signup.add_argument("--seats", type=int, default=1)
+    p_signup.add_argument("--device-id", default="cli")
+
+    p_switch = sub.add_parser("switch-cloud", help="Student-only: change primary cloud (1/year)")
+    p_switch.add_argument("primary_cloud", choices=["aws", "gcp", "azure"])
+
+    args = parser.parse_args()
+    {"status": cmd_status, "list": cmd_list,
+     "signup": cmd_signup, "switch-cloud": cmd_switch_cloud}[args.cmd](args)
+
+
+if __name__ == "__main__":
+    main()

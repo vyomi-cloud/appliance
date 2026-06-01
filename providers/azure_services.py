@@ -519,6 +519,35 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
                 if isinstance(exc, HTTPException):
                     raise
                 raise HTTPException(status_code=500, detail=f"budget check failed: {exc}")
+        # Tier quantity-cap gate — runs before the upsert so an over-cap create
+        # doesn't leave a half-created record. ONLY enforced on first-time
+        # creates (key not already in _state) so PATCH/repeat-PUT updates
+        # don't get blocked.
+        if key not in _state and method == "PUT":
+            try:
+                import server as _srv2
+                _enforce_azure_quantity_cap(_srv2, full_type, method)
+            except HTTPException:
+                raise
+            except Exception:
+                pass
+        # Tier size-cap gate for Azure VMs — parity with EC2 + GCE.
+        # Free=small (≤B1s/B2s); Student=medium; Developer=large; Enterprise=huge.
+        if (method == "PUT" and key not in _state
+                and full_type.lower() == "microsoft.compute/virtualmachines"):
+            try:
+                import server as _srv3
+                vm_size = ""
+                props = payload.get("properties") if isinstance(payload.get("properties"), dict) else {}
+                hw = props.get("hardwareProfile") if isinstance(props, dict) and isinstance(props.get("hardwareProfile"), dict) else {}
+                if isinstance(hw, dict):
+                    vm_size = str(hw.get("vmSize") or "")
+                if vm_size:
+                    _srv3._enforce_size_cap("vm", "azure", vm_size)
+            except HTTPException:
+                raise
+            except Exception:
+                pass
         resp = _upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
         # Data-plane provisioning hooks (real Postgres for SQL, etc.).
         _provision_on_create(full_type, _state.get(key), base)
@@ -655,6 +684,29 @@ def _list(sub: str, rg: str | None, full_type: str) -> JSONResponse:
             continue
         items.append(_view(rec))
     return JSONResponse({"value": items})
+
+
+# Azure ARM resource type → tier quantity-cap bucket. Used by the create-side
+# gate to enforce Free=1 VM, 1 DB, 1 storage account, 1 APIM, 1 Function App
+# per space. Tiers higher than Free relax these.
+_AZURE_TYPE_TO_QUANTITY_KEY = {
+    "microsoft.compute/virtualmachines":       "vm",
+    "microsoft.sql/servers/databases":         "database",
+    "microsoft.storage/storageaccounts":       "bucket",
+    "microsoft.servicebus/namespaces/queues":  "queue",
+    "microsoft.apimanagement/service":         "api_gateway",
+    "microsoft.web/sites":                     "lambda_function",
+    "microsoft.keyvault/vaults":               "kms_key",
+}
+
+
+def _enforce_azure_quantity_cap(srv_mod, full_type: str, method: str) -> None:
+    """Call into server._enforce_quantity_cap for Azure ARM create/PATCH ops."""
+    if method not in ("PUT", "PATCH"):
+        return
+    rt = _AZURE_TYPE_TO_QUANTITY_KEY.get(full_type.lower())
+    if rt:
+        srv_mod._enforce_quantity_cap(rt)
 
 
 def _upsert(rid: str, key: str, full_type: str, name: str, catalog: dict,

@@ -1,0 +1,16 @@
+PackageIdentifier: CloudLearn.CloudLearn
+PackageVersion: 1.0.0
+InstallerType: msi
+Scope: machine
+InstallModes:
+  - interactive
+  - silent
+UpgradeBehavior: install
+ReleaseDate: 2026-06-01
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/cloudlearn/cloud-learn/releases/download/v1.0.0/cloud-learn-1.0.0-x64.msi
+    InstallerSha256: REPLACED_BY_RELEASE_WORKFLOW
+    ProductCode: '{REPLACED_AT_BUILD_TIME-A1B2-C3D4-E5F6-789012345678}'
+ManifestType: installer
+ManifestVersion: 1.6.0

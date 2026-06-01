@@ -98,9 +98,15 @@ services:
     restart: unless-stopped
 
   simulator:
-    build: .
+    # Default: use the published image from Docker Hub. To build from source
+    # instead (e.g. for local development), set CLOUDLEARN_SIMULATOR_IMAGE
+    # to an empty string OR run `docker compose build simulator`.
+    image: ${CLOUDLEARN_SIMULATOR_IMAGE:-cloudlearn/simulator:1.0.0}
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - "9000:9000"
+      - "${CLOUDLEARN_SIMULATOR_PORT:-9000}:9000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

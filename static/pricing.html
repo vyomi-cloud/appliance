@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CloudLearn — Choose your tier</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%E2%98%81%3C/text%3E%3C/svg%3E">
+  <style>
+    /* ---- reset + base -------------------------------------------------- */
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #f8fafb 0%, #eef2f7 100%);
+      color: #1a2330; min-height: 100vh;
+    }
+    .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 64px; }
+
+    /* ---- header ------------------------------------------------------- */
+    header { text-align: center; margin-bottom: 32px; }
+    header .logo {
+      display: inline-flex; align-items: center; gap: 10px;
+      font-size: 22px; font-weight: 700; color: #0f1b2d; margin-bottom: 24px;
+    }
+    header .logo .badge {
+      background: #0f1b2d; color: #fff; padding: 4px 10px;
+      border-radius: 6px; font-size: 11px; letter-spacing: 0.5px;
+    }
+    header h1 { font-size: 32px; font-weight: 700; margin: 0 0 8px; color: #0f1b2d; }
+    header .sub { font-size: 16px; color: #607080; margin-bottom: 24px; }
+
+    /* ---- billing toggle ----------------------------------------------- */
+    .toggle {
+      display: inline-flex; background: #fff; border: 1px solid #d8e0ea;
+      border-radius: 999px; padding: 4px; margin-bottom: 28px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .toggle button {
+      background: transparent; border: 0; padding: 8px 22px;
+      font: inherit; color: #687078; cursor: pointer; border-radius: 999px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .toggle button.active { background: #0f1b2d; color: #fff; font-weight: 600; }
+    .toggle .save {
+      color: #0a7d36; font-size: 12px; font-weight: 600; margin-left: 6px;
+    }
+
+    /* ---- standard-capability foundation bar ---------------------------
+       Sits flush BELOW the tier grid (no gap) — visually the common base
+       that all 4 vertical tier cards rest on. White background matches
+       tier cards so the bar reads as a continuation of them. Square top
+       corners; rounded bottom corners; border matches card border. */
+    .compat-banner {
+      margin: 0 0 28px; padding: 18px 24px;
+      background: #ffffff;
+      border: 1px solid #d8e0ea;
+      border-radius: 0 0 12px 12px;
+      font-size: 13px; color: #1a2330; line-height: 1.55;
+    }
+    .compat-banner .title {
+      font-weight: 600; color: #0f1b2d; text-align: center;
+      margin-bottom: 12px; font-size: 14px;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      flex-wrap: wrap;
+    }
+    .compat-banner .cap-pill {
+      background: #0f1b2d; color: #fff; font-size: 10px; font-weight: 700;
+      letter-spacing: 0.8px; text-transform: uppercase;
+      padding: 3px 9px; border-radius: 999px;
+    }
+    .compat-banner .row {
+      display: flex; gap: 14px; align-items: baseline;
+      padding: 4px 0;
+    }
+    .compat-banner .row .lbl {
+      flex: 0 0 84px; font-weight: 700; color: #0f1b2d;
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px;
+    }
+    .compat-banner code {
+      background: #e6efff; padding: 1px 5px; border-radius: 3px;
+      font-size: 12px;
+    }
+    .compat-banner .note {
+      text-align: center; font-size: 12px; color: #4b6488;
+      margin-top: 10px; font-style: italic;
+    }
+    /* host-capacity footnote inside each tier card */
+    .features li.capacity-note {
+      font-size: 11px; color: #687078; font-style: italic;
+      border-top: 1px dashed #e1e7ee; padding: 8px 0 0; margin-top: 4px;
+    }
+    .features li.capacity-note .icon { display: none; }
+
+    /* ---- tier grid ---------------------------------------------------- */
+    .tiers {
+      display: grid; gap: 20px;
+      grid-template-columns: repeat(4, 1fr);
+    }
+    @media (max-width: 1100px) { .tiers { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px)  { .tiers { grid-template-columns: 1fr; } }
+
+    .tier {
+      background: #fff; border: 1px solid #d8e0ea;
+      /* Square bottom — cards sit flush on the Standard-capability bar below */
+      border-radius: 12px 12px 0 0; border-bottom: 0;
+      padding: 24px 22px 20px; display: flex; flex-direction: column;
+      position: relative; transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .tier.recommended {
+      border-color: #2563eb;
+      box-shadow: 0 4px 16px rgba(37, 99, 235, 0.12);
+    }
+    .tier.recommended::before {
+      content: "Recommended"; position: absolute; top: -10px; right: 16px;
+      background: #2563eb; color: #fff; font-size: 11px; font-weight: 600;
+      padding: 3px 10px; border-radius: 999px; letter-spacing: 0.3px;
+    }
+    .tier.active {
+      border-color: #0a7d36; box-shadow: 0 4px 24px rgba(10, 125, 54, 0.18);
+    }
+    .tier.active::before {
+      content: "✓ Current Plan"; position: absolute; top: -10px; right: 16px;
+      background: #0a7d36; color: #fff; font-size: 11px; font-weight: 600;
+      padding: 3px 10px; border-radius: 999px; letter-spacing: 0.3px;
+    }
+    .tier-name {
+      font-size: 14px; text-transform: uppercase; letter-spacing: 1.2px;
+      color: #687078; font-weight: 600; margin-bottom: 6px;
+    }
+    .tier-headline {
+      font-size: 13px; color: #4a5566; margin-bottom: 16px;
+      min-height: 36px; line-height: 1.4;
+    }
+    .price {
+      display: flex; align-items: baseline; gap: 4px; margin-bottom: 6px;
+    }
+    .price .amount { font-size: 32px; font-weight: 700; color: #0f1b2d; line-height: 1; }
+    .price .currency { font-size: 18px; color: #0f1b2d; font-weight: 600; }
+    .price .period { font-size: 13px; color: #687078; }
+    .price-sub { font-size: 12px; color: #607080; margin-bottom: 18px; min-height: 16px; }
+    .price-sub.highlight { color: #0a7d36; font-weight: 600; }
+
+    .cta {
+      width: 100%; padding: 11px; border: 0; border-radius: 8px;
+      font: inherit; font-weight: 600; cursor: pointer;
+      transition: background 0.15s, transform 0.05s; margin-bottom: 18px;
+    }
+    .cta.primary { background: #0f1b2d; color: #fff; }
+    .cta.primary:hover:not(:disabled) { background: #1e2d44; }
+    .cta.primary:active:not(:disabled) { transform: translateY(1px); }
+    .cta.recommended { background: #2563eb; color: #fff; }
+    .cta.recommended:hover:not(:disabled) { background: #1d4ed8; }
+    .cta.active-current {
+      background: #e8f5ed; color: #0a7d36; cursor: default; font-weight: 600;
+    }
+    .cta:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .features {
+      list-style: none; margin: 0; padding: 0;
+      font-size: 13px; line-height: 1.5;
+    }
+    .features li {
+      padding: 6px 0; display: flex; align-items: flex-start; gap: 8px;
+      border-top: 1px solid #f0f3f7;
+    }
+    .features li:first-child { border-top: 0; padding-top: 0; }
+    .features li .icon {
+      flex-shrink: 0; color: #0a7d36; font-weight: 700; width: 12px;
+    }
+    .features li.locked .icon { color: #c0c6ce; }
+    .features li.locked { color: #97a0aa; }
+    .features li strong { color: #1a2330; font-weight: 600; }
+    /* Section headers within the feature list (e.g. "Developer Experience"). */
+    .features li.section {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+      text-transform: uppercase; color: #687078; padding: 12px 0 4px;
+      border-top: 1px solid #e1e7ee; margin-top: 6px;
+    }
+    .features li.section:first-child { border-top: 0; margin-top: 0; }
+    .features li.section .icon { display: none; }
+
+    /* ---- continue footer --------------------------------------------- */
+    footer {
+      text-align: center; margin-top: 40px; padding-top: 24px;
+      border-top: 1px solid #e1e7ee;
+    }
+    footer .continue {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: #0f1b2d; color: #fff;
+      padding: 14px 32px; border-radius: 8px;
+      font-size: 15px; font-weight: 600; text-decoration: none;
+      border: 0; cursor: pointer; font-family: inherit;
+      transition: background 0.15s;
+    }
+    footer .continue:hover { background: #1e2d44; }
+    footer .continue::after { content: "→"; font-size: 18px; }
+    footer .note {
+      margin-top: 14px; font-size: 13px; color: #687078;
+    }
+    footer .note a { color: #2563eb; text-decoration: none; }
+    footer .note a:hover { text-decoration: underline; }
+
+    /* ---- modal -------------------------------------------------------- */
+    .modal-bg {
+      position: fixed; inset: 0; background: rgba(15, 27, 45, 0.5);
+      display: none; align-items: center; justify-content: center; z-index: 100;
+    }
+    .modal-bg.open { display: flex; }
+    .modal {
+      background: #fff; border-radius: 12px; padding: 28px;
+      max-width: 420px; width: 90%;
+    }
+    .modal h2 { margin: 0 0 14px; font-size: 20px; color: #0f1b2d; }
+    .modal p { color: #4a5566; font-size: 14px; line-height: 1.5; margin: 0 0 18px; }
+    .modal label { display: block; font-size: 13px; font-weight: 600; color: #1a2330; margin-bottom: 6px; }
+    .modal input, .modal select {
+      width: 100%; padding: 9px 12px; border: 1px solid #d8e0ea;
+      border-radius: 6px; font: inherit; margin-bottom: 16px;
+    }
+    .modal .cta-row { display: flex; gap: 10px; }
+    .modal .cta-row button { flex: 1; padding: 10px; border: 0; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; }
+    .modal .cta-row .cancel { background: #f0f3f7; color: #4a5566; }
+    .modal .cta-row .confirm { background: #0f1b2d; color: #fff; }
+
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: #0a7d36; color: #fff; padding: 12px 18px;
+      border-radius: 8px; font-size: 14px; font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      transform: translateY(100px); opacity: 0; transition: all 0.3s;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.error { background: #c92929; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <span class="badge">CL</span>
+        <span>CloudLearn</span>
+      </div>
+      <h1>Choose your tier</h1>
+      <div class="sub">All plans include real backends, multi-cloud consoles, and conformance tests.</div>
+
+      <div class="toggle">
+        <button id="bill-monthly" class="active" onclick="setBilling('monthly')">Monthly</button>
+        <button id="bill-annual" onclick="setBilling('annual')">Annual <span class="save">Save ~42%</span></button>
+      </div>
+    </header>
+
+    <div class="tiers" id="tiers"><!-- rendered by JS --></div>
+
+    <!-- Standard capability bar — spans the full grid width, sits below the
+         tier cards. Same promise applies to every tier, so it's deliberately
+         NOT a per-card row. -->
+    <div class="compat-banner">
+      <div class="title">
+        <span class="cap-pill">Standard capability</span>
+        Works natively with your existing tooling — every plan
+      </div>
+      <div class="row">
+        <span class="lbl">SDKs</span>
+        <span>
+          <code>aws-sdk-java-v2</code> ·
+          <code>aws-sdk-go-v2</code> ·
+          <code>boto3</code> (Python) ·
+          <code>google-cloud-java</code> ·
+          <code>google-cloud-go</code> ·
+          <code>google-cloud-python</code> ·
+          <code>azure-sdk-for-java</code> ·
+          <code>azure-sdk-for-go</code> ·
+          <code>azure-sdk-for-python</code>
+        </span>
+      </div>
+      <div class="row">
+        <span class="lbl">Utilities</span>
+        <span>
+          <code>aws</code> · <code>gcloud</code> · <code>gsutil</code> ·
+          <code>bq</code> · <code>az</code> · <code>terraform</code>
+        </span>
+      </div>
+      <div class="note">Just override the endpoint — no custom SDK or shim.</div>
+    </div>
+
+    <footer>
+      <button class="continue" onclick="goToConsole()">Continue to console</button>
+      <div class="note">
+        After selecting a tier you can switch anytime from <a href="/api/runtime/tier">runtime settings</a>.
+        Tiers enforce server-side via structured 403s.
+      </div>
+    </footer>
+  </div>
+
+  <!-- Modal for Student (cloud picker) + Enterprise (seat count) -->
+  <div class="modal-bg" id="modal-bg">
+    <div class="modal" id="modal-body"><!-- rendered by JS --></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let STATE = {
+      tiers: null,        // /api/runtime/tier all_tiers
+      activeTier: 'free', // /api/runtime/tier active_tier
+      primaryCloud: '',   // /api/runtime/tier primary_cloud
+      billing: 'monthly', // 'monthly' | 'annual'
+    };
+
+    // -------- bootstrap ------------------------------------------------
+    async function load() {
+      try {
+        const r = await fetch('/api/runtime/tier');
+        const d = await r.json();
+        STATE.tiers = d.all_tiers;
+        STATE.activeTier = d.active_tier;
+        STATE.primaryCloud = d.primary_cloud || '';
+      } catch (e) {
+        toast('Could not reach simulator: ' + e, true);
+        return;
+      }
+      render();
+    }
+
+    function setBilling(mode) {
+      STATE.billing = mode;
+      document.getElementById('bill-monthly').classList.toggle('active', mode === 'monthly');
+      document.getElementById('bill-annual').classList.toggle('active', mode === 'annual');
+      render();
+    }
+
+    // -------- rendering ------------------------------------------------
+    const TIER_ORDER = ['free', 'student', 'developer', 'enterprise'];
+    const RECOMMENDED = 'developer';
+
+    function render() {
+      const root = document.getElementById('tiers');
+      root.innerHTML = '';
+      for (const key of TIER_ORDER) {
+        const tier = STATE.tiers?.[key];
+        if (!tier) continue;
+        root.appendChild(renderTier(key, tier));
+      }
+    }
+
+    function renderTier(key, tier) {
+      const isActive = key === STATE.activeTier;
+      const isRecommended = key === RECOMMENDED && !isActive;
+      const card = document.createElement('div');
+      card.className = 'tier' + (isActive ? ' active' : '') + (isRecommended ? ' recommended' : '');
+
+      // -- name + headline
+      const name = document.createElement('div');
+      name.className = 'tier-name';
+      name.textContent = tier.label;
+      card.appendChild(name);
+
+      const headline = document.createElement('div');
+      headline.className = 'tier-headline';
+      headline.textContent = tier.headline || '';
+      card.appendChild(headline);
+
+      // -- price
+      card.appendChild(renderPrice(key, tier));
+
+      // -- CTA
+      card.appendChild(renderCta(key, tier, isActive, isRecommended));
+
+      // -- features
+      card.appendChild(renderFeatures(key, tier));
+
+      return card;
+    }
+
+    function renderPrice(key, tier) {
+      const wrap = document.createElement('div');
+      let priceHtml = '';
+      let subHtml = '';
+      if (key === 'free') {
+        priceHtml = `<span class="currency">₹</span><span class="amount">0</span><span class="period">forever</span>`;
+        subHtml = 'No credit card required';
+      } else if (key === 'enterprise') {
+        priceHtml = `<span class="currency">₹</span><span class="amount">${tier.price_inr_monthly_per_seat || 99}</span><span class="period">/dev/month</span>`;
+        subHtml = `Minimum ${tier.min_seats || 10} developers · custom annual contract`;
+      } else if (STATE.billing === 'annual') {
+        const annual = tier.price_inr_annual;
+        const monthly_equiv = Math.round(annual / 12);
+        const monthly_full = tier.price_inr_monthly * 12;
+        const savings = Math.round(((monthly_full - annual) / monthly_full) * 100);
+        priceHtml = `<span class="currency">₹</span><span class="amount">${monthly_equiv}</span><span class="period">/mo equiv. (₹${annual.toLocaleString('en-IN')}/year)</span>`;
+        subHtml = `Save ${savings}% vs monthly`;
+      } else {
+        priceHtml = `<span class="currency">₹</span><span class="amount">${tier.price_inr_monthly}</span><span class="period">/month</span>`;
+        if (tier.price_inr_annual) {
+          subHtml = `Or ₹${tier.price_inr_annual.toLocaleString('en-IN')} annually`;
+        }
+      }
+      wrap.innerHTML = `<div class="price">${priceHtml}</div><div class="price-sub${STATE.billing === 'annual' && key !== 'free' && key !== 'enterprise' ? ' highlight' : ''}">${subHtml}</div>`;
+      return wrap;
+    }
+
+    function renderCta(key, tier, isActive, isRecommended) {
+      const btn = document.createElement('button');
+      if (isActive) {
+        btn.className = 'cta active-current';
+        btn.textContent = '✓ Current Plan';
+        btn.disabled = true;
+      } else {
+        btn.className = 'cta ' + (isRecommended ? 'recommended' : 'primary');
+        btn.textContent = key === 'free' ? 'Switch to Free' : `Select ${tier.label}`;
+        btn.onclick = () => selectTier(key, tier);
+      }
+      return btn;
+    }
+
+    function renderFeatures(key, tier) {
+      const ul = document.createElement('ul');
+      ul.className = 'features';
+
+      // services
+      const services = tier.service_categories_unlocked;
+      if (services === 'ALL') {
+        ul.appendChild(li('check', `<strong>All 35 services</strong> × ${key === 'student' ? 'one chosen cloud' : 'all 3 clouds'}`));
+      } else {
+        const count = Array.isArray(services) ? services.length : 0;
+        ul.appendChild(li('check', `<strong>${count} service categories</strong> × all 3 clouds`));
+        if (tier.service_categories_locked?.length) {
+          ul.appendChild(li('lock', `Locked: ${tier.service_categories_locked.join(', ')}`));
+        }
+      }
+
+      // spaces (tier quota, not capacity-bound)
+      const max_spaces = tier.max_spaces === -1 ? '∞' : tier.max_spaces;
+      ul.appendChild(li('check', `<strong>${max_spaces}</strong> ${tier.max_spaces === 1 ? 'space' : 'spaces'} per tenant`));
+
+      // Workload scale — qualitative (capacity is bounded by the host laptop;
+      // see capacity-note below). The tier sets the ceiling; actual VM/DB/
+      // storage counts and sizes scale down to fit available CPU/RAM/disk.
+      const f = tier.features || {};
+      if (f.workload_scale) {
+        ul.appendChild(li('check', `<strong>Workload:</strong> ${f.workload_scale}`));
+      }
+      ul.appendChild(li('capacity-note',
+        'VM count · VM size · object storage scale to your host (CPU / RAM / disk)'));
+
+      // -- Developer Experience block ---------------------------------
+      // Per-card rows are tier-differentiating only (the "standard SDKs/CLIs"
+      // promise lives in the Standard-capability bar below the grid).
+      ul.appendChild(li('header', 'Developer Experience'));
+      if (f.api_access)      ul.appendChild(li('check', `<strong>API:</strong> ${f.api_access}`));
+      if (f.cloud_consoles)  ul.appendChild(li('check', `<strong>Consoles:</strong> ${f.cloud_consoles}`));
+      if (f.tier_support)    ul.appendChild(li('check', `<strong>Support:</strong> ${f.tier_support}`));
+
+      // -- Platform Features ------------------------------------------
+      // Every feature listed is backend-implemented. Tier-locked entries
+      // render '✗'; tier-included entries render '✓'. No Roadmap badges —
+      // every line below is wired to real endpoints (see audit_sinks,
+      // notifications, ci_integration, tenant_theming, sso_config,
+      // helm_chart modules).
+      ul.appendChild(li('header', 'Platform Features'));
+      if (f.cloud_shell) ul.appendChild(li('check', 'Cloud Shell drawer'));
+      else ul.appendChild(li('lock', 'Cloud Shell drawer'));
+
+      if (f.cedar_enforcement) ul.appendChild(li('check', 'Cedar IAM enforcement'));
+      else ul.appendChild(li('lock', 'Cedar IAM enforcement'));
+
+      if (f.cost_simulation) ul.appendChild(li('check', `Cost simulation (${f.cost_simulation})`));
+      else ul.appendChild(li('lock', 'Cost simulation'));
+
+      if (f.ci_integration)     ul.appendChild(li('check', 'CI integration'));
+      if (f.sso)                ul.appendChild(li('check', 'SSO / SAML / OIDC'));
+      if (f.audit_export_sinks) ul.appendChild(li('check', 'Audit-log export sinks'));
+      if (f.helm)               ul.appendChild(li('check', 'Helm chart + air-gapped install'));
+      if (f.custom_domain)      ul.appendChild(li('check', 'Custom domain'));
+      if (f.branding)           ul.appendChild(li('check', 'Custom branding'));
+      if (f.notifications)      ul.appendChild(li('check', `Notifications (${f.notifications})`));
+
+      // retention
+      const hours = tier.activity_log_retention_hours;
+      const ret = hours >= 24 ? `${Math.round(hours/24)} days` : `${hours} hours`;
+      ul.appendChild(li('check', `Activity log retention: <strong>${ret}</strong>`));
+
+      // (legacy tier.support row removed — superseded by tier_support feature
+      // string in the Developer Experience block above)
+
+      return ul;
+    }
+
+    function li(kind, html) {
+      const el = document.createElement('li');
+      if (kind === 'header') {
+        // Section header (no icon, distinctive caps style)
+        el.className = 'section';
+        el.innerHTML = html;
+        return el;
+      }
+      if (kind === 'capacity-note') {
+        // Italic footnote (no icon) — used for the host-capacity disclaimer
+        el.className = 'capacity-note';
+        el.innerHTML = html;
+        return el;
+      }
+      if (kind === 'lock') el.className = 'locked';
+      const icon = document.createElement('span');
+      icon.className = 'icon';
+      icon.textContent = kind === 'lock' ? '✗' : '✓';
+      el.appendChild(icon);
+      const span = document.createElement('span');
+      span.innerHTML = html;
+      el.appendChild(span);
+      return el;
+    }
+
+    // -------- tier selection ------------------------------------------
+    async function selectTier(key, tier) {
+      const payload = {
+        user: 'local-user',
+        email: 'local@cloudlearn',
+        tier: key,
+        device_id: 'local',
+        period: STATE.billing,
+        seats: 1,
+        primary_cloud: '',
+      };
+
+      // Student needs primary_cloud picker
+      if (tier.primary_cloud_required) {
+        const cloud = await pickPrimaryCloud(tier);
+        if (!cloud) return;
+        payload.primary_cloud = cloud;
+      }
+      // Enterprise needs seat count
+      if (key === 'enterprise') {
+        const seats = await pickSeats(tier);
+        if (!seats) return;
+        payload.seats = seats;
+      }
+
+      try {
+        const r = await fetch('/api/license/signup', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail?.reason || JSON.stringify(d.detail));
+        toast(`✓ Switched to ${tier.label}`);
+        await load();  // refresh + re-highlight
+      } catch (e) {
+        toast('Failed: ' + e.message, true);
+      }
+    }
+
+    function pickPrimaryCloud(tier) {
+      return new Promise((resolve) => {
+        const body = document.getElementById('modal-body');
+        body.innerHTML = `
+          <h2>Choose your primary cloud</h2>
+          <p>Student tier is locked to one cloud provider. You can switch once per year.</p>
+          <label for="cloud-pick">Primary cloud</label>
+          <select id="cloud-pick">
+            <option value="aws">AWS — Amazon Web Services</option>
+            <option value="gcp">GCP — Google Cloud Platform</option>
+            <option value="azure">Azure — Microsoft Azure</option>
+          </select>
+          <div class="cta-row">
+            <button class="cancel" id="modal-cancel">Cancel</button>
+            <button class="confirm" id="modal-ok">Continue</button>
+          </div>
+        `;
+        const bg = document.getElementById('modal-bg');
+        bg.classList.add('open');
+        body.querySelector('#modal-cancel').onclick = () => { bg.classList.remove('open'); resolve(null); };
+        body.querySelector('#modal-ok').onclick = () => {
+          const v = body.querySelector('#cloud-pick').value;
+          bg.classList.remove('open');
+          resolve(v);
+        };
+      });
+    }
+
+    function pickSeats(tier) {
+      return new Promise((resolve) => {
+        const min = tier.min_seats || 10;
+        const body = document.getElementById('modal-body');
+        body.innerHTML = `
+          <h2>Enterprise developer count</h2>
+          <p>Enterprise tier is ₹${tier.price_inr_monthly_per_seat || 99}/dev/month with a minimum of <strong>${min}</strong> developers.</p>
+          <label for="seats-pick">Number of developer seats</label>
+          <input type="number" id="seats-pick" min="${min}" value="${min}" step="1">
+          <div class="cta-row">
+            <button class="cancel" id="modal-cancel">Cancel</button>
+            <button class="confirm" id="modal-ok">Continue</button>
+          </div>
+        `;
+        const bg = document.getElementById('modal-bg');
+        bg.classList.add('open');
+        body.querySelector('#modal-cancel').onclick = () => { bg.classList.remove('open'); resolve(null); };
+        body.querySelector('#modal-ok').onclick = () => {
+          const v = parseInt(body.querySelector('#seats-pick').value || min, 10);
+          if (v < min) { alert(`Min ${min} seats`); return; }
+          bg.classList.remove('open');
+          resolve(v);
+        };
+      });
+    }
+
+    // -------- navigation ----------------------------------------------
+    function goToConsole() {
+      // Set acknowledgement cookie so the / route doesn't re-redirect us
+      document.cookie = 'cloudlearn_tier_acknowledged=1; path=/; max-age=' + (60*60*24*365);
+      window.location.href = '/';
+    }
+
+    // -------- toast ----------------------------------------------------
+    function toast(msg, isError) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show' + (isError ? ' error' : '');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // -------- go --------------------------------------------------------
+    load();
+  </script>
+</body>
+</html>

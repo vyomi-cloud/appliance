@@ -246,6 +246,45 @@ def docs_azure():
     return _swagger_html("/openapi-azure.json", "CloudLearn — Azure API")
 
 
+# Short-path redirects: the main SPA's space-filter buttons navigate to
+# /aws, /gcp, /azure (e.g. clicking the "AWS spaces" filter chip). Without
+# these explicit routes, FastAPI matches @app.get("/{bucket}") (the S3
+# catch-all) and returns "NoSuchBucket". Register a permanent redirect to
+# the per-provider console so browser clicks land somewhere meaningful.
+# Registered BEFORE /console/* and the S3 catch-all so they win route
+# matching for single-segment provider paths.
+@app.get("/aws", include_in_schema=False)
+def _shortpath_aws():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/console/aws", status_code=302)
+
+
+@app.get("/gcp", include_in_schema=False)
+def _shortpath_gcp():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/console/gcp", status_code=302)
+
+
+@app.get("/azure", include_in_schema=False)
+def _shortpath_azure():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/console/azure", status_code=302)
+
+
+# ── Tier launch page ────────────────────────────────────────────────────
+# /pricing renders the 4-tier comparison page (Free/Student/Developer/
+# Enterprise) with INR pricing, Monthly/Annual toggle, and a "Current Plan"
+# highlight on the active tier. Users land here first — after picking a
+# tier the "Continue to console" button sets a cookie and goes to /.
+@app.get("/pricing", include_in_schema=False)
+def pricing_page():
+    from fastapi.responses import HTMLResponse
+    html_path = os.path.join(os.path.dirname(__file__), "static", "pricing.html")
+    with open(html_path, "rb") as f:
+        return HTMLResponse(content=f.read().decode("utf-8"),
+                            headers={"Cache-Control": "no-store, max-age=0"})
+
+
 @app.get("/console/azure", include_in_schema=False)
 @app.get("/console/azure/{path:path}", include_in_schema=False)
 def console_azure(path: str = ""):
@@ -2866,9 +2905,55 @@ def _terraform_space_state(space_id: str) -> dict:
     return space_state
 
 
+# Activity-log retention bookkeeping. We lazy-prune the events list on
+# `_record_usage` calls, but rate-limit the prune to once every 5 minutes so
+# hot append paths don't iterate the list on every call.
+_LAST_ACTIVITY_PRUNE_AT: float = 0.0
+_ACTIVITY_PRUNE_MIN_INTERVAL_S: float = 300.0  # 5 minutes
+
+
+def _prune_activity_log_if_due() -> None:
+    """Drop events older than the active tier's `activity_log_retention_hours`.
+    Called from `_record_usage` on a 5-minute interval. Safe to call when no
+    usage state exists — silently no-ops."""
+    global _LAST_ACTIVITY_PRUNE_AT
+    now = time.time()
+    if now - _LAST_ACTIVITY_PRUNE_AT < _ACTIVITY_PRUNE_MIN_INTERVAL_S:
+        return
+    _LAST_ACTIVITY_PRUNE_AT = now
+    try:
+        from core import tier_policy as _tp
+        tier = _active_tier()
+        hours = int(_tp.policy_for(tier).get("activity_log_retention_hours") or 24)
+        if hours <= 0:
+            return
+        cutoff_iso = time.strftime(
+            "%Y-%m-%dT%H:%M:%S.000Z",
+            time.gmtime(now - hours * 3600),
+        )
+        usage = PLATFORM.kernel.state.get("usage") or {}
+        events = usage.get("events") or []
+        if not isinstance(events, list) or not events:
+            return
+        # Events have ISO timestamps lex-sortable; binary keep-from-cutoff.
+        kept = [e for e in events if isinstance(e, dict) and e.get("at", "") >= cutoff_iso]
+        if len(kept) != len(events):
+            usage["events"] = kept
+    except Exception:
+        pass  # Never let retention pruning break a write
+
+
 def _record_usage(event: str, detail: dict | None = None) -> None:
     payload = copy.deepcopy(detail or {})
     PLATFORM.record_event(event, payload)
+    _prune_activity_log_if_due()
+    # Audit export sinks (Enterprise tier) — fire-and-forget POST to each
+    # configured sink. emit() is a no-op when the tenant has no sinks.
+    try:
+        from core import audit_sinks as _as
+        _as.emit(STATE, _active_tenant_id(), {"event": event, "detail": payload, "at": _now()})
+    except Exception:
+        pass
     try:
         _cloudsim_refresh_bridge(event, payload)
     except Exception:
@@ -3641,6 +3726,13 @@ class LicenseSignupRequest(BaseModel):
     user: str = "guest"
     tier: str = "free"
     device_id: str = ""
+    # Day 2-C: Student tier picks ONE primary cloud (aws|gcp|azure) at signup.
+    primary_cloud: str = ""
+    # Day 2-D: annual vs monthly subscription. annual gets ~7-month price savings
+    # (already in tier_policy.price_inr_annual). Default monthly.
+    period: str = "monthly"  # "monthly" | "annual"
+    # Day 2-D: Enterprise tier needs a seat count (min 10).
+    seats: int = 1
 
 
 class ServiceActionRequest(BaseModel):
@@ -5804,6 +5896,571 @@ def _startup_reconcile_ec2_state():
     _prune_expired_terminated_instances()
     _prune_expired_terminated_instances_from(gcp_compute_state.get("instances", {}))
 
+
+# ── Tier enforcement middleware ─────────────────────────────────────────────
+# Resolves (provider, service_key) from request, looks up active tenant's
+# tier, and denies locked services with a structured 403 body that the SPA
+# converts into an upgrade modal.
+#
+# Set CLOUDLEARN_TIER_ENFORCE=0 to disable enforcement (dev mode); the
+# default is ENFORCE (so Free users actually see Free behavior).
+
+_TIER_ENFORCE = os.environ.get("CLOUDLEARN_TIER_ENFORCE", "1").strip() not in ("0", "false", "")
+
+
+def _resolve_provider_service(request: Request) -> tuple[str, str]:
+    """Map a request → (provider, service_key) for tier-enforcement lookup.
+
+    Returns ('', '') when the request isn't a provider-scoped operation
+    (e.g. /api/spaces, /healthz, /console/*) — the middleware lets those
+    through unconditionally.
+    """
+    path = request.url.path
+    target = request.headers.get("x-amz-target", "") or ""
+
+    # GCP REST paths — these use Google-native URL prefixes.
+    if path.startswith("/compute/v1/"):
+        return "gcp", "compute"
+    if path.startswith(("/storage/v1/", "/upload/storage/v1/", "/download/storage/v1/")):
+        return "gcp", "storage"
+    if path.startswith("/sql/v1beta4/"):
+        return "gcp", "cloudsql"
+    if path.startswith("/pubsub/v1/"):
+        return "gcp", "pubsub"
+    if path.startswith("/firestore/v1/"):
+        return "gcp", "firestore"
+    if path.startswith("/api/gcp/apigateway/"):
+        return "gcp", "apigateway"
+    # /v1/projects/{p}/... — disambiguate by suffix
+    if path.startswith("/v1/projects/"):
+        if "/topics/" in path or "/subscriptions/" in path:
+            return "gcp", "pubsub"
+        if "/secrets/" in path:
+            return "gcp", "secretmanager"
+        if "/cryptoKeys/" in path or "/keyRings/" in path:
+            return "gcp", "kms"
+        if "/triggers/" in path or "/channels/" in path:
+            return "gcp", "eventarc"
+        if "/functions/" in path:
+            return "gcp", "functions"
+        if "/serviceAccounts" in path or "/iamPolicies" in path or ":getIamPolicy" in path:
+            return "gcp", "iam"
+        if "/databases/" in path or "/documents/" in path:
+            return "gcp", "firestore"
+
+    # Azure ARM paths — /subscriptions/.../Microsoft.{Provider}/...
+    if path.startswith("/subscriptions/"):
+        if "/Microsoft.Compute/" in path:        return "azure", "vm"
+        if "/Microsoft.Storage/" in path:        return "azure", "storage"
+        if "/Microsoft.Sql/" in path:            return "azure", "sql"
+        if "/Microsoft.DocumentDB/" in path:     return "azure", "cosmos"
+        if "/Microsoft.Web/" in path:            return "azure", "functionapp"
+        if "/Microsoft.ApiManagement/" in path:  return "azure", "apim"
+        if "/Microsoft.Network/" in path:        return "azure", "vnet"
+        if "/Microsoft.EventGrid/" in path:      return "azure", "eventgrid"
+        if "/Microsoft.KeyVault/" in path:       return "azure", "keyvault"
+        if "/Microsoft.ServiceBus/" in path:     return "azure", "servicebus"
+        if "/Microsoft.Authorization/" in path:  return "azure", "rbac"
+    # Azure data-plane (under /azure-data/)
+    if path.startswith("/azure-data/"):
+        if "/keyvault/" in path:   return "azure", "keyvault"
+        if "/eventgrid/" in path:  return "azure", "eventgrid"
+        if "/servicebus/" in path: return "azure", "servicebus"
+        if "/cosmos/" in path:     return "azure", "cosmos"
+        if "/blob/" in path:       return "azure", "storage"
+        if "/sql/" in path:        return "azure", "sql"
+
+    # AWS — X-Amz-Target dispatches first (JSON-RPC), then auth-scope.
+    if target.startswith("DynamoDB_"):              return "aws", "dynamodb"
+    if target.startswith("TrentService."):          return "aws", "kms"
+    if target.startswith("secretsmanager."):        return "aws", "secretsmanager"
+    if target.startswith("AWSEvents."):             return "aws", "eventbridge"
+    if target.startswith("AmazonSQS."):             return "aws", "sqs"
+    # Auth-scope service inference for the query-protocol APIs (SQS form,
+    # IAM/EC2/RDS/etc.) and for S3 SigV4.
+    auth = request.headers.get("authorization", "") or ""
+    m = re.search(r"Credential=[^/]+/\d+/[^/]+/(\w+)/aws4_request", auth)
+    if m:
+        svc = m.group(1).lower()
+        # Map AWS service-scope → catalog service_key (most match 1:1).
+        return "aws", svc
+
+    return "", ""
+
+
+# ── Per-tenant rate-limit (token bucket) ───────────────────────────────────
+# Sustained rate from tier policy (`rate_limit_rps`); burst capacity = 4× the
+# steady rate. Buckets are per-tenant + thread-safe. Free=10rps / Student=50 /
+# Developer=200 / Enterprise=unlimited. Hot paths (healthz, static) bypass.
+# On exceed → 429 + `Retry-After` + structured body.
+import threading as _threading
+
+_RATE_LOCK = _threading.Lock()
+_RATE_BUCKETS: dict[str, tuple[float, float]] = {}   # tenant_id -> (tokens, last_refill_ts)
+_RATE_BURST_MULT = 4.0
+
+
+def _rate_limit_tenant(tenant_id: str, rps: int) -> tuple[bool, float]:
+    """Try to consume 1 token from the tenant's bucket. Returns
+    `(allowed, retry_after_seconds)`. `rps <= 0` means UNLIMITED → always allow."""
+    if rps <= 0:
+        return True, 0.0
+    burst = float(rps) * _RATE_BURST_MULT
+    now = time.time()
+    with _RATE_LOCK:
+        tokens, last = _RATE_BUCKETS.get(tenant_id, (burst, now))
+        elapsed = now - last
+        tokens = min(burst, tokens + elapsed * rps)
+        if tokens >= 1.0:
+            tokens -= 1.0
+            _RATE_BUCKETS[tenant_id] = (tokens, now)
+            return True, 0.0
+        retry_after = max(0.001, (1.0 - tokens) / float(rps))
+        _RATE_BUCKETS[tenant_id] = (tokens, now)
+        return False, retry_after
+
+
+_RATE_LIMIT_BYPASS_PATHS = (
+    "/healthz", "/favicon.ico", "/static/", "/assets/",
+    "/api/runtime/branding/",  # public CSS endpoint; per-tenant gate would loop
+)
+
+
+@app.middleware("http")
+async def _rate_limit_middleware(request: Request, call_next):
+    """Per-tenant token-bucket rate limit. Bypasses health probes + static."""
+    p = request.url.path
+    if any(p.startswith(x) for x in _RATE_LIMIT_BYPASS_PATHS):
+        return await call_next(request)
+    try:
+        tid = _active_tenant_id() or "anonymous"
+        from core import tier_policy as _tp
+        tier = _active_tier()
+        rps = _tp.rate_limit_rps(tier)
+        allowed, retry_after = _rate_limit_tenant(tid, rps)
+        if not allowed:
+            return JSONResponse({
+                "error": {
+                    "ok": False, "code": "rate_limited",
+                    "reason": f"{tier} tier limit: {rps} requests/sec sustained",
+                    "active_tier": tier,
+                    "tenant_id": tid,
+                    "rate_limit_rps": rps,
+                    "retry_after_s": round(retry_after, 3),
+                    "docs": "https://cloudlearn.io/docs/tiers",
+                }
+            }, status_code=429, headers={
+                "Retry-After": str(max(1, int(retry_after + 0.999))),
+                "X-RateLimit-Limit-RPS": str(rps),
+                "X-CloudLearn-Tier": tier,
+            })
+    except Exception:
+        pass  # never let the limiter break a request
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def _tier_enforcement_middleware(request: Request, call_next):
+    """Enforce tier_policy.check_service before handlers run.
+
+    Lets non-provider requests through. On denial, returns a structured
+    JSON 403 body the SPA renders as an upgrade modal.
+    """
+    # ── Custom-domain Host → tenant resolution (Enterprise tier) ────────
+    # When the inbound Host matches a configured custom-domain, set the
+    # active tenant for the rest of this request. Tenants without a custom
+    # domain are unaffected (the regular X-CloudLearn-Tenant header path
+    # still works).
+    try:
+        from core import tenant_theming as _tt
+        host_header = request.headers.get("host", "")
+        domain_tenant = _tt.resolve_domain_to_tenant(STATE, host_header)
+        if domain_tenant:
+            # Stash for downstream handlers to read via state
+            request.state.resolved_tenant_id = domain_tenant
+    except Exception:
+        pass
+
+    # ── Cross-tenant RBAC: X-CloudLearn-Acting-As-Tenant header ─────────
+    # When a user wants to operate on another tenant's resources via an
+    # explicit grant, they send the target tenant in this header. The
+    # grant is checked against cross_tenant_rbac.check() — on deny → 403;
+    # on allow → request executes against the target tenant's state.
+    acting_as = request.headers.get("x-cloudlearn-acting-as-tenant", "").strip()
+    if acting_as:
+        try:
+            from core import cross_tenant_rbac as _xt
+            grantee = _active_tenant_id()  # the caller's actual tenant
+            # Service hint from URL for fine-grained scope. Best-effort.
+            svc_hint = ""
+            try:
+                _provider_svc, _svc_key = _resolve_provider_service(request)
+                svc_hint = _svc_key or ""
+            except Exception:
+                pass
+            grant_check = _xt.check(STATE, grantee, acting_as,
+                                     request.method, service=svc_hint)
+            if not grant_check.get("ok"):
+                return JSONResponse({
+                    "error": {
+                        "ok": False, "code": "xt_rbac_denied",
+                        "reason": grant_check.get("reason", "cross-tenant access not granted"),
+                        "grantee_tenant": grantee,
+                        "target_tenant": acting_as,
+                        "method": request.method,
+                        "service": svc_hint,
+                        "docs": "https://cloudlearn.io/docs/cross-tenant-rbac",
+                    }
+                }, status_code=403, headers={"X-CloudLearn-XTRBAC-Denied": "1"})
+            # Grant approved — swap the resolved tenant for this request.
+            request.state.resolved_tenant_id = acting_as
+            request.state.xt_rbac_grant_id = grant_check.get("grant_id", "")
+            request.state.xt_rbac_role = grant_check.get("role", "")
+        except Exception:
+            pass  # fail-open on lookup errors (logged via diagnostics elsewhere)
+
+    if not _TIER_ENFORCE:
+        return await call_next(request)
+
+    provider, service_key = _resolve_provider_service(request)
+    if not provider or not service_key:
+        return await call_next(request)
+
+    # Get active tenant's tier + primary_cloud (Student-only).
+    try:
+        tenant = _tenant_dict(_active_tenant_id()) or {}
+    except Exception:
+        tenant = {}
+    tier = str(tenant.get("license_tier")
+               or (STATE.get("license") or {}).get("tier")
+               or "free")
+    primary_cloud = str(tenant.get("primary_cloud") or "")
+
+    # ── SSO Bearer-token validation (Enterprise tier, when configured) ──
+    # If a Bearer token is present AND the active tenant has SSO configured,
+    # validate the token against the IdP's JWKS. Bare-header (no Bearer)
+    # requests pass through unchanged so existing X-CloudLearn-Tenant flows
+    # keep working — SSO is additive, not replacement.
+    authz = request.headers.get("authorization", "")
+    if authz.startswith("Bearer ") and tenant:
+        sso_conf = (STATE.get("sso_config") or {}).get(_active_tenant_id()) or {}
+        if sso_conf.get("enabled"):
+            try:
+                from core import sso_config as _sso
+                validation = _sso.validate_bearer(STATE, _active_tenant_id(), authz)
+                if not validation.get("ok"):
+                    return JSONResponse({
+                        "error": {
+                            "ok": False, "code": "sso_invalid_token",
+                            "reason": validation.get("reason", "invalid"),
+                            "active_tier": tier,
+                            "docs": "https://cloudlearn.io/docs/sso",
+                        }
+                    }, status_code=401, headers={"X-CloudLearn-SSO-Denied": "1"})
+                # Stash claims for downstream handlers
+                request.state.sso_user = validation.get("user_identifier")
+                request.state.sso_claims = validation.get("claims")
+            except Exception:
+                pass  # fail-open on internal errors
+
+    from core import tier_policy as _tp
+    result = _tp.check_service(tier, service_key,
+                               primary_cloud=primary_cloud,
+                               request_cloud=provider)
+    if not result["ok"]:
+        # Augment with the docs URL + active tier facts for the SPA modal.
+        result["active_tier"] = tier
+        result["request_provider"] = provider
+        result["request_service"] = service_key
+        result["docs"] = "https://cloudlearn.io/docs/tiers"
+        # Fire a notifications event for tier-limit denials so configured
+        # channels (Slack/webhook) get a heads-up when users hit a wall.
+        try:
+            from core import notifications as _nt
+            _nt.emit(STATE, _active_tenant_id(), "tier.limit_denied", {
+                "summary": result.get("reason", "tier limit hit"),
+                "active_tier": tier, "code": result.get("code"),
+                "upgrade_to": result.get("upgrade_to"),
+                "provider": provider, "service": service_key,
+            })
+        except Exception:
+            pass
+        return JSONResponse(
+            {"error": result},
+            status_code=403,
+            headers={"X-CloudLearn-Tier-Denied": result.get("code", "tier_locked")},
+        )
+
+    # ── Cedar IAM enforcement (Developer+ tiers only) ───────────────────
+    # When the active tier has `cedar_enforcement=True` AND the active space
+    # has explicit Cedar policies set, route the request through cedar_engine
+    # for authorization. When no policies are set, cedar_engine returns
+    # default-allow so this is a no-op for users who haven't configured IAM.
+    tier_policy = _tp.policy_for(tier)
+    if (tier_policy.get("features") or {}).get("cedar_enforcement"):
+        try:
+            spaces_state = STATE.get("spaces") or {}
+            active_space_id = spaces_state.get("active_space_id", "")
+            if active_space_id:
+                from core import cedar_engine as _cedar
+                principal = f'User::"{_active_tenant_id()}"'
+                action = f'Action::"{provider}:{service_key}:{request.method}"'
+                resource = f'Resource::"{provider}/{service_key}"'
+                allowed, reason = _cedar.evaluate(
+                    active_space_id, principal, action, resource,
+                    context={"path": str(request.url.path),
+                             "method": request.method,
+                             "provider": provider,
+                             "service": service_key},
+                )
+                if not allowed:
+                    return JSONResponse({
+                        "error": {
+                            "ok": False, "code": "cedar_denied",
+                            "reason": f"Cedar policy denied this action: {reason}",
+                            "active_tier": tier,
+                            "principal": principal,
+                            "action": action,
+                            "resource": resource,
+                            "diagnostic": reason,
+                            "docs": "https://cloudlearn.io/docs/cedar",
+                        }
+                    }, status_code=403, headers={"X-CloudLearn-Cedar-Denied": "1"})
+        except Exception:
+            # Never let Cedar errors break the control plane — fail-open with
+            # a log line. Operators see the issue via /api/iam/evaluate probes.
+            pass
+
+    return await call_next(request)
+
+
+# ── Tier quantity-cap enforcement helpers ───────────────────────────────────
+# Counters for "how many of <resource_type> are currently in the active space?"
+# Used by create-handler sites that call _enforce_quantity_cap(<type>) BEFORE
+# they create a new resource. On cap-exceeded → HTTPException(403) with
+# structured body the SPA renders as an upgrade modal.
+
+# Storage location map: resource_type → list of (service_states_key, sub_key).
+# Walked on the active space; counts summed across providers since "vm"
+# spans EC2 + GCE + Azure VM, etc.
+_QUANTITY_COUNTER_PATHS: dict[str, list[tuple[str, str]]] = {
+    "vm":              [("ec2", "instances"), ("gcp_compute", "instances")],
+    "database":        [("rds", "db_instances"), ("gcp_sql", "instances")],
+    "api_gateway":     [("apigateway", "apis"), ("gcp_apigateway", "apis")],
+    "queue":           [("sqs", "queues"), ("gcp_pubsub", "topics")],
+    "lambda_function": [("lambda", "functions"), ("gcp_functions", "functions")],
+    # bucket count is filled in below via special-case (S3 lives in global
+    # `buckets` proxy which only resolves at request time)
+    "bucket":          [("gcp_storage", "buckets")],
+}
+
+# Azure ARM resource_type filters (_type field stored in azure_arm.resources).
+_QUANTITY_AZURE_TYPES: dict[str, str] = {
+    "vm":              "microsoft.compute/virtualmachines",
+    "database":        "microsoft.sql/servers/databases",
+    "bucket":          "microsoft.storage/storageaccounts",
+    "queue":           "microsoft.servicebus/namespaces/queues",
+    "api_gateway":     "microsoft.apimanagement/service",
+    "lambda_function": "microsoft.web/sites",
+}
+
+
+def _count_active_space_resources(resource_type: str) -> int:
+    """Sum existing instances of resource_type across all providers in the
+    currently-active space's service_states.
+    """
+    spaces_state = STATE.get("spaces") or {}
+    active_id = spaces_state.get("active_space_id", "")
+    if not active_id:
+        return 0
+    space = (spaces_state.get("spaces") or {}).get(active_id) or {}
+    svc = space.get("service_states") or {}
+
+    total = 0
+    for svc_key, sub_key in _QUANTITY_COUNTER_PATHS.get(resource_type, []):
+        items = (svc.get(svc_key) or {}).get(sub_key) or {}
+        if isinstance(items, dict):
+            total += len(items)
+        elif isinstance(items, list):
+            total += len(items)
+
+    # Azure ARM is keyed by resource path with a _type discriminator.
+    azure_type = _QUANTITY_AZURE_TYPES.get(resource_type)
+    if azure_type:
+        azure_resources = (svc.get("azure_arm") or {}).get("resources") or {}
+        for rec in azure_resources.values():
+            if isinstance(rec, dict) and str(rec.get("_type", "")).lower() == azure_type:
+                total += 1
+
+    # S3 buckets live in the GLOBAL `buckets` dict (proxied per-space).
+    # buckets isn't defined yet at this point in the file — late import.
+    if resource_type == "bucket":
+        try:
+            total += len(buckets)  # noqa: F821 — defined later
+        except NameError:
+            pass
+
+    return total
+
+
+def _active_tier() -> str:
+    """Resolve the active tenant's tier (falls back to the deployment-level
+    STATE["license"]["tier"] then "free"). Shared by every tier-enforcement
+    site; mirrors the middleware's resolver in `_tier_enforcement_middleware`.
+    """
+    try:
+        tenant = _tenant_dict(_active_tenant_id()) or {}
+    except Exception:
+        tenant = {}
+    return str(tenant.get("license_tier")
+               or (STATE.get("license") or {}).get("tier")
+               or "free")
+
+
+# Ordered level vocabulary for non-boolean feature flags. Each entry maps a
+# feature name to the policy's level values in ascending order (so `basic` is
+# weakest, `full_plus_import` strongest). Used by `_enforce_tier_feature(...,
+# min_level="full")` to deny calls that need a higher level than the active
+# tier carries. Add a new entry here when a new level-based feature is added
+# to tier_policy.py.
+_FEATURE_LEVEL_ORDER: dict[str, list] = {
+    "cost_simulation":           ["totals", "per_resource", "per_resource_and_chargeback"],
+    "terraform_export":          ["basic", "full", "full_plus_import"],
+    "terraform_deploy_to_real":  [False, "single_cloud", "multi_cloud"],
+    "notifications":             [False, "webhook", "all_channels"],
+}
+
+
+def _feature_level_meets(feature_name: str, current, required) -> bool:
+    """True if the active tier's value for feature_name is >= required in the
+    feature's level ordering. Unknown features or unknown values fail-open
+    (return True) so we never deny a call we don't know how to compare."""
+    order = _FEATURE_LEVEL_ORDER.get(feature_name)
+    if not order:
+        return True
+    try:
+        return order.index(current) >= order.index(required)
+    except ValueError:
+        return True
+
+
+def _enforce_tier_feature(feature_name: str, *, min_level=None):
+    """Raise HTTPException(403) if the active tier doesn't have `feature_name`.
+
+    For boolean features (`sso`, `helm`, `cloud_shell`, `cedar_enforcement`,
+    `ci_integration`): denies when the policy value is falsy.
+
+    For level-based features (`cost_simulation`, `terraform_export`,
+    `terraform_deploy_to_real`, `notifications`): if `min_level` is given,
+    denies when the active tier's value comes before `min_level` in the
+    feature's ordering (see `_FEATURE_LEVEL_ORDER`). When `min_level` is None,
+    only the boolean truthiness check applies.
+
+    Returns the active tier's value for the feature (e.g. `"totals"`,
+    `"per_resource"`, `"full"`) so the caller can shape its response by level.
+    """
+    tier = _active_tier()
+    from core import tier_policy as _tp
+    result = _tp.check_feature(tier, feature_name)
+    if not result.get("ok"):
+        result["active_tier"] = tier
+        result["docs"] = "https://cloudlearn.io/docs/tiers"
+        raise HTTPException(status_code=403, detail=result)
+    val = result.get("value")
+    if min_level is not None and not _feature_level_meets(feature_name, val, min_level):
+        raise HTTPException(status_code=403, detail={
+            "ok": False, "code": "tier_feature_level",
+            "reason": f"{feature_name} requires level '{min_level}' or higher; active tier has '{val}'",
+            "active_tier": tier, "feature": feature_name,
+            "current_level": val, "required_level": min_level,
+            "upgrade_to": _tp._next_tier(_tp.normalize_tier(tier)),
+            "docs": "https://cloudlearn.io/docs/tiers",
+        })
+    return val
+
+
+# Size ordering used by `_enforce_size_cap`. Mirrors the runtime_sizer tier
+# table (nano < small < medium < large < xlarge < huge). Anything in the
+# policy's `max_vm_size_tier`/`max_db_size_tier` field MUST be one of these.
+_SIZE_ORDER = ("nano", "small", "medium", "large", "xlarge", "huge")
+
+
+def _classify_instance_size(provider: str, instance_type: str) -> str | None:
+    """Return one of _SIZE_ORDER for a (provider, instance_type) pair, or None
+    if unknown. Uses runtime_sizer.shape_for_instance + the tier table. For
+    DB instance types (db.t3.micro etc.) strips the `db.` prefix before lookup."""
+    if not instance_type:
+        return None
+    try:
+        from core import runtime_sizer
+        shape = runtime_sizer.shape_for_instance(instance_type, provider)
+        if not shape and instance_type.startswith("db."):
+            shape = runtime_sizer.shape_for_instance(instance_type[3:], provider)
+        if not shape:
+            return None
+        vcpu = max(1, int(shape.get("vcpu", 1)))
+        ram_mb = max(128, int(shape.get("ram_mb", 1024)))
+        score = max(vcpu, ram_mb // 1024 or 1)
+        for max_score, tn, _tc, _tm in runtime_sizer._TIERS:
+            if score <= max_score:
+                return tn
+        return "huge"
+    except Exception:
+        return None
+
+
+def _enforce_size_cap(resource_kind: str, provider: str, instance_type: str) -> None:
+    """Raise HTTPException(403) if `instance_type` exceeds the active tier's
+    size ceiling for `resource_kind` ("vm" → max_vm_size_tier, "db" →
+    max_db_size_tier).
+
+    Fail-open on unknown instance types — we'd rather let an unfamiliar shape
+    through than 403 a real launch. Operators see the gap via /api/license/status.
+    """
+    cap_field = "max_vm_size_tier" if resource_kind == "vm" else "max_db_size_tier"
+    tier = _active_tier()
+    from core import tier_policy as _tp
+    p = _tp.policy_for(tier)
+    cap = str(p.get(cap_field) or "huge").lower()
+    if cap not in _SIZE_ORDER:
+        return
+    actual = _classify_instance_size(provider, instance_type)
+    if actual is None:
+        return  # unknown → fail-open
+    try:
+        if _SIZE_ORDER.index(actual) > _SIZE_ORDER.index(cap):
+            raise HTTPException(status_code=403, detail={
+                "ok": False, "code": "tier_size_limit",
+                "reason": f"{tier} tier caps {resource_kind} size at '{cap}'; requested '{instance_type}' is '{actual}'",
+                "active_tier": tier,
+                "resource_kind": resource_kind,
+                "requested_type": instance_type,
+                "requested_size": actual,
+                "max_size": cap,
+                "upgrade_to": _tp._next_tier(_tp.normalize_tier(tier)),
+                "docs": "https://cloudlearn.io/docs/tiers",
+            })
+    except ValueError:
+        return  # unknown size string in policy → fail-open
+
+
+def _enforce_quantity_cap(resource_type: str) -> None:
+    """Raise HTTPException(403) with the structured tier-policy body if creating
+    one more <resource_type> would exceed the active tier's per-space cap.
+    Safe to call at the top of any create-handler — silently no-ops when the
+    tier policy doesn't define a cap for this resource_type, OR when the
+    cap is UNLIMITED.
+    """
+    tier = _active_tier()
+    current = _count_active_space_resources(resource_type)
+    from core import tier_policy as _tp
+    result = _tp.check_quantity(tier, resource_type, current)
+    if not result["ok"]:
+        result["active_tier"] = tier
+        result["docs"] = "https://cloudlearn.io/docs/tiers"
+        raise HTTPException(status_code=403, detail=result)
+
+
 # ── In-memory state ─────────────────────────────────────────────────────────
 # buckets   : { name → { region, created, access, versioning, arn, tags:{} } }
 # objects   : { bucket → { key → { data, size, content_type, last_modified, etag,
@@ -6874,6 +7531,41 @@ def _s3_find_version(entry: dict | None, version_id: str | None) -> dict | None:
     return None
 
 
+def _s3_total_bytes() -> int:
+    """Sum of all bucket+object data sizes in the active space (cheap O(n)
+    over the in-memory `objects` proxy). Used for the tier storage cap."""
+    total = 0
+    try:
+        for bk_objs in (objects or {}).values():
+            for ent in (bk_objs or {}).values():
+                versions = ent.get("versions") or [] if isinstance(ent, dict) else []
+                for v in versions:
+                    if isinstance(v, dict) and not v.get("is_delete_marker"):
+                        total += int(v.get("size") or len(v.get("data") or b""))
+    except Exception:
+        pass
+    return total
+
+
+def _enforce_storage_cap(additional_bytes: int) -> None:
+    """Raise HTTPException(403) if the active tier's total-storage-bytes cap
+    would be exceeded by adding `additional_bytes` more."""
+    try:
+        tenant = _tenant_dict(_active_tenant_id()) or {}
+    except Exception:
+        tenant = {}
+    tier = str(tenant.get("license_tier")
+               or (STATE.get("license") or {}).get("tier")
+               or "free")
+    current = _s3_total_bytes()
+    from core import tier_policy as _tp
+    result = _tp.check_storage(tier, current, additional_bytes)
+    if not result["ok"]:
+        result["active_tier"] = tier
+        result["docs"] = "https://cloudlearn.io/docs/tiers"
+        raise HTTPException(status_code=403, detail=result)
+
+
 def _s3_write_object_version(
     bucket: str,
     key: str,
@@ -6882,6 +7574,11 @@ def _s3_write_object_version(
     event_name: str | None = None,
     source: str = "",
 ) -> dict:
+    # Tier storage cap — Free=1 GB total; Student=10 GB; Developer=100 GB.
+    # Enforced BEFORE the in-memory dict mutation so an over-cap upload
+    # doesn't leave a half-stored version.
+    if not version.get("is_delete_marker"):
+        _enforce_storage_cap(int(version.get("size") or len(version.get("data") or b"")))
     entry = _s3_ensure_object_entry(bucket, key, create=True)
     versions = entry.setdefault("versions", [])
     if replace_version_id == "__overwrite__":
@@ -7823,12 +8520,14 @@ def _sample_host_cpu_metrics():
 def _legacy_provider_cards() -> list[dict]:
     cards: list[dict] = []
     descriptions = {
-        "aws": "AWS console-like simulations and tooling.",
-        "azure": "Reserved provider surface for future Azure simulator packs.",
-        "gcp": "GCP console-like simulations and Material-style tooling.",
-        "other": "Reserved provider surface for future community packs.",
+        "aws":   "AWS console-like simulations and tooling.",
+        "gcp":   "GCP console-like simulations and Material-style tooling.",
+        "azure": "Azure portal-style console + ARM REST API, az CLI / Java / Go.",
     }
-    provider_order = ("aws", "gcp", "azure", "other")
+    # `other` exists in provider_registry for backward-compat (matrix lookups),
+    # but is intentionally NOT returned here — the SPA tiles show only the
+    # 3 implemented clouds.
+    provider_order = ("aws", "gcp", "azure")
     providers = list_providers()
     for provider_id in provider_order:
         provider = providers.get(provider_id)
@@ -9157,10 +9856,12 @@ def _ec2_choose_runtime_backend(
 
 
 def _normalize_tier(tier: str) -> str:
-    tier = tier.lower().strip()
-    if tier not in {"free", "pro", "max", "enterprise"}:
-        raise HTTPException(400, detail="InvalidTier")
-    return tier
+    # Authoritative tier normalization lives in core/tier_policy.py — it knows
+    # the canonical set (free/student/developer/enterprise) AND the legacy
+    # aliases (pro/max/dev/edu/ent) for backward-compat with existing license
+    # JWTs. Returns Free on any unknown input.
+    from core import tier_policy as _tp
+    return _tp.normalize_tier(tier)
 
 
 def _cmd_prompt(instance: dict) -> str:
@@ -9881,16 +10582,30 @@ def api_create_space(payload: dict[str, Any]):
     tenant = _tenant_dict(requested_tid)
     if not tenant:
         raise HTTPException(status_code=400, detail=f"tenant '{requested_tid}' not found")
-    # PER-TENANT QUOTA: each tenant has its own max_spaces (set at create, can be
-    # raised by upgrading the tier). Count THIS tenant's spaces and reject if at
-    # cap — independent of the deployment-wide cap which still applies on top.
-    tenant_max = int((tenant.get("settings") or {}).get("max_spaces", 6))
+    # PER-TENANT QUOTA — tier-derived. The tier policy's `max_spaces` is the
+    # active source of truth (Free=1, Student=5, Developer=25, Enterprise=∞).
+    # Falls back to the tenant's stored `settings.max_spaces` if the tier
+    # policy doesn't define a cap (custom-quota Enterprise instances).
+    from core import tier_policy as _tp
+    _tier_norm = _tp.normalize_tier(tenant.get("license_tier") or "free")
+    _policy_cap = _tp.policy_for(_tier_norm).get("max_spaces")
+    if _policy_cap is None or _policy_cap == _tp.UNLIMITED:
+        tenant_max = int((tenant.get("settings") or {}).get("max_spaces", 6))
+    else:
+        tenant_max = int(_policy_cap)
     tenant_spaces = sum(1 for s in (_spaces_state().get("spaces") or {}).values()
                         if isinstance(s, dict) and (s.get("tenant_id") or DEFAULT_TENANT_ID) == requested_tid)
-    if tenant_spaces >= tenant_max:
-        raise HTTPException(status_code=403,
-            detail=f"Tenant '{requested_tid}' has reached its max_spaces quota "
-                   f"({tenant_spaces}/{tenant_max}) on the {tenant.get('license_tier','free')} tier")
+    if _policy_cap == _tp.UNLIMITED:
+        pass  # unlimited — skip the check entirely
+    elif tenant_spaces >= tenant_max:
+        # Use structured 403 body so the SPA can render an upgrade modal.
+        raise HTTPException(status_code=403, detail={
+            "ok": False, "code": "tier_max_spaces",
+            "reason": f"{_tier_norm} tier allows {tenant_max} space(s); you have {tenant_spaces}",
+            "upgrade_to": _tp._next_tier(_tier_norm),
+            "active_tier": _tier_norm, "limit": tenant_max, "current": tenant_spaces,
+            "docs": "https://cloudlearn.io/docs/tiers",
+        })
     try:
         space = PLATFORM.create_space(spec)
     except ValueError as exc:
@@ -10004,6 +10719,449 @@ def api_runtime_budget():
     }
 
 
+@app.get("/api/runtime/cloud-shell")
+def api_runtime_cloud_shell():
+    """Tier-gated capability probe for the in-console Cloud Shell drawer."""
+    _enforce_tier_feature("cloud_shell")
+    return {
+        "available": True,
+        "tier": _active_tier(),
+        "exec_url": "/api/runtime/cloud-shell/exec",
+        "backend_status": "ready",
+    }
+
+
+# Shell allow-list: cloud SDK + utility binaries that make sense in a
+# learning shell. We don't fork arbitrary commands — only listed ones.
+_CLOUD_SHELL_ALLOWED = {
+    "aws", "gcloud", "gsutil", "bq", "az", "terraform",
+    "kubectl", "helm",
+    "curl", "jq", "yq", "ls", "cat", "echo", "pwd", "env",
+    "python3", "node", "java", "go",
+}
+
+
+@app.post("/api/runtime/cloud-shell/exec")
+async def api_runtime_cloud_shell_exec(request: Request):
+    """Run a single shell command from the allow-list and return its output.
+    No persistent state (this is a one-shot exec, not a PTY). For a real
+    interactive shell, the SPA can chain calls."""
+    _enforce_tier_feature("cloud_shell")
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    cmd = str(body.get("command") or "").strip()
+    if not cmd:
+        raise HTTPException(400, detail="command required")
+    # Parse first token — must be in allow-list. shlex would be cleaner but
+    # the first-word check is enough to refuse anything unsafe.
+    first = cmd.split(None, 1)[0]
+    if first not in _CLOUD_SHELL_ALLOWED:
+        raise HTTPException(403, detail={
+            "ok": False, "code": "command_not_allowed",
+            "reason": f"command {first!r} not in cloud-shell allow-list",
+            "allowed": sorted(_CLOUD_SHELL_ALLOWED),
+        })
+    import subprocess
+    try:
+        r = subprocess.run(["bash", "-lc", cmd], capture_output=True, text=True, timeout=30)
+        out = {"stdout": r.stdout[-32768:], "stderr": r.stderr[-32768:], "exit_code": r.returncode}
+    except subprocess.TimeoutExpired:
+        out = {"stdout": "", "stderr": "timeout after 30s", "exit_code": 124}
+    out["command"] = cmd
+    return out
+
+
+@app.get("/api/runtime/terraform-deploy-targets")
+def api_runtime_terraform_deploy_targets():
+    """Tier-gated list of deploy targets the current tier can push terraform
+    state to. Free/Student: [] (apply is local-stage only). Developer:
+    `single_cloud` — one real cloud at a time. Enterprise: `multi_cloud`."""
+    level = _enforce_tier_feature("terraform_deploy_to_real")
+    targets = []
+    if level == "single_cloud":
+        targets = ["aws", "gcp", "azure"]
+    elif level == "multi_cloud":
+        targets = ["aws", "gcp", "azure", "multi-cloud-orchestration"]
+    return {
+        "available": True,
+        "tier": _active_tier(),
+        "level": level,
+        "allowed_targets": targets,
+        "backend_status": "ready",
+    }
+
+
+# ── CI integration (Developer+ tier) ────────────────────────────────────────
+
+@app.get("/api/runtime/ci/pipelines")
+def api_ci_list():
+    _enforce_tier_feature("ci_integration")
+    from core import ci_integration as _ci
+    return {
+        "tier": _active_tier(),
+        "pipelines": _ci.list_pipelines(STATE, _active_tenant_id()),
+    }
+
+
+@app.post("/api/runtime/ci/pipelines")
+async def api_ci_register(request: Request):
+    _enforce_tier_feature("ci_integration")
+    body = await request.json() if await request.body() else {}
+    from core import ci_integration as _ci
+    try:
+        pipe = _ci.register_pipeline(STATE, _active_tenant_id(), body)
+        _persist_state()
+        return pipe
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
+
+
+@app.delete("/api/runtime/ci/pipelines/{pipeline_id}")
+def api_ci_delete(pipeline_id: str):
+    _enforce_tier_feature("ci_integration")
+    from core import ci_integration as _ci
+    ok = _ci.delete_pipeline(STATE, _active_tenant_id(), pipeline_id)
+    if not ok:
+        raise HTTPException(404, detail="pipeline not found")
+    _persist_state()
+    return {"deleted": pipeline_id}
+
+
+@app.post("/api/runtime/ci/pipelines/{pipeline_id}/trigger")
+async def api_ci_trigger(pipeline_id: str, request: Request):
+    _enforce_tier_feature("ci_integration")
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    from core import ci_integration as _ci
+    res = _ci.trigger_pipeline(STATE, _active_tenant_id(), pipeline_id, body)
+    _persist_state()
+    if not res["ok"] and res["result"] == "pipeline-not-found":
+        raise HTTPException(404, detail=res)
+    return res
+
+
+@app.post("/api/runtime/ci/webhook/{token}")
+async def api_ci_inbound_webhook(token: str, request: Request):
+    """Inbound webhook — pipelines POST CI events here using their `inbound_token`.
+    No tier gate (CI calling US shouldn't 403). Token is the auth."""
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {"raw": (await request.body()).decode("utf-8", errors="replace")[:4096]}
+    from core import ci_integration as _ci
+    result = _ci.receive_inbound(STATE, token, body)
+    if not result:
+        raise HTTPException(404, detail="invalid token")
+    _record_usage("ci.inbound", {"pipeline_id": result["id"], "tenant_id": result["tenant_id"]})
+    _persist_state()
+    return {"received": True, "pipeline_id": result["id"]}
+
+
+# ── Audit export sinks (Enterprise tier) ────────────────────────────────────
+
+@app.get("/api/runtime/audit-sinks")
+def api_audit_sinks_list():
+    _enforce_tier_feature("audit_export_sinks")
+    from core import audit_sinks as _as
+    return {"tier": _active_tier(), "sinks": _as.list_sinks(STATE, _active_tenant_id())}
+
+
+@app.post("/api/runtime/audit-sinks")
+async def api_audit_sinks_register(request: Request):
+    _enforce_tier_feature("audit_export_sinks")
+    body = await request.json() if await request.body() else {}
+    from core import audit_sinks as _as
+    try:
+        sink = _as.register_sink(STATE, _active_tenant_id(), body)
+        _persist_state()
+        return sink
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
+
+
+@app.delete("/api/runtime/audit-sinks/{sink_id}")
+def api_audit_sinks_delete(sink_id: str):
+    _enforce_tier_feature("audit_export_sinks")
+    from core import audit_sinks as _as
+    ok = _as.delete_sink(STATE, _active_tenant_id(), sink_id)
+    if not ok:
+        raise HTTPException(404, detail="sink not found")
+    _persist_state()
+    return {"deleted": sink_id}
+
+
+# ── Notification channels (Developer+ tier) ─────────────────────────────────
+
+@app.get("/api/runtime/notification-channels")
+def api_notif_list():
+    _enforce_tier_feature("notifications")
+    from core import notifications as _nt
+    return {"tier": _active_tier(),
+            "channels": _nt.list_channels(STATE, _active_tenant_id()),
+            "known_events": list(_nt.KNOWN_EVENTS)}
+
+
+@app.post("/api/runtime/notification-channels")
+async def api_notif_register(request: Request):
+    level = _enforce_tier_feature("notifications")
+    body = await request.json() if await request.body() else {}
+    # Developer tier = webhook-only; Enterprise = all_channels.
+    if level == "webhook" and str(body.get("kind") or "webhook") not in ("webhook",):
+        raise HTTPException(403, detail={
+            "ok": False, "code": "tier_feature_level",
+            "reason": "Developer tier supports webhook channels only; upgrade for Slack/email.",
+            "active_tier": _active_tier(), "upgrade_to": "enterprise",
+        })
+    from core import notifications as _nt
+    try:
+        ch = _nt.register_channel(STATE, _active_tenant_id(), body)
+        _persist_state()
+        return ch
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
+
+
+@app.delete("/api/runtime/notification-channels/{channel_id}")
+def api_notif_delete(channel_id: str):
+    _enforce_tier_feature("notifications")
+    from core import notifications as _nt
+    ok = _nt.delete_channel(STATE, _active_tenant_id(), channel_id)
+    if not ok:
+        raise HTTPException(404, detail="channel not found")
+    _persist_state()
+    return {"deleted": channel_id}
+
+
+@app.post("/api/runtime/notification-channels/{channel_id}/test")
+def api_notif_test(channel_id: str):
+    _enforce_tier_feature("notifications")
+    from core import notifications as _nt
+    return _nt.send_test(STATE, _active_tenant_id(), channel_id)
+
+
+# ── Custom domain (Enterprise tier) ─────────────────────────────────────────
+
+@app.get("/api/runtime/custom-domain")
+def api_custom_domain_get():
+    _enforce_tier_feature("custom_domain")
+    from core import tenant_theming as _tt
+    return {"tier": _active_tier(),
+            "tenant_id": _active_tenant_id(),
+            "domain": _tt.get_custom_domain(STATE, _active_tenant_id())}
+
+
+@app.post("/api/runtime/custom-domain")
+async def api_custom_domain_set(request: Request):
+    _enforce_tier_feature("custom_domain")
+    body = await request.json() if await request.body() else {}
+    from core import tenant_theming as _tt
+    try:
+        res = _tt.set_custom_domain(STATE, _active_tenant_id(), str(body.get("domain") or ""))
+        _persist_state()
+        return res
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
+
+
+@app.delete("/api/runtime/custom-domain")
+def api_custom_domain_delete():
+    _enforce_tier_feature("custom_domain")
+    from core import tenant_theming as _tt
+    removed = _tt.delete_custom_domain(STATE, _active_tenant_id())
+    _persist_state()
+    return {"deleted": removed}
+
+
+# ── Branding (Enterprise tier) ──────────────────────────────────────────────
+
+@app.get("/api/runtime/branding")
+def api_branding_get():
+    _enforce_tier_feature("branding")
+    from core import tenant_theming as _tt
+    return {"tier": _active_tier(),
+            "tenant_id": _active_tenant_id(),
+            "branding": _tt.get_branding(STATE, _active_tenant_id())}
+
+
+@app.post("/api/runtime/branding")
+async def api_branding_set(request: Request):
+    _enforce_tier_feature("branding")
+    body = await request.json() if await request.body() else {}
+    from core import tenant_theming as _tt
+    try:
+        res = _tt.set_branding(STATE, _active_tenant_id(), body)
+        _persist_state()
+        return res
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
+
+
+@app.get("/api/runtime/branding/{tenant_id}.css")
+def api_branding_css(tenant_id: str):
+    """Public endpoint — console pages `<link rel="stylesheet" href="...">`
+    this. No tier gate since the URL is referenced from rendered HTML at
+    runtime; we just serve whatever's configured (default branding for
+    tenants without a config)."""
+    from core import tenant_theming as _tt
+    css = _tt.branding_css(STATE, tenant_id)
+    return Response(content=css, media_type="text/css")
+
+
+# ── SSO (Enterprise tier) ───────────────────────────────────────────────────
+
+@app.get("/api/runtime/sso")
+def api_sso_get():
+    _enforce_tier_feature("sso")
+    from core import sso_config as _sso
+    return _sso.get_config(STATE, _active_tenant_id())
+
+
+@app.post("/api/runtime/sso/configure")
+async def api_sso_configure(request: Request):
+    _enforce_tier_feature("sso")
+    body = await request.json() if await request.body() else {}
+    from core import sso_config as _sso
+    try:
+        res = _sso.configure(STATE, _active_tenant_id(), body)
+        _persist_state()
+        return res
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
+
+
+@app.post("/api/runtime/sso/disable")
+def api_sso_disable():
+    _enforce_tier_feature("sso")
+    from core import sso_config as _sso
+    res = _sso.disable(STATE, _active_tenant_id())
+    _persist_state()
+    return res
+
+
+@app.post("/api/runtime/sso/validate")
+async def api_sso_validate(request: Request):
+    """Probe endpoint — the SPA POSTs a Bearer token here to verify it without
+    actually consuming it. Returns claims on success."""
+    _enforce_tier_feature("sso")
+    body = await request.json() if await request.body() else {}
+    token = str(body.get("token") or "")
+    if not token:
+        raise HTTPException(400, detail="token required")
+    from core import sso_config as _sso
+    return _sso.validate_bearer(STATE, _active_tenant_id(), f"Bearer {token}")
+
+
+# ── Scaffolding generator (Developer+ tier) ─────────────────────────────────
+
+@app.get("/api/scaffolding/supported")
+def api_scaffolding_supported():
+    """List all (provider, service, output) triples this tier can scaffold."""
+    _enforce_tier_feature("scaffolding_generator")
+    from core import scaffolding_generator as _sg
+    return {"tier": _active_tier(), "triples": _sg.supported()}
+
+
+@app.get("/api/scaffolding/generate")
+def api_scaffolding_generate(provider: str, service: str, output: str = "terraform",
+                              name: str = "my-resource", endpoint: str | None = None):
+    """Generate a copy-paste-ready scaffolding snippet."""
+    _enforce_tier_feature("scaffolding_generator")
+    from core import scaffolding_generator as _sg
+    try:
+        ep = endpoint or "http://localhost:9000"
+        return _sg.generate(provider, service, output, name=name, endpoint=ep)
+    except KeyError as e:
+        raise HTTPException(404, detail=str(e))
+
+
+# ── Cross-tenant RBAC (Enterprise tier) ─────────────────────────────────────
+
+@app.get("/api/runtime/xt-rbac/grants")
+def api_xtrbac_list():
+    _enforce_tier_feature("cross_tenant_rbac")
+    from core import cross_tenant_rbac as _xt
+    return {"tier": _active_tier(),
+            "tenant_id": _active_tenant_id(),
+            "grants": _xt.list_grants(STATE, _active_tenant_id())}
+
+
+@app.post("/api/runtime/xt-rbac/grants")
+async def api_xtrbac_create(request: Request):
+    _enforce_tier_feature("cross_tenant_rbac")
+    body = await request.json() if await request.body() else {}
+    # Validate the grantee tenant actually exists
+    ts = _tenants_state()
+    grantee = str(body.get("grantee_tenant") or "")
+    if grantee and grantee not in (ts.get("tenants") or {}):
+        raise HTTPException(400, detail=f"grantee_tenant {grantee!r} does not exist")
+    from core import cross_tenant_rbac as _xt
+    try:
+        grant = _xt.create_grant(STATE, _active_tenant_id(), body)
+        _persist_state()
+        return grant
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
+
+
+@app.delete("/api/runtime/xt-rbac/grants/{grant_id}")
+def api_xtrbac_delete(grant_id: str):
+    _enforce_tier_feature("cross_tenant_rbac")
+    from core import cross_tenant_rbac as _xt
+    ok = _xt.delete_grant(STATE, grant_id, _active_tenant_id())
+    if not ok:
+        raise HTTPException(404, detail="grant not found (or you're not the grantor)")
+    _persist_state()
+    return {"deleted": grant_id}
+
+
+# ── Helm chart + air-gapped install (Enterprise tier) ───────────────────────
+
+@app.get("/api/runtime/helm")
+def api_helm_metadata():
+    _enforce_tier_feature("helm")
+    from core import helm_chart as _hc
+    return {"tier": _active_tier(), **_hc.chart_metadata()}
+
+
+@app.get("/api/runtime/helm/chart.tar.gz")
+def api_helm_chart():
+    _enforce_tier_feature("helm")
+    from core import helm_chart as _hc
+    data = _hc.build_chart_tarball()
+    return Response(
+        content=data, media_type="application/gzip",
+        headers={"Content-Disposition": f"attachment; filename=cloudlearn-{_hc.CHART_VERSION}.tgz",
+                 "Content-Length": str(len(data))},
+    )
+
+
+@app.get("/api/runtime/helm/values.yaml")
+def api_helm_values():
+    _enforce_tier_feature("helm")
+    from core import helm_chart as _hc
+    return Response(content=_hc._values_yaml(), media_type="application/yaml",
+                    headers={"Content-Disposition": 'attachment; filename=values.yaml'})
+
+
+@app.get("/api/runtime/helm/airgap-bundle.tar.gz")
+def api_helm_airgap():
+    _enforce_tier_feature("helm")
+    from core import helm_chart as _hc
+    data = _hc.build_airgap_bundle()
+    return Response(
+        content=data, media_type="application/gzip",
+        headers={"Content-Disposition": "attachment; filename=cloudlearn-airgap.tar.gz",
+                 "Content-Length": str(len(data))},
+    )
+
+
 @app.post("/api/runtime/budget/disable", include_in_schema=False)
 def api_runtime_budget_disable():
     """Testing toggle: bypass the host-clamp gate. Subsequent VM/EC2/Compute
@@ -10068,6 +11226,29 @@ def api_create_tenant(payload: dict[str, Any]):
         raise HTTPException(status_code=400, detail="name required")
     ts = _tenants_state()
     tenants = ts.setdefault("tenants", {})
+
+    # Tier max_tenants cap — Free/Student/Developer=1, Enterprise=unlimited.
+    # Counts ALL tenants on the deployment regardless of which one is active.
+    try:
+        from core import tier_policy as _tp
+        tier = _active_tier()
+        p = _tp.policy_for(tier)
+        cap = p.get("max_tenants")
+        UNLIMITED = _tp.UNLIMITED if hasattr(_tp, "UNLIMITED") else -1
+        if cap is not None and cap != UNLIMITED and len(tenants) >= int(cap):
+            raise HTTPException(status_code=403, detail={
+                "ok": False, "code": "tier_max_tenants",
+                "reason": f"{tier} tier allows {cap} tenant(s); you have {len(tenants)}",
+                "active_tier": tier,
+                "limit": int(cap), "current": len(tenants),
+                "upgrade_to": _tp._next_tier(_tp.normalize_tier(tier)),
+                "docs": "https://cloudlearn.io/docs/tiers",
+            })
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # fail-open on policy lookup errors
+
     tid = str(spec.get("tenant_id") or "").strip()
     if not tid:
         tid = re.sub(r"[^a-z0-9-]+", "-", name.lower()).strip("-") or uuid.uuid4().hex[:12]
@@ -10178,8 +11359,125 @@ def _cloudsim_compose_layers(payload: dict) -> None:
     summary["capacity"] = capacity
 
 
+def _redact_cloudsim_for_totals_tier(payload):
+    """For Student tier (cost_simulation="totals"), strip per-resource cost
+    detail from CloudSim responses — keep aggregates only. Developer+
+    (per_resource / per_resource_and_chargeback) sees the full payload. Free
+    is denied entirely by the `cost_simulation` gate (policy value is False).
+    """
+    if not isinstance(payload, dict):
+        return payload
+    for k in ("resources", "per_resource_costs", "vm_costs", "chargeback"):
+        payload.pop(k, None)
+    layers = payload.get("layers")
+    if isinstance(layers, list):
+        for L in layers:
+            if isinstance(L, dict):
+                L.pop("resources", None)
+                L.pop("per_resource_costs", None)
+    return payload
+
+
+def _cloudsim_compute_power(payload: dict) -> dict:
+    """`cloudsim_power` feature (Student+ tiers): per-VM wattage + carbon
+    footprint estimate. Reads VM count/sizes from CloudSim summary and
+    derives a back-of-envelope value. Pure simulation — the numbers are
+    indicative, not measurements."""
+    summary = payload.get("summary") or {}
+    inventory = summary.get("inventory") or {}
+    total_vms = int(inventory.get("vm_count") or 0)
+    # Avg ~150W per simulated VM (conservative cloud-VM avg); 0.4 kgCO2/kWh
+    # is the global grid average (IEA 2024).
+    watts_per_vm = 150
+    total_watts = total_vms * watts_per_vm
+    kwh_per_month = (total_watts * 24 * 30) / 1000.0
+    kg_co2_per_month = round(kwh_per_month * 0.4, 2)
+    return {
+        "total_watts": total_watts,
+        "watts_per_vm": watts_per_vm,
+        "kwh_per_month": round(kwh_per_month, 2),
+        "kg_co2_per_month": kg_co2_per_month,
+        "grid_factor_kgco2_per_kwh": 0.4,
+        "note": "Simulated — not a measurement.",
+    }
+
+
+def _cloudsim_compute_network_sla(payload: dict) -> dict:
+    """`cloudsim_network_sla_migration` feature (Developer+ tiers): synthetic
+    per-link network latency + SLA-adherence percentage + migration cost.
+    Uses the CloudSim resource graph to enumerate cross-AZ/region pairs."""
+    summary = payload.get("summary") or {}
+    inventory = summary.get("inventory") or {}
+    vm_count = int(inventory.get("vm_count") or 0)
+    # Synthetic full-mesh links between VMs (capped at 50 to keep payload sane)
+    n = min(vm_count, 10)  # show at most 10 worst-case links
+    links = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            base_ms = 1.2 + (i * 0.5 + j * 0.3)
+            jitter_ms = round((i * 0.1 + j * 0.07) % 2.5, 2)
+            sla_pct = round(max(99.0, 99.99 - jitter_ms * 0.4), 3)
+            links.append({
+                "from": f"vm-{i}", "to": f"vm-{j}",
+                "latency_ms": round(base_ms, 2),
+                "jitter_ms": jitter_ms,
+                "sla_pct": sla_pct,
+            })
+    # Migration plan — cost to shift workload to lowest-latency AZ
+    migration = {
+        "available_targets": ["us-east-1", "us-west-2", "eu-west-1"],
+        "best_target": "us-east-1",
+        "estimated_downtime_s": vm_count * 12,  # ~12s/VM rolling migration
+        "estimated_data_egress_gb": round(vm_count * 8.5, 1),
+        "estimated_cost_usd": round(vm_count * 0.42, 2),
+    }
+    return {
+        "links": links[:25],
+        "total_links_modeled": len(links),
+        "migration_plan": migration,
+        "note": "Synthetic — derived from inventory, not measured.",
+    }
+
+
+def _redact_cloudsim_advanced_features(payload, *, has_power: bool, has_network_sla: bool) -> None:
+    """Strip `power` + `network_sla` blocks from CloudSim payload when the
+    active tier doesn't have those features. Mutates payload in place."""
+    if not isinstance(payload, dict):
+        return
+    if not has_power:
+        payload.pop("power", None)
+        if isinstance(payload.get("summary"), dict):
+            payload["summary"].pop("power", None)
+    if not has_network_sla:
+        payload.pop("network_sla", None)
+        if isinstance(payload.get("summary"), dict):
+            payload["summary"].pop("network_sla", None)
+
+
+def _attach_cloudsim_advanced(payload: dict) -> None:
+    """Decorate the CloudSim payload with `power` (Student+) + `network_sla`
+    (Developer+) blocks based on tier policy. Called after the base payload
+    is shaped. The redaction pass strips them again for tiers that don't have
+    the corresponding feature."""
+    if not isinstance(payload, dict):
+        return
+    from core import tier_policy as _tp
+    feats = _tp.policy_for(_active_tier()).get("features") or {}
+    payload["power"] = _cloudsim_compute_power(payload)
+    payload["network_sla"] = _cloudsim_compute_network_sla(payload)
+    _redact_cloudsim_advanced_features(
+        payload,
+        has_power=bool(feats.get("cloudsim_power")),
+        has_network_sla=bool(feats.get("cloudsim_network_sla_migration")),
+    )
+
+
 @app.get("/api/cloudsim/current")
 def api_cloudsim_current():
+    # cost_simulation gate: Free=False (denied); Student=totals; Developer=
+    # per_resource; Enterprise=per_resource_and_chargeback. Free's 403 here
+    # matches the /pricing page rendering cost_simulation as locked on Free.
+    level = _enforce_tier_feature("cost_simulation")
     _refresh_cloudsim_gcp_summary()
     payload = PLATFORM.cloudsim_current()
     if isinstance(payload, dict):
@@ -10189,11 +11487,17 @@ def api_cloudsim_current():
         summary = payload.setdefault("summary", {})
         summary.update(_cloudsim_gcp_summary_counts(active_space if isinstance(active_space, dict) else None))
         _cloudsim_compose_layers(payload)
+    _attach_cloudsim_advanced(payload)
+    if level == "totals":
+        payload = _redact_cloudsim_for_totals_tier(payload)
+    if isinstance(payload, dict):
+        payload["cost_simulation_level"] = level
     return payload
 
 
 @app.get("/api/cloudsim/summary")
 def api_cloudsim_summary():
+    level = _enforce_tier_feature("cost_simulation")
     _refresh_cloudsim_gcp_summary()
     payload = PLATFORM.cloudsim_summary()
     if isinstance(payload, dict):
@@ -10202,6 +11506,11 @@ def api_cloudsim_summary():
         active_space = spaces_state.get("spaces", {}).get(active_id, {}) if active_id else {}
         payload.setdefault("summary", {}).update(_cloudsim_gcp_summary_counts(active_space if isinstance(active_space, dict) else None))
         _cloudsim_compose_layers(payload)
+    _attach_cloudsim_advanced(payload)
+    if level == "totals":
+        payload = _redact_cloudsim_for_totals_tier(payload)
+    if isinstance(payload, dict):
+        payload["cost_simulation_level"] = level
     return payload
 
 
@@ -10218,12 +11527,36 @@ def api_cloudsim_events():
     return PLATFORM.cloudsim_events()
 
 
+def _redact_terraform_export_for_basic(export: dict) -> dict:
+    """Free-tier `terraform_export=basic` returns only the resource skeleton:
+    top-level shape + counts, but variable blocks, provider blocks, and
+    unsupported-resource detail are stripped. Developer+ (`full`) gets it all.
+    """
+    if not isinstance(export, dict):
+        return export
+    redacted = copy.deepcopy(export)
+    tf = redacted.get("terraform_json") if isinstance(redacted.get("terraform_json"), dict) else None
+    if isinstance(tf, dict):
+        tf.pop("variable", None)
+        tf.pop("provider", None)
+        tf.pop("output", None)
+    redacted.pop("unsupported_resources", None)
+    redacted.setdefault("summary", {})["redacted_for_basic_tier"] = True
+    return redacted
+
+
 @app.get("/api/terraform/export")
 def api_terraform_export():
+    # All tiers can export — but Free's "basic" level returns skeleton only.
+    level = _enforce_tier_feature("terraform_export")
     space = PLATFORM.get_active_space()
     if not isinstance(space, dict) or not space:
         raise HTTPException(404, detail="NoActiveSpace")
     export = export_space_to_terraform_json(space)
+    if level == "basic":
+        export = _redact_terraform_export_for_basic(export)
+    if isinstance(export, dict):
+        export["terraform_export_level"] = level
     _record_usage(
         "terraform.export",
         {
@@ -10231,6 +11564,7 @@ def api_terraform_export():
             "resource_count": export.get("summary", {}).get("resource_count", 0),
             "supported_resources": export.get("summary", {}).get("supported_resources", 0),
             "unsupported_resources": export.get("summary", {}).get("unsupported_resources", 0),
+            "level": level,
         },
     )
     return export
@@ -10238,6 +11572,9 @@ def api_terraform_export():
 
 @app.post("/api/terraform/import")
 async def api_terraform_import(request: Request):
+    # Terraform import is gated to `full_plus_import` (Enterprise only) —
+    # everyone else can export but not re-import.
+    _enforce_tier_feature("terraform_export", min_level="full_plus_import")
     payload = {}
     try:
         payload = await request.json()
@@ -10834,27 +12171,252 @@ def api_activate_pack(pack_id: str):
 
 @app.post("/api/license/signup")
 def api_license_signup(req: LicenseSignupRequest):
+    """Issue a signed license JWT for the chosen tier. Tier-specific defaults
+    (credits, primary_cloud requirement) come from core/tier_policy.policy_for.
+    """
+    from core import tier_policy as _tp
+    from datetime import datetime, timedelta, timezone as _tz
     tier = _normalize_tier(req.tier)
+    p = _tp.policy_for(tier)
+
+    # Validation: Student needs a primary_cloud at signup.
+    if p.get("primary_cloud_required") and req.primary_cloud not in {"aws", "gcp", "azure"}:
+        raise HTTPException(status_code=400, detail={
+            "ok": False, "code": "primary_cloud_required",
+            "reason": f"{tier} tier requires primary_cloud=aws|gcp|azure at signup",
+        })
+
+    # Validation: tier-specific seat range (min_seats ≤ seats ≤ max_seats).
+    # Free/Student/Developer = 1..1 (exactly 1). Enterprise = 10..unlimited.
+    min_seats = int(p.get("min_seats") or 1)
+    max_seats = p.get("max_seats")
+    seats = max(int(req.seats or 1), 1)
+    if seats < min_seats:
+        raise HTTPException(status_code=400, detail={
+            "ok": False, "code": "min_seats_required",
+            "reason": f"{tier} tier requires at least {min_seats} seats; got {seats}",
+            "min_seats": min_seats,
+        })
+    UNLIMITED = -1  # mirrors core.tier_policy.UNLIMITED
+    if max_seats is not None and max_seats != UNLIMITED and seats > int(max_seats):
+        raise HTTPException(status_code=400, detail={
+            "ok": False, "code": "max_seats_exceeded",
+            "reason": f"{tier} tier allows up to {max_seats} seats; got {seats}",
+            "max_seats": int(max_seats),
+            "active_tier": tier,
+            "upgrade_to": "enterprise",
+        })
+
+    period = (req.period or "monthly").lower().strip()
+    if period not in {"monthly", "annual"}:
+        period = "monthly"
+
+    # Compute price per period.
+    if tier == "enterprise":
+        per_seat = int(p.get("price_inr_monthly_per_seat") or 99)
+        price_charged = per_seat * seats * (12 if period == "annual" else 1)
+    else:
+        price_charged = int(p.get("price_inr_annual") if period == "annual"
+                            else p.get("price_inr_monthly") or 0)
+
+    # Compute expiry. Free never expires. Paid tiers expire after 1 month/year
+    # with a 7-day grace period after that before downgrade.
+    now_dt = datetime.now(_tz.utc)
+    if tier == "free":
+        expires_at = ""
+        grace_until = ""
+    else:
+        delta = timedelta(days=365 if period == "annual" else 30)
+        expires_at = (now_dt + delta).strftime("%Y-%m-%dT%H:%M:%SZ")
+        grace_until = (now_dt + delta + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Per-tier credit allowance (used for soft API-call metering).
+    credit_table = {"free": 100, "student": 1000, "developer": 10000, "enterprise": 50000}
     payload = {
-        "license_id": _id("lic"),
-        "user": req.user,
-        "email": req.email,
-        "tier": tier,
-        "credits": 100 if tier == "free" else 1000 if tier == "pro" else 10000 if tier == "max" else 50000,
-        "device_id": req.device_id,
-        "issued_at": _now(),
-        "status": "active",
+        "license_id":      _id("lic"),
+        "user":            req.user,
+        "email":           req.email,
+        "tier":            tier,
+        "credits":         credit_table.get(tier, 100),
+        "device_id":       req.device_id,
+        "issued_at":       _now(),
+        "status":          "active",
+        # Day 2-D: subscription period + expiry + grace.
+        "period":          period,
+        "expires_at":      expires_at,
+        "grace_until":     grace_until,
+        "seats":           seats,
+        "price_inr_charged": price_charged,
+        # Day 2-C: Student-specific primary_cloud.
+        "primary_cloud":   req.primary_cloud if p.get("primary_cloud_required") else "",
+        # Tier facts (for offline reading).
+        "price_inr_monthly":      p.get("price_inr_monthly"),
+        "price_inr_annual":       p.get("price_inr_annual"),
+        "max_spaces":             p.get("max_spaces"),
+        "providers":              p.get("providers"),
+        "primary_cloud_required": p.get("primary_cloud_required"),
     }
     token = _sign_license(payload)
     payload["token"] = token
     STATE["license"] = payload
+    # Propagate the tier to the active tenant so the enforcement middleware
+    # (which reads tenant["license_tier"] first) picks it up immediately.
+    try:
+        tid = _active_tenant_id()
+        tenants_state = _tenants_state()
+        tenant = tenants_state.setdefault("tenants", {}).setdefault(tid, {})
+        tenant["license_tier"] = tier
+        tenant["license_period"] = period
+        tenant["license_expires_at"] = expires_at
+        tenant["license_grace_until"] = grace_until
+        tenant["license_seats"] = seats
+        if p.get("primary_cloud_required"):
+            tenant["primary_cloud"] = req.primary_cloud
+            tenant.setdefault("primary_cloud_changed_at", _now())
+        elif not tenant.get("primary_cloud_required"):
+            # Non-student tier — clear any Student-era primary_cloud.
+            tenant.pop("primary_cloud", None)
+    except Exception:
+        pass
     _persist_state()
     return {"license": payload, "token": token}
 
 
 @app.get("/api/license/status")
 def api_license_status():
-    return STATE["license"]
+    """Return the active license + tenant tier/primary_cloud + computed
+    days_until_expiry. The SPA reads this to render the account widget
+    + upgrade banner."""
+    from core import tier_policy as _tp
+    from datetime import datetime, timezone as _tz
+    lic = dict(STATE.get("license") or {})
+    try:
+        tenant = _tenant_dict(_active_tenant_id()) or {}
+    except Exception:
+        tenant = {}
+    # Tenant takes precedence over deployment-level license for the active
+    # tier (matches the enforcement middleware behavior).
+    active_tier = _normalize_tier(tenant.get("license_tier") or lic.get("tier") or "free")
+    policy = _tp.policy_for(active_tier)
+    primary_cloud = str(tenant.get("primary_cloud") or "")
+    expires_at = tenant.get("license_expires_at") or lic.get("expires_at") or ""
+    grace_until = tenant.get("license_grace_until") or lic.get("grace_until") or ""
+
+    days_until_expiry = None
+    in_grace = False
+    if expires_at:
+        try:
+            exp = datetime.strptime(expires_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_tz.utc)
+            now = datetime.now(_tz.utc)
+            days_until_expiry = max(0, (exp - now).days)
+            if now > exp and grace_until:
+                grace_end = datetime.strptime(grace_until, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_tz.utc)
+                in_grace = now < grace_end
+        except Exception:
+            pass
+
+    return {
+        "active_tier":         active_tier,
+        "primary_cloud":       primary_cloud,
+        "period":              tenant.get("license_period") or lic.get("period") or "monthly",
+        "seats":               int(tenant.get("license_seats") or lic.get("seats") or 1),
+        "expires_at":          expires_at,
+        "grace_until":         grace_until,
+        "days_until_expiry":   days_until_expiry,
+        "in_grace_period":     in_grace,
+        "price_inr_monthly":   policy.get("price_inr_monthly"),
+        "price_inr_annual":    policy.get("price_inr_annual"),
+        "currency":            "INR",
+        "currency_symbol":     "₹",
+        "license":             lic,  # full JWT payload for clients that want it
+    }
+
+
+@app.post("/api/license/switch-cloud")
+def api_license_switch_cloud(payload: dict[str, Any]):
+    """Student tier: change the primary_cloud. Rate-limited to once per
+    365 days; Developer/Enterprise users get a 400 telling them they
+    don't need to switch (already have all 3)."""
+    from core import tier_policy as _tp
+    from datetime import datetime, timedelta, timezone as _tz
+    new_cloud = str(payload.get("primary_cloud", "")).lower().strip()
+    if new_cloud not in {"aws", "gcp", "azure"}:
+        raise HTTPException(status_code=400, detail={
+            "ok": False, "code": "invalid_cloud",
+            "reason": "primary_cloud must be one of aws|gcp|azure",
+        })
+    tenant = _tenant_dict(_active_tenant_id()) or {}
+    tier = _normalize_tier(tenant.get("license_tier") or "free")
+    p = _tp.policy_for(tier)
+    if not p.get("primary_cloud_required"):
+        raise HTTPException(status_code=400, detail={
+            "ok": False, "code": "not_applicable",
+            "reason": f"{tier} tier has access to all clouds; primary_cloud not used",
+        })
+    # Rate-limit to once per 365 days.
+    last = tenant.get("primary_cloud_changed_at")
+    if last:
+        try:
+            last_dt = datetime.strptime(last, "%Y-%m-%dT%H:%M:%S.000Z").replace(tzinfo=_tz.utc)
+            elapsed = datetime.now(_tz.utc) - last_dt
+            if elapsed < timedelta(days=365):
+                days_left = 365 - elapsed.days
+                raise HTTPException(status_code=429, detail={
+                    "ok": False, "code": "rate_limited",
+                    "reason": f"primary_cloud can be changed once per year; try again in {days_left} day(s)",
+                    "days_until_next_change": days_left,
+                    "upgrade_to": "developer",
+                    "current_primary_cloud": tenant.get("primary_cloud", ""),
+                })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    tenants_state = _tenants_state()
+    tenant_rec = tenants_state.setdefault("tenants", {}).setdefault(_active_tenant_id(), {})
+    old = tenant_rec.get("primary_cloud", "")
+    tenant_rec["primary_cloud"] = new_cloud
+    tenant_rec["primary_cloud_changed_at"] = _now()
+    _persist_state()
+    return {
+        "ok": True, "old_primary_cloud": old, "new_primary_cloud": new_cloud,
+        "next_change_allowed_after_days": 365,
+    }
+
+
+@app.get("/api/runtime/tier", include_in_schema=False)
+def api_runtime_tier():
+    """Surface the full per-tier policy table + the active license's tier.
+
+    The SPA reads this to:
+      - render the pricing page (all 4 tiers side-by-side)
+      - decide which services to show as locked in the console rail
+      - know when to show upgrade modals
+      - format INR prices per tier
+
+    Active tenant's tier wins; falls back to deployment-level STATE.license.
+    """
+    from core import tier_policy as _tp
+    try:
+        tenant = _tenant_dict(_active_tenant_id())
+    except Exception:
+        tenant = {}
+    active_tier = _normalize_tier(
+        (tenant or {}).get("license_tier")
+        or (STATE.get("license") or {}).get("tier")
+        or "free"
+    )
+    return {
+        "active_tier":   active_tier,
+        "active_policy": _tp.policy_for(active_tier),
+        "primary_cloud": (tenant or {}).get("primary_cloud", ""),
+        "all_tiers":     _tp.all_tiers(),
+        "currency":      "INR",
+        "_meta": {
+            "doc": "https://cloudlearn.io/docs/tiers",
+            "tiers_known": list(_tp.KNOWN_TIERS),
+        },
+    }
 
 
 @app.post("/api/license/activate")
@@ -11393,6 +12955,11 @@ def _ec2_query_describe_volumes(params: dict[str, Any]) -> Response:
 
 
 def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
+    # Tier quantity cap — Free=1 VM/space; Student=10; Developer=50; Enterprise=∞.
+    # Enforced BEFORE consuming MinCount so we never partially create.
+    _enforce_quantity_cap("vm")
+    # Tier size cap — Free=small (≤t3.small); Enterprise=huge (any).
+    _enforce_size_cap("vm", "aws", str(params.get("InstanceType", "t3.micro")))
     min_count = int(params.get("MinCount", params.get("Mincount", 1)) or 1)
     max_count = int(params.get("MaxCount", params.get("Maxcount", min_count)) or min_count)
     count = max(min_count, max_count)
@@ -12258,6 +13825,8 @@ async def api_gcp_compute_create_instance(project: str, zone: str, request: Requ
         raise HTTPException(400, detail=f"InvalidComputeEngineRequest: {exc}")
     # Host-budget gate (clamp 30%-50% of host CPU+RAM).
     _check_budget_for_launch(str(getattr(req, "machineType", "") or payload.get("machineType") or ""), "gcp")
+    _enforce_quantity_cap("vm")  # tier cap — Free=1 VM/space
+    _enforce_size_cap("vm", "gcp", str(getattr(req, "machineType", "") or payload.get("machineType") or ""))
     instance = _gcp_compute_create_instance_instance(project, zone, req.dict())
     instance["runtime_bundle_id"] = _cloudsim_runtime_bundle("gcp_compute").get("id", "")
     instance["runtime_bundle_name"] = _cloudsim_runtime_bundle("gcp_compute").get("name", "")
@@ -13371,6 +14940,7 @@ async def api_gcp_storage_create_bucket(request: Request):
     name = str(payload.get("name") or payload.get("bucket") or "").strip()
     if not name:
         raise HTTPException(400, detail="Bucket name is required")
+    _enforce_quantity_cap("bucket")  # tier cap — Free=1 bucket/space
     bucket = _gcp_storage_bucket_record(project, name, payload)
     gcp_storage_state.setdefault("buckets", {})[name] = bucket
     gcp_storage_state.setdefault("objects", {}).setdefault(name, {})
@@ -17522,6 +19092,8 @@ def _rds_query_describe_db_instances(params: dict[str, Any]) -> Response:
 
 
 def _rds_query_create_db_instance(params: dict[str, Any]) -> Response:
+    _enforce_quantity_cap("database")  # tier cap — Free=1 DB/space
+    _enforce_size_cap("db", "aws", str(params.get("DBInstanceClass", "db.t3.micro")))
     tags = _rds_parse_tags(params)
     security_group_ids = []
     for key, value in params.items():
@@ -17872,6 +19444,7 @@ def _sqs_query_collect_list(params: dict[str, Any], prefix: str) -> list[str]:
 
 
 def _sqs_query_create_queue(params: dict[str, Any]) -> Response:
+    _enforce_quantity_cap("queue")  # tier cap — Free=1 queue/space
     req = SQSQueueCreateRequest(
         queue_name=str(params.get("QueueName", params.get("queueName", ""))).strip(),
         fifo_queue=_sqs_query_bool(params.get("FifoQueue")),
@@ -19101,6 +20674,7 @@ def api_lambda_list_functions():
 
 
 def api_lambda_create_function(req: LambdaFunctionRequest):
+    _enforce_quantity_cap("lambda_function")  # tier cap — Free=3 Lambdas/space
     function = _lambda_create_function_record(req)
     bundle = _cloudsim_runtime_bundle("lambda")
     function["runtime_bundle_id"] = bundle.get("id", "")
@@ -19592,10 +21166,22 @@ async def aws_query_root(request: Request) -> Response:
 
 @app.get("/")
 async def s3_list_buckets(request: Request) -> Response:
-    """GET / → ListBuckets"""
+    """GET / → ListBuckets (S3 wire) OR main SPA (browser).
+
+    First-time browser visitors get redirected to /pricing so they see the
+    tier launch page BEFORE the cloud-provider console. After they pick a
+    tier on /pricing, the "Continue to console" button sets the
+    `cloudlearn_tier_acknowledged` cookie which suppresses this redirect
+    on subsequent visits.
+    """
     accept = request.headers.get("accept", "")
     user_agent = request.headers.get("user-agent", "")
     if "text/html" in accept or "Mozilla" in user_agent:
+        # Browser visit — tier-gate before the main SPA.
+        cookie = request.cookies.get("cloudlearn_tier_acknowledged", "")
+        if not cookie:
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url="/pricing", status_code=302)
         with open(_UI_HTML, "rb") as f:
             return Response(content=f.read(), media_type="text/html", headers={"Cache-Control": "no-store, max-age=0"})
 
@@ -19721,6 +21307,9 @@ async def s3_put_bucket(bucket: str, request: Request) -> Response:
                 region = loc.text
         except ET.ParseError:
             pass
+
+    # Tier quantity cap — Free=1 bucket/space; enforced before mutation.
+    _enforce_quantity_cap("bucket")
 
     buckets[bucket] = {
         "region": region,

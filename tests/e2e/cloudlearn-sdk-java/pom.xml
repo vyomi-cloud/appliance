@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    cloudlearn-tier-sdk-java: thin client + DTOs + fallback helpers for the
+    CloudLearn tier API (/api/license/* and /api/runtime/tier).
+
+    Usage:
+
+      TierClient client = TierClient.builder()
+          .endpoint("http://192.168.252.7:9000")
+          .build();
+
+      TierStatus status = client.getStatus();
+      System.out.println("Active: " + status.activeTier() +
+                         " (₹" + status.priceInrMonthly() + "/mo)");
+
+      // Wrap a call so tier-limit 403s become a soft handler invocation,
+      // not an exception that breaks your app:
+      client.withFallback(
+          () -> eventBridgeClient.putEvents(...),
+          err -> log.warn("EventBridge limited: upgrade to {}", err.upgradeTo())
+      );
+
+      // Or explicit check:
+      if (TierLimitException.isTierLimit(throwable)) {
+          // route to upgrade UI
+      }
+  -->
+
+  <groupId>cloudlearn</groupId>
+  <artifactId>cloudlearn-tier-sdk-java</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+  <name>cloudlearn-tier-sdk-java</name>
+  <description>Tier-policy client + fallback helpers for the CloudLearn simulator</description>
+
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <dependencies>
+    <!-- Jackson for JSON parsing — no other transitive deps -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>2.17.2</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.4.1</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>

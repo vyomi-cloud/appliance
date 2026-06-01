@@ -6248,14 +6248,6 @@ function ProvidersView({providers, onOpenSpaces, notify}) {
       implemented_services: ['Virtual Machines','Blob Storage','SQL Database','Service Bus','Cosmos DB','Functions','API Management','Virtual Network','Entra ID / RBAC'],
       tooling: [{label:'az CLI', status:'partial'}, {label:'ARM REST API', status:'integrated'}, {label:'Azure Java SDK', status:'partial'}, {label:'Azure Go SDK', status:'partial'}],
     },
-    {
-      provider_id: 'other',
-      display_name: 'Other',
-      description: 'Reserved provider surface for future community packs.',
-      surface: {theme: {accent:'#6b7280', accent_dark:'#4b5563', panel:'#fff', border:'#e5e7eb', canvas:'#f4f5f7'}},
-      implemented_services: [],
-      tooling: [],
-    },
   ]).map(provider => ({
     ...provider,
     surface: provider.surface || {theme:{accent:'#0073bb', accent_dark:'#005fa8', panel:'#fff', border:'#eaeded', canvas:'#f2f3f3'}},
@@ -6301,10 +6293,6 @@ function ProvidersView({providers, onOpenSpaces, notify}) {
               <div className="home-card" style={{background:'#fff'}}>
                 <div style={{fontSize:13,color:'#687078'}}>Tooling entries</div>
                 <div style={{fontSize:28,fontWeight:800,lineHeight:1.1,marginTop:4}}>{summary.tooling}</div>
-              </div>
-              <div className="home-card" style={{background:'#fff'}}>
-                <div style={{fontSize:13,color:'#687078'}}>Default landing</div>
-                <div style={{fontSize:18,fontWeight:800,lineHeight:1.3,marginTop:6}}>Providers view</div>
               </div>
             </div>
             <div className="home-grid">

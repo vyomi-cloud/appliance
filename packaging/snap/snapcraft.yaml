@@ -1,18 +1,40 @@
 name: cloud-learn
 base: core24
-version: "0.1.0"
-summary: Local multi-cloud simulator with a CloudSim backbone
+adopt-info: cloud-learn
+summary: Local multi-cloud simulator with AWS/GCP/Azure parity
 description: |
-  CloudLearn runs AWS, GCP, and Azure simulation locally. This snap metadata
-  packages the launcher in appliance mode so the full simulator stack can run
-  inside a Multipass VM boundary.
+  CloudLearn runs AWS, GCP, and Azure simulation locally with cloud-faithful
+  APIs that work with standard provider SDKs (boto3, aws-sdk-java, google-cloud-*,
+  azure-sdk-for-*) and CLIs (aws, gcloud, gsutil, bq, az, terraform) — no shim
+  required, just override the endpoint URL.
+
+  This snap packages the launcher in appliance mode. The full simulator stack
+  runs inside a Multipass VM boundary that the launcher provisions.
+
+  Includes 9 AWS services, 9 GCP services, 11 Azure services backed by real
+  sidecar integrations (Vault, NATS, MinIO, Postgres, MySQL, DynamoDB Local,
+  ElasticMQ, Cedar, fake-gcs-server). 4-tier licensing (Free/Student/Developer/
+  Enterprise), multi-tenant + cross-tenant RBAC, SSO, Terraform export.
+
 license: MIT
-grade: devel
-confinement: strict
+grade: stable
+confinement: classic   # needs to control Multipass + docker on the host
+contact: support@cloudlearn.io
+issues: https://github.com/cloudlearn/cloud-learn/issues
+source-code: https://github.com/cloudlearn/cloud-learn
+website: https://github.com/cloudlearn/cloud-learn
+title: CloudLearn
+
+architectures:
+  - build-on: [amd64, arm64]
+    build-for: [amd64, arm64]
 
 apps:
   cloud-learn:
     command: bin/cloud-learn
+    environment:
+      CLOUDLEARN_DISTRIBUTION_MODE: appliance
+      CLOUD_LEARN_HOME: $SNAP/cloudlearn
     plugs:
       - network
       - network-bind
@@ -23,19 +45,24 @@ parts:
   cloud-learn:
     plugin: dump
     source: ../..
-    organize:
-      scripts/cloud-learn: bin/cloud-learn
-    stage:
-      - core
-      - Dockerfile
-      - VERSION
-      - cloudsim-backbone
-      - core
-      - docker-compose.appliance.yml
-      - docs
-      - packaging
-      - requirements.txt
-      - scripts
-      - server.py
-      - static
-      - tools
+    source-type: local
+    override-build: |
+      craftctl default
+      # Stamp version from VERSION file
+      craftctl set version="$(cat VERSION | tr -d '[:space:]')"
+      mkdir -p "$CRAFT_PART_INSTALL/bin"
+      mkdir -p "$CRAFT_PART_INSTALL/cloudlearn"
+      cp -r core providers packs static scripts \
+            server.py requirements.txt VERSION Dockerfile \
+            docker-compose.appliance.yml \
+            "$CRAFT_PART_INSTALL/cloudlearn/"
+      cat > "$CRAFT_PART_INSTALL/bin/cloud-learn" <<'EOF'
+      #!/bin/sh
+      export CLOUD_LEARN_HOME="$SNAP/cloudlearn"
+      export CLOUDLEARN_DISTRIBUTION_MODE=appliance
+      exec bash "$SNAP/cloudlearn/scripts/cloud-learn" "$@"
+      EOF
+      chmod 0755 "$CRAFT_PART_INSTALL/bin/cloud-learn"
+    stage-packages:
+      - bash
+      - curl

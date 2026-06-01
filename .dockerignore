@@ -10,3 +10,11 @@ node_modules
 dist
 build
 coverage
+# Tests/e2e are run from the host (mounted) — never need to be in the image.
+# (Reduces build context by ~130 MB; the terraform-gate provider binary alone
+# is ~90 MB and causes "no space left on device" failures.)
+tests/
+docs/
+**/target/
+**/playwright-report/
+**/test-results/

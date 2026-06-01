@@ -266,7 +266,8 @@ func (s *server) create(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, fmt.Errorf("insert: %w", err)); return
 	}
 
-	// 3. Publish to Pub/Sub.
+	// 3. Publish to Pub/Sub (UNLOCKED on Free — pubsub category=queue).
+	//    Best-effort: even if it fails, the item is already persisted.
 	topic := s.pubsub.Topic(s.cfg.TopicID)
 	defer topic.Stop()
 	payload, _ := json.Marshal(map[string]any{
@@ -277,7 +278,9 @@ func (s *server) create(w http.ResponseWriter, r *http.Request) {
 		s.logger.Printf("pubsub publish (non-fatal): %v", err)
 	}
 
-	// 4. Fire Eventarc trigger (simulator-only :fire shim).
+	// 4. Fire Eventarc trigger — LOCKED on Free tier. Goroutine + helper
+	//    already swallow errors, so the POST /items request stays 200 even
+	//    when the simulator returns 403 for Eventarc.
 	go s.fireEventarcTrigger(id, body.Name)
 
 	s.logger.Printf("created item id=%d name=%q stock=%d", id, body.Name, body.Stock)

@@ -1,0 +1,99 @@
+name: Docker Publish
+
+# Builds + pushes multi-arch (amd64 + arm64) cloudlearn/simulator images on:
+#   - every push to main         → cloudlearn/simulator:edge + :sha-<short>
+#   - every tag v*.*.*           → cloudlearn/simulator:<version> + :latest
+#   - manual workflow_dispatch   → cloudlearn/simulator:<input_tag>
+#
+# Required secrets (configure once at github.com/<org>/<repo>/settings/secrets):
+#   DOCKERHUB_USERNAME — Docker Hub account that owns the cloudlearn org
+#   DOCKERHUB_TOKEN    — Docker Hub access token (Account Settings → Security)
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag (default: derived from ref)"
+        required: false
+
+permissions:
+  contents: read
+  packages: write   # also push to ghcr.io as a fallback
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version + tags
+        id: meta
+        run: |
+          # Tag refs (e.g. refs/tags/v1.0.0) → 1.0.0; branch pushes → edge.
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF#refs/tags/v}"
+            TAGS="cloudlearn/simulator:${VER},cloudlearn/simulator:latest,ghcr.io/cloudlearn/simulator:${VER}"
+          elif [[ -n "${{ github.event.inputs.tag }}" ]]; then
+            VER="${{ github.event.inputs.tag }}"
+            TAGS="cloudlearn/simulator:${VER},ghcr.io/cloudlearn/simulator:${VER}"
+          else
+            VER="edge"
+            SHORT="${GITHUB_SHA::7}"
+            TAGS="cloudlearn/simulator:edge,cloudlearn/simulator:sha-${SHORT},ghcr.io/cloudlearn/simulator:edge"
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "Will tag: ${TAGS}"
+
+      - name: Set up QEMU (cross-arch emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: ${{ env.HAS_DOCKERHUB == 'true' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        env:
+          HAS_DOCKERHUB: ${{ secrets.DOCKERHUB_TOKEN != '' && 'true' || 'false' }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push (multi-arch)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          # Embed git SHA + build date in image labels for traceability.
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update Docker Hub description (on tag only)
+        if: startsWith(github.ref, 'refs/tags/v') && env.HAS_DOCKERHUB == 'true'
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: cloudlearn/simulator
+          short-description: "Local multi-cloud simulator — AWS/GCP/Azure with real backends"
+          readme-filepath: ./docs/DOCKERHUB.md
+        env:
+          HAS_DOCKERHUB: ${{ secrets.DOCKERHUB_TOKEN != '' && 'true' || 'false' }}

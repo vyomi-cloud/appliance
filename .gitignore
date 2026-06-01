@@ -1,1 +1,60 @@
+# CloudLearn — git ignore
+
+# CloudLearn runtime state
 .cloudlearn-host.json
+.cloudlearn-appliance/
+.cloudlearn_state.sqlite3
+*.sqlite3-journal
+host-sizing-report.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+.python-version
+
+# Java (Maven)
+**/target/
+*.class
+*.jar
+!packaging/**/*.jar
+.mvn/wrapper/maven-wrapper.jar
+
+# Go
+**/vendor/
+
+# Node / Playwright
+node_modules/
+**/playwright-report/
+**/test-results/
+**/.playwright/
+*.log
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Local secrets / overrides
+.env
+.env.local
+*.local.yml
+vault-data/
+vault-shared/
+
+# Distribution build outputs
+dist/
+build/
+*.tgz

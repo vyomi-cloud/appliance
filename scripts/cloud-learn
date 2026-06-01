@@ -448,28 +448,78 @@ appliance_launch_vm() {
 }
 
 appliance_exec_launcher() {
+  # Deploy the inner compose stack DIRECTLY via docker compose — bypasses the
+  # `cloud-learn up --detach` chain which aborted before building in some
+  # environments (see memory: appliance-up-bridge-bug). Idempotent: docker
+  # compose up -d only rebuilds changed services.
   local compose
   compose="$(appliance_multipass_cmd)"
-  progress "==> Appliance: starting inner CloudLearn stack"
-  "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "sudo mkdir -p /var/lib/cloudlearn/deployments && cd ${APPLIANCE_WORKSPACE} && CLOUD_LEARN_HOME=${APPLIANCE_WORKSPACE} CLOUD_LEARN_RUNTIME_CONTEXT=inner CLOUD_LEARN_DISTRIBUTION_MODE=appliance CLOUD_LEARN_COMPOSE_FILE=${APPLIANCE_WORKSPACE}/docker-compose.appliance.yml bash ./scripts/cloud-learn up --detach"
+  progress "==> Appliance: starting inner CloudLearn stack (direct compose)"
+  "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "
+    set -e
+    sudo mkdir -p /var/lib/cloudlearn/deployments
+    cd ${APPLIANCE_WORKSPACE}
+    # Ensure docker daemon is ready
+    for i in \$(seq 1 30); do
+      if docker info >/dev/null 2>&1; then break; fi
+      sleep 1
+    done
+    if ! docker info >/dev/null 2>&1; then
+      echo 'docker daemon never became ready inside appliance VM' >&2
+      exit 1
+    fi
+    # Build + start; -d (detach) so we return immediately; rebuilds changed only.
+    docker compose -f docker-compose.appliance.yml up -d --build --remove-orphans
+    docker compose -f docker-compose.appliance.yml ps
+  "
 }
 
 appliance_health_check() {
   local compose
   compose="$(appliance_multipass_cmd)"
   local waited=0
-  while [ "$waited" -lt 60 ]; do
+  local max_wait="${CLOUD_LEARN_APPLIANCE_HEALTH_TIMEOUT:-180}"
+  while [ "$waited" -lt "$max_wait" ]; do
     if [ $((waited % 10)) -eq 0 ]; then
-      progress "==> Appliance: waiting for simulator and CloudSim to become reachable (${waited}s)"
+      progress "==> Appliance: waiting for simulator + CloudSim + bridge to come up (${waited}s / ${max_wait}s)"
     fi
     if "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "curl -fsS http://127.0.0.1:9171/health >/dev/null && curl -fsS http://127.0.0.1:9000/healthz >/dev/null && curl -fsS http://127.0.0.1:9010/health >/dev/null" >/dev/null 2>&1; then
       progress "==> Appliance: runtime bridge, simulator, and CloudSim are healthy"
+      # Show the user where to go.
+      local vm_ip
+      vm_ip="$(multipass info "$APPLIANCE_NAME" --format=csv 2>/dev/null | awk -F, 'NR==2 {print $3}' | head -1)"
+      [ -z "$vm_ip" ] && vm_ip="<vm-ip>"
+      cat <<INFO
+
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  CloudLearn is up — open in your browser:                    ║
+  ║                                                              ║
+  ║    http://${vm_ip}:9000/        (or http://localhost:9000/)
+  ║                                                              ║
+  ║  Useful endpoints:                                           ║
+  ║    /pricing                  — tier selection                ║
+  ║    /console/aws|gcp|azure    — native cloud consoles         ║
+  ║    /api/runtime/backends     — backend health status         ║
+  ║    /api/runtime/tier         — current tier policy           ║
+  ║                                                              ║
+  ║  Stop with:    cloud-learn down                              ║
+  ║  Status:       cloud-learn status                            ║
+  ╚══════════════════════════════════════════════════════════════╝
+
+INFO
       return 0
     fi
     sleep 2
-    waited=$((waited + 1))
+    waited=$((waited + 2))
   done
-  printf '%s\n' 'appliance health check failed: runtime bridge, simulator, or CloudSim is not reachable inside the VM' >&2
+  cat >&2 <<EOF
+appliance health check failed after ${max_wait}s.
+Possible causes:
+  - Docker daemon inside VM didn't start (check: multipass exec $APPLIANCE_NAME -- systemctl status docker)
+  - Compose build failed (check: multipass exec $APPLIANCE_NAME -- docker compose -f ${APPLIANCE_WORKSPACE}/docker-compose.appliance.yml logs --tail 100)
+  - Port conflict on 9000/9010/9171 (check: multipass exec $APPLIANCE_NAME -- ss -tlnp)
+Run: cloud-learn doctor    for a deeper diagnostic.
+EOF
   return 1
 }
 

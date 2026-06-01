@@ -1,0 +1,40 @@
+PackageIdentifier: CloudLearn.CloudLearn
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: CloudLearn
+PublisherUrl: https://github.com/cloudlearn/cloud-learn
+PublisherSupportUrl: https://github.com/cloudlearn/cloud-learn/issues
+Author: CloudLearn contributors
+PackageName: CloudLearn
+PackageUrl: https://github.com/cloudlearn/cloud-learn
+License: MIT
+LicenseUrl: https://github.com/cloudlearn/cloud-learn/blob/main/LICENSE
+Copyright: Copyright (c) 2026 CloudLearn contributors
+CopyrightUrl: https://github.com/cloudlearn/cloud-learn/blob/main/LICENSE
+ShortDescription: Local multi-cloud simulator (AWS/GCP/Azure) with real backends
+Description: |-
+  CloudLearn gives you AWS, GCP, and Azure-like experiences on your laptop.
+  Standard provider SDKs (boto3, aws-sdk-java, google-cloud-*, azure-sdk-for-*)
+  and CLIs (aws, gcloud, gsutil, bq, az, terraform) work natively against the
+  simulator by overriding the endpoint URL — no shim required.
+
+  The MSI installs the launcher; the full simulator stack runs inside a
+  Multipass VM that 'cloud-learn up' provisions.
+Moniker: cloud-learn
+Tags:
+  - aws
+  - azure
+  - cloud
+  - cloud-development
+  - cloud-simulator
+  - developer-tools
+  - gcp
+  - localstack-alternative
+  - multi-cloud
+  - testing
+ReleaseNotes: |-
+  First GA release. 3 cloud providers, 8 real backends, 4-tier licensing,
+  multi-tenant + cross-tenant RBAC + SSO, Terraform export/import, Helm chart.
+ReleaseNotesUrl: https://github.com/cloudlearn/cloud-learn/blob/main/docs/RELEASE_NOTES_v1.0.md
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

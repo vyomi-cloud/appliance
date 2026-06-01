@@ -1,42 +1,76 @@
+# Homebrew formula for CloudLearn.
+#
+# Tap install (recommended):
+#   brew tap cloudlearn/tap
+#   brew install cloud-learn
+#
+# Direct install (no tap):
+#   brew install --HEAD https://github.com/cloudlearn/cloud-learn.git
+#
+# This formula is auto-updated by .github/workflows/release.yml on every
+# v*.*.* tag — the url + sha256 are bumped to the tarball published with
+# the GitHub Release, then committed to cloudlearn/homebrew-tap.
+
 class CloudLearn < Formula
-  desc "Local multi-cloud simulator with a CloudSim backbone"
-  homepage "https://example.com/cloud-learn/v0.1.0"
-  url "https://example.com/releases/cloud-learn-0.1.0.tar.gz"
-  sha256 "231bfec720575825fa0b1aee259e2fe8050d95c53579b093dc43eb84804093ab"
+  desc "Local multi-cloud simulator (AWS/GCP/Azure) with real backends"
+  homepage "https://github.com/cloudlearn/cloud-learn"
+  url "https://github.com/cloudlearn/cloud-learn/archive/refs/tags/v1.0.0.tar.gz"
+  sha256 "REPLACED_BY_RELEASE_WORKFLOW"
   license "MIT"
+  version "1.0.0"
+
+  depends_on "multipass" => :recommended
+  depends_on "docker"    => :recommended
 
   def install
-    libexec.install "Dockerfile"
-    libexec.install "core"
-    libexec.install "cloudsim-backbone"
-    libexec.install "docker-compose.appliance.yml"
-    libexec.install "requirements.txt"
-    libexec.install "scripts"
-    libexec.install "server.py"
-    libexec.install "docs"
-    libexec.install "static"
-    libexec.install "tools"
+    # Ship the launcher + the appliance compose + the source the appliance VM
+    # syncs in as /workspace/cloud-learn.
+    libexec.install Dir["*"]
 
+    # Wrapper that sets CLOUD_LEARN_HOME and shells into the bundled launcher
     (bin/"cloud-learn").write <<~EOS
       #!/usr/bin/env bash
       export CLOUD_LEARN_HOME="#{libexec}"
-      export CLOUD_LEARN_DISTRIBUTION_MODE="appliance"
+      export CLOUDLEARN_DISTRIBUTION_MODE="appliance"
       exec bash "#{libexec}/scripts/cloud-learn" "$@"
     EOS
     chmod 0555, bin/"cloud-learn"
+
+    # Bash + zsh completions (lightweight; just lists the subcommands)
+    (bash_completion/"cloud-learn").write <<~EOS
+      _cloud_learn() {
+        local cur="${COMP_WORDS[COMP_CWORD]}"
+        local cmds="up down stop restart status doctor help"
+        COMPREPLY=( $(compgen -W "$cmds" -- "$cur") )
+      }
+      complete -F _cloud_learn cloud-learn
+    EOS
   end
 
   def caveats
     <<~EOS
-      CloudLearn runs in appliance mode by default when installed through Homebrew.
-      You need Multipass installed and available on the host.
+      CloudLearn ships as an appliance — it starts a single Multipass VM
+      and runs the full simulator stack (FastAPI + 8 real backends) inside.
 
-      The appliance VM runs the simulator, CloudSim, and provider services
-      inside the local VM boundary.
+      Prerequisites:
+        • Multipass         (brew install --cask multipass)
+        • Docker            (auto-installed inside the VM)
+        • ~32 GB free disk  (VM image + container layers)
+
+      Get started:
+        cloud-learn up                # boots VM + simulator (5-10 min first run)
+        open http://192.168.x.x:9000  # URL printed in the launcher banner
+
+      Stop with:
+        cloud-learn down
+
+      Full docs:
+        https://github.com/cloudlearn/cloud-learn/blob/main/README.md
     EOS
   end
 
   test do
-    assert_match "cloud-learn", shell_output("#{bin}/cloud-learn help")
+    # `cloud-learn help` runs without needing Multipass or Docker present.
+    assert_match "cloud-learn", shell_output("#{bin}/cloud-learn help 2>&1", 0)
   end
 end

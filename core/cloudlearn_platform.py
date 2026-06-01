@@ -587,10 +587,23 @@ class FirestoreEngine:
         return True
 
     def allowed_capabilities(self, tier: str) -> set[str]:
-        tier = tier.lower()
+        """Pack IDs allowed for this tier.
+
+        Free: locks NoSQL + Eventing pack IDs (matches tier_policy.SERVICE_CATEGORY).
+        Student / Developer / Enterprise: all packs in CORE_PACK_IDS.
+        """
+        from core import tier_policy as _tp
+        norm = _tp.normalize_tier(tier)
         base = set(CORE_PACK_IDS)
-        if tier in {"free", "pro", "max", "enterprise"}:
-            return base
+        if norm == "free":
+            # Locked categories: nosql + eventing. The pack IDs in those
+            # categories for any provider.
+            locked_pack_substrings = {
+                "dynamodb", "firestore", "cosmos",          # nosql
+                "eventbridge", "eventarc", "eventgrid",     # eventing
+            }
+            return {p for p in base
+                    if not any(s in p for s in locked_pack_substrings)}
         return base
 
     def check_license_for_pack(self, pack_id: str) -> None:

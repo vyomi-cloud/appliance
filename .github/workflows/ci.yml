@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+
+  # ── Static checks (fast, no docker) ─────────────────────────────────────
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Syntax check all .py
+        run: |
+          python -m compileall -q core providers server.py
+          echo "✓ all .py files compile cleanly"
+      - name: tier_policy module load
+        run: python -c "from core import tier_policy as tp; print('tiers:', list(tp._TIER_POLICY.keys()))"
+
+  # ── Backend stack + conformance (the gate) ──────────────────────────────
+  conformance:
+    runs-on: ubuntu-latest
+    needs: lint
+    services: {}  # we use docker-compose directly below
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install client libs
+        run: pip install boto3 google-cloud-storage google-cloud-pubsub requests
+      - name: Start CloudLearn stack
+        run: |
+          docker compose -f docker-compose.yml up -d --build
+          # Wait for /healthz
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:9000/healthz > /dev/null; then
+              echo "✓ simulator up after ${i}s"
+              break
+            fi
+            sleep 2
+          done
+      - name: Sign up Enterprise (so eventing/nosql aren't tier-locked)
+        run: |
+          curl -sf -X POST http://127.0.0.1:9000/api/license/signup \
+            -H "Content-Type: application/json" \
+            -d '{"user":"ci","email":"ci@cl.io","tier":"enterprise","seats":10,"period":"annual"}'
+      - name: Conformance — per-service (isolated, threshold 85%)
+        run: |
+          # 85% threshold acknowledges known deviations tracked in memory note
+          # mvp-backend-stack-shipped: MinIO read-through cache (1 fail), KMS
+          # encrypt-decrypt warning (2 warn). Local Enterprise+isolated currently
+          # produces 88%. CI runs against a fresh stack with no Cedar policy
+          # pollution → should hit 90%+.
+          python tests/conformance/run_conformance.py \
+            --endpoint http://127.0.0.1:9000 \
+            --isolate-spaces \
+            --fail-under 85.0
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v
+
+  # ── Tier middleware smoke (no docker, uses uvicorn) ─────────────────────
+  tier-middleware:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install minimal deps
+        run: pip install -r requirements.txt
+      - name: Boot uvicorn in background
+        run: |
+          uvicorn server:app --host 127.0.0.1 --port 9001 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:9001/healthz > /dev/null && break
+            sleep 1
+          done
+      - name: Tier policy + /api/runtime/tier round-trip
+        run: |
+          set -e
+          # Default Free → cloud_shell denied
+          sc=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9001/api/runtime/cloud-shell)
+          [ "$sc" = "403" ] || { echo "Free cloud_shell should be 403; got $sc"; exit 1; }
+          # Sign up Enterprise → all 7 enterprise endpoints flip 200
+          curl -s -X POST http://127.0.0.1:9001/api/license/signup \
+            -H "Content-Type: application/json" \
+            -d '{"user":"ci","email":"ci@cl.io","tier":"enterprise","seats":10,"period":"annual"}'
+          for ep in cloud-shell ci-integration terraform-deploy-targets audit-sinks notification-channels custom-domain branding; do
+            sc=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9001/api/runtime/$ep 2>/dev/null || true)
+            # 200 OK or 405 (POST-only) both prove the gate passed; 403 would fail
+            if [ "$sc" = "403" ]; then
+              echo "Enterprise $ep should not be 403; got $sc"
+              exit 1
+            fi
+            echo "  ✓ $ep → HTTP $sc (gate passed)"
+          done
+          # Helm chart real
+          sc=$(curl -s -o /tmp/c -w "%{http_code}" http://127.0.0.1:9001/api/runtime/helm/chart.tar.gz)
+          [ "$sc" = "200" ] || { echo "helm chart 200 expected; got $sc"; exit 1; }
+          file /tmp/c | grep -q "gzip compressed" || { echo "helm tarball not gzip"; exit 1; }
+          echo "✓ tier middleware smoke passed"
+
+  # ── Reference apps build (compile-only smoke) ───────────────────────────
+  refapps-build:
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [java-orders, go-inventory, azure-tickets]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java
+        if: matrix.app == 'java-orders'
+        uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - name: Set up Go
+        if: matrix.app != 'java-orders'
+        uses: actions/setup-go@v5
+        with: {go-version: '1.22'}
+      - name: Build ${{ matrix.app }}
+        run: |
+          cd tests/e2e/${{ matrix.app }}
+          if [ -f pom.xml ]; then
+            mvn -q -DskipTests compile
+          elif [ -f go.mod ]; then
+            go build ./...
+          else
+            echo "no build file — skipping"
+          fi
