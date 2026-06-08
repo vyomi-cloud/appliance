@@ -779,14 +779,20 @@ class _SpaceScopedDictProxy(MutableMapping):
         active_id = ss.get("active_space_id", "")
         space = ss.get("spaces", {}).get(active_id, {}) if active_id else {}
         req_provider = str(REQUEST_PROVIDER.get() or "aws").lower().strip()
+        active_tid = active_tenant_id()
         # STRUCTURAL ISOLATION:
         #   1. Cross-tenant access -- space.tenant_id must equal active_tenant_id.
         #   2. Cross-provider access -- space.provider must equal REQUEST_PROVIDER.
+        # On mismatch, PIVOT to a real space matching the request (creating one
+        # if none exists) rather than silently writing to a scratch dict -- that
+        # bug caused AWS calls to "succeed" then vanish when the active space
+        # was a GCP/Azure space.
         if isinstance(space, dict) and space and active_id:
             space_tid = space.get("tenant_id") or DEFAULT_TENANT_ID
             space_provider = str(space.get("provider") or "aws").lower().strip()
-            if space_tid != active_tenant_id() or space_provider != req_provider:
-                return self.default_factory()  # blocked, scratch (not persisted)
+            if space_tid != active_tid or space_provider != req_provider:
+                space = self._pivot_to_matching_space(ss, req_provider, active_tid)
+                active_id = space.get("space_id", "") if space else ""
         if isinstance(space, dict) and space:
             service_states = space.setdefault("service_states", {})
             service_key = self.service_key if req_provider == "aws" else f"{req_provider}_{self.service_key}"
@@ -795,6 +801,34 @@ class _SpaceScopedDictProxy(MutableMapping):
             # No active space at all -> legacy deployment-level fallback.
             service_state = STATE.setdefault(self.service_key, self.default_factory())
         return service_state
+
+    def _pivot_to_matching_space(self, spaces_state: dict, req_provider: str, active_tid: str) -> dict:
+        """Find the first existing space whose (tenant, provider) matches the
+        request, or create one if none exists. Always returns a dict that
+        belongs to the persistent spaces store (never a scratch dict)."""
+        import uuid as _uuid
+        from datetime import datetime as _dt
+        for sid, s in (spaces_state.get("spaces", {}) or {}).items():
+            if not isinstance(s, dict) or not s:
+                continue
+            stid = s.get("tenant_id") or DEFAULT_TENANT_ID
+            sprov = str(s.get("provider") or "aws").lower().strip()
+            if stid == active_tid and sprov == req_provider:
+                s.setdefault("space_id", sid)
+                return s
+        # None exists -- create one inline so the resource has a home.
+        new_id = f"space-auto-{req_provider}-{_uuid.uuid4().hex[:8]}"
+        new_space = {
+            "space_id":      new_id,
+            "name":          f"{req_provider.upper()} workspace (auto)",
+            "provider":      req_provider,
+            "tenant_id":     active_tid,
+            "service_states": {},
+            "created_at":    _dt.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            "auto_created":  True,
+        }
+        spaces_state.setdefault("spaces", {})[new_id] = new_space
+        return new_space
 
     def _target(self) -> dict:
         service_state = self._service_state()

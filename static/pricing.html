@@ -84,6 +84,59 @@
       text-align: center; font-size: 12px; color: #4b6488;
       margin-top: 10px; font-style: italic;
     }
+
+    /* ---- License activation panel (Phase 1) -------------------------- */
+    .activate-card {
+      background: #fff; border: 1px solid #d8e0ea; border-radius: 12px;
+      margin: 24px 0 16px; padding: 24px 28px;
+    }
+    .activate-header h3 { margin: 0 0 6px; font-size: 20px; color: #0f1b2d; }
+    .activate-sub { font-size: 13px; color: #5f6368; margin-bottom: 18px; }
+    .activate-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+    }
+    @media (max-width: 720px) { .activate-grid { grid-template-columns: 1fr; } }
+    .activate-pane {
+      background: #f8fafc; border: 1px solid #e1e7ee; border-radius: 8px;
+      padding: 16px 18px;
+    }
+    .pane-label {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+      color: #687078; text-transform: uppercase; margin-bottom: 4px;
+    }
+    .activate-btn {
+      padding: 9px 16px; font-size: 13px; font-weight: 600;
+      background: #fff; color: #1f2937; border: 1px solid #c8ced8;
+      border-radius: 6px; cursor: pointer; margin-top: 8px;
+    }
+    .activate-btn:hover { background: #f3f4f6; }
+    .activate-btn.primary { background: #0a7d36; color: #fff; border-color: #0a7d36; }
+    .activate-btn.primary:hover { background: #086228; }
+    .activate-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .device-status { margin-top: 10px; min-height: 20px; }
+    .device-prompt {
+      background: #fff; border: 1px dashed #c8ced8; border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .dp-step { font-size: 12px; color: #687078; margin-bottom: 4px; }
+    .dp-url {
+      display: inline-block; word-break: break-all; font-family: 'SF Mono', Menlo, monospace;
+      font-size: 12px; color: #1b4f9c; margin-bottom: 10px;
+    }
+    .dp-code {
+      font-family: 'SF Mono', Menlo, monospace; font-size: 22px; font-weight: 700;
+      letter-spacing: 6px; color: #0f1b2d; background: #fff7e0;
+      padding: 8px 12px; border-radius: 6px; text-align: center; margin-bottom: 10px;
+    }
+    .dp-status { font-size: 13px; color: #4b6488; }
+    .status-pending { font-size: 13px; color: #4b6488; }
+    .status-ok      { font-size: 13px; color: #0a7d36; }
+    .status-error   { font-size: 13px; color: #a4262c; }
+    .activate-footer {
+      margin-top: 16px; padding-top: 14px; border-top: 1px solid #e1e7ee;
+      font-size: 12px; color: #687078; text-align: center;
+    }
+    .activate-footer a { color: #1b4f9c; }
     /* host-capacity footnote inside each tier card */
     .features li.capacity-note {
       font-size: 11px; color: #687078; font-style: italic;
@@ -281,6 +334,56 @@
         </span>
       </div>
       <div class="note">Just override the endpoint — no custom SDK or shim.</div>
+    </div>
+
+    <!-- ── Activate appliance (Phase 4 — identity-first; portal is the source) ── -->
+    <div id="activate-section" class="activate-card">
+      <div class="activate-header">
+        <h3>Activate this appliance</h3>
+        <div class="activate-sub">
+          Sign in with your CloudLearn account — we'll detect your active subscription
+          and apply the right tier automatically. Subscription changes (upgrade/cancel)
+          propagate within 1 hour, no re-activation needed.
+        </div>
+      </div>
+
+      <div class="activate-grid" style="grid-template-columns: 1fr">
+        <div class="activate-pane">
+          <div class="pane-label">Sign in</div>
+          <p style="font-size:13px;color:#5f6368;margin:6px 0 12px">
+            Opens a code on this page; you confirm it on the portal in your browser.
+            No license keys to paste, no tier to pick — your subscription is the source.
+          </p>
+          <button id="device-start-btn" class="activate-btn primary" onclick="startDeviceFlow()">
+            Sign in with CloudLearn →
+          </button>
+          <div id="device-status" class="device-status"></div>
+        </div>
+      </div>
+
+      <details style="margin-top:14px">
+        <summary style="cursor:pointer;font-size:12px;color:#687078">
+          Advanced — paste a license JWT (admin / offline / air-gapped)
+        </summary>
+        <div style="margin-top:10px">
+          <textarea id="license-key-input" placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    rows="3" style="width:100%;font-family:'SF Mono',Menlo,monospace;font-size:11px;
+                                    padding:8px;border:1px solid #d8e0ea;border-radius:6px;
+                                    box-sizing:border-box;resize:vertical"></textarea>
+          <button class="activate-btn" onclick="activateLicenseKey()">Activate key</button>
+          <div id="activate-status" class="device-status"></div>
+        </div>
+      </details>
+
+      <div class="activate-footer">
+        Don't have a subscription yet?
+        <a href="javascript:void(0)" onclick="window.open('http://localhost:8001/dashboard','_blank')">
+          Subscribe on the portal →
+        </a>
+        · Already activated? Currently active tier shown above.
+        <a href="javascript:void(0)" onclick="signOut()">Sign out</a>
+        · <a href="javascript:void(0)" onclick="refreshLicense()">Refresh now</a>
+      </div>
     </div>
 
     <footer>
@@ -607,9 +710,123 @@
 
     // -------- navigation ----------------------------------------------
     function goToConsole() {
-      // Set acknowledgement cookie so the / route doesn't re-redirect us
-      document.cookie = 'cloudlearn_tier_acknowledged=1; path=/; max-age=' + (60*60*24*365);
-      window.location.href = '/';
+      window.location.href = '/ui';
+    }
+
+    // -------- license activation (Phase 5 — single-flow, 1-click) ------
+    let _activationPollTimer = null;
+
+    async function startDeviceFlow() {
+      const btn = document.getElementById('device-start-btn');
+      const out = document.getElementById('device-status');
+      btn.disabled = true;
+      out.innerHTML = '<div class="status-pending">Contacting portal…</div>';
+      try {
+        const r = await fetch('/api/auth/start-activation', {
+          method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+        });
+        if (!r.ok) throw new Error((await r.text()).slice(0, 200));
+        const d = await r.json();
+        // Open portal in new tab — user signs in (any method) + clicks Approve
+        window.open(d.approval_url, '_blank', 'noreferrer');
+        out.innerHTML = `
+          <div class="device-prompt">
+            <div class="dp-step">📱 Opened in a new tab:</div>
+            <a class="dp-url" href="${d.approval_url}" target="_blank" rel="noreferrer">
+              ${d.approval_url}
+            </a>
+            <div class="dp-step" style="margin-top:10px">Sign in with any method on the portal:</div>
+            <div style="font-size:12px;color:#5f6368;margin:2px 0 10px">
+              Google · GitHub · LinkedIn · email + password · magic link
+            </div>
+            <div class="dp-status" id="dp-status">
+              ⏳ Waiting for you to sign in + approve in the other tab…
+            </div>
+          </div>`;
+        const interval = (d.interval || 5) * 1000;
+        const expiresAt = Date.now() + (d.expires_in || 900) * 1000;
+        if (_activationPollTimer) clearInterval(_activationPollTimer);
+        _activationPollTimer = setInterval(async () => {
+          if (Date.now() > expiresAt) {
+            clearInterval(_activationPollTimer);
+            document.getElementById('dp-status').textContent = '⚠ Activation expired (15min). Click "Sign in" again.';
+            btn.disabled = false;
+            return;
+          }
+          try {
+            const pr = await fetch('/api/auth/poll-activation', {
+              method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+            });
+            const pd = await pr.json();
+            if (pd.status === 'approved') {
+              clearInterval(_activationPollTimer);
+              document.getElementById('dp-status').innerHTML =
+                `✅ <strong>Activated</strong> — tier <strong>${pd.active_tier}</strong>` +
+                (pd.issued_to ? ` for <strong>${pd.issued_to}</strong>` : '');
+              btn.disabled = false;
+              toast(`License activated — tier: ${pd.active_tier}`);
+              setTimeout(load, 800);
+            } else if (pd.status === 'expired') {
+              clearInterval(_activationPollTimer);
+              document.getElementById('dp-status').textContent = '⚠ Activation expired — try again.';
+              btn.disabled = false;
+            } else if (pd.status === 'error') {
+              document.getElementById('dp-status').textContent = `⚠ ${pd.error}`;
+            }
+          } catch (e) { /* keep polling */ }
+        }, interval);
+      } catch (e) {
+        out.innerHTML = `<div class="status-error">Failed: ${e.message}</div>`;
+        btn.disabled = false;
+      }
+    }
+
+    async function activateLicenseKey() {
+      const ta = document.getElementById('license-key-input');
+      const out = document.getElementById('activate-status');
+      const key = ta.value.trim();
+      if (!key) { out.innerHTML = '<div class="status-error">Paste a license key first.</div>'; return; }
+      out.innerHTML = '<div class="status-pending">Verifying key…</div>';
+      try {
+        const r = await fetch('/api/license/activate', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({license_key: key}),
+        });
+        const d = await r.json();
+        if (!r.ok) {
+          const reason = (d.detail || {}).reason || (d.detail || {}).code || 'invalid';
+          out.innerHTML = `<div class="status-error">Activation failed: ${reason}</div>`;
+          return;
+        }
+        out.innerHTML = `<div class="status-ok">✅ Activated — tier <strong>${d.active_tier}</strong>${d.issued_to ? ` for <strong>${d.issued_to}</strong>` : ''}.</div>`;
+        ta.value = '';
+        toast(`License activated — tier: ${d.active_tier}`);
+        setTimeout(load, 800);   // refresh tier cards
+      } catch (e) {
+        out.innerHTML = `<div class="status-error">Failed: ${e.message}</div>`;
+      }
+    }
+
+    async function signOut() {
+      try {
+        await fetch('/api/auth/logout', {method:'POST'});
+        toast('Signed out — tier reverted to Free');
+        setTimeout(load, 500);
+      } catch (e) {
+        toast('Logout failed: ' + e.message, true);
+      }
+    }
+
+    async function refreshLicense() {
+      try {
+        const r = await fetch('/api/license/refresh', {method:'POST'});
+        const d = await r.json();
+        if (!r.ok) throw new Error((d.detail && (d.detail.reason || d.detail.code)) || JSON.stringify(d));
+        toast(`Refreshed from portal — active tier: ${d.active_tier}`);
+        setTimeout(load, 400);
+      } catch (e) {
+        toast('Refresh failed: ' + e.message, true);
+      }
     }
 
     // -------- toast ----------------------------------------------------

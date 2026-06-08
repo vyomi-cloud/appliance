@@ -121,6 +121,15 @@ services:
     environment:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
       CLOUDLEARN_LICENSE_SECRET: cloudlearn-dev-secret
+      # Identity-first license backend (CloudLearn Portal). Reachable from
+      # inside the container. Override per environment:
+      #   - Production:    https://portal.cloudlearn.io
+      #   - Local Mac:     http://host.docker.internal:8001
+      #   - Compose net:   http://cloudlearn-portal:8000  (if portal in same compose)
+      CLOUDLEARN_LICENSE_BACKEND_URL: ${CLOUDLEARN_LICENSE_BACKEND_URL:-http://cloudlearn-portal:8000}
+      # Refresh interval (seconds) — appliance polls portal to pick up
+      # subscription changes. Default 1h.
+      CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS: ${CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS:-3600}
       CLOUDLEARN_CLOUDSIM_URL: http://cloudsim:9010
       CLOUDLEARN_DEPLOY_DIR: /var/lib/cloudlearn/deployments
       CLOUDLEARN_HOST_CONFIG_FILE: /config/cloudlearn-host.json
@@ -158,6 +167,34 @@ services:
       timeout: 5s
       retries: 3
 
+  # ── CloudLearn Portal (license + auth + checkout) ────────────────────────
+  # Lives in its OWN repo at ../cloud-learn-portal — fully decoupled from
+  # the appliance. Bundled here under `--profile portal` for local dev
+  # convenience only. PRODUCTION: deploy that repo on its own host
+  # (Render/Fly/Railway) and point CLOUDLEARN_LICENSE_BACKEND_URL at it.
+  #   cd ../cloud-learn-portal && docker compose up   ← prod-style standalone
+  #   docker compose --profile portal up -d           ← bundled dev
+  cloudlearn-portal:
+    profiles: ["portal"]
+    image: python:3.12-slim
+    working_dir: /app
+    command: ["sh", "-c", "pip install -q -r requirements.txt && python -m app.keygen && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    ports:
+      - "8001:8000"
+    volumes:
+      - ../cloud-learn-portal/app:/app/app:ro
+      - ../cloud-learn-portal/scripts:/app/scripts:ro
+      - ../cloud-learn-portal/requirements.txt:/app/requirements.txt:ro
+      - cloudlearn-portal-keys:/app/keys
+      - cloudlearn-portal-data:/app/data
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token-CHANGE}
+      SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-CHANGE}
+      LICENSE_ISSUER: ${LICENSE_ISSUER:-http://cloudlearn-portal:8000}
+      # `demo` → safe out-of-box checkout flow; switch to razorpay|stripe in prod
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-demo}
+    restart: unless-stopped
+
 volumes:
   cloudlearn-data:
   cloudsim-data:
@@ -167,3 +204,5 @@ volumes:
   cloudlearn-nats:
   cloudlearn-minio:
   cloudlearn-dynamodb:
+  cloudlearn-portal-keys:
+  cloudlearn-portal-data:

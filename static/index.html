@@ -6019,7 +6019,7 @@ function GCPListShell({
   );
 }
 
-function TenantBar({notify}) {
+function TenantBar({notify, onOpenTier}) {
   // Tenant = the licensing/isolation boundary above Space. Active tenant is
   // stored in localStorage and sent as X-CloudLearn-Tenant on every api() call;
   // server filters spaces / blocks cross-tenant access by it.
@@ -6095,6 +6095,7 @@ function TenantBar({notify}) {
         </div>
       )}
       <HostBudgetChip />
+      <TierChip onOpen={onOpenTier} />
       <span style={{marginLeft:'auto',fontSize:11,color:'#878e96'}}>
         Tenant 1:N Spaces · Space 1:1 Provider
       </span>
@@ -6126,6 +6127,51 @@ function HostBudgetChip() {
       </span>
       <span style={{color:'#5f6368'}}>({max}%)</span>
     </div>
+  );
+}
+
+// TierChip — current license tier at a glance in TenantBar.
+// Shows "TIER: Enterprise · ₹990/mo · 142d" with a colored pill. Clicking
+// opens /pricing in a new tab — /pricing is the canonical place for tier
+// selection + license management. Refetches every 30s so the chip stays in
+// sync after a /api/license/signup elsewhere.
+function TierChip() {
+  const [tier, setTier] = useState(null);
+  const [status, setStatus] = useState(null);
+  const load = async () => {
+    try {
+      const [t, s] = await Promise.all([
+        api('GET', '/api/runtime/tier').catch(() => null),
+        api('GET', '/api/license/status').catch(() => null),
+      ]);
+      setTier(t); setStatus(s);
+    } catch { /* hide */ }
+  };
+  useEffect(() => { load(); const i = setInterval(load, 30000); return () => clearInterval(i); }, []);
+  if (!tier) return null;
+  const active = (tier.active_tier || 'free').toLowerCase();
+  const pillColor = {free:'#6b7280', student:'#1b4f9c', developer:'#0a7d36', enterprise:'#6d28d9'}[active] || '#374151';
+  const policy = tier.active_policy || {};
+  const price = active === 'enterprise'
+    ? (policy.price_inr_monthly_per_seat ? `₹${policy.price_inr_monthly_per_seat}/seat/mo` : 'Enterprise')
+    : (policy.price_inr_monthly === 0 ? '₹0' : `₹${policy.price_inr_monthly}/mo`);
+  const days = status?.days_until_expiry;
+  const expiryStr = days == null ? '' : (days <= 0 ? '⚠ expired' : `${days}d`);
+  return (
+    <a href="/pricing" target="_blank" rel="noreferrer"
+       title={`License tier: ${active}. Click to manage tier on /pricing.`}
+       style={{display:'flex',alignItems:'center',gap:8,padding:'5px 12px',
+               background:'#fff',border:`2px solid ${pillColor}`,borderRadius:6,
+               fontSize:12,textDecoration:'none'}}>
+      <span style={{background:pillColor,color:'#fff',padding:'2px 8px',borderRadius:4,
+                    fontSize:10,fontWeight:700,letterSpacing:'.5px'}}>TIER</span>
+      <span style={{fontWeight:700,color:pillColor,textTransform:'capitalize'}}>{active}</span>
+      <span style={{color:'#5f6368'}}>{price}</span>
+      {expiryStr && (
+        <span style={{color: days <= 7 ? '#a4262c' : '#5f6368'}}>· {expiryStr}</span>
+      )}
+      <span style={{marginLeft:4,color:pillColor,fontWeight:600}}>Manage ↗</span>
+    </a>
   );
 }
 
@@ -6222,7 +6268,7 @@ function runtimeSizingRows(sizing) {
   return rows;
 }
 
-function ProvidersView({providers, onOpenSpaces, notify}) {
+function ProvidersView({providers, onOpenSpaces, notify, onOpenTier}) {
   const cards = (providers && providers.length ? providers : [
     {
       provider_id: 'aws',
@@ -6272,7 +6318,7 @@ function ProvidersView({providers, onOpenSpaces, notify}) {
   return (
     <div style={{minHeight:'100vh',background:'#f2f3f3'}}>
       <div style={{padding:'20px',maxWidth:1400,margin:'0 auto'}}>
-        <TenantBar notify={notify} />
+        <TenantBar notify={notify} onOpenTier={onOpenTier} />
         <div className="panel">
           <div className="ph">
             <div>
@@ -19616,7 +19662,26 @@ function GCPIAMView({notify, onBack, onOpen}) {
 /* ── App ────────────────────────────────────────────────────────────────── */
 function App() {
   const productMode = window.location.pathname.startsWith('/product') || window.location.pathname.startsWith('/cloudlearn');
-  const [view, setView]   = useState('providers');
+  // /pricing is the canonical landing page for tier selection (served by a
+  // standalone HTML file, not this SPA). /ui boots into Providers — the
+  // primary in-SPA workspace.  ?view=<providers|spaces> deep-link still works.
+  const initialView = (() => {
+    try {
+      const v = new URLSearchParams(window.location.search).get('view');
+      if (v && ['providers','spaces'].includes(v)) return v;
+    } catch {}
+    return 'providers';
+  })();
+  const [view, setView]   = useState(initialView);
+  // Keep ?view= in sync with state changes (so refresh + back/forward work).
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (view === 'providers') url.searchParams.delete('view');
+      else url.searchParams.set('view', view);
+      window.history.replaceState({}, '', url.toString());
+    } catch {}
+  }, [view]);
   const [bucket, setBucket] = useState(null);
   const [notif, setNotif]   = useState(null);
   const [query, setQuery]   = useState('');
@@ -19950,11 +20015,13 @@ function App() {
   if (!productMode && view === 'providers') {
     return (
       <>
-        <ProvidersView providers={providers} onOpenSpaces={openSpaces} notify={notify} />
+        <ProvidersView providers={providers} onOpenSpaces={openSpaces} notify={notify}
+                       onOpenTier={() => open('tier')} />
         {notif && <Notif key={notif.id} msg={notif.msg} type={notif.type} onClose={()=>setNotif(null)}/>}
       </>
     );
   }
+
 
   if (!productMode && view === 'spaces') {
     return (

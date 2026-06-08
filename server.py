@@ -10044,10 +10044,393 @@ def api_activate_pack(pack_id: str):
     return {"message": "Pack activated", "pack": pack}
 
 
+# ── Production license activation (Phase 1 — JWT from cloudlearn-license-backend)
+#
+# Three endpoints work together:
+#   POST /api/license/activate       — paste a JWT string (manual key path)
+#   POST /api/auth/device/start      — kick off RFC 8628 device flow
+#   POST /api/auth/device/poll       — poll for completion → applies JWT
+#
+# All three end up calling _apply_license_jwt(token), which validates the JWT
+# against the license backend's public key, then persists the tier into the
+# active tenant. /api/license/signup remains as a DEV-MODE-ONLY bypass.
+
+from pydantic import BaseModel as _BaseModel
+
+
+class _LicenseActivateReq(_BaseModel):
+    license_key: str
+
+
+class _DeviceStartReq(_BaseModel):
+    backend_url: str | None = None   # override default cloudlearn.io
+
+
+class _DevicePollReq(_BaseModel):
+    device_code: str
+    backend_url: str | None = None
+
+
+def _apply_license_jwt(token: str) -> dict:
+    """Verify a JWT against the license backend, then propagate the encoded
+    tier into the active tenant. Returns the parsed claims on success.
+    Raises HTTPException on failure."""
+    from core import license_remote as _lr
+    install_id = _lr.get_or_create_install_id(STATE)
+    try:
+        claims = _lr.verify_license_jwt(
+            token,
+            backend_url=os.environ.get("CLOUDLEARN_LICENSE_BACKEND_URL"),
+            install_id=install_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail={
+            "ok": False, "code": "license_invalid", "reason": str(e),
+        })
+
+    # Check against cached revocation list (best-effort — fail-open on miss)
+    revoked = set(STATE.get("license_revoked_jtis") or [])
+    if claims.get("jti") in revoked:
+        raise HTTPException(status_code=403, detail={
+            "ok": False, "code": "license_revoked",
+            "reason": "this license has been revoked; contact support for a new one",
+        })
+
+    # Persist on the active tenant — middleware reads license_tier from here.
+    # Use the canonical tenants_state path so _tenant_dict() finds the value.
+    tier = claims["tier"]
+    ts = _tenants_state()
+    tid = _active_tenant_id() or DEFAULT_TENANT_ID
+    tenants = ts.setdefault("tenants", {})
+    t = tenants.setdefault(tid, {"tenant_id": tid, "name": tid})
+    t["license_tier"] = tier
+    t["primary_cloud"] = claims.get("primary_cloud") or t.get("primary_cloud") or ""
+    t["license_seats"] = int(claims.get("seats") or 1)
+    t["license_jti"] = claims.get("jti")
+    t["license_expires_at"] = _lr._exp_iso(claims)
+    t["license_sub"] = claims.get("sub")
+    t["license_issued_via"] = "license_remote_jwt"
+
+    # Mirror at deployment level too (back-compat with /api/license/status reads)
+    STATE["license"] = {"tier": tier, "active": True,
+                        **_lr.claims_to_tier_payload(claims)}
+    # Cache the JWT itself so device-poll responses + revocation checks can find it
+    STATE["license_jwt"] = token
+    STATE["license_claims"] = dict(claims)
+    _persist_state()
+    return claims
+
+
+@app.post("/api/license/activate")
+async def api_license_activate(req: _LicenseActivateReq):
+    """Paste-a-key activation. The user copies the JWT from a license-issuance
+    email (or from `python scripts/issue-license.py`) and POSTs it here."""
+    if not req.license_key or not req.license_key.strip():
+        raise HTTPException(400, "license_key required")
+    claims = _apply_license_jwt(req.license_key.strip())
+    return {
+        "ok": True,
+        "active_tier": claims["tier"],
+        "expires_at": _exp_iso_for_response(claims),
+        "jti": claims.get("jti"),
+        "issued_to": claims.get("sub"),
+    }
+
+
+def _exp_iso_for_response(claims: dict) -> str:
+    from core import license_remote as _lr
+    return _lr._exp_iso(claims)
+
+
+@app.post("/api/auth/start-activation")
+async def api_auth_start_activation(req: _DeviceStartReq):
+    """Phase 5 single-flow activation — calls portal /api/auth/start-activation,
+    returns the approval_url for the SPA to open in a new tab. SPA then polls
+    /api/auth/poll-activation until the user signs in + approves on portal.
+
+    User experience: 1 click → portal opens → sign in any way → 1 click approve
+    → appliance picks up JWT. No device codes shown to user.
+    """
+    import json as _json
+    import urllib.request as _ur, urllib.error as _ue
+    from core import license_remote as _lr
+    install_id = _lr.get_or_create_install_id(STATE)
+    backend = req.backend_url or os.environ.get("CLOUDLEARN_LICENSE_BACKEND_URL") or _lr.DEFAULT_BACKEND_URL
+    body = _json.dumps({"install_id": install_id,
+                         "label": f"CloudLearn appliance @ {install_id[:12]}"}).encode()
+    try:
+        r = _ur.Request(backend.rstrip("/") + "/api/auth/start-activation",
+                         data=body, method="POST",
+                         headers={"Content-Type": "application/json"})
+        with _ur.urlopen(r, timeout=10) as resp:
+            data = _json.load(resp)
+    except _ue.HTTPError as e:
+        raise HTTPException(502, f"portal_error_{e.code}: {e.read().decode()[:200]}")
+    except Exception as e:
+        raise HTTPException(502, f"portal_unreachable: {type(e).__name__}: {e}")
+    STATE.setdefault("device_auth", {})["pending"] = {
+        "poll_token": data["poll_token"],
+        "approval_url": data["approval_url"],
+        "started_at": time.time(),
+        "expires_at": time.time() + int(data.get("expires_in", 900)),
+    }
+    _persist_state()
+    return {
+        "approval_url": data["approval_url"],
+        "interval": data.get("interval", 5),
+        "expires_in": data.get("expires_in", 900),
+    }
+
+
+@app.post("/api/auth/poll-activation")
+async def api_auth_poll_activation():
+    """Phase 5 — appliance polls portal until user approves. On approval,
+    receives JWT + applies it via _apply_license_jwt."""
+    from core import license_remote as _lr
+    pending = (STATE.get("device_auth") or {}).get("pending") or {}
+    poll_token = pending.get("poll_token", "")
+    if not poll_token:
+        raise HTTPException(400, "no pending activation — call /api/auth/start-activation first")
+    result = _lr.device_flow_poll(
+        os.environ.get("CLOUDLEARN_LICENSE_BACKEND_URL"), poll_token,
+    )
+    if result["status"] == "approved":
+        token = result.get("access_token") or ""
+        if not token:
+            raise HTTPException(502, "backend returned no token")
+        claims = _apply_license_jwt(token)
+        (STATE.get("device_auth") or {}).pop("pending", None)
+        _persist_state()
+        return {
+            "status": "approved",
+            "active_tier": claims["tier"],
+            "expires_at": _exp_iso_for_response(claims),
+            "issued_to": claims.get("sub"),
+        }
+    if result["status"] == "expired":
+        (STATE.get("device_auth") or {}).pop("pending", None)
+        _persist_state()
+    return result
+
+
+@app.post("/api/auth/device/start")
+async def api_auth_device_start(req: _DeviceStartReq):
+    """LEGACY (Phase 1) device-code flow — kept for back-compat. New code
+    should use /api/auth/start-activation for the simpler 1-click UX."""
+    from core import license_remote as _lr
+    install_id = _lr.get_or_create_install_id(STATE)
+    try:
+        resp = _lr.device_flow_start(
+            req.backend_url or os.environ.get("CLOUDLEARN_LICENSE_BACKEND_URL"),
+            install_id,
+            client_name=f"CloudLearn appliance ({install_id})",
+        )
+    except RuntimeError as e:
+        raise HTTPException(502, str(e))
+    # Stash the device_code so the SPA can simply call /poll with no args
+    STATE.setdefault("device_auth", {})["pending"] = {
+        "device_code": resp["device_code"],
+        "user_code": resp["user_code"],
+        "verification_uri": resp["verification_uri"],
+        "started_at": time.time(),
+        "expires_at": time.time() + int(resp.get("expires_in", 600)),
+    }
+    _persist_state()
+    # Don't echo device_code back to the SPA — it stays server-side
+    return {
+        "user_code": resp["user_code"],
+        "verification_uri": resp["verification_uri"],
+        "verification_uri_complete": resp.get("verification_uri_complete"),
+        "interval": resp.get("interval", 5),
+        "expires_in": resp.get("expires_in", 600),
+    }
+
+
+@app.post("/api/auth/device/poll")
+async def api_auth_device_poll(req: _DevicePollReq | None = None):
+    """SPA polls this every few seconds. Returns:
+       {status: 'pending'}  while waiting
+       {status: 'approved', active_tier: 'developer'}  on success
+       {status: 'expired'}  if user took too long
+    """
+    pending = (STATE.get("device_auth") or {}).get("pending") or {}
+    device_code = (req.device_code if req else "") or pending.get("device_code", "")
+    if not device_code:
+        raise HTTPException(400, "no pending device authorization — call /api/auth/device/start first")
+    from core import license_remote as _lr
+    result = _lr.device_flow_poll(
+        (req.backend_url if req else None) or os.environ.get("CLOUDLEARN_LICENSE_BACKEND_URL"),
+        device_code,
+    )
+    if result["status"] == "approved":
+        token = result.get("access_token") or ""
+        if not token:
+            raise HTTPException(502, "backend returned no token")
+        claims = _apply_license_jwt(token)
+        # Clear pending state
+        (STATE.get("device_auth") or {}).pop("pending", None)
+        _persist_state()
+        return {
+            "status": "approved",
+            "active_tier": claims["tier"],
+            "expires_at": _exp_iso_for_response(claims),
+            "issued_to": claims.get("sub"),
+        }
+    if result["status"] == "expired":
+        (STATE.get("device_auth") or {}).pop("pending", None)
+        _persist_state()
+    return result
+
+
+@app.post("/api/auth/logout")
+async def api_auth_logout():
+    """Drop cached license → tier reverts to Free (default)."""
+    STATE.pop("license_jwt", None)
+    STATE.pop("license_claims", None)
+    STATE["license"] = {"tier": "free", "active": False}
+    # Reset active tenant's tier (canonical key is STATE["tenants"]["tenants"])
+    tid = _active_tenant_id() or DEFAULT_TENANT_ID
+    t = _tenant_dict(tid)
+    if t:
+        t.pop("license_tier", None)
+        t.pop("license_seats", None)
+        t.pop("license_jti", None)
+        t.pop("license_expires_at", None)
+        t.pop("license_sub", None)
+        t.pop("license_issued_via", None)
+    _persist_state()
+    return {"ok": True, "active_tier": "free"}
+
+
+# Background revocation poll — daemon thread polls /api/license/revocation
+# every 24h. On revoked-jti match → auto-downgrade to Free + record on STATE
+# so the SPA can show a banner.
+@app.on_event("startup")
+def _start_license_background_tasks():
+    """Spin up two daemon threads on appliance boot:
+       1. Revocation poll (24h) — catches admin revocations
+       2. Refresh loop (1h)    — picks up subscription changes from portal
+
+    Both are safe to call multiple times (idempotent). Both fail-open
+    on network errors. Both apply changes to STATE + persist."""
+    from core import license_remote as _lr
+
+    def _on_revoked(claims):
+        # Auto-revert tier to Free (same as POST /api/auth/logout)
+        STATE.pop("license_jwt", None)
+        STATE.pop("license_claims", None)
+        STATE["license"] = {"tier": "free", "active": False,
+                            "auto_revoked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                            "auto_revoked_jti": claims.get("jti"),
+                            "auto_revoked_sub": claims.get("sub")}
+        tid = _active_tenant_id() or DEFAULT_TENANT_ID
+        t = _tenant_dict(tid)
+        if t:
+            for k in ("license_tier", "license_seats", "license_jti", "license_expires_at"):
+                t.pop(k, None)
+        _persist_state()
+
+    def _on_tier_changed(prev_tier, new_tier, refresh_result):
+        # Subscription on portal changed; apply the new JWT directly.
+        # `state["license_jwt"]` + `["license_claims"]` are already updated
+        # by refresh_token — we just need to propagate to the tenant + persist.
+        claims = STATE.get("license_claims") or {}
+        if not claims:
+            return
+        tid = _active_tenant_id() or DEFAULT_TENANT_ID
+        t = _tenant_dict(tid)
+        if t:
+            t["license_tier"] = claims.get("tier")
+            t["license_seats"] = int(claims.get("seats") or 1)
+            t["license_jti"] = claims.get("jti")
+            t["license_expires_at"] = _lr._exp_iso(claims)
+        STATE["license"] = {"tier": claims.get("tier"), "active": True,
+                            **_lr.claims_to_tier_payload(claims),
+                            "auto_changed_from": prev_tier,
+                            "auto_changed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        _persist_state()
+
+    def _on_auth_failed(detail):
+        # JWT got revoked → reset to Free + flag for SPA banner
+        _on_revoked({"jti": (STATE.get("license_claims") or {}).get("jti"),
+                     "sub": (STATE.get("license_claims") or {}).get("sub")})
+
+    try:
+        _lr.start_revocation_poll(STATE, interval_seconds=24 * 3600, on_revoked=_on_revoked)
+        _lr.start_refresh_loop(STATE, interval_seconds=int(os.environ.get(
+            "CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS", "3600")),
+            on_tier_changed=_on_tier_changed,
+            on_auth_failed=_on_auth_failed)
+    except Exception:
+        pass
+
+
+@app.get("/api/license/revocation-status")
+def api_license_revocation_status():
+    """Surface revocation-poll + refresh state for the SPA to render a banner."""
+    lic = STATE.get("license") or {}
+    return {
+        "last_check_at":      STATE.get("license_last_revocation_check_at"),
+        "last_refresh_at":    STATE.get("license_last_refresh_at"),
+        "refresh_source":     STATE.get("license_refresh_source"),
+        "revoked_jtis_count": len(STATE.get("license_revoked_jtis") or []),
+        "auto_revoked_at":    lic.get("auto_revoked_at"),
+        "auto_revoked_jti":   lic.get("auto_revoked_jti"),
+        "auto_changed_at":    lic.get("auto_changed_at"),
+        "auto_changed_from":  lic.get("auto_changed_from"),
+    }
+
+
+@app.post("/api/license/refresh")
+async def api_license_refresh():
+    """Manual SPA-triggered refresh — calls /api/identity/refresh on the
+    portal NOW (skips the 1h wait). Useful after the user upgrades on
+    /dashboard and wants instant tier-update on the appliance."""
+    from core import license_remote as _lr
+    if not STATE.get("license_jwt"):
+        raise HTTPException(400, "no active license to refresh — sign in first")
+    result = _lr.refresh_token(STATE)
+    if result is None:
+        raise HTTPException(502, "portal unreachable")
+    if isinstance(result, dict) and result.get("_error") == "auth_required":
+        raise HTTPException(401, detail=result.get("_detail", "license_revoked"))
+    # Apply tier change (mirror the on_tier_changed callback logic)
+    claims = STATE.get("license_claims") or {}
+    tid = _active_tenant_id() or DEFAULT_TENANT_ID
+    t = _tenant_dict(tid)
+    if t:
+        t["license_tier"] = claims.get("tier")
+        t["license_seats"] = int(claims.get("seats") or 1)
+        t["license_jti"] = claims.get("jti")
+        t["license_expires_at"] = _lr._exp_iso(claims)
+    STATE["license"] = {"tier": claims.get("tier"), "active": True,
+                        **_lr.claims_to_tier_payload(claims)}
+    _persist_state()
+    return {
+        "ok": True,
+        "active_tier": claims.get("tier"),
+        "source": result.get("source") if isinstance(result, dict) else None,
+        "expires_at": _lr._exp_iso(claims),
+    }
+
+
+@app.post("/api/license/signup")
 def api_license_signup(req: LicenseSignupRequest):
     """Issue a signed license JWT for the chosen tier. Tier-specific defaults
     (credits, primary_cloud requirement) come from core/tier_policy.policy_for.
+
+    DEV MODE ONLY in v1.0 production: gated behind CLOUDLEARN_DEV_MODE=1.
+    Production users activate via POST /api/license/activate (paste JWT from
+    cloudlearn-license-backend) or POST /api/auth/device/start (device flow).
     """
+    if os.environ.get("CLOUDLEARN_DEV_MODE", "").strip() not in ("1", "true", "yes"):
+        raise HTTPException(status_code=403, detail={
+            "ok": False, "code": "signup_disabled",
+            "reason": "Direct tier signup is disabled in production. Use /api/license/activate "
+                      "with a license key issued by cloudlearn-license-backend, or start a "
+                      "device-flow login via /api/auth/device/start.",
+            "docs": "https://github.com/cloudlearn/cloud-learn/blob/main/docs/architecture/LICENSING.md",
+        })
     from core import tier_policy as _tp
     from datetime import datetime, timedelta, timezone as _tz
     tier = _normalize_tier(req.tier)
@@ -19308,13 +19691,14 @@ async def aws_query_root(request: Request) -> Response:
 # ── S3 REST API — root level ─────────────────────────────────────────────────
 
 async def s3_list_buckets(request: Request) -> Response:
-    """GET / → ListBuckets (S3 wire) OR main SPA (browser).
+    """GET / → ListBuckets (S3 wire) OR ALWAYS redirect to /pricing (browser).
 
-    First-time browser visitors get redirected to /pricing so they see the
-    tier launch page BEFORE the cloud-provider console. After they pick a
-    tier on /pricing, the "Continue to console" button sets the
-    `cloudlearn_tier_acknowledged` cookie which suppresses this redirect
-    on subsequent visits.
+    Every browser visit lands on /pricing — the canonical place for tier
+    selection + license management. The previous cookie-gated bypass was
+    removed: /pricing is the single source of truth for tier UX, and the
+    in-SPA TierView was retired in favor of this.
+
+    S3 wire clients (no text/html Accept) still get the ListBuckets XML.
     """
     accept = request.headers.get("accept", "")
     user_agent = request.headers.get("user-agent", "")
