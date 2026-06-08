@@ -565,6 +565,44 @@ def _migrate_state(state: dict) -> dict:
             "tags": {},
         }
         spaces_state["active_space_id"] = legacy_space_id
+        # Auto-create default GCP and Azure spaces so all 3 consoles work
+        # out of the box without requiring the user to manually create them.
+        for _prov, _sid, _label, _region in [
+            ("gcp", "space-gcp-default", "GCP Project", "us-central1"),
+            ("azure", "space-azure-default", "Azure Subscription", "eastus"),
+        ]:
+            spaces_state["spaces"][_sid] = {
+                "space_id": _sid,
+                "name": _label,
+                "provider": _prov,
+                "status": "running",
+                "seed": state.get("license", {}).get("device_id") or "default",
+                "owner_id": "local-user",
+                "created_at": now(),
+                "updated_at": now(),
+                "cloudsim_runtime_id": f"cloudsim-{_sid}",
+                "lxd_project_name": f"cl-{_sid}",
+                "active_region": _region,
+                "active_account": AWS_ACCOUNT_ID,
+                "max_instances": 10,
+                "max_memory_mb": 4096,
+                "max_disk_mb": 20480,
+                "estimated_memory_mb": 0,
+                "estimated_disk_mb": 0,
+                "estimated_runtime_mb": 0,
+                "estimated_cost_notes": f"Default {_prov.upper()} workspace.",
+                "runtime_count": 0,
+                "ec2_count": 0, "lambda_count": 0, "rds_count": 0,
+                "sqs_count": 0, "dynamodb_count": 0,
+                "cloudsim": {"summary": {}, "events": [], "last_tick": "", "policy": copy.deepcopy(_default_cloudsim_space_policy())},
+                "runtime": {"mode": "lxd", "instances": {}, "sandbox_count": 0},
+                "resources": {},
+                "events": [],
+                "snapshots": [],
+                "service_states": {},
+                "tags": {},
+                "tenant_id": DEFAULT_TENANT_ID,
+            }
     return state
 
 

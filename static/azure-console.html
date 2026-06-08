@@ -538,16 +538,28 @@ async function requireAzureSpace(){
   const space = active && active.space ? active.space : null;
   const provider = space ? String(space.provider || "").toLowerCase() : "";
   if (!space || provider !== "azure") {
-    // Show a brief explainer, then redirect — better UX than a silent jump.
+    // Auto-switch: find and activate an Azure space instead of showing an error
+    try {
+      const sr = await fetch(ORIGIN + "/api/spaces");
+      if (sr.ok) {
+        const data = await sr.json();
+        const spaces = data.spaces || [];
+        const azSpace = spaces.find(s => String(s.provider || "").toLowerCase() === "azure" && s.status === "running");
+        if (azSpace) {
+          await fetch(ORIGIN + "/api/spaces/" + azSpace.space_id + "/switch", {method: "POST"});
+          window.location.reload();
+          return false;
+        }
+      }
+    } catch(_){}
+    // No Azure space exists at all — show message
     document.body.innerHTML =
       '<div style="font-family:Segoe UI,sans-serif;padding:60px 24px;max-width:560px;margin:0 auto;text-align:center;color:#323130">' +
       '  <div style="font-size:48px;line-height:1">☁️</div>' +
-      '  <h1 style="font-size:22px;font-weight:600;margin:16px 0 8px">Select an Azure space first</h1>' +
-      '  <p style="font-size:14px;color:#605e5c;line-height:1.5">The Azure console only opens inside a selected simulation space ' +
-      '  (same flow as AWS and GCP). Redirecting you to the Spaces view…</p>' +
+      '  <h1 style="font-size:22px;font-weight:600;margin:16px 0 8px">No Azure space found</h1>' +
+      '  <p style="font-size:14px;color:#605e5c;line-height:1.5">Create an Azure simulation space first.</p>' +
       '  <a href="/ui" style="display:inline-block;margin-top:20px;background:#0078d4;color:#fff;padding:8px 18px;border-radius:2px;font-size:13px;text-decoration:none">Go to Spaces now</a>' +
       '</div>';
-    setTimeout(() => { window.location.href = "/ui"; }, 1800);
     return false;
   }
   return true;

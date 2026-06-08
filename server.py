@@ -19319,11 +19319,6 @@ async def s3_list_buckets(request: Request) -> Response:
     accept = request.headers.get("accept", "")
     user_agent = request.headers.get("user-agent", "")
     if "text/html" in accept or "Mozilla" in user_agent:
-        # Browser visit — tier-gate before the main SPA.
-        cookie = request.cookies.get("cloudlearn_tier_acknowledged", "")
-        if not cookie:
-            from fastapi.responses import RedirectResponse
-            return RedirectResponse(url="/pricing", status_code=302)
         with open(_UI_HTML, "rb") as f:
             return Response(content=f.read(), media_type="text/html", headers={"Cache-Control": "no-store, max-age=0"})
 

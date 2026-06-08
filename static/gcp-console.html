@@ -423,14 +423,28 @@ async function requireGcpSpace(){
   const space = active && active.space ? active.space : null;
   const provider = space ? String(space.provider || "").toLowerCase() : "";
   if (!space || provider !== "gcp") {
+    // Auto-switch: find and activate a GCP space instead of showing an error
+    try {
+      const sr = await fetch(ORIGIN + "/api/spaces");
+      if (sr.ok) {
+        const data = await sr.json();
+        const spaces = data.spaces || [];
+        const gcpSpace = spaces.find(s => String(s.provider || "").toLowerCase() === "gcp" && s.status === "running");
+        if (gcpSpace) {
+          await fetch(ORIGIN + "/api/spaces/" + gcpSpace.space_id + "/switch", {method: "POST"});
+          window.location.reload();
+          return false;
+        }
+      }
+    } catch(_){}
+    // No GCP space exists at all — redirect to Spaces view
     document.body.innerHTML =
       '<div style="font-family:\'Google Sans\',Arial,sans-serif;padding:60px 24px;max-width:560px;margin:60px auto;text-align:center;color:#202124;background:#fff;border:1px solid #e8eaed;border-radius:8px">' +
       '  <svg width="64" height="64" viewBox="0 0 24 24" style="margin-bottom:16px"><path fill="#4285F4" d="M12.19 2.38a9.32 9.32 0 0 0-6.62 2.74l3.92 3.93a3.85 3.85 0 0 1 5.49.04l3.91-3.93a9.32 9.32 0 0 0-6.7-2.78z"/><path fill="#34A853" d="M9.5 21.4a9.32 9.32 0 0 0 6.7-2.78l-3.91-3.93a3.85 3.85 0 0 1-5.49.04l-3.92 3.93a9.32 9.32 0 0 0 6.62 2.74z"/><path fill="#EA4335" d="M2.83 5.13a9.32 9.32 0 0 0-.7 11.06l3.93-3.93a3.85 3.85 0 0 1-.04-5.49l-3.19-1.64z"/><path fill="#FBBC04" d="M21.55 5.13l-3.19 1.64a3.85 3.85 0 0 1-.04 5.49l3.93 3.93a9.32 9.32 0 0 0-.7-11.06z"/></svg>' +
-      '  <h1 style="font-size:22px;font-weight:500;margin:0 0 8px">Select a Google Cloud project first</h1>' +
-      '  <p style="font-size:14px;color:#5f6368;line-height:1.6">The Google Cloud console opens inside a selected simulation space (your GCP project). Redirecting to the Spaces view…</p>' +
+      '  <h1 style="font-size:22px;font-weight:500;margin:0 0 8px">No GCP space found</h1>' +
+      '  <p style="font-size:14px;color:#5f6368;line-height:1.6">Create a GCP simulation space first.</p>' +
       '  <a href="/ui" style="display:inline-block;margin-top:20px;background:#1a73e8;color:#fff;padding:10px 22px;border-radius:4px;font-size:13px;text-decoration:none;font-weight:500;text-transform:uppercase;letter-spacing:.5px">Go to Spaces</a>' +
       '</div>';
-    setTimeout(()=>{ window.location.href = "/ui"; }, 1800);
     return false;
   }
   return true;
