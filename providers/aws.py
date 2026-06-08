@@ -58,4 +58,26 @@ def tool_response(tool: str) -> dict:
             "help": ["Use BaseEndpoint to point the client at the simulator.", "Service request/response bodies stay AWS-shaped."],
             "provider_surface": provider_info.get("surface", {}),
         }
+    if tool == "sdk/python":
+        return {
+            "provider": "aws",
+            "tool": "boto3",
+            "status": "partial",
+            "endpoint": endpoint,
+            "dependency": "boto3",
+            "config": {"endpoint_url": endpoint, "region_name": "us-east-1", "credentials": "test/test"},
+            "help": ["Use endpoint_url to point boto3 clients at the simulator.", "All standard boto3 service clients work with the simulator endpoint."],
+            "provider_surface": provider_info.get("surface", {}),
+        }
+    if tool == "sdk/nodejs":
+        return {
+            "provider": "aws",
+            "tool": "aws-sdk-js-v3",
+            "status": "partial",
+            "endpoint": endpoint,
+            "dependency": "@aws-sdk/client-*",
+            "config": {"endpoint": endpoint, "region": "us-east-1", "credentials": "test/test", "forcePathStyle": True},
+            "help": ["Pass endpoint to each service client constructor.", "Use forcePathStyle for S3."],
+            "provider_surface": provider_info.get("surface", {}),
+        }
     raise KeyError(tool)

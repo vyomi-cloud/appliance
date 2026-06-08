@@ -28,5 +28,6 @@ PACK = build_pack(
         "regionAware": True,
         "apiVersion": "2022-10-01-preview",
         "dataPlane": "in-process broker under /azure-data/servicebus/{namespace}/{entity}/messages",
+        "notes": "REST-only: AMQP protocol is not supported in the CloudLearn simulator. Use HTTP REST endpoints for all send/receive operations.",
     },
 )

@@ -116,6 +116,27 @@ async def api_gcp_iam_create_service_account(project: str, request):
     return {"name": f"projects/{project}/serviceAccounts/{email}", "projectId": project, "uniqueId": rec["uniqueId"], "email": email, "displayName": display_name, "description": rec["description"], "oauth2ClientId": rec["oauth2ClientId"], "disabled": rec["disabled"], "etag": rec["etag"]}
 
 
+def api_gcp_iam_get_service_account(project: str, account: str):
+    project = _gcp_project_name(project)
+    s = _server()
+    accounts = gcp_iam_state.setdefault("service_accounts", {}).setdefault(project, {})
+    for key, rec in accounts.items():
+        if account in {key, rec.get("email", ""), rec.get("name", "")}:
+            return {
+                "name": f"projects/{project}/serviceAccounts/{rec['email']}",
+                "projectId": project,
+                "uniqueId": rec.get("uniqueId", s._gcp_compute_numeric_id(f"{project}:{rec['name']}")),
+                "email": rec["email"],
+                "displayName": rec.get("displayName", rec["name"]),
+                "description": rec.get("description", ""),
+                "oauth2ClientId": rec.get("oauth2ClientId", ""),
+                "disabled": bool(rec.get("disabled", False)),
+                "createTime": rec.get("createTime", _now()),
+                "etag": rec.get("etag", ""),
+            }
+    raise HTTPException(404, detail="Service account not found")
+
+
 def api_gcp_iam_delete_service_account(project: str, account: str):
     project = _gcp_project_name(project)
     accounts = gcp_iam_state.setdefault("service_accounts", {}).setdefault(project, {})

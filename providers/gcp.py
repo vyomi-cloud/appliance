@@ -64,4 +64,26 @@ def tool_response(tool: str) -> dict:
             "help": ["Use the simulator endpoint with Google Cloud Go clients.", "Client wrappers are partial, so transport and request shape glue is still expanding."],
             "provider_surface": provider_info.get("surface", {}),
         }
+    if tool == "sdk/python":
+        return {
+            "provider": "gcp",
+            "tool": "google-cloud-python",
+            "status": "partial",
+            "endpoint": endpoint,
+            "dependency": "google-cloud-storage (and other google-cloud-* packages)",
+            "config": {"STORAGE_EMULATOR_HOST": endpoint, "project": "cloudlearn"},
+            "help": ["Set STORAGE_EMULATOR_HOST env var to point Python clients at the simulator.", "Client wrappers are partial, so transport and request shape glue is still expanding."],
+            "provider_surface": provider_info.get("surface", {}),
+        }
+    if tool == "sdk/nodejs":
+        return {
+            "provider": "gcp",
+            "tool": "google-cloud-nodejs",
+            "status": "partial",
+            "endpoint": endpoint,
+            "dependency": "@google-cloud/storage (and other @google-cloud/* packages)",
+            "config": {"apiEndpoint": endpoint, "projectId": "cloudlearn"},
+            "help": ["Pass apiEndpoint to each client constructor.", "Client wrappers are partial, so transport and request shape glue is still expanding."],
+            "provider_surface": provider_info.get("surface", {}),
+        }
     raise KeyError(tool)

@@ -99,4 +99,32 @@ def tool_response(tool: str) -> dict:
             ],
             "provider_surface": provider_info.get("surface", {}),
         }
+    if tool == "sdk/python":
+        return {
+            "provider": "azure",
+            "tool": "azure-sdk-for-python",
+            "status": "partial",
+            "endpoint": endpoint,
+            "dependency": "azure-mgmt-compute (and other azure-mgmt-* packages)",
+            "config": {"base_url": endpoint, "subscription_id": "sub-001", "credentials": "DefaultAzureCredential"},
+            "help": [
+                "Pass base_url to each management client constructor.",
+                "Use DefaultAzureCredential — simulator accepts any token.",
+            ],
+            "provider_surface": provider_info.get("surface", {}),
+        }
+    if tool == "sdk/nodejs":
+        return {
+            "provider": "azure",
+            "tool": "azure-sdk-for-js",
+            "status": "partial",
+            "endpoint": endpoint,
+            "dependency": "@azure/arm-compute (and other @azure/arm-* packages)",
+            "config": {"$host": endpoint, "subscriptionId": "sub-001", "credentials": "DefaultAzureCredential"},
+            "help": [
+                "Pass $host option to each management client constructor.",
+                "Use DefaultAzureCredential — simulator accepts any token.",
+            ],
+            "provider_surface": provider_info.get("surface", {}),
+        }
     raise KeyError(tool)

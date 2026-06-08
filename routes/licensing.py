@@ -1,4 +1,4 @@
-"""Licensing, catalog, packs, providers, host info, and budget toggle routes."""
+"""Licensing, catalog, packs, providers, host info, budget toggle, and cost budget alert routes."""
 from __future__ import annotations
 
 import copy
@@ -7,6 +7,64 @@ from typing import Any
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import Response
 from core import app_context as ctx
+
+
+def _get_current_spend() -> float:
+    """Return current simulated cloud spend (real_cloud_cost_usd) from the
+    active space's cost_savings. This is what the user WOULD have spent."""
+    try:
+        spaces = ctx.STATE.get("spaces", {}).get("spaces", {})
+        active_id = ctx.STATE.get("spaces", {}).get("active_space_id", "")
+        space = spaces.get(active_id, {}) if active_id else {}
+        if isinstance(space, dict):
+            return float(space.get("cost_savings", {}).get("real_cloud_cost_usd", 0.0) or 0.0)
+    except Exception:
+        pass
+    return 0.0
+
+
+def _check_budget_alerts() -> None:
+    """Check all budgets against current spend and fire notifications for any
+    newly breached thresholds. Called from _cloudsim_refresh_bridge."""
+    budgets = ctx.STATE.get("budgets", {})
+    if not budgets:
+        return
+    current_spend = _get_current_spend()
+    for budget_id, budget in budgets.items():
+        if not isinstance(budget, dict):
+            continue
+        amount = budget.get("amount_usd", 0)
+        if not amount:
+            continue
+        utilization_pct = round((current_spend / amount) * 100, 2)
+        already_triggered = {a.get("threshold") for a in budget.get("alerts_triggered", []) if isinstance(a, dict)}
+        for threshold in budget.get("alert_thresholds", []):
+            if utilization_pct >= threshold and threshold not in already_triggered:
+                alert_record = {
+                    "threshold": threshold,
+                    "utilization_pct": utilization_pct,
+                    "current_spend_usd": current_spend,
+                    "amount_usd": amount,
+                    "triggered_at": ctx.now(),
+                }
+                budget.setdefault("alerts_triggered", []).append(alert_record)
+                # Fire notification via core.notifications.emit()
+                try:
+                    from core import notifications as _nt
+                    _nt.emit(ctx.STATE, ctx.active_tenant_id(), "budget.threshold_breached", {
+                        "budget_id": budget_id,
+                        "budget_name": budget.get("name", ""),
+                        "threshold_pct": threshold,
+                        "utilization_pct": utilization_pct,
+                        "current_spend_usd": current_spend,
+                        "amount_usd": amount,
+                    })
+                except Exception:
+                    pass
+    try:
+        ctx.persist_state()
+    except Exception:
+        pass
 
 
 def register(app: FastAPI) -> None:
@@ -101,6 +159,16 @@ def register(app: FastAPI) -> None:
         from providers.aws import tool_response as aws_tool_response
         return aws_tool_response("sdk/go")
 
+    @app.get("/api/providers/aws/sdk/python")
+    def api_provider_aws_sdk_python():
+        from providers.aws import tool_response as aws_tool_response
+        return aws_tool_response("sdk/python")
+
+    @app.get("/api/providers/aws/sdk/nodejs")
+    def api_provider_aws_sdk_nodejs():
+        from providers.aws import tool_response as aws_tool_response
+        return aws_tool_response("sdk/nodejs")
+
     @app.post("/api/providers/aws/cli/resolve")
     def api_provider_aws_cli_resolve(payload: dict[str, Any]):
         from core.tooling_simulators import aws_cli_resolve
@@ -115,6 +183,16 @@ def register(app: FastAPI) -> None:
     def api_provider_aws_sdk_go_snippet():
         from core.tooling_simulators import sdk_snippet
         return sdk_snippet("aws", "go")
+
+    @app.get("/api/providers/aws/sdk/python/snippet")
+    def api_provider_aws_sdk_python_snippet():
+        from core.tooling_simulators import sdk_snippet
+        return sdk_snippet("aws", "python")
+
+    @app.get("/api/providers/aws/sdk/nodejs/snippet")
+    def api_provider_aws_sdk_nodejs_snippet():
+        from core.tooling_simulators import sdk_snippet
+        return sdk_snippet("aws", "nodejs")
 
     # ── GCP tooling ───────────────────────────────────────────────────────
 
@@ -138,6 +216,16 @@ def register(app: FastAPI) -> None:
         from providers.gcp import tool_response as gcp_tool_response
         return gcp_tool_response("sdk/go")
 
+    @app.get("/api/providers/gcp/sdk/python")
+    def api_provider_gcp_sdk_python():
+        from providers.gcp import tool_response as gcp_tool_response
+        return gcp_tool_response("sdk/python")
+
+    @app.get("/api/providers/gcp/sdk/nodejs")
+    def api_provider_gcp_sdk_nodejs():
+        from providers.gcp import tool_response as gcp_tool_response
+        return gcp_tool_response("sdk/nodejs")
+
     @app.post("/api/providers/gcp/gcloud/resolve")
     def api_provider_gcp_gcloud_resolve(payload: dict[str, Any]):
         from providers.gcp_routes import gcloud_resolve as gcp_gcloud_resolve
@@ -158,6 +246,16 @@ def register(app: FastAPI) -> None:
         from providers.gcp_routes import sdk_go_snippet as gcp_sdk_go_snippet
         return gcp_sdk_go_snippet()
 
+    @app.get("/api/providers/gcp/sdk/python/snippet")
+    def api_provider_gcp_sdk_python_snippet():
+        from core.tooling_simulators import sdk_snippet
+        return sdk_snippet("gcp", "python")
+
+    @app.get("/api/providers/gcp/sdk/nodejs/snippet")
+    def api_provider_gcp_sdk_nodejs_snippet():
+        from core.tooling_simulators import sdk_snippet
+        return sdk_snippet("gcp", "nodejs")
+
     # ── Azure tooling ─────────────────────────────────────────────────────
 
     @app.get("/api/providers/azure/cli")
@@ -175,6 +273,16 @@ def register(app: FastAPI) -> None:
         from providers import azure_tool_response
         return azure_tool_response("sdk/go")
 
+    @app.get("/api/providers/azure/sdk/python")
+    def api_provider_azure_sdk_python():
+        from providers import azure_tool_response
+        return azure_tool_response("sdk/python")
+
+    @app.get("/api/providers/azure/sdk/nodejs")
+    def api_provider_azure_sdk_nodejs():
+        from providers import azure_tool_response
+        return azure_tool_response("sdk/nodejs")
+
     @app.post("/api/providers/azure/cli/resolve")
     def api_provider_azure_cli_resolve(payload: dict[str, Any]):
         from core.tooling_simulators import az_cli_resolve
@@ -189,6 +297,16 @@ def register(app: FastAPI) -> None:
     def api_provider_azure_sdk_go_snippet():
         from core.tooling_simulators import sdk_snippet
         return sdk_snippet("azure", "go")
+
+    @app.get("/api/providers/azure/sdk/python/snippet")
+    def api_provider_azure_sdk_python_snippet():
+        from core.tooling_simulators import sdk_snippet
+        return sdk_snippet("azure", "python")
+
+    @app.get("/api/providers/azure/sdk/nodejs/snippet")
+    def api_provider_azure_sdk_nodejs_snippet():
+        from core.tooling_simulators import sdk_snippet
+        return sdk_snippet("azure", "nodejs")
 
     # ── Pack fragment / activate ──────────────────────────────────────────
 
@@ -380,6 +498,90 @@ def register(app: FastAPI) -> None:
         import server
         server._BUDGET_BYPASSED = False
         return {"bypassed": False, "message": "Budget gate re-enabled."}
+
+    # ── Cost Budget Alerts ───────────────────────────────────────────────
+
+    @app.post("/api/runtime/budgets", include_in_schema=False)
+    async def api_cost_budget_create(request: Request):
+        """Create a cost budget with alert thresholds."""
+        import uuid
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            pass
+        name = str(body.get("name", "")).strip() or "default"
+        amount_usd = float(body.get("amount_usd", 100.0) or 100.0)
+        period = str(body.get("period", "monthly")).strip() or "monthly"
+        alert_thresholds = body.get("alert_thresholds") or [50, 80, 100]
+        if not isinstance(alert_thresholds, list):
+            alert_thresholds = [50, 80, 100]
+        alert_thresholds = sorted(set(int(t) for t in alert_thresholds if isinstance(t, (int, float)) and 0 < t <= 200))
+        budget_id = f"budget-{uuid.uuid4().hex[:12]}"
+        budgets = ctx.STATE.setdefault("budgets", {})
+        budget = {
+            "budget_id": budget_id,
+            "name": name,
+            "amount_usd": amount_usd,
+            "period": period,
+            "alert_thresholds": alert_thresholds,
+            "alerts_triggered": [],
+            "created_at": ctx.now(),
+        }
+        budgets[budget_id] = budget
+        ctx.persist_state()
+        return {"ok": True, "budget": budget}
+
+    @app.get("/api/runtime/budgets", include_in_schema=False)
+    def api_cost_budget_list():
+        """List all cost budgets with current spend."""
+        budgets = ctx.STATE.get("budgets", {})
+        # Compute current spend from active space cost_savings.
+        current_spend = _get_current_spend()
+        results = []
+        for bid, b in budgets.items():
+            if not isinstance(b, dict):
+                continue
+            entry = copy.deepcopy(b)
+            entry["current_spend_usd"] = current_spend
+            entry["utilization_pct"] = round((current_spend / b["amount_usd"]) * 100, 2) if b.get("amount_usd") else 0.0
+            results.append(entry)
+        return {"budgets": results, "count": len(results), "current_spend_usd": current_spend}
+
+    @app.delete("/api/runtime/budgets/{budget_id}", include_in_schema=False)
+    def api_cost_budget_delete(budget_id: str):
+        """Delete a cost budget."""
+        budgets = ctx.STATE.setdefault("budgets", {})
+        if budget_id not in budgets:
+            from fastapi import HTTPException as _HE
+            raise _HE(404, detail="BudgetNotFound")
+        budgets.pop(budget_id)
+        ctx.persist_state()
+        return {"deleted": True, "budget_id": budget_id}
+
+    @app.get("/api/runtime/budgets/{budget_id}/status", include_in_schema=False)
+    def api_cost_budget_status(budget_id: str):
+        """Get budget status including current spend vs amount and alerts triggered."""
+        budgets = ctx.STATE.get("budgets", {})
+        budget = budgets.get(budget_id)
+        if not isinstance(budget, dict):
+            from fastapi import HTTPException as _HE
+            raise _HE(404, detail="BudgetNotFound")
+        current_spend = _get_current_spend()
+        utilization_pct = round((current_spend / budget["amount_usd"]) * 100, 2) if budget.get("amount_usd") else 0.0
+        # Determine which thresholds have been breached.
+        breached = [t for t in budget.get("alert_thresholds", []) if utilization_pct >= t]
+        return {
+            "budget_id": budget_id,
+            "name": budget.get("name", ""),
+            "amount_usd": budget.get("amount_usd", 0),
+            "current_spend_usd": current_spend,
+            "utilization_pct": utilization_pct,
+            "period": budget.get("period", "monthly"),
+            "alert_thresholds": budget.get("alert_thresholds", []),
+            "thresholds_breached": breached,
+            "alerts_triggered": budget.get("alerts_triggered", []),
+        }
 
 
 def _normalize_tier(tier) -> str:

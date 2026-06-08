@@ -265,10 +265,24 @@ def _ddb_create_table_record(payload: dict[str, Any]) -> dict:
     tables = _ddb_tables()
     if table_name in tables:
         raise HTTPException(409, detail="ResourceInUseException: Table already exists.")
-    pk_name = str(payload.get("partition_key_name") or payload.get("PartitionKeyName") or "id").strip() or "id"
-    pk_type = str(payload.get("partition_key_type") or payload.get("PartitionKeyType") or "S").strip().upper() or "S"
-    sk_name = str(payload.get("sort_key_name") or payload.get("SortKeyName") or "").strip()
-    sk_type = str(payload.get("sort_key_type") or payload.get("SortKeyType") or "S").strip().upper() or "S"
+    # Extract key schema from AWS SDK format (KeySchema + AttributeDefinitions)
+    key_schema = payload.get("KeySchema") or payload.get("key_schema") or []
+    attr_defs_input = payload.get("AttributeDefinitions") or payload.get("attribute_definitions") or []
+    _attr_type_map = {ad.get("AttributeName", ""): ad.get("AttributeType", "S") for ad in attr_defs_input if isinstance(ad, dict)}
+    pk_name = ""
+    sk_name = ""
+    for ks in key_schema:
+        if isinstance(ks, dict):
+            if ks.get("KeyType") == "HASH":
+                pk_name = ks.get("AttributeName", "")
+            elif ks.get("KeyType") == "RANGE":
+                sk_name = ks.get("AttributeName", "")
+    if not pk_name:
+        pk_name = str(payload.get("partition_key_name") or payload.get("PartitionKeyName") or "id").strip() or "id"
+    if not sk_name:
+        sk_name = str(payload.get("sort_key_name") or payload.get("SortKeyName") or "").strip()
+    pk_type = _attr_type_map.get(pk_name, str(payload.get("partition_key_type") or payload.get("PartitionKeyType") or "S").strip().upper() or "S")
+    sk_type = _attr_type_map.get(sk_name, str(payload.get("sort_key_type") or payload.get("SortKeyType") or "S").strip().upper() or "S")
     billing_mode = str(payload.get("billing_mode") or payload.get("BillingMode") or "PAY_PER_REQUEST").strip().upper() or "PAY_PER_REQUEST"
     throughput = payload.get("provisioned_throughput") or payload.get("ProvisionedThroughput") or {}
     tags = payload.get("tags") or payload.get("Tags") or {}
@@ -299,6 +313,72 @@ def _ddb_create_table_record(payload: dict[str, Any]) -> dict:
     if sk_name:
         table["attribute_definitions"].append({"AttributeName": sk_name, "AttributeType": sk_type})
         table["key_schema"].append({"AttributeName": sk_name, "KeyType": "RANGE"})
+
+    # GSI / LSI support
+    gsi_list = payload.get("GlobalSecondaryIndexes") or payload.get("global_secondary_indexes") or []
+    lsi_list = payload.get("LocalSecondaryIndexes") or payload.get("local_secondary_indexes") or []
+    indexes = []
+    attr_defs = {ad["AttributeName"] for ad in table["attribute_definitions"]}
+    for idx_def in gsi_list:
+        idx = {
+            "IndexName": idx_def.get("IndexName", idx_def.get("index_name", "")),
+            "IndexType": "GSI",
+            "KeySchema": idx_def.get("KeySchema", idx_def.get("key_schema", [])),
+            "Projection": idx_def.get("Projection", idx_def.get("projection", {"ProjectionType": "ALL"})),
+            "IndexStatus": "ACTIVE",
+            "IndexArn": f"{_ddb_table_arn(table_name)}/index/{idx_def.get('IndexName', idx_def.get('index_name', ''))}",
+        }
+        if idx_def.get("ProvisionedThroughput"):
+            idx["ProvisionedThroughput"] = idx_def["ProvisionedThroughput"]
+        indexes.append(idx)
+        for ks in idx.get("KeySchema", []):
+            if ks.get("AttributeName") and ks["AttributeName"] not in attr_defs:
+                attr_defs.add(ks["AttributeName"])
+                table["attribute_definitions"].append({"AttributeName": ks["AttributeName"], "AttributeType": "S"})
+    for idx_def in lsi_list:
+        idx = {
+            "IndexName": idx_def.get("IndexName", idx_def.get("index_name", "")),
+            "IndexType": "LSI",
+            "KeySchema": idx_def.get("KeySchema", idx_def.get("key_schema", [])),
+            "Projection": idx_def.get("Projection", idx_def.get("projection", {"ProjectionType": "ALL"})),
+            "IndexStatus": "ACTIVE",
+            "IndexArn": f"{_ddb_table_arn(table_name)}/index/{idx_def.get('IndexName', idx_def.get('index_name', ''))}",
+        }
+        indexes.append(idx)
+        for ks in idx.get("KeySchema", []):
+            if ks.get("AttributeName") and ks["AttributeName"] not in attr_defs:
+                attr_defs.add(ks["AttributeName"])
+                table["attribute_definitions"].append({"AttributeName": ks["AttributeName"], "AttributeType": "S"})
+    table["indexes"] = indexes
+
+    # Also add attribute definitions from payload if provided
+    extra_attrs = payload.get("AttributeDefinitions") or payload.get("attribute_definitions") or []
+    for ad in extra_attrs:
+        aname = ad.get("AttributeName", "")
+        if aname and aname not in attr_defs:
+            attr_defs.add(aname)
+            table["attribute_definitions"].append({"AttributeName": aname, "AttributeType": ad.get("AttributeType", "S")})
+        elif aname in attr_defs:
+            # Update type if explicitly specified
+            for existing_ad in table["attribute_definitions"]:
+                if existing_ad["AttributeName"] == aname:
+                    existing_ad["AttributeType"] = ad.get("AttributeType", existing_ad["AttributeType"])
+
+    # Stream support
+    stream_spec = payload.get("StreamSpecification") or payload.get("stream_specification") or {}
+    if stream_spec:
+        stream_enabled = stream_spec.get("StreamEnabled", stream_spec.get("stream_enabled", False))
+        stream_view_type = stream_spec.get("StreamViewType", stream_spec.get("stream_view_type", "NEW_AND_OLD_IMAGES"))
+        if stream_enabled:
+            stream_label = _now().replace(":", "-").replace("+", "-")
+            table["streams"] = {
+                "enabled": True,
+                "stream_view_type": stream_view_type,
+                "stream_arn": f"{_ddb_table_arn(table_name)}/stream/{stream_label}",
+                "latest_stream_label": stream_label,
+            }
+            table["stream_records"] = []
+
     tables[table_name] = table
     _persist_state()
     _record_usage("dynamodb.create_table", {"table_name": table_name})
@@ -314,17 +394,61 @@ def _ddb_delete_table_record(table_name: str) -> None:
     _record_usage("dynamodb.delete_table", {"table_name": table_name})
 
 
+def _ddb_emit_stream_record(table: dict, event_name: str, old_image: dict | None, new_image: dict | None) -> None:
+    """Append a stream record if streams are enabled on the table."""
+    streams = table.get("streams", {})
+    if not streams.get("enabled"):
+        return
+    import uuid
+    view_type = streams.get("stream_view_type", "NEW_AND_OLD_IMAGES")
+    record: dict[str, Any] = {
+        "eventID": uuid.uuid4().hex[:32],
+        "eventName": event_name,
+        "eventVersion": "1.1",
+        "eventSource": "aws:dynamodb",
+        "awsRegion": "us-east-1",
+        "approximateCreationDateTime": _now(),
+    }
+    dynamodb_record: dict[str, Any] = {
+        "ApproximateCreationDateTime": _now(),
+        "SequenceNumber": str(len(table.get("stream_records", [])) + 1).zfill(21),
+        "SizeBytes": 0,
+        "StreamViewType": view_type,
+    }
+    # Build Keys from the new or old image
+    pk_name, sk_name = _ddb_table_key_fields(table)
+    source = new_image or old_image or {}
+    keys: dict[str, Any] = {}
+    if pk_name in source:
+        keys[pk_name] = _ddb_native_to_json(source[pk_name])
+    if sk_name and sk_name in source:
+        keys[sk_name] = _ddb_native_to_json(source[sk_name])
+    dynamodb_record["Keys"] = keys
+    if view_type in ("NEW_AND_OLD_IMAGES", "NEW_IMAGE") and new_image is not None:
+        dynamodb_record["NewImage"] = _ddb_native_item_to_json(new_image)
+    if view_type in ("NEW_AND_OLD_IMAGES", "OLD_IMAGE") and old_image is not None:
+        dynamodb_record["OldImage"] = _ddb_native_item_to_json(old_image)
+    record["dynamodb"] = dynamodb_record
+    stream_records = table.setdefault("stream_records", [])
+    stream_records.append(record)
+    # Cap at 1000 records
+    if len(stream_records) > 1000:
+        table["stream_records"] = stream_records[-1000:]
+
+
 def _ddb_put_item_record(table: dict, payload: dict[str, Any]) -> dict:
     native_item = _ddb_item_to_native_item(payload.get("item") or payload.get("Item") or {})
     key = _ddb_item_key_string(table, native_item)
     items = table.setdefault("items", {})
     existing = items.get(key)
+    old_image = copy.deepcopy(existing.get("item", {})) if existing else None
     items[key] = {
         "item": native_item,
         "created": existing.get("created", _now()) if existing else _now(),
         "updated": _now(),
         "size_bytes": len(json.dumps(native_item, sort_keys=True, default=str).encode("utf-8")),
     }
+    _ddb_emit_stream_record(table, "MODIFY" if existing else "INSERT", old_image, copy.deepcopy(native_item))
     _ddb_refresh_table_metrics(table)
     _persist_state()
     _record_usage("dynamodb.put_item", {"table_name": table["table_name"]})
@@ -341,6 +465,8 @@ def _ddb_delete_item_record(table: dict, payload: dict[str, Any]) -> dict:
     native_key = _ddb_item_to_native_item(payload.get("key") or payload.get("Key") or {})
     key = _ddb_item_key_string(table, native_key)
     removed = table.get("items", {}).pop(key, None)
+    if removed:
+        _ddb_emit_stream_record(table, "REMOVE", copy.deepcopy(removed.get("item", {})), None)
     _ddb_refresh_table_metrics(table)
     _persist_state()
     _record_usage("dynamodb.delete_item", {"table_name": table["table_name"]})
@@ -350,7 +476,9 @@ def _ddb_delete_item_record(table: dict, payload: dict[str, Any]) -> dict:
 def _ddb_update_item_record(table: dict, payload: dict[str, Any]) -> dict:
     native_key = _ddb_item_to_native_item(payload.get("key") or payload.get("Key") or {})
     key = _ddb_item_key_string(table, native_key)
-    current = copy.deepcopy(table.get("items", {}).get(key, {}).get("item", {}))
+    old_record = table.get("items", {}).get(key, {})
+    old_image = copy.deepcopy(old_record.get("item", {})) if old_record else None
+    current = copy.deepcopy(old_record.get("item", {})) if old_record else {}
     updates = payload.get("attribute_updates") or payload.get("AttributeUpdates") or {}
     if not current:
         current = copy.deepcopy(native_key)
@@ -382,6 +510,7 @@ def _ddb_update_item_record(table: dict, payload: dict[str, Any]) -> dict:
         "updated": _now(),
         "size_bytes": len(json.dumps(current, sort_keys=True, default=str).encode("utf-8")),
     }
+    _ddb_emit_stream_record(table, "MODIFY" if old_image else "INSERT", old_image, copy.deepcopy(current))
     _ddb_refresh_table_metrics(table)
     _persist_state()
     _record_usage("dynamodb.update_item", {"table_name": table["table_name"]})
@@ -403,11 +532,35 @@ def _ddb_expr_value(raw: Any) -> Any:
     return _ddb_json_to_native(raw)
 
 
+def _ddb_index_key_fields(table: dict, index_name: str) -> tuple[str, str] | None:
+    """Return (pk_name, sk_name) for the given index, or None if not found."""
+    for idx in table.get("indexes", []):
+        if idx.get("IndexName") == index_name:
+            ks = idx.get("KeySchema", [])
+            pk = ""
+            sk = ""
+            for entry in ks:
+                if entry.get("KeyType") == "HASH":
+                    pk = entry.get("AttributeName", "")
+                elif entry.get("KeyType") == "RANGE":
+                    sk = entry.get("AttributeName", "")
+            return (pk, sk) if pk else None
+    return None
+
+
 def _ddb_query_filter(table: dict, payload: dict[str, Any]) -> tuple[list[dict], int]:
     records = _ddb_sorted_records(table)
     if not records:
         return [], 0
-    pk_name, sk_name = _ddb_table_key_fields(table)
+    index_name = payload.get("IndexName") or payload.get("index_name") or ""
+    if index_name:
+        idx_keys = _ddb_index_key_fields(table, index_name)
+        if idx_keys:
+            pk_name, sk_name = idx_keys
+        else:
+            pk_name, sk_name = _ddb_table_key_fields(table)
+    else:
+        pk_name, sk_name = _ddb_table_key_fields(table)
     pk_value = payload.get("partition_key_value")
     sk_equals = payload.get("sort_key_equals")
     sk_begins = str(payload.get("sort_key_begins_with") or "")
@@ -535,6 +688,27 @@ def api_dynamodb_list_tables():
 
 
 def api_dynamodb_create_table(req: DynamoDBTableRequest):
+    # Proxy to DynamoDB Local (best-effort) AND keep in-memory state in sync.
+    try:
+        from core import dynamodb_proxy as _ddbp
+        if _ddbp.available():
+            import urllib.request, urllib.error
+            key_schema = [{"AttributeName": req.partition_key_name or "id", "KeyType": "HASH"}]
+            attr_defs = [{"AttributeName": req.partition_key_name or "id", "AttributeType": req.partition_key_type or "S"}]
+            if req.sort_key_name:
+                key_schema.append({"AttributeName": req.sort_key_name, "KeyType": "RANGE"})
+                attr_defs.append({"AttributeName": req.sort_key_name, "AttributeType": req.sort_key_type or "S"})
+            proxy_body = json.dumps({"TableName": req.table_name, "KeySchema": key_schema,
+                                     "AttributeDefinitions": attr_defs,
+                                     "BillingMode": req.billing_mode or "PAY_PER_REQUEST"}).encode()
+            proxy_req = urllib.request.Request(
+                _ddbp._DDB_URL, data=proxy_body, method="POST",
+                headers={"X-Amz-Target": "DynamoDB_20120810.CreateTable",
+                         "Content-Type": "application/x-amz-json-1.0",
+                         "Authorization": "AWS4-HMAC-SHA256 Credential=test/20260531/us-east-1/dynamodb/aws4_request"})
+            urllib.request.urlopen(proxy_req, timeout=5)
+    except Exception:
+        pass
     table = _ddb_create_table_record({
         "table_name": req.table_name,
         "partition_key_name": req.partition_key_name,
@@ -558,6 +732,20 @@ def api_dynamodb_get_table(table_name: str):
 
 
 def api_dynamodb_delete_table(table_name: str):
+    # Proxy to DynamoDB Local (best-effort) AND delete from in-memory.
+    try:
+        from core import dynamodb_proxy as _ddbp
+        if _ddbp.available():
+            import urllib.request, urllib.error
+            proxy_body = json.dumps({"TableName": table_name}).encode()
+            proxy_req = urllib.request.Request(
+                _ddbp._DDB_URL, data=proxy_body, method="POST",
+                headers={"X-Amz-Target": "DynamoDB_20120810.DeleteTable",
+                         "Content-Type": "application/x-amz-json-1.0",
+                         "Authorization": "AWS4-HMAC-SHA256 Credential=test/20260531/us-east-1/dynamodb/aws4_request"})
+            urllib.request.urlopen(proxy_req, timeout=5)
+    except Exception:
+        pass
     _ddb_delete_table_record(table_name)
     _record_usage("dynamodb.delete_table", {"table_name": table_name})
     return {"deleted": True, "table_name": table_name}
@@ -575,6 +763,21 @@ def api_dynamodb_put_item(table_name: str, req: DynamoDBItemRequest):
     table = _ddb_find_table(table_name)
     if not table:
         raise HTTPException(404, detail="TableNotFound")
+    # Proxy to DynamoDB Local (best-effort write-through).
+    try:
+        from core import dynamodb_proxy as _ddbp
+        if _ddbp.available():
+            import urllib.request, urllib.error
+            item_json = _ddb_native_item_to_json(_ddb_item_to_native_item(req.item))
+            proxy_body = json.dumps({"TableName": table_name, "Item": item_json}).encode()
+            proxy_req = urllib.request.Request(
+                _ddbp._DDB_URL, data=proxy_body, method="POST",
+                headers={"X-Amz-Target": "DynamoDB_20120810.PutItem",
+                         "Content-Type": "application/x-amz-json-1.0",
+                         "Authorization": "AWS4-HMAC-SHA256 Credential=test/20260531/us-east-1/dynamodb/aws4_request"})
+            urllib.request.urlopen(proxy_req, timeout=5)
+    except Exception:
+        pass
     old = _ddb_put_item_record(table, {"item": req.item})
     native_item = _ddb_item_to_native_item(req.item)
     key = _ddb_item_key_string(table, native_item)
@@ -601,6 +804,21 @@ def api_dynamodb_delete_item(table_name: str, req: DynamoDBItemRequest):
     table = _ddb_find_table(table_name)
     if not table:
         raise HTTPException(404, detail="TableNotFound")
+    # Proxy to DynamoDB Local (best-effort).
+    try:
+        from core import dynamodb_proxy as _ddbp
+        if _ddbp.available():
+            import urllib.request, urllib.error
+            key_json = _ddb_native_item_to_json(_ddb_item_to_native_item(req.key or {}))
+            proxy_body = json.dumps({"TableName": table_name, "Key": key_json}).encode()
+            proxy_req = urllib.request.Request(
+                _ddbp._DDB_URL, data=proxy_body, method="POST",
+                headers={"X-Amz-Target": "DynamoDB_20120810.DeleteItem",
+                         "Content-Type": "application/x-amz-json-1.0",
+                         "Authorization": "AWS4-HMAC-SHA256 Credential=test/20260531/us-east-1/dynamodb/aws4_request"})
+            urllib.request.urlopen(proxy_req, timeout=5)
+    except Exception:
+        pass
     removed = _ddb_delete_item_record(table, {"key": req.key})
     _record_usage("dynamodb.delete_item", {"table_name": table_name})
     return {"table_name": table_name, "deleted": True, "item": removed.get("item", {})}
@@ -610,6 +828,39 @@ def api_dynamodb_query_items(table_name: str, req: DynamoDBQueryRequest):
     table = _ddb_find_table(table_name)
     if not table:
         raise HTTPException(404, detail="TableNotFound")
+    # Try DynamoDB Local proxy first when a KeyConditionExpression is provided.
+    try:
+        from core import dynamodb_proxy as _ddbp
+        if _ddbp.available() and req.key_condition_expression:
+            import urllib.request, urllib.error
+            proxy_payload: dict[str, Any] = {"TableName": table_name,
+                                             "KeyConditionExpression": req.key_condition_expression}
+            if req.expression_attribute_values:
+                proxy_payload["ExpressionAttributeValues"] = {
+                    k: _ddb_native_to_json(_ddb_json_to_native(v)) if isinstance(v, dict) else _ddb_native_to_json(v)
+                    for k, v in req.expression_attribute_values.items()}
+            if req.expression_attribute_names:
+                proxy_payload["ExpressionAttributeNames"] = req.expression_attribute_names
+            if req.limit:
+                proxy_payload["Limit"] = req.limit
+            proxy_body = json.dumps(proxy_payload).encode()
+            proxy_req = urllib.request.Request(
+                _ddbp._DDB_URL, data=proxy_body, method="POST",
+                headers={"X-Amz-Target": "DynamoDB_20120810.Query",
+                         "Content-Type": "application/x-amz-json-1.0",
+                         "Authorization": "AWS4-HMAC-SHA256 Credential=test/20260531/us-east-1/dynamodb/aws4_request"})
+            with urllib.request.urlopen(proxy_req, timeout=10) as r:
+                if r.status == 200:
+                    result = json.loads(r.read())
+                    items_raw = result.get("Items", [])
+                    native_items = [_ddb_json_to_native({"M": item}) for item in items_raw]
+                    rows = [{"item": ni, "key": "", "created": "", "updated": "", "size_bytes": 0, "size_human": "0 B"} for ni in native_items]
+                    return {"table_name": table_name,
+                            "items": [_ddb_item_record_view(table, "", {"item": ni}) for ni in native_items],
+                            "count": len(items_raw), "scanned_count": result.get("ScannedCount", len(items_raw)),
+                            "_proxy": "dynamodb-local"}
+    except Exception:
+        pass
     payload = {
         "partition_key_value": req.partition_key_value,
         "sort_key_equals": req.sort_key_equals,
@@ -628,6 +879,31 @@ def api_dynamodb_scan_items(table_name: str, req: DynamoDBScanRequest):
     table = _ddb_find_table(table_name)
     if not table:
         raise HTTPException(404, detail="TableNotFound")
+    # Try DynamoDB Local proxy first.
+    try:
+        from core import dynamodb_proxy as _ddbp
+        if _ddbp.available():
+            import urllib.request, urllib.error
+            proxy_payload: dict[str, Any] = {"TableName": table_name}
+            if req.limit:
+                proxy_payload["Limit"] = req.limit
+            proxy_body = json.dumps(proxy_payload).encode()
+            proxy_req = urllib.request.Request(
+                _ddbp._DDB_URL, data=proxy_body, method="POST",
+                headers={"X-Amz-Target": "DynamoDB_20120810.Scan",
+                         "Content-Type": "application/x-amz-json-1.0",
+                         "Authorization": "AWS4-HMAC-SHA256 Credential=test/20260531/us-east-1/dynamodb/aws4_request"})
+            with urllib.request.urlopen(proxy_req, timeout=10) as r:
+                if r.status == 200:
+                    result = json.loads(r.read())
+                    items_raw = result.get("Items", [])
+                    native_items = [_ddb_json_to_native({"M": item}) for item in items_raw]
+                    return {"table_name": table_name,
+                            "items": [_ddb_item_record_view(table, "", {"item": ni}) for ni in native_items],
+                            "count": len(items_raw), "scanned_count": result.get("ScannedCount", len(items_raw)),
+                            "_proxy": "dynamodb-local"}
+    except Exception:
+        pass
     rows, count = _ddb_scan_filter(table, {"limit": req.limit})
     return {"table_name": table_name, "items": [_ddb_item_record_view(table, row.get("key", ""), row) for row in rows], "count": len(rows), "scanned_count": count}
 

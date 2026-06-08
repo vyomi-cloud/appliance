@@ -766,7 +766,7 @@ class FirestoreEngine:
         ddb_memory = ddb_count * 95
         total_memory_mb = base_memory + cloudsim_memory + lxd_memory + runtime_memory + ec2_memory + lambda_memory + rds_memory + sqs_memory + ddb_memory
         total_disk_mb = base_disk + (runtime_count * 20) + (ec2_count * 120) + (lambda_count * 20) + (rds_count * 260) + (sqs_count * 5) + (ddb_count * 40)
-        return {
+        result = {
             "provider": provider,
             "base_memory_mb": base_memory,
             "cloudsim_memory_mb": cloudsim_memory,
@@ -791,6 +791,26 @@ class FirestoreEngine:
             "max_disk_mb": int(self._spaces_state().get("settings", {}).get("max_disk_mb", 32768)),
             "current_spaces": self._space_count(),
         }
+        try:
+            from core import cost_model as _cm
+            _est_nodes = []
+            for _ in range(ec2_count):
+                _est_nodes.append({"provider": provider, "service": "ec2", "kind": "instance"})
+            for _ in range(rds_count):
+                _est_nodes.append({"provider": provider, "service": "rds", "kind": "db_instance"})
+            for _ in range(lambda_count):
+                _est_nodes.append({"provider": provider, "service": "lambda", "kind": "function"})
+            for _ in range(sqs_count):
+                _est_nodes.append({"provider": provider, "service": "sqs", "kind": "queue"})
+            for _ in range(ddb_count):
+                _est_nodes.append({"provider": provider, "service": "dynamodb", "kind": "table"})
+            _est_savings = _cm.estimate_space_savings(_est_nodes)
+            result["real_cloud_cost_usd"] = _est_savings["real_cloud_cost_usd"]
+            result["savings_usd"] = _est_savings["savings_usd"]
+        except Exception:
+            result["real_cloud_cost_usd"] = 0.0
+            result["savings_usd"] = 0.0
+        return result
 
     def create_space(self, spec: dict) -> dict:
         spec = copy.deepcopy(spec or {})

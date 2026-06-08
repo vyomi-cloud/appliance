@@ -310,6 +310,7 @@ class LambdaFunctionRequest(BaseModel):
     memory_size: int = 128
     environment: dict[str, str] = {}
     tags: list[dict[str, str]] | None = None
+    layers: list[str] = []
 
 
 class LambdaFunctionUpdateRequest(BaseModel):
@@ -341,6 +342,14 @@ class LambdaPermissionRequest(BaseModel):
     source_arn: str = ""
     source_account: str = ""
     revision_id: str = ""
+
+
+class LambdaLayerRequest(BaseModel):
+    name: str
+    description: str = ""
+    runtime: str = "python3.12"
+    code: str = ""
+    license_info: str = ""
 
 
 # ---------------------------------------------------------------------------

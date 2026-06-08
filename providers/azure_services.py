@@ -119,6 +119,7 @@ RESOURCE_CATALOG: list[dict] = [
         "key": "servicebus", "label": "Service Bus", "icon": "queue",
         "namespace": "Microsoft.ServiceBus", "type": "namespaces",
         "api_version": "2022-10-01-preview", "scope": "rg",
+        "notes": "CloudLearn Service Bus supports REST messaging protocol. AMQP (Advanced Message Queuing Protocol) is not supported — use HTTP REST endpoints for send/receive operations.",
         "children": [{"type": "queues", "label": "Queues", "icon": "queue"},
                      {"type": "topics", "label": "Topics", "icon": "campaign"}],
         "columns": [["name", "Name"], ["location", "Location"],
@@ -129,7 +130,12 @@ RESOURCE_CATALOG: list[dict] = [
         ],
         "defaults": {
             "sku": {"name": "Standard", "tier": "Standard"},
-            "properties": {"provisioningState": "Succeeded", "status": "Active"},
+            "properties": {
+                "provisioningState": "Succeeded",
+                "status": "Active",
+                "serviceBusEndpoint": "http://localhost:9000/azure-data/servicebus/__NAME__",
+                "messagingProtocol": "REST (AMQP not supported in simulator)",
+            },
         },
         "endpoints": {"properties.serviceBusEndpoint": "/azure-data/servicebus/__NAME__/"},
     },
@@ -171,6 +177,11 @@ RESOURCE_CATALOG: list[dict] = [
         "key": "apim", "label": "API Management", "icon": "api",
         "namespace": "Microsoft.ApiManagement", "type": "service",
         "api_version": "2023-05-01-preview", "scope": "rg",
+        "children": [
+            {"type": "apis", "label": "APIs", "icon": "api"},
+            {"type": "products", "label": "Products", "icon": "inventory_2"},
+            {"type": "subscriptions", "label": "Subscriptions", "icon": "subscriptions"},
+        ],
         "columns": [["name", "Name"], ["location", "Location"],
                     ["sku.name", "Tier"], ["properties.provisioningState", "Status"]],
         "create_fields": [
@@ -201,6 +212,69 @@ RESOURCE_CATALOG: list[dict] = [
             "properties": {"provisioningState": "Succeeded",
                            "addressSpace": {"addressPrefixes": ["10.0.0.0/16"]}, "subnets": []},
         },
+    },
+    {
+        "key": "nsg",
+        "label": "Network Security Group",
+        "icon": "security",
+        "namespace": "Microsoft.Network",
+        "type": "networkSecurityGroups",
+        "api_version": "2023-11-01",
+        "scope": "rg",
+        "columns": [
+            ["name", "Name"],
+            ["location", "Location"],
+            ["properties.provisioningState", "Status"],
+        ],
+        "create_fields": [
+            {"name": "name", "label": "Name", "type": "text", "required": True},
+            {"name": "location", "label": "Location", "type": "text", "default": "eastus"},
+        ],
+        "defaults": {
+            "properties": {
+                "provisioningState": "Succeeded",
+                "securityRules": [],
+            }
+        },
+        "children": [
+            {
+                "type": "securityRules",
+                "key": "security_rule",
+                "label": "Security Rule",
+                "columns": [
+                    ["name", "Name"],
+                    ["properties.priority", "Priority"],
+                    ["properties.direction", "Direction"],
+                    ["properties.access", "Access"],
+                    ["properties.protocol", "Protocol"],
+                    ["properties.destinationPortRange", "Port"],
+                ],
+                "create_fields": [
+                    {"name": "name", "label": "Name", "type": "text", "required": True},
+                    {"name": "properties.priority", "label": "Priority", "type": "number", "default": 100},
+                    {"name": "properties.direction", "label": "Direction", "type": "select", "options": ["Inbound", "Outbound"], "default": "Inbound"},
+                    {"name": "properties.access", "label": "Access", "type": "select", "options": ["Allow", "Deny"], "default": "Allow"},
+                    {"name": "properties.protocol", "label": "Protocol", "type": "select", "options": ["Tcp", "Udp", "Icmp", "*"], "default": "*"},
+                    {"name": "properties.sourceAddressPrefix", "label": "Source", "type": "text", "default": "*"},
+                    {"name": "properties.destinationAddressPrefix", "label": "Destination", "type": "text", "default": "*"},
+                    {"name": "properties.sourcePortRange", "label": "Source Port", "type": "text", "default": "*"},
+                    {"name": "properties.destinationPortRange", "label": "Destination Port", "type": "text", "default": "*"},
+                ],
+                "defaults": {
+                    "properties": {
+                        "provisioningState": "Succeeded",
+                        "priority": 100,
+                        "direction": "Inbound",
+                        "access": "Allow",
+                        "protocol": "*",
+                        "sourceAddressPrefix": "*",
+                        "destinationAddressPrefix": "*",
+                        "sourcePortRange": "*",
+                        "destinationPortRange": "*",
+                    }
+                }
+            }
+        ],
     },
     {
         "key": "eventgrid", "label": "Event Grid topics", "icon": "hub",
@@ -257,6 +331,32 @@ RESOURCE_CATALOG: list[dict] = [
             },
         },
         "endpoints": {"properties.vaultUri": "/azure-data/keyvault/__NAME__/"},
+    },
+    {
+        "key": "role_definition",
+        "label": "Role Definition",
+        "icon": "admin_panel_settings",
+        "namespace": "Microsoft.Authorization",
+        "type": "roleDefinitions",
+        "api_version": "2022-04-01",
+        "scope": "sub",
+        "columns": [
+            ["name", "Name"],
+            ["properties.roleName", "Role Name"],
+            ["properties.type", "Type"],
+        ],
+        "create_fields": [
+            {"name": "properties.roleName", "label": "Role Name", "type": "text", "required": True},
+            {"name": "properties.description", "label": "Description", "type": "text"},
+            {"name": "properties.type", "label": "Type", "type": "select", "options": ["BuiltInRole", "CustomRole"], "default": "CustomRole"},
+        ],
+        "defaults": {
+            "properties": {
+                "type": "CustomRole",
+                "permissions": [{"actions": ["*"], "notActions": []}],
+                "assignableScopes": ["/"],
+            }
+        },
     },
     {
         "key": "rbac", "label": "Entra ID / RBAC", "icon": "admin_panel_settings",
@@ -366,6 +466,37 @@ def _canonical_id(sub: str, rg: str | None, type_chain: list[str], names: list[s
 def _view(rec: dict) -> dict:
     # Return a copy without the internal bookkeeping keys.
     return {k: v for k, v in rec.items() if not k.startswith("_")}
+
+
+# Map ARM resource type → CloudSim bundle key for non-compute services.
+_ARM_TYPE_BUNDLE: dict[str, str] = {
+    "microsoft.sql/servers": "azure_sql",
+    "microsoft.sql/servers/databases": "azure_sql",
+    "microsoft.storage/storageaccounts": "azure_storage",
+    "microsoft.web/sites": "azure_functions",
+    "microsoft.servicebus/namespaces": "azure_servicebus",
+    "microsoft.documentdb/databaseaccounts": "azure_cosmos",
+    "microsoft.apimanagement/service": "azure_apim",
+    "microsoft.eventgrid/topics": "azure_eventgrid",
+    "microsoft.network/virtualnetworks": "azure_vnet",
+}
+
+
+def _cloudsim_sync_arm_service(full_type: str, rid: str, leaf_name: str,
+                               location: str, action: str = "upsert") -> None:
+    """Sync non-compute ARM resources to CloudSim via the generic helper."""
+    bundle_key = _ARM_TYPE_BUNDLE.get(full_type.lower())
+    if not bundle_key:
+        return
+    try:
+        import server as _srv
+        resource = {"name": leaf_name, "location": location}
+        service = bundle_key.replace("azure_", "")
+        _srv._cloudsim_sync_service_resource(
+            "azure", service, full_type, rid, resource, bundle_key, action=action, region=location,
+        )
+    except Exception:
+        pass
 
 
 # --- generic ARM dispatcher ------------------------------------------------
@@ -561,12 +692,14 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
                 resp.headers[hk] = hv
         # resource_id makes per-resource activity filtering in the SPA possible.
         _record_usage(f"azure.{method.lower()}", {"type": full_type, "name": leaf_name, "resource_id": rid})
+        _cloudsim_sync_arm_service(full_type, rid, leaf_name, str(payload.get("location") or DEFAULT_LOCATION), action="upsert")
         return resp
     if method == "DELETE":
         rec = _state.pop(key, None)
         _deprovision_on_delete(full_type, rec)
         if rec is not None:
             _record_usage("azure.delete", {"type": full_type, "name": leaf_name, "resource_id": rid})
+            _cloudsim_sync_arm_service(full_type, rid, leaf_name, str((rec or {}).get("location") or DEFAULT_LOCATION), action="delete")
         # Terminal success with NO async header: compatible with both sync
         # Delete clients (storage/functionapp expect 200/204) and BeginDelete
         # pollers (a header-less terminal status = immediately complete). The
@@ -618,6 +751,11 @@ def _arm_action(action: str, type_chain: list[str], resource_name: str,
                           "poweroff": "stopped", "deallocate": "deallocated"}[action]
             rt["containerStatus"] = new_status
             props["powerState"] = f"PowerState/{new_status}"
+            try:
+                import server as _srv
+                _srv._cloudsim_sync_azure_vm_resource(rec, "upsert")
+            except Exception:
+                pass
             # Activity log: record even the metadata-only transition.
             _record_usage(f"azure.vm.{action}",
                           {"vm": resource_name, "container": "(simulated)",
@@ -636,6 +774,11 @@ def _arm_action(action: str, type_chain: list[str], resource_name: str,
                       "poweroff": "stopped", "deallocate": "deallocated"}[action]
         rt["containerStatus"] = new_status
         props["powerState"] = f"PowerState/{new_status}"
+        try:
+            import server as _srv
+            _srv._cloudsim_sync_azure_vm_resource(rec, "upsert")
+        except Exception:
+            pass
         # Trigger graph + summary refresh + persist.
         _record_usage(f"azure.vm.{action}",
                       {"vm": resource_name, "container": container, "resource_id": parent_rid})
@@ -808,6 +951,16 @@ def catalog_for_console() -> list[dict]:
     return out
 
 
+_BUILTIN_ROLES = [
+    {"id": "owner", "name": "Owner", "properties": {"roleName": "Owner", "type": "BuiltInRole", "description": "Full access to all resources", "permissions": [{"actions": ["*"], "notActions": []}]}},
+    {"id": "contributor", "name": "Contributor", "properties": {"roleName": "Contributor", "type": "BuiltInRole", "description": "Create and manage all resources, but cannot grant access", "permissions": [{"actions": ["*"], "notActions": ["Microsoft.Authorization/*/Write", "Microsoft.Authorization/*/Delete"]}]}},
+    {"id": "reader", "name": "Reader", "properties": {"roleName": "Reader", "type": "BuiltInRole", "description": "View all resources", "permissions": [{"actions": ["*/read"], "notActions": []}]}},
+    {"id": "vm-contributor", "name": "Virtual Machine Contributor", "properties": {"roleName": "Virtual Machine Contributor", "type": "BuiltInRole", "description": "Manage VMs but not access", "permissions": [{"actions": ["Microsoft.Compute/*"], "notActions": []}]}},
+    {"id": "storage-contributor", "name": "Storage Account Contributor", "properties": {"roleName": "Storage Account Contributor", "type": "BuiltInRole", "description": "Manage storage accounts", "permissions": [{"actions": ["Microsoft.Storage/*"], "notActions": []}]}},
+    {"id": "sql-contributor", "name": "SQL DB Contributor", "properties": {"roleName": "SQL DB Contributor", "type": "BuiltInRole", "description": "Manage SQL databases", "permissions": [{"actions": ["Microsoft.Sql/*"], "notActions": []}]}},
+]
+
+
 def seed() -> None:
     """Populate one example resource per top-level service so grids aren't
     empty on first load. Idempotent."""
@@ -819,9 +972,12 @@ def seed() -> None:
         "servicebus": "sb-cloudlearn", "cosmos": "cosmos-cloudlearn",
         "functionapp": "fn-orders", "apim": "apim-cloudlearn",
         "vnet": "vnet-cloudlearn", "rbac": "11111111-1111-1111-1111-111111111111",
+        "role_definition": "owner",
     }
     for c in RESOURCE_CATALOG:
-        name = samples[c["key"]]
+        name = samples.get(c["key"])
+        if name is None:
+            continue
         full_type = c["namespace"] + "/" + c["type"]
         rid = f"/subscriptions/{sub}/resourceGroups/{rg}/providers/{full_type}/{name}"
         _upsert(rid, rid.lower(), full_type, name, c, {}, base)
@@ -832,6 +988,14 @@ def seed() -> None:
     sb_q = f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ServiceBus/namespaces/sb-cloudlearn/queues/orders"
     _upsert(sb_q, sb_q.lower(), "Microsoft.ServiceBus/namespaces/queues", "orders",
             _BY_TYPE[("microsoft.servicebus", "namespaces")], {"properties": {"status": "Active"}}, base)
+    # Seed built-in role definitions
+    role_def_catalog = _BY_TYPE.get(("microsoft.authorization", "roledefinitions"))
+    if role_def_catalog:
+        for role in _BUILTIN_ROLES:
+            full_type = "Microsoft.Authorization/roleDefinitions"
+            rid = f"/subscriptions/{sub}/providers/{full_type}/{role['id']}"
+            _upsert(rid, rid.lower(), full_type, role["name"], role_def_catalog,
+                    {"properties": role["properties"]}, base)
 
 
 def _provision_on_create(full_type: str, rec: dict | None, base: str) -> None:

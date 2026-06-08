@@ -1826,151 +1826,237 @@ def _cloudsim_runtime_bundle(bundle_key: str | None) -> dict:
     return copy.deepcopy(bundle)
 
 
-def _cloudsim_sync_ec2_resource(instance: dict, action: str = "upsert") -> None:
-    if not isinstance(instance, dict):
-        return
-    resource_id = str(instance.get("instance_id") or instance.get("id") or "").strip()
-    if not resource_id:
-        return
-    region = str(instance.get("az") or instance.get("region") or instance.get("active_region") or "us-east-1").strip() or "us-east-1"
-    bundle = _cloudsim_runtime_bundle("ec2")
-    payload = {
-        "name": instance.get("name") or resource_id,
-        "instance_type": instance.get("instance_type", ""),
-        "ami": instance.get("ami", ""),
-        "ami_name": instance.get("ami_name", ""),
-        "state": instance.get("state", ""),
-        "launch_status": instance.get("launch_status", ""),
-        "runtime_backend": instance.get("runtime_backend", ""),
-        "runtime_bundle_id": bundle.get("id", ""),
-        "runtime_bundle_name": bundle.get("name", ""),
-        "runtime_bundle_kind": bundle.get("kind", ""),
-        "runtime_bundle_provider": bundle.get("provider", ""),
-        "runtime_bundle_service": bundle.get("service", ""),
-        "console_backend": instance.get("console_backend", ""),
-        "endpoint_url": instance.get("endpoint_url", ""),
-        "private_ip": instance.get("private_ip", ""),
-        "public_ip": instance.get("public_ip", ""),
-        "workspace": instance.get("workspace", ""),
-        "updated_at": instance.get("updated_at") or instance.get("created") or _now(),
-    }
-    try:
-        if action == "delete":
-            PLATFORM.delete_resource("ec2", resource_id, region=region)
-        else:
-            PLATFORM.create_resource("ec2", "instance", resource_id, payload, region=region)
-    except Exception:
-        pass
+# ---------------------------------------------------------------------------
+# VM sync field maps -- one entry per provider
+# ---------------------------------------------------------------------------
+_VM_SYNC_FIELDS: dict[str, dict] = {
+    "ec2": {
+        "id_fields": ["instance_id", "id"],
+        "region_fields": ["az", "region", "active_region"],
+        "region_default": "us-east-1",
+        "type_fields": ["instance_type"],
+        "image_fields": ["ami"],
+        "image_name_fields": ["ami_name"],
+        "state_fields": ["state"],
+    },
+    "gcp_compute": {
+        "id_fields": ["instance_id", "id", "name"],
+        "region_fields": ["zone", "active_zone"],
+        "region_default": "us-central1-a",
+        "region_transform": lambda z: z.rsplit("-", 1)[0] if "-" in z else z,
+        "type_fields": ["machine_type", "machineType"],
+        "image_fields": ["source_image", "sourceImage"],
+        "image_name_fields": ["ami_name"],
+        "state_fields": ["status", "state"],
+    },
+    "azure_vm": {
+        "id_fields": ["id", "name"],
+        "region_fields": ["location", "region"],
+        "region_default": "eastus",
+        "type_from_nested": True,
+        "state_from_nested": True,
+    },
+}
 
 
-def _cloudsim_sync_gcp_compute_resource(instance: dict, action: str = "upsert") -> None:
-    """CloudSim sync for GCP Compute Engine instances (parity with EC2 + Azure VM).
+def _cloudsim_sync_vm_resource(
+    provider: str,
+    service_key: str,
+    bundle_key: str,
+    record: dict,
+    action: str = "upsert",
+    field_map: dict | None = None,
+) -> None:
+    """Unified CloudSim sync for VM resources across AWS, GCP, and Azure.
 
-    GCP Compute VMs were previously visible to CloudSim only via the bulk
-    ``_aggregate_vm_shapes`` walker — that aggregates shapes at reconcile time
-    but doesn't reflect per-resource events (start/stop/delete) incrementally.
-    This function mirrors ``_cloudsim_sync_ec2_resource`` so per-VM lifecycle
-    events push to the same resource_graph the AWS+Azure paths use.
-    """
-    if not isinstance(instance, dict):
-        return
-    resource_id = str(instance.get("instance_id") or instance.get("id") or instance.get("name") or "").strip()
-    if not resource_id:
-        return
-    zone = str(instance.get("zone") or instance.get("active_zone") or "us-central1-a").strip() or "us-central1-a"
-    # Region is derived from zone (e.g. "us-central1-a" → "us-central1").
-    region = zone.rsplit("-", 1)[0] if "-" in zone else zone
-    bundle = _cloudsim_runtime_bundle("gcp_compute")
-    payload = {
-        "name": instance.get("name") or resource_id,
-        "instance_type": instance.get("machine_type") or instance.get("machineType", ""),
-        "ami": instance.get("source_image") or instance.get("sourceImage", ""),
-        "ami_name": instance.get("ami_name", ""),
-        "state": instance.get("status") or instance.get("state", ""),
-        "launch_status": instance.get("launch_status", ""),
-        "runtime_backend": instance.get("runtime_backend", ""),
-        "runtime_bundle_id": bundle.get("id", ""),
-        "runtime_bundle_name": bundle.get("name", ""),
-        "runtime_bundle_kind": bundle.get("kind", ""),
-        "runtime_bundle_provider": bundle.get("provider", ""),
-        "runtime_bundle_service": bundle.get("service", ""),
-        "console_backend": instance.get("console_backend", ""),
-        "endpoint_url": instance.get("endpoint_url", ""),
-        "private_ip": instance.get("private_ip", ""),
-        "public_ip": instance.get("public_ip", ""),
-        "workspace": instance.get("workspace", ""),
-        "updated_at": instance.get("updated_at") or instance.get("created") or _now(),
-    }
-    try:
-        if action == "delete":
-            PLATFORM.delete_resource("gcp_compute", resource_id, region=region)
-        else:
-            PLATFORM.create_resource("gcp_compute", "instance", resource_id, payload, region=region)
-    except Exception:
-        pass
-
-
-def _cloudsim_sync_azure_vm_resource(record: dict, action: str = "upsert") -> None:
-    """CloudSim sync for Azure Microsoft.Compute/virtualMachines (parity with
-    _cloudsim_sync_ec2_resource). Azure VMs are LXD-backed identically to EC2
-    and GCE; without this hook, Azure VMs were invisible to CloudSim Plus —
-    the per-space cloudsim summary showed 0 VMs even when 10 were running.
-
-    Pulls fields from the ARM record shape:
-      record["id"]                                  → resource ID (ARM path)
-      record["name"]                                → VM name
-      record["location"]                            → region
-      record["properties"]["hardwareProfile"]["vmSize"] → instance type
-      record["properties"]["runtime"]["containerName"]  → LXD container name
-      record["properties"]["runtime"]["backend"]        → 'lxd' | 'multipass'
+    ``field_map`` controls how provider-specific field names are resolved.
+    See ``_VM_SYNC_FIELDS`` for the per-provider maps.
     """
     if not isinstance(record, dict):
         return
-    resource_id = str(record.get("id") or record.get("name") or "").strip()
+    fm = field_map or {}
+
+    # --- resource_id ---
+    resource_id = ""
+    for f in fm.get("id_fields", ["id"]):
+        resource_id = str(record.get(f) or "").strip()
+        if resource_id:
+            break
     if not resource_id:
         return
-    region = str(record.get("location") or record.get("region") or "eastus").strip() or "eastus"
-    props = record.get("properties") if isinstance(record.get("properties"), dict) else {}
-    hw = props.get("hardwareProfile") if isinstance(props.get("hardwareProfile"), dict) else {}
-    runtime = props.get("runtime") if isinstance(props.get("runtime"), dict) else {}
-    instance_view = props.get("instanceView") if isinstance(props.get("instanceView"), dict) else {}
 
-    bundle = _cloudsim_runtime_bundle("azure_vm")
-    # Power state: PowerState/running, /deallocated, etc. → simple state string.
-    power_state = ""
-    statuses = instance_view.get("statuses") if isinstance(instance_view, dict) else []
-    if isinstance(statuses, list):
-        for s in statuses:
-            code = str(s.get("code", "")) if isinstance(s, dict) else ""
-            if code.startswith("PowerState/"):
-                power_state = code.split("/", 1)[1]
+    # --- region ---
+    default_region = fm.get("region_default", "us-east-1")
+    region = ""
+    for f in fm.get("region_fields", ["region"]):
+        region = str(record.get(f) or "").strip()
+        if region:
+            break
+    region = region or default_region
+    region_transform = fm.get("region_transform")
+    if region_transform is not None:
+        region = region_transform(region)
+
+    bundle = _cloudsim_runtime_bundle(bundle_key)
+
+    # --- Azure nested property helpers ---
+    props: dict = {}
+    hw: dict = {}
+    runtime: dict = {}
+    if fm.get("type_from_nested") or fm.get("state_from_nested"):
+        props = record.get("properties") if isinstance(record.get("properties"), dict) else {}
+        hw = props.get("hardwareProfile") if isinstance(props.get("hardwareProfile"), dict) else {}
+        runtime = props.get("runtime") if isinstance(props.get("runtime"), dict) else {}
+
+    # --- instance_type ---
+    if fm.get("type_from_nested"):
+        instance_type = hw.get("vmSize", "")
+    else:
+        instance_type = ""
+        for f in fm.get("type_fields", ["instance_type"]):
+            instance_type = record.get(f) or ""
+            if instance_type:
                 break
+
+    # --- image / ami ---
+    if fm.get("type_from_nested"):
+        # Azure: image from storageProfile
+        storage = props.get("storageProfile", {}) if isinstance(props.get("storageProfile"), dict) else {}
+        img_ref = storage.get("imageReference", {}) if isinstance(storage.get("imageReference"), dict) else {}
+        ami = img_ref.get("offer", "")
+        ami_name = img_ref.get("sku", "")
+    else:
+        ami = ""
+        for f in fm.get("image_fields", []):
+            ami = record.get(f) or ""
+            if ami:
+                break
+        ami_name = ""
+        for f in fm.get("image_name_fields", []):
+            ami_name = record.get(f) or ""
+            if ami_name:
+                break
+
+    # --- state ---
+    if fm.get("state_from_nested"):
+        instance_view = props.get("instanceView") if isinstance(props.get("instanceView"), dict) else {}
+        power_state = ""
+        statuses = instance_view.get("statuses") if isinstance(instance_view, dict) else []
+        if isinstance(statuses, list):
+            for s in statuses:
+                code = str(s.get("code", "")) if isinstance(s, dict) else ""
+                if code.startswith("PowerState/"):
+                    power_state = code.split("/", 1)[1]
+                    break
+        state = power_state or str(props.get("provisioningState", "")).lower()
+    else:
+        state = ""
+        for f in fm.get("state_fields", ["state"]):
+            state = record.get(f) or ""
+            if state:
+                break
+
+    # --- Azure-specific overrides for non-top-level fields ---
+    if fm.get("type_from_nested"):
+        launch_status = str(props.get("provisioningState", ""))
+        runtime_backend = runtime.get("backend", "")
+        console_backend = runtime.get("backend", "")
+        endpoint_url = runtime.get("endpointUrl", "")
+        private_ip = runtime.get("privateIp", "")
+        public_ip = runtime.get("publicIp", "")
+        workspace = runtime.get("containerName", "")
+        updated_at = _now()
+    else:
+        launch_status = record.get("launch_status", "")
+        runtime_backend = record.get("runtime_backend", "")
+        console_backend = record.get("console_backend", "")
+        endpoint_url = record.get("endpoint_url", "")
+        private_ip = record.get("private_ip", "")
+        public_ip = record.get("public_ip", "")
+        workspace = record.get("workspace", "")
+        updated_at = record.get("updated_at") or record.get("created") or _now()
 
     payload = {
         "name": record.get("name") or resource_id,
-        "instance_type": hw.get("vmSize", ""),
-        "ami": props.get("storageProfile", {}).get("imageReference", {}).get("offer", "") if isinstance(props.get("storageProfile"), dict) else "",
-        "ami_name": props.get("storageProfile", {}).get("imageReference", {}).get("sku", "") if isinstance(props.get("storageProfile"), dict) else "",
-        "state": power_state or str(props.get("provisioningState", "")).lower(),
-        "launch_status": str(props.get("provisioningState", "")),
-        "runtime_backend": runtime.get("backend", ""),
+        "instance_type": instance_type,
+        "ami": ami,
+        "ami_name": ami_name,
+        "state": state,
+        "launch_status": launch_status,
+        "runtime_backend": runtime_backend,
         "runtime_bundle_id": bundle.get("id", ""),
         "runtime_bundle_name": bundle.get("name", ""),
         "runtime_bundle_kind": bundle.get("kind", ""),
         "runtime_bundle_provider": bundle.get("provider", ""),
         "runtime_bundle_service": bundle.get("service", ""),
-        "console_backend": runtime.get("backend", ""),
-        "endpoint_url": runtime.get("endpointUrl", ""),
-        "private_ip": runtime.get("privateIp", ""),
-        "public_ip": runtime.get("publicIp", ""),
-        "workspace": runtime.get("containerName", ""),
-        "updated_at": _now(),
+        "console_backend": console_backend,
+        "endpoint_url": endpoint_url,
+        "private_ip": private_ip,
+        "public_ip": public_ip,
+        "workspace": workspace,
+        "updated_at": updated_at,
     }
     try:
         if action == "delete":
-            PLATFORM.delete_resource("azure_vm", resource_id, region=region)
+            PLATFORM.delete_resource(service_key, resource_id, region=region)
         else:
-            PLATFORM.create_resource("azure_vm", "instance", resource_id, payload, region=region)
+            PLATFORM.create_resource(service_key, "instance", resource_id, payload, region=region)
+    except Exception:
+        pass
+
+
+def _cloudsim_sync_ec2_resource(instance: dict, action: str = "upsert") -> None:
+    _cloudsim_sync_vm_resource("aws", "ec2", "ec2", instance, action, _VM_SYNC_FIELDS["ec2"])
+
+
+def _cloudsim_sync_gcp_compute_resource(instance: dict, action: str = "upsert") -> None:
+    """CloudSim sync for GCP Compute Engine instances (parity with EC2 + Azure VM)."""
+    _cloudsim_sync_vm_resource("gcp", "gcp_compute", "gcp_compute", instance, action, _VM_SYNC_FIELDS["gcp_compute"])
+
+
+def _cloudsim_sync_azure_vm_resource(record: dict, action: str = "upsert") -> None:
+    """CloudSim sync for Azure Microsoft.Compute/virtualMachines."""
+    _cloudsim_sync_vm_resource("azure", "azure_vm", "azure_vm", record, action, _VM_SYNC_FIELDS["azure_vm"])
+
+
+def _cloudsim_sync_service_resource(provider: str, service: str, resource_type: str,
+                                     resource_id: str, resource: dict, bundle_key: str | None = None,
+                                     action: str = "upsert", region: str = "us-east-1") -> None:
+    """Generic CloudSim sync for non-compute services (databases, functions,
+    storage, queues, etc.). Mirrors the VM-specific sync functions."""
+    if not resource_id:
+        return
+    bundle = _cloudsim_runtime_bundle(bundle_key) if bundle_key else {}
+    name = (resource.get("name") or resource.get("db_instance_identifier")
+            or resource.get("function_name") or resource.get("queue_name")
+            or resource.get("table_name") or resource.get("topic") or resource_id)
+    state = (resource.get("status") or resource.get("state")
+             or resource.get("table_status") or "active")
+    location = (resource.get("region") or resource.get("az")
+                or resource.get("location") or resource.get("availability_zone") or region)
+    payload = {
+        "name": name,
+        "resource_type": resource_type,
+        "provider": provider,
+        "service": service,
+        "state": str(state).lower(),
+        "location": str(location),
+        "updated_at": resource.get("updated_at") or resource.get("created") or resource.get("last_modified") or _now(),
+    }
+    if bundle:
+        payload.update({
+            "runtime_bundle_id": bundle.get("id", ""),
+            "runtime_bundle_name": bundle.get("name", ""),
+            "runtime_bundle_kind": bundle.get("kind", ""),
+            "runtime_bundle_provider": bundle.get("provider", ""),
+            "runtime_bundle_service": bundle.get("service", ""),
+        })
+    try:
+        svc_key = f"{provider}_{service}" if provider != "aws" else service
+        if action == "delete":
+            PLATFORM.delete_resource(svc_key, resource_id, region=str(location))
+        else:
+            PLATFORM.create_resource(svc_key, resource_type, resource_id, payload, region=str(location))
     except Exception:
         pass
 
@@ -2092,33 +2178,131 @@ def _cloudsim_service_state(space: dict | None, *keys: str) -> dict:
     return service_states.setdefault(keys[0], {})
 
 
-def _cloudsim_gcp_summary_counts(space: dict | None = None) -> dict[str, int]:
+def _cloudsim_all_provider_summary_counts(space: dict | None = None) -> dict[str, int]:
+    """Unified summary counts across AWS, GCP, and Azure providers."""
     target = space if isinstance(space, dict) else _spaces_state().get("spaces", {}).get(_spaces_state().get("active_space_id", ""), {})
     if not isinstance(target, dict):
         target = {}
-    service_state_space = {"service_states": target.get("service_states", {}) if isinstance(target.get("service_states", {}), dict) else {}}
+    service_states_raw = target.get("service_states", {})
+    if not isinstance(service_states_raw, dict):
+        service_states_raw = {}
+    service_state_space = {"service_states": service_states_raw}
 
     def bucket(*keys: str) -> dict:
         return _cloudsim_service_state(service_state_space, *keys)
 
+    # --- AWS counts ---
+    ec2_count = len(bucket("ec2").get("instances", {}))
+    lambda_count = len(bucket("lambda").get("functions", {}))
+    rds_count = len(bucket("rds").get("db_instances", {}))
+    s3_bucket_count = len(bucket("s3").get("buckets", {}))
+    sqs_count = len(bucket("sqs").get("queues", {}))
+    dynamodb_count = len(bucket("dynamodb").get("tables", {}))
+    apigateway_count = len(bucket("apigateway").get("apis", {}))
+    vpc_count = len(bucket("vpc").get("vpcs", {}))
+
+    # --- GCP counts ---
+    gcp_compute_count = len(bucket("gcp_compute").get("instances", {}))
+    gcp_storage_bucket_count = len(bucket("gcp_storage").get("buckets", {}))
+    gcp_sql_count = len(bucket("gcp_sql").get("instances", {}))
+    gcp_pubsub_topic_count = len(bucket("gcp_pubsub").get("topics", {}))
+    gcp_pubsub_subscription_count = len(bucket("gcp_pubsub").get("subscriptions", {}))
+    gcp_functions_count = len(bucket("gcp_functions").get("functions", {}))
+    gcp_apigateway_count = len(bucket("gcp_apigateway").get("apis", {}))
+    gcp_vpc_count = len(bucket("gcp_vpc").get("networks", {}))
+    gcp_iam_count = len(bucket("gcp_iam").get("service_accounts", {}))
+
+    # --- Azure counts (walk azure_arm.resources using RESOURCE_CATALOG) ---
+    azure_arm = service_states_raw.get("azure_arm", {})
+    azure_resources = azure_arm.get("resources", {}) if isinstance(azure_arm, dict) else {}
+    if not isinstance(azure_resources, dict):
+        azure_resources = {}
+    azure_key_counts: dict[str, int] = {c["key"]: 0 for c in provider_azure_services.RESOURCE_CATALOG}
+    azure_type_to_key = {(c["namespace"] + "/" + c["type"]).lower(): c["key"]
+                         for c in provider_azure_services.RESOURCE_CATALOG}
+    for _rid, rec in azure_resources.items():
+        if not isinstance(rec, dict):
+            continue
+        full_type = str(rec.get("_type", "")).lower()
+        key = azure_type_to_key.get(full_type)
+        if key is None:
+            segs = full_type.split("/")
+            if len(segs) >= 2:
+                key = azure_type_to_key.get(segs[0] + "/" + segs[1])
+        if key and key in azure_key_counts:
+            azure_key_counts[key] += 1
+
+    azure_vm_count = azure_key_counts.get("vm", 0)
+    azure_sql_count = azure_key_counts.get("sql", 0)
+    azure_storage_count = azure_key_counts.get("storage", 0)
+    azure_functionapp_count = azure_key_counts.get("functionapp", 0)
+    azure_servicebus_count = azure_key_counts.get("servicebus", 0)
+    azure_cosmos_count = azure_key_counts.get("cosmos", 0)
+    azure_apim_count = azure_key_counts.get("apim", 0)
+    azure_vnet_count = azure_key_counts.get("vnet", 0)
+    azure_eventgrid_count = azure_key_counts.get("eventgrid", 0)
+
+    # --- Totals ---
+    total_vm_count = ec2_count + gcp_compute_count + azure_vm_count
+    total_resource_count = (
+        ec2_count + lambda_count + rds_count + s3_bucket_count + sqs_count
+        + dynamodb_count + apigateway_count + vpc_count
+        + gcp_compute_count + gcp_storage_bucket_count + gcp_sql_count
+        + gcp_pubsub_topic_count + gcp_pubsub_subscription_count
+        + gcp_functions_count + gcp_apigateway_count + gcp_vpc_count + gcp_iam_count
+        + azure_vm_count + azure_sql_count + azure_storage_count
+        + azure_functionapp_count + azure_servicebus_count + azure_cosmos_count
+        + azure_apim_count + azure_vnet_count + azure_eventgrid_count
+    )
+
     return {
-        "gcp_compute_count": len(bucket("gcp_compute", "gcp_gcp_compute").get("instances", {})),
-        "gcp_storage_bucket_count": len(bucket("gcp_storage", "gcp_gcp_storage").get("buckets", {})),
-        "gcp_sql_count": len(bucket("gcp_sql", "gcp_gcp_sql").get("instances", {})),
-        "gcp_pubsub_topic_count": len(bucket("gcp_pubsub", "gcp_gcp_pubsub").get("topics", {})),
-        "gcp_pubsub_subscription_count": len(bucket("gcp_pubsub", "gcp_gcp_pubsub").get("subscriptions", {})),
-        "gcp_functions_count": len(bucket("gcp_functions", "gcp_gcp_functions").get("functions", {})),
-        "gcp_apigateway_count": len(bucket("gcp_apigateway", "gcp_gcp_apigateway").get("apis", {})),
-        "gcp_vpc_count": len(bucket("gcp_vpc", "gcp_gcp_vpc").get("networks", {})),
-        "gcp_iam_count": len(bucket("gcp_iam", "gcp_gcp_iam").get("service_accounts", {})),
+        # AWS
+        "ec2_count": ec2_count,
+        "lambda_count": lambda_count,
+        "rds_count": rds_count,
+        "s3_bucket_count": s3_bucket_count,
+        "sqs_count": sqs_count,
+        "dynamodb_count": dynamodb_count,
+        "apigateway_count": apigateway_count,
+        "vpc_count": vpc_count,
+        # GCP
+        "gcp_compute_count": gcp_compute_count,
+        "gcp_storage_bucket_count": gcp_storage_bucket_count,
+        "gcp_sql_count": gcp_sql_count,
+        "gcp_pubsub_topic_count": gcp_pubsub_topic_count,
+        "gcp_pubsub_subscription_count": gcp_pubsub_subscription_count,
+        "gcp_functions_count": gcp_functions_count,
+        "gcp_apigateway_count": gcp_apigateway_count,
+        "gcp_vpc_count": gcp_vpc_count,
+        "gcp_iam_count": gcp_iam_count,
+        # Azure
+        "azure_vm_count": azure_vm_count,
+        "azure_sql_count": azure_sql_count,
+        "azure_storage_count": azure_storage_count,
+        "azure_functionapp_count": azure_functionapp_count,
+        "azure_servicebus_count": azure_servicebus_count,
+        "azure_cosmos_count": azure_cosmos_count,
+        "azure_apim_count": azure_apim_count,
+        "azure_vnet_count": azure_vnet_count,
+        "azure_eventgrid_count": azure_eventgrid_count,
+        # Totals
+        "total_vm_count": total_vm_count,
+        "total_resource_count": total_resource_count,
     }
 
 
-def _refresh_cloudsim_gcp_summary() -> None:
+def _cloudsim_gcp_summary_counts(space: dict | None = None) -> dict[str, int]:
+    """Backward-compatible wrapper: returns only gcp_* keys."""
+    all_counts = _cloudsim_all_provider_summary_counts(space)
+    return {k: v for k, v in all_counts.items() if k.startswith("gcp_")}
+
+
+def _refresh_cloudsim_all_providers_summary() -> None:
+    """Refresh summary counts for all providers (AWS, GCP, Azure)."""
     spaces_state = _spaces_state()
     active_id = spaces_state.get("active_space_id", "")
     active_space = spaces_state.get("spaces", {}).get(active_id, {}) if active_id else {}
-    counts = _cloudsim_gcp_summary_counts(active_space if isinstance(active_space, dict) else None)
+    counts = _cloudsim_all_provider_summary_counts(active_space if isinstance(active_space, dict) else None)
     cloudsim = STATE.setdefault("cloudsim", {"summary": {}, "events": [], "last_reconcile_at": ""})
     cloudsim.setdefault("summary", {}).update(counts)
     if isinstance(active_space, dict):
@@ -2133,6 +2317,11 @@ def _refresh_cloudsim_gcp_summary() -> None:
                 platform_active.setdefault("cloudsim", {"summary": {}, "events": [], "last_tick": ""}).setdefault("summary", {}).update(counts)
     except Exception:
         pass
+
+
+def _refresh_cloudsim_gcp_summary() -> None:
+    """Backward-compatible alias for _refresh_cloudsim_all_providers_summary."""
+    _refresh_cloudsim_all_providers_summary()
 
 
 def _cloudsim_resource_id(resource: dict, *candidates: str) -> str:
@@ -2225,6 +2414,18 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
                 "runtime_bundle_service": bundle.get("service", ""),
             })
             _cloudsim_add_runtime_instance(runtime_instances, resource_id, provider, service, bundle_key or "", resource)
+        try:
+            from core import cost_model as _cm
+            _cost = _cm.estimate_resource_cost(
+                provider, service, kind,
+                resource.get("instance_type") or resource.get("machine_type") or resource.get("machineType")
+                or resource.get("db_instance_class") or resource.get("vmSize") or "",
+            )
+            node["estimated_real_cost_usd"] = _cost["monthly_usd"]
+            node["estimated_hourly_usd"] = _cost["hourly_usd"]
+        except Exception:
+            node["estimated_real_cost_usd"] = 0.0
+            node["estimated_hourly_usd"] = 0.0
         nodes.append(node)
         counts[f"{provider}.{service}.{kind}"] = counts.get(f"{provider}.{service}.{kind}", 0) + 1
 
@@ -2395,6 +2596,18 @@ def _cloudsim_refresh_bridge(reason: str, detail: dict | None = None) -> None:
         counts: dict[str, int] = {}
         runtime_instances: dict[str, dict] = {}
         nodes, counts, runtime_instances = _cloudsim_collect_resources(source_space)
+        try:
+            from core import cost_model as _cm
+            _savings = _cm.estimate_space_savings(nodes)
+        except Exception:
+            _savings = {"real_cloud_cost_usd": 0.0, "simulator_cost_usd": 0.0, "savings_usd": 0.0, "savings_pct": 0.0, "by_provider": {}, "by_service": {}, "resource_count": 0}
+        if detail is None:
+            detail = {}
+        try:
+            detail["real_cloud_cost_usd"] = _savings["real_cloud_cost_usd"]
+            detail["savings_usd"] = _savings["savings_usd"]
+        except Exception:
+            pass
         if isinstance(active_space, dict):
             runtime_state_ref = active_space.setdefault("runtime", {"mode": "sandboxed", "instances": {}, "sandbox_count": 0})
             runtime_state_ref["instances"] = copy.deepcopy(runtime_instances)
@@ -2453,6 +2666,15 @@ def _cloudsim_refresh_bridge(reason: str, detail: dict | None = None) -> None:
                 "summary": inventory_summary, "_source": "internal-db",
                 "updated_at": now, "reason": reason,
             }
+            active_space["cost_savings"] = {
+                "real_cloud_cost_usd": _savings["real_cloud_cost_usd"],
+                "simulator_cost_usd": 0.0,
+                "savings_usd": _savings["savings_usd"],
+                "savings_pct": _savings["savings_pct"],
+                "by_provider": _savings["by_provider"],
+                "by_service": _savings["by_service"],
+                "resource_count": _savings["resource_count"],
+            }
             active_space.setdefault("runtime", {}).setdefault("mode", "sandboxed")
             active_space["runtime"]["preferred_backend"] = runtime_preferred_backend
             active_space["runtime"]["host_os"] = runtime_host_os
@@ -2495,11 +2717,18 @@ def _cloudsim_refresh_bridge(reason: str, detail: dict | None = None) -> None:
                 "last_reconcile_at": cloudsim.get("last_reconcile_at", ""),
             }
         )
+        summary["cost_savings"] = active_space.get("cost_savings", {}) if isinstance(active_space, dict) else {}
         cloudsim["summary"] = summary
         cloudsim["last_tick"] = now
         if active_space and isinstance(active_space, dict):
             active_space.setdefault("cloudsim", {}).setdefault("summary", {}).update(copy.deepcopy(summary))
             active_space["cloudsim"]["last_tick"] = now
+        # Cost budget alert check — evaluate all budgets against current spend.
+        try:
+            from routes.licensing import _check_budget_alerts
+            _check_budget_alerts()
+        except Exception:
+            pass
         _persist_state()
 
 
@@ -3201,6 +3430,7 @@ def _lambda_create_function_record(req: LambdaFunctionRequest) -> dict:
         "invocations": [],
         "permissions": [],
         "tags": copy.deepcopy(req.tags or []),
+        "layers": list(req.layers) if req.layers else [],
     }
     function["code_sha256"] = base64.b64encode(hashlib.sha256(function["code"].encode("utf-8")).digest()).decode("ascii")
     _lambda_sync_code_artifact(function)
@@ -3359,6 +3589,34 @@ def _lambda_get_policy(function: dict) -> dict:
     }
 
 
+def _lambda_merge_layers(function: dict, workdir) -> None:
+    """Merge layer code blobs into the function's working directory before invoke."""
+    layer_arns = function.get("layers") or []
+    if not layer_arns:
+        return
+    layers_store = lambda_state.get("layers") or {}
+    for arn in layer_arns:
+        # Extract layer name from ARN: arn:aws:lambda:...:layer:NAME:VERSION
+        parts = arn.split(":")
+        layer_name = None
+        for i, p in enumerate(parts):
+            if p == "layer" and i + 1 < len(parts):
+                layer_name = parts[i + 1]
+                break
+        if not layer_name:
+            # Try using the ARN as a plain name
+            layer_name = arn
+        layer = layers_store.get(layer_name)
+        if not layer or not layer.get("code"):
+            continue
+        # Write layer code as a Python module in the workdir
+        layer_file = workdir / f"{layer_name.replace('-', '_')}.py"
+        try:
+            layer_file.write_text(layer["code"])
+        except Exception:
+            pass
+
+
 def _lambda_run_handler(function: dict, event_payload: Any) -> dict:
     workdir = _lambda_function_dir(function["function_name"])
     module_name = _lambda_handler_module(function.get("handler", "lambda_function.lambda_handler")) or "lambda_function"
@@ -3366,6 +3624,8 @@ def _lambda_run_handler(function: dict, event_payload: Any) -> dict:
     code_path = workdir / f"{module_name}.py"
     if not code_path.exists():
         _lambda_sync_code_artifact(function)
+    # Merge layer code into workdir before execution
+    _lambda_merge_layers(function, workdir)
     helper_code = textwrap.dedent(
         """
         import contextlib
@@ -3426,6 +3686,7 @@ def _lambda_run_handler(function: dict, event_payload: Any) -> dict:
         timeout=max(int(function.get("timeout", 3) or 3), 1) + 1,
         env={
             **os.environ,
+            **(function.get("environment") or {}),
             "PYTHONPATH": str(workdir) + (os.pathsep + os.environ.get("PYTHONPATH", "") if os.environ.get("PYTHONPATH") else ""),
         },
     )
@@ -8915,6 +9176,10 @@ def _redact_cloudsim_for_totals_tier(payload):
         return payload
     for k in ("resources", "per_resource_costs", "vm_costs", "chargeback"):
         payload.pop(k, None)
+    cost_savings = payload.get("cost_savings")
+    if isinstance(cost_savings, dict):
+        cost_savings.pop("per_resource_costs", None)
+        cost_savings.pop("by_service", None)
     layers = payload.get("layers")
     if isinstance(layers, list):
         for L in layers:
@@ -8931,20 +9196,40 @@ def _cloudsim_compute_power(payload: dict) -> dict:
     indicative, not measurements."""
     summary = payload.get("summary") or {}
     inventory = summary.get("inventory") or {}
-    total_vms = int(inventory.get("vm_count") or 0)
-    # Avg ~150W per simulated VM (conservative cloud-VM avg); 0.4 kgCO2/kWh
-    # is the global grid average (IEA 2024).
-    watts_per_vm = 150
-    total_watts = total_vms * watts_per_vm
+
+    # Per-provider VM counts
+    aws_vms = int(inventory.get("ec2_count") or 0)
+    gcp_vms = int(inventory.get("gcp_compute_count") or 0)
+    azure_vms = int(inventory.get("azure_vm_count") or 0)
+    total_vms = aws_vms + gcp_vms + azure_vms
+    # Fallback if per-provider counts not yet populated
+    if total_vms == 0:
+        total_vms = int(inventory.get("vm_count") or inventory.get("total_vm_count") or 0)
+        aws_vms = total_vms  # conservative attribution
+
+    # Provider-specific watts (GCP DCs are more energy-efficient)
+    WATTS = {"aws": 150, "gcp": 120, "azure": 140}
+    total_watts = aws_vms * WATTS["aws"] + gcp_vms * WATTS["gcp"] + azure_vms * WATTS["azure"]
+    if total_vms > 0 and total_watts == 0:
+        total_watts = total_vms * 150
     kwh_per_month = (total_watts * 24 * 30) / 1000.0
     kg_co2_per_month = round(kwh_per_month * 0.4, 2)
+
     return {
+        "total_vms": total_vms,
         "total_watts": total_watts,
-        "watts_per_vm": watts_per_vm,
         "kwh_per_month": round(kwh_per_month, 2),
         "kg_co2_per_month": kg_co2_per_month,
         "grid_factor_kgco2_per_kwh": 0.4,
-        "note": "Simulated — not a measurement.",
+        "providers": {
+            "aws": {"vm_count": aws_vms, "watts_per_vm": WATTS["aws"],
+                    "total_watts": aws_vms * WATTS["aws"]},
+            "gcp": {"vm_count": gcp_vms, "watts_per_vm": WATTS["gcp"],
+                    "total_watts": gcp_vms * WATTS["gcp"]},
+            "azure": {"vm_count": azure_vms, "watts_per_vm": WATTS["azure"],
+                      "total_watts": azure_vms * WATTS["azure"]},
+        },
+        "note": "Simulated — not a measurement. Watts are average estimates per on-demand VM.",
     }
 
 
@@ -8954,34 +9239,64 @@ def _cloudsim_compute_network_sla(payload: dict) -> dict:
     Uses the CloudSim resource graph to enumerate cross-AZ/region pairs."""
     summary = payload.get("summary") or {}
     inventory = summary.get("inventory") or {}
-    vm_count = int(inventory.get("vm_count") or 0)
-    # Synthetic full-mesh links between VMs (capped at 50 to keep payload sane)
-    n = min(vm_count, 10)  # show at most 10 worst-case links
+
+    aws_vms = int(inventory.get("ec2_count") or 0)
+    gcp_vms = int(inventory.get("gcp_compute_count") or 0)
+    azure_vms = int(inventory.get("azure_vm_count") or 0)
+    total_vms = aws_vms + gcp_vms + azure_vms
+    if total_vms == 0:
+        total_vms = int(inventory.get("vm_count") or inventory.get("total_vm_count") or 0)
+
+    # Build labeled VM list with provider tags
+    vms = []
+    for i in range(min(aws_vms, 5)):
+        vms.append({"id": f"ec2-{i}", "provider": "aws"})
+    for i in range(min(gcp_vms, 5)):
+        vms.append({"id": f"gce-{i}", "provider": "gcp"})
+    for i in range(min(azure_vms, 3)):
+        vms.append({"id": f"azvm-{i}", "provider": "azure"})
+
+    n = min(len(vms), 10)
     links = []
     for i in range(n):
         for j in range(i + 1, n):
-            base_ms = 1.2 + (i * 0.5 + j * 0.3)
-            jitter_ms = round((i * 0.1 + j * 0.07) % 2.5, 2)
-            sla_pct = round(max(99.0, 99.99 - jitter_ms * 0.4), 3)
+            cross_cloud = vms[i]["provider"] != vms[j]["provider"]
+            base_ms = 1.2 + (i * 0.5 + j * 0.3) + (2.0 if cross_cloud else 0.0)
+            jitter_ms = round((i * 0.1 + j * 0.07) % 2.5 + (0.5 if cross_cloud else 0.0), 2)
+            sla_pct = round(max(99.0, 99.99 - jitter_ms * 0.4 - (0.2 if cross_cloud else 0.0)), 3)
             links.append({
-                "from": f"vm-{i}", "to": f"vm-{j}",
+                "from": vms[i]["id"], "to": vms[j]["id"],
+                "from_provider": vms[i]["provider"],
+                "to_provider": vms[j]["provider"],
+                "cross_cloud": cross_cloud,
                 "latency_ms": round(base_ms, 2),
                 "jitter_ms": jitter_ms,
                 "sla_pct": sla_pct,
             })
-    # Migration plan — cost to shift workload to lowest-latency AZ
+
     migration = {
-        "available_targets": ["us-east-1", "us-west-2", "eu-west-1"],
-        "best_target": "us-east-1",
-        "estimated_downtime_s": vm_count * 12,  # ~12s/VM rolling migration
-        "estimated_data_egress_gb": round(vm_count * 8.5, 1),
-        "estimated_cost_usd": round(vm_count * 0.42, 2),
+        "available_targets": {
+            "aws": ["us-east-1", "us-west-2", "eu-west-1"],
+            "gcp": ["us-central1", "europe-west1", "asia-east1"],
+            "azure": ["eastus", "westeurope", "southeastasia"],
+        },
+        "best_target": {"aws": "us-east-1", "gcp": "us-central1", "azure": "eastus"},
+        "estimated_downtime_s": total_vms * 12,
+        "estimated_data_egress_gb": round(total_vms * 8.5, 1),
+        "estimated_cost_usd": round(total_vms * 0.42, 2),
     }
+
     return {
         "links": links[:25],
         "total_links_modeled": len(links),
+        "vm_count": total_vms,
+        "providers": {
+            "aws": {"vm_count": aws_vms},
+            "gcp": {"vm_count": gcp_vms},
+            "azure": {"vm_count": azure_vms},
+        },
         "migration_plan": migration,
-        "note": "Synthetic — derived from inventory, not measured.",
+        "note": "Synthetic full-mesh latency model. Cross-cloud links have +2ms penalty.",
     }
 
 
@@ -9023,14 +9338,14 @@ def api_cloudsim_current():
     # per_resource; Enterprise=per_resource_and_chargeback. Free's 403 here
     # matches the /pricing page rendering cost_simulation as locked on Free.
     level = _enforce_tier_feature("cost_simulation")
-    _refresh_cloudsim_gcp_summary()
+    _refresh_cloudsim_all_providers_summary()
     payload = PLATFORM.cloudsim_current()
     if isinstance(payload, dict):
         spaces_state = _spaces_state()
         active_id = spaces_state.get("active_space_id", "")
         active_space = spaces_state.get("spaces", {}).get(active_id, {}) if active_id else {}
         summary = payload.setdefault("summary", {})
-        summary.update(_cloudsim_gcp_summary_counts(active_space if isinstance(active_space, dict) else None))
+        summary.update(_cloudsim_all_provider_summary_counts(active_space if isinstance(active_space, dict) else None))
         _cloudsim_compose_layers(payload)
     _attach_cloudsim_advanced(payload)
     if level == "totals":
@@ -9042,13 +9357,13 @@ def api_cloudsim_current():
 
 def api_cloudsim_summary():
     level = _enforce_tier_feature("cost_simulation")
-    _refresh_cloudsim_gcp_summary()
+    _refresh_cloudsim_all_providers_summary()
     payload = PLATFORM.cloudsim_summary()
     if isinstance(payload, dict):
         spaces_state = _spaces_state()
         active_id = spaces_state.get("active_space_id", "")
         active_space = spaces_state.get("spaces", {}).get(active_id, {}) if active_id else {}
-        payload.setdefault("summary", {}).update(_cloudsim_gcp_summary_counts(active_space if isinstance(active_space, dict) else None))
+        payload.setdefault("summary", {}).update(_cloudsim_all_provider_summary_counts(active_space if isinstance(active_space, dict) else None))
         _cloudsim_compose_layers(payload)
     _attach_cloudsim_advanced(payload)
     if level == "totals":
@@ -9482,6 +9797,22 @@ def api_provider_aws_sdk_go_snippet():
     return sdk_snippet("aws", "go")
 
 
+def api_provider_aws_sdk_python():
+    return aws_tool_response("sdk/python")
+
+
+def api_provider_aws_sdk_nodejs():
+    return aws_tool_response("sdk/nodejs")
+
+
+def api_provider_aws_sdk_python_snippet():
+    return sdk_snippet("aws", "python")
+
+
+def api_provider_aws_sdk_nodejs_snippet():
+    return sdk_snippet("aws", "nodejs")
+
+
 def api_provider_gcp_gcloud():
     return gcp_tool_response("gcloud")
 
@@ -9514,6 +9845,24 @@ def api_provider_gcp_sdk_go_snippet():
     return gcp_sdk_go_snippet()
 
 
+def api_provider_gcp_sdk_python():
+    return gcp_tool_response("sdk/python")
+
+
+def api_provider_gcp_sdk_nodejs():
+    return gcp_tool_response("sdk/nodejs")
+
+
+def api_provider_gcp_sdk_python_snippet():
+    from providers.gcp_routes import sdk_python_snippet as gcp_sdk_python_snippet
+    return gcp_sdk_python_snippet()
+
+
+def api_provider_gcp_sdk_nodejs_snippet():
+    from providers.gcp_routes import sdk_nodejs_snippet as gcp_sdk_nodejs_snippet
+    return gcp_sdk_nodejs_snippet()
+
+
 # Azure tooling routes — pack-architecture parity with AWS+GCP (2026-06-01).
 # providers/azure.tool_response and core.tooling_simulators.az_cli_resolve
 # back the SPA's Tools tab + ``az`` command resolver.
@@ -9543,6 +9892,24 @@ def api_provider_azure_sdk_java_snippet():
 
 def api_provider_azure_sdk_go_snippet():
     return sdk_snippet("azure", "go")
+
+
+def api_provider_azure_sdk_python():
+    from providers import azure_tool_response
+    return azure_tool_response("sdk/python")
+
+
+def api_provider_azure_sdk_nodejs():
+    from providers import azure_tool_response
+    return azure_tool_response("sdk/nodejs")
+
+
+def api_provider_azure_sdk_python_snippet():
+    return sdk_snippet("azure", "python")
+
+
+def api_provider_azure_sdk_nodejs_snippet():
+    return sdk_snippet("azure", "nodejs")
 
 
 def api_pack_fragment(pack_id: str):
@@ -10529,7 +10896,7 @@ def _gcp_compute_instance_bucket() -> dict[str, dict]:
         service_states = {}
         space["service_states"] = service_states
     candidates: list[tuple[int, dict]] = []
-    for key in ("gcp_gcp_compute", "gcp_compute"):
+    for key in ("gcp_compute",):
         bucket = service_states.get(key)
         if isinstance(bucket, dict):
             score = 0
@@ -11416,6 +11783,7 @@ def api_gcp_compute_start_instance(project: str, zone: str, instance: str):
     instance["launch_status"] = "starting"
     _gcp_compute_queue_runtime_start(str(instance.get("instance_id", "")))
     _gcp_compute_sync_resource_links()
+    _cloudsim_sync_gcp_compute_resource(instance, "upsert")
     _record_usage("gcp.compute.start_instance", {"instance_id": instance.get("instance_id", ""), "project": project, "zone": zone})
     return _gcp_compute_operation_json(instance, "start", "PENDING")
 
@@ -11430,6 +11798,7 @@ def api_gcp_compute_stop_instance(project: str, zone: str, instance: str):
     instance["stopped_at"] = _now()
     instance["launch_status"] = "ready"
     _gcp_compute_sync_resource_links()
+    _cloudsim_sync_gcp_compute_resource(instance, "upsert")
     _record_usage("gcp.compute.stop_instance", {"instance_id": instance.get("instance_id", ""), "project": project, "zone": zone})
     return _gcp_compute_operation_json(instance, "stop", "DONE")
 
@@ -11444,6 +11813,7 @@ def api_gcp_compute_reset_instance(project: str, zone: str, instance: str):
     _reboot_runtime_process(instance)
     instance["launch_status"] = "ready"
     _gcp_compute_sync_resource_links()
+    _cloudsim_sync_gcp_compute_resource(instance, "upsert")
     _record_usage("gcp.compute.reset_instance", {"instance_id": instance.get("instance_id", ""), "project": project, "zone": zone})
     return _gcp_compute_operation_json(instance, "reset", "DONE")
 
@@ -11479,6 +11849,19 @@ async def api_gcp_compute_set_tags(project: str, zone: str, instance: str, reque
     inst["tags"] = [str(t) for t in items if str(t).strip()] if isinstance(items, list) else []
     _record_usage("gcp.compute.set_tags", {"instance_id": inst.get("instance_id", ""), "project": project, "zone": zone})
     return _gcp_compute_operation_json(inst, "setTags", "DONE")
+
+
+async def api_gcp_compute_set_labels(project: str, zone: str, instance: str, request: Request):
+    """POST instances/{i}/setLabels — replace instance labels (Terraform/SDK update path)."""
+    inst = _gcp_compute_find_instance(project, zone, instance)
+    if not inst:
+        raise HTTPException(404, detail="NoSuchInstance")
+    payload = await request.json() if request is not None else {}
+    payload = payload if isinstance(payload, dict) else {}
+    labels = payload.get("labels")
+    inst["labels"] = {str(k): str(v) for k, v in labels.items()} if isinstance(labels, dict) else {}
+    _record_usage("gcp.compute.set_labels", {"instance_id": inst.get("instance_id", ""), "project": project, "zone": zone})
+    return _gcp_compute_operation_json(inst, "setLabels", "DONE")
 
 
 def api_gcp_compute_delete_instance(project: str, zone: str, instance: str):
@@ -11633,6 +12016,14 @@ async def api_gcp_compute_create_disk(project: str, zone: str, request: Request)
     return _gcp_compute_disk_view(disk)
 
 
+def api_gcp_compute_get_disk(project: str, zone: str, disk: str):
+    project = _gcp_project_name(project)
+    rec = gcp_compute_state.get("disks", {}).get(disk)
+    if not rec or str(rec.get("project") or project) != project or str(rec.get("zone") or zone) != zone:
+        raise HTTPException(404, detail="DiskNotFound")
+    return _gcp_compute_disk_view(rec)
+
+
 def api_gcp_compute_delete_disk(project: str, zone: str, disk: str):
     project = _gcp_project_name(project)
     rec = gcp_compute_state.get("disks", {}).get(disk)
@@ -11675,6 +12066,14 @@ async def api_gcp_compute_create_snapshot(project: str, request: Request):
     return _gcp_compute_snapshot_view(snapshot)
 
 
+def api_gcp_compute_get_snapshot(project: str, snapshot: str):
+    project = _gcp_project_name(project)
+    rec = gcp_compute_state.get("snapshots", {}).get(snapshot)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="SnapshotNotFound")
+    return _gcp_compute_snapshot_view(rec)
+
+
 def api_gcp_compute_delete_snapshot(project: str, snapshot: str):
     project = _gcp_project_name(project)
     rec = gcp_compute_state.get("snapshots", {}).get(snapshot)
@@ -11709,6 +12108,14 @@ async def api_gcp_compute_create_image(project: str, request: Request):
     gcp_compute_state.setdefault("images", {})[image["name"]] = image
     _record_usage("gcp.compute.create_image", {"project": project, "image": image["name"]})
     return _gcp_compute_image_view(image)
+
+
+def api_gcp_compute_get_image(project: str, image_name: str):
+    project = _gcp_project_name(project)
+    rec = gcp_compute_state.get("images", {}).get(image_name)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="ImageNotFound")
+    return _gcp_compute_image_view(rec)
 
 
 def api_gcp_compute_delete_image(project: str, image_name: str):
@@ -12440,6 +12847,7 @@ async def api_gcp_storage_create_bucket(request: Request):
     bucket = _gcp_storage_bucket_record(project, name, payload)
     gcp_storage_state.setdefault("buckets", {})[name] = bucket
     gcp_storage_state.setdefault("objects", {}).setdefault(name, {})
+    _cloudsim_sync_service_resource("gcp", "storage", "bucket", name, bucket, "gcp_storage")
     _record_usage("gcp.storage.create_bucket", {"project": project, "bucket": name})
     return _gcp_storage_bucket_view(project, bucket)
 
@@ -12457,6 +12865,7 @@ def api_gcp_storage_delete_bucket(bucket: str):
         raise HTTPException(404, detail="Bucket not found")
     gcp_storage_state.setdefault("buckets", {}).pop(bucket, None)
     gcp_storage_state.setdefault("objects", {}).pop(bucket, None)
+    _cloudsim_sync_service_resource("gcp", "storage", "bucket", bucket, {}, "gcp_storage", action="delete")
     _record_usage("gcp.storage.delete_bucket", {"bucket": bucket})
     return {"kind": "storage#empty", "deleted": True, "bucket": bucket}
 
@@ -12511,6 +12920,61 @@ def api_gcp_storage_delete_object(bucket: str, object_name: str):
     del gcp_storage_state["objects"][bucket][object_name]
     _record_usage("gcp.storage.delete_object", {"bucket": bucket, "object": object_name})
     return {"kind": "storage#empty", "deleted": True, "bucket": bucket, "object": object_name}
+
+
+async def api_gcp_storage_patch_object(bucket: str, object_name: str, request: Request):
+    """PATCH /storage/v1/b/{bucket}/o/{object} — update object metadata without changing data."""
+    bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
+    obj = gcp_storage_state.get("objects", {}).get(bucket, {}).get(object_name)
+    if not bucket_rec or not obj:
+        raise HTTPException(404, detail="Object not found")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    for field in ("contentType", "cacheControl", "contentDisposition", "contentEncoding", "contentLanguage"):
+        if field in payload:
+            obj[field] = str(payload[field])
+    if isinstance(payload.get("metadata"), dict):
+        obj.setdefault("metadata", {}).update(payload["metadata"])
+    obj["updated"] = _now()
+    _record_usage("gcp.storage.patch_object", {"bucket": bucket, "object": object_name})
+    return _gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, object_name, obj)
+
+
+async def api_gcp_storage_compose_object(bucket: str, destination: str, request: Request):
+    """POST /storage/v1/b/{bucket}/o/{destination}/compose — concatenate source objects."""
+    bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
+    if not bucket_rec:
+        raise HTTPException(404, detail="Bucket not found")
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    source_objects = payload.get("sourceObjects", [])
+    if not isinstance(source_objects, list) or not source_objects:
+        raise HTTPException(400, detail="sourceObjects list is required")
+    bucket_objects = gcp_storage_state.get("objects", {}).get(bucket, {})
+    combined_data = ""
+    for src in source_objects:
+        src_name = str(src.get("name") or src) if isinstance(src, dict) else str(src)
+        src_obj = bucket_objects.get(src_name)
+        if not src_obj:
+            raise HTTPException(404, detail=f"Source object {src_name!r} not found")
+        combined_data += str(src_obj.get("data") or "")
+    dest_payload = dict(payload.get("destination", {}) or {})
+    dest_payload["data"] = combined_data
+    dest_payload.setdefault("contentType", "application/octet-stream")
+    obj = _gcp_storage_object_record(bucket, destination, dest_payload)
+    gcp_storage_state.setdefault("objects", {}).setdefault(bucket, {})[destination] = obj
+    _record_usage("gcp.storage.compose_object", {"bucket": bucket, "destination": destination, "sources": len(source_objects)})
+    return _gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, destination, obj)
 
 
 def api_gcp_storage_list_folders(bucket: str):
@@ -12643,6 +13107,7 @@ async def api_gcp_sql_create_instance(project: str, request: Request):
     instance["runtime_bundle_name"] = bundle.get("name", "")
     instance["runtime_bundle_kind"] = bundle.get("kind", "")
     gcp_sql_state.setdefault("instances", {})[instance["name"]] = instance
+    _cloudsim_sync_service_resource("gcp", "sql", "db_instance", instance["name"], instance, "gcp_sql", region=str(instance.get("region") or "us-central1"))
     _record_usage("gcp.sql.create_instance", {"project": project, "instance": instance["name"]})
     return _gcp_sql_instance_view(project, instance)
 
@@ -12661,6 +13126,7 @@ def api_gcp_sql_delete_instance(project: str, instance: str):
     if not rec or str(rec.get("project") or project) != project:
         raise HTTPException(404, detail="Instance not found")
     del gcp_sql_state["instances"][instance]
+    _cloudsim_sync_service_resource("gcp", "sql", "db_instance", instance, {}, "gcp_sql", action="delete")
     _record_usage("gcp.sql.delete_instance", {"project": project, "instance": instance})
     return {"kind": "sql#operation", "operationType": "DELETE", "status": "DONE", "targetLink": f"{_gcp_sql_root()}/projects/{project}/instances/{instance}"}
 
@@ -12777,6 +13243,7 @@ async def api_gcp_pubsub_create_topic(project: str, request: Request):
             "ackDeadlineSeconds": payload.get("ackDeadlineSeconds", 10),
         })
         gcp_pubsub_state.setdefault("subscriptions", {})[default_sub_id] = default_sub
+    _cloudsim_sync_service_resource("gcp", "pubsub", "topic", topic_id, topic, "gcp_pubsub")
     _record_usage("gcp.pubsub.create_topic", {"project": project, "topic": topic_id})
     return _gcp_pubsub_topic_view(project, topic)
 
@@ -12813,6 +13280,7 @@ async def api_gcp_pubsub_put_topic(project: str, topic: str, request: Request):
         pass
     rec = _gcp_pubsub_topic_record(project, topic_id, payload)
     gcp_pubsub_state.setdefault("topics", {})[topic_id] = rec
+    _cloudsim_sync_service_resource("gcp", "pubsub", "topic", topic_id, rec, "gcp_pubsub")
     _record_usage("gcp.pubsub.create_topic", {"project": project, "topic": topic_id})
     return _gcp_pubsub_topic_view(project, rec)
 
@@ -12834,6 +13302,7 @@ async def api_gcp_pubsub_put_subscription(project: str, subscription: str, reque
     if not rec.get("topic"):
         raise HTTPException(400, detail="Topic is required")
     gcp_pubsub_state.setdefault("subscriptions", {})[sub_id] = rec
+    _cloudsim_sync_service_resource("gcp", "pubsub", "subscription", sub_id, rec, "gcp_pubsub")
     _record_usage("gcp.pubsub.create_subscription", {"project": project, "subscription": sub_id})
     return _gcp_pubsub_subscription_view(project, rec)
 
@@ -12894,6 +13363,7 @@ def api_gcp_pubsub_delete_topic(project: str, topic: str):
             del gcp_pubsub_state["subscriptions"][sub_id]
             gcp_pubsub_state.get("messages", {}).pop(sub_id, None)
     gcp_pubsub_state.get("messages", {}).pop(topic, None)
+    _cloudsim_sync_service_resource("gcp", "pubsub", "topic", topic, {}, "gcp_pubsub", action="delete")
     _record_usage("gcp.pubsub.delete_topic", {"project": project, "topic": topic})
     return {"done": True}
 
@@ -12960,6 +13430,7 @@ async def api_gcp_pubsub_create_subscription(project: str, request: Request, que
     if not sub.get("topic"):
         raise HTTPException(400, detail="Topic is required")
     gcp_pubsub_state.setdefault("subscriptions", {})[sub_id] = sub
+    _cloudsim_sync_service_resource("gcp", "pubsub", "subscription", sub_id, sub, "gcp_pubsub")
     _record_usage("gcp.pubsub.create_subscription", {"project": project, "subscription": sub_id, "topic": sub.get("topic", "")})
     return _gcp_pubsub_subscription_view(project, sub)
 
@@ -13001,6 +13472,7 @@ def api_gcp_pubsub_delete_subscription(project: str, subscription: str):
         raise HTTPException(404, detail="Subscription not found")
     del gcp_pubsub_state["subscriptions"][subscription]
     gcp_pubsub_state.get("messages", {}).pop(subscription, None)
+    _cloudsim_sync_service_resource("gcp", "pubsub", "subscription", subscription, {}, "gcp_pubsub", action="delete")
     _record_usage("gcp.pubsub.delete_subscription", {"project": project, "subscription": subscription})
     return {"done": True}
 
@@ -13153,6 +13625,7 @@ async def api_gcp_firestore_create_document(project: str, database: str, collect
         doc_id = doc_id.rsplit("/", 1)[-1]
     fields = payload.get("fields", {}) if isinstance(payload.get("fields"), dict) else {}
     doc = _gcp_firestore_engine().create_document(project, database, collection, _gcp_firestore_normalize_fields(fields), doc_id)
+    _cloudsim_sync_service_resource("gcp", "firestore", "document", doc_id, {"name": doc_id, "collection": collection, "database": database}, "gcp_firestore")
     _record_usage("gcp.firestore.create_document", {"project": project, "database": database, "collection": collection, "document": doc_id})
     return doc
 
@@ -13173,6 +13646,7 @@ def api_gcp_firestore_delete_document(project: str, database: str, collection: s
         _gcp_firestore_engine().delete_document(project, database, collection, doc_id)
     except KeyError:
         raise HTTPException(404, detail="Document not found")
+    _cloudsim_sync_service_resource("gcp", "firestore", "document", doc_id, {}, "gcp_firestore", action="delete")
     _record_usage("gcp.firestore.delete_document", {"project": project, "database": database, "collection": collection, "document": doc_id})
     return {"done": True}
 
@@ -13307,6 +13781,7 @@ async def api_gcp_functions_create(project: str, request: Request, location: str
     fn["runtime_bundle_name"] = bundle.get("name", "")
     fn["runtime_bundle_kind"] = bundle.get("kind", "")
     gcp_functions_state.setdefault("functions", {})[fn["name"]] = fn
+    _cloudsim_sync_service_resource("gcp", "functions", "function", fn["name"], fn, "gcp_functions", region=location)
     _record_usage("gcp.functions.create_function", {"project": project, "location": location, "function": fn.get("name", "")})
     return _gcp_functions_view(project, location, fn)
 
@@ -13453,6 +13928,7 @@ def api_gcp_functions_delete(project: str, location: str, function: str):
     if not fn or str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
         raise HTTPException(404, detail="Function not found")
     del gcp_functions_state["functions"][function]
+    _cloudsim_sync_service_resource("gcp", "functions", "function", function, {}, "gcp_functions", action="delete", region=location)
     _record_usage("gcp.functions.delete_function", {"project": project, "location": location, "function": function})
     return {"done": True}
 
@@ -13470,9 +13946,30 @@ async def api_gcp_functions_call(project: str, location: str, function: str, req
     except Exception:
         payload = {}
     execution_id = _id("exec")
+    # Attempt real execution via gcp_function_runtime
+    result_body = None
+    try:
+        code = fn.get("code") or fn.get("source_code") or ""
+        entry = fn.get("entry_point") or fn.get("entryPoint") or fn.get("handler") or "hello_http"
+        runtime = fn.get("runtime") or "python312"
+        timeout = int(fn.get("timeout") or 30)
+        env_vars = fn.get("environmentVariables") or {}
+        fn_env = {str(k): str(v) for k, v in env_vars.items()} if isinstance(env_vars, dict) else {}
+        if code.strip():
+            from core import gcp_function_runtime as _gfr
+            out = _gfr.execute(code, entry, runtime, payload, timeout=timeout, env=fn_env or None)
+            if out.get("status") == "SUCCESS":
+                result_body = json.dumps(out.get("result"), default=str)
+            else:
+                result_body = json.dumps({"error": out.get("error"), "logs": out.get("logs", "")}, default=str)
+    except Exception:
+        pass
+    # Fallback to canned response if real execution unavailable or code empty
+    if result_body is None:
+        result_body = json.dumps({"message": f"Hello from {function}", "input": payload}, default=str)
     response = {
         "executionId": execution_id,
-        "result": json.dumps({"message": f"Hello from {function}", "input": payload}, default=str),
+        "result": result_body,
     }
     gcp_functions_state.setdefault("operations", []).append({"type": "call", "function": function, "executionId": execution_id, "at": _now()})
     gcp_functions_state.setdefault("invocations", []).append({"function": function, "payload": payload, "executionId": execution_id, "timestamp": _now()})
@@ -13861,6 +14358,89 @@ async def api_gcp_vpc_create_firewall(project: str, request: Request):
         "logConfig": rec["logConfig"],
         "selfLink": f"{_gcp_compute_network_root()}/projects/{project}/global/firewalls/{name}",
     }
+
+
+def api_gcp_vpc_list_routes(project: str):
+    project = _gcp_project_name(project)
+    routes = []
+    for route in gcp_vpc_state.get("routes", {}).values():
+        if str(route.get("project") or project) != project:
+            continue
+        route_name = str(route.get("name") or "")
+        routes.append({
+            "kind": "compute#route",
+            "id": str(route.get("id") or _gcp_compute_numeric_id(f"{project}:{route_name}")),
+            "creationTimestamp": route.get("createTime", _now()),
+            "name": route_name,
+            "description": route.get("description", ""),
+            "network": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{route.get('network', 'default')}",
+            "destRange": route.get("destRange", ""),
+            "priority": int(route.get("priority") or 1000),
+            "nextHopGateway": route.get("nextHopGateway", ""),
+            "nextHopIp": route.get("nextHopIp", ""),
+            "nextHopInstance": route.get("nextHopInstance", ""),
+            "nextHopNetwork": route.get("nextHopNetwork", ""),
+            "tags": route.get("tags", []),
+            "selfLink": f"{_gcp_compute_network_root()}/projects/{project}/global/routes/{route_name}",
+        })
+    return {"kind": "compute#routeList", "items": routes}
+
+
+async def api_gcp_vpc_create_route(project: str, request: Request):
+    project = _gcp_project_name(project)
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, detail="Route name is required")
+    rec = {
+        "id": _gcp_compute_numeric_id(f"{project}:{name}"),
+        "name": name,
+        "description": str(payload.get("description") or ""),
+        "project": project,
+        "network": str(payload.get("network") or "default").split("/")[-1],
+        "destRange": str(payload.get("destRange") or ""),
+        "priority": int(payload.get("priority") or 1000),
+        "nextHopGateway": str(payload.get("nextHopGateway") or ""),
+        "nextHopIp": str(payload.get("nextHopIp") or ""),
+        "nextHopInstance": str(payload.get("nextHopInstance") or ""),
+        "nextHopNetwork": str(payload.get("nextHopNetwork") or ""),
+        "tags": payload.get("tags") if isinstance(payload.get("tags"), list) else [],
+        "createTime": _now(),
+    }
+    gcp_vpc_state.setdefault("routes", {})[name] = rec
+    _record_usage("gcp.vpc.create_route", {"project": project, "route": name})
+    return {
+        "kind": "compute#route",
+        "id": rec["id"],
+        "creationTimestamp": rec["createTime"],
+        "name": name,
+        "description": rec["description"],
+        "network": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{rec['network']}",
+        "destRange": rec["destRange"],
+        "priority": rec["priority"],
+        "nextHopGateway": rec["nextHopGateway"],
+        "nextHopIp": rec["nextHopIp"],
+        "nextHopInstance": rec["nextHopInstance"],
+        "nextHopNetwork": rec["nextHopNetwork"],
+        "tags": rec["tags"],
+        "selfLink": f"{_gcp_compute_network_root()}/projects/{project}/global/routes/{name}",
+    }
+
+
+def api_gcp_vpc_delete_route(project: str, route: str):
+    project = _gcp_project_name(project)
+    rec = gcp_vpc_state.get("routes", {}).get(route)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Route not found")
+    del gcp_vpc_state["routes"][route]
+    _record_usage("gcp.vpc.delete_route", {"project": project, "route": route})
+    return {"done": True}
 
 
 def _gcp_project_name(project: str | None) -> str:
@@ -16201,6 +16781,7 @@ def api_rds_create_database(req: RDSDatabaseRequest):
     db["runtime_bundle_id"] = _cloudsim_runtime_bundle("rds").get("id", "")
     db["runtime_bundle_name"] = _cloudsim_runtime_bundle("rds").get("name", "")
     db["runtime_bundle_kind"] = _cloudsim_runtime_bundle("rds").get("kind", "")
+    _cloudsim_sync_service_resource("aws", "rds", "db_instance", db["db_instance_identifier"], db, "rds")
     _record_usage("rds.create_database", {"db_instance_identifier": db.get("db_instance_identifier", ""), "engine": db.get("engine", "")})
     return _rds_db_view(db)
 
@@ -16219,6 +16800,7 @@ def api_rds_start_database(db_instance_identifier: str):
     if _rds_db_status(db) == "available":
         return _rds_db_view(db)
     db = _rds_runtime_start(db)
+    _cloudsim_sync_service_resource("aws", "rds", "db_instance", db_instance_identifier, db, "rds")
     _rds_emit_event("StartDBInstance", {"db_instance_identifier": db_instance_identifier})
     _record_usage("rds.start_database", {"db_instance_identifier": db_instance_identifier})
     return _rds_db_view(db)
@@ -16229,6 +16811,7 @@ def api_rds_stop_database(db_instance_identifier: str):
     if not db:
         raise HTTPException(404, detail="DBInstanceNotFound")
     db = _rds_runtime_stop(db)
+    _cloudsim_sync_service_resource("aws", "rds", "db_instance", db_instance_identifier, db, "rds")
     _rds_emit_event("StopDBInstance", {"db_instance_identifier": db_instance_identifier})
     _record_usage("rds.stop_database", {"db_instance_identifier": db_instance_identifier})
     return _rds_db_view(db)
@@ -16239,6 +16822,7 @@ def api_rds_reboot_database(db_instance_identifier: str):
     if not db:
         raise HTTPException(404, detail="DBInstanceNotFound")
     db = _rds_runtime_reboot(db)
+    _cloudsim_sync_service_resource("aws", "rds", "db_instance", db_instance_identifier, db, "rds")
     _rds_emit_event("RebootDBInstance", {"db_instance_identifier": db_instance_identifier})
     _record_usage("rds.reboot_database", {"db_instance_identifier": db_instance_identifier})
     return _rds_db_view(db)
@@ -16255,6 +16839,7 @@ def api_rds_modify_database(db_instance_identifier: str, req: RDSModifyRequest):
 
 def api_rds_delete_database(db_instance_identifier: str, skip_final_snapshot: bool = True, final_snapshot_identifier: str = ""):
     _rds_delete_db_instance(db_instance_identifier, skip_final_snapshot=skip_final_snapshot, final_snapshot_identifier=final_snapshot_identifier)
+    _cloudsim_sync_service_resource("aws", "rds", "db_instance", db_instance_identifier, {}, "rds", action="delete")
     _record_usage("rds.delete_database", {"db_instance_identifier": db_instance_identifier, "skip_final_snapshot": skip_final_snapshot})
     return {"deleted": True, "db_instance_identifier": db_instance_identifier}
 
@@ -17120,7 +17705,21 @@ def _sqs_json_error(code: str, message: str, status: int = 400) -> Response:
 
 async def _sqs_json_dispatch(request: Request, action: str) -> Response:
     """Modern boto3/SDK SQS uses the AWS-JSON protocol (X-Amz-Target). Reuse the
-    SQS store operations and serialize JSON responses so unmodified clients work."""
+    SQS store operations and serialize JSON responses so unmodified clients work.
+
+    ElasticMQ proxy: try ElasticMQ first (it now handles JSON-RPC via the
+    query-protocol translation layer in elasticmq_proxy), fall back to in-memory.
+    """
+    # --- ElasticMQ proxy attempt (mirrors the query-path proxy in api_sqs_query) ---
+    try:
+        from core import elasticmq_proxy as _emq
+        if _emq.available():
+            status, body_bytes, ctype = await _emq.proxy(request)
+            if status != 502:
+                return Response(content=body_bytes, status_code=status, media_type=ctype)
+    except Exception:
+        pass
+
     try:
         raw = await request.body()
         body = json.loads(raw.decode("utf-8") or "{}") if raw else {}
@@ -17261,6 +17860,7 @@ def api_sqs_list_queues():
 
 def api_sqs_create_queue(req: SQSQueueCreateRequest):
     queue = _sqs_create_queue_record(req)
+    _cloudsim_sync_service_resource("aws", "sqs", "queue", queue.get("queue_name", ""), queue, "sqs")
     _record_usage("sqs.create_queue", {"queue_name": queue.get("queue_name", "")})
     return _sqs_queue_view(queue)
 
@@ -17294,6 +17894,7 @@ def api_sqs_update_queue(queue_name: str, req: SQSQueueUpdateRequest):
 
 def api_sqs_delete_queue(queue_name: str):
     _sqs_delete_queue(queue_name)
+    _cloudsim_sync_service_resource("aws", "sqs", "queue", queue_name, {}, "sqs", action="delete")
     _record_usage("sqs.delete_queue", {"queue_name": queue_name})
     return {"deleted": True, "queue_name": queue_name}
 
@@ -17839,6 +18440,7 @@ def api_dynamodb_create_table(req: DynamoDBTableRequest):
         "write_capacity_units": req.write_capacity_units,
         "tags": req.tags or {},
     })
+    _cloudsim_sync_service_resource("aws", "dynamodb", "table", req.table_name, table, "dynamodb")
     _record_usage("dynamodb.create_table", {"table_name": req.table_name})
     return _ddb_table_response(table, include_items=False)
 
@@ -17852,6 +18454,7 @@ def api_dynamodb_get_table(table_name: str):
 
 def api_dynamodb_delete_table(table_name: str):
     _ddb_delete_table_record(table_name)
+    _cloudsim_sync_service_resource("aws", "dynamodb", "table", table_name, {}, "dynamodb", action="delete")
     _record_usage("dynamodb.delete_table", {"table_name": table_name})
     return {"deleted": True, "table_name": table_name}
 
@@ -18075,6 +18678,7 @@ def api_apigateway_create_api(req: APIGatewayRequest):
     if not req.name.strip():
         raise HTTPException(400, detail="MissingParameter: name is required.")
     api = _apigw_create_api_record(req)
+    _cloudsim_sync_service_resource("aws", "apigateway", "rest_api", api.get("id", ""), api, "apigateway")
     _record_usage("apigateway.create_api", {"rest_api_id": api.get("id", ""), "name": api.get("name", "")})
     return _apigw_summary(api)
 
@@ -18088,6 +18692,7 @@ def api_apigateway_get_api(api_id: str):
 
 def api_apigateway_delete_api(api_id: str):
     _apigw_delete_api_record(api_id)
+    _cloudsim_sync_service_resource("aws", "apigateway", "rest_api", api_id, {}, "apigateway", action="delete")
     _record_usage("apigateway.delete_api", {"rest_api_id": api_id})
     return {"message": "API Gateway API deleted", "rest_api_id": api_id}
 
@@ -18174,6 +18779,7 @@ def api_lambda_create_function(req: LambdaFunctionRequest):
     function["runtime_bundle_id"] = bundle.get("id", "")
     function["runtime_bundle_name"] = bundle.get("name", "")
     function["runtime_bundle_kind"] = bundle.get("kind", "")
+    _cloudsim_sync_service_resource("aws", "lambda", "function", function["function_name"], function, "lambda")
     _record_usage("lambda.create_function", {"function_name": function.get("function_name", "")})
     return _lambda_function_view(function)
 
@@ -18205,6 +18811,7 @@ def api_lambda_update_function_configuration(function_name: str, req: LambdaFunc
 
 def api_lambda_delete_function(function_name: str):
     _lambda_delete_function(function_name)
+    _cloudsim_sync_service_resource("aws", "lambda", "function", function_name, {}, "lambda", action="delete")
     _record_usage("lambda.delete_function", {"function_name": function_name})
     return {"deleted": True, "function_name": function_name}
 
@@ -18341,6 +18948,63 @@ async def api_lambda_invoke_function_aws(function_name: str, request: Request):
     if not headers["X-Amz-Function-Error"]:
         headers.pop("X-Amz-Function-Error", None)
     return Response(content=body_bytes, media_type=media_type, headers=headers)
+
+
+# ---------------------------------------------------------------------------
+# Lambda Layers
+# ---------------------------------------------------------------------------
+
+def _lambda_layers() -> dict:
+    """Layers are stored inside lambda_state under a 'layers' sub-dict."""
+    return lambda_state.setdefault("layers", {})
+
+
+def api_lambda_list_layers():
+    layers = list(_lambda_layers().values())
+    layers.sort(key=lambda x: x.get("created", ""))
+    return {"layers": layers, "count": len(layers)}
+
+
+def api_lambda_create_layer(req: LambdaLayerRequest):
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(400, detail="Layer name is required")
+    layers = _lambda_layers()
+    layer_arn = f"arn:aws:lambda:us-east-1:{AWS_ACCOUNT_ID}:layer:{name}"
+    existing = layers.get(name)
+    version = 1
+    if existing:
+        version = existing.get("latest_version", 0) + 1
+    layer = {
+        "layer_name": name,
+        "layer_arn": layer_arn,
+        "layer_version_arn": f"{layer_arn}:{version}",
+        "description": req.description,
+        "runtime": req.runtime,
+        "code": req.code,
+        "license_info": req.license_info,
+        "latest_version": version,
+        "created": _now(),
+    }
+    layers[name] = layer
+    _record_usage("lambda.create_layer", {"layer_name": name, "version": version})
+    return layer
+
+
+def api_lambda_get_layer(name: str):
+    layer = _lambda_layers().get(name)
+    if not layer:
+        raise HTTPException(404, detail="ResourceNotFoundException")
+    return layer
+
+
+def api_lambda_delete_layer(name: str):
+    layers = _lambda_layers()
+    if name not in layers:
+        raise HTTPException(404, detail="ResourceNotFoundException")
+    del layers[name]
+    _record_usage("lambda.delete_layer", {"layer_name": name})
+    return {"deleted": True}
 
 
 def api_runtime_bundles():
@@ -18797,6 +19461,7 @@ async def s3_put_bucket(bucket: str, request: Request) -> Response:
         "notifications": _s3_default_notifications(),
     }
     objects[bucket] = {}
+    _cloudsim_sync_service_resource("aws", "s3", "bucket", bucket, buckets[bucket], "s3")
     return _empty_response(200, {"Location": f"/{bucket}"})
 
 
@@ -18972,6 +19637,7 @@ async def s3_delete_bucket(bucket: str, request: Request) -> Response:
         return _empty_response(204)
     if objects.get(bucket):
         return _error_xml("BucketNotEmpty", "The bucket you tried to delete is not empty.", f"/{bucket}", 409)
+    _cloudsim_sync_service_resource("aws", "s3", "bucket", bucket, {}, "s3", action="delete")
     del buckets[bucket]
     del objects[bucket]
     return _empty_response(204)

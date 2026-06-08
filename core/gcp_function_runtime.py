@@ -55,9 +55,12 @@ def _parse(stdout: str) -> tuple:
     return None, stdout.strip()
 
 
-def _run(cmd: list[str], cwd: str, timeout: int) -> dict:
+def _run(cmd: list[str], cwd: str, timeout: int, env: dict[str, str] | None = None) -> dict:
+    run_env = dict(os.environ)
+    if env:
+        run_env.update(env)
     try:
-        proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+        proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=run_env)
     except subprocess.TimeoutExpired:
         return {"status": "ERROR", "error": f"Function timed out after {timeout}s", "logs": "", "result": None}
     if proc.returncode != 0:
@@ -67,8 +70,12 @@ def _run(cmd: list[str], cwd: str, timeout: int) -> dict:
     return {"status": "SUCCESS", "result": result, "logs": logs[:4000]}
 
 
-def execute(code: str, entry_point: str, runtime: str, event: dict, timeout: int = 30) -> dict:
-    """Execute the function source and return {status, result, logs[, error]}."""
+def execute(code: str, entry_point: str, runtime: str, event: dict, timeout: int = 30, env: dict[str, str] | None = None) -> dict:
+    """Execute the function source and return {status, result, logs[, error]}.
+
+    *env* — optional mapping of environment variables injected into the
+    subprocess (merged on top of the current process environment).
+    """
     code = code or ""
     entry_point = entry_point or "handler"
     runtime = str(runtime or "python").lower()
@@ -85,7 +92,7 @@ def execute(code: str, entry_point: str, runtime: str, event: dict, timeout: int
             harness = _PY_HARNESS.format(entry=entry_point, event=event_json, marker=_RESULT_MARKER)
             with open(os.path.join(workdir, "_run.py"), "w") as fh:
                 fh.write(harness)
-            return _run([sys.executable, os.path.join(workdir, "_run.py")], workdir, timeout)
+            return _run([sys.executable, os.path.join(workdir, "_run.py")], workdir, timeout, env=env)
         if runtime.startswith("node") or runtime.startswith("nodejs"):
             node = shutil.which("node")
             if not node:
@@ -96,7 +103,7 @@ def execute(code: str, entry_point: str, runtime: str, event: dict, timeout: int
             harness = _NODE_HARNESS.format(entry=json.dumps(entry_point), event=json.dumps(event_json), marker=json.dumps(_RESULT_MARKER))
             with open(os.path.join(workdir, "_run.js"), "w") as fh:
                 fh.write(harness)
-            return _run([node, os.path.join(workdir, "_run.js")], workdir, timeout)
+            return _run([node, os.path.join(workdir, "_run.js")], workdir, timeout, env=env)
         return {"status": "ERROR", "error": f"Runtime {runtime!r} not supported for execution.",
                 "logs": "", "result": None}
     finally:

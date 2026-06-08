@@ -39,6 +39,11 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from . import vault_client as vc
 
+# Module-level KMS key metadata store: key_id -> key metadata dict
+_kms_keys: dict[str, dict] = {}
+# Module-level KMS alias store: alias_name -> key_id
+_kms_aliases: dict[str, str] = {}
+
 
 def _active_space_id(request: Request) -> str:
     """Get the active space ID from the platform — needed for Vault namespacing.
@@ -70,27 +75,37 @@ def _vault_unavailable_response(provider: str) -> JSONResponse:
 # patch server.py's existing root POST dispatcher (see register()) so that
 # X-Amz-Target=TrentService.* and =secretsmanager.* route here.
 
+def _kms_resolve_key_name(body: dict) -> str:
+    """Resolve the key name from various body fields."""
+    key = body.get("KeyId") or body.get("KeyArn") or body.get("KeyAlias") or "default"
+    # Check if it's an alias reference
+    if key.startswith("alias/"):
+        alias_name = key
+        resolved = _kms_aliases.get(alias_name)
+        if resolved:
+            key = resolved
+    key_name = key.split("/")[-1] if "/" in key else key
+    return key_name
+
+
+def _kms_key_metadata(key_id: str) -> dict | None:
+    """Return stored key metadata, or None."""
+    return _kms_keys.get(key_id)
+
+
 async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
     """Return the response dict for an AWS KMS X-Amz-Target, or None if not handled."""
     op = target.split(".", 1)[-1]  # "TrentService.Encrypt" → "Encrypt"
     key = body.get("KeyId") or body.get("KeyArn") or body.get("KeyAlias") or "default"
-    # KeyId may be arn:aws:kms:::key/<uuid>, alias/<name>, or just a name.
-    key_name = key.split("/")[-1] if "/" in key else key
+    key_name = _kms_resolve_key_name(body)
 
     if op == "Encrypt":
         pt_b64 = body.get("Plaintext", "")
-        # Vault wants base64; boto3 already sends b64-encoded bytes.
         ct = vc.transit_encrypt("aws", space, key_name, pt_b64) or ""
-        # AWS SDK v2 (Java + Go) treats CiphertextBlob as SdkBytes — the JSON
-        # value must be valid base64. Vault returns "vault:v1:<b64>" which
-        # isn't base64 on its own. Wrap the whole opaque blob in base64 so
-        # both lax (boto3) and strict (sdk-java/sdk-go) clients accept it.
         ct_wrapped = base64.b64encode(ct.encode()).decode()
         return {"KeyId": key, "CiphertextBlob": ct_wrapped}
     if op == "Decrypt":
         ct_in = body.get("CiphertextBlob", "")
-        # Unwrap the base64 wrap we apply in Encrypt (back-compat: pass-through
-        # if the value isn't our wrap).
         try:
             ct = base64.b64decode(ct_in).decode()
             if not ct.startswith("vault:"):
@@ -101,25 +116,32 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
         return {"KeyId": key, "Plaintext": pt}
     if op == "GenerateDataKey":
         spec = body.get("KeySpec", "AES_256")
-        # Ensure key exists before generating.
         vc.transit_create_key("aws", space, key_name)
         r = vc.transit_generate_data_key("aws", space, key_name, key_spec=spec)
         if not r:
             return None
         return {"KeyId": key, "Plaintext": r["Plaintext"], "CiphertextBlob": r["CiphertextBlob"]}
     if op == "CreateKey":
-        # boto3 KMS CreateKey returns a KeyMetadata struct.
-        vc.transit_create_key("aws", space, key_name)
-        return {"KeyMetadata": {
-            "KeyId": key_name, "Arn": f"arn:aws:kms:us-east-1:000000000000:key/{key_name}",
-            "Enabled": True, "Description": body.get("Description", ""),
+        import uuid as _uuid
+        key_id = body.get("KeyId") or _uuid.uuid4().hex
+        vc.transit_create_key("aws", space, key_id)
+        metadata = {
+            "KeyId": key_id,
+            "Arn": f"arn:aws:kms:us-east-1:000000000000:key/{key_id}",
+            "Enabled": True,
+            "Description": body.get("Description", ""),
             "KeyUsage": body.get("KeyUsage", "ENCRYPT_DECRYPT"),
-            "KeyState": "Enabled", "Origin": "AWS_KMS",
+            "KeySpec": body.get("KeySpec", "SYMMETRIC_DEFAULT"),
+            "KeyState": "Enabled",
+            "Origin": "AWS_KMS",
             "CreationDate": time.time(),
-        }}
+        }
+        _kms_keys[key_id] = metadata
+        return {"KeyMetadata": metadata}
     if op == "DescribeKey":
-        # Read-only metadata. Lazily ensure the Vault key exists so subsequent
-        # Encrypt calls work, then return a synthetic KeyMetadata.
+        stored = _kms_key_metadata(key_name)
+        if stored:
+            return {"KeyMetadata": stored}
         vc.transit_create_key("aws", space, key_name)
         return {"KeyMetadata": {
             "KeyId": key_name, "Arn": f"arn:aws:kms:us-east-1:000000000000:key/{key_name}",
@@ -127,9 +149,49 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
             "KeyState": "Enabled", "Origin": "AWS_KMS",
         }}
     if op == "ListKeys":
-        # Simulator doesn't enumerate Vault keys per-space (would require a
-        # separate index). Return an empty list with no NextMarker.
-        return {"Keys": [], "Truncated": False}
+        keys = [{"KeyId": k, "KeyArn": v.get("Arn", f"arn:aws:kms:us-east-1:000000000000:key/{k}")}
+                for k, v in _kms_keys.items()]
+        return {"Keys": keys, "Truncated": False}
+    if op == "ScheduleKeyDeletion":
+        stored = _kms_keys.get(key_name)
+        if not stored:
+            return {"__type": "NotFoundException", "message": f"Key {key_name} not found."}
+        pending_days = body.get("PendingWindowInDays", 30)
+        stored["KeyState"] = "PendingDeletion"
+        stored["Enabled"] = False
+        stored["DeletionDate"] = time.time() + (pending_days * 86400)
+        return {"KeyId": stored["KeyId"], "KeyState": "PendingDeletion",
+                "DeletionDate": stored["DeletionDate"]}
+    if op == "EnableKey":
+        stored = _kms_keys.get(key_name)
+        if not stored:
+            return {"__type": "NotFoundException", "message": f"Key {key_name} not found."}
+        stored["Enabled"] = True
+        stored["KeyState"] = "Enabled"
+        return {}
+    if op == "DisableKey":
+        stored = _kms_keys.get(key_name)
+        if not stored:
+            return {"__type": "NotFoundException", "message": f"Key {key_name} not found."}
+        stored["Enabled"] = False
+        stored["KeyState"] = "Disabled"
+        return {}
+    if op == "CreateAlias":
+        alias_name = body.get("AliasName", "")
+        target_key_id = body.get("TargetKeyId", "")
+        if not alias_name or not target_key_id:
+            return {"__type": "ValidationException", "message": "AliasName and TargetKeyId are required."}
+        _kms_aliases[alias_name] = target_key_id
+        return {}
+    if op == "ListAliases":
+        aliases = []
+        for alias_name, target_key_id in _kms_aliases.items():
+            aliases.append({
+                "AliasName": alias_name,
+                "AliasArn": f"arn:aws:kms:us-east-1:000000000000:{alias_name}",
+                "TargetKeyId": target_key_id,
+            })
+        return {"Aliases": aliases, "Truncated": False}
     return None
 
 

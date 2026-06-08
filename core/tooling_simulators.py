@@ -221,6 +221,102 @@ opts := &arm.ClientOptions{
 }
 client, _ := armcompute.NewVirtualMachinesClient("sub-001", cred, opts)""",
         }
+    # ── Python SDK snippets ──────────────────────────────────────────────
+    if provider == "aws" and language == "python":
+        return {
+            "provider": "aws",
+            "language": "python",
+            "endpoint": endpoint,
+            "snippet": """import boto3
+
+client = boto3.client('s3',
+    endpoint_url='http://127.0.0.1:9000',
+    region_name='us-east-1',
+    aws_access_key_id='test',
+    aws_secret_access_key='test',
+)
+response = client.list_buckets()
+print(response['Buckets'])""",
+        }
+    if provider == "gcp" and language == "python":
+        return {
+            "provider": "gcp",
+            "language": "python",
+            "endpoint": endpoint,
+            "snippet": """from google.cloud import storage
+import os
+
+os.environ['STORAGE_EMULATOR_HOST'] = 'http://127.0.0.1:9000'
+client = storage.Client(project='cloudlearn')
+buckets = list(client.list_buckets())
+print(buckets)""",
+        }
+    if provider == "azure" and language == "python":
+        return {
+            "provider": "azure",
+            "language": "python",
+            "endpoint": endpoint,
+            "snippet": """from azure.identity import DefaultAzureCredential
+from azure.mgmt.compute import ComputeManagementClient
+
+credential = DefaultAzureCredential()
+client = ComputeManagementClient(
+    credential,
+    'sub-001',
+    base_url='http://127.0.0.1:9000',
+)
+vms = list(client.virtual_machines.list_all())
+print(vms)""",
+        }
+    # ── Node.js SDK snippets ──────────────────────────────────────────────
+    if provider == "aws" and language == "nodejs":
+        return {
+            "provider": "aws",
+            "language": "nodejs",
+            "endpoint": endpoint,
+            "snippet": """const { S3Client, ListBucketsCommand } = require('@aws-sdk/client-s3');
+
+const client = new S3Client({
+    endpoint: 'http://127.0.0.1:9000',
+    region: 'us-east-1',
+    credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+    forcePathStyle: true,
+});
+const response = await client.send(new ListBucketsCommand({}));
+console.log(response.Buckets);""",
+        }
+    if provider == "gcp" and language == "nodejs":
+        return {
+            "provider": "gcp",
+            "language": "nodejs",
+            "endpoint": endpoint,
+            "snippet": """const { Storage } = require('@google-cloud/storage');
+
+const storage = new Storage({
+    projectId: 'cloudlearn',
+    apiEndpoint: 'http://127.0.0.1:9000',
+});
+const [buckets] = await storage.getBuckets();
+console.log(buckets);""",
+        }
+    if provider == "azure" and language == "nodejs":
+        return {
+            "provider": "azure",
+            "language": "nodejs",
+            "endpoint": endpoint,
+            "snippet": """const { DefaultAzureCredential } = require('@azure/identity');
+const { ComputeManagementClient } = require('@azure/arm-compute');
+
+const credential = new DefaultAzureCredential();
+const client = new ComputeManagementClient(credential, 'sub-001', {
+    $host: 'http://127.0.0.1:9000',
+});
+const vms = [];
+for await (const vm of client.virtualMachines.listAll()) {
+    vms.push(vm);
+}
+console.log(vms);""",
+        }
     return {"provider": provider, "language": language, "endpoint": endpoint, "snippet": "", "status": "planned"}
 
 

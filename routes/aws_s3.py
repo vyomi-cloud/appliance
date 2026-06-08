@@ -1148,18 +1148,35 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if "acl" in params:
             if not _bucket_exists(bucket):
                 return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+            body = await request.body()
+            if body and body.strip():
+                buckets[bucket]["acl"] = body.decode("utf-8", errors="replace")
             return _empty_response(200)
 
         # CORS
         if "cors" in params:
             if not _bucket_exists(bucket):
                 return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+            body = await request.body()
+            if body and body.strip():
+                try:
+                    ET.fromstring(body)
+                except ET.ParseError:
+                    return _error_xml("MalformedXML", "The XML you provided was not well-formed.", f"/{bucket}", 400)
+                buckets[bucket]["cors"] = body.decode("utf-8", errors="replace")
             return _empty_response(200)
 
         # Lifecycle
         if "lifecycle" in params:
             if not _bucket_exists(bucket):
                 return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+            body = await request.body()
+            if body and body.strip():
+                try:
+                    ET.fromstring(body)
+                except ET.ParseError:
+                    return _error_xml("MalformedXML", "The XML you provided was not well-formed.", f"/{bucket}", 400)
+                buckets[bucket]["lifecycle"] = body.decode("utf-8", errors="replace")
             return _empty_response(200)
 
         # Encryption
@@ -1293,6 +1310,9 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return _xml_response(xml)
 
         if "acl" in params:
+            stored_acl = buckets[bucket].get("acl")
+            if stored_acl:
+                return _xml_response(stored_acl)
             xml = (
                 f'<?xml version="1.0" encoding="UTF-8"?>'
                 f'<AccessControlPolicy xmlns="{S3_NS}">'
@@ -1311,10 +1331,16 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
                               "The server side encryption configuration was not found.", f"/{bucket}", 404)
 
         if "lifecycle" in params:
+            stored_lifecycle = buckets[bucket].get("lifecycle")
+            if stored_lifecycle:
+                return _xml_response(stored_lifecycle)
             return _error_xml("NoSuchLifecycleConfiguration",
                               "The lifecycle configuration does not exist.", f"/{bucket}", 404)
 
         if "cors" in params:
+            stored_cors = buckets[bucket].get("cors")
+            if stored_cors:
+                return _xml_response(stored_cors)
             return _error_xml("NoSuchCORSConfiguration",
                               "The CORS configuration does not exist.", f"/{bucket}", 404)
 
@@ -1358,6 +1384,15 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
         if "notification" in params:
             buckets[bucket]["notifications"] = _s3_default_notifications()
+            return _empty_response(204)
+        if "cors" in params:
+            buckets[bucket].pop("cors", None)
+            return _empty_response(204)
+        if "lifecycle" in params:
+            buckets[bucket].pop("lifecycle", None)
+            return _empty_response(204)
+        if "tagging" in params:
+            buckets[bucket].pop("tags", None)
             return _empty_response(204)
         if objects.get(bucket):
             return _error_xml("BucketNotEmpty", "The bucket you tried to delete is not empty.", f"/{bucket}", 409)

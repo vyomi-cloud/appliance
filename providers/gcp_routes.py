@@ -19,6 +19,7 @@ _TARGET_OVERRIDES = {
     "api_gcp_iam_test_permissions": gcp_iam.api_gcp_iam_test_permissions,
     "api_gcp_iam_list_service_accounts": gcp_iam.api_gcp_iam_list_service_accounts,
     "api_gcp_iam_create_service_account": gcp_iam.api_gcp_iam_create_service_account,
+    "api_gcp_iam_get_service_account": gcp_iam.api_gcp_iam_get_service_account,
     "api_gcp_iam_patch_service_account": gcp_iam.api_gcp_iam_patch_service_account,
     "api_gcp_iam_delete_service_account": gcp_iam.api_gcp_iam_delete_service_account,
     "api_gcp_iam_create_service_account_key": gcp_iam.api_gcp_iam_create_service_account_key,
@@ -50,6 +51,8 @@ _TARGET_OVERRIDES = {
     "api_gcp_storage_create_object": gcp_storage_sql_vpc.api_gcp_storage_create_object,
     "api_gcp_storage_get_object": gcp_storage_sql_vpc.api_gcp_storage_get_object,
     "api_gcp_storage_delete_object": gcp_storage_sql_vpc.api_gcp_storage_delete_object,
+    "api_gcp_storage_patch_object": gcp_storage_sql_vpc.api_gcp_storage_patch_object,
+    "api_gcp_storage_compose_object": gcp_storage_sql_vpc.api_gcp_storage_compose_object,
     "api_gcp_storage_list_folders": gcp_storage_sql_vpc.api_gcp_storage_list_folders,
     "api_gcp_storage_create_folder": gcp_storage_sql_vpc.api_gcp_storage_create_folder,
     "api_gcp_storage_delete_folder": gcp_storage_sql_vpc.api_gcp_storage_delete_folder,
@@ -76,6 +79,9 @@ _TARGET_OVERRIDES = {
     "api_gcp_vpc_create_subnetwork": gcp_storage_sql_vpc.api_gcp_vpc_create_subnetwork,
     "api_gcp_vpc_list_firewalls": gcp_storage_sql_vpc.api_gcp_vpc_list_firewalls,
     "api_gcp_vpc_create_firewall": gcp_storage_sql_vpc.api_gcp_vpc_create_firewall,
+    "api_gcp_vpc_list_routes": gcp_storage_sql_vpc.api_gcp_vpc_list_routes,
+    "api_gcp_vpc_create_route": gcp_storage_sql_vpc.api_gcp_vpc_create_route,
+    "api_gcp_vpc_delete_route": gcp_storage_sql_vpc.api_gcp_vpc_delete_route,
 }
 
 for _name in gcp_services.TARGETS:
@@ -100,6 +106,14 @@ def sdk_java_snippet() -> dict:
 
 def sdk_go_snippet() -> dict:
     return sdk_snippet("gcp", "go")
+
+
+def sdk_python_snippet() -> dict:
+    return sdk_snippet("gcp", "python")
+
+
+def sdk_nodejs_snippet() -> dict:
+    return sdk_snippet("gcp", "nodejs")
 
 
 def _server():
@@ -218,6 +232,14 @@ def register(app, h) -> None:
     def api_provider_gcp_sdk_go():
         return tool_response("sdk/go")
 
+    @app.get("/api/providers/gcp/sdk/python")
+    def api_provider_gcp_sdk_python():
+        return tool_response("sdk/python")
+
+    @app.get("/api/providers/gcp/sdk/nodejs")
+    def api_provider_gcp_sdk_nodejs():
+        return tool_response("sdk/nodejs")
+
     @app.post("/api/providers/gcp/gcloud/resolve")
     def api_provider_gcp_gcloud_resolve(payload: dict[str, Any]):
         return gcloud_resolve(payload)
@@ -233,6 +255,14 @@ def register(app, h) -> None:
     @app.get("/api/providers/gcp/sdk/go/snippet")
     def api_provider_gcp_sdk_go_snippet():
         return sdk_go_snippet()
+
+    @app.get("/api/providers/gcp/sdk/python/snippet")
+    def api_provider_gcp_sdk_python_snippet():
+        return sdk_python_snippet()
+
+    @app.get("/api/providers/gcp/sdk/nodejs/snippet")
+    def api_provider_gcp_sdk_nodejs_snippet():
+        return sdk_nodejs_snippet()
 
     specs = [
         # Storage
@@ -265,6 +295,10 @@ def register(app, h) -> None:
         ("DELETE", "/storage/v1/b/{bucket}/o/{object_name:path}", "api_gcp_storage_delete_object", "(bucket: str, object_name: str)"),
         ("DELETE", "/api/gcp/storage/v1/b/{bucket}/o/{object_name:path}", "api_gcp_storage_delete_object", "(bucket: str, object_name: str)"),
         ("DELETE", "/api/gcp/s3/buckets/{bucket}/objects/{object_name:path}", "api_gcp_storage_delete_object", "(bucket: str, object_name: str)"),
+        ("PATCH", "/storage/v1/b/{bucket}/o/{object_name:path}", "api_gcp_storage_patch_object", "(bucket: str, object_name: str, request: Request)"),
+        ("PATCH", "/api/gcp/storage/v1/b/{bucket}/o/{object_name:path}", "api_gcp_storage_patch_object", "(bucket: str, object_name: str, request: Request)"),
+        ("POST", "/storage/v1/b/{bucket}/o/{destination:path}/compose", "api_gcp_storage_compose_object", "(bucket: str, destination: str, request: Request)"),
+        ("POST", "/api/gcp/storage/v1/b/{bucket}/o/{destination:path}/compose", "api_gcp_storage_compose_object", "(bucket: str, destination: str, request: Request)"),
         ("GET", "/storage/v1/b/{bucket}/folders", "api_gcp_storage_list_folders", "(bucket: str)"),
         ("GET", "/api/gcp/storage/v1/b/{bucket}/folders", "api_gcp_storage_list_folders", "(bucket: str)"),
         ("POST", "/storage/v1/b/{bucket}/folders", "api_gcp_storage_create_folder", "(bucket: str, request: Request)"),
@@ -451,6 +485,13 @@ def register(app, h) -> None:
         ("DELETE", "/compute/v1/projects/{project}/global/firewalls/{firewall}", "api_gcp_vpc_delete_firewall", "(project: str, firewall: str)"),
         ("DELETE", "/api/gcp/vpc/firewalls/{firewall}", "api_gcp_vpc_delete_firewall", "(project: str, firewall: str)"),
         ("DELETE", "/api/gcp/vpc/security-groups/{firewall}", "api_gcp_vpc_delete_firewall", "(project: str, firewall: str)"),
+        # Routes
+        ("GET", "/compute/v1/projects/{project}/global/routes", "api_gcp_vpc_list_routes", "(project: str)"),
+        ("GET", "/api/gcp/vpc/routes", "api_gcp_vpc_list_routes", "(project: str)"),
+        ("POST", "/compute/v1/projects/{project}/global/routes", "api_gcp_vpc_create_route", "(project: str, request: Request)"),
+        ("POST", "/api/gcp/vpc/routes", "api_gcp_vpc_create_route", "(project: str, request: Request)"),
+        ("DELETE", "/compute/v1/projects/{project}/global/routes/{route}", "api_gcp_vpc_delete_route", "(project: str, route: str)"),
+        ("DELETE", "/api/gcp/vpc/routes/{route}", "api_gcp_vpc_delete_route", "(project: str, route: str)"),
         # IAM
         ("GET", "/v1/projects/{project}:getIamPolicy", "api_gcp_iam_get_policy", "(project: str)"),
         ("POST", "/v1/projects/{project}:getIamPolicy", "api_gcp_iam_get_policy", "(project: str)"),
@@ -463,6 +504,8 @@ def register(app, h) -> None:
         ("GET", "/api/gcp/iam/service-accounts", "api_gcp_iam_list_service_accounts", "(project: str)"),
         ("POST", "/v1/projects/{project}/serviceAccounts", "api_gcp_iam_create_service_account", "(project: str, request: Request)"),
         ("POST", "/api/gcp/iam/service-accounts", "api_gcp_iam_create_service_account", "(project: str, request: Request)"),
+        ("GET", "/v1/projects/{project}/serviceAccounts/{account}", "api_gcp_iam_get_service_account", "(project: str, account: str)"),
+        ("GET", "/api/gcp/iam/service-accounts/{account}", "api_gcp_iam_get_service_account", "(project: str, account: str)"),
         ("PATCH", "/v1/projects/{project}/serviceAccounts/{account}", "api_gcp_iam_patch_service_account", "(project: str, account: str, request: Request)"),
         ("PUT", "/v1/projects/{project}/serviceAccounts/{account}", "api_gcp_iam_patch_service_account", "(project: str, account: str, request: Request)"),
         ("PATCH", "/api/gcp/iam/service-accounts/{account}", "api_gcp_iam_patch_service_account", "(project: str, account: str, request: Request)"),

@@ -91,6 +91,8 @@ for _name in [
     "api_lambda_remove_permission", "api_lambda_list_invocations",
     "api_lambda_list_versions", "api_lambda_publish_version",
     "api_lambda_invoke_function",
+    "api_lambda_list_layers", "api_lambda_create_layer",
+    "api_lambda_get_layer", "api_lambda_delete_layer",
     "api_lambda_list_functions_aws", "api_lambda_create_function_aws",
     "api_lambda_get_function_aws", "api_lambda_delete_function_aws",
     "api_lambda_get_policy_aws", "api_lambda_add_permission_aws",
@@ -183,6 +185,14 @@ def sdk_go_snippet() -> dict:
     return sdk_snippet("aws", "go")
 
 
+def sdk_python_snippet() -> dict:
+    return sdk_snippet("aws", "python")
+
+
+def sdk_nodejs_snippet() -> dict:
+    return sdk_snippet("aws", "nodejs")
+
+
 def _server():
     import server as server_module
 
@@ -247,6 +257,14 @@ def register(app, h) -> None:
     def api_provider_aws_sdk_go():
         return tool_response("sdk/go")
 
+    @app.get("/api/providers/aws/sdk/python")
+    def api_provider_aws_sdk_python():
+        return tool_response("sdk/python")
+
+    @app.get("/api/providers/aws/sdk/nodejs")
+    def api_provider_aws_sdk_nodejs():
+        return tool_response("sdk/nodejs")
+
     @app.post("/api/providers/aws/cli/resolve")
     def api_provider_aws_cli_resolve(payload: dict[str, Any]):
         return cli_resolve(payload)
@@ -258,6 +276,14 @@ def register(app, h) -> None:
     @app.get("/api/providers/aws/sdk/go/snippet")
     def api_provider_aws_sdk_go_snippet():
         return sdk_go_snippet()
+
+    @app.get("/api/providers/aws/sdk/python/snippet")
+    def api_provider_aws_sdk_python_snippet():
+        return sdk_python_snippet()
+
+    @app.get("/api/providers/aws/sdk/nodejs/snippet")
+    def api_provider_aws_sdk_nodejs_snippet():
+        return sdk_nodejs_snippet()
 
     specs = [
         # IAM
@@ -395,6 +421,11 @@ def register(app, h) -> None:
         ("GET", "/api/lambda/functions/{function_name}/versions", "api_lambda_list_versions", "(function_name: str)"),
         ("POST", "/api/lambda/functions/{function_name}/versions", "api_lambda_publish_version", "(function_name: str, request: Request)", "model", "req", "LambdaVersionRequest"),
         ("POST", "/api/lambda/functions/{function_name}/invoke", "api_lambda_invoke_function", "(function_name: str, request: Request)", "model", "req", "LambdaInvokeRequest"),
+        # Lambda Layers
+        ("GET", "/api/lambda/layers", "api_lambda_list_layers", "()"),
+        ("POST", "/api/lambda/layers", "api_lambda_create_layer", "(request: Request)", "model", "req", "LambdaLayerRequest"),
+        ("GET", "/api/lambda/layers/{name}", "api_lambda_get_layer", "(name: str)"),
+        ("DELETE", "/api/lambda/layers/{name}", "api_lambda_delete_layer", "(name: str)"),
         ("GET", "/2015-03-31/functions", "api_lambda_list_functions_aws", "()"),
         ("POST", "/2015-03-31/functions", "api_lambda_create_function_aws", "(request: Request)", "model", "req", "LambdaFunctionRequest"),
         ("GET", "/2015-03-31/functions/{function_name}", "api_lambda_get_function_aws", "(function_name: str)"),

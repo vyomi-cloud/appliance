@@ -995,7 +995,7 @@ async def _ddb_api_aws(request: Request):
                     _ddb_put_item_record(table, {"item": op["PutRequest"].get("Item", {})})
                 elif "DeleteRequest" in op:
                     _ddb_delete_item_record(table, {"key": op["DeleteRequest"].get("Key", {})})
-        return _ddb_json_response({})
+        return _ddb_json_response({"UnprocessedItems": {}})
     if action == "TagResource":
         table = _ddb_find_table(table_name_from_payload())
         if not table:
@@ -1020,6 +1020,89 @@ async def _ddb_api_aws(request: Request):
         if not table:
             return _ddb_error_response("ResourceNotFoundException", "Table not found.", 404)
         return _ddb_json_response({"Tags": [{"Key": k, "Value": v} for k, v in _ddb_tags_view(table).items()]})
+    if action == "DescribeStream":
+        stream_arn = payload.get("StreamArn", "")
+        # Find table by stream ARN
+        target_table = None
+        for tname, tbl in _ddb_tables().items():
+            tbl = _ddb_find_table(tname)
+            if tbl and tbl.get("streams", {}).get("stream_arn") == stream_arn:
+                target_table = tbl
+                break
+        if not target_table:
+            return _ddb_error_response("ResourceNotFoundException", "Stream not found.", 404)
+        streams = target_table.get("streams", {})
+        stream_desc = {
+            "StreamArn": streams.get("stream_arn", ""),
+            "StreamLabel": streams.get("latest_stream_label", ""),
+            "StreamStatus": "ENABLED" if streams.get("enabled") else "DISABLED",
+            "StreamViewType": streams.get("stream_view_type", "NEW_AND_OLD_IMAGES"),
+            "TableName": target_table.get("table_name", ""),
+            "KeySchema": target_table.get("key_schema", []),
+            "Shards": [
+                {
+                    "ShardId": "shardId-00000001",
+                    "SequenceNumberRange": {
+                        "StartingSequenceNumber": "000000000000000000001",
+                    },
+                }
+            ],
+        }
+        return _ddb_json_response({"StreamDescription": stream_desc})
+
+    if action == "GetShardIterator":
+        stream_arn = payload.get("StreamArn", "")
+        shard_id = payload.get("ShardId", "")
+        iterator_type = payload.get("ShardIteratorType", "TRIM_HORIZON")
+        # Encode the stream ARN and position into the iterator
+        import base64
+        iterator_data = json.dumps({"stream_arn": stream_arn, "shard_id": shard_id, "type": iterator_type, "position": 0})
+        shard_iterator = base64.b64encode(iterator_data.encode()).decode()
+        return _ddb_json_response({"ShardIterator": shard_iterator})
+
+    if action == "GetRecords":
+        shard_iterator = payload.get("ShardIterator", "")
+        limit = min(int(payload.get("Limit", 1000)), 1000)
+        import base64
+        try:
+            iterator_data = json.loads(base64.b64decode(shard_iterator).decode())
+        except Exception:
+            return _ddb_error_response("TrimmedDataAccessException", "Invalid shard iterator.", 400)
+        stream_arn = iterator_data.get("stream_arn", "")
+        position = int(iterator_data.get("position", 0))
+        # Find table
+        target_table = None
+        for tname, tbl in _ddb_tables().items():
+            tbl = _ddb_find_table(tname)
+            if tbl and tbl.get("streams", {}).get("stream_arn") == stream_arn:
+                target_table = tbl
+                break
+        if not target_table:
+            return _ddb_json_response({"Records": [], "NextShardIterator": None})
+        all_records = target_table.get("stream_records", [])
+        page = all_records[position:position + limit]
+        next_position = position + len(page)
+        next_iterator = None
+        if next_position < len(all_records):
+            next_data = json.dumps({"stream_arn": stream_arn, "shard_id": iterator_data.get("shard_id", ""), "type": "AT_SEQUENCE_NUMBER", "position": next_position})
+            next_iterator = base64.b64encode(next_data.encode()).decode()
+        return _ddb_json_response({"Records": page, "NextShardIterator": next_iterator})
+
+    if action == "ListStreams":
+        table_name = payload.get("TableName", "")
+        streams_list = []
+        for tname, tbl in _ddb_tables().items():
+            if table_name and tname != table_name:
+                continue
+            tbl = _ddb_find_table(tname)
+            if tbl and tbl.get("streams", {}).get("enabled"):
+                streams_list.append({
+                    "StreamArn": tbl["streams"].get("stream_arn", ""),
+                    "StreamLabel": tbl["streams"].get("latest_stream_label", ""),
+                    "TableName": tname,
+                })
+        return _ddb_json_response({"Streams": streams_list})
+
     return _ddb_error_response("UnknownOperationException", f"The action {action} is not implemented.", 400)
 
 
@@ -1541,6 +1624,7 @@ def _lambda_run_handler(function: dict, event_payload: Any) -> dict:
         timeout=max(int(function.get("timeout", 3) or 3), 1) + 1,
         env={
             **os.environ,
+            **(function.get("environment") or {}),
             "PYTHONPATH": str(workdir) + (os.pathsep + os.environ.get("PYTHONPATH", "") if os.environ.get("PYTHONPATH") else ""),
         },
     )

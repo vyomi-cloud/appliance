@@ -88,6 +88,24 @@ _DEFAULT_RUNTIME_BUNDLES: dict[str, dict] = {
     "gcp_functions": {"id": "cloudlearn.runtime.gcp.functions", "name": "Cloud Functions Runtime Bundle", "kind": "function", "provider": "gcp",    "service": "functions", "installed": True, "active": False},
     "rds":           {"id": "cloudlearn.runtime.rds",          "name": "RDS Runtime Bundle",              "kind": "database", "provider": "aws",    "service": "rds",       "installed": True, "active": False},
     "gcp_sql":       {"id": "cloudlearn.runtime.gcp.sql",      "name": "Cloud SQL Runtime Bundle",        "kind": "database", "provider": "gcp",    "service": "sql",       "installed": True, "active": False},
+    # AWS — additional services
+    "s3":              {"id": "cloudlearn.runtime.s3",              "name": "S3 Runtime Bundle",               "kind": "storage",   "provider": "aws",    "service": "s3",           "installed": True, "active": False},
+    "sqs":             {"id": "cloudlearn.runtime.sqs",             "name": "SQS Runtime Bundle",              "kind": "queue",     "provider": "aws",    "service": "sqs",          "installed": True, "active": False},
+    "dynamodb":        {"id": "cloudlearn.runtime.dynamodb",        "name": "DynamoDB Runtime Bundle",         "kind": "nosql",     "provider": "aws",    "service": "dynamodb",     "installed": True, "active": False},
+    "apigateway":      {"id": "cloudlearn.runtime.apigateway",      "name": "API Gateway Runtime Bundle",      "kind": "api_gw",    "provider": "aws",    "service": "apigateway",   "installed": True, "active": False},
+    # GCP — additional services
+    "gcp_storage":     {"id": "cloudlearn.runtime.gcp.storage",     "name": "Cloud Storage Runtime Bundle",    "kind": "storage",   "provider": "gcp",    "service": "storage",      "installed": True, "active": False},
+    "gcp_pubsub":      {"id": "cloudlearn.runtime.gcp.pubsub",      "name": "Pub/Sub Runtime Bundle",          "kind": "queue",     "provider": "gcp",    "service": "pubsub",       "installed": True, "active": False},
+    "gcp_firestore":   {"id": "cloudlearn.runtime.gcp.firestore",   "name": "Firestore Runtime Bundle",        "kind": "nosql",     "provider": "gcp",    "service": "firestore",    "installed": True, "active": False},
+    "gcp_apigateway":  {"id": "cloudlearn.runtime.gcp.apigateway",  "name": "GCP API Gateway Runtime Bundle",  "kind": "api_gw",    "provider": "gcp",    "service": "apigateway",   "installed": True, "active": False},
+    # Azure — all services (only azure_vm existed before)
+    "azure_sql":       {"id": "cloudlearn.runtime.azure.sql",       "name": "Azure SQL Runtime Bundle",        "kind": "database",  "provider": "azure",  "service": "sql",          "installed": True, "active": False},
+    "azure_storage":   {"id": "cloudlearn.runtime.azure.storage",   "name": "Azure Storage Runtime Bundle",    "kind": "storage",   "provider": "azure",  "service": "storage",      "installed": True, "active": False},
+    "azure_functions": {"id": "cloudlearn.runtime.azure.functions",  "name": "Azure Functions Runtime Bundle",  "kind": "function",  "provider": "azure",  "service": "functionapp",  "installed": True, "active": False},
+    "azure_servicebus":{"id": "cloudlearn.runtime.azure.servicebus","name": "Service Bus Runtime Bundle",      "kind": "queue",     "provider": "azure",  "service": "servicebus",   "installed": True, "active": False},
+    "azure_cosmos":    {"id": "cloudlearn.runtime.azure.cosmos",     "name": "Cosmos DB Runtime Bundle",        "kind": "nosql",     "provider": "azure",  "service": "cosmos",       "installed": True, "active": False},
+    "azure_apim":      {"id": "cloudlearn.runtime.azure.apim",      "name": "API Management Runtime Bundle",   "kind": "api_gw",    "provider": "azure",  "service": "apim",         "installed": True, "active": False},
+    "azure_eventgrid": {"id": "cloudlearn.runtime.azure.eventgrid", "name": "Event Grid Runtime Bundle",       "kind": "eventing",  "provider": "azure",  "service": "eventgrid",    "installed": True, "active": False},
 }
 
 

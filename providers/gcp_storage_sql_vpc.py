@@ -169,6 +169,14 @@ def api_gcp_storage_delete_object(bucket: str, object_name: str):
     return {"kind": "storage#empty", "deleted": True, "bucket": bucket, "object": object_name}
 
 
+async def api_gcp_storage_patch_object(bucket: str, object_name: str, request: Request):
+    return await _server().api_gcp_storage_patch_object(bucket, object_name, request)
+
+
+async def api_gcp_storage_compose_object(bucket: str, destination: str, request: Request):
+    return await _server().api_gcp_storage_compose_object(bucket, destination, request)
+
+
 def api_gcp_storage_list_folders(bucket: str):
     return _server().api_gcp_storage_list_folders(bucket)
 
@@ -581,3 +589,15 @@ async def api_gcp_vpc_create_firewall(project: str, request: Request):
         "logConfig": rec["logConfig"],
         "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/firewalls/{name}",
     }
+
+
+def api_gcp_vpc_list_routes(project: str):
+    return _server().api_gcp_vpc_list_routes(project)
+
+
+async def api_gcp_vpc_create_route(project: str, request: Request):
+    return await _server().api_gcp_vpc_create_route(project, request)
+
+
+def api_gcp_vpc_delete_route(project: str, route: str):
+    return _server().api_gcp_vpc_delete_route(project, route)

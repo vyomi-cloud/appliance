@@ -25,9 +25,46 @@ from fastapi.responses import JSONResponse
 from . import nats_client as nc
 
 
+# Module-level Eventarc trigger store: (project, location, name) -> trigger dict
+_eventarc_triggers: dict[tuple, dict] = {}
+
+# Module-level EventBridge rule store: rule_name -> rule dict
+_eventbridge_rules: dict[str, dict] = {}
+# Module-level EventBridge rule targets: rule_name -> [target dicts]
+_eventbridge_targets: dict[str, list] = {}
+
+
 # ============================================================================
 # AWS EventBridge — JSON-RPC at "/" dispatched by X-Amz-Target
 # ============================================================================
+def _eventbridge_match_event(rule: dict, event: dict) -> bool:
+    """Check if an event matches a rule's EventPattern (simple field matching)."""
+    pattern = rule.get("EventPattern")
+    if not pattern:
+        return False
+    if isinstance(pattern, str):
+        try:
+            pattern = json.loads(pattern)
+        except Exception:
+            return False
+    if not isinstance(pattern, dict):
+        return False
+    for field, expected_values in pattern.items():
+        if not isinstance(expected_values, list):
+            expected_values = [expected_values]
+        event_value = event.get(field) or event.get(field.replace("-", "_"))
+        if event_value is None:
+            # Try detail sub-fields for nested patterns
+            detail = event.get("detail", {})
+            if isinstance(detail, dict):
+                event_value = detail.get(field)
+        if event_value is None:
+            return False
+        if event_value not in expected_values:
+            return False
+    return True
+
+
 async def _aws_eventbridge_dispatch(target: str, body: dict, space: str) -> dict | None:
     """Return response dict for an EventBridge X-Amz-Target, or None if unhandled."""
     op = target.split(".", 1)[-1]  # "AWSEvents.PutEvents" → "PutEvents"
@@ -51,21 +88,92 @@ async def _aws_eventbridge_dispatch(target: str, body: dict, space: str) -> dict
                 "detail": _maybe_parse_json(entry.get("Detail", "{}")),
             }
             nc.publish(subject, payload)
+            # Basic pattern matching: check all rules for matches
+            for rule_name, rule in _eventbridge_rules.items():
+                if rule.get("State") != "ENABLED":
+                    continue
+                rule_bus = rule.get("EventBusName", "default")
+                if rule_bus != bus:
+                    continue
+                if _eventbridge_match_event(rule, payload):
+                    targets = _eventbridge_targets.get(rule_name, [])
+                    for tgt in targets:
+                        tgt_subject = f"aws.eventbridge.rule.{rule_name}.{tgt.get('Id', 'default')}"
+                        nc.publish(tgt_subject, payload)
             results.append({"EventId": payload["id"]})
         return {"Entries": results, "FailedEntryCount": 0}
     if op == "ListEventBuses":
-        # Read-only metadata. Return the well-known 'default' bus; real
-        # EventBridge always includes it. (Simulator doesn't track custom
-        # buses today — events publish freely to any subject.)
         return {"EventBuses": [{
             "Name": "default",
             "Arn": "arn:aws:events:us-east-1:000000000000:event-bus/default",
             "Description": "Default event bus (simulator-synthesized)",
         }]}
+    if op == "PutRule":
+        rule_name = body.get("Name", "")
+        if not rule_name:
+            return {"__type": "ValidationException", "message": "Name is required."}
+        rule = {
+            "Name": rule_name,
+            "Arn": f"arn:aws:events:us-east-1:000000000000:rule/{rule_name}",
+            "State": body.get("State", "ENABLED"),
+            "EventBusName": body.get("EventBusName", "default"),
+            "EventPattern": body.get("EventPattern"),
+            "ScheduleExpression": body.get("ScheduleExpression", ""),
+            "Description": body.get("Description", ""),
+            "CreatedBy": "000000000000",
+        }
+        _eventbridge_rules[rule_name] = rule
+        return {"RuleArn": rule["Arn"]}
+    if op == "DeleteRule":
+        rule_name = body.get("Name", "")
+        removed = _eventbridge_rules.pop(rule_name, None)
+        _eventbridge_targets.pop(rule_name, None)
+        if not removed:
+            return {"__type": "ResourceNotFoundException", "message": f"Rule {rule_name} does not exist."}
+        return {}
     if op == "ListRules":
-        # Empty rule list — real PutRule isn't wired (PutEvents publishes
-        # directly to NATS subjects without going through rule matching).
-        return {"Rules": []}
+        bus = body.get("EventBusName", "default")
+        prefix = body.get("NamePrefix", "")
+        rules = []
+        for name, rule in _eventbridge_rules.items():
+            if rule.get("EventBusName", "default") != bus:
+                continue
+            if prefix and not name.startswith(prefix):
+                continue
+            rules.append(rule)
+        return {"Rules": rules}
+    if op == "DescribeRule":
+        rule_name = body.get("Name", "")
+        rule = _eventbridge_rules.get(rule_name)
+        if not rule:
+            return {"__type": "ResourceNotFoundException", "message": f"Rule {rule_name} does not exist."}
+        return rule
+    if op == "PutTargets":
+        rule_name = body.get("Rule", "")
+        if rule_name not in _eventbridge_rules:
+            return {"__type": "ResourceNotFoundException", "message": f"Rule {rule_name} does not exist."}
+        new_targets = body.get("Targets", [])
+        existing = _eventbridge_targets.setdefault(rule_name, [])
+        existing_ids = {t.get("Id") for t in existing}
+        for tgt in new_targets:
+            if tgt.get("Id") in existing_ids:
+                existing[:] = [t if t.get("Id") != tgt.get("Id") else tgt for t in existing]
+            else:
+                existing.append(tgt)
+        return {"FailedEntryCount": 0, "FailedEntries": []}
+    if op == "ListTargetsByRule":
+        rule_name = body.get("Rule", "")
+        if rule_name not in _eventbridge_rules:
+            return {"__type": "ResourceNotFoundException", "message": f"Rule {rule_name} does not exist."}
+        return {"Targets": _eventbridge_targets.get(rule_name, [])}
+    if op == "RemoveTargets":
+        rule_name = body.get("Rule", "")
+        if rule_name not in _eventbridge_rules:
+            return {"__type": "ResourceNotFoundException", "message": f"Rule {rule_name} does not exist."}
+        ids_to_remove = set(body.get("Ids", []))
+        existing = _eventbridge_targets.get(rule_name, [])
+        _eventbridge_targets[rule_name] = [t for t in existing if t.get("Id") not in ids_to_remove]
+        return {"FailedEntryCount": 0, "FailedEntries": []}
     return None
 
 
@@ -101,6 +209,52 @@ def _register_gcp(app: FastAPI) -> None:
                 published += 1
         return {"published": published, "count": len(events)}
 
+    # ── Eventarc Trigger CRUD ──────────────────────────────────────────
+    # Stored in a module-level dict keyed by (project, location, trigger_name).
+    # These complement the generic gcp_rail_extras CRUD with first-class
+    # routes that wire NATS publish + Cloud Function invocation on fire.
+
+    @app.get("/v1/projects/{project}/locations/{loc}/triggers")
+    async def gcp_eventarc_list_triggers(project: str, loc: str):
+        triggers = []
+        for (p, l, n), t in _eventarc_triggers.items():
+            if p == project and l == loc:
+                triggers.append(t)
+        return {"triggers": triggers}
+
+    @app.post("/v1/projects/{project}/locations/{loc}/triggers")
+    async def gcp_eventarc_create_trigger(project: str, loc: str, request: Request):
+        body = await request.json()
+        name = body.get("name") or body.get("triggerId") or f"trigger-{uuid.uuid4().hex[:8]}"
+        trigger = {
+            "name": f"projects/{project}/locations/{loc}/triggers/{name}",
+            "uid": uuid.uuid4().hex,
+            "createTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "updateTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "eventFilters": body.get("eventFilters", []),
+            "destination": body.get("destination", {}),
+            "transport": body.get("transport", {}),
+            "state": "ACTIVE",
+        }
+        _eventarc_triggers[(project, loc, name)] = trigger
+        return trigger
+
+    @app.get("/v1/projects/{project}/locations/{loc}/triggers/{trigger}")
+    async def gcp_eventarc_get_trigger(project: str, loc: str, trigger: str):
+        t = _eventarc_triggers.get((project, loc, trigger))
+        if not t:
+            return JSONResponse(status_code=404, content={
+                "error": {"code": 404, "message": f"Trigger '{trigger}' not found", "status": "NOT_FOUND"}})
+        return t
+
+    @app.delete("/v1/projects/{project}/locations/{loc}/triggers/{trigger}")
+    async def gcp_eventarc_delete_trigger(project: str, loc: str, trigger: str):
+        removed = _eventarc_triggers.pop((project, loc, trigger), None)
+        if not removed:
+            return JSONResponse(status_code=404, content={
+                "error": {"code": 404, "message": f"Trigger '{trigger}' not found", "status": "NOT_FOUND"}})
+        return {}
+
     # Convenience: trigger fire (simulator-only — real Eventarc routes via
     # internal mechanisms; the SDK never calls this directly, but ``gcloud
     # eventarc triggers fire-event`` and demo scripts use it).
@@ -115,7 +269,84 @@ def _register_gcp(app: FastAPI) -> None:
             "data": body,
         }
         ok = nc.publish(subject, payload)
-        return {"id": payload["id"], "delivered": ok}
+
+        # If the trigger has a Cloud Function destination, invoke it.
+        invoked_function = None
+        trigger_rec = _eventarc_triggers.get((project, loc, trigger))
+        if trigger_rec:
+            dest = trigger_rec.get("destination") or {}
+            cf_name = dest.get("cloudFunction") or dest.get("cloud_function") or ""
+            if cf_name:
+                try:
+                    from core import gcp_function_runtime
+                    result = gcp_function_runtime.execute(
+                        "", "main", "python", payload, timeout=30)
+                    invoked_function = cf_name
+                except Exception:
+                    pass
+
+        return {"id": payload["id"], "delivered": ok, "invoked_function": invoked_function}
+
+
+# ============================================================================
+# AWS EventBridge — REST endpoints for rule management
+# ============================================================================
+def _register_eventbridge_rest(app: FastAPI) -> None:
+    @app.put("/api/eventbridge/rules/{rule_name}")
+    async def eventbridge_put_rule(rule_name: str, request: Request):
+        body = await request.json()
+        rule = {
+            "Name": rule_name,
+            "Arn": f"arn:aws:events:us-east-1:000000000000:rule/{rule_name}",
+            "State": body.get("State", "ENABLED"),
+            "EventBusName": body.get("EventBusName", "default"),
+            "EventPattern": body.get("EventPattern"),
+            "ScheduleExpression": body.get("ScheduleExpression", ""),
+            "Description": body.get("Description", ""),
+            "CreatedBy": "000000000000",
+        }
+        _eventbridge_rules[rule_name] = rule
+        return rule
+
+    @app.get("/api/eventbridge/rules")
+    async def eventbridge_list_rules():
+        return {"Rules": list(_eventbridge_rules.values())}
+
+    @app.get("/api/eventbridge/rules/{rule_name}")
+    async def eventbridge_get_rule(rule_name: str):
+        rule = _eventbridge_rules.get(rule_name)
+        if not rule:
+            return JSONResponse(status_code=404, content={"error": f"Rule {rule_name} not found"})
+        return rule
+
+    @app.delete("/api/eventbridge/rules/{rule_name}")
+    async def eventbridge_delete_rule(rule_name: str):
+        removed = _eventbridge_rules.pop(rule_name, None)
+        _eventbridge_targets.pop(rule_name, None)
+        if not removed:
+            return JSONResponse(status_code=404, content={"error": f"Rule {rule_name} not found"})
+        return {"deleted": True, "rule_name": rule_name}
+
+    @app.put("/api/eventbridge/rules/{rule_name}/targets")
+    async def eventbridge_put_targets(rule_name: str, request: Request):
+        if rule_name not in _eventbridge_rules:
+            return JSONResponse(status_code=404, content={"error": f"Rule {rule_name} not found"})
+        body = await request.json()
+        new_targets = body.get("Targets", [])
+        existing = _eventbridge_targets.setdefault(rule_name, [])
+        existing_ids = {t.get("Id") for t in existing}
+        for tgt in new_targets:
+            if tgt.get("Id") in existing_ids:
+                existing[:] = [t if t.get("Id") != tgt.get("Id") else tgt for t in existing]
+            else:
+                existing.append(tgt)
+        return {"FailedEntryCount": 0, "FailedEntries": []}
+
+    @app.get("/api/eventbridge/rules/{rule_name}/targets")
+    async def eventbridge_list_targets(rule_name: str):
+        if rule_name not in _eventbridge_rules:
+            return JSONResponse(status_code=404, content={"error": f"Rule {rule_name} not found"})
+        return {"Targets": _eventbridge_targets.get(rule_name, [])}
 
 
 # ============================================================================
@@ -166,6 +397,7 @@ def _register_inbox(app: FastAPI) -> None:
 # Public
 # ============================================================================
 def register(app: FastAPI, aws_dispatchers: dict | None = None) -> None:
+    _register_eventbridge_rest(app)
     _register_gcp(app)
     _register_azure(app)
     _register_inbox(app)

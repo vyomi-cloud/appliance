@@ -208,6 +208,22 @@ def on_create(full_type: str, rec: dict, base: str) -> None:
             _srv._cloudsim_sync_azure_vm_resource(rec, "upsert")
         except Exception:
             pass
+        # After VM provisioning, reconcile NSG rules so new VMs pick up any
+        # existing security rules (parity with GCP VPC reconcile-on-create).
+        try:
+            from routes.azure_console import _azure_nsg_reconcile
+            _azure_nsg_reconcile()
+        except Exception:
+            pass
+        return
+    # When an NSG or security rule is created/updated, reconcile all VMs.
+    if ft in ("microsoft.network/networksecuritygroups",
+              "microsoft.network/networksecuritygroups/securityrules"):
+        try:
+            from routes.azure_console import _azure_nsg_reconcile
+            _azure_nsg_reconcile()
+        except Exception:
+            pass
         return
     if ft == "microsoft.sql/servers/databases":
         try:
@@ -379,6 +395,232 @@ async def _json(request: Request) -> dict:
 
 
 # ----------------------------------------------------------------------------
+# Function Apps (serverless execution via gcp_function_runtime)
+# ----------------------------------------------------------------------------
+async def _function_app_handle(app_name: str, function_name: str, request: Request) -> Response:
+    """Invoke an Azure Function App by executing its deployed code."""
+    sid = _sid()
+    # Look up the Function App ARM resource from the active space.
+    try:
+        import server
+        spaces_state = server._spaces_state()
+        active_id = spaces_state.get("active_space_id", "")
+        space = (spaces_state.get("spaces") or {}).get(active_id) or {}
+        svc = space.get("service_states") or {}
+        azure_resources = (svc.get("azure_arm") or {}).get("resources") or {}
+    except Exception:
+        return JSONResponse(status_code=500, content={"error": "Unable to access space state"})
+
+    # Find the function app resource by name (type microsoft.web/sites, kind functionapp)
+    func_rec = None
+    for rec in azure_resources.values():
+        if not isinstance(rec, dict):
+            continue
+        if str(rec.get("_type", "")).lower() == "microsoft.web/sites" and rec.get("name", "").lower() == app_name.lower():
+            func_rec = rec
+            break
+
+    if not func_rec:
+        return JSONResponse(status_code=404, content={"error": f"Function App '{app_name}' not found"})
+
+    props = func_rec.get("properties") or {}
+    code = props.get("code") or props.get("sourceCode") or ""
+    entry = props.get("entryPoint") or "main"
+    runtime = props.get("runtime") or "python"
+    timeout = int(props.get("timeout") or 30)
+
+    # Parse request payload
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    # Record usage event
+    try:
+        from core.app_context import record_usage
+        record_usage("azure.functionapp.invoke", {"app": app_name, "function": function_name})
+    except Exception:
+        pass
+
+    # Execute the function code
+    if not code.strip():
+        return JSONResponse(content={
+            "invocationId": uuid.uuid4().hex,
+            "result": {"message": f"Hello from {app_name}/{function_name}", "input": payload},
+            "status": "FALLBACK",
+        })
+
+    try:
+        from core import gcp_function_runtime
+        out = gcp_function_runtime.execute(code, entry, runtime, payload, timeout=timeout)
+        if out.get("status") == "SUCCESS":
+            return JSONResponse(content={
+                "invocationId": uuid.uuid4().hex,
+                "result": out.get("result"),
+                "logs": out.get("logs", ""),
+                "status": "SUCCESS",
+            })
+        return JSONResponse(status_code=500, content={
+            "invocationId": uuid.uuid4().hex,
+            "error": out.get("error"),
+            "logs": out.get("logs", ""),
+            "status": "ERROR",
+        })
+    except Exception as exc:
+        # Fallback to canned response if runtime unavailable
+        return JSONResponse(content={
+            "invocationId": uuid.uuid4().hex,
+            "result": {"message": f"Hello from {app_name}/{function_name}", "input": payload},
+            "status": "FALLBACK",
+            "note": str(exc)[:200],
+        })
+
+
+# ----------------------------------------------------------------------------
+# APIM gateway (data plane)
+# ----------------------------------------------------------------------------
+# Per-space rate-limit buckets for APIM subscription keys: (sid, svc, key) -> (tokens, ts)
+_apim_rate: dict[tuple, tuple[float, float]] = {}
+_APIM_RATE_RPS = 10  # default requests/sec per subscription key
+
+
+async def _apim_handle(service_name: str, rest: str, request: Request) -> Response:
+    """Data-plane proxy for Azure API Management.
+
+    Looks up the APIM ARM resource, finds a matching child API, applies basic
+    policies (subscription-key check, rate limiting), then returns the backend
+    response or a mock.
+    """
+    sid = _sid()
+    method = request.method.upper()
+
+    # ── locate the APIM ARM resource ──
+    try:
+        import server
+        spaces_state = server._spaces_state()
+        active_id = spaces_state.get("active_space_id", "")
+        space = (spaces_state.get("spaces") or {}).get(active_id) or {}
+        svc = space.get("service_states") or {}
+        azure_resources = (svc.get("azure_arm") or {}).get("resources") or {}
+    except Exception:
+        return JSONResponse(status_code=500, content={"error": {"code": "InternalError", "message": "Unable to access space state"}})
+
+    # Find the APIM service resource by name
+    apim_rec = None
+    for rec in azure_resources.values():
+        if not isinstance(rec, dict):
+            continue
+        if (str(rec.get("_type", "")).lower() == "microsoft.apimanagement/service"
+                and rec.get("name", "").lower() == service_name.lower()):
+            apim_rec = rec
+            break
+
+    if not apim_rec:
+        return JSONResponse(status_code=404, content={"error": {"code": "ServiceNotFound",
+                            "message": f"APIM service '{service_name}' not found"}})
+
+    # ── subscription-key policy ──
+    sub_key = request.headers.get("ocp-apim-subscription-key") or request.query_params.get("subscription-key") or ""
+    if not sub_key:
+        return JSONResponse(status_code=401, content={
+            "statusCode": 401,
+            "message": "Access denied due to missing subscription key. "
+                       "Include 'Ocp-Apim-Subscription-Key' header."})
+
+    # ── simple per-key rate limiting ──
+    import threading
+    now = time.time()
+    rk = (sid, service_name, sub_key)
+    burst = float(_APIM_RATE_RPS) * 4.0
+    tokens, last = _apim_rate.get(rk, (burst, now))
+    elapsed = now - last
+    tokens = min(burst, tokens + elapsed * _APIM_RATE_RPS)
+    if tokens < 1.0:
+        return JSONResponse(status_code=429, content={
+            "statusCode": 429, "message": "Rate limit exceeded. Try again later."})
+    tokens -= 1.0
+    _apim_rate[rk] = (tokens, now)
+
+    # ── find matching child API ──
+    rest = rest or ""
+    api_path_segment = rest.split("/")[0] if rest else ""
+    matched_api = None
+    for rkey, rec in azure_resources.items():
+        if not isinstance(rec, dict):
+            continue
+        rec_type = str(rec.get("_type", "")).lower()
+        if rec_type == "microsoft.apimanagement/service/apis":
+            # Match if the API name or path matches the first segment
+            api_name = rec.get("name", "")
+            api_props = rec.get("properties") or {}
+            api_path = api_props.get("path", "").strip("/")
+            if (api_name.lower() == api_path_segment.lower()
+                    or api_path.lower() == api_path_segment.lower()):
+                matched_api = rec
+                break
+
+    # ── route to backend or return mock ──
+    if matched_api:
+        api_props = matched_api.get("properties") or {}
+        backend_url = api_props.get("serviceUrl") or api_props.get("backendUrl") or ""
+        mock_response = api_props.get("mockResponse") or api_props.get("mock_response")
+
+        if mock_response:
+            # Record usage
+            try:
+                from core.app_context import record_usage
+                record_usage("azure.apim.invoke", {"service": service_name, "api": matched_api.get("name", ""), "mode": "mock"})
+            except Exception:
+                pass
+            if isinstance(mock_response, dict):
+                return JSONResponse(content=mock_response)
+            return JSONResponse(content={"value": mock_response})
+
+        if backend_url:
+            # Record usage
+            try:
+                from core.app_context import record_usage
+                record_usage("azure.apim.invoke", {"service": service_name, "api": matched_api.get("name", ""), "mode": "proxy"})
+            except Exception:
+                pass
+            # Strip the matched API segment from the rest path for proxying
+            sub_path = "/".join(rest.split("/")[1:]) if "/" in rest else ""
+            target = f"{backend_url.rstrip('/')}/{sub_path}" if sub_path else backend_url
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=30) as client:
+                    body = await request.body()
+                    resp = await client.request(
+                        method, target,
+                        content=body if body else None,
+                        headers={k: v for k, v in request.headers.items()
+                                 if k.lower() not in ("host", "content-length", "ocp-apim-subscription-key")},
+                    )
+                    return Response(content=resp.content, status_code=resp.status_code,
+                                    media_type=resp.headers.get("content-type", "application/json"))
+            except Exception as exc:
+                return JSONResponse(status_code=502, content={
+                    "statusCode": 502,
+                    "message": f"Backend unavailable: {exc!s}"[:300]})
+
+    # No matching API found — return a generic mock
+    try:
+        from core.app_context import record_usage
+        record_usage("azure.apim.invoke", {"service": service_name, "path": rest, "mode": "default-mock"})
+    except Exception:
+        pass
+    return JSONResponse(content={
+        "statusCode": 200,
+        "message": "OK",
+        "service": service_name,
+        "path": rest,
+        "method": method,
+        "mock": True,
+    })
+
+
+# ----------------------------------------------------------------------------
 # routes
 # ----------------------------------------------------------------------------
 def register(app) -> None:
@@ -398,3 +640,14 @@ def register(app) -> None:
                    methods=["GET", "PUT", "POST", "DELETE"], include_in_schema=False)
     async def cosmos_dispatch(account: str, rest: str, request: Request):
         return await _cosmos_handle(account, rest, request)
+
+    @app.post("/azure-data/functions/{app_name}/{function_name}", include_in_schema=False)
+    async def function_app_invoke(app_name: str, function_name: str, request: Request):
+        return await _function_app_handle(app_name, function_name, request)
+
+    APIM_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+
+    @app.api_route("/azure-data/apim/{service_name}", methods=APIM_METHODS, include_in_schema=False)
+    @app.api_route("/azure-data/apim/{service_name}/{rest:path}", methods=APIM_METHODS, include_in_schema=False)
+    async def apim_dispatch(service_name: str, request: Request, rest: str = ""):
+        return await _apim_handle(service_name, rest, request)

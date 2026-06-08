@@ -24,6 +24,7 @@ from core.app_context import (
     STATE,
     active_tenant_id as _active_tenant_id,
     active_tier as _active_tier,
+    azure_state_dict as _azure_state_dict,
     gcp_active_space_dict as _gcp_active_space_dict,
     gcp_iam_state,
     is_azure_native_path as _is_azure_native_path,
@@ -110,6 +111,151 @@ def _gcp_iam_enforcement_response(request, path: str):
         return JSONResponse(status_code=403, content={"error": {
             "code": 403, "status": "PERMISSION_DENIED",
             "message": f"Permission '{required}' denied for principal '{principal}'.",
+        }})
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Azure RBAC enforcement helper
+# ---------------------------------------------------------------------------
+
+def _azure_namespace_from_path(path: str) -> str:
+    """Extract the Azure resource namespace (e.g. 'Microsoft.Compute') from an
+    ARM-style request path like /subscriptions/.../providers/Microsoft.Compute/..."""
+    lower = path.lower()
+    idx = lower.find("/providers/")
+    if idx == -1:
+        return ""
+    after = path[idx + len("/providers/"):]
+    parts = after.split("/")
+    return parts[0] if parts else ""
+
+
+def _azure_action_matches(pattern: str, namespace: str, method: str) -> bool:
+    """Check if an action pattern (e.g. 'Microsoft.Compute/*', '*', '*/read')
+    matches the given namespace + HTTP method."""
+    # Map HTTP method to Azure action suffix
+    method_upper = method.upper()
+    action_suffix_map = {
+        "GET": "read",
+        "PUT": "write",
+        "PATCH": "write",
+        "POST": "action",
+        "DELETE": "delete",
+    }
+    action_suffix = action_suffix_map.get(method_upper, "read")
+
+    # Wildcard matches everything
+    if pattern == "*":
+        return True
+
+    # e.g. "*/read" matches any namespace for read operations
+    if "/" in pattern:
+        parts = pattern.split("/", 1)
+        pat_ns = parts[0]
+        pat_action = parts[1] if len(parts) > 1 else "*"
+        # Check namespace match
+        ns_match = (pat_ns == "*" or pat_ns.lower() == namespace.lower())
+        # Check action match
+        action_match = (pat_action == "*" or pat_action.lower() == action_suffix)
+        return ns_match and action_match
+
+    # Bare namespace without slash (unlikely but handle gracefully)
+    return pattern.lower() == namespace.lower()
+
+
+def _azure_rbac_enforcement_response(request, path: str):
+    """Return a 403 JSONResponse if Azure RBAC enforcement is enabled for the
+    active space and the caller's role assignments don't grant access; else None.
+    Fails open so enforcement bugs never block the control plane."""
+    try:
+        space = _gcp_active_space_dict()
+        if not (isinstance(space, dict) and space.get("enforce_rbac")):
+            return None
+
+        # Extract the namespace from the ARM path
+        namespace = _azure_namespace_from_path(path)
+        if not namespace:
+            return None
+
+        principal = request.headers.get("x-cloudlearn-principal") or str(space.get("active_principal") or "root")
+
+        # Root/owner bypass
+        if principal == "root":
+            return None
+
+        # Get the ARM resources for this space
+        arm_resources = _azure_state_dict()
+
+        # Find role assignments for this principal
+        role_assignments = []
+        for key, rec in arm_resources.items():
+            rec_type = (rec.get("_type") or rec.get("type") or "").lower()
+            if rec_type != "microsoft.authorization/roleassignments":
+                continue
+            props = rec.get("properties", {})
+            if str(props.get("principalId", "")).lower() == principal.lower():
+                role_assignments.append(rec)
+
+        if not role_assignments:
+            return JSONResponse(status_code=403, content={"error": {
+                "code": "AuthorizationFailed",
+                "message": f"Principal '{principal}' does not have any role assignments. Access is denied.",
+            }})
+
+        # For each assignment, look up the role definition and check permissions
+        method = request.method
+        for assignment in role_assignments:
+            props = assignment.get("properties", {})
+            role_def_id = str(props.get("roleDefinitionId", ""))
+
+            # Find the role definition: check by id suffix or name
+            role_def = None
+            for rkey, rrec in arm_resources.items():
+                rrec_type = (rrec.get("_type") or rrec.get("type") or "").lower()
+                if rrec_type != "microsoft.authorization/roledefinitions":
+                    continue
+                rd_props = rrec.get("properties", {})
+                # Match by role name (e.g. "Contributor") or by resource id
+                if (rd_props.get("roleName", "").lower() == role_def_id.lower()
+                        or rrec.get("name", "").lower() == role_def_id.lower()
+                        or rrec.get("id", "").lower().endswith("/" + role_def_id.lower())):
+                    role_def = rrec
+                    break
+
+            if not role_def:
+                continue
+
+            rd_props = role_def.get("properties", {})
+            permissions_list = rd_props.get("permissions", [])
+
+            for perm in permissions_list:
+                actions = perm.get("actions", [])
+                not_actions = perm.get("notActions", [])
+
+                # Check if any action pattern matches
+                action_granted = any(
+                    _azure_action_matches(act, namespace, method)
+                    for act in actions
+                )
+                if not action_granted:
+                    continue
+
+                # Check notActions for exclusions
+                action_denied = any(
+                    _azure_action_matches(na, namespace, method)
+                    for na in not_actions
+                )
+                if action_denied:
+                    continue
+
+                # Permission granted
+                return None
+
+        return JSONResponse(status_code=403, content={"error": {
+            "code": "AuthorizationFailed",
+            "message": f"Principal '{principal}' does not have permission to perform this action on namespace '{namespace}'.",
         }})
     except Exception:
         return None
@@ -211,6 +357,10 @@ async def provider_api_alias_middleware(request, call_next):
     request.state.cloudlearn_original_path = path
     if _is_azure_native_path(path):
         try:
+            if not path.startswith(("/api/azure/",)):
+                denied = _azure_rbac_enforcement_response(request, path)
+                if denied is not None:
+                    return denied
             return await call_next(request)
         finally:
             REQUEST_PROVIDER.reset(token)
@@ -446,13 +596,26 @@ async def _tier_enforcement_middleware(request: Request, call_next):
             headers={"X-CloudLearn-Tier-Denied": result.get("code", "tier_locked")},
         )
 
-    # -- Cedar IAM enforcement (Developer+ tiers only) ---------------------
-    # When the active tier has `cedar_enforcement=True` AND the active space
-    # has explicit Cedar policies set, route the request through cedar_engine
-    # for authorization. When no policies are set, cedar_engine returns
-    # default-allow so this is a no-op for users who haven't configured IAM.
+    # -- Cedar IAM enforcement ------------------------------------------------
+    # Cedar fires for ALL tiers when the active space has explicit Cedar
+    # policies configured.  When no policies exist, cedar_engine returns
+    # default-allow so this is a no-op for users who haven't set up IAM.
+    # (Previously gated on Developer+ tiers only; now any tier can opt-in
+    # by adding Cedar policies to their space.)
     tier_policy = _tp.policy_for(tier)
-    if (tier_policy.get("features") or {}).get("cedar_enforcement"):
+    _cedar_tier_enabled = (tier_policy.get("features") or {}).get("cedar_enforcement")
+    # Check whether the space has explicit Cedar policies — if so, enforce
+    # regardless of tier.
+    _cedar_space_has_policies = False
+    try:
+        spaces_state = STATE.get("spaces") or {}
+        _active_space_id_check = spaces_state.get("active_space_id", "")
+        if _active_space_id_check:
+            from core import cedar_engine as _cedar_check
+            _cedar_space_has_policies = bool(_cedar_check.get_policies(_active_space_id_check).strip())
+    except Exception:
+        pass
+    if _cedar_tier_enabled or _cedar_space_has_policies:
         try:
             spaces_state = STATE.get("spaces") or {}
             active_space_id = spaces_state.get("active_space_id", "")

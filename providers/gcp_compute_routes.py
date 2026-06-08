@@ -50,6 +50,11 @@ def register(app, h) -> None:
     async def api_gcp_compute_set_tags(project: str, zone: str, instance: str, request: Request):
         return await _server().api_gcp_compute_set_tags(project, zone, instance, request)
 
+    @app.post("/compute/v1/projects/{project}/zones/{zone}/instances/{instance}/setLabels")
+    @app.post("/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{instance}/setLabels")
+    async def api_gcp_compute_set_labels(project: str, zone: str, instance: str, request: Request):
+        return await _server().api_gcp_compute_set_labels(project, zone, instance, request)
+
     @app.delete("/compute/v1/projects/{project}/zones/{zone}/instances/{instance}")
     @app.delete("/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{instance}")
     @app.post("/compute/v1/projects/{project}/zones/{zone}/instances/{instance}/delete")
@@ -87,6 +92,11 @@ def register(app, h) -> None:
     async def api_gcp_compute_create_disk(project: str, zone: str, request: Request):
         return await _server().api_gcp_compute_create_disk(project, zone, request)
 
+    @app.get("/compute/v1/projects/{project}/zones/{zone}/disks/{disk}")
+    @app.get("/api/gcp/compute/v1/projects/{project}/zones/{zone}/disks/{disk}")
+    def api_gcp_compute_get_disk(project: str, zone: str, disk: str):
+        return _server().api_gcp_compute_get_disk(project, zone, disk)
+
     @app.delete("/compute/v1/projects/{project}/zones/{zone}/disks/{disk}")
     @app.delete("/api/gcp/compute/v1/projects/{project}/zones/{zone}/disks/{disk}")
     def api_gcp_compute_delete_disk(project: str, zone: str, disk: str):
@@ -102,6 +112,11 @@ def register(app, h) -> None:
     async def api_gcp_compute_create_snapshot(project: str, request: Request):
         return await _server().api_gcp_compute_create_snapshot(project, request)
 
+    @app.get("/compute/v1/projects/{project}/global/snapshots/{snapshot}")
+    @app.get("/api/gcp/compute/v1/projects/{project}/global/snapshots/{snapshot}")
+    def api_gcp_compute_get_snapshot(project: str, snapshot: str):
+        return _server().api_gcp_compute_get_snapshot(project, snapshot)
+
     @app.delete("/compute/v1/projects/{project}/global/snapshots/{snapshot}")
     @app.delete("/api/gcp/compute/v1/projects/{project}/global/snapshots/{snapshot}")
     def api_gcp_compute_delete_snapshot(project: str, snapshot: str):
@@ -116,6 +131,11 @@ def register(app, h) -> None:
     @app.post("/api/gcp/compute/v1/projects/{project}/global/images")
     async def api_gcp_compute_create_image(project: str, request: Request):
         return await _server().api_gcp_compute_create_image(project, request)
+
+    @app.get("/compute/v1/projects/{project}/global/images/{image_name}")
+    @app.get("/api/gcp/compute/v1/projects/{project}/global/images/{image_name}")
+    def api_gcp_compute_get_image(project: str, image_name: str):
+        return _server().api_gcp_compute_get_image(project, image_name)
 
     @app.delete("/compute/v1/projects/{project}/global/images/{image_name}")
     @app.delete("/api/gcp/compute/v1/projects/{project}/global/images/{image_name}")
