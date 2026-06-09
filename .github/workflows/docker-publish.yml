@@ -1,6 +1,6 @@
 name: Docker Publish
 
-# Builds + pushes multi-arch (amd64 + arm64) cloudlearn/simulator images.
+# Builds + pushes multi-arch (amd64 + arm64) gansudkum/cloud-learn images.
 # Appliance publishes to BOTH Docker Hub + GHCR (unlike portal which is
 # Docker Hub only) so users can pull from either registry.
 #
@@ -57,8 +57,8 @@ jobs:
           #                                   silently land on an RC.
           # Manual dispatch with tag input    → :<input>    (no :latest)
           # Manual dispatch, no input         → :edge + :sha-<7chars>
-          DH="cloudlearn/simulator"
-          GH="ghcr.io/cloudlearn/simulator"
+          DH="gansudkum/cloud-learn"
+          GH="ghcr.io/sudhirkumarganti/cloud-learn"
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VER="${GITHUB_REF#refs/tags/v}"
             if [[ "${VER}" == *-* ]]; then
@@ -139,7 +139,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: cloudlearn/simulator
+          repository: gansudkum/cloud-learn
           short-description: "Local multi-cloud simulator — AWS/GCP/Azure with real backends"
           readme-filepath: ./docs/DOCKERHUB.md
         env:

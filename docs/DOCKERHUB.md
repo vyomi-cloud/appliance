@@ -1,4 +1,4 @@
-# cloudlearn/simulator
+# gansudkum/cloud-learn
 
 **Local multi-cloud simulator. Real SDKs, real CLIs, real backends — no network required.**
 
@@ -14,7 +14,7 @@ The simulator image is the FastAPI control plane. For a full local stack with th
 
 ### One-container quick try
 ```bash
-docker run --rm -p 9000:9000 cloudlearn/simulator:1.0.0
+docker run --rm -p 9000:9000 gansudkum/cloud-learn:1.0.0
 # Open http://localhost:9000/pricing
 ```
 
@@ -36,7 +36,7 @@ docker compose up -d
 | `edge` | latest `main` commit | every push to main |
 | `sha-<short>` | specific commit | every push to main |
 
-Use a pinned version (`cloudlearn/simulator:1.0.0`) in production. `latest` is OK for dev/CI.
+Use a pinned version (`gansudkum/cloud-learn:1.0.0`) in production. `latest` is OK for dev/CI.
 
 ## Architectures
 

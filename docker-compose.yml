@@ -101,7 +101,7 @@ services:
     # Default: use the published image from Docker Hub. To build from source
     # instead (e.g. for local development), set CLOUDLEARN_SIMULATOR_IMAGE
     # to an empty string OR run `docker compose build simulator`.
-    image: ${CLOUDLEARN_SIMULATOR_IMAGE:-cloudlearn/simulator:1.0.0}
+    image: ${CLOUDLEARN_SIMULATOR_IMAGE:-gansudkum/cloud-learn:1.0.0}
     build:
       context: .
       dockerfile: Dockerfile

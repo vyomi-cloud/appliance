@@ -8,7 +8,7 @@ endpoint: `http://localhost:9000`.
 | Platform | Install command | Boundary | Image source |
 |---|---|---|---|
 | **Docker (any OS)** | `docker compose up -d` | host containers | Docker Hub |
-| **Docker (one-shot)** | `docker run -p 9000:9000 cloudlearn/simulator:1.0.0` | single container | Docker Hub |
+| **Docker (one-shot)** | `docker run -p 9000:9000 gansudkum/cloud-learn:1.0.0` | single container | Docker Hub |
 | **macOS / Linux (Brew)** | `brew install cloudlearn/tap/cloud-learn && cloud-learn up` | Multipass VM | Homebrew + Docker Hub |
 | **Ubuntu / Debian / Mint** | `sudo apt install cloud-learn && cloud-learn up` | Multipass VM | APT repo + Docker Hub |
 | **Fedora / RHEL / CentOS** | `sudo dnf install cloud-learn && cloud-learn up` | Multipass VM | RPM repo + Docker Hub |
@@ -21,7 +21,7 @@ endpoint: `http://localhost:9000`.
 
 ### One-shot try (no real backends; in-memory only)
 ```bash
-docker run --rm -p 9000:9000 cloudlearn/simulator:1.0.0
+docker run --rm -p 9000:9000 gansudkum/cloud-learn:1.0.0
 open http://localhost:9000/pricing
 ```
 

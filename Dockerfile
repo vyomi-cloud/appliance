@@ -1,12 +1,12 @@
-# Multi-stage Dockerfile for cloudlearn/simulator.
+# Multi-stage Dockerfile for gansudkum/cloud-learn.
 #   stage 1 (builder): install Python deps into /opt/venv  → cacheable
 #   stage 2 (runtime): copy /opt/venv + app, no build tools in final image
 #
 # Final image: python:3.14-slim base + virtualenv + Node.js runtime
 # (for Cloud Functions exec), ~150 MB compressed.
 #
-# Build:   docker build -t cloudlearn/simulator:1.0.0 .
-# Run:     docker run --rm -p 9000:9000 cloudlearn/simulator:1.0.0
+# Build:   docker build -t gansudkum/cloud-learn:1.0.0 .
+# Run:     docker run --rm -p 9000:9000 gansudkum/cloud-learn:1.0.0
 
 # ───── builder ────────────────────────────────────────────────────────────
 FROM python:3.14-slim AS builder
