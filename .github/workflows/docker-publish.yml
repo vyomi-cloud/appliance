@@ -1,27 +1,43 @@
 name: Docker Publish
 
-# Builds + pushes multi-arch (amd64 + arm64) cloudlearn/simulator images on:
-#   - every push to main         → cloudlearn/simulator:edge + :sha-<short>
-#   - every tag v*.*.*           → cloudlearn/simulator:<version> + :latest
-#   - manual workflow_dispatch   → cloudlearn/simulator:<input_tag>
+# Builds + pushes multi-arch (amd64 + arm64) cloudlearn/simulator images.
+# Appliance publishes to BOTH Docker Hub + GHCR (unlike portal which is
+# Docker Hub only) so users can pull from either registry.
+#
+# Triggers (release-driven — main pushes do NOT build):
+#   stable tag    v1.2.0       → :1.2.0 + :latest  (both registries)
+#   prerelease    v1.2.0-rc1   → :1.2.0-rc1 only   (never :latest — SemVer rule)
+#   manual run    tag=foo      → :foo only
+#   manual run    no tag input → :edge + :sha-<short>
+#
+# Why no auto-build on main pushes:
+#   • Daily commits to main are dev iteration, not releases — we don't
+#     want every commit to ship an image. That would churn Hub tag lists,
+#     consume CI minutes, and tempt users to pin :edge in production.
+#   • Build only when you explicitly cut a version (`git tag v0.x.y`).
+#   • Manual sanity build from current main is still available via the
+#     "Run workflow" button on the Actions tab.
 #
 # Required secrets (configure once at github.com/<org>/<repo>/settings/secrets):
 #   DOCKERHUB_USERNAME — Docker Hub account that owns the cloudlearn org
 #   DOCKERHUB_TOKEN    — Docker Hub access token (Account Settings → Security)
+#
+# GHCR auth uses the workflow-issued GITHUB_TOKEN — no secret needed.
+# If DOCKERHUB_TOKEN is missing, the Docker Hub login + tag steps are
+# skipped (HAS_DOCKERHUB guard), and the build still pushes to GHCR.
 
 on:
   push:
-    branches: [main]
-    tags: ['v*.*.*']
+    tags: ['v*.*.*']      # release tags ONLY — branch pushes are ignored
   workflow_dispatch:
     inputs:
       tag:
-        description: "Image tag (default: derived from ref)"
+        description: "Image tag to publish (leave blank for :edge + :sha-<short>)"
         required: false
 
 permissions:
   contents: read
-  packages: write   # also push to ghcr.io as a fallback
+  packages: write   # required to push to ghcr.io
 
 jobs:
   docker:
@@ -32,21 +48,47 @@ jobs:
       - name: Resolve version + tags
         id: meta
         run: |
-          # Tag refs (e.g. refs/tags/v1.0.0) → 1.0.0; branch pushes → edge.
+          # Stable tag      (v1.2.0)         → :1.2.0 + :latest  (both registries)
+          # Pre-release tag (v1.2.0-rc1,     → :1.2.0-rc1 ONLY (no :latest)
+          #                  v2.0.0-beta.3)   SemVer rule: anything after the
+          #                                   first '-' is a pre-release; never
+          #                                   promote it to :latest, otherwise
+          #                                   users pinned to :latest would
+          #                                   silently land on an RC.
+          # Manual dispatch with tag input    → :<input>    (no :latest)
+          # Manual dispatch, no input         → :edge + :sha-<7chars>
+          DH="cloudlearn/simulator"
+          GH="ghcr.io/cloudlearn/simulator"
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VER="${GITHUB_REF#refs/tags/v}"
-            TAGS="cloudlearn/simulator:${VER},cloudlearn/simulator:latest,ghcr.io/cloudlearn/simulator:${VER}"
+            if [[ "${VER}" == *-* ]]; then
+              TAGS="${DH}:${VER},${GH}:${VER}"
+              PRERELEASE="yes"
+            else
+              TAGS="${DH}:${VER},${DH}:latest,${GH}:${VER},${GH}:latest"
+              PRERELEASE="no"
+            fi
           elif [[ -n "${{ github.event.inputs.tag }}" ]]; then
             VER="${{ github.event.inputs.tag }}"
-            TAGS="cloudlearn/simulator:${VER},ghcr.io/cloudlearn/simulator:${VER}"
+            TAGS="${DH}:${VER},${GH}:${VER}"
+            PRERELEASE="n/a"
           else
             VER="edge"
             SHORT="${GITHUB_SHA::7}"
-            TAGS="cloudlearn/simulator:edge,cloudlearn/simulator:sha-${SHORT},ghcr.io/cloudlearn/simulator:edge"
+            TAGS="${DH}:edge,${DH}:sha-${SHORT},${GH}:edge,${GH}:sha-${SHORT}"
+            PRERELEASE="n/a"
           fi
-          echo "version=${VER}" >> "$GITHUB_OUTPUT"
-          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
-          echo "Will tag: ${TAGS}"
+          echo "version=${VER}"         >> "$GITHUB_OUTPUT"
+          echo "tags=${TAGS}"           >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Will publish"
+            echo
+            echo "- **version**: \`${VER}\`"
+            echo "- **prerelease**: \`${PRERELEASE}\`"
+            echo "- **tags**:"
+            for t in ${TAGS//,/ }; do echo "  - \`$t\`"; done
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up QEMU (cross-arch emulation)
         uses: docker/setup-qemu-action@v3
@@ -86,8 +128,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Update Docker Hub description (on tag only)
-        if: startsWith(github.ref, 'refs/tags/v') && env.HAS_DOCKERHUB == 'true'
+      - name: Update Docker Hub description (stable tag only)
+        # Pre-release tags don't update the Hub README — the README should
+        # always reflect the latest stable user-facing docs.
+        if: |
+          startsWith(github.ref, 'refs/tags/v') &&
+          steps.meta.outputs.prerelease == 'no' &&
+          env.HAS_DOCKERHUB == 'true'
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
