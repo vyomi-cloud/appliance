@@ -64,8 +64,8 @@ fpm \
   --depends "bash" \
   --depends "curl" \
   --depends "ca-certificates" \
-  --recommends "multipass" \
-  --recommends "docker.io | docker-ce" \
+  --deb-recommends "multipass" \
+  --deb-recommends "docker.io | docker-ce" \
   --deb-suggests "qemu-system-x86" \
   --deb-recommends "snapd" \
   --after-install "$ROOT/packaging/debian/postinst.sh" \
