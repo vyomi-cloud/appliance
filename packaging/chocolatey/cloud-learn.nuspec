@@ -6,13 +6,13 @@
     <title>CloudLearn</title>
     <authors>CloudLearn contributors</authors>
     <owners>CloudLearn</owners>
-    <projectUrl>https://github.com/cloudlearn/cloud-learn</projectUrl>
-    <iconUrl>https://raw.githubusercontent.com/cloudlearn/cloud-learn/main/static/favicon.ico</iconUrl>
-    <licenseUrl>https://github.com/cloudlearn/cloud-learn/blob/main/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/sudhirkumarganti/cloud-learn</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/sudhirkumarganti/cloud-learn/main/static/favicon.ico</iconUrl>
+    <licenseUrl>https://github.com/sudhirkumarganti/cloud-learn/blob/main/LICENSE</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <bugTrackerUrl>https://github.com/cloudlearn/cloud-learn/issues</bugTrackerUrl>
-    <docsUrl>https://github.com/cloudlearn/cloud-learn/blob/main/README.md</docsUrl>
-    <packageSourceUrl>https://github.com/cloudlearn/cloud-learn/tree/main/packaging/chocolatey</packageSourceUrl>
+    <bugTrackerUrl>https://github.com/sudhirkumarganti/cloud-learn/issues</bugTrackerUrl>
+    <docsUrl>https://github.com/sudhirkumarganti/cloud-learn/blob/main/README.md</docsUrl>
+    <packageSourceUrl>https://github.com/sudhirkumarganti/cloud-learn/tree/main/packaging/chocolatey</packageSourceUrl>
     <description>
 Local multi-cloud simulator (AWS/GCP/Azure) with real backends.
 
@@ -24,7 +24,7 @@ The package installs the launcher; the full simulator stack runs inside a
 Multipass VM that `cloud-learn up` provisions.
     </description>
     <summary>Local multi-cloud simulator (AWS/GCP/Azure)</summary>
-    <releaseNotes>https://github.com/cloudlearn/cloud-learn/blob/main/docs/RELEASE_NOTES_v1.0.md</releaseNotes>
+    <releaseNotes>https://github.com/sudhirkumarganti/cloud-learn/blob/main/docs/RELEASE_NOTES_v1.0.md</releaseNotes>
     <copyright>Copyright (c) 2026 CloudLearn contributors</copyright>
     <tags>cloud aws gcp azure simulator developer-tools multi-cloud testing localstack-alternative</tags>
     <dependencies>

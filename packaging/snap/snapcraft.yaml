@@ -20,9 +20,9 @@ license: MIT
 grade: stable
 confinement: classic   # needs to control Multipass + docker on the host
 contact: support@cloudlearn.io
-issues: https://github.com/cloudlearn/cloud-learn/issues
-source-code: https://github.com/cloudlearn/cloud-learn
-website: https://github.com/cloudlearn/cloud-learn
+issues: https://github.com/sudhirkumarganti/cloud-learn/issues
+source-code: https://github.com/sudhirkumarganti/cloud-learn
+website: https://github.com/sudhirkumarganti/cloud-learn
 title: CloudLearn
 
 architectures:

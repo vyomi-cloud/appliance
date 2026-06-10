@@ -60,7 +60,7 @@ fpm \
   --maintainer "CloudLearn <support@cloudlearn.io>" \
   --vendor "CloudLearn" \
   --description "Local multi-cloud simulator (AWS/GCP/Azure) with real backends" \
-  --url "https://github.com/cloudlearn/cloud-learn" \
+  --url "https://github.com/sudhirkumarganti/cloud-learn" \
   --depends "bash" \
   --depends "curl" \
   --depends "ca-certificates" \
