@@ -41,11 +41,16 @@ apps:
     environment:
       CLOUDLEARN_DISTRIBUTION_MODE: appliance
       CLOUD_LEARN_HOME: $SNAP/cloudlearn
-    plugs:
-      - network
-      - network-bind
-      - home
-      - removable-media
+    # Classic confinement = full host access. plugs/slots are NOT allowed
+    # alongside classic confinement and the Snap Store review rejects the
+    # upload if they're present. (The plugs were redundant anyway — a
+    # classic snap can already touch the network, home dir, etc.)
+    #
+    # Classic confinement requires manual approval from the Snapcraft team:
+    #   https://forum.snapcraft.io/c/store-requests/classic-confinement/26
+    # Justification: the launcher must invoke `multipass launch`,
+    # `multipass exec`, and other host binaries to manage the appliance VM.
+    # Strict-confined snaps run in a sandbox and can't see /usr/bin/multipass.
 
 parts:
   cloud-learn:
