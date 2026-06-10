@@ -10613,6 +10613,54 @@ def api_license_status():
         except Exception:
             pass
 
+    # ── Expiry banner — same escalation pattern as the portal dashboard.
+    # Returns None when nothing's worth surfacing; otherwise a small
+    # dict the SPA renders blindly (no client-side date math). Free tier
+    # has no expiry — skip it entirely.
+    expiry_banner = None
+    if active_tier != "free" and days_until_expiry is not None:
+        portal_url = (os.environ.get("CLOUDLEARN_LICENSE_BACKEND_URL") or "").rstrip("/")
+        manage_url = f"{portal_url}/dashboard" if portal_url else "/pricing"
+        renew_url  = f"{portal_url}/dashboard" if portal_url else "/pricing"
+        tier_upper = active_tier.upper()
+        if in_grace:
+            expiry_banner = {
+                "accent": "#b91c1c", "icon": "⚠",
+                "title": f"Your {tier_upper} subscription expired — in grace period",
+                "message": (
+                    "Your subscription expired; you're in the 7-day grace window. "
+                    "Renew now to avoid downgrade to Free."
+                ),
+                "cta_label": "Renew now", "cta_url": renew_url,
+            }
+        elif days_until_expiry <= 0:
+            expiry_banner = {
+                "accent": "#b91c1c", "icon": "⚠",
+                "title": f"Your {tier_upper} subscription has expired",
+                "message": (
+                    "Appliance has reverted to Free tier. Re-subscribe any time "
+                    "to restore your features."
+                ),
+                "cta_label": "Re-subscribe", "cta_url": renew_url,
+            }
+        elif days_until_expiry <= 3:
+            expiry_banner = {
+                "accent": "#d97706", "icon": "⏰",
+                "title": f"Renewal in {days_until_expiry} day{'s' if days_until_expiry != 1 else ''}",
+                "message": (
+                    f"{tier_upper} renews on {expires_at[:10] if expires_at else 'soon'}. "
+                    "Update payment if needed."
+                ),
+                "cta_label": "Manage", "cta_url": manage_url,
+            }
+        elif days_until_expiry <= 7:
+            expiry_banner = {
+                "accent": "#ca8a04", "icon": "📅",
+                "title": f"Renewal in {days_until_expiry} days",
+                "message": f"{tier_upper} renews on {expires_at[:10] if expires_at else 'soon'}.",
+                "cta_label": None, "cta_url": None,
+            }
+
     return {
         "active_tier":         active_tier,
         "primary_cloud":       primary_cloud,
@@ -10622,6 +10670,7 @@ def api_license_status():
         "grace_until":         grace_until,
         "days_until_expiry":   days_until_expiry,
         "in_grace_period":     in_grace,
+        "expiry_banner":       expiry_banner,
         "price_inr_monthly":   policy.get("price_inr_monthly"),
         "price_inr_annual":    policy.get("price_inr_annual"),
         "currency":            "INR",
