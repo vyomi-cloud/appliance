@@ -25,9 +25,15 @@ source-code: https://github.com/sudhirkumarganti/cloud-learn
 website: https://github.com/sudhirkumarganti/cloud-learn
 title: CloudLearn
 
-architectures:
-  - build-on: [amd64, arm64]
-    build-for: [amd64, arm64]
+# snapcraft 8+ with base: core24 uses 'platforms', not 'architectures'.
+# Each platform maps a build host arch → target arch. GitHub Actions
+# ubuntu-latest runners are amd64; arm64 builds require either an
+# arm64 runner or QEMU emulation. Starting amd64-only — adding arm64
+# is an extra `runs-on: ubuntu-24.04-arm` matrix job (next iteration).
+platforms:
+  amd64:
+    build-on: [amd64]
+    build-for: [amd64]
 
 apps:
   cloud-learn:
