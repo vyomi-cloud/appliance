@@ -7,7 +7,7 @@
     <authors>CloudLearn contributors</authors>
     <owners>CloudLearn</owners>
     <projectUrl>https://github.com/sudhirkumarganti/cloud-learn</projectUrl>
-    <iconUrl>https://raw.githubusercontent.com/sudhirkumarganti/cloud-learn/main/static/favicon.ico</iconUrl>
+    <iconUrl>https://raw.githubusercontent.com/sudhirkumarganti/cloud-learn/main/packaging/chocolatey/cloud-learn.png</iconUrl>
     <licenseUrl>https://github.com/sudhirkumarganti/cloud-learn/blob/main/LICENSE</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <bugTrackerUrl>https://github.com/sudhirkumarganti/cloud-learn/issues</bugTrackerUrl>
