@@ -24,6 +24,9 @@ services:
     restart: unless-stopped
 
   cloudlearn-sql-mysql:
+    # Heavy (~200 MB) — opt-in via the lazy provisioner on first MySQL call,
+    # or eagerly via `docker compose --profile full up`.
+    profiles: ["full"]
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: cloudlearn
@@ -43,8 +46,15 @@ services:
       - cloudlearn-gcs:/data
     restart: unless-stopped
 
-  # MVP P0 backends — see docker-compose.appliance.yml for full notes.
+  # ── MVP backends — all lazy-provisioned by default ────────────────────
+  # These services are NOT started by `docker compose up -d`. The simulator
+  # pulls + runs them on demand via core/backend_provisioner.py the first
+  # time a user clicks the matching feature (S3 → minio, Vault → vault, etc.).
+  # They're declared here too so power users can opt for eager start via:
+  #   docker compose --profile full up -d
+
   cloudlearn-vault:
+    profiles: ["full"]
     image: hashicorp/vault:1.15
     command: ["server", "-dev", "-dev-root-token-id=cloudlearn-dev-token", "-dev-listen-address=0.0.0.0:8200"]
     environment:
@@ -57,6 +67,7 @@ services:
     restart: unless-stopped
 
   cloudlearn-nats:
+    profiles: ["full"]
     image: nats:2-alpine
     command: ["-js", "-sd", "/data", "-m", "8222"]
     ports:
@@ -67,6 +78,7 @@ services:
     restart: unless-stopped
 
   cloudlearn-minio:
+    profiles: ["full"]
     image: minio/minio:latest
     command: ["server", "/data", "--address", ":9000", "--console-address", ":9001"]
     environment:
@@ -80,6 +92,7 @@ services:
     restart: unless-stopped
 
   cloudlearn-dynamodb:
+    profiles: ["full"]
     image: amazon/dynamodb-local:latest
     command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
     working_dir: /home/dynamodblocal
@@ -91,6 +104,7 @@ services:
     restart: unless-stopped
 
   cloudlearn-elasticmq:
+    profiles: ["full"]
     image: softwaremill/elasticmq-native:latest
     ports:
       - "9324:9324"
@@ -101,7 +115,11 @@ services:
     # Default: use the published image from Docker Hub. To build from source
     # instead (e.g. for local development), set CLOUDLEARN_SIMULATOR_IMAGE
     # to an empty string OR run `docker compose build simulator`.
-    image: ${CLOUDLEARN_SIMULATOR_IMAGE:-gansudkum/cloud-learn:1.0.0}
+    # Default to :latest — the publish workflow's pre-release guard keeps
+    # :latest pinned to the most recent STABLE tag (not RCs). Pin explicitly
+    # in your .env for production:
+    #   CLOUDLEARN_SIMULATOR_IMAGE=gansudkum/cloud-learn:0.1.0
+    image: ${CLOUDLEARN_SIMULATOR_IMAGE:-gansudkum/cloud-learn:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -110,14 +128,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      # Default install only requires the 2 small backends. The rest
+      # (vault, nats, minio, dynamodb, elasticmq, mysql) are lazy-provisioned
+      # via /api/runtime/backends/{name}/provision when first used.
       - cloudlearn-sql-postgres
-      - cloudlearn-sql-mysql
       - cloudlearn-gcs
-      - cloudlearn-vault
-      - cloudlearn-nats
-      - cloudlearn-minio
-      - cloudlearn-dynamodb
-      - cloudlearn-elasticmq
     environment:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
       # PRODUCTION: override CLOUDLEARN_LICENSE_SECRET via env or .env file
@@ -161,7 +176,14 @@ services:
       - /var/lib/cloudlearn/deployments:/var/lib/cloudlearn/deployments
       - ./.cloudlearn-host.json:/config/cloudlearn-host.json:ro
       - ./.cloudlearn-appliance/host-sizing-report.json:/config/cloudlearn-host-sizing.json:ro
-    read_only: true
+      # Lazy backend provisioner (core/backend_provisioner.py) needs to
+      # pull + run sibling containers (MinIO, Vault, NATS, etc.) on demand
+      # via the host Docker daemon. The socket is mounted RO at the kernel
+      # level — the SDK still writes to it via /var/run/docker.sock.
+      - /var/run/docker.sock:/var/run/docker.sock
+    # read_only: dropped — the docker SDK + lazy provisioner write small
+    # state files (~/.docker, tempdirs). If you re-enable read_only, also
+    # add a tmpfs for ~/.docker.
     tmpfs:
       - /tmp:size=100M
     security_opt:

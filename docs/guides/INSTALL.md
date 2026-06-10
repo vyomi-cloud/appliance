@@ -1,164 +1,142 @@
-# CloudLearn — Installation
+# CloudLearn — Install
 
-Pick the path that matches your platform. Every path lands on the same
-endpoint: `http://localhost:9000`.
+The fastest path is the one-liner. Everything else is a variation of it.
 
-## At a glance
+## Quick install
 
-| Platform | Install command | Boundary | Image source |
-|---|---|---|---|
-| **Docker (any OS)** | `docker compose up -d` | host containers | Docker Hub |
-| **Docker (one-shot)** | `docker run -p 9000:9000 gansudkum/cloud-learn:1.0.0` | single container | Docker Hub |
-| **macOS / Linux (Brew)** | `brew install cloudlearn/tap/cloud-learn && cloud-learn up` | Multipass VM | Homebrew + Docker Hub |
-| **Ubuntu / Debian / Mint** | `sudo apt install cloud-learn && cloud-learn up` | Multipass VM | APT repo + Docker Hub |
-| **Fedora / RHEL / CentOS** | `sudo dnf install cloud-learn && cloud-learn up` | Multipass VM | RPM repo + Docker Hub |
-| **Ubuntu (Snap)** | `sudo snap install cloud-learn --classic` | Multipass VM | Snap Store |
-| **Windows (winget)** | `winget install CloudLearn.CloudLearn` | Multipass VM | winget + Docker Hub |
-| **Windows (Chocolatey)** | `choco install cloud-learn` | Multipass VM | Chocolatey + Docker Hub |
-| **From source** | `git clone … && docker compose up -d` | host containers | local build |
-
-## Docker — the fastest path
-
-### One-shot try (no real backends; in-memory only)
 ```bash
-docker run --rm -p 9000:9000 gansudkum/cloud-learn:1.0.0
-open http://localhost:9000/pricing
+curl -fsSL https://raw.githubusercontent.com/sudhirkumarganti/cloud-learn/main/install.sh | bash
 ```
 
-Good for kicking the tires. Most services run with in-memory state since the
-real backends (Vault, NATS, MinIO, Postgres, MySQL, DynamoDB Local, ElasticMQ,
-Cedar) aren't started. For the full experience, use docker-compose:
+What happens, in order:
 
-### Full stack via docker-compose
+1. The script verifies you have Docker + Docker Compose v2 running.
+2. Creates `~/.cloudlearn/` (no `sudo` needed).
+3. Downloads `docker-compose.yml` + host config defaults.
+4. Runs `docker compose up -d` — **4 services** start (~30 s):
+
+   | Service | Image | Role |
+   |---|---|---|
+   | `simulator` | `gansudkum/cloud-learn:latest` | The AWS / GCP / Azure API surface |
+   | `cloudsim` | locally-built | The Java CloudSim backbone |
+   | `cloudlearn-sql-postgres` | `postgres:16-alpine` | SQL data plane |
+   | `cloudlearn-gcs` | `fsouza/fake-gcs-server` | GCS data plane |
+
+5. Opens **http://localhost:9000** in your browser.
+
+Heavy backends (Vault, NATS, MinIO, DynamoDB-local, ElasticMQ, MySQL)
+**don't get pulled** until you actually use a feature that needs them.
+First S3 click → MinIO is fetched + started in the background, takes
+~25 s with a progress banner. Subsequent clicks are instant.
+
+## Variations
+
+| Goal | Command |
+|---|---|
+| Eager-start all 10 services (skip lazy provisioning) | `curl -fsSL .../install.sh \| bash -s -- --full` |
+| Pin a version (avoid `:latest` drift) | `curl -fsSL .../install.sh \| bash -s -- --tag v0.1.0` |
+| Dry-run — see what it would do | `curl -fsSL .../install.sh \| bash -s -- --dry-run` |
+| Use a fork | `curl -fsSL .../install.sh \| bash -s -- --repo https://raw.githubusercontent.com/me/cloud-learn/main` |
+
+## Day-2 commands
+
+After install, your compose context lives at `~/.cloudlearn/compose`. From there:
+
 ```bash
-git clone https://github.com/cloudlearn/cloud-learn && cd cloud-learn
+docker compose logs -f simulator       # tail logs
+docker compose down                     # stop everything
+docker compose pull && up -d            # upgrade to latest tag
+docker compose --profile full up -d     # bring up the 6 lazy backends eagerly
+```
+
+## Lazy backend provisioning
+
+A new install runs 4 services. The other 6 (MinIO, Vault, NATS,
+DynamoDB-local, ElasticMQ, MySQL) provision **on first use**:
+
+- Trigger via the UI (S3 click → MinIO, Secrets click → Vault, etc.) or directly:
+  ```bash
+  curl -X POST http://localhost:9000/api/runtime/backends/minio/provision
+  ```
+- Poll status:
+  ```bash
+  curl http://localhost:9000/api/runtime/backends/minio/status
+  # → {"state":"pulling","pull_progress_pct":40, ...}
+  ```
+- Stop a running backend (frees RAM):
+  ```bash
+  curl -X POST http://localhost:9000/api/runtime/backends/minio/stop
+  ```
+
+Once provisioned, containers stay running until host restart. Persistent
+volumes survive `docker compose down`.
+
+## Manual install (without the script)
+
+If you'd rather not pipe a script:
+
+```bash
+mkdir -p ~/.cloudlearn/{compose,deployments,config}
+cd ~/.cloudlearn/compose
+
+# 1. Get the compose file + host config
+curl -O https://raw.githubusercontent.com/sudhirkumarganti/cloud-learn/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/sudhirkumarganti/cloud-learn/main/.cloudlearn-host.json
+mkdir .cloudlearn-appliance
+curl -o .cloudlearn-appliance/host-sizing-report.json \
+  https://raw.githubusercontent.com/sudhirkumarganti/cloud-learn/main/.cloudlearn-appliance/host-sizing-report.json
+
+# 2. Bring it up
 docker compose up -d
-open http://localhost:9000/pricing
+
+# 3. Wait for healthy
+until curl -fsS http://localhost:9000/healthz >/dev/null; do sleep 1; done
+open http://localhost:9000           # or xdg-open on Linux
 ```
 
-13 containers come up: the simulator + 8 real backends + CloudSim backbone +
-fake-gcs + supporting sidecars. First boot pulls ~600 MB of images. Subsequent
-starts: ~30 seconds.
+## Package-manager paths (Multipass-VM based)
 
-To customize ports / passwords, copy `.env.example` to `.env` and edit before
-`docker compose up`.
+These are the older, heavier paths. They use a Multipass / VirtualBox VM
+under the hood and a wrapper CLI (`cloud-learn up`). Each one ultimately
+fetches the same Docker images.
 
-### Stop
-```bash
-docker compose down              # stop containers (keep volumes)
-docker compose down -v           # stop + drop all data (clean slate)
-```
+| Platform | Install command |
+|---|---|
+| macOS / Linux (Brew) | `brew install cloudlearn/tap/cloud-learn && cloud-learn up` |
+| Ubuntu / Debian | `sudo apt install cloud-learn && cloud-learn up` |
+| Fedora / RHEL | `sudo dnf install cloud-learn && cloud-learn up` |
+| Ubuntu (Snap) | `sudo snap install cloud-learn --classic` |
+| Windows (winget) | `winget install CloudLearn.CloudLearn` |
+| Windows (Chocolatey) | `choco install cloud-learn` |
 
-## Homebrew (macOS + Linux)
+Use these if you need the Multipass-VM isolation. The `curl-bash` path
+above is simpler if you already have Docker.
 
-```bash
-brew tap cloudlearn/tap
-brew install cloud-learn
-cloud-learn up
-```
-
-`cloud-learn up` provisions a Multipass VM appliance (4 CPUs, 8 GB RAM, 32 GB
-disk by default) and runs the full docker-compose stack inside. Browser URL is
-printed on success.
-
-Stop:
-```bash
-cloud-learn down       # stop VM (keep state)
-cloud-learn restart    # restart inside the same VM
-cloud-learn status     # show VM + simulator status
-cloud-learn doctor     # diagnostic
-```
-
-Prerequisites: `multipass` (auto-installed from Homebrew cask if missing).
-
-## APT — Debian / Ubuntu / Mint
+## From source
 
 ```bash
-# Add the apt repo
-curl -fsSL https://apt.cloudlearn.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloudlearn.gpg
-echo "deb [signed-by=/usr/share/keyrings/cloudlearn.gpg] https://apt.cloudlearn.io stable main" \
-  | sudo tee /etc/apt/sources.list.d/cloudlearn.list
-
-sudo apt update
-sudo apt install cloud-learn
-cloud-learn up
-```
-
-Or grab the `.deb` directly from the GitHub Release page and `sudo dpkg -i`.
-
-## RPM — Fedora / RHEL / CentOS / openSUSE
-
-```bash
-sudo dnf install https://github.com/cloudlearn/cloud-learn/releases/download/v1.0.0/cloud-learn-1.0.0-1.noarch.rpm
-cloud-learn up
-```
-
-A proper YUM/DNF repo is in the v1.1 roadmap.
-
-## Snap — Ubuntu
-
-```bash
-sudo snap install cloud-learn --classic
-cloud-learn up
-```
-
-Note: cloud-learn uses **classic confinement** because the launcher controls
-Multipass + Docker on the host. The simulator stack itself runs sandboxed
-inside the Multipass VM.
-
-## Winget — Windows 10/11
-
-```powershell
-winget install CloudLearn.CloudLearn
-cloud-learn up
-```
-
-Prerequisite: Multipass for Windows. `winget install Canonical.Multipass`.
-
-## Chocolatey — Windows (traditional)
-
-```powershell
-choco install cloud-learn
-cloud-learn up
-```
-
-## From source (development)
-
-```bash
-git clone https://github.com/cloudlearn/cloud-learn && cd cloud-learn
+git clone https://github.com/sudhirkumarganti/cloud-learn.git
+cd cloud-learn
+sudo mkdir -p /var/lib/cloudlearn/deployments
 docker compose up -d
-# Or run uvicorn directly without docker:
-pip install -r requirements.txt
-uvicorn server:app --host 0.0.0.0 --port 9000
 ```
 
-This is the path for contributors. Tests live in `tests/`; conformance harness
-at `tests/conformance/run_conformance.py`. See [`README.md`](../../README.md#contributing)
-for the contributor guide.
+Builds the simulator + CloudSim from local source. ~5–10 min first build,
+near-instant on subsequent restarts.
 
-## Production deployment
-
-For Helm + Kubernetes + Vault prod-mode + backup procedures:
-[`docs/PRODUCTION_DEPLOYMENT.md`](../PRODUCTION_DEPLOYMENT.md)
-
-## Verify the install
+## Uninstall
 
 ```bash
-curl http://localhost:9000/healthz                   # simulator alive
-curl http://localhost:9000/api/runtime/tier          # current tier policy
-curl http://localhost:9000/api/runtime/backends      # 8 backend health
-open http://localhost:9000/pricing                   # pick a tier
-open http://localhost:9000/console/aws               # AWS console
+cd ~/.cloudlearn/compose
+docker compose down -v          # -v removes the volumes (your simulated state)
+rm -rf ~/.cloudlearn
+docker image prune              # remove unused images
 ```
 
-## Troubleshooting
+## What you get
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `port 9000 already in use` | another service on 9000 | `CLOUDLEARN_SIMULATOR_PORT=9001 docker compose up` |
-| `cloud-learn up` hangs at "waiting for simulator" | Multipass VM still booting (cold start) | wait 5-10 min on first run; subsequent boots ~30s |
-| `docker compose pull` fails | rate-limited by Docker Hub anon pulls | `docker login` first |
-| Vault keys disappear on restart | running dev-mode (default) | switch to prod mode: [`docs/PRODUCTION_DEPLOYMENT.md`](../PRODUCTION_DEPLOYMENT.md) |
-| Brew install fails on "outdated formula" | tap cache stale | `brew update && brew install cloud-learn` |
-
-More: `cloud-learn doctor` runs a 12-point diagnostic.
+A local appliance serving **AWS, GCP, Azure** API endpoints on `:9000`.
+Real SDKs (`boto3`, `aws-cli`, `google-cloud-*`, `azure-sdk-*`, Terraform)
+hit it natively. Tier policy enforced via license JWT from
+`portal.cloudlearn.io`. See the dashboard for live status of each backend
+and which service categories your tier unlocks.
