@@ -1,6 +1,6 @@
 name: cloud-learn
 base: core24
-adopt-info: cloud-learn
+adopt-info: cloud-learn  # part-name whose override-pull calls craftctl set version=...
 summary: Local multi-cloud simulator with AWS/GCP/Azure parity
 description: |
   CloudLearn runs AWS, GCP, and Azure simulation locally with cloud-faithful
@@ -49,19 +49,30 @@ apps:
 
 parts:
   cloud-learn:
-    plugin: dump
-    source: ../..
-    source-type: local
+    # Pull the curated tarball produced by release.yml — same artefact
+    # the GitHub Release ships. Smaller than `source: ../..` (which
+    # copied .git/, target/, tests/, etc — that was hanging the build
+    # for 40+ min on file-system thrash).
+    #
+    # The VERSION env var here is the snap version (set via adopt-info);
+    # we fetch the tarball using the same string.
+    plugin: nil
+    build-environment:
+      - CL_VERSION: "0.1.0"
+    override-pull: |
+      VER="${CL_VERSION}"
+      echo "Fetching cloud-learn ${VER} source tarball..."
+      curl -fsSL "https://github.com/sudhirkumarganti/cloud-learn/releases/download/v${VER}/cloud-learn-${VER}.tar.gz" \
+        | tar xz --strip-components=1
+      craftctl set version="${VER}"
     override-build: |
-      craftctl default
-      # Stamp version from VERSION file
-      craftctl set version="$(cat VERSION | tr -d '[:space:]')"
       mkdir -p "$CRAFT_PART_INSTALL/bin"
       mkdir -p "$CRAFT_PART_INSTALL/cloudlearn"
+      # Only ship the runtime tree the launcher needs.
       cp -r core providers packs static scripts \
             server.py requirements.txt VERSION Dockerfile \
-            docker-compose.appliance.yml \
-            "$CRAFT_PART_INSTALL/cloudlearn/"
+            docker-compose.yml docker-compose.appliance.yml \
+            "$CRAFT_PART_INSTALL/cloudlearn/" 2>/dev/null || true
       cat > "$CRAFT_PART_INSTALL/bin/cloud-learn" <<'EOF'
       #!/bin/sh
       export CLOUD_LEARN_HOME="$SNAP/cloudlearn"
