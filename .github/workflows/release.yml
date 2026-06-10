@@ -218,8 +218,12 @@ jobs:
           VER="${{ needs.build.outputs.version }}"
           SHA="${{ needs.build.outputs.tarball_sha256 }}"
           F=tap/Formula/cloud-learn.rb
+          # Point at the workflow-built RELEASE-ASSET tarball — that's the
+          # file whose SHA we compute in the build job (the GitHub
+          # auto-tarball at /archive/refs/tags/* has different bytes and
+          # a different SHA).
           sed -i.bak \
-            -e "s|url \".*\"|url \"https://github.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}/archive/refs/tags/v${VER}.tar.gz\"|" \
+            -e "s|url \".*\"|url \"https://github.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}/releases/download/v${VER}/cloud-learn-${VER}.tar.gz\"|" \
             -e "s|sha256 \".*\"|sha256 \"${SHA}\"|" \
             -e "s|version \".*\"|version \"${VER}\"|" \
             "$F"
