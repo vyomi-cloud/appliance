@@ -1,20 +1,20 @@
 # Homebrew formula for CloudLearn.
 #
 # Tap install (recommended):
-#   brew tap cloudlearn/tap
+#   brew tap sudhirkumarganti/tap
 #   brew install cloud-learn
 #
 # Direct install (no tap):
-#   brew install --HEAD https://github.com/cloudlearn/cloud-learn.git
+#   brew install --HEAD https://github.com/sudhirkumarganti/cloud-learn.git
 #
 # This formula is auto-updated by .github/workflows/release.yml on every
 # v*.*.* tag — the url + sha256 are bumped to the tarball published with
-# the GitHub Release, then committed to cloudlearn/homebrew-tap.
+# the GitHub Release, then committed to sudhirkumarganti/homebrew-tap.
 
 class CloudLearn < Formula
   desc "Local multi-cloud simulator (AWS/GCP/Azure) with real backends"
-  homepage "https://github.com/cloudlearn/cloud-learn"
-  url "https://github.com/cloudlearn/cloud-learn/archive/refs/tags/v1.0.0.tar.gz"
+  homepage "https://github.com/sudhirkumarganti/cloud-learn"
+  url "https://github.com/sudhirkumarganti/cloud-learn/archive/refs/tags/v1.0.0.tar.gz"
   sha256 "REPLACED_BY_RELEASE_WORKFLOW"
   license "MIT"
   version "1.0.0"
@@ -65,7 +65,7 @@ class CloudLearn < Formula
         cloud-learn down
 
       Full docs:
-        https://github.com/cloudlearn/cloud-learn/blob/main/README.md
+        https://github.com/sudhirkumarganti/cloud-learn/blob/main/README.md
     EOS
   end
 

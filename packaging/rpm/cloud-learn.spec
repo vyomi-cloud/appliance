@@ -11,8 +11,8 @@ Version:       1.0.0
 Release:       1%{?dist}
 Summary:       Local multi-cloud simulator (AWS/GCP/Azure) with real backends
 License:       MIT
-URL:           https://github.com/cloudlearn/cloud-learn
-Source0:       https://github.com/cloudlearn/cloud-learn/archive/refs/tags/v%{version}.tar.gz
+URL:           https://github.com/sudhirkumarganti/cloud-learn
+Source0:       https://github.com/sudhirkumarganti/cloud-learn/archive/refs/tags/v%{version}.tar.gz
 BuildArch:     noarch
 
 Requires:      bash
@@ -66,7 +66,7 @@ install -m 644 README.md LICENSE CHANGELOG.md %{buildroot}/usr/share/doc/cloud-l
 
 %post
 echo "==> CloudLearn installed. Run 'cloud-learn up' to start the simulator."
-echo "==> Docs: https://github.com/cloudlearn/cloud-learn"
+echo "==> Docs: https://github.com/sudhirkumarganti/cloud-learn"
 if ! command -v multipass >/dev/null 2>&1; then
   echo "==> Note: Multipass not detected. Install: sudo snap install multipass"
 fi

@@ -1,23 +1,74 @@
 name: Release
 
 # On every v*.*.* tag (or manual dispatch):
-#   1. Build source tarball + per-PM packages (.deb, .rpm, brew formula update)
-#   2. Publish GitHub Release with all artifacts attached
-#   3. Trigger downstream package-manager publishes (brew tap, snap store,
-#      docker-publish.yml, winget, chocolatey)
+#   1. Build the source tarball + .deb + .rpm
+#   2. Publish a GitHub Release with all artifacts attached
+#   3. Fan out to downstream package managers (Brew tap, Snap Store,
+#      winget, Chocolatey) — each one is OPT-IN via its secret being set
+#
+# Required secrets — none for a default release (just builds the tarball
+# + .deb + .rpm + GitHub Release). Each downstream PM is gated on its
+# own secret being present. Adding a secret turns that PM's job on:
+#
+#   HOMEBREW_TAP_TOKEN        — PAT (contents:write) on the homebrew-tap repo
+#   SNAPCRAFT_STORE_CREDENTIALS — output of `snapcraft export-login`
+#   WINGET_TOKEN              — PAT (public_repo) for opening PRs to microsoft/winget-pkgs
+#   CHOCOLATEY_API_KEY        — push key from chocolatey.org
+#
+# The Docker Hub publish lives in a separate workflow (docker-publish.yml).
 
 on:
   push:
     tags: ['v*.*.*']
   workflow_dispatch:
     inputs:
-      version: {description: "Version (e.g. 1.0.0)", required: true}
+      version:
+        description: "Version (e.g. 0.1.0)"
+        required: true
 
 permissions:
-  contents: write
-  packages: write
+  contents: write     # github-release needs to write the Release page
+  packages: write     # if any job ever needs to push to GHCR
+
+env:
+  GH_OWNER: sudhirkumarganti
+  GH_REPO:  cloud-learn
 
 jobs:
+  # ── Preflight: which downstream PMs have credentials? ───────────────────
+  # Secrets CANNOT be referenced from job-level `if:` expressions in GitHub
+  # Actions. The clean workaround is to evaluate them inside a step and
+  # surface the result via job outputs that downstream `if:` can consume.
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      has_brew:   ${{ steps.check.outputs.has_brew }}
+      has_snap:   ${{ steps.check.outputs.has_snap }}
+      has_winget: ${{ steps.check.outputs.has_winget }}
+      has_choco:  ${{ steps.check.outputs.has_choco }}
+    steps:
+      - id: check
+        env:
+          BREW:   ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          SNAP:   ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+          WINGET: ${{ secrets.WINGET_TOKEN }}
+          CHOCO:  ${{ secrets.CHOCOLATEY_API_KEY }}
+        run: |
+          mask() { [ -n "$1" ] && echo true || echo false; }
+          {
+            echo "has_brew=$(mask "$BREW")"
+            echo "has_snap=$(mask "$SNAP")"
+            echo "has_winget=$(mask "$WINGET")"
+            echo "has_choco=$(mask "$CHOCO")"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## Downstream targets"
+            echo "- Homebrew tap : $(mask "$BREW")"
+            echo "- Snap Store   : $(mask "$SNAP")"
+            echo "- Winget       : $(mask "$WINGET")"
+            echo "- Chocolatey   : $(mask "$CHOCO")"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # ── source tarball + deb + rpm ──────────────────────────────────────────
   build:
     runs-on: ubuntu-latest
@@ -54,19 +105,19 @@ jobs:
             --transform "s,^,cloud-learn-${{ steps.ver.outputs.version }}/," \
             core providers packs server.py static requirements.txt VERSION \
             Dockerfile docker-compose.yml docker-compose.appliance.yml \
-            .env.example packaging scripts docs \
+            .env.example packaging scripts docs install.sh \
             README.md CHANGELOG.md LICENSE
 
       - name: Build .deb
         run: bash packaging/debian/build-deb.sh "${{ steps.ver.outputs.version }}"
 
-      - name: Build .rpm via fpm (canonical .spec is in packaging/rpm/)
+      - name: Build .rpm via fpm
         run: |
           STAGE="$(mktemp -d)"
           mkdir -p "$STAGE/usr/lib/cloud-learn" "$STAGE/usr/bin" "$STAGE/usr/share/doc/cloud-learn"
           cp -r core providers packs static scripts \
                 server.py requirements.txt VERSION Dockerfile \
-                docker-compose.yml docker-compose.appliance.yml .env.example \
+                docker-compose.yml docker-compose.appliance.yml .env.example install.sh \
                 "$STAGE/usr/lib/cloud-learn/"
           cat > "$STAGE/usr/bin/cloud-learn" <<'EOF'
           #!/usr/bin/env bash
@@ -80,23 +131,21 @@ jobs:
             -n cloud-learn -v "${{ steps.ver.outputs.version }}" \
             --license MIT --architecture noarch \
             --maintainer "CloudLearn <support@cloudlearn.io>" \
-            --url "https://github.com/cloudlearn/cloud-learn" \
+            --url "https://github.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}" \
             --description "Local multi-cloud simulator (AWS/GCP/Azure) with real backends" \
             --depends bash --depends curl \
             --chdir "$STAGE" \
             --package "dist/cloud-learn-${{ steps.ver.outputs.version }}-1.noarch.rpm" \
             .
 
-      - name: Compute SHA256 of source tarball (for Homebrew + winget bump)
+      - name: Compute SHA256 of tarball (Homebrew formula bump needs it)
         id: shas
         run: |
           TARBALL_SHA="$(sha256sum dist/cloud-learn-${{ steps.ver.outputs.version }}.tar.gz | awk '{print $1}')"
           echo "tarball_sha256=$TARBALL_SHA" >> "$GITHUB_OUTPUT"
-          echo "Tarball SHA256: $TARBALL_SHA"
-          # Also compute SHAs for .deb + .rpm so downstream PMs can pin them
-          for f in dist/*; do
-            sha256sum "$f"
-          done > dist/SHA256SUMS
+          {
+            for f in dist/*; do sha256sum "$f"; done
+          } > dist/SHA256SUMS
 
       - uses: actions/upload-artifact@v4
         with:
@@ -104,11 +153,10 @@ jobs:
           path: dist/
           retention-days: 30
 
-  # ── GitHub Release ──────────────────────────────────────────────────────
+  # ── GitHub Release page ─────────────────────────────────────────────────
   github-release:
     needs: build
     runs-on: ubuntu-latest
-    permissions: {contents: write}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -117,8 +165,8 @@ jobs:
       - name: Extract changelog for this version
         id: changelog
         run: |
-          # Extract the section between ## [<version>] and the next ## header
           VER="${{ needs.build.outputs.version }}"
+          # Extract section between ## [<version>] and the next ## header
           awk -v v="$VER" '
             /^## \[/ {
               if (in_section) exit
@@ -136,6 +184,8 @@ jobs:
             echo
             ls dist | sed 's/^/- /'
             echo
+            echo "**Docker image:** \`docker pull gansudkum/cloud-learn:${VER}\`"
+            echo "**Install:** \`curl -fsSL https://raw.githubusercontent.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}/main/install.sh | bash\`"
             echo "**SHA256 checksums:** see \`SHA256SUMS\` in attached artifacts."
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
@@ -148,18 +198,18 @@ jobs:
           files: dist/*
 
   # ── Brew tap auto-bump ──────────────────────────────────────────────────
-  # Bumps cloud-learn.rb in the cloudlearn/homebrew-tap repo with the new
-  # url + sha256. Requires HOMEBREW_TAP_TOKEN secret (PAT with `contents:write`
-  # on cloudlearn/homebrew-tap).
+  # Bumps cloud-learn.rb in the sudhirkumarganti/homebrew-tap repo with the
+  # new url + sha256. Requires HOMEBREW_TAP_TOKEN secret (PAT with `contents:write`
+  # on sudhirkumarganti/homebrew-tap). Falls back to a no-op if missing.
   brew-bump:
-    needs: build
+    needs: [preflight, build]
+    if: needs.preflight.outputs.has_brew == 'true'
     runs-on: ubuntu-latest
-    if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
     steps:
       - name: Checkout tap repo
         uses: actions/checkout@v4
         with:
-          repository: cloudlearn/homebrew-tap
+          repository: ${{ env.GH_OWNER }}/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
 
@@ -169,10 +219,11 @@ jobs:
           SHA="${{ needs.build.outputs.tarball_sha256 }}"
           F=tap/Formula/cloud-learn.rb
           sed -i.bak \
-            -e "s|url \".*\"|url \"https://github.com/cloudlearn/cloud-learn/archive/refs/tags/v${VER}.tar.gz\"|" \
+            -e "s|url \".*\"|url \"https://github.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}/archive/refs/tags/v${VER}.tar.gz\"|" \
             -e "s|sha256 \".*\"|sha256 \"${SHA}\"|" \
             -e "s|version \".*\"|version \"${VER}\"|" \
             "$F"
+          rm -f "$F.bak"
           cd tap
           git config user.email "bot@cloudlearn.io"
           git config user.name  "CloudLearn Release Bot"
@@ -181,11 +232,10 @@ jobs:
           git push
 
   # ── Snap Store publish ──────────────────────────────────────────────────
-  # Requires SNAPCRAFT_STORE_CREDENTIALS secret (`snapcraft export-login`).
   snap-publish:
-    needs: build
+    needs: [preflight, build]
+    if: needs.preflight.outputs.has_snap == 'true'
     runs-on: ubuntu-latest
-    if: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: snapcore/action-build@v1
@@ -198,13 +248,15 @@ jobs:
           snap: ${{ steps.build-snap.outputs.snap }}
           release: stable
 
-  # ── Winget submission ───────────────────────────────────────────────────
-  # Opens a PR to microsoft/winget-pkgs with the new version manifest.
-  # Requires WINGET_TOKEN secret (PAT with `public_repo` scope).
+  # ── Winget PR submission ────────────────────────────────────────────────
+  # NOTE: winget consumes .msi installers — we don't build one yet.
+  # This job stays gated behind WINGET_TOKEN AND the existence of an .msi
+  # in dist/ (the winget-releaser action looks for it). For MVP it stays
+  # skipped; revisit once we ship a real MSI installer.
   winget-submit:
-    needs: build
+    needs: [preflight, build]
+    if: needs.preflight.outputs.has_winget == 'true'
     runs-on: windows-latest
-    if: ${{ secrets.WINGET_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: vedantmgoyal2009/winget-releaser@v2
@@ -215,11 +267,10 @@ jobs:
           token: ${{ secrets.WINGET_TOKEN }}
 
   # ── Chocolatey publish ──────────────────────────────────────────────────
-  # Requires CHOCOLATEY_API_KEY secret.
   choco-publish:
-    needs: build
+    needs: [preflight, build]
+    if: needs.preflight.outputs.has_choco == 'true'
     runs-on: windows-latest
-    if: ${{ secrets.CHOCOLATEY_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
       - name: Update nuspec version

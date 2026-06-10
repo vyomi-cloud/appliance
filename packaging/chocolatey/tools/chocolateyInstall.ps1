@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $packageName = 'cloud-learn'
 $version     = '1.0.0'
-$url64       = "https://github.com/cloudlearn/cloud-learn/releases/download/v$version/cloud-learn-$version-x64.msi"
+$url64       = "https://github.com/sudhirkumarganti/cloud-learn/releases/download/v$version/cloud-learn-$version-x64.msi"
 $checksum64  = 'REPLACED_BY_RELEASE_WORKFLOW'
 
 $packageArgs = @{
@@ -18,7 +18,7 @@ Install-ChocolateyPackage @packageArgs
 
 Write-Host ""
 Write-Host "==> CloudLearn installed. Run 'cloud-learn up' to start the simulator."
-Write-Host "==> Docs: https://github.com/cloudlearn/cloud-learn"
+Write-Host "==> Docs: https://github.com/sudhirkumarganti/cloud-learn"
 
 # Multipass dependency check
 if (-not (Get-Command multipass -ErrorAction SilentlyContinue)) {
