@@ -416,6 +416,20 @@ def check_service(tier: str, service_key: str,
     # Provider gate — Student is locked to one cloud.
     providers = p.get("providers", [])
     if providers == "primary_cloud_only":
+        # Fail-safe: a Student tier subscription with an empty primary_cloud
+        # is a misconfiguration upstream (UI picker must have failed). Deny
+        # ALL clouds rather than silently letting the user in — otherwise an
+        # empty primary_cloud + the truthy-AND below would short-circuit to
+        # "allowed" and break the tier promise.
+        if request_cloud and not primary_cloud:
+            return {
+                "ok": False, "code": "tier_primary_cloud_unset",
+                "reason": (
+                    "Student tier requires a primary cloud to be selected. "
+                    "Re-activate from the dashboard or pick one on /pricing."
+                ),
+                "upgrade_to": "developer",
+            }
         if request_cloud and primary_cloud and request_cloud != primary_cloud:
             return {
                 "ok": False, "code": "tier_provider_locked",
