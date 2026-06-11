@@ -1,0 +1,59 @@
+{
+  "version": "0.2.0",
+  "description": "Local multi-cloud simulator (AWS/GCP/Azure) with real backends — full SDK + CLI parity for boto3, aws-cli, google-cloud-*, azure-sdk-*, Terraform.",
+  "homepage": "https://github.com/sudhirkumarganti/cloud-learn",
+  "license": "MIT",
+  "url": "https://github.com/sudhirkumarganti/cloud-learn/releases/download/v0.2.0/cloud-learn-0.2.0.tar.gz",
+  "hash": "REPLACED_BY_RELEASE_WORKFLOW",
+  "extract_dir": "cloud-learn-0.2.0",
+  "depends": [
+    "extras/multipass"
+  ],
+  "bin": [
+    [
+      "scripts\\cloud-learn.ps1",
+      "cloud-learn"
+    ]
+  ],
+  "post_install": [
+    "Write-Host ''",
+    "Write-Host '==> CloudLearn installed. Run `cloud-learn up` to start the simulator.' -ForegroundColor Green",
+    "Write-Host '==> Docs: https://github.com/sudhirkumarganti/cloud-learn' -ForegroundColor Cyan"
+  ],
+  "uninstaller": {
+    "script": [
+      "Write-Host '==> Stopping appliance VM (if running)...' -ForegroundColor Yellow",
+      "if (Get-Command multipass -ErrorAction SilentlyContinue) {",
+      "  multipass stop cloudlearn-appliance 2>&1 | Out-Null",
+      "  multipass delete cloudlearn-appliance 2>&1 | Out-Null",
+      "  multipass purge 2>&1 | Out-Null",
+      "}"
+    ]
+  },
+  "checkver": {
+    "github": "https://github.com/sudhirkumarganti/cloud-learn"
+  },
+  "autoupdate": {
+    "url": "https://github.com/sudhirkumarganti/cloud-learn/releases/download/v$version/cloud-learn-$version.tar.gz",
+    "extract_dir": "cloud-learn-$version",
+    "hash": {
+      "url": "$baseurl/SHA256SUMS"
+    }
+  },
+  "notes": [
+    "CloudLearn ships as an appliance — the launcher runs a single Multipass VM and starts the full simulator stack (FastAPI + 8 real backends + Java CloudSim) inside.",
+    "",
+    "Prerequisites (Scoop's `depends` handles multipass; you also need):",
+    "  - Hyper-V enabled (Windows 10/11 Pro/Enterprise)  OR  VirtualBox",
+    "  - ~32 GB free disk for VM image + container layers",
+    "",
+    "Get started:",
+    "  cloud-learn up               # boots VM + simulator (5-10 min first run)",
+    "  Start http://192.168.x.x:9000   # URL printed in the launcher banner",
+    "",
+    "Stop with:",
+    "  cloud-learn down",
+    "",
+    "Full docs: https://github.com/sudhirkumarganti/cloud-learn/blob/main/README.md"
+  ]
+}

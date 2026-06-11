@@ -106,8 +106,8 @@ fetches the same Docker images.
 | Ubuntu / Debian | `sudo apt install cloud-learn && cloud-learn up` |
 | Fedora / RHEL | `sudo dnf install cloud-learn && cloud-learn up` |
 | Ubuntu (Snap) | `sudo snap install cloud-learn --classic` |
-| Windows (winget) | `winget install CloudLearn.CloudLearn` |
-| Windows (Chocolatey) | `choco install cloud-learn` |
+| Windows (Scoop) | `scoop bucket add cloudlearn https://github.com/sudhirkumarganti/scoop-bucket && scoop install cloud-learn` |
+| Windows (winget) | `winget install CloudLearn.CloudLearn` _(awaiting MSI)_ |
 
 Use these if you need the Multipass-VM isolation. The `curl-bash` path
 above is simpler if you already have Docker.
