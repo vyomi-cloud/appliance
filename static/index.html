@@ -20109,6 +20109,34 @@ function App() {
           onCreate={(space) => setSpaces(prev => [space, ...prev])}
           onDelete={(spaceId) => setSpaces(prev => prev.filter(space => space.id !== spaceId))}
           onConnect={async (space) => {
+            // ── Tier gate ────────────────────────────────────────────────
+            // Refuse early if the user's tier doesn't include this cloud.
+            // The HTML route + space-create gates also catch this server-side
+            // (the user would 302 back), but a clean toast here is friendlier
+            // than a silent redirect.
+            try {
+              const [lic, tp] = await Promise.all([
+                fetch('/api/license/status').then(r => r.ok ? r.json() : null).catch(() => null),
+                fetch('/api/runtime/tier').then(r => r.ok ? r.json() : null).catch(() => null),
+              ]);
+              const providers = tp?.active_policy?.providers;
+              const primary = String(lic?.primary_cloud || '');
+              const tier = String(tp?.active_tier || 'free');
+              const denied =
+                (providers === 'primary_cloud_only' && primary && space.provider_id !== primary) ||
+                (Array.isArray(providers) && !providers.includes(space.provider_id));
+              if (denied) {
+                setNotif({
+                  id: Date.now(),
+                  type: 'error',
+                  msg: providers === 'primary_cloud_only'
+                    ? `Your ${tier.toUpperCase()} plan is locked to ${primary.toUpperCase()}; cannot connect to ${space.provider_id.toUpperCase()}. Switch primary cloud from the dashboard or upgrade to Developer.`
+                    : `${space.provider_id.toUpperCase()} is not included in your ${tier.toUpperCase()} plan. Upgrade to access it.`,
+                });
+                return;
+              }
+            } catch (_) { /* fall through — server-side gates still apply */ }
+
             window.localStorage.setItem('cloudlearn.active.space', space.name);
             window.localStorage.setItem('cloudlearn.active.space.provider', space.provider_id);
             if (space.provider_id === 'aws') {

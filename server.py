@@ -8441,13 +8441,53 @@ def api_create_space(payload: dict[str, Any]):
     tenant = _tenant_dict(requested_tid)
     if not tenant:
         raise HTTPException(status_code=400, detail=f"tenant '{requested_tid}' not found")
+    # PER-TIER PROVIDER GATE — Student tier is locked to one cloud, so a
+    # space for a different provider must be rejected at creation time. If
+    # we allow the space to be created, the user can switch into it and the
+    # appliance ends up in a state where the active space's provider doesn't
+    # match the license — confusing, and a paid-tier-breaking gap if the
+    # console-route gate ever regresses.
+    from core import tier_policy as _tp
+    _tier_norm = _tp.normalize_tier(tenant.get("license_tier") or "free")
+    _policy = _tp.policy_for(_tier_norm)
+    _primary_cloud = str(tenant.get("primary_cloud") or "")
+    _providers = _policy.get("providers", [])
+    if _providers == "primary_cloud_only":
+        if not _primary_cloud:
+            raise HTTPException(status_code=403, detail={
+                "ok": False, "code": "tier_primary_cloud_unset",
+                "reason": ("Student tier requires a primary cloud to be selected. "
+                           "Re-activate from the dashboard or pick one on /pricing."),
+                "upgrade_to": "developer",
+                "active_tier": _tier_norm,
+                "docs": "https://cloudlearn.io/docs/tiers",
+            })
+        if provider != _primary_cloud:
+            raise HTTPException(status_code=403, detail={
+                "ok": False, "code": "tier_provider_locked",
+                "reason": (f"Student tier is locked to {_primary_cloud}; "
+                           f"cannot create a {provider} space"),
+                "upgrade_to": "developer",
+                "active_tier": _tier_norm,
+                "primary_cloud": _primary_cloud,
+                "requested_provider": provider,
+                "docs": "https://cloudlearn.io/docs/tiers",
+            })
+    elif isinstance(_providers, list) and provider not in _providers:
+        raise HTTPException(status_code=403, detail={
+            "ok": False, "code": "tier_provider_locked",
+            "reason": f"{provider} not available on {_tier_norm} tier",
+            "upgrade_to": "student" if _tier_norm == "free" else "developer",
+            "active_tier": _tier_norm,
+            "requested_provider": provider,
+            "docs": "https://cloudlearn.io/docs/tiers",
+        })
+
     # PER-TENANT QUOTA — tier-derived. The tier policy's `max_spaces` is the
     # active source of truth (Free=1, Student=5, Developer=25, Enterprise=∞).
     # Falls back to the tenant's stored `settings.max_spaces` if the tier
     # policy doesn't define a cap (custom-quota Enterprise instances).
-    from core import tier_policy as _tp
-    _tier_norm = _tp.normalize_tier(tenant.get("license_tier") or "free")
-    _policy_cap = _tp.policy_for(_tier_norm).get("max_spaces")
+    _policy_cap = _policy.get("max_spaces")
     if _policy_cap is None or _policy_cap == _tp.UNLIMITED:
         tenant_max = int((tenant.get("settings") or {}).get("max_spaces", 6))
     else:
