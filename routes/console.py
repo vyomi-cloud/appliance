@@ -7,6 +7,50 @@ from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, Resp
 from core import app_context as ctx
 
 
+# ─── Tier gate shared across the 3 console HTML routes ──────────────────────
+# A Student-tier subscription is locked to ONE cloud. We must block UI access
+# to other clouds at the HTML route level — otherwise the user sees an empty
+# but fully-rendered console shell (every click 403s through the middleware,
+# which is correct but a leaky UX).
+#
+# Returns a RedirectResponse to use, or None to continue with the normal
+# HTMLResponse.
+def _console_tier_gate(provider: str) -> RedirectResponse | None:
+    try:
+        from core import tier_policy as _tp
+        tenant = ctx._tenant_dict(ctx._active_tenant_id()) or {}
+    except Exception:
+        return None  # fail-open on internal errors — middleware still gates APIs
+    tier = str(tenant.get("license_tier") or "free")
+    primary = str(tenant.get("primary_cloud") or "")
+    policy = _tp.policy_for(tier)
+    providers = policy.get("providers", [])
+
+    if providers == "primary_cloud_only":
+        # Student tier with no primary_cloud set → bounce to /pricing so they
+        # can fix the activation. Matches the fail-safe in tier_policy.
+        if not primary:
+            return RedirectResponse(
+                "/pricing?error=student_primary_cloud_required",
+                status_code=302,
+            )
+        # Student tier asking for a different cloud → bounce to their cloud's
+        # console with a query param the SPA can use to show a "locked" toast.
+        if primary != provider:
+            return RedirectResponse(
+                f"/console/{primary}?denied={provider}",
+                status_code=302,
+            )
+    elif isinstance(providers, list) and provider not in providers:
+        # Free tier hitting a console it doesn't have access to — bounce to
+        # /pricing with the upgrade context.
+        return RedirectResponse(
+            f"/pricing?error=tier_console_locked&cloud={provider}&tier={tier}",
+            status_code=302,
+        )
+    return None
+
+
 def _swagger_html(openapi_url: str, title: str):
     """Swagger UI from locally-bundled assets (works fully offline)."""
     from fastapi.openapi.docs import get_swagger_ui_html
@@ -151,6 +195,9 @@ def register(app: FastAPI) -> None:
     @app.get("/console/azure", include_in_schema=False)
     @app.get("/console/azure/{path:path}", include_in_schema=False)
     def console_azure(path: str = ""):
+        gate = _console_tier_gate("azure")
+        if gate is not None:
+            return gate
         html_path = os.path.join(os.path.dirname(__file__), "..", "static", "azure-console.html")
         with open(html_path, "rb") as f:
             return HTMLResponse(content=f.read().decode("utf-8"), headers={"Cache-Control": "no-store, max-age=0"})
@@ -158,6 +205,9 @@ def register(app: FastAPI) -> None:
     @app.get("/console/aws", include_in_schema=False)
     @app.get("/console/aws/{path:path}", include_in_schema=False)
     def console_aws(path: str = ""):
+        gate = _console_tier_gate("aws")
+        if gate is not None:
+            return gate
         html_path = os.path.join(os.path.dirname(__file__), "..", "static", "aws-console.html")
         with open(html_path, "rb") as f:
             return HTMLResponse(content=f.read().decode("utf-8"), headers={"Cache-Control": "no-store, max-age=0"})
@@ -173,6 +223,9 @@ def register(app: FastAPI) -> None:
     @app.get("/console/gcp", include_in_schema=False)
     @app.get("/console/gcp/{path:path}", include_in_schema=False)
     def console_gcp(path: str = ""):
+        gate = _console_tier_gate("gcp")
+        if gate is not None:
+            return gate
         html_path = os.path.join(os.path.dirname(__file__), "..", "static", "gcp-console.html")
         with open(html_path, "rb") as f:
             return HTMLResponse(content=f.read().decode("utf-8"), headers={"Cache-Control": "no-store, max-age=0"})
