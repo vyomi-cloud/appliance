@@ -722,11 +722,11 @@ _APIM_WIZARD = {
                       "1-50 chars, lowercase, start with a letter"),
                 _location(),
                 {"name": "properties.publisherEmail", "label": "Organization email",
-                 "default": "admin@cloudlearn.dev", "required": True,
+                 "default": "admin@vyomi.cloud", "required": True,
                  "validate": {"regex": r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
                               "message": "valid email address"}},
                 {"name": "properties.publisherName", "label": "Organization name",
-                 "default": "CloudLearn", "required": True},
+                 "default": "Vyomi", "required": True},
                 {"name": "sku.name", "label": "Pricing tier", "type": "select",
                  "default": "Developer", "options": [
                     {"value": "Consumption", "label": "Consumption — pay-per-call, serverless"},

@@ -1,4 +1,4 @@
-# CloudLearn
+# Vyomi
 
 [![CI](https://github.com/cloudlearn/cloud-learn/actions/workflows/ci.yml/badge.svg)](https://github.com/cloudlearn/cloud-learn/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -6,7 +6,9 @@
 
 **Local-first multi-cloud simulator. Real SDKs, real CLIs, real backends — no network required.**
 
-CloudLearn gives you AWS, GCP, and Azure-like experiences on your laptop, with cloud-faithful APIs that work with the standard `boto3`, `aws-sdk-java`, `google-cloud-*`, `azure-sdk-for-*`, plus the `aws` / `gcloud` / `gsutil` / `az` / `terraform` CLIs. Override the endpoint, point at `http://localhost:9000`, and your existing code runs.
+> Note: Vyomi is the customer-facing brand at [vyomi.cloud](https://vyomi.cloud). The codebase, the `cloud-learn` CLI, the Docker image (`cloudlearn/simulator`), and the GitHub repo stay named `cloudlearn` / `cloud-learn` so existing installs keep working.
+
+Vyomi gives you AWS, GCP, and Azure-like experiences on your laptop, with cloud-faithful APIs that work with the standard `boto3`, `aws-sdk-java`, `google-cloud-*`, `azure-sdk-for-*`, plus the `aws` / `gcloud` / `gsutil` / `az` / `terraform` CLIs. Override the endpoint, point at `http://localhost:9000`, and your existing code runs.
 
 ## What's in v1.0
 

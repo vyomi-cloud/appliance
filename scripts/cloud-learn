@@ -39,7 +39,7 @@ export CLOUDLEARN_RUNTIME_CONTEXT="$RUNTIME_CONTEXT"
 
 usage() {
   cat <<'EOF'
-cloud-learn - local cloud simulator launcher
+Vyomi simulator launcher (cloud-learn CLI) — local multi-cloud appliance
 
 Usage:
   cloud-learn up
@@ -67,7 +67,7 @@ Environment:
 
 Default mode:
   The launcher starts a single Multipass VM appliance and then starts the
-  full CloudLearn stack inside that VM.
+  full Vyomi stack inside that VM.
 EOF
 }
 
