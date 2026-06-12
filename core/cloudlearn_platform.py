@@ -1571,13 +1571,13 @@ class RuntimeManager:
                 return (
                     "manual-multipass",
                     [],
-                    "Multipass must be available on the host. CloudLearn cannot install host runtimes from inside the app container.",
+                    "Multipass must be available on the host. Vyomi cannot install host runtimes from inside the app container.",
                 )
             if backend == "lxd":
                 return (
                     "manual-lxd",
                     [],
-                    "LXD must be available on the host. CloudLearn cannot install host runtimes from inside the app container.",
+                    "LXD must be available on the host. Vyomi cannot install host runtimes from inside the app container.",
                 )
         if backend == "multipass":
             if host_os == "windows":

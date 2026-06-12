@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CloudLearn Simulator</title>
+  <title>Vyomi Simulator</title>
   <script crossorigin src="/assets/react.development.js"></script>
   <script crossorigin src="/assets/react-dom.development.js"></script>
   <script src="/assets/babel.min.js"></script>
@@ -2696,7 +2696,7 @@ function AwsConsoleShell({activeView, onOpen, children}) {
   return (
     <>
       <header className="hdr">
-        <div className="hdr-logo">cloud-learn<span>☁</span></div>
+        <div className="hdr-logo">Vyomi<span>☁</span></div>
         <button className="hdr-menu" onClick={() => open('providers')}><span className="material-symbols-outlined">apps</span>Providers</button>
         <div className="hdr-search">
           <span className="material-symbols-outlined hdr-search-icon">search</span>
@@ -5020,7 +5020,7 @@ function DashboardView({onOpen, onBack, notify, onExportTerraform}) {
   return (
     <>
       <header className="hdr">
-        <div className="hdr-logo">cloud-learn<span>☁</span></div>
+        <div className="hdr-logo">Vyomi<span>☁</span></div>
         <button className="hdr-menu" onClick={() => onOpen('providers')}><span className="material-symbols-outlined">apps</span>Providers</button>
         <div className="hdr-search">
           <span className="material-symbols-outlined hdr-search-icon">search</span>
@@ -6481,7 +6481,7 @@ function ProductView({notify}) {
       <div className="panel">
         <div className="ph">
           <div>
-            <div className="pt">CloudLearn Product Center</div>
+            <div className="pt">Vyomi Product Center</div>
             <div className="ps">Licensing, packs, credits, and simulator administration.</div>
           </div>
         </div>
@@ -20348,7 +20348,7 @@ function App() {
         <>
           <header className="hdr">
             <div className="hdr-logo">aws<span>☁</span></div>
-            <div className="hdr-svc"><strong>CloudLearn Product Center</strong></div>
+            <div className="hdr-svc"><strong>Vyomi Product Center</strong></div>
             <div className="hdr-right">
               <button className="hdr-pill" title="API docs (Swagger)" onClick={() => window.open('/docs', '_blank', 'noopener')}><span className="material-symbols-outlined">api</span>API</button>
               <span className="badge">ADMIN</span>
@@ -20363,7 +20363,7 @@ function App() {
         <>
           {/* Top header */}
           <header className="hdr">
-            <div className="hdr-logo">cloud-learn<span>☁</span></div>
+            <div className="hdr-logo">Vyomi<span>☁</span></div>
             <button className="hdr-menu" onClick={() => open('providers')}>Providers</button>
             <div className="hdr-svc"><strong>{titleMap[view] || 'Simulator'}</strong></div>
             <div className="hdr-search">
