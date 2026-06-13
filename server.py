@@ -2067,6 +2067,25 @@ def _cloudsim_sync_service_resource(provider: str, service: str, resource_type: 
         pass
 
 
+def _default_cloudsim_space_policy() -> dict:
+    """Default CloudSim per-space policy. Used when a space has no
+    explicit `cloudsim.policy` block. Liberal defaults — allow EC2
+    launches on both multipass and LXD backends with no AMI allowlist.
+    The normalizer in `_cloudsim_space_policy` enforces shape/types
+    on top of whatever this returns.
+
+    Was referenced but never defined — calls used to NameError, taking
+    every EC2 launch path with it. Filled in 2026-06-13.
+    """
+    return {
+        "ec2": {
+            "launch": True,
+            "allowed_runtime_backends": ["multipass", "lxd"],
+            "allowed_amis": [],  # empty list = no allowlist, any AMI accepted
+        },
+    }
+
+
 def _cloudsim_space_policy(space: dict | None) -> dict:
     policy = copy.deepcopy(_default_cloudsim_space_policy())
     if not isinstance(space, dict):
