@@ -20837,6 +20837,123 @@ def _list_objects_v2(bucket: str, params: dict) -> Response:
     return _xml_response("".join(xml_parts))
 
 
+# ── VM-Connect endpoints (AWS EC2 + GCP Compute + Azure VM) ────────────
+# Cross-provider SSH/lxc-shell helper. Lazy-provisions an SSH key into
+# the LXD container backing the VM, opens a proxy port on the VM, and
+# returns realistic Connect commands the user can paste into a terminal.
+# See core/vm_connect.py for the full provisioning pipeline.
+#
+# Must be registered BEFORE aws_s3.register() so the S3 catch-all
+# doesn't swallow the GETs as bucket-style lookups.
+from core import vm_connect as _vmc
+
+
+def _find_instance_across_spaces(provider: str, instance_id: str) -> tuple[Optional[dict], Optional[dict]]:
+    """Return (instance_dict, space_dict) or (None, None). Scans every
+    space's service_states because the active space at request time may
+    not be the one that owns this instance (e.g., user switched spaces
+    between launch and Connect)."""
+    iid = str(instance_id or "").strip()
+    if not iid:
+        return None, None
+    spaces = (STATE.get("spaces") or {}).get("spaces") or {}
+    for sid, space in spaces.items():
+        if not isinstance(space, dict):
+            continue
+        ss = space.get("service_states") or {}
+        if provider == "aws":
+            instances = (ss.get("ec2") or {}).get("instances") or {}
+            inst = instances.get(iid)
+            if inst:
+                return inst, space
+        elif provider == "gcp":
+            instances = (ss.get("gcp_compute") or {}).get("instances") or {}
+            inst = instances.get(iid)
+            if inst:
+                return inst, space
+        elif provider == "azure":
+            # Azure VMs are stored as ARM resources keyed by full
+            # resource_id; match by name suffix or by the bare name.
+            resources = (ss.get("azure_arm") or {}).get("resources") or {}
+            for rid, rec in resources.items():
+                if not isinstance(rec, dict):
+                    continue
+                if "virtualmachines" not in str(rec.get("_type", "")).lower():
+                    continue
+                if rec.get("name") == iid or str(rid).rstrip("/").endswith("/" + iid):
+                    return rec, space
+    return None, None
+
+
+def _connect_info_response(provider: str, instance_id: str) -> dict:
+    inst, _ = _find_instance_across_spaces(provider, instance_id)
+    if not inst:
+        raise HTTPException(404, f"instance {instance_id!r} not found")
+    state_running = inst.get("state") or inst.get("powerState") or ""
+    if isinstance(state_running, dict):
+        state_running = state_running.get("Name") or ""
+    if str(state_running).lower() not in {"running", "powerstate/running"}:
+        raise HTTPException(409, detail={
+            "error": "instance_not_running",
+            "state": state_running,
+            "hint": "Start the instance before connecting.",
+        })
+    # Pass the deployment-level STATE so port claims are global, not per-space.
+    info = _vmc.connect_info(STATE, inst, provider=provider)
+    if not info.get("ok"):
+        raise HTTPException(503, detail=info)
+    _persist_state()
+    return info
+
+
+@app.get("/api/aws/ec2/instances/{instance_id}/connect-info")
+def api_ec2_connect_info(instance_id: str):
+    return _connect_info_response("aws", instance_id)
+
+
+@app.get("/api/aws/ec2/instances/{instance_id}/private-key.pem")
+def api_ec2_private_key(instance_id: str):
+    pem = _vmc.read_private_key(instance_id)
+    if not pem:
+        raise HTTPException(404, "private key not provisioned yet — open Connect first")
+    return Response(
+        content=pem, media_type="application/x-pem-file",
+        headers={"Content-Disposition": f'attachment; filename="vyomi-{instance_id}.pem"'},
+    )
+
+
+@app.get("/api/gcp/compute/instances/{instance_id}/connect-info")
+def api_gce_connect_info(instance_id: str):
+    return _connect_info_response("gcp", instance_id)
+
+
+@app.get("/api/gcp/compute/instances/{instance_id}/private-key.pem")
+def api_gce_private_key(instance_id: str):
+    pem = _vmc.read_private_key(instance_id)
+    if not pem:
+        raise HTTPException(404, "private key not provisioned yet — open Connect first")
+    return Response(
+        content=pem, media_type="application/x-pem-file",
+        headers={"Content-Disposition": f'attachment; filename="vyomi-{instance_id}.pem"'},
+    )
+
+
+@app.get("/api/azure/vm/{instance_id}/connect-info")
+def api_azure_vm_connect_info(instance_id: str):
+    return _connect_info_response("azure", instance_id)
+
+
+@app.get("/api/azure/vm/{instance_id}/private-key.pem")
+def api_azure_vm_private_key(instance_id: str):
+    pem = _vmc.read_private_key(instance_id)
+    if not pem:
+        raise HTTPException(404, "private key not provisioned yet — open Connect first")
+    return Response(
+        content=pem, media_type="application/x-pem-file",
+        headers={"Content-Disposition": f'attachment; filename="vyomi-{instance_id}.pem"'},
+    )
+
+
 # ── S3 catch-all routes — TRULY LAST ────────────────────────────────
 # Register AFTER all the explicit /api/{auth,license,...} POST routes
 # defined above. Starlette matches routes in registration order; if

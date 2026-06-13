@@ -2374,16 +2374,75 @@ function buildSparkline(label, lo, hi, suffix){
 // EC2-specific tabs
 SUB_RENDERERS.connect = function(svc, full, host){
   host.append(el("div",{class:"alert info"}, icon("terminal"),
-    el("div",{}, "Connect to your instance via SSH or EC2 Instance Connect.")));
-  const ip = full.public_ip || full.private_ip || "<host>";
-  host.append(el("div",{class:"keyblock"}, el("div",{class:"k"}, "SSH client"),
-    el("pre",{class:"keyval"}, `ssh -i ~/.ssh/${full.key_name||"id_rsa"} ec2-user@${ip}`),
-    el("div",{class:"row"},
-      el("button",{class:"btn",onclick:()=>{navigator.clipboard.writeText(`ssh -i ~/.ssh/${full.key_name||"id_rsa"} ec2-user@${ip}`); toast("Copied");}}, "Copy"))));
-  if (full.container_name) {
-    host.append(el("div",{class:"keyblock"}, el("div",{class:"k"}, "Simulator backend (LXD/multipass)"),
-      el("pre",{class:"keyval"}, `lxc exec ${full.container_name} -- bash`)));
+    el("div",{}, "Connect to your instance via SSH (real key + port forward) or via the LXD shell fallback.")));
+
+  // Container for the live values — populated by an async fetch to the
+  // /connect-info endpoint, which lazy-provisions the SSH key + lxc proxy
+  // device on first hit and returns cached info thereafter.
+  const wrap = el("div",{class:"vm-connect-pane"});
+  host.append(wrap);
+  wrap.append(el("div",{class:"alert"}, icon("clock"),
+    el("div",{}, "Provisioning SSH access on the running container…")));
+
+  const instanceId = full.instance_id || full.InstanceId || full.id || "";
+  if (!instanceId) {
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"alert warn"}, el("div",{}, "Missing instance_id — cannot generate connect command.")));
+    return;
   }
+
+  fetch(`/api/aws/ec2/instances/${encodeURIComponent(instanceId)}/connect-info`)
+    .then(r => r.json().then(d => ({ok: r.ok, status: r.status, body: d})))
+    .then(({ok, status, body}) => {
+      wrap.innerHTML = "";
+      if (!ok) {
+        const reason = (body.detail && (body.detail.error || body.detail.reason)) || body.detail || "unknown";
+        const hint = (body.detail && body.detail.hint) || "";
+        wrap.append(el("div",{class:"alert warn"},
+          el("div",{}, `Connect provisioning failed (HTTP ${status}): ${reason}${hint ? " · " + hint : ""}`)));
+        return;
+      }
+      const ssh = body.ssh || {};
+      const lxcCmd = (body.lxc || {}).command || "";
+      const keyUrl = ssh.key_download_url || "";
+
+      // 1. Download SSH key — one-click download of the .pem file
+      wrap.append(el("div",{class:"keyblock"},
+        el("div",{class:"k"}, "Step 1 — Download SSH private key (one-time)"),
+        el("div",{class:"row"},
+          el("a",{class:"btn", href:keyUrl, download:`vyomi-${instanceId}.pem`},
+            icon("download"), `Download ${ssh.key_local_filename || "vyomi-" + instanceId + ".pem"}`),
+          el("span",{class:"muted", style:"font-size:12px;margin-left:8px"},
+            "Save to ~/Downloads. Run `chmod 600` on it before connecting."))));
+
+      // 2. The real SSH command, ready to copy + paste
+      const sshCmd = ssh.command || "";
+      wrap.append(el("div",{class:"keyblock"},
+        el("div",{class:"k"}, "Step 2 — SSH command"),
+        el("pre",{class:"keyval"}, sshCmd),
+        el("div",{class:"row"},
+          el("button",{class:"btn",onclick:()=>{navigator.clipboard.writeText(sshCmd); toast("Copied");}},
+            icon("copy"), "Copy"),
+          el("span",{class:"muted", style:"font-size:12px;margin-left:8px"},
+            `Logs you in as ${ssh.user || "ubuntu"}@${ssh.host || ""} on port ${ssh.port || ""}.`))));
+
+      // 3. lxc shell fallback (no key needed, but only works on the
+      //    same machine running the appliance VM)
+      if (lxcCmd) {
+        wrap.append(el("div",{class:"keyblock"},
+          el("div",{class:"k"}, "Alternative — LXD shell (no key required)"),
+          el("pre",{class:"keyval"}, lxcCmd),
+          el("div",{class:"row"},
+            el("button",{class:"btn",onclick:()=>{navigator.clipboard.writeText(lxcCmd); toast("Copied");}},
+              icon("copy"), "Copy"),
+            el("span",{class:"muted", style:"font-size:12px;margin-left:8px"},
+              "Drops you straight into a root shell — works without SSH keys but only from the host running this appliance."))));
+      }
+    })
+    .catch(e => {
+      wrap.innerHTML = "";
+      wrap.append(el("div",{class:"alert warn"}, el("div",{}, `Connect endpoint error: ${e.message}`)));
+    });
 };
 SUB_RENDERERS.ec2networking = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
