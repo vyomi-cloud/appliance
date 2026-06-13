@@ -20089,7 +20089,7 @@ function App() {
   const filteredNavItems = navItems.filter(([label]) => matches(label));
   const handleBackToDashboard = () => open('dashboard');
 
-  if (!productMode && view === 'providers') {
+  if (!productMode && (view === 'providers' || view === 'spaces')) {
     return (
       <>
         {/* Same slim brand header used on the spaces view — vyomi logo
@@ -20099,7 +20099,7 @@ function App() {
           <a href="/clouds" className="hdr-logo" style={{textDecoration:'none'}}>
             <img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi"/>
           </a>
-          <div className="hdr-svc"><strong>Providers</strong></div>
+          <div className="hdr-svc"><strong>Workspaces</strong></div>
           <div className="hdr-right">
             <a href="/" className="hdr-pill" title="Back to the launch / pricing page"
                style={{textDecoration:'none',color:'#16191f'}}>
@@ -20110,6 +20110,123 @@ function App() {
           </div>
         </header>
         <div style={{marginTop:50}}>
+          {/* ──── Existing spaces — resume your work ──── */}
+          <SimulationSpacesView
+            key={`spaces-${spaceProviderFilter || 'all'}-${spacesViewNonce}`}
+            providers={providers}
+            spaces={spaces}
+            providerFilter={spaceProviderFilter}
+            onBack={() => open('providers')}
+            onFilter={setSpaceProviderFilter}
+            onCreate={(space) => setSpaces(prev => [space, ...prev])}
+            onDelete={(spaceId) => setSpaces(prev => prev.filter(space => space.id !== spaceId))}
+            onConnect={async (space) => {
+              // ── Tier gate ────────────────────────────────────────────────
+              // Refuse early if the user's tier doesn't include this cloud.
+              // The HTML route + space-create gates also catch this server-side
+              // (the user would 302 back), but a clean toast here is friendlier
+              // than a silent redirect.
+              try {
+                const [lic, tp] = await Promise.all([
+                  fetch('/api/license/status').then(r => r.ok ? r.json() : null).catch(() => null),
+                  fetch('/api/runtime/tier').then(r => r.ok ? r.json() : null).catch(() => null),
+                ]);
+                const providers = tp?.active_policy?.providers;
+                const primary = String(lic?.primary_cloud || '');
+                const tier = String(tp?.active_tier || 'free');
+                const denied =
+                  (providers === 'primary_cloud_only' && primary && space.provider_id !== primary) ||
+                  (Array.isArray(providers) && !providers.includes(space.provider_id));
+                if (denied) {
+                  setNotif({
+                    id: Date.now(),
+                    type: 'error',
+                    msg: providers === 'primary_cloud_only'
+                      ? `Your ${tier.toUpperCase()} plan is locked to ${primary.toUpperCase()}; cannot connect to ${space.provider_id.toUpperCase()}. Switch primary cloud from the dashboard or upgrade to Developer.`
+                      : `${space.provider_id.toUpperCase()} is not included in your ${tier.toUpperCase()} plan. Upgrade to access it.`,
+                  });
+                  return;
+                }
+              } catch (_) { /* fall through — server-side gates still apply */ }
+
+              window.localStorage.setItem('cloudlearn.active.space', space.name);
+              window.localStorage.setItem('cloudlearn.active.space.provider', space.provider_id);
+              if (space.provider_id === 'aws') {
+                // Mirror Azure's Provider→Space→Console flow: ensure backend has
+                // an AWS-provider space + switch to it, then jump to /console/aws.
+                // The legacy 'space-legacy' is already provider=aws so this is
+                // usually a no-op; falls back to legacy on any error.
+                try {
+                  const list = await fetch('/api/spaces').then(r => r.json()).catch(() => ({spaces:[]}));
+                  let awsSpace = (list.spaces || []).find(s => (s.provider || '').toLowerCase() === 'aws');
+                  if (!awsSpace) {
+                    const created = await fetch('/api/spaces', {
+                      method: 'POST', headers: {'Content-Type': 'application/json'},
+                      body: JSON.stringify({name: space.name, provider: 'aws', tenant_id: 'default'}),
+                    }).then(r => r.json()).catch(() => null);
+                    awsSpace = created && created.space ? created.space : null;
+                  }
+                  if (awsSpace && awsSpace.space_id) {
+                    await fetch(`/api/spaces/${awsSpace.space_id}/switch`, {method: 'POST'}).catch(() => {});
+                  }
+                } catch (_) { /* best-effort — still let the navigation happen */ }
+                window.location.href = '/console/aws';
+                return;
+              }
+              if (space.provider_id === 'azure') {
+                // The Azure console (/console/azure) is a standalone SPA that talks
+                // to the backend's CURRENT active space. AWS/GCP work without this
+                // because the legacy backend space is already provider=aws. For
+                // Azure we must (a) ensure an Azure-provider space exists on the
+                // backend, (b) switch active to it, then (c) navigate to the
+                // console. Otherwise the space-scoped state proxy rejects writes
+                // (provider mismatch → per-request scratch dict, nothing persists).
+                try {
+                  const list = await fetch('/api/spaces').then(r => r.json()).catch(() => ({spaces:[]}));
+                  let azureSpace = (list.spaces || []).find(s => (s.provider || '').toLowerCase() === 'azure');
+                  if (!azureSpace) {
+                    const created = await fetch('/api/spaces', {
+                      method: 'POST', headers: {'Content-Type': 'application/json'},
+                      body: JSON.stringify({name: space.name, provider: 'azure', tenant_id: 'default'}),
+                    }).then(r => r.json()).catch(() => null);
+                    azureSpace = created && created.space ? created.space : null;
+                  }
+                  if (azureSpace && azureSpace.space_id) {
+                    await fetch(`/api/spaces/${azureSpace.space_id}/switch`, {method: 'POST'}).catch(() => {});
+                  }
+                } catch (_) { /* best-effort — still let the navigation happen */ }
+                window.location.href = '/console/azure';
+                return;
+              }
+              if (space.provider_id === 'gcp') {
+                // Mirror Azure/AWS Provider→Space→Console flow: ensure backend
+                // has a GCP-provider space + switch to it, then navigate to
+                // /console/gcp. Closes the scratch-dict trap identified in the
+                // cross-cloud parity audit (GCP API calls when active space is
+                // not provider=gcp silently write to a per-request scratch
+                // dict). requireGcpSpace inside the standalone console gates
+                // for the same reason.
+                try {
+                  const list = await fetch('/api/spaces').then(r => r.json()).catch(() => ({spaces:[]}));
+                  let gcpSpace = (list.spaces || []).find(s => (s.provider || '').toLowerCase() === 'gcp');
+                  if (!gcpSpace) {
+                    const created = await fetch('/api/spaces', {
+                      method: 'POST', headers: {'Content-Type': 'application/json'},
+                      body: JSON.stringify({name: space.name, provider: 'gcp', tenant_id: 'default'}),
+                    }).then(r => r.json()).catch(() => null);
+                    gcpSpace = created && created.space ? created.space : null;
+                  }
+                  if (gcpSpace && gcpSpace.space_id) {
+                    await fetch(`/api/spaces/${gcpSpace.space_id}/switch`, {method: 'POST'}).catch(() => {});
+                  }
+                } catch (_) { /* best-effort — still navigate */ }
+                window.location.href = '/console/gcp';
+                return;
+              }
+              return open('dashboard');
+            }}
+          />
+          {/* ──── Cloud providers — start something new ──── */}
           <ProvidersView providers={providers} onOpenSpaces={openSpaces} notify={notify}
                          onOpenTier={() => open('tier')} />
         </div>
@@ -20119,145 +20236,6 @@ function App() {
   }
 
 
-  if (!productMode && view === 'spaces') {
-    return (
-      <>
-        {/* Slim brand header — same logo + Back to Launch shown on the
-            default /clouds view, so users in ?view=spaces still see the
-            vyomi mark and can return to the launch page. */}
-        <header className="hdr">
-          <a href="/clouds" className="hdr-logo" style={{textDecoration:'none'}}>
-            <img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi"/>
-          </a>
-          <div className="hdr-svc"><strong>Spaces</strong></div>
-          <div className="hdr-right">
-            <a href="/" className="hdr-pill" title="Back to the launch / pricing page"
-               style={{textDecoration:'none',color:'#16191f'}}>
-              <span className="material-symbols-outlined">arrow_back</span>Back to Launch
-            </a>
-            <span className="badge">SIMULATOR</span>
-            <span style={{background:'#37475a',padding:'3px 10px',borderRadius:3,fontSize:12}}>root</span>
-          </div>
-        </header>
-        <SimulationSpacesView
-          key={`spaces-${spaceProviderFilter || 'all'}-${spacesViewNonce}`}
-          providers={providers}
-          spaces={spaces}
-          providerFilter={spaceProviderFilter}
-          onBack={() => open('providers')}
-          onFilter={setSpaceProviderFilter}
-          onCreate={(space) => setSpaces(prev => [space, ...prev])}
-          onDelete={(spaceId) => setSpaces(prev => prev.filter(space => space.id !== spaceId))}
-          onConnect={async (space) => {
-            // ── Tier gate ────────────────────────────────────────────────
-            // Refuse early if the user's tier doesn't include this cloud.
-            // The HTML route + space-create gates also catch this server-side
-            // (the user would 302 back), but a clean toast here is friendlier
-            // than a silent redirect.
-            try {
-              const [lic, tp] = await Promise.all([
-                fetch('/api/license/status').then(r => r.ok ? r.json() : null).catch(() => null),
-                fetch('/api/runtime/tier').then(r => r.ok ? r.json() : null).catch(() => null),
-              ]);
-              const providers = tp?.active_policy?.providers;
-              const primary = String(lic?.primary_cloud || '');
-              const tier = String(tp?.active_tier || 'free');
-              const denied =
-                (providers === 'primary_cloud_only' && primary && space.provider_id !== primary) ||
-                (Array.isArray(providers) && !providers.includes(space.provider_id));
-              if (denied) {
-                setNotif({
-                  id: Date.now(),
-                  type: 'error',
-                  msg: providers === 'primary_cloud_only'
-                    ? `Your ${tier.toUpperCase()} plan is locked to ${primary.toUpperCase()}; cannot connect to ${space.provider_id.toUpperCase()}. Switch primary cloud from the dashboard or upgrade to Developer.`
-                    : `${space.provider_id.toUpperCase()} is not included in your ${tier.toUpperCase()} plan. Upgrade to access it.`,
-                });
-                return;
-              }
-            } catch (_) { /* fall through — server-side gates still apply */ }
-
-            window.localStorage.setItem('cloudlearn.active.space', space.name);
-            window.localStorage.setItem('cloudlearn.active.space.provider', space.provider_id);
-            if (space.provider_id === 'aws') {
-              // Mirror Azure's Provider→Space→Console flow: ensure backend has
-              // an AWS-provider space + switch to it, then jump to /console/aws.
-              // The legacy 'space-legacy' is already provider=aws so this is
-              // usually a no-op; falls back to legacy on any error.
-              try {
-                const list = await fetch('/api/spaces').then(r => r.json()).catch(() => ({spaces:[]}));
-                let awsSpace = (list.spaces || []).find(s => (s.provider || '').toLowerCase() === 'aws');
-                if (!awsSpace) {
-                  const created = await fetch('/api/spaces', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name: space.name, provider: 'aws', tenant_id: 'default'}),
-                  }).then(r => r.json()).catch(() => null);
-                  awsSpace = created && created.space ? created.space : null;
-                }
-                if (awsSpace && awsSpace.space_id) {
-                  await fetch(`/api/spaces/${awsSpace.space_id}/switch`, {method: 'POST'}).catch(() => {});
-                }
-              } catch (_) { /* best-effort — still let the navigation happen */ }
-              window.location.href = '/console/aws';
-              return;
-            }
-            if (space.provider_id === 'azure') {
-              // The Azure console (/console/azure) is a standalone SPA that talks
-              // to the backend's CURRENT active space. AWS/GCP work without this
-              // because the legacy backend space is already provider=aws. For
-              // Azure we must (a) ensure an Azure-provider space exists on the
-              // backend, (b) switch active to it, then (c) navigate to the
-              // console. Otherwise the space-scoped state proxy rejects writes
-              // (provider mismatch → per-request scratch dict, nothing persists).
-              try {
-                const list = await fetch('/api/spaces').then(r => r.json()).catch(() => ({spaces:[]}));
-                let azureSpace = (list.spaces || []).find(s => (s.provider || '').toLowerCase() === 'azure');
-                if (!azureSpace) {
-                  const created = await fetch('/api/spaces', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name: space.name, provider: 'azure', tenant_id: 'default'}),
-                  }).then(r => r.json()).catch(() => null);
-                  azureSpace = created && created.space ? created.space : null;
-                }
-                if (azureSpace && azureSpace.space_id) {
-                  await fetch(`/api/spaces/${azureSpace.space_id}/switch`, {method: 'POST'}).catch(() => {});
-                }
-              } catch (_) { /* best-effort — still let the navigation happen */ }
-              window.location.href = '/console/azure';
-              return;
-            }
-            if (space.provider_id === 'gcp') {
-              // Mirror Azure/AWS Provider→Space→Console flow: ensure backend
-              // has a GCP-provider space + switch to it, then navigate to
-              // /console/gcp. Closes the scratch-dict trap identified in the
-              // cross-cloud parity audit (GCP API calls when active space is
-              // not provider=gcp silently write to a per-request scratch
-              // dict). requireGcpSpace inside the standalone console gates
-              // for the same reason.
-              try {
-                const list = await fetch('/api/spaces').then(r => r.json()).catch(() => ({spaces:[]}));
-                let gcpSpace = (list.spaces || []).find(s => (s.provider || '').toLowerCase() === 'gcp');
-                if (!gcpSpace) {
-                  const created = await fetch('/api/spaces', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name: space.name, provider: 'gcp', tenant_id: 'default'}),
-                  }).then(r => r.json()).catch(() => null);
-                  gcpSpace = created && created.space ? created.space : null;
-                }
-                if (gcpSpace && gcpSpace.space_id) {
-                  await fetch(`/api/spaces/${gcpSpace.space_id}/switch`, {method: 'POST'}).catch(() => {});
-                }
-              } catch (_) { /* best-effort — still navigate */ }
-              window.location.href = '/console/gcp';
-              return;
-            }
-            return open('dashboard');
-          }}
-        />
-        {notif && <Notif key={notif.id} msg={notif.msg} type={notif.type} onClose={()=>setNotif(null)}/>}
-      </>
-    );
-  }
 
   if (!productMode && view === 'gcp-console') {
     return (
