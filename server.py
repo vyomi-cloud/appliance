@@ -11118,7 +11118,24 @@ def api_ec2_terminate_instance(instance_id: str):
     if not instance:
         raise HTTPException(404, detail="NoSuchInstance")
     backend = str(instance.get("runtime_backend") or "").strip().lower()
+    # Phantom-instance escape hatch. The previous condition only caught
+    # launch_status=='error', which missed orphans where:
+    #   - launch_status stayed 'ready' but container_status went 'missing'
+    #     (e.g. disk-full mid-unpack → LXD rolled back partial container
+    #     but the simulator persist already wrote 'ready'), or
+    #   - the LXD container was deleted out-of-band (manual `lxc delete`,
+    #     storage pool wipe).
+    # In both cases there's no backing container to talk to. The terminate
+    # call to LXD would then error/hang, leaving the row stuck "stopped"
+    # forever from the user's POV. Catch the no-container shape early.
+    container_status = str(instance.get("container_status") or "").strip().lower()
+    no_backing_container = (
+        not str(instance.get("container_id") or "").strip()
+        and container_status in {"missing", "launch-failed", "removed", ""}
+    )
     if instance.get("launch_status") == "error" and not str(instance.get("container_id") or "").strip():
+        _terminate_simulated_instance(instance)
+    elif no_backing_container:
         _terminate_simulated_instance(instance)
     elif backend == "multipass":
         _terminate_multipass_instance(instance)
