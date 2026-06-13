@@ -248,19 +248,17 @@
     .tier {
       position: relative;
       background: #ffffff;
-      /* Stronger 2-side treatment so the bottom edge READS:
-         - Solid border on all 4 sides (medium-grey, no longer subtle).
-         - An inset box-shadow doubles as a second border line — works
-           even if some upstream rule somehow strips the border.
-         - Outer drop-shadow lifts the card off the white page. */
-      border: 1.5px solid #cbd5e1;
-      border-radius: 14px;
+      /* Clear 2px gray rounded border on all 4 sides. The legacy
+         border-radius: 12px 12px 0 0 + border-bottom: 0 rules (from when
+         cards sat flush on a capability bar below) have been deleted,
+         so this rule is no longer being overridden. !important is added
+         as belt-and-suspenders against any future regressions. */
+      border: 2px solid #cbd5e1 !important;
+      border-radius: 16px !important;
       padding: 28px 24px 24px;
       display: flex; flex-direction: column;
-      box-shadow:
-        0 0 0 1px rgba(15, 27, 45, 0.04) inset,
-        0 2px 4px rgba(15, 27, 45, 0.05),
-        0 8px 20px rgba(15, 27, 45, 0.06);
+      box-shadow: 0 2px 8px rgba(15, 27, 45, 0.04),
+                  0 12px 24px rgba(15, 27, 45, 0.06);
       transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
     }
     .tier:hover {
@@ -577,22 +575,16 @@
     @media (max-width: 1100px) { .tiers { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 640px)  { .tiers { grid-template-columns: 1fr; } }
 
-    .tier {
-      background: #fff; border: 1px solid #d8e0ea;
-      /* Square bottom — cards sit flush on the Standard-capability bar below */
-      border-radius: 12px 12px 0 0; border-bottom: 0;
-      padding: 24px 22px 20px; display: flex; flex-direction: column;
-      position: relative; transition: border-color 0.15s, box-shadow 0.15s;
-    }
-    .tier.recommended {
-      border-color: #2563eb;
-      box-shadow: 0 4px 16px rgba(37, 99, 235, 0.12);
-    }
-    .tier.recommended::before {
-      content: "Recommended"; position: absolute; top: -10px; right: 16px;
-      background: #2563eb; color: #fff; font-size: 11px; font-weight: 600;
-      padding: 3px 10px; border-radius: 999px; letter-spacing: 0.3px;
-    }
+    /* LEGACY .tier rules removed — these were from the old JS-rendered tier
+       cards back when they sat flush on the now-deleted Standard-capability
+       bar (hence border-radius: 12px 12px 0 0 + border-bottom: 0). Because
+       they came AFTER the new .tier rule in cascade order, they were
+       silently stripping the bottom border and the bottom corner radius
+       from the new portal-style cards. The new .tier rule (defined earlier
+       in this stylesheet, ~line 248) is now the only source of truth.
+
+       The .tier.active styles are kept for backward-compat with the JS
+       active-tier highlight, but trimmed to color tweaks only. */
     .tier.active {
       border-color: #0a7d36; box-shadow: 0 4px 24px rgba(10, 125, 54, 0.18);
     }
@@ -737,11 +729,7 @@
         <button id="bill-annual" onclick="setBilling('annual')">Annual <span class="save">Save ~42%</span></button>
       </div>
     </header>
-
-    {# Cloud-provider showcase moved to /clouds — opens when user clicks
-       "Continue to console" in the top action bar. #}
-
-    <!-- ── SDKs / tooling — 4-tile grid (matches portal /features → sdk-strip) ── -->
+<!-- ── SDKs / tooling — 4-tile grid (matches portal /features → sdk-strip) ── -->
     <section class="sdk-strip">
       <div class="sdk-head">
         <span class="sdk-badge">✓ Verified by real conformance harness</span>
@@ -814,10 +802,7 @@
         </div>
       </div>
     </section>
-
-    {# tiers div kept for backward-compat with the JS — render() leaves
-       it empty now since cards are static below. #}
-    <div class="tiers" id="tiers" style="display:none"></div>
+<div class="tiers" id="tiers" style="display:none"></div>
 
     <!-- ── Tier cards (portal-style, light theme) ───────────────────── -->
     <div class="tier-grid">
@@ -1012,12 +997,7 @@
       </div>
     </section>
 
-    {# compat-banner removed — redundant with the new sdk-strip section above. #}
-
-    {# Bottom activate-section retired — activation now lives in the top-bar
-       modal triggered by the 'Activate appliance' button. Stub kept so any
-       existing scrollIntoView(#activate-section) calls don't 404. #}
-    <div id="activate-section" style="display:none">
+<div id="activate-section" style="display:none">
       <div id="device-status" class="device-status"></div>
       <input type="hidden" id="license-key-input">
       <div id="activate-status" class="device-status"></div>
