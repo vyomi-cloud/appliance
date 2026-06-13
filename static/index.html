@@ -1215,6 +1215,44 @@
     .empty-t{font-size:18px;font-weight:700;color:#16191f;margin-bottom:8px}
     .empty-d{font-size:14px;margin-bottom:18px}
     .home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+
+    /* Disk-health dashboard widget — surfaces on every cloud console home.
+       Border lights up yellow at warn / red at freeze so paying users see
+       the issue BEFORE their launches start failing. */
+    .disk-widget {
+      background: #fff; border: 1.5px solid #10b981; border-radius: 10px;
+      padding: 14px 18px; margin: 0 0 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .disk-widget.disk-warn { background: #fffbeb; }
+    .disk-widget.disk-freeze { background: #fef2f2; }
+    .disk-widget.disk-unknown { border-color: #d1d5db; }
+    .disk-widget-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .disk-widget-title { font-size: 14px; font-weight: 600; color: #1f2937; }
+    .disk-widget-tier {
+      display: inline-block; margin-left: 8px; padding: 2px 8px;
+      background: #ede9fe; color: #6d28d9; border-radius: 999px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+    }
+    .disk-widget-status { font-size: 12px; font-weight: 600; }
+    .disk-widget-sub { font-size: 12px; color: #6b7280; }
+    .disk-widget-bar-wrap { margin-bottom: 12px; }
+    .disk-widget-bar { height: 8px; background: #f3f4f6; border-radius: 999px; overflow: hidden; }
+    .disk-widget-bar-fill { height: 100%; transition: width 0.3s; }
+    .disk-widget-bar-label { font-size: 11px; color: #6b7280; margin-top: 6px; }
+    .disk-widget-actions { display: flex; gap: 8px; }
+
+    /* Cleanup modal */
+    .disk-cleanup-modal { max-width: 600px; }
+    .disk-clean-row {
+      display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f1f5f9; cursor: pointer;
+    }
+    .disk-clean-row:last-child { border-bottom: 0; }
+    .disk-clean-row input { margin-top: 3px; }
+    .disk-clean-text { flex: 1; }
+    .disk-clean-label { font-size: 13.5px; font-weight: 500; color: #1f2937; }
+    .disk-clean-est { color: #059669; font-weight: 600; font-size: 12px; margin-left: 6px; }
+    .disk-clean-detail { font-size: 12px; color: #6b7280; margin-top: 2px; }
+    .disk-grow-modal { max-width: 500px; }
     .spaces-grid-3{grid-template-columns:repeat(3,minmax(0,1fr)) !important}
     .home-card{background:#fff;border:1px solid #eaeded;border-radius:4px;padding:16px}
     .home-card h3{font-size:16px;margin-bottom:10px}
@@ -2688,6 +2726,200 @@ function buildAwsConsoleSidebarCounts(graph) {
     }
   }
   return counts;
+}
+
+// ── Disk-health dashboard widget + cleanup/grow modals ──────────────────────
+// Shared across AWS / GCP / Azure console homes. Fetches /api/runtime/disk-
+// health every 30s and renders a tier-aware gauge + Free-up-space CTA. When
+// status flips to 'warn' or 'freeze', the card border lights up so the user
+// sees it before instances start failing to launch.
+function DiskHealthWidget() {
+  const [data, setData] = useState(null);
+  const [showCleanup, setShowCleanup] = useState(false);
+  const [showGrow, setShowGrow] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    const fetchHealth = async () => {
+      try {
+        const r = await fetch('/api/runtime/disk-health');
+        const d = await r.json();
+        if (alive) setData(d);
+      } catch (e) { /* keep last value */ }
+    };
+    fetchHealth();
+    const t = setInterval(fetchHealth, 30000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
+  if (!data || !data.available) {
+    return React.createElement('div', {className:'disk-widget disk-unknown'},
+      React.createElement('div', {className:'disk-widget-title'}, 'Appliance disk'),
+      React.createElement('div', {className:'disk-widget-sub'}, 'monitoring not yet available'));
+  }
+
+  const status = data.status; // green | warn | freeze
+  const disk = data.disk || {};
+  const pct = Math.round(disk.pct_used || 0);
+  const tier = (data.tier || 'free').toUpperCase();
+  const canGrow = ['student', 'developer', 'enterprise'].includes(data.tier);
+  const statusLabel = status === 'green' ? 'Healthy'
+                    : status === 'warn'  ? `Warning · ${pct}% used`
+                    :                      `Critical · ${pct}% used — new launches will be refused`;
+  const accent = status === 'green' ? '#10b981'
+               : status === 'warn'  ? '#f59e0b'
+               :                      '#ef4444';
+
+  return React.createElement('div', {
+    className:`disk-widget disk-${status}`,
+    style:{borderColor: accent}
+  },
+    React.createElement('div', {className:'disk-widget-head'},
+      React.createElement('div', {className:'disk-widget-title'}, 'Appliance disk',
+        React.createElement('span', {className:'disk-widget-tier'}, tier)),
+      React.createElement('div', {className:'disk-widget-status', style:{color:accent}}, statusLabel)),
+    React.createElement('div', {className:'disk-widget-bar-wrap'},
+      React.createElement('div', {className:'disk-widget-bar'},
+        React.createElement('div', {className:'disk-widget-bar-fill',
+          style:{width: pct + '%', background: accent}})),
+      React.createElement('div', {className:'disk-widget-bar-label'},
+        `${disk.used_gb} / ${disk.total_gb} GB · ${disk.avail_gb} GB free`)),
+    React.createElement('div', {className:'disk-widget-actions'},
+      React.createElement('button', {
+        className:'btn btn-s',
+        onClick:()=>setShowCleanup(true)
+      }, 'Free up space →'),
+      canGrow ? React.createElement('button', {
+        className:'btn btn-s btn-secondary',
+        onClick:()=>setShowGrow(true),
+        title:`${tier} tier can grow appliance disk`
+      }, 'Grow disk') : null),
+    showCleanup ? React.createElement(DiskCleanupModal, {
+      onClose: ()=>setShowCleanup(false),
+    }) : null,
+    showGrow ? React.createElement(DiskGrowModal, {
+      currentGb: disk.total_gb,
+      onClose: ()=>setShowGrow(false),
+    }) : null,
+  );
+}
+
+function DiskCleanupModal({onClose}) {
+  const [sug, setSug] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(null);
+  const [picks, setPicks] = useState({});
+
+  useEffect(() => {
+    fetch('/api/runtime/disk-cleanup/suggestions')
+      .then(r=>r.json())
+      .then(d=>{
+        setSug(d);
+        const init = {};
+        (d.suggestions||[]).forEach(s => { init[s.key] = s.safe; });
+        setPicks(init);
+      });
+  }, []);
+
+  const run = async () => {
+    setBusy(true);
+    const categories = Object.keys(picks).filter(k => picks[k]);
+    try {
+      const r = await fetch('/api/runtime/disk-cleanup/run', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({categories}),
+      });
+      const d = await r.json();
+      setDone(d);
+    } catch (e) {
+      setDone({error: e.message});
+    } finally { setBusy(false); }
+  };
+
+  return React.createElement('div', {className:'modal-overlay', onClick:onClose},
+    React.createElement('div', {className:'modal-content disk-cleanup-modal',
+                                onClick:(e)=>e.stopPropagation()},
+      React.createElement('div', {className:'modal-head'},
+        React.createElement('h3', {}, 'Free up appliance disk'),
+        React.createElement('button', {className:'modal-close', onClick:onClose}, '×')),
+      !sug ? React.createElement('div', {className:'modal-body'}, 'Scanning disk…') :
+      done ? React.createElement('div', {className:'modal-body'},
+        React.createElement('div', {className:'alert success'}, '✓ Cleanup complete.'),
+        React.createElement('pre', {style:{fontSize:11, background:'#0f172a', color:'#e2e8f0', padding:10, borderRadius:6, overflow:'auto', maxHeight:300}},
+          JSON.stringify(done, null, 2)),
+        React.createElement('button', {className:'btn', onClick:onClose}, 'Done')) :
+      React.createElement(React.Fragment, null,
+        React.createElement('div', {className:'modal-body'},
+          React.createElement('div', {style:{marginBottom:12, fontSize:13, color:'#475569'}},
+            'Select what to clean. All options below are safe — they never affect running workloads.'),
+          (sug.suggestions||[]).map(s =>
+            React.createElement('label', {key:s.key, className:'disk-clean-row'},
+              React.createElement('input', {
+                type:'checkbox',
+                checked:!!picks[s.key],
+                onChange:(e)=>setPicks({...picks, [s.key]: e.target.checked}),
+              }),
+              React.createElement('div', {className:'disk-clean-text'},
+                React.createElement('div', {className:'disk-clean-label'}, s.label,
+                  s.est_reclaim_gb ? React.createElement('span', {className:'disk-clean-est'},
+                    ` ≈ ${s.est_reclaim_gb} GB`) : null),
+                React.createElement('div', {className:'disk-clean-detail'}, s.detail))))),
+        React.createElement('div', {className:'modal-foot'},
+          React.createElement('button', {className:'btn btn-secondary', onClick:onClose}, 'Cancel'),
+          React.createElement('button', {className:'btn btn-accent', onClick:run, disabled:busy},
+            busy ? 'Running…' : 'Run cleanup')))));
+}
+
+function DiskGrowModal({currentGb, onClose}) {
+  const [target, setTarget] = useState(Math.max(60, Math.round((currentGb||30) * 2)));
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch('/api/runtime/disk-grow', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({target_gb: target}),
+      });
+      const d = await r.json();
+      setResult({ok: r.ok, body: d});
+    } catch (e) {
+      setResult({ok:false, body:{error: e.message}});
+    } finally { setBusy(false); }
+  };
+  return React.createElement('div', {className:'modal-overlay', onClick:onClose},
+    React.createElement('div', {className:'modal-content disk-grow-modal',
+                                onClick:(e)=>e.stopPropagation()},
+      React.createElement('div', {className:'modal-head'},
+        React.createElement('h3', {}, 'Grow appliance disk'),
+        React.createElement('button', {className:'modal-close', onClick:onClose}, '×')),
+      React.createElement('div', {className:'modal-body'},
+        !result ? React.createElement(React.Fragment, null,
+          React.createElement('div', {style:{marginBottom:14, fontSize:13, color:'#475569'}},
+            `Current size: ${currentGb || '?'} GB. Pick a new size:`),
+          React.createElement('div', {style:{display:'flex', gap:8, marginBottom:14}},
+            [60, 120, 240].map(g =>
+              React.createElement('button', {
+                key: g, className:`btn btn-s ${target===g ? 'btn-accent' : 'btn-secondary'}`,
+                onClick:()=>setTarget(g),
+              }, `${g} GB`)),
+          ),
+          React.createElement('div', {style:{fontSize:12, color:'#6b7280', lineHeight:1.5}},
+            'Resize requires a brief restart of the appliance VM (≈30 s + 2 min boot). ',
+            'Running workloads will pause then resume.')) :
+        React.createElement('div', null,
+          result.ok && result.body.deferred ? React.createElement(React.Fragment, null,
+            React.createElement('div', {className:'alert info'},
+              'Run this command on the machine running your multipass:'),
+            React.createElement('pre', {style:{background:'#0f172a', color:'#e2e8f0', padding:10, borderRadius:6, fontSize:12}},
+              result.body.command),
+            React.createElement('div', {style:{fontSize:12, color:'#6b7280', marginTop:8}}, result.body.instructions)
+          ) : React.createElement('div', {className:'alert warn'},
+            `Failed: ${(result.body.detail && result.body.detail.reason) || result.body.reason || 'unknown'}`))),
+      React.createElement('div', {className:'modal-foot'},
+        React.createElement('button', {className:'btn btn-secondary', onClick:onClose}, result ? 'Close' : 'Cancel'),
+        !result ? React.createElement('button', {className:'btn btn-accent', onClick:submit, disabled:busy},
+          busy ? 'Resizing…' : 'Grow now') : null)));
 }
 
 function AwsConsoleShell({activeView, onOpen, children}) {
@@ -5073,6 +5305,7 @@ function DashboardView({onOpen, onBack, notify, onExportTerraform}) {
           <span className="bc-sep">›</span>
           <span className="aws-service-crumb-title">Console Home</span>
         </div>
+        <DiskHealthWidget />
         <div className="aws-launch-banner">
         <div className="aws-launch-head">
           <div>
@@ -5485,6 +5718,7 @@ function GCPConsoleView({onOpen, onBack, notify, onExportTerraform}) {
             <span className="gcp-console-crumb-title">Console Home</span>
           </div>
         </div>
+        <DiskHealthWidget />
         <div className="gcp-console-head">
           <div className="gcp-console-head-top">
             <div>

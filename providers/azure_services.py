@@ -643,8 +643,13 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             if isinstance(hw, dict):
                 vm_size = str(hw.get("vmSize") or "")
             try:
-                from server import _check_budget_for_launch
+                from server import _check_budget_for_launch, _disk_preflight
                 _check_budget_for_launch(vm_size, "azure")  # raises HTTPException(403)
+                # Disk pre-flight: same 507 gate the EC2 + GCE paths use.
+                # Azure VM hardware profiles don't surface storage_gb at
+                # this layer, so we pass None — the helper uses the
+                # default rootfs estimate.
+                _disk_preflight(None)
             except Exception as exc:
                 # Re-raise HTTPException; surface other failures as 500.
                 if isinstance(exc, HTTPException):

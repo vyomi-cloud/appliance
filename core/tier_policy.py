@@ -175,6 +175,11 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "max_vm_size_tier":            "small",   # from core.runtime_sizer._TIERS
         "max_db_size_tier":            "small",
         "storage_bytes_cap":           1 * 1024 ** 3,    # 1 GB
+        # Appliance VM disk sizing — read by the multipass launcher to
+        # provision the right disk size at appliance bootstrap. Free
+        # gets the multipass default; paid tiers grow on first install.
+        "appliance_disk_gb":           30,
+        "auto_grow_disk":              False,  # paid-only escape hatch
         "activity_log_retention_hours": 24,
         "features": {
             # DevEx surface for /pricing. cloud_sdks + provider_clis are the
@@ -225,6 +230,8 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "max_vm_size_tier":            "medium",
         "max_db_size_tier":            "medium",
         "storage_bytes_cap":           10 * 1024 ** 3,
+        "appliance_disk_gb":           60,
+        "auto_grow_disk":              True,
         "activity_log_retention_hours": 7 * 24,
         "features": {
             # Developer-experience surface.
@@ -272,6 +279,8 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "max_vm_size_tier":            "large",
         "max_db_size_tier":            "large",
         "storage_bytes_cap":           100 * 1024 ** 3,
+        "appliance_disk_gb":           120,
+        "auto_grow_disk":              True,
         "activity_log_retention_hours": 30 * 24,
         "features": {
             # Developer-experience surface.
@@ -320,6 +329,8 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "max_vm_size_tier":            "huge",
         "max_db_size_tier":            "huge",
         "storage_bytes_cap":           UNLIMITED,
+        "appliance_disk_gb":           240,
+        "auto_grow_disk":              True,
         "activity_log_retention_hours": 90 * 24,
         "features": {
             # Developer-experience surface.
