@@ -16,6 +16,88 @@
       background: #ffffff;
       color: #1a2330; min-height: 100vh;
     }
+
+    /* ── Sticky top action bar — Activate + Continue console buttons
+          always visible at the top of the launch view. ─────────────────── */
+    .top-bar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: saturate(180%) blur(16px);
+      -webkit-backdrop-filter: saturate(180%) blur(16px);
+      border-bottom: 1px solid #e7e7e9;
+      padding: 10px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px;
+    }
+    .top-bar .tb-brand { display: flex; align-items: center; }
+    .top-bar .tb-brand img { height: 32px; width: auto; display: block; }
+    .top-bar .tb-actions { display: flex; align-items: center; gap: 10px; }
+    .top-bar .tb-btn {
+      padding: 9px 18px; border-radius: 8px; font-size: 13.5px; font-weight: 600;
+      border: 1px solid transparent; cursor: pointer; text-decoration: none;
+      transition: all 0.15s; font-family: inherit; line-height: 1;
+    }
+    .top-bar .tb-btn-secondary {
+      background: #ffffff; color: #1a2330; border-color: #d8e0ea;
+    }
+    .top-bar .tb-btn-secondary:hover { border-color: #1a2330; }
+    .top-bar .tb-btn-primary {
+      background: #0f1b2d; color: #ffffff; border-color: #0f1b2d;
+    }
+    .top-bar .tb-btn-primary:hover { background: #1a2c44; }
+
+    /* ── Features showcase strip — the portal's /features view condensed.
+          Sits between the hero and the tier cards. ──────────────────────── */
+    .features-strip {
+      max-width: 1080px; margin: 36px auto 8px;
+      padding: 0 24px;
+    }
+    .features-strip h2 {
+      font-size: 22px; font-weight: 700; color: #0f1b2d;
+      text-align: center; margin: 0 0 6px;
+    }
+    .features-strip .sub {
+      font-size: 14px; color: #5f6b7a;
+      text-align: center; margin: 0 0 22px;
+    }
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+    }
+    @media (max-width: 720px) { .features-grid { grid-template-columns: 1fr; } }
+    .feature-card {
+      border: 1px solid #e7e7e9; border-radius: 12px;
+      padding: 18px 18px 16px; background: #ffffff;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .feature-card:hover {
+      border-color: #c5cfd9;
+      box-shadow: 0 4px 12px rgba(15, 27, 45, 0.06);
+    }
+    .feature-card .fc-head {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 12px;
+    }
+    .feature-card .fc-mark {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 13px; color: #fff;
+    }
+    .feature-card.aws .fc-mark   { background: #ff9900; color: #232f3e; }
+    .feature-card.gcp .fc-mark   { background: #4285f4; }
+    .feature-card.azure .fc-mark { background: #0078d4; }
+    .feature-card .fc-name {
+      font-size: 15px; font-weight: 700; color: #0f1b2d;
+    }
+    .feature-card .fc-count {
+      font-size: 11px; font-weight: 600; color: #5f6b7a;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .feature-card ul {
+      list-style: none; padding: 0; margin: 0;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px;
+      font-size: 12px; color: #1a2330;
+    }
+    .feature-card ul li::before { content: "•"; color: #5f6b7a; margin-right: 6px; }
     .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 64px; }
 
     /* ---- header ------------------------------------------------------- */
@@ -291,11 +373,24 @@
   </style>
 </head>
 <body>
+  <!-- ── Sticky top action bar — Activate appliance + Continue to console ── -->
+  <nav class="top-bar">
+    <a class="tb-brand" href="/pricing" aria-label="vyomi">
+      <img src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi">
+    </a>
+    <div class="tb-actions">
+      <button class="tb-btn tb-btn-secondary" type="button"
+              onclick="document.getElementById('activate-section').scrollIntoView({behavior:'smooth',block:'start'})">
+        Activate appliance
+      </button>
+      <button class="tb-btn tb-btn-primary" type="button" onclick="goToConsole()">
+        Continue to console →
+      </button>
+    </div>
+  </nav>
+
   <div class="container">
     <header>
-      <div class="logo">
-        <img class="vyomi-logo" src="/assets/brand/vyomi-wordmark-light.png" alt="Vyomi">
-      </div>
       <h1>Choose your tier</h1>
       <div class="sub">All plans include real backends, multi-cloud consoles, and conformance tests.</div>
 
@@ -304,6 +399,51 @@
         <button id="bill-annual" onclick="setBilling('annual')">Annual <span class="save">Save ~42%</span></button>
       </div>
     </header>
+
+    <!-- ── Features showcase (portal /features condensed): what each
+              tier unlocks — 3 cloud cards with their service catalog. ── -->
+    <section class="features-strip">
+      <h2>Real cloud APIs, on your laptop.</h2>
+      <p class="sub">Every tier ships the same SDK fidelity. Higher tiers just unlock more clouds + advanced services.</p>
+      <div class="features-grid">
+        <div class="feature-card aws">
+          <div class="fc-head">
+            <span class="fc-mark">aws</span>
+            <span class="fc-name">Amazon Web Services</span>
+            <span class="fc-count" style="margin-left:auto">12 services</span>
+          </div>
+          <ul>
+            <li>EC2</li><li>S3</li><li>VPC</li><li>IAM</li>
+            <li>RDS</li><li>Lambda</li><li>SQS</li><li>DynamoDB</li>
+            <li>API GW</li><li>KMS</li><li>Secrets</li><li>EventBridge</li>
+          </ul>
+        </div>
+        <div class="feature-card gcp">
+          <div class="fc-head">
+            <span class="fc-mark">gcp</span>
+            <span class="fc-name">Google Cloud Platform</span>
+            <span class="fc-count" style="margin-left:auto">12 services</span>
+          </div>
+          <ul>
+            <li>Compute</li><li>GCS</li><li>VPC</li><li>IAM</li>
+            <li>Cloud SQL</li><li>Functions</li><li>Pub/Sub</li><li>Firestore</li>
+            <li>API GW</li><li>Cloud KMS</li><li>Secret Mgr</li><li>Eventarc</li>
+          </ul>
+        </div>
+        <div class="feature-card azure">
+          <div class="fc-head">
+            <span class="fc-mark">az</span>
+            <span class="fc-name">Microsoft Azure</span>
+            <span class="fc-count" style="margin-left:auto">11 services</span>
+          </div>
+          <ul>
+            <li>VM</li><li>Storage</li><li>VNet</li><li>RBAC</li>
+            <li>Azure SQL</li><li>Functions</li><li>Service Bus</li><li>Cosmos DB</li>
+            <li>APIM</li><li>Key Vault</li><li>Event Grid</li>
+          </ul>
+        </div>
+      </div>
+    </section>
 
     <div class="tiers" id="tiers"><!-- rendered by JS --></div>
 
@@ -390,10 +530,10 @@
     </div>
 
     <footer>
-      <button class="continue" onclick="goToConsole()">Continue to console</button>
       <div class="note">
         After selecting a tier you can switch anytime from <a href="/api/runtime/tier">runtime settings</a>.
         Tiers enforce server-side via structured 403s.
+        The Activate appliance + Continue to console buttons are pinned to the top of this page.
       </div>
     </footer>
   </div>
@@ -618,43 +758,49 @@
     }
 
     // -------- tier selection ------------------------------------------
+    //
+    // In the appliance, /api/license/signup is intentionally disabled
+    // (production gate — see server.py:api_license_signup). All checkout
+    // happens on the portal at vyomi.cloud, then the user comes back to
+    // this page and clicks "Activate appliance" (device flow) to bind
+    // their subscription.
+    //
+    // Free tier is the one exception — no payment needed, just open the
+    // device-flow activate panel and let the user sign in.
     async function selectTier(key, tier) {
-      const payload = {
-        user: 'local-user',
-        email: 'local@cloudlearn',
-        tier: key,
-        device_id: 'local',
-        period: STATE.billing,
-        seats: 1,
-        primary_cloud: '',
-      };
+      // Free tier: no checkout, just point at the Activate flow.
+      if (key === 'free') {
+        document.getElementById('activate-section').scrollIntoView({behavior:'smooth', block:'start'});
+        toast('Free is the default tier — just activate to start.');
+        return;
+      }
 
       // Student needs primary_cloud picker
+      let primary_cloud = '';
       if (tier.primary_cloud_required) {
-        const cloud = await pickPrimaryCloud(tier);
-        if (!cloud) return;
-        payload.primary_cloud = cloud;
+        primary_cloud = await pickPrimaryCloud(tier);
+        if (!primary_cloud) return;
       }
-      // Enterprise needs seat count
+      // Enterprise needs seat count (still useful for the portal pre-fill)
+      let seats = 1;
       if (key === 'enterprise') {
-        const seats = await pickSeats(tier);
+        seats = await pickSeats(tier);
         if (!seats) return;
-        payload.seats = seats;
       }
 
-      try {
-        const r = await fetch('/api/license/signup', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(payload),
-        });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.detail?.reason || JSON.stringify(d.detail));
-        toast(`✓ Switched to ${tier.label}`);
-        await load();  // refresh + re-highlight
-      } catch (e) {
-        toast('Failed: ' + e.message, true);
-      }
+      // Build the portal checkout URL with all known params pre-filled
+      // so vyomi.cloud lands the user directly in the right flow.
+      const portalBase = (window.VYOMI_PORTAL_URL || 'https://vyomi.cloud').replace(/\/$/, '');
+      const params = new URLSearchParams({
+        tier: key,
+        period: STATE.billing,
+      });
+      if (primary_cloud) params.set('primary_cloud', primary_cloud);
+      if (key === 'enterprise') params.set('seats', String(seats));
+      const portalUrl = `${portalBase}/checkout?${params.toString()}`;
+
+      toast(`Opening vyomi.cloud to checkout ${tier.label}…`);
+      window.open(portalUrl, '_blank', 'noopener');
     }
 
     function pickPrimaryCloud(tier) {
