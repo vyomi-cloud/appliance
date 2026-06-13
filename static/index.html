@@ -21,11 +21,12 @@
     .hdr{background:#ffffff;color:#16191f;display:flex;align-items:center;padding:0 8px 0 14px;height:50px;position:fixed;top:0;width:100%;z-index:1000;gap:6px;border-bottom:1px solid #e7e7e9;box-shadow:0 1px 0 rgba(0,0,0,0.02)}
     .hdr-logo{display:flex;align-items:center;padding-right:6px;text-decoration:none}
     .hdr-logo span{color:#16191f;font-weight:400}
-    /* Vyomi wordmark — height-locked to 28px so the full "vyomi" letters
-       + orbit swoosh stay legible. The 3:1 aspect of the source means
-       this renders ~84x28 in the header; width:auto preserves the ratio
-       so nothing gets chopped. */
-    .hdr-logo-img{height:28px;width:auto;display:block;flex-shrink:0}
+    /* Vyomi wordmark — height-locked to 40px to match the portal's visual
+       weight (~84px wide). Our source has a 1.88:1 aspect (vs portal's 3:1
+       because we cropped wider to preserve the orbit swoosh), so at 40px
+       tall it renders ~75x40 — comparable visual prominence to the
+       portal's 84x28. width:auto preserves the ratio. */
+    .hdr-logo-img{height:40px;width:auto;display:block;flex-shrink:0}
     /* Light-theme header — dark text on white. Hover states use a soft
        neutral instead of the old AWS-navy hover so it matches the white bg. */
     .hdr-svc{color:#16191f;font-size:14px;font-weight:700;padding-left:2px;white-space:nowrap}

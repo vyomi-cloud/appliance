@@ -24,10 +24,11 @@
       display: inline-flex; align-items: center; gap: 10px;
       margin-bottom: 24px;
     }
-    /* Vyomi wordmark — height-locked to 28px so the full "vyomi" letters
-       + orbit swoosh stay legible. width:auto preserves the 3:1 aspect. */
+    /* Vyomi wordmark — height-locked to 40px so visual prominence matches
+       the portal (whose 28px-tall 3:1 wordmark renders ~84px wide). Our
+       source is 1.88:1 so at 40px it renders ~75x40 — equivalent footprint. */
     header .logo img.vyomi-logo {
-      height: 28px; width: auto; display: block;
+      height: 40px; width: auto; display: block;
     }
     header h1 { font-size: 32px; font-weight: 700; margin: 0 0 8px; color: #0f1b2d; }
     header .sub { font-size: 16px; color: #607080; margin-bottom: 24px; }
