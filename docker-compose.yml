@@ -142,7 +142,7 @@ services:
       #   - Production:    https://portal.cloudlearn.io
       #   - Local Mac:     http://host.docker.internal:8001
       #   - Compose net:   http://cloudlearn-portal:8000  (if portal in same compose)
-      CLOUDLEARN_LICENSE_BACKEND_URL: ${CLOUDLEARN_LICENSE_BACKEND_URL:-http://cloudlearn-portal:8000}
+      CLOUDLEARN_LICENSE_BACKEND_URL: ${CLOUDLEARN_LICENSE_BACKEND_URL:-https://vyomi.cloud}
       # Refresh interval (seconds) — appliance polls portal to pick up
       # subscription changes. Default 1h.
       CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS: ${CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS:-3600}
