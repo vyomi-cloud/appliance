@@ -1640,6 +1640,24 @@
               method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
             });
             const pd = await pr.json();
+            // 401 = JWT arrived but verification failed (signature mismatch
+            // / install_id_mismatch / etc). The portal has already consumed
+            // the one-shot JWT — the row is now orphaned. Stop polling and
+            // tell the user instead of looping forever on the stale token.
+            if (!pr.ok && pr.status === 401) {
+              clearInterval(_activationPollTimer);
+              const reason = (pd.detail && (pd.detail.reason || pd.detail.code)) || 'unknown';
+              const dps = document.getElementById('dp-status');
+              if (dps) dps.innerHTML =
+                `⚠ <strong>Activation failed</strong> — ${reason}.<br>` +
+                `<span style="font-size:12px;color:#5f6368">` +
+                `The JWT was delivered but the appliance couldn't verify it. ` +
+                `Click <strong>Sign in with vyomi</strong> again to retry.` +
+                `</span>`;
+              btn.disabled = false;
+              toast(`Activation failed: ${reason}`, true);
+              return;
+            }
             if (pd.status === 'approved') {
               clearInterval(_activationPollTimer);
               document.getElementById('dp-status').innerHTML =
