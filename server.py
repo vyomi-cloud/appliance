@@ -193,6 +193,7 @@ init_azure_state()
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
 _UI_HTML = os.path.join(STATIC_DIR, "index.html")
+_PRICING_HTML = os.path.join(STATIC_DIR, "pricing.html")
 app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="assets")
 
 # ── S3 catch-all routes — LAST ──────────────────────────────────────
@@ -19822,19 +19823,19 @@ async def aws_query_root(request: Request) -> Response:
 # ── S3 REST API — root level ─────────────────────────────────────────────────
 
 async def s3_list_buckets(request: Request) -> Response:
-    """GET / → ListBuckets (S3 wire) OR ALWAYS redirect to /pricing (browser).
+    """GET / → ListBuckets (S3 wire) OR serve pricing.html (browser).
 
-    Every browser visit lands on /pricing — the canonical place for tier
-    selection + license management. The previous cookie-gated bypass was
-    removed: /pricing is the single source of truth for tier UX, and the
-    in-SPA TierView was retired in favor of this.
+    / is now the canonical launch page — pricing/features/SDKs all live
+    on a single page that opens to browsers at the root URL. The old
+    /pricing endpoint was removed; bookmarks/redirects to it are handled
+    by a 302 in routes/console.py.
 
     S3 wire clients (no text/html Accept) still get the ListBuckets XML.
     """
     accept = request.headers.get("accept", "")
     user_agent = request.headers.get("user-agent", "")
     if "text/html" in accept or "Mozilla" in user_agent:
-        with open(_UI_HTML, "rb") as f:
+        with open(_PRICING_HTML, "rb") as f:
             return Response(content=f.read(), media_type="text/html", headers={"Cache-Control": "no-store, max-age=0"})
 
     now = _now()

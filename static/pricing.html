@@ -248,16 +248,19 @@
     .tier {
       position: relative;
       background: #ffffff;
-      /* Slightly darker border (#d1d5db vs #e7e7e9) so all 4 edges read
-         on a white page background. Paired with a soft bottom shadow
-         so the card looks elevated — the previous border-only treatment
-         made the bottom edge nearly invisible. */
-      border: 1px solid #d1d5db;
+      /* Stronger 2-side treatment so the bottom edge READS:
+         - Solid border on all 4 sides (medium-grey, no longer subtle).
+         - An inset box-shadow doubles as a second border line — works
+           even if some upstream rule somehow strips the border.
+         - Outer drop-shadow lifts the card off the white page. */
+      border: 1.5px solid #cbd5e1;
       border-radius: 14px;
       padding: 28px 24px 24px;
       display: flex; flex-direction: column;
-      box-shadow: 0 1px 2px rgba(15, 27, 45, 0.04),
-                  0 4px 12px rgba(15, 27, 45, 0.04);
+      box-shadow:
+        0 0 0 1px rgba(15, 27, 45, 0.04) inset,
+        0 2px 4px rgba(15, 27, 45, 0.05),
+        0 8px 20px rgba(15, 27, 45, 0.06);
       transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
     }
     .tier:hover {
@@ -735,39 +738,8 @@
       </div>
     </header>
 
-    <!-- ── 3 cloud cards — portal /features design, light theme.
-              Native per-service icons from _partials/cloud_service_icons.html. -->
-    <section class="features-strip">
-      <h2>Real cloud APIs, on your laptop.</h2>
-      <p class="sub">Standard SDKs hit a real backend on your laptop — no mocks, no shims, no cloud bill.</p>
-
-
-
-
-
-    <!-- ════════ CLOUD-CARDS BLOCK ════════ -->
-    <div class="clouds-row">
-      <div class="cloud-card aws">
-        <div class="cloud-icon aws"><svg viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L4 6v6c0 4.5 3.4 8.7 8 10 4.6-1.3 8-5.5 8-10V6l-8-4z" opacity="0.95"/><path d="M12 6.5L8 8.5v3.4c0 2.3 1.7 4.4 4 5 2.3-.6 4-2.7 4-5V8.5l-4-2z" fill="#ec7211"/></svg></div>
-        <h3>AWS · 12 services</h3>
-        <div class="svc-grid"><div class="svc"><span class="svc-ico svc-ico-aws svc-ec2"><svg viewBox="0 0 20 20" fill="#fff"><path d="M3 4h14v3H3V4zm0 5h14v3H3V9zm0 5h14v2H3v-2zM5 5.5v.5h2v-.5H5zm0 5v.5h2v-.5H5zm10-5h-1V6h1v-.5z"/></svg></span><span class="name">EC2</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-lambda"><svg viewBox="0 0 20 20" fill="#fff"><path d="M4 3h3.5L13 17H9.5L8 13.4 5 17H2l5-6.2L4 3zm5 5l2 4.8L13.5 7H17l-4 10h-3l-1-2.5z" opacity="0.85"/><path d="M5 4h2.2L12 16H9.8L4.5 4H5z"/></svg></span><span class="name">Lambda</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-s3"><svg viewBox="0 0 20 20" fill="#fff"><path d="M4 4l6-2 6 2v2c0 4-2.5 8-6 10-3.5-2-6-6-6-10V4z" opacity="0.95"/><path d="M10 5L7 6.5v3.5c0 2.3 1.3 4.5 3 5.8 1.7-1.3 3-3.5 3-5.8V6.5L10 5z" fill="#ec7211"/></svg></span><span class="name">S3</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-rds"><svg viewBox="0 0 20 20" fill="#fff"><ellipse cx="10" cy="5" rx="6" ry="2"/><path d="M4 6v8c0 1.1 2.7 2 6 2s6-.9 6-2V6c0 1.1-2.7 2-6 2S4 7.1 4 6zm0 4v4c0 1.1 2.7 2 6 2s6-.9 6-2v-4c0 1.1-2.7 2-6 2s-6-.9-6-2z"/></svg></span><span class="name">RDS</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-dynamodb"><svg viewBox="0 0 20 20" fill="#fff"><path d="M3 5h6v3H3V5zm8 0h6v3h-6V5zM3 9h6v3H3V9zm8 0h6v3h-6V9zM3 13h6v3H3v-3zm8 0h6v3h-6v-3z"/></svg></span><span class="name">DynamoDB</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-sqs"><svg viewBox="0 0 20 20" fill="#fff"><path d="M3 4h14v3H3V4zm0 5h14v3H3V9zm0 5h14v2H3v-2zM15 5.5L17 5.7v.6L15 6.5v-1zm0 5L17 10.7v.6L15 11.5v-1z" opacity="0.85"/><circle cx="6" cy="5.5" r="1"/><circle cx="6" cy="10.5" r="1"/></svg></span><span class="name">SQS</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-eventbridge"><svg viewBox="0 0 20 20" fill="#fff" stroke="#fff" stroke-width="1.2"><circle cx="10" cy="4" r="1.8"/><circle cx="4" cy="14" r="1.8"/><circle cx="10" cy="14" r="1.8"/><circle cx="16" cy="14" r="1.8"/><path d="M10 6v6m0 0l-6 2m6-2h6" fill="none"/></svg></span><span class="name">EventBridge</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-iam"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="10" cy="6" r="3"/><path d="M4 17v-1.5c0-2.5 2.7-4.5 6-4.5s6 2 6 4.5V17H4z"/></svg></span><span class="name">IAM</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-vpc"><svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.4"><path d="M3 6c1-2 4-3 7-3s6 1 7 3M3 14c1 2 4 3 7 3s6-1 7-3" stroke-linecap="round"/><circle cx="6" cy="10" r="1.8" fill="#fff"/><circle cx="14" cy="10" r="1.8" fill="#fff"/><circle cx="10" cy="6" r="1.5" fill="#fff"/><circle cx="10" cy="14" r="1.5" fill="#fff"/><path d="M6 10h8M10 6v8" stroke-width="1"/></svg></span><span class="name">VPC</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-secretsmanager"><svg viewBox="0 0 20 20" fill="#fff"><path d="M5 9V6a5 5 0 0110 0v3h1v8H4V9h1zm2 0h6V6a3 3 0 00-6 0v3zm3 3.5a1 1 0 100 2 1 1 0 000-2z"/></svg></span><span class="name">Secrets Mgr</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-kms"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="14" cy="7" r="4"/><path d="M11.5 9.5L4 17v1h2v-2h2v-2h2l1.5-1.5-0.5-0.5-1 1z"/><circle cx="14" cy="6" r="1.3" fill="#ec7211"/></svg></span><span class="name">KMS</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-cloudwatch"><svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M5 12l3-3 3 3 4-4" stroke-linejoin="round" stroke-linecap="round" fill="none"/></svg></span><span class="name">CloudWatch</span></div></div>
-        <div class="meta">boto3 · aws-sdk-java · aws-sdk-go · aws CLI — works unchanged</div>
-      </div>
-      <div class="cloud-card gcp">
-        <div class="cloud-icon gcp"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="7" r="2.4" fill="#fbbc04"/><circle cx="17" cy="12" r="2.4" fill="#34a853"/><circle cx="12" cy="17" r="2.4" fill="#ea4335"/><circle cx="7" cy="12" r="2.4" fill="#4285f4"/></svg></div>
-        <h3>GCP · 12 services</h3>
-        <div class="svc-grid"><div class="svc"><span class="svc-ico svc-ico-gcp svc-compute"><svg viewBox="0 0 20 20" fill="#fff"><rect x="3" y="4" width="14" height="12" rx="1"/><rect x="5" y="6" width="10" height="2" rx="0.3" fill="#1a73e8"/><rect x="5" y="9" width="10" height="2" rx="0.3" fill="#1a73e8"/><rect x="5" y="12" width="10" height="2" rx="0.3" fill="#1a73e8"/><circle cx="6.5" cy="7" r="0.5" fill="#34a853"/><circle cx="6.5" cy="10" r="0.5" fill="#34a853"/><circle cx="6.5" cy="13" r="0.5" fill="#34a853"/></svg></span><span class="name">Compute</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-functions"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="2" width="16" height="16" rx="4" fill="#fff"/><path d="M7 14c2.5 0 3-2 3.5-4 .4-2 1-3.5 3-3.5h1l-1 2h-.5c-.7 0-1 .8-1.3 2.5-.5 2.5-1.4 4.5-4.7 4.5H7v-1.5z" fill="#4285f4"/></svg></span><span class="name">Functions</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-gcs"><svg viewBox="0 0 20 20" fill="#fff"><path d="M3 6h14l-2 10H5L3 6z"/><path d="M5 6l1-3h8l1 3H5z" fill="#1a73e8"/></svg></span><span class="name">GCS</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-cloudsql"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="2" width="16" height="16" rx="3" fill="#1a73e8"/><ellipse cx="10" cy="6" rx="5" ry="1.5" fill="#fff"/><path d="M5 6v8c0 .8 2.2 1.5 5 1.5s5-.7 5-1.5V6c0 .8-2.2 1.5-5 1.5S5 6.8 5 6z" fill="#fff"/><text x="10" y="13" font-size="3.5" font-family="monospace" font-weight="bold" text-anchor="middle" fill="#1a73e8">SQL</text></svg></span><span class="name">Cloud SQL</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-firestore"><svg viewBox="0 0 20 20" fill="#fff"><path d="M4 6l6-3 6 3-6 3-6-3z"/><path d="M4 10l6 3 6-3" stroke="#fff" stroke-width="1.5" fill="none"/><path d="M4 14l6 3 6-3" stroke="#fff" stroke-width="1.5" fill="none" opacity="0.6"/><circle cx="10" cy="6" r="1" fill="#fbbc04"/></svg></span><span class="name">Firestore</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-pubsub"><svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.5"><path d="M4 8c0-3 3-5 6-5s6 2 6 5-3 5-6 5c-1.5 0-3-.5-4-1.3" fill="none" stroke-linecap="round"/><path d="M5 10l-2 2 2 2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="7" r="0.8" fill="#fff"/><circle cx="13" cy="9" r="0.8" fill="#fff"/></svg></span><span class="name">Pub/Sub</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-eventarc"><svg viewBox="0 0 20 20" fill="#fff" stroke="#fff" stroke-width="1.2"><circle cx="4" cy="10" r="2"/><circle cx="16" cy="5" r="2"/><circle cx="16" cy="15" r="2"/><path d="M5.5 9l9-3.5M5.5 11l9 3.5" fill="none"/></svg></span><span class="name">Eventarc</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-iam"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="10" cy="6" r="3"/><path d="M4 17v-1.5c0-2.5 2.7-4.5 6-4.5s6 2 6 4.5V17H4z"/><circle cx="10" cy="6" r="1" fill="#fbbc04"/></svg></span><span class="name">IAM</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-vpc"><svg viewBox="0 0 20 20" fill="#fff" stroke="#fff" stroke-width="1.3"><circle cx="10" cy="10" r="6" fill="none"/><circle cx="10" cy="4" r="1.5"/><circle cx="10" cy="16" r="1.5"/><circle cx="4" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/><path d="M10 5v10M5 10h10" stroke-width="1"/></svg></span><span class="name">VPC</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-secretmanager"><svg viewBox="0 0 20 20" fill="#fff"><path d="M10 2L4 5v4c0 4 2.5 7.5 6 9 3.5-1.5 6-5 6-9V5l-6-3z"/><circle cx="10" cy="8" r="1.5" fill="#34a853"/><path d="M10 9.5v3" stroke="#34a853" stroke-width="1.2"/></svg></span><span class="name">Secret Mgr</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-kms"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="14" cy="7" r="4"/><path d="M11.5 9.5L4 17v1h2v-2h2v-2h2l1.5-1.5-0.5-0.5-1 1z"/><circle cx="14" cy="6" r="1.3" fill="#fbbc04"/></svg></span><span class="name">KMS</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-logging"><svg viewBox="0 0 20 20" fill="#fff"><rect x="3" y="3" width="14" height="14" rx="1.5"/><path d="M5 7h10M5 10h10M5 13h8" stroke="#1a73e8" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="name">Logging</span></div></div>
-        <div class="meta">google-cloud-* (Python/Java/Go) + gcloud CLI</div>
-      </div>
-      <div class="cloud-card azure">
-        <div class="cloud-icon azure"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11.5 3 4 19.5h6.2l3.2-9.5L11.5 3z" fill="#50e6ff"/><path d="M13 7.2 10.4 14h5l.4 2-4.5 2H20l-7-10.8z" fill="#fff"/></svg></div>
-        <h3>Azure · 11 services</h3>
-        <div class="svc-grid"><div class="svc"><span class="svc-ico svc-ico-azure svc-vm"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="3" width="16" height="11" rx="1.5"/><path d="M2 14h16v1H2z" opacity="0.8"/><path d="M7 17h6v1H7z" opacity="0.6"/><path d="M9.5 14l-1 3h3l-1-3" opacity="0.7"/><rect x="4" y="5" width="12" height="7" rx="0.5" fill="#0078d4"/></svg></span><span class="name">VM</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-functionapp"><svg viewBox="0 0 20 20" fill="#fff"><path d="M10 2L3 6v8l7 4 7-4V6l-7-4z" opacity="0.9"/><path d="M7 12c1.5 0 2-1 2.3-2.5.3-1.5.7-2.5 2-2.5h.5L11 8.5h-.3c-.4 0-.5.6-.7 1.6-.3 1.5-.9 2.9-3 2.9z" fill="#0078d4"/></svg></span><span class="name">Function App</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-blob"><svg viewBox="0 0 20 20" fill="#fff"><rect x="3" y="5" width="14" height="11" rx="1"/><circle cx="7" cy="9" r="1.4" fill="#0078d4"/><circle cx="11" cy="9" r="1.4" fill="#0078d4"/><circle cx="15" cy="9" r="1.4" fill="#0078d4"/><path d="M3 12h14" stroke="#0078d4" stroke-width="1" opacity="0.5"/></svg></span><span class="name">Blob</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-sql"><svg viewBox="0 0 20 20" fill="#fff"><ellipse cx="10" cy="5" rx="6" ry="2"/><path d="M4 6v8c0 1.1 2.7 2 6 2s6-.9 6-2V6c0 1.1-2.7 2-6 2S4 7.1 4 6zm0 4v4c0 1.1 2.7 2 6 2s6-.9 6-2v-4c0 1.1-2.7 2-6 2s-6-.9-6-2z"/><text x="10" y="13" font-size="3" font-family="monospace" font-weight="bold" text-anchor="middle" fill="#0078d4">SQL</text></svg></span><span class="name">SQL</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-cosmos"><svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.5"><circle cx="10" cy="10" r="2.5" fill="#fff"/><ellipse cx="10" cy="10" rx="8" ry="3.5"/><ellipse cx="10" cy="10" rx="8" ry="3.5" transform="rotate(60 10 10)"/><ellipse cx="10" cy="10" rx="8" ry="3.5" transform="rotate(120 10 10)"/></svg></span><span class="name">Cosmos DB</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-servicebus"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="6" width="16" height="8" rx="1"/><rect x="4" y="8" width="3" height="4" rx="0.3" fill="#0078d4"/><rect x="8.5" y="8" width="3" height="4" rx="0.3" fill="#0078d4"/><rect x="13" y="8" width="3" height="4" rx="0.3" fill="#0078d4"/><circle cx="5" cy="16" r="0.8"/><circle cx="15" cy="16" r="0.8"/></svg></span><span class="name">Service Bus</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-eventgrid"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="12" y="2" width="6" height="6" rx="1"/><rect x="2" y="12" width="6" height="6" rx="1"/><rect x="12" y="12" width="6" height="6" rx="1"/><path d="M8 5h4M5 8v4M15 8v4M8 15h4" stroke="#fff" stroke-width="1" opacity="0.7"/></svg></span><span class="name">Event Grid</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-keyvault"><svg viewBox="0 0 20 20" fill="#fff"><rect x="3" y="6" width="14" height="11" rx="1.5"/><circle cx="10" cy="11" r="2.5" fill="#0078d4"/><circle cx="10" cy="11" r="1" fill="#fff"/><path d="M6 4h8l-1 2H7l-1-2z" opacity="0.85"/></svg></span><span class="name">Key Vault</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-apim"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="10" cy="10" r="7" opacity="0.95"/><circle cx="10" cy="10" r="3" fill="#0078d4"/><path d="M10 3v2M10 15v2M3 10h2M15 10h2" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="name">APIM</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-vnet"><svg viewBox="0 0 20 20" fill="#fff" stroke="#fff" stroke-width="1.3"><path d="M4 4h12v12H4V4z" fill="none"/><circle cx="4" cy="4" r="1.5"/><circle cx="16" cy="4" r="1.5"/><circle cx="4" cy="16" r="1.5"/><circle cx="16" cy="16" r="1.5"/><circle cx="10" cy="10" r="1.5"/><path d="M4 4l6 6M16 4l-6 6M4 16l6-6M16 16l-6-6" stroke-width="1"/></svg></span><span class="name">VNet</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-storage_mgmt"><svg viewBox="0 0 20 20" fill="#fff"><path d="M2 6c0-1 1-2 2-2h4l2 2h6c1 0 2 1 2 2v8c0 1-1 2-2 2H4c-1 0-2-1-2-2V6z" opacity="0.95"/><rect x="5" y="9" width="10" height="1.5" fill="#0078d4"/><rect x="5" y="12" width="10" height="1.5" fill="#0078d4"/></svg></span><span class="name">Storage Mgmt</span></div></div>
-        <div class="meta">azure-sdk-for-* (Python/Java/Go/.NET) + az CLI</div>
-      </div>
-    </div>
-
-    </section>
+    {# Cloud-provider showcase moved to /clouds — opens when user clicks
+       "Continue to console" in the top action bar. #}
 
     <!-- ── SDKs / tooling — 4-tile grid (matches portal /features → sdk-strip) ── -->
     <section class="sdk-strip">
@@ -1040,37 +1012,7 @@
       </div>
     </section>
 
-    <!-- Standard capability bar — spans the full grid width, sits below the
-         tier cards. Same promise applies to every tier, so it's deliberately
-         NOT a per-card row. -->
-    <div class="compat-banner">
-      <div class="title">
-        <span class="cap-pill">Standard capability</span>
-        Works natively with your existing tooling — every plan
-      </div>
-      <div class="row">
-        <span class="lbl">SDKs</span>
-        <span>
-          <code>aws-sdk-java-v2</code> ·
-          <code>aws-sdk-go-v2</code> ·
-          <code>boto3</code> (Python) ·
-          <code>google-cloud-java</code> ·
-          <code>google-cloud-go</code> ·
-          <code>google-cloud-python</code> ·
-          <code>azure-sdk-for-java</code> ·
-          <code>azure-sdk-for-go</code> ·
-          <code>azure-sdk-for-python</code>
-        </span>
-      </div>
-      <div class="row">
-        <span class="lbl">Utilities</span>
-        <span>
-          <code>aws</code> · <code>gcloud</code> · <code>gsutil</code> ·
-          <code>bq</code> · <code>az</code> · <code>terraform</code>
-        </span>
-      </div>
-      <div class="note">Just override the endpoint — no custom SDK or shim.</div>
-    </div>
+    {# compat-banner removed — redundant with the new sdk-strip section above. #}
 
     {# Bottom activate-section retired — activation now lives in the top-bar
        modal triggered by the 'Activate appliance' button. Stub kept so any
@@ -1520,7 +1462,10 @@
 
     // -------- navigation ----------------------------------------------
     function goToConsole() {
-      window.location.href = '/ui';
+      // Step user through a cloud picker first — /clouds shows the 3 cloud
+      // cards with "Open <Cloud> Console" buttons. Direct SPA bypass is at
+      // /ui for power users who already know which cloud they want.
+      window.location.href = '/clouds';
     }
 
     // -------- license activation (Phase 5 — single-flow, 1-click) ------

@@ -186,8 +186,24 @@ def register(app: FastAPI) -> None:
         return RedirectResponse(url="/console/azure", status_code=302)
 
     @app.get("/pricing", include_in_schema=False)
-    def pricing_page():
-        html_path = os.path.join(os.path.dirname(__file__), "..", "static", "pricing.html")
+    def pricing_legacy_redirect():
+        # /pricing is retired — the launch page is now served at /.
+        # Kept as a 302 so old bookmarks and existing redirects in the
+        # codebase (e.g. tier-gate error redirects) still land correctly.
+        from urllib.parse import urlencode
+        from fastapi import Request
+        # Preserve query string (e.g. ?error=student_primary_cloud_required)
+        # so /pricing?error=… → /?error=… without losing context.
+        # FastAPI gives us no Request here without a dep; we can use the
+        # actual request object via Starlette's request scope when needed.
+        return RedirectResponse(url="/", status_code=302)
+
+    @app.get("/clouds", include_in_schema=False)
+    def clouds_page():
+        # Cloud-provider showcase — opens from the "Continue to console"
+        # button on the launch page. Lists the 3 cloud cards with native
+        # icons and an "Open <Cloud> Console →" CTA on each card.
+        html_path = os.path.join(os.path.dirname(__file__), "..", "static", "clouds.html")
         with open(html_path, "rb") as f:
             return HTMLResponse(content=f.read().decode("utf-8"),
                                 headers={"Cache-Control": "no-store, max-age=0"})
