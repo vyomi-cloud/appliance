@@ -107,8 +107,22 @@ def verify_license_jwt(
     except Exception as e:
         raise ValueError(f"decode_failed: {e}")
 
-    # Pick a JWKS source: local file (air-gap) or network fetch
-    jwks = _load_local_pubkey_as_jwks() or _fetch_jwks(backend_url or DEFAULT_BACKEND_URL)
+    # Pick a JWKS source — NETWORK FIRST, local fallback for air-gap.
+    #
+    # The previous order (local-first) was a landmine: an appliance image
+    # built against a dev backend would ship with a pubkey that doesn't
+    # match the live portal's signing key. verify_license_jwt would then
+    # raise signature_invalid 401 on every real activation — and because
+    # the portal nulls `issued_jwt` after one read, the JWT was lost
+    # forever. User-visible symptom: modal stuck on "Waiting…" with no
+    # way to recover.
+    #
+    # Network-first means an online appliance always picks up the current
+    # portal key, even if a stale baked key is sitting on disk. The local
+    # fallback still keeps air-gap installs working.
+    jwks = _fetch_jwks(backend_url or DEFAULT_BACKEND_URL)
+    if not jwks.get("keys"):
+        jwks = _load_local_pubkey_as_jwks() or {"keys": []}
     if not jwks.get("keys"):
         raise ValueError("no_signing_keys_available")
 
