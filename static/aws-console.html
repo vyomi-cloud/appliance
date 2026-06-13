@@ -1922,7 +1922,12 @@ function renderCollapsibleForm(svc, main){
       }
       setPath(bodyObj, k, v);
     });
-    const r = await api(svc.create_method, svc.collection_path, bodyObj);
+    // Honor svc.create_path override (S3 etc) — for services where
+    // the create endpoint differs from the list endpoint. Falls back
+    // to collection_path for everything else (backward-compatible).
+    const createTemplate = svc.create_path || svc.collection_path;
+    const createUrl = fillPath(createTemplate, {name: name});
+    const r = await api(svc.create_method, createUrl, bodyObj);
     if (r.ok) { toast(name + " created", "ok"); recordNotif("ok", "Launched " + name);
       navigate({view:"list", item:null}); }
     else {
@@ -2232,7 +2237,10 @@ function renderSteppedWizard(svc, main){
       }
       setPath(bodyObj, k, v);
     });
-    const r = await api(svc.create_method, svc.collection_path, bodyObj);
+    // Same create_path override pattern — applies to wizard path too.
+    const createTemplate = svc.create_path || svc.collection_path;
+    const createUrl = fillPath(createTemplate, {name: name});
+    const r = await api(svc.create_method, createUrl, bodyObj);
     if (r.ok) {
       toast(name + " created", "ok"); recordNotif("ok", "Created " + name);
       navigate({view:"list", item:null});

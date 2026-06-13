@@ -69,10 +69,13 @@ def _read_aws() -> list[ActionSpec]:
                 provider="aws", service=key, action="list",
                 method="GET", path=coll,
             ))
+            # Honor create_path override (S3 — POST /api/s3/buckets/{name})
+            create_template = str(svc.get("create_path") or coll)
             specs.append(ActionSpec(
                 provider="aws", service=key, action="create",
                 method=str(svc.get("create_method") or "POST").upper(),
-                path=coll, payload=payload_for("aws", key),
+                path=create_template, payload=payload_for("aws", key),
+                requires_resource="{name}" in create_template,
             ))
         if res:
             specs.append(ActionSpec(
@@ -193,6 +196,23 @@ def enumerate_actions(providers: Optional[list[str]] = None) -> list[ActionSpec]
     if "aws"   in providers: out.extend(_read_aws())
     if "gcp"   in providers: out.extend(_read_gcp())
     if "azure" in providers: out.extend(_read_azure())
+    # Sort so the harness runs actions in lifecycle order WITHIN each
+    # service: create FIRST (so subsequent get/delete have a real id),
+    # list / get next (idempotent reads), lifecycle in the middle,
+    # delete LAST (cleans up). Without this, parameterized pytest runs
+    # alphabetically, which kicks 'delete' before 'create' and produces
+    # a flood of false-positive 404s on resources that never existed.
+    _ACTION_ORDER = {
+        "create": 0, "list": 1, "get": 2,
+        # lifecycle / sub-actions middle
+        "start": 4, "restart": 4, "reboot": 4, "stop": 5,
+        "modify": 5, "update": 5, "patch": 5,
+        # destructive last
+        "purge": 8, "terminate": 9, "delete": 9,
+    }
+    def sort_key(s: ActionSpec):
+        return (s.provider, s.service, _ACTION_ORDER.get(s.action, 6), s.action)
+    out.sort(key=sort_key)
     return out
 
 

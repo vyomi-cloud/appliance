@@ -72,7 +72,7 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `kms` | `custom-key-stores` | `GET` | `/api/aws/extras/kms/custom-key-stores` | `200` | ✓ 200 |
 | `kms` | `delete` | `DELETE` | `/api/aws/extras/kms/keys/{name}` | `200` | ✓ 200 |
 | `kms` | `delete` | `DELETE` | `/api/aws/extras/kms/keys/{name}` | `200` | ✓ 200 |
-| `kms` | `get` | `GET` | `/api/aws/extras/kms/keys/{name}` | `404` | ✗ 404 — {"detail":"Unknown stub: kms/keys/key-5600a6d4"} |
+| `kms` | `get` | `GET` | `/api/aws/extras/kms/keys/{name}` | `404` | ✗ 404 — {"detail":"Unknown stub: kms/keys/key-67086f3e"} |
 | `kms` | `keys` | `GET` | `/api/aws/extras/kms/keys` | `200` | ✓ 200 |
 | `kms` | `list` | `GET` | `/api/aws/extras/kms/keys` | `200` | ✓ 200 |
 | `lambda` | `create` | `POST` | `/api/lambda/functions` | `500` | ✗ 500 — Internal Server Error |
@@ -263,7 +263,7 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `kms` | `delete` | `DELETE` | `/api/gcp/extras/kms/keys/{name}` | `200` | ✓ 200 |
 | `kms` | `delete` | `DELETE` | `/api/gcp/extras/kms/keys/{name}` | `200` | ✓ 200 |
 | `kms` | `ekmConnections` | `GET` | `/api/gcp/extras/kms/ekmConnections` | `200` | ✓ 200 |
-| `kms` | `get` | `GET` | `/api/gcp/extras/kms/keys/{name}` | `404` | ✗ 404 — {"detail":"Unknown GCP stub: kms/keys/key-3c6bad72"} |
+| `kms` | `get` | `GET` | `/api/gcp/extras/kms/keys/{name}` | `404` | ✗ 404 — {"detail":"Unknown GCP stub: kms/keys/key-6cd0649c"} |
 | `kms` | `importJobs` | `GET` | `/api/gcp/extras/kms/importJobs` | `200` | ✓ 200 |
 | `kms` | `keyrings` | `GET` | `/api/gcp/extras/kms/keyrings` | `200` | ✓ 200 |
 | `kms` | `keys` | `GET` | `/api/gcp/extras/kms/keys` | `200` | ✓ 200 |
@@ -279,7 +279,7 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `secretmanager` | `create` | `POST` | `/api/gcp/extras/secretmanager/secrets` | `200` | ✓ 200 |
 | `secretmanager` | `delete` | `DELETE` | `/api/gcp/extras/secretmanager/secrets/{name}` | `200` | ✓ 200 |
 | `secretmanager` | `delete` | `DELETE` | `/api/gcp/extras/secretmanager/secrets/{name}` | `200` | ✓ 200 |
-| `secretmanager` | `get` | `GET` | `/api/gcp/extras/secretmanager/secrets/{name}` | `404` | ✗ 404 — {"detail":"Unknown GCP stub: secretmanager/secrets/sec-23b2e9fb"} |
+| `secretmanager` | `get` | `GET` | `/api/gcp/extras/secretmanager/secrets/{name}` | `404` | ✗ 404 — {"detail":"Unknown GCP stub: secretmanager/secrets/sec-bce5291e"} |
 | `secretmanager` | `list` | `GET` | `/api/gcp/extras/secretmanager/secrets` | `200` | ✓ 200 |
 | `secretmanager` | `rotation` | `GET` | `/api/gcp/extras/secretmanager/rotation` | `200` | ✓ 200 |
 | `secretmanager` | `secrets` | `GET` | `/api/gcp/extras/secretmanager/secrets` | `200` | ✓ 200 |

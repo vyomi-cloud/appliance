@@ -98,6 +98,11 @@ RESOURCE_CATALOG_AWS = [
         "resource_path":   "/api/s3/buckets/{name}",
         "name_field":      "name",
         "create_method":   "POST",
+        # S3 wire protocol nests the bucket name in the path for create
+        # (POST /api/s3/buckets/{name}) — not the collection. Override
+        # so the console renderer doesn't hit /api/s3/buckets which the
+        # S3 catch-all eats as NoSuchBucket.
+        "create_path":     "/api/s3/buckets/{name}",
         "rail_items": [
             {"key": "buckets",         "label": "General purpose buckets","icon": "storage",   "type": "primary"},
             {"key": "directory",       "label": "Directory buckets",   "icon": "folder_special","type": "stub"},
@@ -586,6 +591,11 @@ def catalog_for_console() -> list[dict]:
             "resource_path":   c["resource_path"],
             "name_field":      c["name_field"],
             "create_method":   c["create_method"],
+            # create_path is optional — only set for services where the
+            # POST endpoint doesn't match collection_path (S3: bucket
+            # name nested in the path). Console renderer falls back to
+            # collection_path when this is absent.
+            "create_path":     c.get("create_path"),
             "api_paths":       c["api_paths"],
             "columns":         c["columns"],
             "createFields":    c["createFields"],
