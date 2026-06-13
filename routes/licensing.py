@@ -363,7 +363,9 @@ def register(app: FastAPI) -> None:
 
     @app.get("/api/license/status")
     def api_license_status():
+        import os
         from core import tier_policy as _tp
+        from core import license_remote as _lr
         from datetime import datetime, timezone as _tz
         lic = dict(ctx.STATE.get("license") or {})
         try:
@@ -389,20 +391,42 @@ def register(app: FastAPI) -> None:
             except Exception:
                 pass
 
+        # Phase 5 subscription coupling fields \u2014 read from the cached JWT
+        # claims. These are what the SPA pill renders: hard cutoff date,
+        # days-until-deactivation countdown, cancel-in-grace banner, and
+        # refresh-loop health for the green/yellow/red dot.
+        claims = ctx.STATE.get("license_claims") or {}
+        sub_expires_at = claims.get("sub_expires_at")
+        days_until_sub_expiry = _lr.days_until_sub_expiry(claims)
+        sub_expired = _lr.is_sub_expired(claims)
+        cancel_at_period_end = bool(claims.get("cancel_at_period_end"))
+        refresh_status = {
+            "last_refresh_at":          ctx.STATE.get("license_last_refresh_at"),
+            "last_refresh_attempted":   ctx.STATE.get("license_last_refresh_attempted_at"),
+            "last_refresh_status":      ctx.STATE.get("license_last_refresh_status"),
+            "refresh_interval_seconds": int(os.environ.get(
+                "CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS", str(24 * 3600))),
+        }
+
         return {
-            "active_tier":         active_tier,
-            "primary_cloud":       primary_cloud,
-            "period":              tenant.get("license_period") or lic.get("period") or "monthly",
-            "seats":               int(tenant.get("license_seats") or lic.get("seats") or 1),
-            "expires_at":          expires_at,
-            "grace_until":         grace_until,
-            "days_until_expiry":   days_until_expiry,
-            "in_grace_period":     in_grace,
-            "price_inr_monthly":   policy.get("price_inr_monthly"),
-            "price_inr_annual":    policy.get("price_inr_annual"),
-            "currency":            "INR",
-            "currency_symbol":     "\u20b9",
-            "license":             lic,
+            "active_tier":            active_tier,
+            "primary_cloud":          primary_cloud,
+            "period":                 tenant.get("license_period") or lic.get("period") or "monthly",
+            "seats":                  int(tenant.get("license_seats") or lic.get("seats") or 1),
+            "expires_at":             expires_at,
+            "grace_until":            grace_until,
+            "days_until_expiry":      days_until_expiry,
+            "in_grace_period":        in_grace,
+            "sub_expires_at":         sub_expires_at,
+            "days_until_sub_expiry":  days_until_sub_expiry,
+            "sub_expired":            sub_expired,
+            "cancel_at_period_end":   cancel_at_period_end,
+            "refresh_status":         refresh_status,
+            "price_inr_monthly":      policy.get("price_inr_monthly"),
+            "price_inr_annual":       policy.get("price_inr_annual"),
+            "currency":               "INR",
+            "currency_symbol":        "\u20b9",
+            "license":                lic,
         }
 
     @app.post("/api/license/switch-cloud")

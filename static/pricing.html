@@ -47,9 +47,12 @@
     .top-bar .tb-btn-primary:hover { background: #1a2c44; }
 
     /* Activation status pill — shown in place of the Activate button once
-       activeTier !== 'free'. Green = bound to a real entitlement. The pill
-       is a button that opens a small dropdown menu (Manage / Re-bind /
-       Sign out). Caret arrow inside is sized via the ::after element. */
+       activeTier !== 'free'. Three color states track health:
+         green  = healthy, days_until_sub_expiry > 7 AND fresh refresh
+         yellow = warning, days_until_sub_expiry ≤ 7 OR refresh stale (>48h)
+         red    = sub_expired OR explicit auth_required state
+       The pill is a button that opens a dropdown (Manage / Re-bind / Refresh
+       now / Sign out). Right-side countdown chip shows "N days left". */
     .tb-activated {
       position: relative;
       display: inline-flex;
@@ -65,6 +68,16 @@
       transition: background 0.15s, border-color 0.15s;
     }
     .tb-activated .tb-pill:hover { background: #d1fae5; border-color: #6ee7b7; }
+    .tb-activated.warn .tb-pill {
+      background: #fef3c7; color: #92400e; border-color: #fcd34d;
+    }
+    .tb-activated.warn .tb-pill:hover { background: #fde68a; border-color: #f59e0b; }
+    .tb-activated.warn .tb-pill .tb-check { background: #f59e0b; }
+    .tb-activated.danger .tb-pill {
+      background: #fee2e2; color: #b91c1c; border-color: #fca5a5;
+    }
+    .tb-activated.danger .tb-pill:hover { background: #fecaca; border-color: #ef4444; }
+    .tb-activated.danger .tb-pill .tb-check { background: #ef4444; }
     .tb-activated .tb-pill .tb-check {
       display: inline-flex; width: 14px; height: 14px; align-items: center; justify-content: center;
       background: #10b981; color: #fff; border-radius: 50%;
@@ -73,6 +86,15 @@
     .tb-activated .tb-pill .tb-tier {
       letter-spacing: 0.06em; text-transform: uppercase; font-size: 11.5px;
     }
+    /* Countdown chip — sits to the right of the tier label, inside the pill.
+       Slightly de-emphasized in green state, prominent in yellow/red. */
+    .tb-activated .tb-pill .tb-countdown {
+      font-size: 11px; font-weight: 500; opacity: 0.85;
+      padding: 0 2px 0 6px; border-left: 1px solid currentColor;
+      letter-spacing: 0;
+    }
+    .tb-activated.warn   .tb-pill .tb-countdown,
+    .tb-activated.danger .tb-pill .tb-countdown { opacity: 1; font-weight: 700; }
     .tb-activated .tb-pill .tb-caret {
       font-size: 9px; opacity: 0.7; margin-left: 2px;
     }
@@ -1120,6 +1142,15 @@
       activeTier: 'free', // /api/runtime/tier active_tier
       primaryCloud: '',   // /api/runtime/tier primary_cloud
       issuedTo: '',       // /api/license/status issued_to — bound email
+      // Subscription-level state from /api/license/status (Phase 5 coupling)
+      subExpiresAt:        null,  // ISO 8601
+      daysUntilSubExpiry:  null,  // int or null
+      subExpired:          false,
+      cancelAtPeriodEnd:   false,
+      refreshLastAt:       null,
+      refreshLastStatus:   null,
+      // Derived pill health: 'green' | 'warn' | 'danger'
+      pillState: 'green',
       billing: 'monthly', // 'monthly' | 'annual'
     };
 
@@ -1137,19 +1168,55 @@
       }
       // /api/license/status returns the full JWT payload in .license; the
       // portal mints sub=<user_email>, so that's our bound-account display.
-      // Best-effort: on failure or Free tier, we just skip the email row.
+      // It also surfaces the subscription cutoff + refresh health that drive
+      // the green/yellow/red pill state.
       if (STATE.activeTier !== 'free') {
         try {
           const lr = await fetch('/api/license/status');
           const ld = await lr.json();
           const lic = ld.license || {};
           STATE.issuedTo = lic.sub || lic.email || ld.issued_to || '';
-        } catch (e) { STATE.issuedTo = ''; }
+          STATE.subExpiresAt       = ld.sub_expires_at || null;
+          STATE.daysUntilSubExpiry = (ld.days_until_sub_expiry !== undefined)
+            ? ld.days_until_sub_expiry : null;
+          STATE.subExpired         = !!ld.sub_expired;
+          STATE.cancelAtPeriodEnd  = !!ld.cancel_at_period_end;
+          const rs = ld.refresh_status || {};
+          STATE.refreshLastAt     = rs.last_refresh_at || null;
+          STATE.refreshLastStatus = rs.last_refresh_status || null;
+          // Derive pill health. Order matters — danger beats warn beats green.
+          STATE.pillState = derivePillState();
+        } catch (e) {
+          STATE.issuedTo = '';
+          STATE.pillState = 'green';
+        }
       } else {
         STATE.issuedTo = '';
+        STATE.subExpiresAt = null;
+        STATE.daysUntilSubExpiry = null;
+        STATE.subExpired = false;
+        STATE.cancelAtPeriodEnd = false;
+        STATE.refreshLastAt = null;
+        STATE.refreshLastStatus = null;
+        STATE.pillState = 'green';
       }
       renderTopBar();
       render();
+    }
+
+    // Pill color rules:
+    //   danger  → sub_expires_at already passed (hard signal)
+    //   warn    → ≤7 days left OR refresh stale > 48h OR cancel_at_period_end
+    //   green   → everything else
+    function derivePillState() {
+      if (STATE.subExpired) return 'danger';
+      if (STATE.daysUntilSubExpiry !== null && STATE.daysUntilSubExpiry <= 7) return 'warn';
+      if (STATE.cancelAtPeriodEnd) return 'warn';
+      if (STATE.refreshLastAt) {
+        const ageHours = (Date.now() - new Date(STATE.refreshLastAt).getTime()) / 3.6e6;
+        if (ageHours > 48) return 'warn';
+      }
+      return 'green';
     }
 
     // Top-bar activation slot. Free tier shows the original [Activate
@@ -1168,21 +1235,53 @@
       }
       const portalBase = (window.VYOMI_PORTAL_URL || 'https://vyomi.cloud').replace(/\/$/, '');
       const tierLabel = tier.toUpperCase();
+      const pillClass = STATE.pillState === 'green' ? 'tb-activated'
+                      : STATE.pillState === 'warn'  ? 'tb-activated warn'
+                      :                                'tb-activated danger';
+      // Countdown chip inside the pill — most prominent in warn/danger states.
+      let countdownHtml = '';
+      if (STATE.subExpired) {
+        countdownHtml = '<span class="tb-countdown">expired</span>';
+      } else if (STATE.daysUntilSubExpiry !== null) {
+        const d = STATE.daysUntilSubExpiry;
+        const label = d === 0 ? 'ends today' : (d === 1 ? '1 day left' : d + ' days left');
+        countdownHtml = '<span class="tb-countdown">' + label + '</span>';
+      }
       const emailRow = STATE.issuedTo
         ? '<div class="tb-menu-meta">Bound to ' + escapeHtml(STATE.issuedTo) + '</div>' +
           '<div class="tb-menu-sep"></div>'
         : '';
+      // Subscription detail rows in the dropdown — only when we have data.
+      let subDetailRows = '';
+      if (STATE.subExpiresAt) {
+        const dateStr = String(STATE.subExpiresAt).slice(0, 10);
+        const verb = STATE.cancelAtPeriodEnd ? 'Ends' : 'Renews';
+        subDetailRows +=
+          '<div class="tb-menu-meta">' + verb + ' on ' + escapeHtml(dateStr) + '</div>';
+      }
+      if (STATE.refreshLastAt) {
+        const refreshStr = String(STATE.refreshLastAt).slice(0, 16).replace('T', ' ');
+        subDetailRows +=
+          '<div class="tb-menu-meta" style="opacity:0.7">' +
+          'Last validated ' + escapeHtml(refreshStr) + ' UTC</div>';
+      }
+      if (subDetailRows) subDetailRows += '<div class="tb-menu-sep"></div>';
+
       slot.innerHTML =
-        '<div class="tb-activated" id="tb-activated">' +
+        '<div class="' + pillClass + '" id="tb-activated">' +
           '<button class="tb-pill" type="button" onclick="toggleTbMenu(event)">' +
             '<span class="tb-check">✓</span>' +
             '<span class="tb-tier">' + tierLabel + '</span>' +
+            countdownHtml +
             '<span class="tb-caret">▾</span>' +
           '</button>' +
           '<div class="tb-menu" role="menu">' +
             emailRow +
+            subDetailRows +
             '<a href="' + portalBase + '/dashboard" target="_blank" rel="noopener" ' +
                'onclick="closeTbMenu()">Manage subscription ↗</a>' +
+            '<button type="button" onclick="closeTbMenu(); refreshLicenseNow()">' +
+              'Validate now (sync with portal)</button>' +
             '<button type="button" onclick="closeTbMenu(); openActivateModal()">' +
               'Re-bind to different account</button>' +
             '<div class="tb-menu-sep"></div>' +
@@ -1190,6 +1289,22 @@
               'Sign out appliance</button>' +
           '</div>' +
         '</div>';
+    }
+
+    // Manual "Validate now" — hits the same endpoint the daily refresh
+    // loop uses, but on demand. Useful when the user just upgraded on
+    // the portal and doesn't want to wait 24h for propagation.
+    async function refreshLicenseNow() {
+      toast('Validating with portal…');
+      try {
+        const r = await fetch('/api/license/refresh', {method: 'POST'});
+        const d = await r.json();
+        if (!r.ok) throw new Error((d.detail && (d.detail.reason || d.detail.code)) || JSON.stringify(d));
+        toast('✓ Validated — tier: ' + d.active_tier);
+        setTimeout(load, 400);
+      } catch (e) {
+        toast('Validation failed: ' + e.message, true);
+      }
     }
 
     function toggleTbMenu(ev) {

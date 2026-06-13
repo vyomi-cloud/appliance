@@ -149,6 +149,30 @@ def verify_license_jwt(
     if claims.get("tier") not in ("free", "student", "developer", "enterprise"):
         raise ValueError(f"invalid_tier_claim ({claims.get('tier')!r})")
 
+    # Subscription-level hard expiry. Independent of JWT exp — the JWT could
+    # be cryptographically valid for hours after the paid period ended.
+    # `sub_expires_at` is the billing cutoff baked into the JWT at mint time.
+    # When it passes, the appliance must self-downgrade to Free even without
+    # network reachability to the portal. This is what makes appliance
+    # entitlement actually coupled to the subscription period.
+    sub_exp = claims.get("sub_expires_at")
+    if sub_exp:
+        try:
+            # tolerate trailing 'Z' or '+00:00'
+            iso = sub_exp.rstrip("Z").split("+")[0].split(".")[0]
+            sub_exp_ts = time.mktime(time.strptime(iso, "%Y-%m-%dT%H:%M:%S"))
+            # Use timegm semantics — strptime gives local-tz naive; convert
+            # via calendar.timegm for true UTC.
+            import calendar
+            sub_exp_ts = calendar.timegm(time.strptime(iso, "%Y-%m-%dT%H:%M:%S"))
+            if sub_exp_ts < now - 30:
+                raise ValueError(f"subscription_expired (sub_expires_at={sub_exp})")
+        except ValueError:
+            raise
+        except Exception:
+            # malformed claim value — refuse rather than ignore
+            raise ValueError(f"invalid_sub_expires_at_claim ({sub_exp!r})")
+
     return claims
 
 
@@ -296,32 +320,54 @@ def refresh_token(state: dict, *, backend_url: Optional[str] = None,
             data = json.load(r)
     except urllib.error.HTTPError as e:
         # 401 → JWT no longer valid (revoked or expired); caller handles
+        state["license_last_refresh_attempted_at"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         if e.code == 401:
+            state["license_last_refresh_status"] = "auth_required"
             return {"_error": "auth_required",
                     "_status": 401,
                     "_detail": e.read().decode()[:200]}
+        state["license_last_refresh_status"] = f"http_{e.code}"
         return None
-    except Exception:
+    except Exception as ex:
+        state["license_last_refresh_attempted_at"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        state["license_last_refresh_status"] = f"network_error: {type(ex).__name__}"
         return None  # network — keep cached JWT, try again later
     new_jwt = data.get("access_token", "")
     if not new_jwt:
+        state["license_last_refresh_attempted_at"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        state["license_last_refresh_status"] = "empty_token"
         return None
     # Verify the new JWT signature locally before applying (defense in depth)
     try:
         claims = verify_license_jwt(new_jwt, backend_url=backend_url)
-    except ValueError:
+    except ValueError as ve:
+        state["license_last_refresh_attempted_at"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        state["license_last_refresh_status"] = f"verify_failed: {ve}"
         return None  # backend returned something we can't verify — keep cached
     state["license_jwt"] = new_jwt
     state["license_claims"] = dict(claims)
     state["license_last_refresh_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    state["license_last_refresh_attempted_at"] = state["license_last_refresh_at"]
+    state["license_last_refresh_status"] = "ok"
     state["license_refresh_source"] = data.get("source")
     return claims
 
 
-def start_refresh_loop(state: dict, *, interval_seconds: int = 3600,
+def start_refresh_loop(state: dict, *, interval_seconds: int = 24 * 3600,
                        on_tier_changed=None, on_auth_failed=None) -> None:
     """Background daemon that refreshes the license JWT every
-    `interval_seconds` (default 1h) while the appliance is online.
+    `interval_seconds` (default 24h) while the appliance is online.
+
+    24h cadence: matches the JWT TTL — the JWT is essentially a 1-day
+    cache of "the portal said you're Student". Smaller intervals add
+    network traffic without improving enforcement (the JWT's
+    sub_expires_at claim is the real hard expiry, not the refresh
+    cadence). Failed refreshes are surfaced via STATE['license_last_*']
+    fields so the SPA pill can flip from green to yellow.
 
     Subscription changes on the portal propagate to the appliance within
     `interval_seconds`. On revoked/expired auth: calls `on_auth_failed()`
@@ -369,8 +415,49 @@ def claims_to_tier_payload(claims: dict) -> dict:
         "sub": claims.get("sub"),
         "iss": claims.get("iss"),
         "install_id": claims.get("install_id"),
+        "sub_expires_at": claims.get("sub_expires_at"),
+        "cancel_at_period_end": bool(claims.get("cancel_at_period_end")),
         "issued_via": "license_remote_jwt",
     }
+
+
+def is_sub_expired(claims: dict, now_ts: Optional[float] = None) -> bool:
+    """True iff the subscription cutoff baked into the JWT has passed.
+
+    Cheap one-claim check used at runtime by the appliance — every tier
+    read goes through this so an expired sub immediately reads as Free,
+    even before the next refresh cycle fires.
+    """
+    if not claims:
+        return False
+    sub_exp = claims.get("sub_expires_at")
+    if not sub_exp:
+        return False
+    try:
+        import calendar
+        iso = sub_exp.rstrip("Z").split("+")[0].split(".")[0]
+        sub_exp_ts = calendar.timegm(time.strptime(iso, "%Y-%m-%dT%H:%M:%S"))
+    except Exception:
+        return False
+    return (now_ts or time.time()) > sub_exp_ts
+
+
+def days_until_sub_expiry(claims: dict, now_ts: Optional[float] = None) -> Optional[int]:
+    """Whole days remaining until sub_expires_at, or None if no claim. Used
+    by the SPA pill to show '✓ STUDENT · 23 days left'."""
+    if not claims:
+        return None
+    sub_exp = claims.get("sub_expires_at")
+    if not sub_exp:
+        return None
+    try:
+        import calendar
+        iso = sub_exp.rstrip("Z").split("+")[0].split(".")[0]
+        sub_exp_ts = calendar.timegm(time.strptime(iso, "%Y-%m-%dT%H:%M:%S"))
+    except Exception:
+        return None
+    delta = sub_exp_ts - (now_ts or time.time())
+    return max(0, int(delta // 86400))
 
 
 def _exp_iso(claims: dict) -> str:

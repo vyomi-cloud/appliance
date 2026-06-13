@@ -4630,14 +4630,32 @@ def _active_tier() -> str:
     """Resolve the active tenant's tier (falls back to the deployment-level
     STATE["license"]["tier"] then "free"). Shared by every tier-enforcement
     site; mirrors the middleware's resolver in `_tier_enforcement_middleware`.
+
+    Also enforces the JWT's `sub_expires_at` claim: if the subscription
+    cutoff has passed, every read returns "free" regardless of stored
+    tier — so the appliance self-downgrades the moment the billing
+    period ends, without needing to reach the portal first. The next
+    successful refresh will overwrite the persisted tier with whatever
+    the portal derives (typically also Free if the sub didn't renew).
     """
     try:
         tenant = _tenant_dict(_active_tenant_id()) or {}
     except Exception:
         tenant = {}
-    return str(tenant.get("license_tier")
-               or (STATE.get("license") or {}).get("tier")
-               or "free")
+    stored = str(tenant.get("license_tier")
+                 or (STATE.get("license") or {}).get("tier")
+                 or "free")
+    if stored == "free":
+        return "free"
+    # Subscription cutoff check — runs on every tier read but is a single
+    # claim lookup + timestamp compare, so cost is negligible.
+    try:
+        from core import license_remote as _lr
+        if _lr.is_sub_expired(STATE.get("license_claims") or {}):
+            return "free"
+    except Exception:
+        pass
+    return stored
 
 
 # Ordered level vocabulary for non-boolean feature flags. Each entry maps a
@@ -10438,8 +10456,11 @@ def _start_license_background_tasks():
 
     try:
         _lr.start_revocation_poll(STATE, interval_seconds=24 * 3600, on_revoked=_on_revoked)
+        # Refresh cadence default: 24h. Matches the JWT TTL + the user-facing
+        # "validate once per day" promise. Override via env if a deployment
+        # genuinely wants tighter coupling (e.g. high-churn enterprise).
         _lr.start_refresh_loop(STATE, interval_seconds=int(os.environ.get(
-            "CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS", "3600")),
+            "CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS", str(24 * 3600))),
             on_tier_changed=_on_tier_changed,
             on_auth_failed=_on_auth_failed)
     except Exception:
@@ -10705,21 +10726,51 @@ def api_license_status():
                 "cta_label": None, "cta_url": None,
             }
 
+    # Subscription-level fields: distinct from the JWT-level `expires_at`.
+    # sub_expires_at is the BILLING cutoff baked into the JWT — what the
+    # appliance actually enforces. days_until_sub_expiry drives the SPA
+    # countdown ('✓ STUDENT · 23 days left'). is_sub_expired is the
+    # already-passed signal for showing a red banner.
+    claims = STATE.get("license_claims") or {}
+    from core import license_remote as _lr
+    sub_expires_at = claims.get("sub_expires_at")
+    days_until_sub_expiry = _lr.days_until_sub_expiry(claims)
+    sub_expired = _lr.is_sub_expired(claims)
+    cancel_at_period_end = bool(claims.get("cancel_at_period_end"))
+
+    # Refresh-loop health: when did we last successfully fetch a fresh JWT
+    # from the portal? The SPA flips the pill from green → yellow when this
+    # is stale (>48h) so users see "appliance is offline" before silently
+    # running on a 30-day-old cache.
+    refresh_status = {
+        "last_refresh_at":         STATE.get("license_last_refresh_at"),
+        "last_refresh_attempted":  STATE.get("license_last_refresh_attempted_at"),
+        "last_refresh_status":     STATE.get("license_last_refresh_status"),
+        "refresh_interval_seconds": int(os.environ.get(
+            "CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS", str(24 * 3600))),
+    }
+
     return {
-        "active_tier":         active_tier,
-        "primary_cloud":       primary_cloud,
-        "period":              tenant.get("license_period") or lic.get("period") or "monthly",
-        "seats":               int(tenant.get("license_seats") or lic.get("seats") or 1),
-        "expires_at":          expires_at,
-        "grace_until":         grace_until,
-        "days_until_expiry":   days_until_expiry,
-        "in_grace_period":     in_grace,
-        "expiry_banner":       expiry_banner,
-        "price_inr_monthly":   policy.get("price_inr_monthly"),
-        "price_inr_annual":    policy.get("price_inr_annual"),
-        "currency":            "INR",
-        "currency_symbol":     "₹",
-        "license":             lic,  # full JWT payload for clients that want it
+        "active_tier":            active_tier,
+        "primary_cloud":          primary_cloud,
+        "period":                 tenant.get("license_period") or lic.get("period") or "monthly",
+        "seats":                  int(tenant.get("license_seats") or lic.get("seats") or 1),
+        "expires_at":             expires_at,
+        "grace_until":            grace_until,
+        "days_until_expiry":      days_until_expiry,
+        "in_grace_period":        in_grace,
+        "expiry_banner":          expiry_banner,
+        # New subscription-bound fields (Phase 5 coupling):
+        "sub_expires_at":         sub_expires_at,
+        "days_until_sub_expiry":  days_until_sub_expiry,
+        "sub_expired":            sub_expired,
+        "cancel_at_period_end":   cancel_at_period_end,
+        "refresh_status":         refresh_status,
+        "price_inr_monthly":      policy.get("price_inr_monthly"),
+        "price_inr_annual":       policy.get("price_inr_annual"),
+        "currency":               "INR",
+        "currency_symbol":        "₹",
+        "license":                lic,  # full JWT payload for clients that want it
     }
 
 
