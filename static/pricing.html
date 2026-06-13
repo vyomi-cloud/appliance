@@ -248,16 +248,23 @@
     .tier {
       position: relative;
       background: #ffffff;
-      border: 1px solid #e7e7e9;
+      /* Slightly darker border (#d1d5db vs #e7e7e9) so all 4 edges read
+         on a white page background. Paired with a soft bottom shadow
+         so the card looks elevated — the previous border-only treatment
+         made the bottom edge nearly invisible. */
+      border: 1px solid #d1d5db;
       border-radius: 14px;
       padding: 28px 24px 24px;
       display: flex; flex-direction: column;
+      box-shadow: 0 1px 2px rgba(15, 27, 45, 0.04),
+                  0 4px 12px rgba(15, 27, 45, 0.04);
       transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
     }
     .tier:hover {
-      border-color: #c5cfd9;
+      border-color: #9aa5b1;
       transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(15, 27, 45, 0.06);
+      box-shadow: 0 2px 4px rgba(15, 27, 45, 0.04),
+                  0 12px 28px rgba(15, 27, 45, 0.08);
     }
     .tier.featured {
       border-color: #a855f7;
