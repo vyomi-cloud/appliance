@@ -46,6 +46,62 @@
     }
     .top-bar .tb-btn-primary:hover { background: #1a2c44; }
 
+    /* Activation status pill — shown in place of the Activate button once
+       activeTier !== 'free'. Green = bound to a real entitlement. The pill
+       is a button that opens a small dropdown menu (Manage / Re-bind /
+       Sign out). Caret arrow inside is sized via the ::after element. */
+    .tb-activated {
+      position: relative;
+      display: inline-flex;
+    }
+    .tb-activated .tb-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 9px 14px 9px 12px;
+      border-radius: 999px;
+      background: #ecfdf5; color: #047857;
+      border: 1px solid #a7f3d0;
+      font-size: 13px; font-weight: 600; line-height: 1;
+      cursor: pointer; font-family: inherit;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .tb-activated .tb-pill:hover { background: #d1fae5; border-color: #6ee7b7; }
+    .tb-activated .tb-pill .tb-check {
+      display: inline-flex; width: 14px; height: 14px; align-items: center; justify-content: center;
+      background: #10b981; color: #fff; border-radius: 50%;
+      font-size: 9px; font-weight: 700;
+    }
+    .tb-activated .tb-pill .tb-tier {
+      letter-spacing: 0.06em; text-transform: uppercase; font-size: 11.5px;
+    }
+    .tb-activated .tb-pill .tb-caret {
+      font-size: 9px; opacity: 0.7; margin-left: 2px;
+    }
+    .tb-activated .tb-menu {
+      position: absolute; top: calc(100% + 6px); right: 0; min-width: 220px;
+      background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px;
+      box-shadow: 0 12px 32px rgba(15, 27, 45, 0.10);
+      padding: 6px; display: none; z-index: 200;
+    }
+    .tb-activated.open .tb-menu { display: block; }
+    .tb-activated .tb-menu button,
+    .tb-activated .tb-menu a {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; padding: 9px 12px; border-radius: 7px;
+      background: transparent; border: 0; color: #1a2330;
+      font-size: 13px; font-family: inherit; line-height: 1.2;
+      text-align: left; cursor: pointer; text-decoration: none;
+    }
+    .tb-activated .tb-menu button:hover,
+    .tb-activated .tb-menu a:hover { background: #f3f4f6; }
+    .tb-activated .tb-menu .tb-menu-sep {
+      height: 1px; background: #e5e7eb; margin: 4px 2px;
+    }
+    .tb-activated .tb-menu .tb-menu-danger { color: #b91c1c; }
+    .tb-activated .tb-menu .tb-menu-meta {
+      padding: 6px 12px 4px; font-size: 11px;
+      color: #6b7280; letter-spacing: 0.04em;
+    }
+
     /* ═══════════════════════════════════════════════════════════════════
        FEATURES SECTION — portal /features layout ported to light theme.
        Cloud cards stack vertically (one per row), each with native
@@ -710,9 +766,16 @@
       <img src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi">
     </a>
     <div class="tb-actions">
-      <button class="tb-btn tb-btn-secondary" type="button" onclick="openActivateModal()">
-        Activate appliance
-      </button>
+      <!-- Slot rendered by renderTopBar() based on STATE.activeTier:
+           - tier === 'free' → [Activate appliance] button (opens modal)
+           - tier !== 'free' → green pill + dropdown (manage / re-bind / sign out)
+           Default markup below is the Free-tier state so first-paint isn't
+           blank before /api/runtime/tier resolves. -->
+      <div id="tb-activate-slot">
+        <button class="tb-btn tb-btn-secondary" type="button" onclick="openActivateModal()">
+          Activate appliance
+        </button>
+      </div>
       <button class="tb-btn tb-btn-primary" type="button" onclick="goToConsole()">
         Continue to console →
       </button>
@@ -1056,6 +1119,7 @@
       tiers: null,        // /api/runtime/tier all_tiers
       activeTier: 'free', // /api/runtime/tier active_tier
       primaryCloud: '',   // /api/runtime/tier primary_cloud
+      issuedTo: '',       // /api/license/status issued_to — bound email
       billing: 'monthly', // 'monthly' | 'annual'
     };
 
@@ -1071,7 +1135,89 @@
         toast('Could not reach simulator: ' + e, true);
         return;
       }
+      // /api/license/status returns the full JWT payload in .license; the
+      // portal mints sub=<user_email>, so that's our bound-account display.
+      // Best-effort: on failure or Free tier, we just skip the email row.
+      if (STATE.activeTier !== 'free') {
+        try {
+          const lr = await fetch('/api/license/status');
+          const ld = await lr.json();
+          const lic = ld.license || {};
+          STATE.issuedTo = lic.sub || lic.email || ld.issued_to || '';
+        } catch (e) { STATE.issuedTo = ''; }
+      } else {
+        STATE.issuedTo = '';
+      }
+      renderTopBar();
       render();
+    }
+
+    // Top-bar activation slot. Free tier shows the original [Activate
+    // appliance] button. Any paid tier shows a green pill that opens a
+    // small dropdown menu. Dropdown actions reuse existing handlers
+    // (openActivateModal, signOut) plus a fresh tab to the portal.
+    function renderTopBar() {
+      const slot = document.getElementById('tb-activate-slot');
+      if (!slot) return;
+      const tier = (STATE.activeTier || 'free').toLowerCase();
+      if (tier === 'free') {
+        slot.innerHTML =
+          '<button class="tb-btn tb-btn-secondary" type="button" onclick="openActivateModal()">' +
+          'Activate appliance</button>';
+        return;
+      }
+      const portalBase = (window.VYOMI_PORTAL_URL || 'https://vyomi.cloud').replace(/\/$/, '');
+      const tierLabel = tier.toUpperCase();
+      const emailRow = STATE.issuedTo
+        ? '<div class="tb-menu-meta">Bound to ' + escapeHtml(STATE.issuedTo) + '</div>' +
+          '<div class="tb-menu-sep"></div>'
+        : '';
+      slot.innerHTML =
+        '<div class="tb-activated" id="tb-activated">' +
+          '<button class="tb-pill" type="button" onclick="toggleTbMenu(event)">' +
+            '<span class="tb-check">✓</span>' +
+            '<span class="tb-tier">' + tierLabel + '</span>' +
+            '<span class="tb-caret">▾</span>' +
+          '</button>' +
+          '<div class="tb-menu" role="menu">' +
+            emailRow +
+            '<a href="' + portalBase + '/dashboard" target="_blank" rel="noopener" ' +
+               'onclick="closeTbMenu()">Manage subscription ↗</a>' +
+            '<button type="button" onclick="closeTbMenu(); openActivateModal()">' +
+              'Re-bind to different account</button>' +
+            '<div class="tb-menu-sep"></div>' +
+            '<button type="button" class="tb-menu-danger" onclick="closeTbMenu(); confirmSignOut()">' +
+              'Sign out appliance</button>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function toggleTbMenu(ev) {
+      ev.stopPropagation();
+      const el = document.getElementById('tb-activated');
+      if (el) el.classList.toggle('open');
+    }
+    function closeTbMenu() {
+      const el = document.getElementById('tb-activated');
+      if (el) el.classList.remove('open');
+    }
+    // Click anywhere outside the menu closes it.
+    document.addEventListener('click', (ev) => {
+      const el = document.getElementById('tb-activated');
+      if (el && el.classList.contains('open') && !el.contains(ev.target)) {
+        el.classList.remove('open');
+      }
+    });
+    function confirmSignOut() {
+      if (!confirm('Sign out this appliance? Your tier reverts to Free until you re-activate.')) return;
+      signOut();
+    }
+    // Minimal HTML escape — emails are user-controlled, we drop them into
+    // markup unguarded otherwise.
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[c]));
     }
 
     function setBilling(mode) {
@@ -1501,7 +1647,13 @@
                 (pd.issued_to ? ` for <strong>${pd.issued_to}</strong>` : '');
               btn.disabled = false;
               toast(`License activated — tier: ${pd.active_tier}`);
+              // load() refreshes STATE.activeTier + renderTopBar() so the
+              // top bar flips from [Activate appliance] to the green pill
+              // even if the user hasn't closed the modal yet.
               setTimeout(load, 800);
+              // Auto-close the modal a moment later so the user lands on
+              // the new green-pill state instead of a stuck modal.
+              setTimeout(closeActivateModal, 1800);
             } else if (pd.status === 'expired') {
               clearInterval(_activationPollTimer);
               document.getElementById('dp-status').textContent = '⚠ Activation expired — try again.';
@@ -1541,7 +1693,8 @@
         out.innerHTML = `<div class="status-ok">✅ Activated — tier <strong>${d.active_tier}</strong>${d.issued_to ? ` for <strong>${d.issued_to}</strong>` : ''}.</div>`;
         ta.value = '';
         toast(`License activated — tier: ${d.active_tier}`);
-        setTimeout(load, 800);   // refresh tier cards
+        setTimeout(load, 800);   // refreshes tier cards AND the green pill
+        setTimeout(closeActivateModal, 1800);
       } catch (e) {
         out.innerHTML = `<div class="status-error">Failed: ${e.message}</div>`;
       }
