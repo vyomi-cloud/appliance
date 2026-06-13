@@ -395,6 +395,14 @@
       color: #ffffff; border-color: transparent;
     }
     .tier-cta.accent:hover { opacity: 0.92; }
+    /* Applied by highlightActivePlan() when the user's subscribed tier
+       card is rendered. Matches the portal /pricing 'Current Plan' chip
+       style — disabled CTA with a green tick. */
+    .tier-cta.active-current {
+      background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7;
+      cursor: default; font-weight: 700;
+    }
+    .tier-cta.active-current:hover { background: #ecfdf5; opacity: 1; }
 
     .tier-features { list-style: none; padding: 0; margin: 0; flex: 1;
                       font-size: 13.5px; }
@@ -1202,6 +1210,49 @@
       }
       renderTopBar();
       render();
+      highlightActivePlan();
+    }
+
+    // Highlight the static tier card matching STATE.activeTier — same pattern
+    // as the portal /pricing page. Adds `.active` class (gives the "✓ Current
+    // Plan" badge + green border via existing CSS at ~line 666) and swaps the
+    // CTA button to a disabled "✓ Current Plan" pill.
+    //
+    // Runs against the static [data-tier="X"] cards in the markup, not the
+    // (currently hidden) dynamic #tiers grid.
+    function highlightActivePlan() {
+      const cards = document.querySelectorAll('.tier-grid .tier[data-tier]');
+      if (!cards.length) return;
+      const activeKey = (STATE.activeTier || 'free').toLowerCase();
+      cards.forEach((card) => {
+        const key = (card.getAttribute('data-tier') || '').toLowerCase();
+        const isActive = key === activeKey;
+        card.classList.toggle('active', isActive);
+        // Swap CTA button. The .tier-cta class lives on the static buttons.
+        const cta = card.querySelector('.tier-cta');
+        if (!cta) return;
+        if (isActive) {
+          // Cache the original label/handler so we can restore on tier change
+          // (sign-out → tier flips back to free → card needs the CTA back).
+          if (cta.dataset.origText === undefined) {
+            cta.dataset.origText = cta.textContent;
+            cta.dataset.origClass = cta.className;
+            cta.dataset.origOnclick = cta.getAttribute('onclick') || '';
+          }
+          cta.textContent = '✓ Current Plan';
+          cta.disabled = true;
+          cta.className = 'tier-cta active-current';
+          cta.removeAttribute('onclick');
+        } else if (cta.dataset.origText !== undefined) {
+          cta.textContent = cta.dataset.origText;
+          cta.className = cta.dataset.origClass;
+          if (cta.dataset.origOnclick) cta.setAttribute('onclick', cta.dataset.origOnclick);
+          cta.disabled = false;
+          delete cta.dataset.origText;
+          delete cta.dataset.origClass;
+          delete cta.dataset.origOnclick;
+        }
+      });
     }
 
     // Pill color rules:
