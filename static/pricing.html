@@ -48,10 +48,10 @@
 
     /* ── Features showcase strip — the portal's /features view condensed.
           Sits between the hero and the tier cards. ──────────────────────── */
-    .features-strip {
-      max-width: 1080px; margin: 36px auto 8px;
-      padding: 0 24px;
-    }
+    /* features-strip is inside .container (max-width:1280px); using width:100%
+       makes the cloud feature tiles fill the container all the way to the
+       sides — exactly the "100% width" feel requested. */
+    .features-strip { width: 100%; margin: 36px 0 8px; }
     .features-strip h2 {
       font-size: 22px; font-weight: 700; color: #0f1b2d;
       text-align: center; margin: 0 0 6px;
@@ -60,10 +60,12 @@
       font-size: 14px; color: #5f6b7a;
       text-align: center; margin: 0 0 22px;
     }
+    /* Cloud-provider feature tiles render full-width, one per row, so the
+       service-list grid inside has more breathing room and you can scan
+       all 12 services for a cloud at a glance. */
     .features-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+      display: flex; flex-direction: column; gap: 14px;
     }
-    @media (max-width: 720px) { .features-grid { grid-template-columns: 1fr; } }
     .feature-card {
       border: 1px solid #e7e7e9; border-radius: 12px;
       padding: 18px 18px 16px; background: #ffffff;
@@ -94,10 +96,205 @@
     }
     .feature-card ul {
       list-style: none; padding: 0; margin: 0;
-      display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px;
-      font-size: 12px; color: #1a2330;
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px 14px;
+      font-size: 12.5px; color: #1a2330;
     }
+    @media (max-width: 900px) { .feature-card ul { grid-template-columns: repeat(4, 1fr); } }
+    @media (max-width: 540px) { .feature-card ul { grid-template-columns: repeat(2, 1fr); } }
     .feature-card ul li::before { content: "•"; color: #5f6b7a; margin-right: 6px; }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       TIER CARDS — light-theme port of the portal /pricing design.
+       Same grid + featured-card violet ring; colors flipped for white bg.
+       ═══════════════════════════════════════════════════════════════════ */
+    .tier-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 16px; margin: 32px 0;
+    }
+    @media (max-width: 980px) { .tier-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 540px) { .tier-grid { grid-template-columns: 1fr; } }
+    .tier {
+      position: relative;
+      background: #ffffff;
+      border: 1px solid #e7e7e9;
+      border-radius: 14px;
+      padding: 28px 24px 24px;
+      display: flex; flex-direction: column;
+      transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+    }
+    .tier:hover {
+      border-color: #c5cfd9;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(15, 27, 45, 0.06);
+    }
+    .tier.featured {
+      border-color: #a855f7;
+      box-shadow:
+        0 0 0 1px #a855f7 inset,
+        0 12px 32px rgba(168, 85, 247, 0.14);
+    }
+    .tier-badge {
+      position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+      background: linear-gradient(180deg, #c084fc 0%, #a855f7 100%);
+      color: #ffffff;
+      padding: 4px 12px; border-radius: 9999px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+      box-shadow: 0 6px 16px rgba(168, 85, 247, 0.30);
+    }
+    .tier-label {
+      font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; margin-bottom: 14px;
+    }
+    .tier-label.free       { color: #5f6b7a; }
+    .tier-label.student    { color: #2563eb; }
+    .tier-label.developer  { color: #059669; }
+    .tier-label.enterprise { color: #7e22ce; }
+
+    .tier-price { display: flex; align-items: baseline; gap: 4px; margin-bottom: 6px; color: #0f1b2d; }
+    .tier-price .sym { font-size: 20px; color: #5f6b7a; font-weight: 500; }
+    .tier-price .num { font-size: 38px; font-weight: 600; line-height: 1; letter-spacing: -0.02em; }
+    .tier-price .per { font-size: 13.5px; color: #5f6b7a; margin-left: 4px; }
+
+    .tier-tag { font-size: 13.5px; color: #4b5563; min-height: 42px; margin-bottom: 22px; }
+
+    .tier-cta {
+      display: inline-block; padding: 10px 18px; border-radius: 8px;
+      font-size: 14px; font-weight: 600; text-align: center;
+      cursor: pointer; transition: all 0.15s; text-decoration: none;
+      border: 1px solid transparent; margin-bottom: 22px; line-height: 1.2;
+      font-family: inherit;
+    }
+    .tier-cta.outline {
+      background: #ffffff; color: #1a2330; border-color: #d8e0ea;
+    }
+    .tier-cta.outline:hover { border-color: #1a2330; }
+    .tier-cta.primary {
+      background: #1a2330; color: #ffffff; border-color: #1a2330;
+    }
+    .tier-cta.primary:hover { background: #0f1b2d; }
+    .tier-cta.accent {
+      background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+      color: #ffffff; border-color: transparent;
+    }
+    .tier-cta.accent:hover { opacity: 0.92; }
+
+    .tier-features { list-style: none; padding: 0; margin: 0; flex: 1;
+                      font-size: 13.5px; }
+    .tier-features li {
+      display: flex; align-items: flex-start; gap: 8px; padding: 6px 0;
+      color: #1a2330;
+    }
+    .tier-features .check {
+      width: 14px; height: 14px; flex-shrink: 0; color: #10b981; margin-top: 2px;
+    }
+    .tier.featured .tier-features .check { color: #a855f7; }
+    .tier-features .check svg { width: 14px; height: 14px; }
+    .tier-features li.section {
+      font-weight: 600; font-size: 11px; color: #5f6b7a;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      border-top: 1px solid #e7e7e9; padding: 14px 0 6px;
+      margin-top: 6px;
+    }
+    .tier-features li.section:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       COMPARE TABLE — full feature breakdown across all 4 tiers.
+       ═══════════════════════════════════════════════════════════════════ */
+    .compare { width: 100%; margin: 56px 0 0; }
+    .compare-head { text-align: center; margin-bottom: 32px; }
+    .compare-head h2 { font-size: 24px; font-weight: 700; color: #0f1b2d; margin: 0 0 8px; }
+    .compare-head p  { font-size: 14px; color: #5f6b7a; margin: 0; }
+    .compare-table-wrap { overflow-x: auto; border: 1px solid #e7e7e9; border-radius: 12px; }
+    .compare-table { width: 100%; border-collapse: collapse; }
+    .compare-table th, .compare-table td {
+      padding: 11px 14px; text-align: left; border-bottom: 1px solid #e7e7e9;
+      font-size: 13.5px;
+    }
+    .compare-table thead th { background: #f7f8fc; font-weight: 700; color: #0f1b2d;
+                              font-size: 12.5px; letter-spacing: 0.02em; }
+    .compare-table th.col { text-align: center; min-width: 130px; }
+    .compare-table td.col { text-align: center; color: #1a2330; }
+    .compare-table td.feature-name { color: #0f1b2d; font-weight: 500; }
+    .compare-table tr.category td {
+      background: #f3f4f6; font-weight: 700; font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: 0.06em; color: #5f6b7a;
+      padding: 10px 14px;
+    }
+    .compare-table .ck { color: #10b981; display: inline-flex; }
+    .compare-table .ck svg { width: 14px; height: 14px; }
+    .compare-table .xx { color: #cbd5e1; }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       ACTIVATE MODAL — opens from the top-bar 'Activate appliance' button.
+       Replaces the redundant bottom activate-section.
+       ═══════════════════════════════════════════════════════════════════ */
+    .am-overlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(15, 27, 45, 0.55);
+      display: none; align-items: flex-start; justify-content: center;
+      padding: 80px 16px 16px;
+      overflow-y: auto;
+    }
+    .am-overlay.open { display: flex; }
+    .am-card {
+      background: #ffffff; border-radius: 14px;
+      width: 100%; max-width: 520px;
+      box-shadow: 0 20px 60px rgba(15, 27, 45, 0.30);
+      overflow: hidden;
+      animation: am-pop 0.18s ease-out;
+    }
+    @keyframes am-pop {
+      from { transform: scale(0.96) translateY(-8px); opacity: 0; }
+      to   { transform: none; opacity: 1; }
+    }
+    .am-head {
+      padding: 22px 24px 14px;
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px; border-bottom: 1px solid #e7e7e9;
+    }
+    .am-head h3 { margin: 0; font-size: 18px; color: #0f1b2d; font-weight: 700; }
+    .am-head .am-sub { margin-top: 4px; font-size: 13px; color: #5f6b7a; line-height: 1.5; }
+    .am-close {
+      background: transparent; border: 0; cursor: pointer;
+      font-size: 22px; line-height: 1; color: #5f6b7a; padding: 2px 6px;
+      border-radius: 6px;
+    }
+    .am-close:hover { background: #f2f3f3; color: #0f1b2d; }
+    .am-body { padding: 18px 24px 22px; }
+    .am-body .am-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #5f6b7a; margin-bottom: 8px;
+    }
+    .am-body .am-primary-btn {
+      width: 100%; padding: 12px; border-radius: 8px;
+      background: #0f1b2d; color: #ffffff; border: 0; cursor: pointer;
+      font-weight: 600; font-size: 14px; font-family: inherit;
+      transition: background 0.15s;
+    }
+    .am-body .am-primary-btn:hover { background: #1a2c44; }
+    .am-body textarea {
+      width: 100%; padding: 10px; border: 1px solid #d8e0ea; border-radius: 8px;
+      font-family: 'SF Mono', Menlo, monospace; font-size: 11.5px;
+      resize: vertical; box-sizing: border-box; line-height: 1.4;
+    }
+    .am-body .am-secondary-btn {
+      margin-top: 8px; padding: 10px 14px; border-radius: 8px;
+      background: #ffffff; color: #1a2330; border: 1px solid #d8e0ea;
+      cursor: pointer; font-size: 13px; font-weight: 600;
+      font-family: inherit;
+    }
+    .am-divider {
+      display: flex; align-items: center; gap: 10px;
+      margin: 18px 0;
+      color: #9ca3af; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .am-divider::before, .am-divider::after {
+      content: ""; flex: 1; height: 1px; background: #e7e7e9;
+    }
+    .am-status {
+      margin-top: 10px; font-size: 12.5px; color: #5f6b7a; min-height: 18px;
+    }
     .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 64px; }
 
     /* ---- header ------------------------------------------------------- */
@@ -379,8 +576,7 @@
       <img src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi">
     </a>
     <div class="tb-actions">
-      <button class="tb-btn tb-btn-secondary" type="button"
-              onclick="document.getElementById('activate-section').scrollIntoView({behavior:'smooth',block:'start'})">
+      <button class="tb-btn tb-btn-secondary" type="button" onclick="openActivateModal()">
         Activate appliance
       </button>
       <button class="tb-btn tb-btn-primary" type="button" onclick="goToConsole()">
@@ -445,7 +641,202 @@
       </div>
     </section>
 
-    <div class="tiers" id="tiers"><!-- rendered by JS --></div>
+    {# tiers div kept for backward-compat with the JS — render() leaves
+       it empty now since cards are static below. #}
+    <div class="tiers" id="tiers" style="display:none"></div>
+
+    <!-- ── Tier cards (portal-style, light theme) ───────────────────── -->
+    <div class="tier-grid">
+
+      <!-- FREE -->
+      <div class="tier" data-tier="free">
+        <div class="tier-label free">Free</div>
+        <div class="tier-price"><span class="sym">₹</span><span class="num">0</span><span class="per">forever</span></div>
+        <div class="tier-tag">For individual developers exploring the platform.</div>
+        <button class="tier-cta outline" type="button" onclick="selectStaticTier('free')">Get started free</button>
+        <ul class="tier-features">
+          <li class="section">Core</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> 10 service categories × all 3 clouds</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> 1 space · 1 tenant</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Standard SDKs work natively</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Basic Terraform export</li>
+          <li class="section">Support</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Community + GitHub</li>
+        </ul>
+      </div>
+
+      <!-- STUDENT -->
+      <div class="tier" data-tier="student">
+        <div class="tier-label student">Student</div>
+        <div class="tier-price">
+          <span class="sym">₹</span><span class="num" data-monthly="299" data-annual="175">299</span>
+          <span class="per" data-monthly-text="/ month" data-annual-text="/ mo, billed annually">/ month</span>
+        </div>
+        <div class="tier-tag">All services on the one cloud you're learning.</div>
+        <button class="tier-cta primary" type="button" onclick="selectStaticTier('student')">Start 14-day trial</button>
+        <ul class="tier-features">
+          <li class="section">Core</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> All 35 services × 1 primary cloud</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> 5 spaces · multiple apps</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Full Terraform export</li>
+          <li class="section">Dev</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Cloud Shell drawer</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> CloudSim power model</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Cost simulation (totals)</li>
+          <li class="section">Support</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Discord + GitHub</li>
+        </ul>
+      </div>
+
+      <!-- DEVELOPER (featured) -->
+      <div class="tier featured" data-tier="developer">
+        <div class="tier-badge">RECOMMENDED</div>
+        <div class="tier-label developer">Developer</div>
+        <div class="tier-price">
+          <span class="sym">₹</span><span class="num" data-monthly="599" data-annual="350">599</span>
+          <span class="per" data-monthly-text="/ month" data-annual-text="/ mo, billed annually">/ month</span>
+        </div>
+        <div class="tier-tag">All 3 clouds + Cedar IAM + CI integration.</div>
+        <button class="tier-cta accent" type="button" onclick="selectStaticTier('developer')">Start 14-day trial</button>
+        <ul class="tier-features">
+          <li class="section">Core</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> All 35 services × all 3 clouds</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> 25 spaces · CI workloads</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Single-cloud Terraform deploy</li>
+          <li class="section">Dev</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Cedar IAM enforcement</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> CI integration</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Per-resource cost simulation</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Network SLA simulation</li>
+          <li class="section">Support</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Email · 48h response</li>
+        </ul>
+      </div>
+
+      <!-- ENTERPRISE -->
+      <div class="tier" data-tier="enterprise">
+        <div class="tier-label enterprise">Enterprise</div>
+        <div class="tier-price"><span class="sym">₹</span><span class="num">99</span><span class="per">/ seat / mo</span></div>
+        <div class="tier-tag">Min 10 seats. Annual contract. Full enterprise stack.</div>
+        <button class="tier-cta outline" type="button" onclick="selectStaticTier('enterprise')">Talk to sales</button>
+        <ul class="tier-features">
+          <li class="section">Core</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Everything in Developer</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Unlimited spaces + tenants</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Multi-cloud Terraform deploy</li>
+          <li class="section">Enterprise</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> SSO (SAML/OIDC)</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Helm + air-gapped install</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Custom domain + branding</li>
+          <li class="section">Support</li>
+          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Dedicated Slack · SLA</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- ── Compare table (matches the portal /pricing) ───────────────── -->
+    <section class="compare">
+      <div class="compare-head">
+        <h2>Compare all features</h2>
+        <p>Full breakdown across all 4 tiers.</p>
+      </div>
+      <div class="compare-table-wrap">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th style="width:32%">Feature</th>
+              <th class="col" style="color:#5f6b7a">Free</th>
+              <th class="col" style="color:#2563eb">Student</th>
+              <th class="col" style="color:#059669">Developer</th>
+              <th class="col" style="color:#7e22ce">Enterprise</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="category"><td colspan="5">Core platform</td></tr>
+            <tr><td class="feature-name">Cloud providers</td>
+                <td class="col">3 (locked)</td><td class="col">1 primary</td>
+                <td class="col">3 full</td><td class="col">3 + orchestration</td></tr>
+            <tr><td class="feature-name">Services unlocked</td>
+                <td class="col">10 cats</td><td class="col">All 35</td>
+                <td class="col">All 35</td><td class="col">All 35</td></tr>
+            <tr><td class="feature-name">Spaces per tenant</td>
+                <td class="col">1</td><td class="col">5</td>
+                <td class="col">25</td><td class="col">∞</td></tr>
+            <tr><td class="feature-name">Tenants</td>
+                <td class="col">1</td><td class="col">1</td>
+                <td class="col">1</td><td class="col">∞</td></tr>
+            <tr><td class="feature-name">Seats</td>
+                <td class="col">1</td><td class="col">1</td>
+                <td class="col">1</td><td class="col">10+ per-seat</td></tr>
+
+            <tr class="category"><td colspan="5">Development tools</td></tr>
+            <tr><td class="feature-name">Standard SDKs</td>
+                <td class="col"><span class="ck">✓</span></td>
+                <td class="col"><span class="ck">✓</span></td>
+                <td class="col"><span class="ck">✓</span></td>
+                <td class="col"><span class="ck">✓</span></td></tr>
+            <tr><td class="feature-name">Cedar IAM enforcement</td>
+                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
+                <td class="col"><span class="ck">✓</span></td><td class="col"><span class="ck">✓</span></td></tr>
+            <tr><td class="feature-name">CI integration</td>
+                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
+                <td class="col"><span class="ck">✓</span></td><td class="col"><span class="ck">✓</span></td></tr>
+            <tr><td class="feature-name">Cloud Shell drawer</td>
+                <td class="col"><span class="xx">—</span></td>
+                <td class="col"><span class="ck">✓</span></td>
+                <td class="col"><span class="ck">✓</span></td>
+                <td class="col"><span class="ck">✓</span></td></tr>
+            <tr><td class="feature-name">Cost simulation</td>
+                <td class="col"><span class="xx">—</span></td>
+                <td class="col">Totals</td><td class="col">Per-resource</td>
+                <td class="col">+ chargeback</td></tr>
+            <tr><td class="feature-name">CloudSim power + SLA</td>
+                <td class="col"><span class="xx">—</span></td>
+                <td class="col">Power only</td>
+                <td class="col"><span class="ck">✓</span></td>
+                <td class="col"><span class="ck">✓</span></td></tr>
+
+            <tr class="category"><td colspan="5">Terraform</td></tr>
+            <tr><td class="feature-name">Export to HCL</td>
+                <td class="col">Basic</td><td class="col">Full</td>
+                <td class="col">Full</td><td class="col">Full + import</td></tr>
+            <tr><td class="feature-name">Deploy to real cloud</td>
+                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
+                <td class="col">1 cloud</td><td class="col">Multi-cloud</td></tr>
+
+            <tr class="category"><td colspan="5">Enterprise</td></tr>
+            <tr><td class="feature-name">SSO (SAML/OIDC)</td>
+                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
+                <td class="col"><span class="xx">—</span></td>
+                <td class="col"><span class="ck">✓</span></td></tr>
+            <tr><td class="feature-name">Helm + air-gapped install</td>
+                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
+                <td class="col"><span class="xx">—</span></td>
+                <td class="col"><span class="ck">✓</span></td></tr>
+            <tr><td class="feature-name">Custom domain + branding</td>
+                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
+                <td class="col"><span class="xx">—</span></td>
+                <td class="col"><span class="ck">✓</span></td></tr>
+            <tr><td class="feature-name">Audit-log export</td>
+                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
+                <td class="col"><span class="xx">—</span></td>
+                <td class="col"><span class="ck">✓</span></td></tr>
+            <tr><td class="feature-name">Cross-tenant RBAC</td>
+                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
+                <td class="col"><span class="xx">—</span></td>
+                <td class="col"><span class="ck">✓</span></td></tr>
+
+            <tr class="category"><td colspan="5">Support</td></tr>
+            <tr><td class="feature-name">Support tier</td>
+                <td class="col">Community</td>
+                <td class="col">Discord</td>
+                <td class="col">Email 48h</td>
+                <td class="col">Slack · SLA</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
     <!-- Standard capability bar — spans the full grid width, sits below the
          tier cards. Same promise applies to every tier, so it's deliberately
@@ -479,54 +870,13 @@
       <div class="note">Just override the endpoint — no custom SDK or shim.</div>
     </div>
 
-    <!-- ── Activate appliance (Phase 4 — identity-first; portal is the source) ── -->
-    <div id="activate-section" class="activate-card">
-      <div class="activate-header">
-        <h3>Activate this appliance</h3>
-        <div class="activate-sub">
-          Sign in with your Vyomi account — we'll detect your active subscription
-          and apply the right tier automatically. Subscription changes (upgrade/cancel)
-          propagate within 1 hour, no re-activation needed.
-        </div>
-      </div>
-
-      <div class="activate-grid" style="grid-template-columns: 1fr">
-        <div class="activate-pane">
-          <div class="pane-label">Sign in</div>
-          <p style="font-size:13px;color:#5f6368;margin:6px 0 12px">
-            Opens a code on this page; you confirm it on the portal in your browser.
-            No license keys to paste, no tier to pick — your subscription is the source.
-          </p>
-          <button id="device-start-btn" class="activate-btn primary" onclick="startDeviceFlow()">
-            Sign in with Vyomi →
-          </button>
-          <div id="device-status" class="device-status"></div>
-        </div>
-      </div>
-
-      <details style="margin-top:14px">
-        <summary style="cursor:pointer;font-size:12px;color:#687078">
-          Advanced — paste a license JWT (admin / offline / air-gapped)
-        </summary>
-        <div style="margin-top:10px">
-          <textarea id="license-key-input" placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
-                    rows="3" style="width:100%;font-family:'SF Mono',Menlo,monospace;font-size:11px;
-                                    padding:8px;border:1px solid #d8e0ea;border-radius:6px;
-                                    box-sizing:border-box;resize:vertical"></textarea>
-          <button class="activate-btn" onclick="activateLicenseKey()">Activate key</button>
-          <div id="activate-status" class="device-status"></div>
-        </div>
-      </details>
-
-      <div class="activate-footer">
-        Don't have a subscription yet?
-        <a href="javascript:void(0)" onclick="window.open('http://localhost:8001/dashboard','_blank')">
-          Subscribe on the portal →
-        </a>
-        · Already activated? Currently active tier shown above.
-        <a href="javascript:void(0)" onclick="signOut()">Sign out</a>
-        · <a href="javascript:void(0)" onclick="refreshLicense()">Refresh now</a>
-      </div>
+    {# Bottom activate-section retired — activation now lives in the top-bar
+       modal triggered by the 'Activate appliance' button. Stub kept so any
+       existing scrollIntoView(#activate-section) calls don't 404. #}
+    <div id="activate-section" style="display:none">
+      <div id="device-status" class="device-status"></div>
+      <input type="hidden" id="license-key-input">
+      <div id="activate-status" class="device-status"></div>
     </div>
 
     <footer>
@@ -536,6 +886,45 @@
         The Activate appliance + Continue to console buttons are pinned to the top of this page.
       </div>
     </footer>
+  </div>
+
+  <!-- ── Activate appliance modal (replaces the bottom activate-section) ── -->
+  <div class="am-overlay" id="activate-modal" onclick="if(event.target===this)closeActivateModal()">
+    <div class="am-card" role="dialog" aria-modal="true" aria-labelledby="am-title">
+      <div class="am-head">
+        <div>
+          <h3 id="am-title">Activate this appliance</h3>
+          <div class="am-sub">
+            Sign in with your vyomi account — we'll detect your active subscription
+            and apply the right tier automatically.
+          </div>
+        </div>
+        <button class="am-close" type="button" aria-label="Close" onclick="closeActivateModal()">×</button>
+      </div>
+      <div class="am-body">
+        <div class="am-label">Sign in with vyomi</div>
+        <button class="am-primary-btn" type="button" onclick="startDeviceFlow()">
+          Sign in with vyomi →
+        </button>
+        <div id="am-device-status" class="am-status"></div>
+
+        <div class="am-divider">or</div>
+
+        <div class="am-label">Paste a license JWT (admin / offline)</div>
+        <textarea id="am-license-input" rows="3"
+                  placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."></textarea>
+        <button class="am-secondary-btn" type="button" onclick="activateLicenseKey()">
+          Activate key
+        </button>
+        <div id="am-activate-status" class="am-status"></div>
+
+        <div style="margin-top:18px;font-size:12px;color:#5f6b7a;line-height:1.5">
+          Don't have a subscription yet?
+          <a href="https://vyomi.cloud/dashboard" target="_blank" rel="noopener"
+             style="color:#2563eb;text-decoration:none">Subscribe on the portal →</a>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Modal for Student (cloud picker) + Enterprise (seat count) -->
@@ -572,8 +961,78 @@
       STATE.billing = mode;
       document.getElementById('bill-monthly').classList.toggle('active', mode === 'monthly');
       document.getElementById('bill-annual').classList.toggle('active', mode === 'annual');
+      updateStaticPrices(mode);
       render();
     }
+
+    // Static tier cards swap price + period via data-* attributes when the
+    // monthly/annual toggle flips. Only Student + Developer have annual
+    // pricing — Free is forever, Enterprise is per-seat.
+    function updateStaticPrices(mode) {
+      document.querySelectorAll('.tier-grid .tier .tier-price .num[data-monthly]').forEach(num => {
+        const val = mode === 'annual' ? num.dataset.annual : num.dataset.monthly;
+        if (val) num.textContent = val;
+      });
+      document.querySelectorAll('.tier-grid .tier .tier-price .per[data-monthly-text]').forEach(per => {
+        const val = mode === 'annual' ? per.dataset.annualText : per.dataset.monthlyText;
+        if (val) per.textContent = val;
+      });
+    }
+
+    // -------- static tier click (matches portal flow: redirect to vyomi.cloud) ----
+    //
+    // The /api/license/signup endpoint is intentionally disabled in appliance
+    // mode (production). Tier selection just opens vyomi.cloud/checkout in a
+    // new tab with the right tier preselected. Free tier just opens the
+    // Activate modal (no payment).
+    function selectStaticTier(key) {
+      if (key === 'free') {
+        openActivateModal();
+        toast('Free is the default tier — just activate to start.');
+        return;
+      }
+      if (key === 'enterprise') {
+        window.open('mailto:sales@vyomi.cloud?subject=Enterprise%20inquiry', '_blank');
+        return;
+      }
+      const portalBase = (window.VYOMI_PORTAL_URL || 'https://vyomi.cloud').replace(/\/$/, '');
+      const params = new URLSearchParams({ tier: key, period: STATE.billing });
+      window.open(`${portalBase}/checkout?${params.toString()}`, '_blank', 'noopener');
+      toast(`Opening vyomi.cloud to checkout ${key}…`);
+    }
+
+    // -------- activate modal show/hide ---------------------------------------
+    function openActivateModal() {
+      document.getElementById('activate-modal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeActivateModal() {
+      document.getElementById('activate-modal').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeActivateModal();
+    });
+
+    // The new modal has its own #am-license-input textarea + status fields,
+    // but startDeviceFlow() / activateLicenseKey() below read from the old
+    // hidden ones (#license-key-input, #activate-status, #device-status).
+    // Mirror the modal's textarea into the legacy input on each keystroke so
+    // both code paths see the same value.
+    document.addEventListener('input', e => {
+      if (e.target.id === 'am-license-input') {
+        document.getElementById('license-key-input').value = e.target.value;
+      }
+    });
+    // Mirror status writes back to the modal so users see feedback in-modal.
+    const _origAS = document.getElementById('activate-status');
+    const _origDS = document.getElementById('device-status');
+    if (_origAS) new MutationObserver(() => {
+      document.getElementById('am-activate-status').textContent = _origAS.textContent;
+    }).observe(_origAS, { childList: true, characterData: true, subtree: true });
+    if (_origDS) new MutationObserver(() => {
+      document.getElementById('am-device-status').textContent = _origDS.textContent;
+    }).observe(_origDS, { childList: true, characterData: true, subtree: true });
 
     // -------- rendering ------------------------------------------------
     const TIER_ORDER = ['free', 'student', 'developer', 'enterprise'];
