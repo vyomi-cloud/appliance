@@ -20099,18 +20099,22 @@ function App() {
           <a href="/clouds" className="hdr-logo" style={{textDecoration:'none'}}>
             <img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi"/>
           </a>
-          <div className="hdr-svc"><strong>Workspaces</strong></div>
+          <div className="hdr-svc"><strong>{view === 'spaces' ? 'Spaces' : 'Workspaces'}</strong></div>
           <div className="hdr-right">
             <a href="/" className="hdr-pill" title="Back to the launch / pricing page"
                style={{textDecoration:'none',color:'#16191f'}}>
               <span className="material-symbols-outlined">arrow_back</span>Back to Launch
             </a>
             <span className="badge">SIMULATOR</span>
-            <span style={{background:'#37475a',padding:'3px 10px',borderRadius:3,fontSize:12}}>root</span>
           </div>
         </header>
         <div style={{marginTop:50}}>
-          {/* ──── Existing spaces — resume your work ──── */}
+          {/* One section at a time: provider cards (default) flip to the
+              filtered spaces view as soon as the user clicks a cloud.
+              Showing both at once was clutter — and the user reported
+              that the provider-card buttons looked like they disappeared
+              into the dense stack below. Conditional render fixes both. */}
+          {view === 'spaces' ? (
           <SimulationSpacesView
             key={`spaces-${spaceProviderFilter || 'all'}-${spacesViewNonce}`}
             providers={providers}
@@ -20226,9 +20230,10 @@ function App() {
               return open('dashboard');
             }}
           />
-          {/* ──── Cloud providers — start something new ──── */}
-          <ProvidersView providers={providers} onOpenSpaces={openSpaces} notify={notify}
-                         onOpenTier={() => open('tier')} />
+          ) : (
+            <ProvidersView providers={providers} onOpenSpaces={openSpaces} notify={notify}
+                           onOpenTier={() => open('tier')} />
+          )}
         </div>
         {notif && <Notif key={notif.id} msg={notif.msg} type={notif.type} onClose={()=>setNotif(null)}/>}
       </>
