@@ -4,6 +4,9 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Vyomi Simulator</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/brand/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/brand/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/brand/apple-touch-icon.png">
   <script crossorigin src="/assets/react.development.js"></script>
   <script crossorigin src="/assets/react-dom.development.js"></script>
   <script src="/assets/babel.min.js"></script>
@@ -18,6 +21,10 @@
     .hdr{background:#232f3e;color:#fff;display:flex;align-items:center;padding:0 8px 0 14px;height:50px;position:fixed;top:0;width:100%;z-index:1000;gap:6px}
     .hdr-logo{font-size:19px;font-weight:900;color:#ff9900;letter-spacing:-.5px;display:flex;align-items:center;gap:1px;padding-right:6px}
     .hdr-logo span{color:#fff;font-weight:400}
+    /* Vyomi wordmark inside the dark AWS-style top bar — white-text on
+       transparent navy variant of the brand image so it reads against
+       the #232f3e nav-wrap. Height-locked to fit the 50px header. */
+    .hdr-logo-img{height:24px;width:auto;display:block;padding-right:8px}
     .hdr-svc{color:#fff;font-size:14px;font-weight:700;padding-left:2px;white-space:nowrap}
     .hdr-menu{background:transparent;border:none;color:#fff;border-radius:4px;padding:7px 10px;font-size:14px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px}
     .hdr-menu:hover{background:#2e3c4d}
@@ -2696,7 +2703,7 @@ function AwsConsoleShell({activeView, onOpen, children}) {
   return (
     <>
       <header className="hdr">
-        <div className="hdr-logo">Vyomi<span>☁</span></div>
+        <a href="/ui" className="hdr-logo" style={{textDecoration:'none'}}><img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-dark.png" alt="Vyomi"/></a>
         <button className="hdr-menu" onClick={() => open('providers')}><span className="material-symbols-outlined">apps</span>Providers</button>
         <div className="hdr-search">
           <span className="material-symbols-outlined hdr-search-icon">search</span>
@@ -5020,7 +5027,7 @@ function DashboardView({onOpen, onBack, notify, onExportTerraform}) {
   return (
     <>
       <header className="hdr">
-        <div className="hdr-logo">Vyomi<span>☁</span></div>
+        <a href="/ui" className="hdr-logo" style={{textDecoration:'none'}}><img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-dark.png" alt="Vyomi"/></a>
         <button className="hdr-menu" onClick={() => onOpen('providers')}><span className="material-symbols-outlined">apps</span>Providers</button>
         <div className="hdr-search">
           <span className="material-symbols-outlined hdr-search-icon">search</span>
@@ -20363,7 +20370,7 @@ function App() {
         <>
           {/* Top header */}
           <header className="hdr">
-            <div className="hdr-logo">Vyomi<span>☁</span></div>
+            <a href="/ui" className="hdr-logo" style={{textDecoration:'none'}}><img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-dark.png" alt="Vyomi"/></a>
             <button className="hdr-menu" onClick={() => open('providers')}>Providers</button>
             <div className="hdr-svc"><strong>{titleMap[view] || 'Simulator'}</strong></div>
             <div className="hdr-search">

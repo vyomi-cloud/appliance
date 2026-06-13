@@ -4,7 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Vyomi — Choose your tier</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%E2%98%81%3C/text%3E%3C/svg%3E">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/brand/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/brand/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/brand/apple-touch-icon.png">
   <style>
     /* ---- reset + base -------------------------------------------------- */
     *, *::before, *::after { box-sizing: border-box; }
@@ -20,11 +22,13 @@
     header { text-align: center; margin-bottom: 32px; }
     header .logo {
       display: inline-flex; align-items: center; gap: 10px;
-      font-size: 22px; font-weight: 700; color: #0f1b2d; margin-bottom: 24px;
+      margin-bottom: 24px;
     }
-    header .logo .badge {
-      background: #0f1b2d; color: #fff; padding: 4px 10px;
-      border-radius: 6px; font-size: 11px; letter-spacing: 0.5px;
+    /* Vyomi wordmark — replaces the old "[V] Vyomi" text+badge block.
+       Light-bg variant of the brand image; sits inside the white pricing-page
+       header so the dark "vyomi" letters + purple→blue swoosh read cleanly. */
+    header .logo img.vyomi-logo {
+      height: 44px; width: auto; display: block;
     }
     header h1 { font-size: 32px; font-weight: 700; margin: 0 0 8px; color: #0f1b2d; }
     header .sub { font-size: 16px; color: #607080; margin-bottom: 24px; }
@@ -290,8 +294,7 @@
   <div class="container">
     <header>
       <div class="logo">
-        <span class="badge">V</span>
-        <span>Vyomi</span>
+        <img class="vyomi-logo" src="/assets/brand/vyomi-wordmark-light.png" alt="Vyomi">
       </div>
       <h1>Choose your tier</h1>
       <div class="sub">All plans include real backends, multi-cloud consoles, and conformance tests.</div>
