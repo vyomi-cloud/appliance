@@ -6909,6 +6909,10 @@ def _terminate_lxd_instance(instance: dict) -> dict:
     instance["terminated_at"] = _now()
     instance["container_status"] = "removed"
     instance["pid"] = None
+    # Reclaim the per-instance workspace dir + drop any vm-connect port
+    # claim. Without this, /var/lib/cloudlearn/deployments grows
+    # forever — a real cause of the disk-full incident earlier today.
+    _post_terminate_cleanup(instance)
     return instance
 
 
@@ -7513,6 +7517,7 @@ def _terminate_multipass_instance(instance: dict) -> dict:
     instance["terminated_at"] = _now()
     instance["container_status"] = "removed"
     instance["pid"] = None
+    _post_terminate_cleanup(instance)
     return instance
 
 
@@ -7689,7 +7694,27 @@ def _terminate_simulated_instance(instance: dict) -> dict:
     instance["state"] = "terminated"
     instance["terminated_at"] = _now()
     instance["console_state"] = "closed"
+    _post_terminate_cleanup(instance)
     return instance
+
+
+def _post_terminate_cleanup(instance: dict) -> None:
+    """Shared post-terminate hygiene: drop the workspace dir, release any
+    vm-connect port claim. Called from every terminate path so disk
+    doesn't creep with stale state."""
+    iid = str(instance.get("instance_id") or instance.get("id") or "").strip()
+    if not iid:
+        return
+    try:
+        from core import disk_health as _dh
+        _dh.cleanup_terminated_workspace(iid)
+    except Exception:
+        pass
+    try:
+        from core import vm_connect as _vmc
+        _vmc.release_ssh_port(STATE, iid)
+    except Exception:
+        pass
 
 
 def _ami_profile(ami: str) -> dict:
@@ -10482,6 +10507,12 @@ def _start_license_background_tasks():
             "CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS", str(24 * 3600))),
             on_tier_changed=_on_tier_changed,
             on_auth_failed=_on_auth_failed)
+        # Disk-health monitor: samples every 60s, surfaces tier-aware
+        # warn/freeze status under STATE['runtime']['disk_health']. The
+        # SPA dashboard widget + the launch pre-flight gate both read
+        # from this cache.
+        from core import disk_health as _dh
+        _dh.start_disk_health_monitor(STATE)
     except Exception:
         pass
 
@@ -10912,6 +10943,11 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
     # chosen instance_type would push the simulator past its share of the host.
     # Raises HTTPException(403) with a clear "delete one / pick smaller" message.
     _check_budget_for_launch(getattr(req, "instance_type", "") or "", "aws")
+    # Disk pre-flight: refuse early with HTTP 507 instead of letting LXD
+    # half-unpack a rootfs that won't fit and leave an orphan stuck at
+    # 'stopped'. The tier-aware thresholds in disk_health give paid users
+    # bigger safety margins.
+    _disk_preflight(getattr(req, "storage_gb", None))
     instance_id = _id("i")
     pack = _activate_pack("cloudlearn.ec2.basic")
     if req.vpc_id and req.vpc_id not in vpc_state["vpcs"]:
@@ -12298,6 +12334,9 @@ async def api_gcp_compute_create_instance(project: str, zone: str, request: Requ
         raise HTTPException(400, detail=f"InvalidComputeEngineRequest: {exc}")
     # Host-budget gate (clamp 30%-50% of host CPU+RAM).
     _check_budget_for_launch(str(getattr(req, "machineType", "") or payload.get("machineType") or ""), "gcp")
+    # Disk pre-flight — refuse early with 507 rather than half-creating
+    # a container that won't fit. See _disk_preflight definition.
+    _disk_preflight(getattr(req, "diskSizeGb", None) or 10)
     _enforce_quantity_cap("vm")  # tier cap — Free=1 VM/space
     _enforce_size_cap("vm", "gcp", str(getattr(req, "machineType", "") or payload.get("machineType") or ""))
     instance = _gcp_compute_create_instance_instance(project, zone, req.dict())
@@ -20852,6 +20891,75 @@ def _list_objects_v2(bucket: str, params: dict) -> Response:
         xml_parts.append(f"<CommonPrefixes><Prefix>{cp}</Prefix></CommonPrefixes>")
     xml_parts.append("</ListBucketResult>")
     return _xml_response("".join(xml_parts))
+
+
+# ── Disk-health endpoints + pre-flight gate (the disk-reliability stack) ──
+# core/disk_health.py owns the logic; here we just expose it. The monitor
+# daemon is started during the same startup hook that fires the license
+# refresh loop (search for start_disk_health_monitor below).
+from core import disk_health as _disk_health
+
+
+def _disk_preflight(storage_gb_hint: Optional[float] = None) -> None:
+    """Pre-flight any VM launch. Caller passes the requested
+    instance.storage_gb when available. Pad with the rootfs base size
+    (Ubuntu 22.04 sqaushfs ~1.2 GB) and a slop margin."""
+    base_rootfs_gb = 1.5  # ubuntu:22.04 unpacked rootfs
+    slop_gb = 0.5
+    required = base_rootfs_gb + float(storage_gb_hint or 0) + slop_gb
+    try:
+        _disk_health.preflight_launch_check(STATE, required_gb=required)
+    except _disk_health.InsufficientDiskError as e:
+        raise HTTPException(507, detail=e.payload)
+
+
+@app.get("/api/runtime/disk-health")
+def api_runtime_disk_health():
+    """Surface the latest disk-health snapshot for the SPA dashboard
+    widget. Returns the cached snapshot from the monitor daemon when
+    available (no shell-out cost) and falls back to a live sample."""
+    cached = (STATE.get("runtime") or {}).get("disk_health")
+    if cached and cached.get("available"):
+        return cached
+    return _disk_health.evaluate_health(STATE)
+
+
+@app.get("/api/runtime/disk-cleanup/suggestions")
+def api_runtime_disk_cleanup_suggestions():
+    return _disk_health.cleanup_suggestions(STATE)
+
+
+class _DiskCleanupRequest(BaseModel):
+    categories: list[str]
+
+
+@app.post("/api/runtime/disk-cleanup/run")
+def api_runtime_disk_cleanup_run(req: _DiskCleanupRequest):
+    result = _disk_health.run_cleanup(STATE, req.categories or [])
+    # Re-sample disk immediately so the UI sees the result without
+    # waiting for the next 60s monitor tick.
+    STATE.setdefault("runtime", {})["disk_health"] = _disk_health.evaluate_health(STATE)
+    _persist_state()
+    return result
+
+
+class _DiskGrowRequest(BaseModel):
+    target_gb: int
+
+
+@app.post("/api/runtime/disk-grow")
+def api_runtime_disk_grow(req: _DiskGrowRequest):
+    """Paid-tier escape hatch. Free tier gets a friendly 403 directing
+    them to the pricing page; paid tiers receive the multipass resize
+    command the user runs on the host machine."""
+    tier = str((STATE.get("license") or {}).get("tier") or "free").lower()
+    if tier == "free":
+        raise HTTPException(403, detail={
+            "code": "tier_required",
+            "reason": "Disk-grow requires a paid tier (Student / Developer / Enterprise).",
+            "upgrade_url": "https://vyomi.cloud/pricing",
+        })
+    return _disk_health.grow_disk(STATE, int(req.target_gb))
 
 
 # ── VM-Connect endpoints (AWS EC2 + GCP Compute + Azure VM) ────────────

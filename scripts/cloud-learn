@@ -22,6 +22,38 @@ APPLIANCE_IMAGE="${CLOUD_LEARN_APPLIANCE_IMAGE:-24.04}"
 APPLIANCE_CPUS="${CLOUD_LEARN_APPLIANCE_CPUS:-4}"
 APPLIANCE_MEMORY="${CLOUD_LEARN_APPLIANCE_MEMORY:-8G}"
 APPLIANCE_DISK="${CLOUD_LEARN_APPLIANCE_DISK:-32G}"
+# Tier-aware disk sizing — if the user already has a license JWT on disk,
+# bootstrap with the disk size their tier deserves instead of the 32G
+# free-tier default. Paid users with bigger fleets shouldn't have to
+# re-launch the VM to grow it; they get the right size from minute one.
+#   Free       → 30 GB (1 small VM comfortably)
+#   Student    → 60 GB
+#   Developer  → 120 GB
+#   Enterprise → 240 GB
+# Override at any time with CLOUD_LEARN_APPLIANCE_DISK=NG.
+_tier_appliance_disk_gb() {
+  local jwt_dir="$HOME/.config/vyomi"
+  [ -f "$jwt_dir/active.json" ] || { echo "30"; return; }
+  local tier
+  tier=$(python3 -c "
+import json, sys
+try:
+    with open('$jwt_dir/active.json') as f:
+        d = json.load(f)
+    print((d.get('tier') or 'free').lower())
+except Exception:
+    print('free')
+" 2>/dev/null)
+  case "$tier" in
+    enterprise) echo "240" ;;
+    developer)  echo "120" ;;
+    student)    echo "60"  ;;
+    *)          echo "30"  ;;
+  esac
+}
+if [ "$APPLIANCE_DISK" = "32G" ] && [ -z "${CLOUD_LEARN_APPLIANCE_DISK:-}" ]; then
+  APPLIANCE_DISK="$(_tier_appliance_disk_gb)G"
+fi
 APPLIANCE_WORKSPACE="${CLOUD_LEARN_APPLIANCE_WORKSPACE:-/workspace/cloud-learn}"
 HOST_SIZING_FILE_NAME="host-sizing-report.json"
 
