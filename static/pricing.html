@@ -13,7 +13,7 @@
     body {
       margin: 0; padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: linear-gradient(135deg, #f8fafb 0%, #eef2f7 100%);
+      background: #ffffff;
       color: #1a2330; min-height: 100vh;
     }
     .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 64px; }
@@ -24,11 +24,11 @@
       display: inline-flex; align-items: center; gap: 10px;
       margin-bottom: 24px;
     }
-    /* Vyomi wordmark — replaces the old "[V] Vyomi" text+badge block.
-       Light-bg variant of the brand image; sits inside the white pricing-page
-       header so the dark "vyomi" letters + purple→blue swoosh read cleanly. */
+    /* Vyomi square icon — 28x28 fixed, object-fit:contain keeps the full
+       "v" + orbit-dot visible (no chopping). Light variant works on the
+       white pricing-page background. */
     header .logo img.vyomi-logo {
-      height: 44px; width: auto; display: block;
+      width: 28px; height: 28px; display: block; object-fit: contain;
     }
     header h1 { font-size: 32px; font-weight: 700; margin: 0 0 8px; color: #0f1b2d; }
     header .sub { font-size: 16px; color: #607080; margin-bottom: 24px; }
@@ -294,7 +294,7 @@
   <div class="container">
     <header>
       <div class="logo">
-        <img class="vyomi-logo" src="/assets/brand/vyomi-wordmark-light.png" alt="Vyomi">
+        <img class="vyomi-logo" src="/assets/brand/vyomi-icon-light.png" alt="Vyomi">
       </div>
       <h1>Choose your tier</h1>
       <div class="sub">All plans include real backends, multi-cloud consoles, and conformance tests.</div>

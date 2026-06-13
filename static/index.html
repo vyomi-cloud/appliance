@@ -14,36 +14,38 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Google+Sans:wght@400;500;700&display=swap" />
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:"Amazon Ember",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;font-size:14px;line-height:1.45;background:#f2f3f3;color:#16191f}
+    body{font-family:"Amazon Ember",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;font-size:14px;line-height:1.45;background:#ffffff;color:#16191f}
     .material-symbols-outlined{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;font-size:20px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
 
-    /* ── Header (AWS Cloudscape-style global navigation) ── */
-    .hdr{background:#232f3e;color:#fff;display:flex;align-items:center;padding:0 8px 0 14px;height:50px;position:fixed;top:0;width:100%;z-index:1000;gap:6px}
-    .hdr-logo{font-size:19px;font-weight:900;color:#ff9900;letter-spacing:-.5px;display:flex;align-items:center;gap:1px;padding-right:6px}
-    .hdr-logo span{color:#fff;font-weight:400}
-    /* Vyomi wordmark inside the dark AWS-style top bar — white-text on
-       transparent navy variant of the brand image so it reads against
-       the #232f3e nav-wrap. Height-locked to fit the 50px header. */
-    .hdr-logo-img{height:24px;width:auto;display:block;padding-right:8px}
-    .hdr-svc{color:#fff;font-size:14px;font-weight:700;padding-left:2px;white-space:nowrap}
-    .hdr-menu{background:transparent;border:none;color:#fff;border-radius:4px;padding:7px 10px;font-size:14px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px}
-    .hdr-menu:hover{background:#2e3c4d}
+    /* ── Header (global navigation) ── */
+    .hdr{background:#ffffff;color:#16191f;display:flex;align-items:center;padding:0 8px 0 14px;height:50px;position:fixed;top:0;width:100%;z-index:1000;gap:6px;border-bottom:1px solid #e7e7e9;box-shadow:0 1px 0 rgba(0,0,0,0.02)}
+    .hdr-logo{display:flex;align-items:center;padding-right:6px;text-decoration:none}
+    .hdr-logo span{color:#16191f;font-weight:400}
+    /* Vyomi square icon — locked to 28x28 so it sits neatly in the 50px
+       header without the wordmark getting chopped. Object-fit:contain
+       keeps the orbit-dot fully visible even if the source is non-square. */
+    .hdr-logo-img{width:28px;height:28px;display:block;object-fit:contain;flex-shrink:0}
+    /* Light-theme header — dark text on white. Hover states use a soft
+       neutral instead of the old AWS-navy hover so it matches the white bg. */
+    .hdr-svc{color:#16191f;font-size:14px;font-weight:700;padding-left:2px;white-space:nowrap}
+    .hdr-menu{background:transparent;border:none;color:#16191f;border-radius:4px;padding:7px 10px;font-size:14px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px}
+    .hdr-menu:hover{background:#f2f3f3}
     .hdr-menu .material-symbols-outlined{font-size:18px}
     .hdr-search{flex:1;max-width:760px;position:relative;display:flex;align-items:center;margin:0 4px}
     .hdr-search-icon{position:absolute;left:9px;color:#5f6b7a;font-size:18px;pointer-events:none}
-    .hdr-search input{width:100%;padding:7px 56px 7px 33px;border:1px solid #5f6b7a;border-radius:8px;font-size:14px;outline:none;background:#fff;color:#16191f}
+    .hdr-search input{width:100%;padding:7px 56px 7px 33px;border:1px solid #d5dbdb;border-radius:8px;font-size:14px;outline:none;background:#fff;color:#16191f}
     .hdr-search input::placeholder{color:#5f6b7a}
     .hdr-kbd{position:absolute;right:8px;color:#5f6b7a;font-size:11px;font-weight:600;border:1px solid #d5dbdb;border-radius:4px;padding:1px 6px;background:#f2f3f3}
-    .hdr-right{margin-left:auto;display:flex;align-items:center;gap:2px;color:#d5dbdb;font-size:13px}
+    .hdr-right{margin-left:auto;display:flex;align-items:center;gap:2px;color:#5f6b7a;font-size:13px}
     .hdr-sim{background:#ff9900;color:#16191f;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:800;letter-spacing:.4px;margin-right:6px}
-    .hdr-ico{background:transparent;border:none;color:#d5dbdb;width:36px;height:36px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
-    .hdr-ico:hover{background:#2e3c4d;color:#fff}
+    .hdr-ico{background:transparent;border:none;color:#5f6b7a;width:36px;height:36px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+    .hdr-ico:hover{background:#f2f3f3;color:#16191f}
     .hdr-ico .material-symbols-outlined{font-size:20px}
-    .hdr-pill{display:inline-flex;align-items:center;gap:5px;padding:7px 9px;border-radius:4px;color:#fff;cursor:pointer;font-size:13px;white-space:nowrap;border:none;background:transparent}
-    .hdr-pill:hover{background:#2e3c4d}
-    .hdr-pill .material-symbols-outlined{font-size:17px;color:#d5dbdb}
-    .hdr-pill .caret{font-size:18px;color:#aeb6c2}
-    .hdr-divider{width:1px;height:24px;background:#3a4858;margin:0 4px}
+    .hdr-pill{display:inline-flex;align-items:center;gap:5px;padding:7px 9px;border-radius:4px;color:#16191f;cursor:pointer;font-size:13px;white-space:nowrap;border:none;background:transparent}
+    .hdr-pill:hover{background:#f2f3f3}
+    .hdr-pill .material-symbols-outlined{font-size:17px;color:#5f6b7a}
+    .hdr-pill .caret{font-size:18px;color:#5f6b7a}
+    .hdr-divider{width:1px;height:24px;background:#e7e7e9;margin:0 4px}
     .badge{background:#ff9900;color:#000;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:700}
 
     /* ── Layout ── */
@@ -2703,7 +2705,7 @@ function AwsConsoleShell({activeView, onOpen, children}) {
   return (
     <>
       <header className="hdr">
-        <a href="/ui" className="hdr-logo" style={{textDecoration:'none'}}><img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-dark.png" alt="Vyomi"/></a>
+        <a href="/ui" className="hdr-logo" style={{textDecoration:'none'}}><img className="hdr-logo-img" src="/assets/brand/vyomi-icon-light.png" alt="Vyomi"/></a>
         <button className="hdr-menu" onClick={() => open('providers')}><span className="material-symbols-outlined">apps</span>Providers</button>
         <div className="hdr-search">
           <span className="material-symbols-outlined hdr-search-icon">search</span>
@@ -5027,7 +5029,7 @@ function DashboardView({onOpen, onBack, notify, onExportTerraform}) {
   return (
     <>
       <header className="hdr">
-        <a href="/ui" className="hdr-logo" style={{textDecoration:'none'}}><img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-dark.png" alt="Vyomi"/></a>
+        <a href="/ui" className="hdr-logo" style={{textDecoration:'none'}}><img className="hdr-logo-img" src="/assets/brand/vyomi-icon-light.png" alt="Vyomi"/></a>
         <button className="hdr-menu" onClick={() => onOpen('providers')}><span className="material-symbols-outlined">apps</span>Providers</button>
         <div className="hdr-search">
           <span className="material-symbols-outlined hdr-search-icon">search</span>
@@ -20370,7 +20372,7 @@ function App() {
         <>
           {/* Top header */}
           <header className="hdr">
-            <a href="/ui" className="hdr-logo" style={{textDecoration:'none'}}><img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-dark.png" alt="Vyomi"/></a>
+            <a href="/ui" className="hdr-logo" style={{textDecoration:'none'}}><img className="hdr-logo-img" src="/assets/brand/vyomi-icon-light.png" alt="Vyomi"/></a>
             <button className="hdr-menu" onClick={() => open('providers')}>Providers</button>
             <div className="hdr-svc"><strong>{titleMap[view] || 'Simulator'}</strong></div>
             <div className="hdr-search">
