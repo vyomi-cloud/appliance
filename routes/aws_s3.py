@@ -1006,6 +1006,7 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     import os
     STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
     _UI_HTML = os.path.join(STATIC_DIR, "index.html")
+    _PRICING_HTML = os.path.join(STATIC_DIR, "pricing.html")
 
     # ── AWS query-protocol root dispatch ─────────────────────────────────
 
@@ -1071,11 +1072,16 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
 
     @app.get("/")
     async def s3_list_buckets(request: Request) -> Response:
-        """GET / -> ListBuckets (S3 wire) OR main SPA (browser)."""
+        """GET / -> ListBuckets (S3 wire) OR launch page = pricing.html (browser).
+
+        / is now the appliance launch view (tier cards + SDK strip + compare
+        table). The old /pricing route is retired and 302-redirects here.
+        The SPA still lives at /ui for users who want to skip the launch.
+        """
         accept = request.headers.get("accept", "")
         user_agent = request.headers.get("user-agent", "")
         if "text/html" in accept or "Mozilla" in user_agent:
-            with open(_UI_HTML, "rb") as f:
+            with open(_PRICING_HTML, "rb") as f:
                 return Response(content=f.read(), media_type="text/html", headers={"Cache-Control": "no-store, max-age=0"})
 
         now = _now()
