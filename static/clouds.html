@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Choose a cloud — vyomi</title>
+  <title>Workspaces — vyomi</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/brand/favicon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/brand/favicon-16.png">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap">
@@ -15,7 +15,7 @@
       background: #ffffff; color: #1a2330; min-height: 100vh;
     }
 
-    /* Sticky top bar — matches /pricing */
+    /* ── Top bar (matches launch page) ───────────────────────────── */
     .top-bar {
       position: sticky; top: 0; z-index: 100;
       background: rgba(255,255,255,0.92);
@@ -35,34 +35,86 @@
     }
     .tb-btn-secondary { background: #fff; color: #1a2330; border-color: #d8e0ea; }
     .tb-btn-secondary:hover { border-color: #1a2330; }
-    .tb-btn-primary { background: #0f1b2d; color: #fff; border-color: #0f1b2d; }
-    .tb-btn-primary:hover { background: #1a2c44; }
 
     .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 64px; }
 
-    header.hero { text-align: center; margin-bottom: 40px; }
+    /* ── Section heading + sub ───────────────────────────────────── */
+    .section-head { margin-bottom: 20px; }
+    .section-head h2 {
+      font-size: 22px; font-weight: 700; color: #0f1b2d; margin: 0 0 4px;
+      letter-spacing: -0.01em;
+    }
+    .section-head .sub { font-size: 13.5px; color: #5f6b7a; margin: 0; }
+
+    header.hero { text-align: center; margin: 8px 0 32px; }
     header.hero h1 { font-size: 32px; font-weight: 700; color: #0f1b2d; margin: 0 0 8px; letter-spacing: -0.02em; }
     header.hero p  { font-size: 16px; color: #5f6b7a; margin: 0; }
 
-    /* Cloud cards — identical to portal /features */
+    /* ── Existing spaces list ────────────────────────────────────── */
+    .spaces-section { margin-bottom: 44px; }
+    .spaces-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+    }
+    @media (max-width: 900px) { .spaces-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 540px) { .spaces-grid { grid-template-columns: 1fr; } }
+    .space-card {
+      background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 12px;
+      padding: 16px 18px;
+      box-shadow: 0 1px 2px rgba(15,27,45,0.03), 0 4px 12px rgba(15,27,45,0.04);
+      transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+      cursor: pointer; text-decoration: none; color: inherit; display: block;
+    }
+    .space-card:hover {
+      border-color: #94a3b8; transform: translateY(-2px);
+      box-shadow: 0 2px 4px rgba(15,27,45,0.04), 0 10px 22px rgba(15,27,45,0.08);
+    }
+    .space-card.active {
+      border-color: #10b981;
+      box-shadow: 0 0 0 1px #10b981 inset,
+                  0 4px 12px rgba(16,185,129,0.10);
+    }
+    .space-row {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+    }
+    .space-provider {
+      display: inline-block; padding: 2px 8px; border-radius: 6px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+      text-transform: uppercase; color: #fff;
+    }
+    .space-provider.aws   { background: #ec7211; }
+    .space-provider.gcp   { background: #1a73e8; }
+    .space-provider.azure { background: #0078d4; }
+    .space-name { font-weight: 600; color: #0f1b2d; font-size: 14.5px; flex: 1; }
+    .space-active-pill {
+      font-size: 10px; font-weight: 700; color: #047857;
+      background: rgba(16,185,129,0.10); padding: 2px 8px; border-radius: 9999px;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .space-meta { font-size: 12px; color: #5f6b7a; }
+    .space-meta .dot { margin: 0 6px; opacity: 0.4; }
+
+    .empty-spaces {
+      text-align: center; padding: 24px;
+      background: #f7f8fc; border: 1px dashed #cbd5e1; border-radius: 12px;
+      color: #5f6b7a; font-size: 14px;
+    }
+
+    /* ── Cloud-provider cards (PORTAL /features design, VERTICAL stack) ── */
+    .features-strip { width: 100%; margin: 0; }
     .clouds-row { display: flex; flex-direction: column; gap: 16px; }
     .cloud-card {
       background: #ffffff;
-      border: 1.5px solid #cbd5e1;
+      border: 2px solid #cbd5e1;
       border-radius: 14px;
       padding: 24px 24px 22px;
       display: flex; flex-direction: column;
-      box-shadow: 0 0 0 1px rgba(15,27,45,0.04) inset,
-                  0 2px 4px rgba(15,27,45,0.05),
-                  0 8px 20px rgba(15,27,45,0.06);
+      box-shadow: 0 2px 8px rgba(15,27,45,0.04), 0 12px 24px rgba(15,27,45,0.06);
       transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
     }
     .cloud-card:hover {
       border-color: #94a3b8;
       transform: translateY(-2px);
-      box-shadow: 0 0 0 1px rgba(15,27,45,0.06) inset,
-                  0 2px 4px rgba(15,27,45,0.06),
-                  0 14px 30px rgba(15,27,45,0.10);
+      box-shadow: 0 4px 10px rgba(15,27,45,0.06), 0 18px 36px rgba(15,27,45,0.10);
     }
     .cloud-icon {
       width: 44px; height: 44px; border-radius: 10px;
@@ -105,14 +157,12 @@
       font-size: 12.5px; color: #5f6b7a;
       display: flex; align-items: center; justify-content: space-between; gap: 16px;
     }
-    /* Open <Cloud> Console button on each card */
     .cloud-card .open-btn {
       padding: 8px 16px; border-radius: 8px;
-      background: #0f1b2d; color: #fff; text-decoration: none;
+      color: #fff; text-decoration: none;
       font-size: 13px; font-weight: 600; white-space: nowrap;
-      transition: background 0.15s;
+      transition: opacity 0.15s;
     }
-    .cloud-card .open-btn:hover { background: #1a2c44; }
     .cloud-card.aws   .open-btn { background: linear-gradient(135deg, #ff9900, #ec7211); }
     .cloud-card.gcp   .open-btn { background: linear-gradient(135deg, #4285f4, #1a73e8); }
     .cloud-card.azure .open-btn { background: linear-gradient(135deg, #00a4ef, #0078d4); }
@@ -129,13 +179,28 @@
 
   <div class="container">
     <header class="hero">
-      <h1>Choose a cloud to start</h1>
-      <p>Each console mimics the real cloud's UI — same chrome, same flow, same SDK contracts.</p>
+      <h1>Your workspaces</h1>
+      <p>Resume an existing space or pick a cloud below to start a new one.</p>
     </header>
 
-<!-- ── 3 cloud cards — portal /features design, light theme.
-              Native per-service icons from _partials/cloud_service_icons.html. -->
-    <section class="features-strip" style="margin:0">
+    <!-- ── Existing spaces ─────────────────────────────────────────── -->
+    <section class="spaces-section">
+      <div class="section-head">
+        <h2>Active spaces</h2>
+        <p class="sub">Click a space to switch + open its console.</p>
+      </div>
+      <div id="spaces-grid" class="spaces-grid">
+        <div class="empty-spaces">Loading spaces…</div>
+      </div>
+    </section>
+
+    <!-- ── Cloud-provider cards (VERTICAL stack, native icons) ─────── -->
+    <section>
+      <div class="section-head">
+        <h2>Start a new workspace</h2>
+        <p class="sub">Pick a cloud — each console mimics the real provider's UI.</p>
+      </div>
+<section class="features-strip" style="margin:0">
       <h2>Real cloud APIs, on your laptop.</h2>
       <p class="sub">Standard SDKs hit a real backend on your laptop — no mocks, no shims, no cloud bill.</p>
 
@@ -166,27 +231,82 @@
     </div>
 
     </section>
+    </section>
   </div>
 
   <script>
-    // Inject an "Open <Cloud> Console →" button at the bottom of each card.
-    document.addEventListener('DOMContentLoaded', () => {
-      const map = { aws: '/console/aws', gcp: '/console/gcp', azure: '/console/azure' };
-      document.querySelectorAll('.cloud-card').forEach(card => {
-        for (const key of Object.keys(map)) {
-          if (card.classList.contains(key)) {
-            const meta = card.querySelector('.meta');
-            if (meta) {
-              const a = document.createElement('a');
-              a.href = map[key];
-              a.className = 'open-btn';
-              a.textContent = `Open ${ key.toUpperCase() } Console →`;
-              meta.appendChild(a);
-            }
+    // ── Inject "Open <Cloud> Console →" buttons on each cloud card ───
+    const PROVIDER_PATHS = { aws: '/console/aws', gcp: '/console/gcp', azure: '/console/azure' };
+    document.querySelectorAll('.cloud-card').forEach(card => {
+      for (const key of Object.keys(PROVIDER_PATHS)) {
+        if (card.classList.contains(key)) {
+          const meta = card.querySelector('.meta');
+          if (meta) {
+            const a = document.createElement('a');
+            a.href = PROVIDER_PATHS[key];
+            a.className = 'open-btn';
+            a.textContent = `Open ${ key.toUpperCase() } Console →`;
+            meta.appendChild(a);
           }
         }
-      });
+      }
     });
+
+    // ── Fetch + render existing spaces ───────────────────────────────
+    async function loadSpaces() {
+      const grid = document.getElementById('spaces-grid');
+      try {
+        const r = await fetch('/api/spaces');
+        const d = await r.json();
+        const spaces = d.spaces || [];
+        const active = d.active_space_id;
+        if (spaces.length === 0) {
+          grid.innerHTML = `<div class="empty-spaces">No spaces yet — pick a cloud below to create your first one.</div>`;
+          // Empty state spans full width so it doesn't render as a tiny card
+          grid.style.gridTemplateColumns = '1fr';
+          return;
+        }
+        grid.innerHTML = spaces.map(s => {
+          const provider = (s.provider || 'aws').toLowerCase();
+          const isActive = s.space_id === active;
+          const region = s.region || s.active_region || '';
+          // Total resource count across known fields
+          const counts = [
+            s.ec2_count, s.lambda_count, s.dynamodb_count, s.sqs_count, s.rds_count,
+            s.gcp_count, s.gcp_functions_count, s.azure_count, s.azure_functionapp_count,
+          ].filter(n => typeof n === 'number');
+          const totalRes = counts.reduce((a, b) => a + b, 0);
+          const consolePath = PROVIDER_PATHS[provider] || '/ui';
+          return `
+            <a class="space-card ${ isActive ? 'active' : '' }"
+               href="javascript:void(0)"
+               data-space-id="${ s.space_id }" data-provider="${ provider }"
+               onclick="switchAndOpen('${ s.space_id }', '${ provider }')">
+              <div class="space-row">
+                <span class="space-provider ${ provider }">${ provider }</span>
+                <span class="space-name">${ s.name || s.space_id }</span>
+                ${ isActive ? '<span class="space-active-pill">Active</span>' : '' }
+              </div>
+              <div class="space-meta">
+                ${ region }<span class="dot">·</span>${ totalRes } resource${ totalRes === 1 ? '' : 's' }
+              </div>
+            </a>
+          `;
+        }).join('');
+      } catch (e) {
+        grid.innerHTML = `<div class="empty-spaces">Couldn't load spaces: ${ e.message }</div>`;
+        grid.style.gridTemplateColumns = '1fr';
+      }
+    }
+
+    async function switchAndOpen(spaceId, provider) {
+      try {
+        await fetch(`/api/spaces/${ spaceId }/switch`, { method: 'POST' });
+      } catch (e) { /* swallow — opening console works without explicit switch */ }
+      window.location.href = PROVIDER_PATHS[provider] || '/ui';
+    }
+
+    document.addEventListener('DOMContentLoaded', loadSpaces);
   </script>
 </body>
 </html>
