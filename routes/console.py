@@ -199,11 +199,15 @@ def register(app: FastAPI) -> None:
         return RedirectResponse(url="/", status_code=302)
 
     @app.get("/clouds", include_in_schema=False)
-    def clouds_page():
-        # Cloud-provider showcase — opens from the "Continue to console"
-        # button on the launch page. Lists the 3 cloud cards with native
-        # icons and an "Open <Cloud> Console →" CTA on each card.
-        html_path = os.path.join(os.path.dirname(__file__), "..", "static", "clouds.html")
+    @app.get("/clouds/{path:path}", include_in_schema=False)
+    def clouds_page(path: str = ""):
+        # /clouds is now the merged workspaces view — serves the SPA
+        # (index.html) directly. Previously a separate static page with
+        # cloud-provider cards, but those were redundant against the
+        # SPA's own Spaces view, so we just point at the SPA. The legacy
+        # /ui route 302-redirects here for back-compat with the dozens
+        # of "Go to Spaces" buttons inside the console pages.
+        html_path = os.path.join(os.path.dirname(__file__), "..", "static", "index.html")
         with open(html_path, "rb") as f:
             return HTMLResponse(content=f.read().decode("utf-8"),
                                 headers={"Cache-Control": "no-store, max-age=0"})
@@ -344,9 +348,18 @@ def register(app: FastAPI) -> None:
 
     @app.get("/ui", include_in_schema=False)
     @app.get("/ui/{path:path}", include_in_schema=False)
+    async def serve_ui_legacy_redirect(path: str = "") -> Response:
+        # /ui retired — the SPA is now canonical at /clouds. Kept as a
+        # 302 redirect so the dozens of "Go to Spaces" buttons inside
+        # aws-console.html / gcp-console.html / azure-console.html
+        # (and the SPA's own brand logo) keep working without each
+        # needing to be rewritten.
+        suffix = f"/{path}" if path else ""
+        return RedirectResponse(url=f"/clouds{suffix}", status_code=302)
+
     @app.get("/product", include_in_schema=False)
     @app.get("/product/{path:path}", include_in_schema=False)
-    async def serve_ui(path: str = "") -> Response:
+    async def serve_product(path: str = "") -> Response:
         _UI_HTML = os.path.join(os.path.dirname(__file__), "..", "static", "index.html")
         with open(_UI_HTML, "rb") as f:
             return Response(content=f.read(), media_type="text/html", headers={"Cache-Control": "no-store, max-age=0"})
