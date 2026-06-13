@@ -20110,6 +20110,23 @@ function App() {
   if (!productMode && view === 'spaces') {
     return (
       <>
+        {/* Slim brand header — same logo + Back to Launch shown on the
+            default /clouds view, so users in ?view=spaces still see the
+            vyomi mark and can return to the launch page. */}
+        <header className="hdr">
+          <a href="/clouds" className="hdr-logo" style={{textDecoration:'none'}}>
+            <img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi"/>
+          </a>
+          <div className="hdr-svc"><strong>Spaces</strong></div>
+          <div className="hdr-right">
+            <a href="/" className="hdr-pill" title="Back to the launch / pricing page"
+               style={{textDecoration:'none',color:'#16191f'}}>
+              <span className="material-symbols-outlined">arrow_back</span>Back to Launch
+            </a>
+            <span className="badge">SIMULATOR</span>
+            <span style={{background:'#37475a',padding:'3px 10px',borderRadius:3,fontSize:12}}>root</span>
+          </div>
+        </header>
         <SimulationSpacesView
           key={`spaces-${spaceProviderFilter || 'all'}-${spacesViewNonce}`}
           providers={providers}
@@ -20385,7 +20402,9 @@ function App() {
               />
             </div>
             <div className="hdr-right">
-              <button className="hdr-pill" title="API docs (Swagger)" onClick={() => window.open('/docs', '_blank', 'noopener')}><span className="material-symbols-outlined">api</span>API</button>
+              <a href="/" className="hdr-pill" title="Back to the launch / pricing page" style={{textDecoration:'none',color:'#16191f'}}>
+                <span className="material-symbols-outlined">arrow_back</span>Back to Launch
+              </a>
               <span className="badge">SIMULATOR</span>
               <span>us-east-1</span>
               <span style={{background:'#37475a',padding:'3px 10px',borderRadius:3,fontSize:12}}>root</span>
