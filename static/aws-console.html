@@ -1013,22 +1013,37 @@ async function renderList(main){
     if (action === "delete" || action === "terminate") {
       if (!confirm(`${action} ${sel.length} ${svc.label.toLowerCase()}?`)) return;
     }
+    // Resolve the action to a concrete (method, path-template) once. Prefer
+    // an explicit api_paths mapping — EC2's terminate is POST
+    // /api/ec2/instances/{name}/terminate, not DELETE
+    // /api/ec2/instances/{name} (which the S3 catch-all swallows). The
+    // earlier code unconditionally fell into the DELETE branch for
+    // terminate, so multi-select Terminate silently did nothing on EC2.
+    const ap = (svc.api_paths || {})[action];
+    const explicitDelete = !ap && (action === "delete" || action === "terminate");
+    let okCount = 0, failCount = 0;
     for (const it of sel) {
       const name = itemKey(svc, it);
-      if (action === "delete" || action === "terminate") {
+      let r;
+      if (ap) {
+        const path = fillPath(ap.path, {name});
+        r = await api(ap.method, path);
+      } else if (explicitDelete) {
         const path = fillPath(svc.resource_path, {name});
-        await api("DELETE", path);
+        r = await api("DELETE", path);
+      } else {
+        continue;
+      }
+      if (r && (r.ok || [200,201,202,204].includes(r.status))) {
+        okCount += 1;
         recordNotif("ok", `${action} ${name}`);
       } else {
-        const ap = (svc.api_paths || {})[action];
-        if (ap) {
-          const path = fillPath(ap.path, {name});
-          await api(ap.method, path);
-          recordNotif("ok", `${action} ${name}`);
-        }
+        failCount += 1;
+        recordNotif("error", `${action} ${name} failed`);
       }
     }
-    toast(`${action} on ${sel.length} item(s) completed`);
+    if (failCount === 0) toast(`${action} on ${sel.length} item(s) completed`);
+    else toast(`${action}: ${okCount} ok, ${failCount} failed`, failCount ? "err" : null);
     state.selected.clear();
     renderList(main);
   }
@@ -1624,7 +1639,24 @@ async function singleAction(svc, full, action){
   }
   const path = fillPath(ap.path, {name});
   const r = await api(ap.method, path);
-  if (r.ok || [200,201,202,204].includes(r.status)) { toast(name+" "+action); recordNotif("ok", action+" "+name); render(); }
+  if (r.ok || [200,201,202,204].includes(r.status)) {
+    toast(name+" "+action);
+    recordNotif("ok", action+" "+name);
+    // For destructive actions (terminate/delete), the resource is gone
+    // from the backend — but `render()` would re-render the current
+    // detail view from cache, so the user stays on a stale page showing
+    // 'stopped' instead of seeing the instance disappear. Navigate back
+    // to the list view, which refetches collection_path. For lifecycle
+    // actions (start/stop/reboot), the instance still exists; re-render
+    // the current view (which on list view re-fetches; on detail view
+    // shows stale data until the user refreshes — acceptable since the
+    // state transition is asynchronous anyway).
+    if (action === "delete" || action === "terminate") {
+      navigate({view:"list", item:null});
+    } else {
+      render();
+    }
+  }
   else toast(action+" failed ("+r.status+")", "err");
 }
 
