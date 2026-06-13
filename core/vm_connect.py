@@ -135,17 +135,40 @@ def release_ssh_port(state: dict, instance_id: str) -> None:
 
 def _generate_keypair(workspace: Path) -> tuple[Path, Path]:
     """Create ed25519 keypair in the workspace if it doesn't exist already.
-    Returns (private_path, public_path)."""
+    Returns (private_path, public_path).
+
+    Uses the `cryptography` library directly instead of shelling out to
+    ssh-keygen — the simulator container is minimal and doesn't ship
+    openssh-client. cryptography is already a hard dependency (used by
+    sso_config + license_remote for JWT signing). The encoded outputs
+    are wire-compatible with OpenSSH: PEM-encoded PKCS8 private key,
+    `ssh-ed25519 AAAA…` public key.
+    """
     private = workspace / "ssh_key"
     public = workspace / "ssh_key.pub"
     if private.exists() and public.exists():
         return private, public
     workspace.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["ssh-keygen", "-t", "ed25519", "-N", "", "-f", str(private),
-         "-C", f"vyomi-vm-{workspace.name}"],
-        capture_output=True, text=True, timeout=30, check=True,
+
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+    from cryptography.hazmat.primitives import serialization
+
+    key = ed25519.Ed25519PrivateKey.generate()
+    private_bytes = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.OpenSSH,
+        encryption_algorithm=serialization.NoEncryption(),
     )
+    public_bytes = key.public_key().public_bytes(
+        encoding=serialization.Encoding.OpenSSH,
+        format=serialization.PublicFormat.OpenSSH,
+    )
+    # Tag the public key with a human comment — useful when the user
+    # peeks at ~ubuntu/.ssh/authorized_keys on the container.
+    public_line = public_bytes + f" vyomi-vm-{workspace.name}".encode()
+
+    private.write_bytes(private_bytes)
+    public.write_bytes(public_line + b"\n")
     os.chmod(private, 0o600)
     return private, public
 
@@ -322,7 +345,17 @@ def connect_info(state: dict, instance: dict, *, provider: str,
     instance["ssh_host"] = vm_ip or "<appliance-ip>"
     instance["ssh_target"] = f"{ssh_user}@{vm_ip}" if vm_ip else ""
 
-    key_download_url = f"/api/{provider}/instances/{instance_id}/private-key.pem"
+    # Per-provider key download path. The endpoint segments differ
+    # between clouds (AWS uses /ec2/instances/, GCP uses /compute/instances/,
+    # Azure uses /vm/) — match the actual route registrations in server.py
+    # rather than guessing from `provider` alone.
+    _key_url_template = {
+        "aws":   f"/api/aws/ec2/instances/{instance_id}/private-key.pem",
+        "gcp":   f"/api/gcp/compute/instances/{instance_id}/private-key.pem",
+        "azure": f"/api/azure/vm/{instance_id}/private-key.pem",
+    }
+    key_download_url = _key_url_template.get(provider) \
+        or f"/api/{provider}/instances/{instance_id}/private-key.pem"
 
     return {
         "ok": True,
