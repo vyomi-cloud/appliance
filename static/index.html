@@ -5752,8 +5752,11 @@ function SimulationSpacesView({providers, spaces, providerFilter, onBack, onFilt
                   : 'Select a provider space, then connect to the services running under that space.'}
               </div>
             </div>
+            {/* 'Back to Providers' removed — the merged /clouds view
+                doesn't have a separate providers page to return to.
+                Filter row (All / AWS / GCP / Azure) below handles
+                clearing the scope in a single click. */}
             <div className="btn-grp">
-              <button className="btn btn-s" onClick={onBack} style={secondaryButtonStyle}>Back to Providers</button>
               <button className="btn btn-p" onClick={createSpace} style={primaryButtonStyle}>Create Space</button>
             </div>
           </div>
