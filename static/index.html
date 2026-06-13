@@ -5792,15 +5792,45 @@ function SimulationSpacesView({providers, spaces, providerFilter, onBack, onFilt
               >
                 All
               </button>
-              {(providers || []).map(provider => (
-                <button
-                  key={provider.provider_id}
-                  className={`btn ${providerFilter === provider.provider_id ? 'btn-p' : 'btn-s'}`}
-                  onClick={() => onFilter(provider.provider_id)}
-                >
-                  {provider.display_name}
-                </button>
-              ))}
+              {(providers || []).map(provider => {
+                // Inline native-cloud SVG glyphs. Match the same palette used
+                // on /clouds.html cards and the /console/* headers, so the
+                // filter buttons read at a glance:
+                //  - AWS:   orange shield + amber inner (#ff9900 → #ec7211)
+                //  - GCP:   4 brand-color dots (yellow/green/red/blue)
+                //  - Azure: cyan A-mark (#50e6ff stroke + white fill)
+                const id = provider.provider_id;
+                const iconStyle = {flexShrink: 0};
+                const icon = id === 'aws' ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" style={iconStyle}>
+                    <path d="M12 2L4 6v6c0 4.5 3.4 8.7 8 10 4.6-1.3 8-5.5 8-10V6l-8-4z" fill="#ff9900"/>
+                    <path d="M12 6.5L8 8.5v3.4c0 2.3 1.7 4.4 4 5 2.3-.6 4-2.7 4-5V8.5l-4-2z" fill="#ec7211"/>
+                  </svg>
+                ) : id === 'gcp' ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" style={iconStyle}>
+                    <circle cx="12" cy="7" r="2.4" fill="#fbbc04"/>
+                    <circle cx="17" cy="12" r="2.4" fill="#34a853"/>
+                    <circle cx="12" cy="17" r="2.4" fill="#ea4335"/>
+                    <circle cx="7"  cy="12" r="2.4" fill="#4285f4"/>
+                  </svg>
+                ) : id === 'azure' ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" style={iconStyle}>
+                    <path d="M11.5 3 4 19.5h6.2l3.2-9.5L11.5 3z" fill="#50e6ff"/>
+                    <path d="M13 7.2 10.4 14h5l.4 2-4.5 2H20l-7-10.8z" fill="#fff" stroke="#0078d4" strokeWidth="0.4"/>
+                  </svg>
+                ) : null;
+                return (
+                  <button
+                    key={provider.provider_id}
+                    className={`btn ${providerFilter === provider.provider_id ? 'btn-p' : 'btn-s'}`}
+                    onClick={() => onFilter(provider.provider_id)}
+                    style={{display:'inline-flex',alignItems:'center',gap:6}}
+                  >
+                    {icon}
+                    {provider.display_name}
+                  </button>
+                );
+              })}
               {providerFilter && (
                 <>
                   <span style={{flex:'0 0 12px'}}></span>
