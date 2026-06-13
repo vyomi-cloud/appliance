@@ -3479,27 +3479,17 @@ gcpDialogRootNode.id = 'gcp-dialog-root';
 document.body.appendChild(gcpDialogRootNode);
 const gcpDialogRoot = ReactDOM.createRoot(gcpDialogRootNode);
 
-// Always-visible Swagger/API-docs launcher — appended directly to <body> so it
-// shows on EVERY view regardless of which header renders. Opens the locally
-// bundled Swagger UI (/docs) in a new tab.
-(function mountApiDocsButton() {
-  if (document.getElementById('cl-api-fab')) return;
-  const btn = document.createElement('button');
-  btn.id = 'cl-api-fab';
-  btn.type = 'button';
-  btn.title = 'Open the API reference (Swagger)';
-  btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;margin-right:6px">api</span>API';
-  btn.style.cssText = [
-    'position:fixed', 'top:10px', 'right:14px', 'z-index:2147483647',
-    'display:inline-flex', 'align-items:center', 'background:#1a73e8', 'color:#fff',
-    'border:none', 'border-radius:6px', 'padding:7px 14px', 'font-size:13px',
-    'font-weight:600', 'cursor:pointer', 'box-shadow:0 2px 8px rgba(0,0,0,.25)',
-    'font-family:Roboto,Arial,sans-serif',
-  ].join(';');
-  btn.onmouseenter = () => { btn.style.background = '#1761c9'; };
-  btn.onmouseleave = () => { btn.style.background = '#1a73e8'; };
-  btn.onclick = () => window.open('/docs', '_blank', 'noopener');
-  document.body.appendChild(btn);
+// REMOVED — the always-visible Swagger/API-docs floating button (the blue
+// 'API' pill at top-right) was appended to <body> so it overlaid every
+// view including /clouds and ?view=spaces, getting in the way of the new
+// brand header. Users who actually need Swagger can hit /docs directly,
+// and the cloud-specific consoles still have their own per-cloud API
+// pills inside their headers (e.g. /console/aws → 'AWS API docs (Swagger)').
+// Defensive cleanup in case the button was injected by a stale cached
+// build before the page hot-reloaded:
+(function removeApiDocsButtonIfPresent() {
+  const stale = document.getElementById('cl-api-fab');
+  if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
 })();
 let gcpDialogState = null;
 let gcpDialogResolve = null;
