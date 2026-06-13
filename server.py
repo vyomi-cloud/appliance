@@ -196,9 +196,12 @@ _UI_HTML = os.path.join(STATIC_DIR, "index.html")
 _PRICING_HTML = os.path.join(STATIC_DIR, "pricing.html")
 app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="assets")
 
-# ── S3 catch-all routes — LAST ──────────────────────────────────────
+# S3 routes are registered at the BOTTOM of this file (see end-of-file
+# block) so the catch-all @app.post("/{bucket}/{key:path}") doesn't
+# swallow the specific /api/... POST routes that are defined further
+# down. The comment 'S3 catch-all routes — LAST' was correct intent;
+# the placement here was wrong.
 from routes import aws_s3
-aws_s3.register(app, aws_xamz_dispatchers=_aws_xamz_dispatchers)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -20762,6 +20765,15 @@ def _list_objects_v2(bucket: str, params: dict) -> Response:
         xml_parts.append(f"<CommonPrefixes><Prefix>{cp}</Prefix></CommonPrefixes>")
     xml_parts.append("</ListBucketResult>")
     return _xml_response("".join(xml_parts))
+
+
+# ── S3 catch-all routes — TRULY LAST ────────────────────────────────
+# Register AFTER all the explicit /api/{auth,license,...} POST routes
+# defined above. Starlette matches routes in registration order; if
+# we registered the @app.post("/{bucket}/{key:path}") catch-all up
+# top (as the file originally did), it swallowed POST /api/auth/...
+# with bucket=api, key=auth/... and returned a NoSuchBucket XML.
+aws_s3.register(app, aws_xamz_dispatchers=_aws_xamz_dispatchers)
 
 
 if __name__ == "__main__":
