@@ -1,0 +1,112 @@
+name: Console actions conformance
+
+# Permanent CI gate for every major release. Boots the full appliance
+# stack via docker-compose, then runs tests/conformance/console_actions
+# which walks every AWS/GCP/Azure catalog action end-to-end. Fails the
+# build if pass-rate < 100% (skips on tier-gated services don't count).
+#
+# Triggered on:
+#   - push to main      (regression gate)
+#   - PRs touching providers/ or static/ or routes/ (preflight)
+#   - tag v*           (release gate — fail = no release)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'providers/**'
+      - 'routes/**'
+      - 'static/**'
+      - 'server.py'
+      - 'core/**'
+      - 'tests/conformance/console_actions/**'
+      - 'docker-compose*.yml'
+      - '.github/workflows/console-conformance.yml'
+  push:
+    tags: ['v*']
+
+jobs:
+  console-actions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test deps
+        run: pip install --quiet requests pytest
+
+      - name: Build simulator image
+        run: |
+          docker build -t cloudlearn/simulator:ci .
+
+      - name: Boot appliance stack
+        run: |
+          # Use the dev compose; mounts host paths the appliance compose
+          # expects (the multipass-specific paths aren't relevant in CI).
+          CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:ci \
+            docker compose -f docker-compose.yml up -d \
+              simulator cloudlearn-pubsub cloudlearn-firestore \
+              cloudlearn-sql-postgres cloudlearn-minio cloudlearn-nats \
+              cloudlearn-dynamodb cloudlearn-elasticmq cloudlearn-vault
+
+      - name: Wait for /healthz
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fs http://localhost:9000/healthz >/dev/null; then
+              echo "Simulator up after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -f http://localhost:9000/healthz
+
+      - name: Apply Developer-tier test license
+        env:
+          VYOMI_TEST_LICENSE_JWT: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
+        run: |
+          if [ -n "$VYOMI_TEST_LICENSE_JWT" ]; then
+            curl -fs -X POST -H 'Content-Type: application/json' \
+              -d "{\"license_key\":\"$VYOMI_TEST_LICENSE_JWT\"}" \
+              http://localhost:9000/api/license/activate
+            curl -fs http://localhost:9000/api/runtime/tier | jq -r '.active_tier'
+          else
+            echo "No VYOMI_TEST_LICENSE_JWT secret — running on Free tier."
+            echo "Azure + some advanced services will be marked tier-skipped."
+          fi
+
+      - name: Run console-actions conformance
+        env:
+          VYOMI_BASE_URL: http://localhost:9000
+          VYOMI_CONFORMANCE_REPORT: tests/conformance/console_actions/REPORT.md
+        run: |
+          python3 -m pytest tests/conformance/console_actions/ \
+            --junitxml=results.xml \
+            --tb=short \
+            -v
+
+      - name: Upload conformance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: console-conformance-report
+          path: |
+            tests/conformance/console_actions/REPORT.md
+            results.xml
+
+      - name: Post report as PR comment
+        if: github.event_name == 'pull_request' && always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: tests/conformance/console_actions/REPORT.md
+          header: console-conformance
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yml down -v
