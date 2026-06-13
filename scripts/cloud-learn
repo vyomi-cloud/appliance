@@ -559,6 +559,45 @@ EOF
   return 1
 }
 
+vyomi_host_ssh_bootstrap() {
+  # Generate ~/.ssh/vyomi_ed25519 + mirror pubkey to
+  # ~/.config/vyomi/host-ssh-pubkey.pub if not already present.
+  # Subsequently mounted into the appliance VM and used as the
+  # authorized_keys source for every new container the simulator
+  # launches. Idempotent — never overwrites existing keys.
+  local script="${ROOT_DIR}/scripts/vyomi-host-ssh-bootstrap.sh"
+  if [ ! -x "$script" ]; then
+    progress "vyomi-host-ssh-bootstrap.sh not executable or missing — skipping"
+    return 0
+  fi
+  progress "==> Vyomi host SSH bootstrap"
+  bash "$script" || progress "host SSH bootstrap returned non-zero — Connect via SSH may need manual key install"
+}
+
+vyomi_mount_host_pubkey_into_appliance() {
+  # Push the host's public key into the appliance VM at
+  # /etc/vyomi/host-ssh-pubkey.pub, which docker-compose bind-mounts
+  # into the simulator container at /config/host-ssh-pubkey.pub.
+  # core/vm_connect.py reads it on every Connect-info request and
+  # injects it into the target LXD container's authorized_keys —
+  # so the user never sees a 'download key + chmod' step.
+  local compose
+  compose="$(appliance_multipass_cmd 2>/dev/null || echo multipass)"
+  local pubkey="${HOME}/.config/vyomi/host-ssh-pubkey.pub"
+  if [ ! -f "$pubkey" ]; then
+    progress "no host pubkey at $pubkey — skipping mount"
+    return 0
+  fi
+  progress "==> Pushing host pubkey into appliance VM"
+  "$compose" transfer "$pubkey" "${APPLIANCE_NAME}:/tmp/vyomi-host-ssh-pubkey.pub" >/dev/null 2>&1 || true
+  "$compose" exec "$APPLIANCE_NAME" -- sudo bash -lc '
+    set -e
+    install -d -m 755 /etc/vyomi
+    install -m 644 /tmp/vyomi-host-ssh-pubkey.pub /etc/vyomi/host-ssh-pubkey.pub
+    rm -f /tmp/vyomi-host-ssh-pubkey.pub
+  ' >/dev/null 2>&1 || progress "host pubkey push failed (non-fatal) — Connect will fall back to per-instance keys"
+}
+
 appliance_start_runtime_bridge() {
   local compose
   compose="$(appliance_multipass_cmd)"
@@ -812,8 +851,10 @@ outer_run() {
   case "$subcmd" in
     up)
       ensure_prereqs
+      vyomi_host_ssh_bootstrap
       write_appliance_manifest
       appliance_launch_vm
+      vyomi_mount_host_pubkey_into_appliance
       appliance_start_runtime_bridge
       appliance_exec_launcher
       appliance_health_check

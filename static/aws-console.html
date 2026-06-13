@@ -2405,20 +2405,33 @@ SUB_RENDERERS.connect = function(svc, full, host){
       const ssh = body.ssh || {};
       const lxcCmd = (body.lxc || {}).command || "";
       const keyUrl = ssh.key_download_url || "";
+      const sharedKey = body.auth_mode === "shared_host_key";
 
-      // 1. Download SSH key — one-click download of the .pem file
-      wrap.append(el("div",{class:"keyblock"},
-        el("div",{class:"k"}, "Step 1 — Download SSH private key (one-time)"),
-        el("div",{class:"row"},
-          el("a",{class:"btn", href:keyUrl, download:`vyomi-${instanceId}.pem`},
-            icon("download"), `Download ${ssh.key_local_filename || "vyomi-" + instanceId + ".pem"}`),
-          el("span",{class:"muted", style:"font-size:12px;margin-left:8px"},
-            "Save to ~/Downloads. Run `chmod 600` on it before connecting."))));
+      // Shared host-key path (the headline path for installed appliances):
+      // no download, no chmod — the user's ~/.ssh/vyomi_ed25519 already
+      // matches the authorized_keys on every container. Just paste & go.
+      if (sharedKey) {
+        wrap.append(el("div",{class:"alert success",
+                              style:"background:#ecfdf5;border-color:#a7f3d0;color:#047857"},
+          el("div",{}, `✓ Shared SSH identity installed at `,
+            el("code",{}, ssh.host_identity_path || "~/.ssh/vyomi_ed25519"),
+            ` — no key download needed.`)));
+      } else {
+        // Dev fallback — per-instance keypair, download required.
+        wrap.append(el("div",{class:"keyblock"},
+          el("div",{class:"k"}, "Step 1 — Download SSH private key (one-time)"),
+          el("div",{class:"row"},
+            el("a",{class:"btn", href:keyUrl, download:`vyomi-${instanceId}.pem`},
+              icon("download"), `Download ${ssh.key_local_filename || "vyomi-" + instanceId + ".pem"}`),
+            el("span",{class:"muted", style:"font-size:12px;margin-left:8px"},
+              "Save to ~/Downloads. Run `chmod 600` on it before connecting."))));
+      }
 
-      // 2. The real SSH command, ready to copy + paste
+      // The SSH command itself — same UI for both modes
       const sshCmd = ssh.command || "";
+      const stepLabel = sharedKey ? "Paste this into your terminal" : "Step 2 — SSH command";
       wrap.append(el("div",{class:"keyblock"},
-        el("div",{class:"k"}, "Step 2 — SSH command"),
+        el("div",{class:"k"}, stepLabel),
         el("pre",{class:"keyval"}, sshCmd),
         el("div",{class:"row"},
           el("button",{class:"btn",onclick:()=>{navigator.clipboard.writeText(sshCmd); toast("Copied");}},
