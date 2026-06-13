@@ -5747,7 +5747,10 @@ function SimulationSpacesView({providers, spaces, providerFilter, onBack, onFilt
   };
 
   return (
-    <div style={{minHeight:'100vh',background:pageBg}}>
+    /* marginTop:50 clears the fixed .hdr (50px tall) so the spaces panel
+       sits below it, not underneath. minHeight subtracts the same so the
+       background bleed stops at the bottom edge of the viewport. */
+    <div style={{minHeight:'calc(100vh - 50px)',background:pageBg,marginTop:50}}>
       <div style={{padding:'20px',maxWidth:1400,margin:'0 auto'}}>
         <div className="panel" style={{borderColor: panelBorder, boxShadow: providerFilter ? '0 4px 18px rgba(0,0,0,.04)' : undefined}}>
           <div className="ph" style={{background: providerFilter ? 'linear-gradient(180deg,#fff 0%,rgba(255,255,255,.92) 100%)' : undefined, borderBottomColor: panelBorder}}>
@@ -20099,8 +20102,27 @@ function App() {
   if (!productMode && view === 'providers') {
     return (
       <>
-        <ProvidersView providers={providers} onOpenSpaces={openSpaces} notify={notify}
-                       onOpenTier={() => open('tier')} />
+        {/* Same slim brand header used on the spaces view — vyomi logo
+            + Back to Launch. The 50px offset below clears the fixed
+            .hdr so the ProvidersView content isn't tucked underneath it. */}
+        <header className="hdr">
+          <a href="/clouds" className="hdr-logo" style={{textDecoration:'none'}}>
+            <img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi"/>
+          </a>
+          <div className="hdr-svc"><strong>Providers</strong></div>
+          <div className="hdr-right">
+            <a href="/" className="hdr-pill" title="Back to the launch / pricing page"
+               style={{textDecoration:'none',color:'#16191f'}}>
+              <span className="material-symbols-outlined">arrow_back</span>Back to Launch
+            </a>
+            <span className="badge">SIMULATOR</span>
+            <span style={{background:'#37475a',padding:'3px 10px',borderRadius:3,fontSize:12}}>root</span>
+          </div>
+        </header>
+        <div style={{marginTop:50}}>
+          <ProvidersView providers={providers} onOpenSpaces={openSpaces} notify={notify}
+                         onOpenTier={() => open('tier')} />
+        </div>
         {notif && <Notif key={notif.id} msg={notif.msg} type={notif.type} onClose={()=>setNotif(null)}/>}
       </>
     );
