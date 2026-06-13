@@ -259,7 +259,7 @@ runcmd:
   - [ bash, -lc, "usermod -aG lxd ubuntu || true" ]
   - [ bash, -lc, "cat >/tmp/cloudlearn-lxd-preseed.yaml <<'EOF'\nconfig: {}\nnetworks:\n- name: lxdbr0\n  type: bridge\n  config:\n    ipv4.address: auto\n    ipv4.nat: \"true\"\n    ipv6.address: auto\n    ipv6.nat: \"true\"\nstorage_pools:\n- name: default\n  driver: dir\nprofiles:\n- name: default\n  description: Default LXD profile\n  config: {}\n  devices:\n    root:\n      type: disk\n      pool: default\n      path: /\n    eth0:\n      type: nic\n      network: lxdbr0\n      name: eth0\nEOF\nlxd init --preseed < /tmp/cloudlearn-lxd-preseed.yaml || true" ]
   - [ bash, -lc, "mkdir -p ${APPLIANCE_WORKSPACE}" ]
-  - [ bash, -lc, "sudo mkdir -p /var/lib/cloudlearn/deployments" ]
+  - [ bash, -lc, "sudo mkdir -p /var/lib/cloudlearn/deployments && sudo chown -R 100:101 /var/lib/cloudlearn/deployments" ]
 EOF
 }
 
@@ -457,7 +457,11 @@ appliance_exec_launcher() {
   progress "==> Appliance: starting inner CloudLearn stack (direct compose)"
   "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "
     set -e
+    # Bind-mounted into the simulator container at the same path; the
+    # container runs as uid 100 (cloudlearn), so chown to match — without
+    # this, EC2 launches PermissionError on workspace.mkdir().
     sudo mkdir -p /var/lib/cloudlearn/deployments
+    sudo chown -R 100:101 /var/lib/cloudlearn/deployments
     cd ${APPLIANCE_WORKSPACE}
     # Ensure docker daemon is ready
     for i in \$(seq 1 30); do
