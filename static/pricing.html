@@ -1445,8 +1445,16 @@
     let _activationPollTimer = null;
 
     async function startDeviceFlow() {
-      const btn = document.getElementById('device-start-btn');
-      const out = document.getElementById('device-status');
+      // Modal refactor: the bottom activate-section was retired, so the old
+      // #device-start-btn / #device-status IDs no longer exist as live
+      // elements. Resolve against the modal IDs (am-primary-btn /
+      // am-device-status) first and fall back to the legacy hidden stub
+      // for back-compat with any embedded usage.
+      const btn = document.querySelector('.am-primary-btn')
+               || document.getElementById('device-start-btn');
+      const out = document.getElementById('am-device-status')
+               || document.getElementById('device-status');
+      if (!btn || !out) return;
       btn.disabled = true;
       out.innerHTML = '<div class="status-pending">Contacting portal…</div>';
       try {
@@ -1510,8 +1518,12 @@
     }
 
     async function activateLicenseKey() {
-      const ta = document.getElementById('license-key-input');
-      const out = document.getElementById('activate-status');
+      // Same fix as startDeviceFlow — modal IDs first, legacy IDs fallback.
+      const ta = document.getElementById('am-license-input')
+              || document.getElementById('license-key-input');
+      const out = document.getElementById('am-activate-status')
+               || document.getElementById('activate-status');
+      if (!ta || !out) return;
       const key = ta.value.trim();
       if (!key) { out.innerHTML = '<div class="status-error">Paste a license key first.</div>'; return; }
       out.innerHTML = '<div class="status-pending">Verifying key…</div>';
