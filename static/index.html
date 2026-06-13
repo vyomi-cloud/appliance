@@ -20039,11 +20039,14 @@ function App() {
   };
   window.__cloudlearnOpenView = open;
   const openSpaces = (providerId = '') => {
+    // Merged Workspaces view: changing the filter no longer changes the
+    // URL view. /clouds is the only workspace URL — picking a provider
+    // just sets spaceProviderFilter so SimulationSpacesView re-scopes.
+    // setView('spaces') was removed so the URL stays clean at /clouds.
     setSpaceProviderFilter(providerId || '');
     setQuery('');
     setBucket(null);
     setSpacesViewNonce(v => v + 1);
-    setView('spaces');
   };
   const titleMap = {
     providers: 'Cloud Providers',
@@ -20092,14 +20095,19 @@ function App() {
   if (!productMode && (view === 'providers' || view === 'spaces')) {
     return (
       <>
-        {/* Same slim brand header used on the spaces view — vyomi logo
-            + Back to Launch. The 50px offset below clears the fixed
-            .hdr so the ProvidersView content isn't tucked underneath it. */}
+        {/* Single merged Workspaces view at /clouds.
+            SimulationSpacesView ALREADY has built-in filter buttons
+            (All / AWS / GCP / Azure) at lines 5780-5793, so it's the
+            entire workspace UI — provider picker AND spaces list in one
+            component. No need for ProvidersView alongside; their roles
+            overlap. The internal onFilter callback drives the
+            spaceProviderFilter state, which the same component uses to
+            re-render with the chosen scope. */}
         <header className="hdr">
           <a href="/clouds" className="hdr-logo" style={{textDecoration:'none'}}>
             <img className="hdr-logo-img" src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi"/>
           </a>
-          <div className="hdr-svc"><strong>{view === 'spaces' ? 'Spaces' : 'Workspaces'}</strong></div>
+          <div className="hdr-svc"><strong>Workspaces</strong></div>
           <div className="hdr-right">
             <a href="/" className="hdr-pill" title="Back to the launch / pricing page"
                style={{textDecoration:'none',color:'#16191f'}}>
@@ -20109,18 +20117,14 @@ function App() {
           </div>
         </header>
         <div style={{marginTop:50}}>
-          {/* One section at a time: provider cards (default) flip to the
-              filtered spaces view as soon as the user clicks a cloud.
-              Showing both at once was clutter — and the user reported
-              that the provider-card buttons looked like they disappeared
-              into the dense stack below. Conditional render fixes both. */}
-          {view === 'spaces' ? (
           <SimulationSpacesView
             key={`spaces-${spaceProviderFilter || 'all'}-${spacesViewNonce}`}
             providers={providers}
             spaces={spaces}
             providerFilter={spaceProviderFilter}
-            onBack={() => open('providers')}
+            /* 'Back' now clears the filter (returns to the All-providers
+               view), since there's no separate providers page anymore. */
+            onBack={() => setSpaceProviderFilter('')}
             onFilter={setSpaceProviderFilter}
             onCreate={(space) => setSpaces(prev => [space, ...prev])}
             onDelete={(spaceId) => setSpaces(prev => prev.filter(space => space.id !== spaceId))}
@@ -20230,10 +20234,6 @@ function App() {
               return open('dashboard');
             }}
           />
-          ) : (
-            <ProvidersView providers={providers} onOpenSpaces={openSpaces} notify={notify}
-                           onOpenTier={() => open('tier')} />
-          )}
         </div>
         {notif && <Notif key={notif.id} msg={notif.msg} type={notif.type} onClose={()=>setNotif(null)}/>}
       </>
