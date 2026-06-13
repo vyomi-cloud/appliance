@@ -24,11 +24,10 @@
       display: inline-flex; align-items: center; gap: 10px;
       margin-bottom: 24px;
     }
-    /* Vyomi square icon — 28x28 fixed, object-fit:contain keeps the full
-       "v" + orbit-dot visible (no chopping). Light variant works on the
-       white pricing-page background. */
+    /* Vyomi wordmark — height-locked to 28px so the full "vyomi" letters
+       + orbit swoosh stay legible. width:auto preserves the 3:1 aspect. */
     header .logo img.vyomi-logo {
-      width: 28px; height: 28px; display: block; object-fit: contain;
+      height: 28px; width: auto; display: block;
     }
     header h1 { font-size: 32px; font-weight: 700; margin: 0 0 8px; color: #0f1b2d; }
     header .sub { font-size: 16px; color: #607080; margin-bottom: 24px; }
@@ -294,7 +293,7 @@
   <div class="container">
     <header>
       <div class="logo">
-        <img class="vyomi-logo" src="/assets/brand/vyomi-icon-light.png" alt="Vyomi">
+        <img class="vyomi-logo" src="/assets/brand/vyomi-wordmark-light.png" alt="Vyomi">
       </div>
       <h1>Choose your tier</h1>
       <div class="sub">All plans include real backends, multi-cloud consoles, and conformance tests.</div>
