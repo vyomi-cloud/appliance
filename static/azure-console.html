@@ -293,6 +293,9 @@
     <button class="x material-symbols-outlined" id="notifClose">close</button></div>
   <div class="body" id="notifBody"></div>
 </div>
+<!-- Disk-health widget — populated by initDiskWidget() in the script
+     block below. Persists above the main shell on every Azure view. -->
+<div id="disk-widget-slot" style="padding: 8px 16px 0"></div>
 <div class="body">
   <nav id="rail">
     <div class="navhead">Azure services</div>
@@ -3101,6 +3104,114 @@ async function confirmDelete(svc, item, fromBlade){
 
 // ---------- misc ----------
 document.getElementById("menuBtn").addEventListener("click",()=>document.getElementById("rail").classList.toggle("collapsed"));
+
+// ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──
+// Renders into #disk-widget-slot. Auto-refreshes every 30s. See
+// aws-console.html for the shared design notes.
+let _diskWidgetState = null;
+function renderDiskWidget(d) {
+  const slot = document.getElementById("disk-widget-slot");
+  if (!slot) return;
+  if (!d || !d.available) { slot.innerHTML = ""; return; }
+  _diskWidgetState = d;
+  const disk = d.disk || {};
+  const pct = Math.round(disk.pct_used || 0);
+  const tier = String(d.tier || "free").toUpperCase();
+  const status = d.status;
+  const accent = status === "green" ? "#10b981" : status === "warn" ? "#f59e0b" : "#ef4444";
+  const bg = status === "green" ? "#fff" : status === "warn" ? "#fffbeb" : "#fef2f2";
+  const statusLabel = status === "green" ? "Healthy"
+                    : status === "warn"  ? "Warning · " + pct + "% used"
+                    :                      "Critical · " + pct + "% used — new launches will be refused";
+  const canGrow = ["student","developer","enterprise"].includes(String(d.tier||"").toLowerCase());
+  slot.innerHTML =
+    '<div style="background:'+bg+';border:1.5px solid '+accent+';border-radius:10px;padding:12px 16px;margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+        '<div style="font-size:13.5px;font-weight:600;color:#1f2937">Appliance disk'+
+          '<span style="display:inline-block;margin-left:8px;padding:2px 8px;background:#ede9fe;color:#6d28d9;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.05em">'+tier+'</span>'+
+        '</div>'+
+        '<div style="font-size:12px;font-weight:600;color:'+accent+'">'+statusLabel+'</div>'+
+      '</div>'+
+      '<div style="margin-bottom:10px">'+
+        '<div style="height:8px;background:#f3f4f6;border-radius:999px;overflow:hidden">'+
+          '<div style="height:100%;width:'+pct+'%;background:'+accent+';transition:width 0.3s"></div>'+
+        '</div>'+
+        '<div style="font-size:11px;color:#6b7280;margin-top:6px">'+disk.used_gb+' / '+disk.total_gb+' GB · '+disk.avail_gb+' GB free</div>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button onclick="openDiskCleanup()" style="font-size:12px;padding:6px 12px;background:#0f1b2d;color:#fff;border:0;border-radius:6px;cursor:pointer">Free up space →</button>'+
+        (canGrow ? '<button onclick="openDiskGrow()" style="font-size:12px;padding:6px 12px;background:#fff;color:#1a2330;border:1px solid #d8e0ea;border-radius:6px;cursor:pointer">Grow disk</button>' : '')+
+      '</div>'+
+    '</div>';
+}
+async function fetchDiskHealth() {
+  try { renderDiskWidget(await (await fetch("/api/runtime/disk-health")).json()); } catch (e) {}
+}
+async function openDiskCleanup() {
+  const modal = document.createElement("div");
+  modal.className = "modal-disk";
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,0.5);display:flex;align-items:center;justify-content:center;z-index:99999";
+  modal.innerHTML = '<div style="background:#fff;border-radius:10px;max-width:640px;width:90%;max-height:80vh;display:flex;flex-direction:column">'+
+    '<div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">'+
+      '<h3 style="margin:0;font-size:16px">Free up appliance disk</h3>'+
+      '<button onclick="this.closest(\'.modal-disk\').remove()" style="background:none;border:0;font-size:24px;cursor:pointer">×</button></div>'+
+    '<div id="cleanup-body" style="padding:20px;overflow-y:auto;flex:1">Scanning…</div>'+
+    '<div id="cleanup-foot" style="padding:12px 20px;border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:flex-end"></div>'+
+  '</div>';
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+  const d = await (await fetch("/api/runtime/disk-cleanup/suggestions")).json();
+  const body = modal.querySelector("#cleanup-body");
+  const foot = modal.querySelector("#cleanup-foot");
+  body.innerHTML = '<div style="margin-bottom:12px;font-size:13px;color:#475569">Select what to clean. All options below are safe.</div>'+
+    (d.suggestions||[]).map(s =>
+      '<label style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid #f1f5f9;cursor:pointer">'+
+        '<input type="checkbox" data-key="'+s.key+'"'+(s.safe?' checked':'')+' style="margin-top:3px">'+
+        '<div style="flex:1"><div style="font-size:13.5px;font-weight:500">'+s.label+
+          (s.est_reclaim_gb?' <span style="color:#059669;font-weight:600;margin-left:6px">≈ '+s.est_reclaim_gb+' GB</span>':'')+
+        '</div><div style="font-size:12px;color:#6b7280;margin-top:2px">'+s.detail+'</div></div></label>'
+    ).join("");
+  foot.innerHTML = '<button onclick="this.closest(\'.modal-disk\').remove()" style="padding:8px 14px;background:#fff;border:1px solid #d8e0ea;color:#1a2330;border-radius:6px;cursor:pointer">Cancel</button>'+
+    '<button id="cleanup-run" style="padding:8px 14px;background:#0f1b2d;color:#fff;border:0;border-radius:6px;cursor:pointer">Run cleanup</button>';
+  foot.querySelector("#cleanup-run").onclick = async () => {
+    const cats = [...body.querySelectorAll("input:checked")].map(i => i.dataset.key);
+    foot.querySelector("#cleanup-run").textContent = "Running…";
+    const out = await (await fetch("/api/runtime/disk-cleanup/run", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({categories:cats})})).json();
+    body.innerHTML = '<div style="background:#ecfdf5;color:#047857;padding:10px 14px;border-radius:6px;margin-bottom:12px">✓ Cleanup complete.</div>'+
+      '<pre style="background:#0f172a;color:#e2e8f0;padding:10px;border-radius:6px;font-size:11px;overflow:auto;max-height:300px">'+JSON.stringify(out,null,2)+'</pre>';
+    foot.innerHTML = '<button onclick="this.closest(\'.modal-disk\').remove(); fetchDiskHealth()" style="padding:8px 14px;background:#0f1b2d;color:#fff;border:0;border-radius:6px;cursor:pointer">Done</button>';
+  };
+}
+function openDiskGrow() {
+  const current = (_diskWidgetState && _diskWidgetState.disk && _diskWidgetState.disk.total_gb) || 30;
+  const modal = document.createElement("div");
+  modal.className = "modal-disk";
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,0.5);display:flex;align-items:center;justify-content:center;z-index:99999";
+  modal.innerHTML = '<div style="background:#fff;border-radius:10px;max-width:480px;width:90%">'+
+    '<div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">'+
+      '<h3 style="margin:0;font-size:16px">Grow appliance disk</h3>'+
+      '<button onclick="this.closest(\'.modal-disk\').remove()" style="background:none;border:0;font-size:24px;cursor:pointer">×</button></div>'+
+    '<div id="grow-body" style="padding:20px"><div style="margin-bottom:14px;font-size:13px;color:#475569">Current size: '+current+' GB. Pick a new size:</div>'+
+      '<div style="display:flex;gap:8px;margin-bottom:14px">'+
+        [60,120,240].map(g=>'<button class="grow-btn" data-gb="'+g+'" style="padding:6px 14px;background:#fff;color:#1a2330;border:1px solid #d8e0ea;border-radius:6px;cursor:pointer">'+g+' GB</button>').join("")+
+      '</div>'+
+      '<div style="font-size:12px;color:#6b7280;line-height:1.5">Resize requires a brief restart (≈30s + 2 min boot).</div>'+
+    '</div></div>';
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+  modal.querySelectorAll(".grow-btn").forEach(b => {
+    b.onclick = async () => {
+      const r = await fetch("/api/runtime/disk-grow", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({target_gb:parseInt(b.dataset.gb,10)})});
+      const d = await r.json();
+      modal.querySelector("#grow-body").innerHTML = (r.ok && d.deferred)
+        ? '<div style="background:#e0f2fe;color:#075985;padding:10px;border-radius:6px;margin-bottom:10px">Run this on the machine running multipass:</div><pre style="background:#0f172a;color:#e2e8f0;padding:10px;border-radius:6px;font-size:12px">'+d.command+'</pre>'
+        : '<div style="background:#fee2e2;color:#b91c1c;padding:10px;border-radius:6px">Failed: '+((d.detail&&d.detail.reason)||d.reason||"unknown")+'</div>';
+    };
+  });
+}
+fetchDiskHealth();
+setInterval(fetchDiskHealth, 30000);
+
 boot();
 </script>
 <script src="/assets/lazy_backends.js"></script>
