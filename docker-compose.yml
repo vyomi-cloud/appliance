@@ -179,6 +179,10 @@ services:
       - /var/lib/cloudlearn/deployments:/var/lib/cloudlearn/deployments
       - ./.cloudlearn-host.json:/config/cloudlearn-host.json:ro
       - ./.cloudlearn-appliance/host-sizing-report.json:/config/cloudlearn-host-sizing.json:ro
+      # Host SSH pubkey for the Connect feature — installed during
+      # `cloud-learn appliance up` by vyomi_mount_host_pubkey_into_appliance.
+      # If absent (dev), vm_connect.py falls back to per-instance keygen.
+      - /etc/vyomi/host-ssh-pubkey.pub:/config/host-ssh-pubkey.pub:ro
       # Lazy backend provisioner (core/backend_provisioner.py) needs to
       # pull + run sibling containers (MinIO, Vault, NATS, etc.) on demand
       # via the host Docker daemon. The socket is mounted RO at the kernel
