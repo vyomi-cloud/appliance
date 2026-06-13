@@ -5777,26 +5777,35 @@ function SimulationSpacesView({providers, spaces, providerFilter, onBack, onFilt
                 {providerFilter && <div style={{fontSize:12,color:'#687078',marginTop:4}}>{providerMap.get(providerFilter)?.display_name || providerFilter.toUpperCase()} services</div>}
               </div>
             </div>
-            {!providerFilter && (
-              <div className="btn-grp" style={{marginBottom:16}}>
-                <button className="btn btn-p" onClick={() => onFilter('')}>All</button>
-                {(providers || []).map(provider => (
-                  <button
-                    key={provider.provider_id}
-                    className="btn btn-s"
-                    onClick={() => onFilter(provider.provider_id)}
-                  >
-                    {provider.display_name}
-                  </button>
-                ))}
-              </div>
-            )}
-            {providerFilter && (
-              <div className="btn-grp" style={{marginBottom:16}}>
-                <span className="badge" style={{background:'#eef2f7',color:'#374151',border:'1px solid #dbe2ea'}}>Regions: {filteredSummary.regions}</span>
-                <span className="badge" style={{background:'#eef2f7',color:'#374151',border:'1px solid #dbe2ea'}}>Services: {filteredSummary.services}</span>
-              </div>
-            )}
+            {/* Filter buttons are ALWAYS visible — clicking a provider
+                scopes the spaces below, but the row of choices stays so
+                the user can swap clouds or clear the filter with one click.
+                The active filter button gets the primary style (.btn-p),
+                inactive ones use the secondary outline style (.btn-s). */}
+            <div className="btn-grp" style={{marginBottom:16, alignItems:'center', flexWrap:'wrap', gap:8}}>
+              <button
+                className={`btn ${providerFilter === '' ? 'btn-p' : 'btn-s'}`}
+                onClick={() => onFilter('')}
+              >
+                All
+              </button>
+              {(providers || []).map(provider => (
+                <button
+                  key={provider.provider_id}
+                  className={`btn ${providerFilter === provider.provider_id ? 'btn-p' : 'btn-s'}`}
+                  onClick={() => onFilter(provider.provider_id)}
+                >
+                  {provider.display_name}
+                </button>
+              ))}
+              {providerFilter && (
+                <>
+                  <span style={{flex:'0 0 12px'}}></span>
+                  <span className="badge" style={{background:'#eef2f7',color:'#374151',border:'1px solid #dbe2ea'}}>Regions: {filteredSummary.regions}</span>
+                  <span className="badge" style={{background:'#eef2f7',color:'#374151',border:'1px solid #dbe2ea'}}>Services: {filteredSummary.services}</span>
+                </>
+              )}
+            </div>
             <div className="home-grid spaces-grid-3">
               {filteredSpaces.length ? filteredSpaces.map(space => {
                 const provider = providerMap.get(space.provider_id);
