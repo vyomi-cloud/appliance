@@ -10213,7 +10213,7 @@ async def api_auth_start_activation(req: _DeviceStartReq):
     install_id = _lr.get_or_create_install_id(STATE)
     backend = req.backend_url or os.environ.get("CLOUDLEARN_LICENSE_BACKEND_URL") or _lr.DEFAULT_BACKEND_URL
     body = _json.dumps({"install_id": install_id,
-                         "label": f"CloudLearn appliance @ {install_id[:12]}"}).encode()
+                         "label": f"Vyomi appliance @ {install_id[:12]}"}).encode()
     try:
         r = _ur.Request(backend.rstrip("/") + "/api/auth/start-activation",
                          data=body, method="POST",
@@ -10279,7 +10279,7 @@ async def api_auth_device_start(req: _DeviceStartReq):
         resp = _lr.device_flow_start(
             req.backend_url or os.environ.get("CLOUDLEARN_LICENSE_BACKEND_URL"),
             install_id,
-            client_name=f"CloudLearn appliance ({install_id})",
+            client_name=f"Vyomi appliance ({install_id})",
         )
     except RuntimeError as e:
         raise HTTPException(502, str(e))
