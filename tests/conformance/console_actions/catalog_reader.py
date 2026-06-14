@@ -91,7 +91,8 @@ def _read_aws() -> list[ActionSpec]:
                 method="GET", path=res, requires_resource=True,
                 name_field=name_field,
             ))
-        for action_name, api_path in (svc.get("api_paths") or {}).items():
+        api_paths = svc.get("api_paths") or {}
+        for action_name, api_path in api_paths.items():
             if not isinstance(api_path, dict):
                 continue
             specs.append(ActionSpec(
@@ -101,7 +102,11 @@ def _read_aws() -> list[ActionSpec]:
                 requires_resource="{name}" in str(api_path.get("path", "")),
                 name_field=name_field,
             ))
-        if res:
+        # Auto-append a delete spec from resource_path ONLY if api_paths
+        # didn't already declare its own delete. Otherwise the harness runs
+        # the same delete twice and the second one 404s on a tombstone — a
+        # false negative that masks real failures.
+        if res and "delete" not in api_paths:
             specs.append(ActionSpec(
                 provider="aws", service=key, action="delete",
                 method="DELETE", path=res, requires_resource=True,
@@ -145,7 +150,8 @@ def _read_gcp() -> list[ActionSpec]:
                 method="GET", path=res, requires_resource=True,
                 name_field=name_field,
             ))
-        for action_name, api_path in (svc.get("api_paths") or {}).items():
+        api_paths = svc.get("api_paths") or {}
+        for action_name, api_path in api_paths.items():
             if not isinstance(api_path, dict):
                 continue
             specs.append(ActionSpec(
@@ -155,7 +161,11 @@ def _read_gcp() -> list[ActionSpec]:
                 requires_resource="{name}" in str(api_path.get("path", "")),
                 name_field=name_field,
             ))
-        if res:
+        # Auto-append a delete spec from resource_path ONLY if api_paths
+        # didn't already declare its own delete. Otherwise the harness runs
+        # the same delete twice and the second one 404s on a tombstone — a
+        # false negative that masks real failures.
+        if res and "delete" not in api_paths:
             specs.append(ActionSpec(
                 provider="gcp", service=key, action="delete",
                 method="DELETE", path=res, requires_resource=True,
