@@ -6,6 +6,27 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-06-14
+
+Hotfix for the launcher on brew-installed setups (macOS).
+
+### Fixed
+
+- **`cloud-learn up` no longer fails with `install: cannot open '.../host-sizing-report.json' for reading: Permission denied`.** The launcher was writing the bootstrap artifacts (`cloud-init.yaml`, `appliance-bootstrap.json`, `host-sizing-report.json`) into `${ROOT_DIR}/.cloudlearn-appliance/`. When installed via brew, `ROOT_DIR` is `/opt/homebrew/Cellar/cloud-learn/<v>/libexec`, which sits behind macOS's brew-prefix sandbox. Multipass's SSHFS workspace-mount cannot read through that boundary from inside the VM — even as root — so the subsequent "sync host sizing into VM" step blew up.
+  - `APPLIANCE_DIR` now defaults to `${HOME}/.cloud-learn/appliance/${APPLIANCE_NAME}/`. Writeable by the launching user, per-VM, no sandbox.
+  - The sync step now uses `multipass transfer` to push the sizing report directly into the VM instead of relying on the SSHFS mount. Removes the SSHFS dependency entirely for this step.
+- **`cloud-learn up` no longer looks "stuck" during cloud-init.** The previous `multipass launch` foreground call printed `Waiting for initialization to complete` then sat silent for 3-5 min while LXD's snap install ran. The new `appliance_wait_for_cloud_init` helper polls cloud-init status every 12s and surfaces:
+  - the current cloud-init stage (`init` / `config` / `final`)
+  - the active runcmd process (so users see "snap install lxd" when that's the slow bit)
+  - elapsed seconds
+  - a 10-min bail-out heartbeat with a pointer to `cloud-init-output.log` for triage
+- **Added an up-front timing hint.** `==> Appliance: launching Multipass VM` now prints expected cold-start time (5-8 min) and the three big downloads (image / snap / cloud-init) so users know whether to wait or alt-tab.
+
+### Backward compat
+
+- `CLOUD_LEARN_APPLIANCE_DIR` env var still overrides the new default — existing automation pinned to the old location keeps working.
+- The brew tap auto-bump workflow continues to fire on this tag; users just `brew upgrade cloud-learn`.
+
 ## [1.1.0] — 2026-06-14
 
 Console-actions conformance climbs from 53% baseline → **100%** across
