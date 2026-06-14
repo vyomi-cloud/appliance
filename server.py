@@ -5988,11 +5988,17 @@ def api_get_bucket_versioning(name: str):
 
 
 @api.delete("/buckets/{name}")
-def api_delete_bucket(name: str):
+def api_delete_bucket(name: str, force: int = 0):
     if name not in buckets:
         raise HTTPException(404, detail="NoSuchBucket")
     if objects.get(name):
-        raise HTTPException(409, detail="BucketNotEmpty — delete all objects first")
+        if not force:
+            raise HTTPException(409, detail="BucketNotEmpty — delete all objects first")
+        # ?force=1 — drop everything in the bucket so delete completes.
+        # Matches the real S3 console's "Empty bucket then delete" flow
+        # and lets the conformance harness exercise the contract
+        # end-to-end without walking the versioning sweep manually.
+        objects[name].clear()
     del buckets[name]
     del objects[name]
     _record_usage("s3.delete_bucket", {"bucket": name})

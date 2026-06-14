@@ -320,9 +320,13 @@ def register(app, h) -> None:
         ("POST", "/api/gcp/storage/v1/b/{bucket}/iam", "api_gcp_storage_set_policy", "(bucket: str, request: Request)"),
         # SQL / RDS aliases
         ("GET", "/sql/v1beta4/projects/{project}/instances", "api_gcp_sql_list_instances", "(project: str, request: Request)"),
-        ("GET", "/api/gcp/rds/databases", "api_gcp_sql_list_instances", "(project: str, request: Request)"),
+        # AWS-style /api/gcp/rds path defaults project to "cloudlearn" so
+        # console + conformance harness can hit it without threading the
+        # query param. The /sql/v1beta4 path keeps project mandatory
+        # since real google-cloud-sdk clients always supply it.
+        ("GET", "/api/gcp/rds/databases", "api_gcp_sql_list_instances", "(request: Request, project: str = 'cloudlearn')"),
         ("POST", "/sql/v1beta4/projects/{project}/instances", "api_gcp_sql_create_instance", "(project: str, request: Request)"),
-        ("POST", "/api/gcp/rds/databases", "api_gcp_sql_create_instance", "(project: str, request: Request)"),
+        ("POST", "/api/gcp/rds/databases", "api_gcp_sql_create_instance", "(request: Request, project: str = 'cloudlearn')"),
         ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}", "api_gcp_sql_get_instance", "(project: str, instance: str)"),
         ("PATCH", "/sql/v1beta4/projects/{project}/instances/{instance}", "api_gcp_sql_patch_instance", "(project: str, instance: str, request: Request)"),
         ("PUT", "/sql/v1beta4/projects/{project}/instances/{instance}", "api_gcp_sql_patch_instance", "(project: str, instance: str, request: Request)"),

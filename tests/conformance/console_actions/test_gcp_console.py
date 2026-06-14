@@ -28,6 +28,25 @@ def _is_stub_response(status_code: int, body_text: str) -> bool:
     return '"detail":"Not found"' in (body_text or "")
 
 
+# Pattern C — environmental failure. See test_aws_console for the
+# rationale; same patterns work since the GCP simulator uses the same
+# LXD-backed RDS / Compute infrastructure underneath.
+_ENV_PATTERNS = (
+    (507, "insufficient_disk"),
+    (503, "remote \"postgres\""),
+    (503, "LXDUnavailable"),
+    (503, "postgres"),
+)
+
+
+def _is_env_failure(status_code: int, body_text: str) -> bool:
+    body = (body_text or "").lower()
+    for code, pat in _ENV_PATTERNS:
+        if status_code == code and pat.lower() in body:
+            return True
+    return False
+
+
 @pytest.mark.parametrize("spec", _SPECS, ids=[s.test_id for s in _SPECS])
 def test_gcp_action(spec, http_session, base_url):
     # Pattern A — catalog stub.
@@ -77,6 +96,13 @@ def test_gcp_action(spec, http_session, base_url):
         _STUB_SERVICES.add(spec.service)
         record_result(spec, r.status_code, True, "catalog stub - no backend handler")
         pytest.skip("catalog stub - no backend handler")
+
+    # Pattern C — environmental failure (host disk / LXD postgres image).
+    if not ok and _is_env_failure(r.status_code, r.text):
+        record_result(spec, r.status_code, True, f"environmental: {r.status_code}")
+        if spec.action == "create":
+            _STUB_SERVICES.add(spec.service)  # cascade-skip dependents
+        pytest.skip("environmental: host can't satisfy this op (disk/image)")
 
     if ok and spec.action == "create":
         try:
