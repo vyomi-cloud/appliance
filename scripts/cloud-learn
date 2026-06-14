@@ -446,6 +446,11 @@ packages:
   - ca-certificates
   - docker.io
   - docker-compose-v2
+  # mDNS stack — publishes the VM's hostname as <hostname>.local on the
+  # local network so users reach the simulator at http://vyomi.local:9000
+  # instead of memorising a Multipass-assigned IP that changes between runs.
+  - avahi-daemon
+  - libnss-mdns
 runcmd:
   - [ bash, -lc, "systemctl enable --now docker" ]
   - [ bash, -lc, "usermod -aG docker ubuntu || true" ]
@@ -455,6 +460,14 @@ runcmd:
   - [ bash, -lc, "cat >/tmp/cloudlearn-lxd-preseed.yaml <<'EOF'\nconfig: {}\nnetworks:\n- name: lxdbr0\n  type: bridge\n  config:\n    ipv4.address: auto\n    ipv4.nat: \"true\"\n    ipv6.address: auto\n    ipv6.nat: \"true\"\nstorage_pools:\n- name: default\n  driver: dir\nprofiles:\n- name: default\n  description: Default LXD profile\n  config: {}\n  devices:\n    root:\n      type: disk\n      pool: default\n      path: /\n    eth0:\n      type: nic\n      network: lxdbr0\n      name: eth0\nEOF\nlxd init --preseed < /tmp/cloudlearn-lxd-preseed.yaml || true" ]
   - [ bash, -lc, "mkdir -p ${APPLIANCE_WORKSPACE}" ]
   - [ bash, -lc, "sudo mkdir -p /var/lib/cloudlearn/deployments && sudo chown -R 100:101 /var/lib/cloudlearn/deployments" ]
+  # ── mDNS: publish vyomi.local on the local network ───────────────────
+  # Ubuntu's default /etc/nsswitch.conf only lists \`files dns\` — no mDNS
+  # resolver. nss-mdns ships with a snippet but doesn't auto-edit, so
+  # we patch the hosts: line here. Avahi-daemon itself needs to be
+  # enabled to broadcast the hostname.
+  - [ bash, -lc, "hostnamectl set-hostname vyomi" ]
+  - [ bash, -lc, "sed -i 's/^hosts:.*/hosts: files mdns4_minimal [NOTFOUND=return] dns mdns4/' /etc/nsswitch.conf" ]
+  - [ bash, -lc, "systemctl enable --now avahi-daemon" ]
 EOF
 }
 
@@ -589,6 +602,7 @@ trap 'on_err' ERR
 # Success banner — printed by cmd_up at the very end after health check.
 launch_success_banner() {
   local url="$1"
+  local fallback_url="${2:-}"
   local elapsed_total=$(( $(date +%s) - _LAUNCH_STARTED_AT ))
   local m=$(( elapsed_total / 60 )) s=$(( elapsed_total % 60 ))
   local bar="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -598,6 +612,9 @@ launch_success_banner() {
   _emit "${_C_GREEN}${bar}${_C_RESET}"
   _emit ""
   _emit "  Open in browser:  ${_C_BOLD}${_C_CYAN}${url}${_C_RESET}"
+  if [ -n "$fallback_url" ]; then
+    _emit "  Or via IP:        ${_C_CYAN}${fallback_url}${_C_RESET}   ${_C_DIM}(works without mDNS)${_C_RESET}"
+  fi
   _emit "  Log:              ${_LOG_FILE}"
   _emit ""
   _emit "  Stop:    cloud-learn stop"
@@ -1031,9 +1048,12 @@ Or try again:
   # Tell the user where to go BEFORE we start waiting — even if the
   # health check turns out to hang (which shouldn't anymore, but
   # belt-and-suspenders), they can already paste the URL into a browser.
+  # We print BOTH the mDNS hostname (vyomi.local) and the raw IP. The
+  # banner at the end will narrow it down to whichever one is reachable.
   _emit ""
-  _emit "    ${_C_BOLD}Appliance URL${_C_RESET}  ${_C_CYAN}http://${vm_ip}:9000/${_C_RESET}"
-  _emit "    (you can open this now — health check below confirms it)"
+  _emit "    ${_C_BOLD}Appliance URL${_C_RESET}  ${_C_CYAN}http://${_VYOMI_MDNS_HOST}:9000/${_C_RESET}   ${_C_DIM}(preferred — mDNS-resolved)${_C_RESET}"
+  _emit "                   ${_C_CYAN}http://${vm_ip}:9000/${_C_RESET}     ${_C_DIM}(fallback — bridged IP)${_C_RESET}"
+  _emit "    (you can open either now — health check below confirms it)"
   _emit ""
 
   local waited=0
@@ -1083,12 +1103,68 @@ Restart fresh:
   cloud-learn down && cloud-learn up -v"
 }
 
+# Brand-friendly mDNS hostname the appliance publishes via avahi. The
+# inside-VM cloud-init runcmd sets the kernel hostname to this value and
+# enables avahi-daemon; nss-mdns on the host (built into macOS Bonjour
+# and Windows 10 1809+) then resolves "vyomi.local" to the VM's IP
+# without any /etc/hosts modification or DNS server.
+_VYOMI_MDNS_HOST="vyomi.local"
+
+# Ensure mDNS publishing works inside an EXISTING VM that was launched
+# before v1.2.3 (when avahi-daemon was added to cloud-init). Fast no-op
+# when avahi is already active. Idempotent — safe to call on every
+# `cloud-learn up`.
+ensure_vyomi_mdns_active() {
+  # Quick exit when avahi-daemon is already running and the hostname is
+  # already 'vyomi'. Bounded `multipass exec` (10s wall-clock cap via
+  # background subshell) so it can never hang the launcher.
+  local quick
+  quick="$(
+    ( multipass exec "$APPLIANCE_NAME" -- bash -lc \
+        'systemctl is-active avahi-daemon 2>/dev/null; hostname' 2>/dev/null ) &
+    local pid=$!
+    ( sleep 10 && kill -9 $pid 2>/dev/null ) &
+    wait $pid 2>/dev/null
+  )"
+  case "$quick" in
+    *active*$'\n'vyomi*)
+      verbose "mdns: avahi already running + hostname=vyomi — no fixup needed"
+      return 0
+      ;;
+  esac
+  verbose "mdns: legacy VM (no avahi or wrong hostname) — running fixup"
+  # Match the cloud-init runcmd exactly so behaviour is identical on a
+  # fresh launch vs an upgrade. `|| true` so this step never aborts up.
+  ( multipass exec "$APPLIANCE_NAME" -- sudo bash -lc "
+      DEBIAN_FRONTEND=noninteractive apt-get install -y avahi-daemon libnss-mdns >/dev/null 2>&1 || true
+      hostnamectl set-hostname vyomi || true
+      sed -i 's/^hosts:.*/hosts: files mdns4_minimal [NOTFOUND=return] dns mdns4/' /etc/nsswitch.conf || true
+      systemctl enable --now avahi-daemon >/dev/null 2>&1 || true
+    " 2>/dev/null
+  ) &
+  local pid=$!
+  ( sleep 60 && kill -9 $pid 2>/dev/null ) &
+  wait $pid 2>/dev/null || true
+}
+
 # Print the URL banner at the very end of a successful `cloud-learn up`.
+# Prefer vyomi.local over the raw IP — that's the whole point of mDNS.
+# Fall back to the IP if mDNS isn't reachable (e.g. corporate network
+# blocking multicast, VPN shadowing .local, host without nss-mdns).
 print_url_banner() {
   local vm_ip
   vm_ip="$(multipass info "$APPLIANCE_NAME" --format=csv 2>/dev/null | awk -F, 'NR==2 {print $3}' | head -1)"
   [ -z "$vm_ip" ] && vm_ip="<vm-ip>"
-  launch_success_banner "http://${vm_ip}:9000/"
+  # Probe mDNS by hitting the simulator's /healthz at vyomi.local. If
+  # curl succeeds within 2s, mDNS is working — primary URL goes to the
+  # hostname. Otherwise primary stays as the IP.
+  local primary="http://${vm_ip}:9000/"
+  local fallback=""
+  if curl -fsS -o /dev/null -m 2 "http://${_VYOMI_MDNS_HOST}:9000/healthz" 2>/dev/null; then
+    primary="http://${_VYOMI_MDNS_HOST}:9000/"
+    fallback="http://${vm_ip}:9000/"
+  fi
+  launch_success_banner "$primary" "$fallback"
 }
 
 vyomi_host_ssh_bootstrap() {
@@ -1771,6 +1847,11 @@ outer_run() {
       phase "Waiting for simulator, CloudSim, and runtime bridge to become healthy"
       appliance_health_check
       phase_done
+      # Idempotent: fast no-op when avahi is already publishing vyomi.local
+      # (default since v1.2.3). On legacy VMs launched before v1.2.3, this
+      # installs avahi-daemon + sets the hostname + fixes nsswitch.conf so
+      # the mDNS URL works immediately, no `cloud-learn restart` needed.
+      ensure_vyomi_mdns_active
       print_url_banner
       ;;
     down|stop)
