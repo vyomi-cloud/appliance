@@ -6,6 +6,23 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.4] — 2026-06-14
+
+Hotfix for zombie-VM recovery on `cloud-learn up`.
+
+### Fixed
+
+- **`Deleted` (zombie) VMs from prior `multipass delete` without `multipass purge` are now auto-recovered.** Previously `cloud-learn up` would log `existing VM detected (Deleted)` → `VM state is uncertain, skipping start and continuing` → then march forward into `mount`, `transfer`, and `wait_for_cloud_init` against a non-existent VM. Result: `(warning: could not transfer host-sizing-report.json to VM)` + an infinite cloud-init wait.
+  - The launcher now detects the `Deleted` state explicitly, runs `multipass purge`, and launches a fresh VM.
+- **Unknown / Starting / Restarting / etc. states now surface a clear pointer instead of silently continuing.** If the launcher can't recover the state automatically, it prints the exact two commands the user needs (`multipass info` / `delete && purge`) and exits — much better than the previous infinite hang.
+
+### How users hit this
+
+1. Run `multipass delete --all` (forgot the `purge`).
+2. Run `cloud-learn up`.
+3. See `(warning: could not transfer host-sizing-report.json to VM)` and a stuck `waiting for cloud-init`.
+4. Eventually `Ctrl+C` and re-clean. v1.1.4 makes step 3 self-heal.
+
 ## [1.1.3] — 2026-06-14
 
 Hotfix continuation of v1.1.1 — same brew-sandbox class of bug, this time
