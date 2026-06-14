@@ -527,16 +527,38 @@ appliance_launch_vm() {
   local state
   state="$(appliance_instance_state)"
   if appliance_instance_exists; then
-    progress "==> Appliance: existing VM detected (${state:-unknown}), starting it if needed"
+    progress "==> Appliance: existing VM detected (${state:-unknown})"
     case "$state" in
-      running)
+      running|Running)
+        progress "    VM already running — reusing"
         ;;
-      stopped|suspended)
-      progress "==> Appliance: starting Multipass VM ${APPLIANCE_NAME}"
-      "$compose" start "$APPLIANCE_NAME"
+      stopped|Stopped|suspended|Suspended)
+        progress "==> Appliance: starting Multipass VM ${APPLIANCE_NAME}"
+        "$compose" start "$APPLIANCE_NAME"
+        ;;
+      deleted|Deleted)
+        # The VM was `multipass delete`d but not `purge`d — it's a
+        # zombie. Trying to operate on it (mount, exec, transfer) will
+        # silently fail or hang. Purge + relaunch is the only safe
+        # path; otherwise the user just sees "could not transfer …" /
+        # "waiting for cloud-init" forever.
+        progress "==> Appliance: VM is in 'Deleted' (zombie) state — purging + relaunching"
+        "$compose" purge >/dev/null 2>&1 || true
+        progress "==> Appliance: launching fresh Multipass VM ${APPLIANCE_NAME}"
+        progress "    (first launch needs to: download Ubuntu image ~600MB, install"
+        progress "     LXD snap ~150MB, run cloud-init — total cold start 5-8 min)"
+        "$compose" launch "$APPLIANCE_IMAGE" --name "$APPLIANCE_NAME" --cpus "$APPLIANCE_CPUS" --memory "$APPLIANCE_MEMORY" --disk "$APPLIANCE_DISK" --cloud-init "$APPLIANCE_DIR/cloud-init.yaml"
         ;;
       *)
-        progress "==> Appliance: VM state is uncertain, skipping start and continuing"
+        # Other states we don't know how to recover from automatically
+        # (Starting / Restarting / Unknown). Print a clear pointer
+        # instead of marching forward into "waiting for cloud-init"
+        # against a VM that may never become usable.
+        progress "==> Appliance: VM state '${state}' is not recoverable by the launcher."
+        progress "    Run one of these and retry:"
+        progress "      multipass info ${APPLIANCE_NAME}        # see what's wrong"
+        progress "      multipass delete ${APPLIANCE_NAME} && multipass purge   # nuke + restart fresh"
+        return 1
         ;;
     esac
   else
