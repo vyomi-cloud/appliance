@@ -6,6 +6,24 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.8] — 2026-06-14
+
+**Replaces the SSHFS workspace mount with tar+transfer.** The third (and last) brew-prefix sandbox issue in the launcher.
+
+### Fixed
+
+- **`docker compose up` failed with `open /workspace/cloud-learn/docker-compose.appliance.yml: permission denied`.** Root cause: same brew SSHFS sandbox issue v1.1.1 fixed for host-sizing-report.json and v1.1.3 fixed for runtime_bridge.py. Docker compose runs inside the VM and tries to read its config file from the SSHFS mount — which is unreadable when ROOT_DIR is under `/opt/homebrew/`. Verified: even `sudo cat /workspace/cloud-learn/docker-compose.appliance.yml` returns `Permission denied`. Verified the workaround paths (native mount, uid mapping) don't help.
+
+### Approach
+
+- `appliance_sync_workspace_into_vm()` replaces the legacy `multipass mount`. It tars the essential source files (Dockerfile, docker-compose.appliance.yml, server.py, core/, providers/, packs/, static/, cloudsim-backbone/, + a few more), `multipass transfer`s the tarball, and untars at `${APPLIANCE_WORKSPACE}` (default `/workspace/cloud-learn`).
+- Tarball size: ~3 MB gzipped, transfers + extracts in 2-3 seconds.
+- No SSHFS dependency anywhere in the appliance hot path. The brew-prefix sandbox is now completely side-stepped for all three of: host-sizing report, runtime bridge script, and the workspace source itself.
+
+### Trade-off
+
+- Live-edits on the host don't auto-propagate into the VM anymore. Users must `cloud-learn restart` to re-sync. For brew installs (a pinned snapshot) this is exactly right. For dev installs (where ROOT_DIR is the user's working clone), it's a manual step instead of an automatic one — acceptable.
+
 ## [1.1.7] — 2026-06-14
 
 Two embarrassing bugs in v1.1.6 surfaced on the user's next run. Both
