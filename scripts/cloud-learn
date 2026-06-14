@@ -369,24 +369,28 @@ fi
 
 VERBOSE="${CLOUD_LEARN_VERBOSE:-0}"
 
-# All progress lines go to stderr AND to the persistent log.
+# _emit prints to stderr (TTY) AND appends to the persistent log.
+# Pass ALREADY-FORMATTED strings — _emit does not interpret %b or any
+# format specifier. ANSI escapes in the string are preserved on TTY
+# and stripped from the log via sed.
 _emit() {
   local line="$1"
-  printf '%b\n' "$line" >&2
-  printf '%s\n' "$(printf '%b' "$line" | sed 's/\x1b\[[0-9;]*m//g')" >> "$_LOG_FILE" 2>/dev/null || true
+  printf '%s\n' "$line" >&2
+  printf '%s\n' "${line}" | sed 's/\x1b\[[0-9;]*m//g' >> "$_LOG_FILE" 2>/dev/null || true
+}
+
+_ts_prefix() {
+  local elapsed=$(( $(date +%s) - _LAUNCH_STARTED_AT ))
+  printf '[%dm%02ds]' $(( elapsed / 60 )) $(( elapsed % 60 ))
 }
 
 progress() {
-  local elapsed=$(( $(date +%s) - _LAUNCH_STARTED_AT ))
-  local m=$(( elapsed / 60 )) s=$(( elapsed % 60 ))
-  _emit "$(printf '[%dm%02ds] %s' "$m" "$s" "$*")"
+  _emit "$(_ts_prefix) $*"
 }
 
 verbose() {
   [ "$VERBOSE" = "0" ] && return 0
-  local elapsed=$(( $(date +%s) - _LAUNCH_STARTED_AT ))
-  local m=$(( elapsed / 60 )) s=$(( elapsed % 60 ))
-  _emit "$(printf '[%dm%02ds]   %b·%b %s' "$m" "$s" "$_C_DIM" "$_C_RESET" "$*")"
+  _emit "$(_ts_prefix)   ${_C_DIM}·${_C_RESET} $*"
 }
 
 # phase() prints a numbered banner heading. Use at the start of each
@@ -395,22 +399,13 @@ phase() {
   _PHASE_NUM=$(( _PHASE_NUM + 1 ))
   _PHASE_NAME="$1"
   _PHASE_STARTED_AT=$(date +%s)
-  local elapsed=$(( _PHASE_STARTED_AT - _LAUNCH_STARTED_AT ))
-  local m=$(( elapsed / 60 )) s=$(( elapsed % 60 ))
-  _emit "$(printf '[%dm%02ds] %b[%d/%d]%b %b%s%b' \
-    "$m" "$s" "$_C_CYAN" "$_PHASE_NUM" "$_PHASE_TOTAL" "$_C_RESET" \
-    "$_C_BOLD" "$1" "$_C_RESET")"
+  _emit "$(_ts_prefix) ${_C_CYAN}[${_PHASE_NUM}/${_PHASE_TOTAL}]${_C_RESET} ${_C_BOLD}${1}${_C_RESET}"
 }
 
 # phase_done() prints "✓ done in Xs" line. Call after each phase succeeds.
 phase_done() {
-  local now elapsed_phase elapsed_total m s
-  now=$(date +%s)
-  elapsed_phase=$(( now - _PHASE_STARTED_AT ))
-  elapsed_total=$(( now - _LAUNCH_STARTED_AT ))
-  m=$(( elapsed_total / 60 )); s=$(( elapsed_total % 60 ))
-  _emit "$(printf '[%dm%02ds]       %b✓%b done in %ds' \
-    "$m" "$s" "$_C_GREEN" "$_C_RESET" "$elapsed_phase")"
+  local elapsed_phase=$(( $(date +%s) - _PHASE_STARTED_AT ))
+  _emit "$(_ts_prefix)       ${_C_GREEN}✓${_C_RESET} done in ${elapsed_phase}s"
 }
 
 # _die() — failure exit with a loud banner.
@@ -420,16 +415,18 @@ _die() {
   local hint="${2:-}"
   local elapsed_total=$(( $(date +%s) - _LAUNCH_STARTED_AT ))
   local m=$(( elapsed_total / 60 )) s=$(( elapsed_total % 60 ))
+  _DIE_CALLED=1
+  local bar="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   _emit ""
-  _emit "$(printf '%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b' "$_C_RED" "$_C_RESET")"
-  _emit "$(printf '%b✗ APPLIANCE LAUNCH FAILED%b after %dm%02ds' "$_C_BOLD$_C_RED" "$_C_RESET" "$m" "$s")"
-  _emit "$(printf '%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b' "$_C_RED" "$_C_RESET")"
+  _emit "${_C_RED}${bar}${_C_RESET}"
+  _emit "${_C_BOLD}${_C_RED}✗ APPLIANCE LAUNCH FAILED${_C_RESET} after ${m}m$(printf '%02d' "$s")s"
+  _emit "${_C_RED}${bar}${_C_RESET}"
   _emit ""
-  _emit "  Failed at: %bPhase ${_PHASE_NUM}/${_PHASE_TOTAL} — ${_PHASE_NAME}%b"
-  _emit "  Reason:    %b${what}%b"
+  _emit "  Failed at: ${_C_BOLD}Phase ${_PHASE_NUM}/${_PHASE_TOTAL} — ${_PHASE_NAME}${_C_RESET}"
+  _emit "  Reason:    ${_C_YELLOW}${what}${_C_RESET}"
   if [ -n "$hint" ]; then
     _emit ""
-    _emit "  %bWhat to try:%b"
+    _emit "  ${_C_BOLD}What to try:${_C_RESET}"
     while IFS= read -r line; do _emit "    ${line}"; done <<<"$hint"
   fi
   _emit ""
@@ -463,12 +460,13 @@ launch_success_banner() {
   local url="$1"
   local elapsed_total=$(( $(date +%s) - _LAUNCH_STARTED_AT ))
   local m=$(( elapsed_total / 60 )) s=$(( elapsed_total % 60 ))
+  local bar="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   _emit ""
-  _emit "$(printf '%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b' "$_C_GREEN" "$_C_RESET")"
-  _emit "$(printf '%b✓ APPLIANCE READY%b in %dm%02ds' "$_C_BOLD$_C_GREEN" "$_C_RESET" "$m" "$s")"
-  _emit "$(printf '%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b' "$_C_GREEN" "$_C_RESET")"
+  _emit "${_C_GREEN}${bar}${_C_RESET}"
+  _emit "${_C_BOLD}${_C_GREEN}✓ APPLIANCE READY${_C_RESET} in ${m}m$(printf '%02d' "$s")s"
+  _emit "${_C_GREEN}${bar}${_C_RESET}"
   _emit ""
-  _emit "  Open in browser:  %b${_C_CYAN}${url}%b"
+  _emit "  Open in browser:  ${_C_BOLD}${_C_CYAN}${url}${_C_RESET}"
   _emit "  Log:              ${_LOG_FILE}"
   _emit ""
   _emit "  Stop:    cloud-learn stop"
@@ -945,6 +943,11 @@ If state is anything other than 'Running', recover with:
   # FULL stderr stream so on failure we can surface the real reason.
   local install_log
   install_log="$(mktemp -t cloud-learn-bridge-XXXXXX.log)"
+  # Bridge poll timeout: bumped 30s → 180s. On a fresh cold-start the
+  # snap.lxd.daemon.service can take 1-2 min to settle, and systemd
+  # was queueing our bridge start behind it. Even though we drop the
+  # LXD After= dependency below, a generous timeout keeps things
+  # robust across slow first-boot conditions.
   if ! "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "set -e
     sudo mkdir -p /var/lib/cloudlearn
     sudo install -m 644 /tmp/runtime_bridge.py $bridge_dst
@@ -952,8 +955,12 @@ If state is anything other than 'Running', recover with:
     sudo tee /etc/systemd/system/cloudlearn-runtime-bridge.service >/dev/null <<UNIT
 [Unit]
 Description=CloudLearn runtime bridge (LXD/multipass over HTTP for the simulator)
-After=network.target docker.service snap.lxd.daemon.service
-Wants=docker.service snap.lxd.daemon.service
+# Only require network — the bridge can come up before docker/LXD are
+# ready, and they're checked on-demand per HTTP request anyway.
+# Earlier After=snap.lxd.daemon.service caused 1-3 min start delays
+# while LXD finished initialising, well past our health-poll budget.
+After=network.target
+Wants=docker.service
 
 [Service]
 Type=simple
@@ -968,11 +975,19 @@ StandardError=journal
 WantedBy=multi-user.target
 UNIT
     sudo systemctl daemon-reload
+    # daemon-reload picks up the new dependency graph; reset-failed
+    # clears any prior 'failed' state from earlier launches.
+    sudo systemctl reset-failed cloudlearn-runtime-bridge.service >/dev/null 2>&1 || true
     sudo systemctl enable --now cloudlearn-runtime-bridge.service >/dev/null 2>&1
-    for i in \$(seq 1 30); do
+    for i in \$(seq 1 180); do
       if curl -fsS http://127.0.0.1:9171/health >/dev/null 2>&1; then
-        echo READY
+        echo READY-after-\${i}s
         exit 0
+      fi
+      # Echo a heartbeat to the captured install_log every 15s so the
+      # user can see it's polling, not hung.
+      if [ \$((i % 15)) -eq 0 ]; then
+        echo \"  polling /health … \${i}s elapsed; systemctl says: \$(sudo systemctl is-active cloudlearn-runtime-bridge.service 2>&1 | head -1)\"
       fi
       sleep 1
     done
