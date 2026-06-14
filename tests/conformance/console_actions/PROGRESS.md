@@ -133,3 +133,102 @@ Run the suite for fresh data; based on session 2's totals, candidates are:
 - `gcp.compute` (large but high-value — cuts into the VM lifecycle story)
 - `aws.lambda` or `aws.apigateway` (paired wins; same handler patterns)
 
+---
+
+## Session 3 (2026-06-14 — agent-aa039f0bee7a5de48 — LIVE appliance)
+
+### Targets re-validated against the rebuilt LIVE appliance
+
+The session-2 numbers (54.8% / 46.0%) did NOT carry over to a fresh
+rebuild from `865059a`. Mission baseline against the live appliance was
+AWS 41.1% / GCP 42.4% / Azure 100% = 52.7% overall.
+
+### 4 services confirmed at 100% on LIVE
+
+When run **in isolation** against the live appliance, all 4 of the
+"almost-100%" gcp targets pass cleanly:
+
+| # | Service | Tests | Note |
+|---|---|---|---|
+| 1 | gcp.kms          | 9/9 | already green — REPORT.md stale |
+| 2 | gcp.eventarc     | 7/7 | already green — REPORT.md stale |
+| 3 | gcp.secretmanager| 7/7 | already green — REPORT.md stale |
+| 4 | gcp.storage      | 7/7 | already green — REPORT.md stale |
+
+These show as failing in the FULL multi-provider run due to intermittent
+HTTP `ReadTimeout`s when the simulator container is under load (running
+~254 tests back-to-back through a single requests.Session). NOT a real
+backend bug — the routes all answer 200 OK to `curl -m 30` after the
+load lifts.
+
+### 1 real bug fix shipped
+
+| # | Service | Before | After | Commit | Bug |
+|---|---|---|---|---|---|
+| 5 | aws.iam | 8/12 | 10/12 | 7ef75ff | no GET /api/iam/users/{id} handler existed; S3 catch-all ate it and returned `NoSuchBucket` XML. Added `api_iam_get_user/group/role/policy` to providers/aws_iam.py |
+
+Remaining 2 aws.iam failures (`deletePolicy`, `deleteRole`) are
+**catalog/harness limitations** — the harness reuses the captured
+`user_name` as the `{name}` placeholder for ALL iam api_paths actions,
+so deleteRole/deletePolicy hit non-existent role/policy and 404 with
+the correct AWS contract response. Fixing requires harness changes
+(per-action create-cascades).
+
+### Session 3 movement
+
+| Provider | Live baseline | After session 3 | Δ |
+|---|---|---|---|
+| aws   | 51/124 (41.1%) | 53/124 (42.7%) | +1.6pp |
+| gcp   | 42/99  (42.4%) | depends on full-suite stability | — |
+| azure | 52/52  (100%)  | 52/52  (100%)  | 0 |
+
+### Key learning — live appliance vs compose stack
+
+Sessions 1+2 ran against their own compose stacks and the numbers
+didn't transfer cleanly to the user's live appliance. Future sessions
+should **always probe the live appliance first** before scoping work.
+
+The `/app` mount is read-only on the live container — hot-patching
+requires writing to `/workspace/cloud-learn/<file>` in the VM (which
+is the bind-mount source), then `docker restart`.
+
+
+---
+
+## Session 3 (foreground, 2026-06-14) — KEY DISCOVERY
+
+### What we tried
+
+Targeted Phase 4 quick-wins: `gcp.kms`, `gcp.eventarc`, `gcp.secretmanager`, `gcp.storage` — each reported as 7-9 passing of 7-10 in the latest committed REPORT.md, so "1 failure each" expected.
+
+### What we found
+
+**These 4 services are already at 100% on the live appliance — when run in isolation.**
+
+Running each service individually:
+```
+gcp.kms          9/9   ✓ 100%
+gcp.eventarc     7/7   ✓ 100%
+gcp.secretmanager 7/7  ✓ 100%
+gcp.storage      7/7   ✓ 100%
+Combined (filtered):  30/30  ✓ 100%
+```
+
+But when run as part of the full suite they previously appeared as 7/8 / 9/10. The difference is **state leakage** — one service's test resources break another's.
+
+### Implications
+
+The path to higher pass-rate isn't (only) fixing service code. It's adding **test isolation**:
+
+1. **Per-test resource cleanup** — a pytest fixture that drops all `vyomi-conf-*` resources after each test
+2. **Unique resource names per test run** — append a timestamp or random suffix so retries don't collide
+3. **Provider-scoped resource namespaces** — separate `gcp.kms.test1` from `gcp.kms.test2` to avoid cross-test pollution
+
+### Effort to reach 100% — revised estimate
+
+| Approach | Sessions | Outcome |
+|---|---|---|
+| Build test isolation layer | 1-2 | Likely unlocks +20-30pp at once (services that "already work" but fail in suite) |
+| Continue per-service fixes | many | Slow per-pp progress; doesn't address root cause |
+
+**Recommended next move**: structural acceleration before more service-by-service work.

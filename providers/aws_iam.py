@@ -23,6 +23,51 @@ def api_iam_list_users():
     return {"users": list(iam_state["users"].values()), "count": len(iam_state["users"])}
 
 
+def api_iam_get_user(user_id: str):
+    s = _server()
+    user = iam_state["users"].get(user_id) or s._iam_find_user(user_id)
+    if not user:
+        raise HTTPException(404, detail="NoSuchUser")
+    return user
+
+
+def api_iam_get_role(role_id: str):
+    s = _server()
+    role = iam_state["roles"].get(role_id)
+    if not role:
+        for candidate in iam_state.get("roles", {}).values():
+            if role_id in {
+                candidate.get("role_id", ""),
+                candidate.get("role_name", ""),
+                s._iam_role_arn(candidate.get("role_name", "")),
+            }:
+                role = candidate
+                break
+    if not role:
+        raise HTTPException(404, detail="NoSuchRole")
+    return role
+
+
+def api_iam_get_policy(policy_id: str):
+    policy = iam_state["policies"].get(policy_id)
+    if not policy:
+        for candidate in iam_state.get("policies", {}).values():
+            if policy_id in {candidate.get("policy_id", ""), candidate.get("policy_name", "")}:
+                policy = candidate
+                break
+    if not policy:
+        raise HTTPException(404, detail="NoSuchPolicy")
+    return policy
+
+
+def api_iam_get_group(group_id: str):
+    s = _server()
+    group = iam_state["groups"].get(group_id) or s._iam_find_group(group_id)
+    if not group:
+        raise HTTPException(404, detail="NoSuchGroup")
+    return group
+
+
 def api_iam_create_user(req):
     if not (req.user_name or "").strip():
         raise HTTPException(400, detail="MissingParameter: user_name is required.")
