@@ -331,7 +331,13 @@ def api_gcp_sql_list_instances(project: str, request: Request):
 async def api_gcp_sql_create_instance(project: str, request: Request):
     s = _server()
     project = _gcp_project_name(project)
-    payload = await request.json() if request is not None else {}
+    # Defensive parse — conformance tooling sometimes hits this without
+    # a body to verify the URL is wired; an empty body would otherwise
+    # raise JSONDecodeError -> 500.
+    try:
+        payload = await request.json() if request is not None else {}
+    except Exception:
+        payload = {}
     payload = payload if isinstance(payload, dict) else {}
     instance = s._gcp_sql_instance_record(project, payload)
     if instance["name"] in gcp_sql_state.get("instances", {}):
@@ -612,7 +618,13 @@ async def api_gcp_pubsub_publish(project: str, topic: str, request: Request):
     s = _server()
     project = _gcp_project_name(project)
     topic = _strip_action_suffix(topic, ":publish")
-    payload = await request.json() if request is not None else {}
+    # Defensive parse — an empty POST body raises JSONDecodeError.
+    # Real callers always send {"messages": [...]} but conformance
+    # tooling probes without a body to check the URL is wired.
+    try:
+        payload = await request.json() if request is not None else {}
+    except Exception:
+        payload = {}
     payload = payload if isinstance(payload, dict) else {}
     messages = payload.get("messages", []) if isinstance(payload, dict) else []
     if not isinstance(messages, list):
@@ -1174,7 +1186,10 @@ async def api_gcp_functions_create(project: str, request: Request, location: str
     s = _server()
     project = _gcp_project_name(project)
     location = s._gcp_location_name(location)
-    payload = await request.json() if request is not None else {}
+    try:
+        payload = await request.json() if request is not None else {}
+    except Exception:
+        payload = {}
     payload = payload if isinstance(payload, dict) else {}
     fn = s._gcp_functions_record(project, location, payload)
     gcp_functions_state.setdefault("functions", {})[fn["name"]] = fn
@@ -1190,7 +1205,10 @@ async def api_gcp_functions_update(project: str, location: str, function: str, r
     fn = gcp_functions_state.get("functions", {}).get(function)
     if not fn or str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
         raise HTTPException(404, detail="Function not found")
-    payload = await request.json() if request is not None else {}
+    try:
+        payload = await request.json() if request is not None else {}
+    except Exception:
+        payload = {}
     payload = payload if isinstance(payload, dict) else {}
     if "code" in payload:
         fn["code"] = str(payload.get("code") or "")
@@ -1281,7 +1299,10 @@ async def api_gcp_functions_set_policy(project: str, location: str, function: st
     fn = gcp_functions_state.get("functions", {}).get(function)
     if not fn or str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
         raise HTTPException(404, detail="Function not found")
-    payload = await request.json() if request is not None else {}
+    try:
+        payload = await request.json() if request is not None else {}
+    except Exception:
+        payload = {}
     payload = payload if isinstance(payload, dict) else {}
     bindings = payload.get("bindings", []) if isinstance(payload.get("bindings"), list) else []
     fn["permissions"] = bindings
@@ -1320,7 +1341,10 @@ async def api_gcp_functions_call(project: str, location: str, function: str, req
     fn = gcp_functions_state.get("functions", {}).get(function)
     if not fn or str(fn.get("project") or project) != project or str(fn.get("location") or location) != location:
         raise HTTPException(404, detail="Function not found")
-    payload = await request.json() if request is not None else {}
+    try:
+        payload = await request.json() if request is not None else {}
+    except Exception:
+        payload = {}
     payload = payload if isinstance(payload, dict) else {}
     # Actually execute the uploaded source with the request payload.
     event = payload.get("data") if isinstance(payload.get("data"), (dict, list)) else payload

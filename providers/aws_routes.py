@@ -440,15 +440,20 @@ def register(app, h) -> None:
         ("POST", "/api/lambda/functions", "api_lambda_create_function", "(request: Request)", "model", "req", "LambdaFunctionRequest"),
         ("GET", "/api/lambda/functions/{function_name}", "api_lambda_get_function", "(function_name: str)"),
         ("PUT", "/api/lambda/functions/{function_name}/code", "api_lambda_update_function_code", "(function_name: str, request: Request)", "json", "payload"),
+        # Catalog publishes POST as well — alias to the same handler.
+        ("POST", "/api/lambda/functions/{function_name}/code", "api_lambda_update_function_code", "(function_name: str, request: Request)", "json", "payload"),
         ("PUT", "/api/lambda/functions/{function_name}/configuration", "api_lambda_update_function_configuration", "(function_name: str, request: Request)", "model", "req", "LambdaFunctionUpdateRequest"),
+        ("POST", "/api/lambda/functions/{function_name}/configuration", "api_lambda_update_function_configuration", "(function_name: str, request: Request)", "model", "req", "LambdaFunctionUpdateRequest"),
         ("DELETE", "/api/lambda/functions/{function_name}", "api_lambda_delete_function", "(function_name: str)"),
         ("GET", "/api/lambda/functions/{function_name}/policy", "api_lambda_get_policy", "(function_name: str)"),
         ("POST", "/api/lambda/functions/{function_name}/policy", "api_lambda_add_permission", "(function_name: str, request: Request)", "model", "req", "LambdaPermissionRequest"),
+        # Catalog publishes /permission singular — alias.
+        ("POST", "/api/lambda/functions/{function_name}/permission", "api_lambda_add_permission", "(function_name: str, request: Request)", "model", "req", "LambdaPermissionRequest"),
         ("DELETE", "/api/lambda/functions/{function_name}/policy/{statement_id}", "api_lambda_remove_permission", "(function_name: str, statement_id: str)"),
         ("GET", "/api/lambda/functions/{function_name}/invocations", "api_lambda_list_invocations", "(function_name: str)"),
         ("GET", "/api/lambda/functions/{function_name}/versions", "api_lambda_list_versions", "(function_name: str)"),
         ("POST", "/api/lambda/functions/{function_name}/versions", "api_lambda_publish_version", "(function_name: str, request: Request)", "model", "req", "LambdaVersionRequest"),
-        ("POST", "/api/lambda/functions/{function_name}/invoke", "api_lambda_invoke_function", "(function_name: str, request: Request)", "model", "req", "LambdaInvokeRequest"),
+        ("POST", "/api/lambda/functions/{function_name}/invoke", "api_lambda_invoke_function", "(function_name: str, request: Request)", "model", "payload", "LambdaInvokeRequest"),
         # Lambda Layers
         ("GET", "/api/lambda/layers", "api_lambda_list_layers", "()"),
         ("POST", "/api/lambda/layers", "api_lambda_create_layer", "(request: Request)", "model", "req", "LambdaLayerRequest"),

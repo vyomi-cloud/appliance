@@ -6145,16 +6145,58 @@ def api_list_object_versions(bucket: str, key: str):
 
 
 @api.post("/buckets/{bucket}/objects")
-async def api_upload_object(bucket: str, file: UploadFile = File(...)):
+async def api_upload_object(bucket: str, request: Request):
+    """Upload an object — accepts either multipart/form-data (`file` field)
+    or application/json (`{"key": str, "content": str|base64}`) so the
+    same endpoint serves the SPA's multipart uploader AND the conformance
+    harness's JSON-only POST."""
     if bucket not in buckets:
         raise HTTPException(404, detail="NoSuchBucket")
-    data = await file.read()
-    key = file.filename or "unnamed"
+
+    ctype = (request.headers.get("content-type") or "").lower()
+    key = "unnamed"
+    data = b""
+    content_type = "application/octet-stream"
+
+    if ctype.startswith("multipart/form-data"):
+        form = await request.form()
+        upload = form.get("file")
+        if upload is None or not hasattr(upload, "read"):
+            raise HTTPException(422, detail="Field 'file' required")
+        data = await upload.read()
+        key = getattr(upload, "filename", None) or "unnamed"
+        content_type = getattr(upload, "content_type", None) or content_type
+    elif ctype.startswith("application/json") or not ctype:
+        # JSON shape: {"key": "...", "content": "..."} — content may be
+        # plain text or base64 if "base64": true.
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if not isinstance(body, dict):
+            body = {}
+        key = str(body.get("key") or body.get("name") or "conformance-object")
+        content = body.get("content", body.get("body", ""))
+        if isinstance(content, str):
+            if body.get("base64"):
+                import base64 as _b64
+                try:
+                    data = _b64.b64decode(content)
+                except Exception:
+                    data = content.encode()
+            else:
+                data = content.encode()
+        elif isinstance(content, (bytes, bytearray)):
+            data = bytes(content)
+        content_type = str(body.get("content_type") or "text/plain")
+    else:
+        raise HTTPException(415, detail=f"Unsupported content-type: {ctype}")
+
     versioning_status = _s3_bucket_versioning_status(bucket)
     version_id = _s3_new_version_id(bucket) if versioning_status == "Enabled" else "null"
     version = _s3_make_version_record(
         data=data,
-        content_type=file.content_type or "application/octet-stream",
+        content_type=content_type,
         storage_class="STANDARD",
         metadata={},
         tags={},

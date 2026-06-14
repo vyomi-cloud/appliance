@@ -292,6 +292,36 @@ def api_gcp_sql_restart_instance(project: str, instance: str):
     return {"kind": "sql#operation", "operationType": "RESTART", "status": "DONE", "targetLink": f"{s._gcp_sql_root()}/projects/{project}/instances/{instance}"}
 
 
+def api_gcp_sql_start_instance(project: str, instance: str):
+    """POST .../start — Cloud SQL exposes this as setting activationPolicy=ALWAYS.
+    We mirror that by flipping the cached state to RUNNABLE.
+    """
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = gcp_sql_state.get("instances", {}).get(instance)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Instance not found")
+    rec["state"] = "RUNNABLE"
+    settings = rec.setdefault("settings", {})
+    settings["activationPolicy"] = "ALWAYS"
+    rec["updateTime"] = _now()
+    return {"kind": "sql#operation", "operationType": "START", "status": "DONE", "targetLink": f"{s._gcp_sql_root()}/projects/{project}/instances/{instance}"}
+
+
+def api_gcp_sql_stop_instance(project: str, instance: str):
+    """POST .../stop — sets activationPolicy=NEVER, flips state to STOPPED."""
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = gcp_sql_state.get("instances", {}).get(instance)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Instance not found")
+    rec["state"] = "STOPPED"
+    settings = rec.setdefault("settings", {})
+    settings["activationPolicy"] = "NEVER"
+    rec["updateTime"] = _now()
+    return {"kind": "sql#operation", "operationType": "STOP", "status": "DONE", "targetLink": f"{s._gcp_sql_root()}/projects/{project}/instances/{instance}"}
+
+
 def api_gcp_sql_list_backups(project: str, instance: str = ""):
     return _server().api_gcp_sql_list_backups(project, instance)
 
@@ -415,6 +445,32 @@ def api_gcp_vpc_delete_network(project: str, network: str):
         raise HTTPException(404, detail="Network not found")
     del gcp_vpc_state["networks"][network]
     return {"done": True}
+
+
+def api_gcp_vpc_patch_network(project: str, network: str, payload: dict):
+    """PATCH a VPC network's mutable fields. The GCP API exposes
+    routingConfig and description as the practically-patchable fields;
+    we mirror that and ignore anything else.
+    """
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = gcp_vpc_state.get("networks", {}).get(network)
+    if not rec or str(rec.get("project") or project) != project:
+        raise HTTPException(404, detail="Network not found")
+    if isinstance(payload, dict):
+        if "description" in payload:
+            rec["description"] = str(payload.get("description") or "")
+        rc = payload.get("routingConfig") or {}
+        if isinstance(rc, dict) and rc.get("routingMode"):
+            rec["routingMode"] = str(rc["routingMode"]).upper()
+    rec["updated"] = _now()
+    return {
+        "kind": "compute#operation",
+        "name": f"operation-patch-{network}",
+        "operationType": "patch",
+        "status": "DONE",
+        "targetLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network}",
+    }
 
 
 def api_gcp_vpc_list_subnetworks(project: str, region: str):
