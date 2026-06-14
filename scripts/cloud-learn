@@ -755,13 +755,39 @@ vyomi_mount_host_pubkey_into_appliance() {
 appliance_start_runtime_bridge() {
   local compose
   compose="$(appliance_multipass_cmd)"
-  local bridge_script="${APPLIANCE_WORKSPACE}/core/runtime_bridge.py"
+  # Copy the bridge script into a VM-local path INSTEAD of pointing the
+  # systemd unit at the SSHFS-mounted workspace.
+  #
+  # Background: on macOS brew installs ROOT_DIR is /opt/homebrew/Cellar/
+  # cloud-learn/<v>/libexec, which sits behind the brew-prefix sandbox.
+  # Multipass's SSHFS workspace mount cannot read THROUGH that sandbox
+  # from inside the VM — every file under /workspace/cloud-learn shows
+  # as "Permission denied", even to root. So a systemd ExecStart
+  # pointing at /workspace/cloud-learn/core/runtime_bridge.py fails
+  # immediately with Python exit 2 ("can't open file").
+  #
+  # We resolve this by transferring the source script INTO the VM at
+  # a writable, brew-sandbox-free path (/var/lib/cloudlearn/), then
+  # pointing systemd at THAT path. The mount can stay or go — the
+  # bridge daemon doesn't care anymore.
+  local bridge_src="${ROOT_DIR}/core/runtime_bridge.py"
+  local bridge_dst="/var/lib/cloudlearn/runtime_bridge.py"
   progress "==> Appliance: installing VM-local runtime bridge (systemd)"
-  # systemd unit — auto-starts on every VM boot. The earlier nohup
-  # approach left the bridge dangling after `multipass restart`,
-  # which silently broke EC2 launches (no listener on :9171 → sim sees
-  # lxd_available=False → instances stay at state=pending forever).
+  if [ ! -f "$bridge_src" ]; then
+    progress "    ⚠ bridge source not found at $bridge_src — skipping (lxd_available will be False)"
+    return 0
+  fi
+  verbose "transferring $bridge_src → $APPLIANCE_NAME:$bridge_dst"
+  # Push the script through the multipass channel (avoids SSHFS) and
+  # install it into /var/lib/cloudlearn/ owned by root with mode 644.
+  "$compose" transfer "$bridge_src" "${APPLIANCE_NAME}:/tmp/runtime_bridge.py" >/dev/null 2>&1 || {
+    progress "    ⚠ multipass transfer failed — runtime bridge will be unavailable"
+    return 0
+  }
   "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "set -e
+    sudo mkdir -p /var/lib/cloudlearn
+    sudo install -m 644 /tmp/runtime_bridge.py $bridge_dst
+    rm -f /tmp/runtime_bridge.py
     sudo tee /etc/systemd/system/cloudlearn-runtime-bridge.service >/dev/null <<UNIT
 [Unit]
 Description=CloudLearn runtime bridge (LXD/multipass over HTTP for the simulator)
@@ -770,7 +796,7 @@ Wants=docker.service snap.lxd.daemon.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 ${bridge_script} --host 0.0.0.0 --port 9171
+ExecStart=/usr/bin/python3 $bridge_dst --host 0.0.0.0 --port 9171
 Restart=on-failure
 RestartSec=5
 User=root
