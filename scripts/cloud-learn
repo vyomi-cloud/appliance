@@ -1413,7 +1413,33 @@ maybe_install_multipass() {
       return 0
       ;;
     linux)
+      # Multipass on Linux ships ONLY via snap (no apt/yum repo from Canonical).
+      # On RHEL/Fedora/SUSE minimal images, snapd isn't installed by default —
+      # detect that case and walk the user through it instead of just exiting 1.
       if ! command -v snap >/dev/null 2>&1; then
+        _emit ""
+        _emit "${_C_BOLD}${_C_YELLOW}Multipass is not installed, and snapd isn't available either.${_C_RESET}"
+        _emit "  Canonical ships Multipass on Linux exclusively via snap, so you'll"
+        _emit "  need snapd first. Install it for your distro, then re-run cloud-learn up:"
+        _emit ""
+        # Pick the right hint based on the package manager actually present.
+        if command -v apt-get >/dev/null 2>&1; then
+          _emit "      ${_C_BOLD}sudo apt-get update && sudo apt-get install -y snapd${_C_RESET}"
+          _emit "      ${_C_BOLD}sudo snap install multipass${_C_RESET}"
+        elif command -v dnf >/dev/null 2>&1; then
+          _emit "      ${_C_BOLD}sudo dnf install -y snapd${_C_RESET}"
+          _emit "      ${_C_BOLD}sudo systemctl enable --now snapd.socket${_C_RESET}"
+          _emit "      ${_C_BOLD}sudo ln -s /var/lib/snapd/snap /snap${_C_RESET}     # Fedora/RHEL classic-confinement symlink"
+          _emit "      ${_C_BOLD}sudo snap install multipass${_C_RESET}"
+        elif command -v zypper >/dev/null 2>&1; then
+          _emit "      ${_C_BOLD}sudo zypper install snapd${_C_RESET}"
+          _emit "      ${_C_BOLD}sudo systemctl enable --now snapd.socket${_C_RESET}"
+          _emit "      ${_C_BOLD}sudo snap install multipass${_C_RESET}"
+        else
+          _emit "      See ${_C_BOLD}https://snapcraft.io/docs/installing-snapd${_C_RESET} for your distro,"
+          _emit "      then: ${_C_BOLD}sudo snap install multipass${_C_RESET}"
+        fi
+        _emit ""
         return 1
       fi
       _emit ""
@@ -1444,6 +1470,73 @@ maybe_install_multipass() {
       _emit "${_C_GREEN}  ✓ Multipass installed.${_C_RESET}"
       return 0
       ;;
+    windows)
+      # On Windows, Multipass ships as a Canonical-signed .exe installed via
+      # winget. Cloud-learn itself is installed via Scoop, which is parallel
+      # to winget — neither manages the other's packages — so we shell out
+      # to winget directly. Requires winget on PATH (preinstalled on
+      # Windows 10 1809+ / Windows 11).
+      if ! command -v winget >/dev/null 2>&1; then
+        _emit ""
+        _emit "${_C_BOLD}${_C_YELLOW}Multipass is not installed, and winget isn't on PATH.${_C_RESET}"
+        _emit "  winget is bundled with Windows 10 1809+ and Windows 11 by default —"
+        _emit "  if it's missing, install ${_C_BOLD}\"App Installer\"${_C_RESET} from the Microsoft Store,"
+        _emit "  then run cloud-learn up again. Or grab Multipass directly from:"
+        _emit "      ${_C_BOLD}https://multipass.run/download/windows${_C_RESET}"
+        _emit ""
+        return 1
+      fi
+      _emit ""
+      _emit "${_C_BOLD}${_C_YELLOW}┌─ Multipass is not installed ───────────────────────────────${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}   The appliance runs inside a Multipass-managed Ubuntu VM."
+      _emit "${_C_YELLOW}│${_C_RESET}   cloud-learn can install it for you via winget:"
+      _emit "${_C_YELLOW}│${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}     ${_C_BOLD}winget install Canonical.Multipass${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}   Download:   ~150 MB    (Canonical-signed .exe)"
+      _emit "${_C_YELLOW}│${_C_RESET}   ${_C_BOLD}Windows will pop a UAC elevation prompt${_C_RESET} for the install."
+      _emit "${_C_YELLOW}│${_C_RESET}"
+      _emit "${_C_YELLOW}└────────────────────────────────────────────────────────────${_C_RESET}"
+      _emit ""
+      if [ "${CLOUD_LEARN_YES:-0}" = "1" ] || [ "${ASSUME_YES:-0}" = "1" ]; then
+        _emit "  (CLOUD_LEARN_YES=1 — installing without prompt)"
+      elif [ ! -t 0 ] || [ ! -t 2 ]; then
+        verbose "multipass-install: non-interactive shell — skipping prompt"
+        return 1
+      else
+        local ans
+        printf '  Install Multipass now? [Y/n] (auto-yes in 30s): ' >&2
+        if ! read -r -t 30 ans; then
+          _emit ""
+          _emit "  (no answer in 30s — proceeding with install)"
+        else
+          case "${ans:-y}" in
+            n|N|no|NO|No)
+              _emit ""
+              _emit "  ${_C_YELLOW}Skipped.${_C_RESET} Install Multipass yourself, then re-run ${_C_BOLD}cloud-learn up${_C_RESET}:"
+              _emit "      winget install Canonical.Multipass"
+              return 1
+              ;;
+          esac
+        fi
+      fi
+      _emit ""
+      _emit "${_C_BOLD}  ==> Installing Multipass via winget${_C_RESET}  (UAC prompt may appear)..."
+      # --accept-package-agreements + --accept-source-agreements avoids the
+      # interactive Y/N for first-time winget users.
+      if ! winget install --id Canonical.Multipass --accept-package-agreements --accept-source-agreements; then
+        _emit ""
+        _emit "  ${_C_RED}winget install Canonical.Multipass failed.${_C_RESET}"
+        _emit "  Install it manually from ${_C_BOLD}https://multipass.run/download/windows${_C_RESET}"
+        _emit "  and re-run cloud-learn up."
+        return 1
+      fi
+      _emit "${_C_GREEN}  ✓ Multipass installed.${_C_RESET}"
+      _emit "  ${_C_YELLOW}Note:${_C_RESET} you may need to open a NEW terminal so that the multipass.exe"
+      _emit "  on PATH is picked up. cloud-learn will try to find it from this shell first."
+      return 0
+      ;;
     *)
       return 1
       ;;
@@ -1469,9 +1562,13 @@ ensure_prereqs() {
     return "$missing"
   fi
 
-  # Offer to auto-install multipass (macOS via brew, Linux via snap) if it's
-  # missing. Falls through to the friendly error if the install is refused
-  # or the platform's package manager isn't present.
+  # Offer to auto-install multipass on every supported parent OS:
+  #   macOS    → brew install --cask multipass
+  #   Linux    → sudo snap install multipass     (with snapd-bootstrap guide
+  #                                                if snap itself is missing)
+  #   Windows  → winget install Canonical.Multipass
+  # Falls through to the friendly error if the install is refused or the
+  # platform's package manager isn't present.
   maybe_install_multipass || true
 
   if ! command -v multipass >/dev/null 2>&1; then
@@ -1494,6 +1591,22 @@ Then re-run:
 
 Install it with:
     sudo snap install multipass
+
+(If snap itself is missing — common on RHEL/Fedora minimal — install snapd
+first: sudo dnf install -y snapd && sudo systemctl enable --now snapd.socket)
+
+Then re-run:
+    cloud-learn up"
+        ;;
+      windows)
+        _die "multipass is not installed" \
+"Multipass is required for the appliance VM but isn't on PATH.
+
+Install it with:
+    winget install Canonical.Multipass
+
+(Windows will pop a UAC elevation prompt for the .exe install. Open a NEW
+terminal afterwards so the multipass.exe on PATH is picked up.)
 
 Then re-run:
     cloud-learn up"

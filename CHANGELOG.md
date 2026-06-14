@@ -6,6 +6,34 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.2] — 2026-06-15
+
+Distribution-parity release: every package-manager install path that ships cloud-learn now gets the same first-launch experience — `cloud-learn up` detects missing Multipass and installs it via the platform-native package manager. Closes the Windows (Scoop) and Linux-without-snapd gaps that v1.2.1 left open. Also fixes a docker-compose .env.example bug that made the Compose install path 404 on `docker compose pull`.
+
+### Added
+
+- **`maybe_install_multipass()` now covers Windows.** When `PARENT_OS=windows` (Scoop install path), the launcher detects winget on PATH, shows the same yellow notice box used on macOS/Linux, and runs `winget install --id Canonical.Multipass --accept-package-agreements --accept-source-agreements`. Honors `-y` / `CLOUD_LEARN_YES=1` and gracefully degrades if winget isn't on PATH (e.g. Windows Server without App Installer).
+- **Snapd-bootstrap guidance on Linux.** When `snap` itself isn't on PATH (common on RHEL/Fedora/SUSE minimal images), the launcher detects which distro package manager is available (`apt-get` / `dnf` / `zypper`) and prints the exact 2-3 commands to install snapd + enable its socket + install Multipass. No more silent fall-through to "multipass is not installed" with no recovery path.
+
+### Fixed
+
+- **`.env.example` image pin was broken.** Was `CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:1.0.0` — wrong namespace (`cloudlearn/simulator` does not exist on Docker Hub) AND stale version (months behind). Any user running `cp .env.example .env && docker compose pull` got `pull access denied`. Now pins to `gansudkum/cloud-learn:1.2.2` (the real, current image). Comment explains how to opt into rolling `:latest` updates.
+- **INSTALL.md docker-compose upgrade step clarified.** `docker compose up` does NOT auto-pull on existing images — added an explicit `docker compose pull && docker compose up -d` recipe with a note about `--pull always` semantics. The previous one-liner `docker compose pull && up -d` was a typo (missing the second `docker compose`).
+
+### Coverage matrix after this release
+
+| Install path | OS | Auto-install command |
+|---|---|---|
+| Brew | macOS | `brew install --cask multipass` |
+| DEB / RPM | Linux + snapd | `sudo snap install multipass` |
+| DEB / RPM | Linux no-snapd | Step-by-step instructions for apt-get / dnf / zypper |
+| Scoop | Windows | `winget install Canonical.Multipass` |
+| Docker Compose | any | N/A — appliance runs inside Docker, no host Multipass needed |
+
+### Why this matters
+
+v1.2.1 closed the macOS-via-brew gap. v1.2.2 closes the same gap on every OTHER package-manager install path users actually use. A first-time Windows user who runs `scoop install cloud-learn` followed by `cloud-learn up` now gets the same one-prompt-and-go experience their macOS counterpart does.
+
 ## [1.2.1] — 2026-06-15
 
 UX polish: `cloud-learn up` now installs Multipass for the user when it's missing, instead of just emitting "multipass is not installed". The brew formula structurally can't `depends_on` Multipass (formulae cannot depend on casks), so the launcher closes the gap at runtime.
