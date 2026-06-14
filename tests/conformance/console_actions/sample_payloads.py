@@ -57,7 +57,7 @@ _AWS_PAYLOADS: dict[str, dict] = {
     "ec2":        {"name": "conformance-test-vm", "ami": "sim-ubuntu-22.04",
                    "instance_type": "t3.nano"},
     "iam":        {"user_name": "vyomi-conformance-user"},
-    "vpc":        {"cidr_block": "10.99.0.0/16", "tag_name": "vyomi-conformance-vpc"},
+    "vpc":        {"name": "vyomi-conformance-vpc", "cidr_block": "10.99.0.0/16"},
     "rds":        {"db_instance_identifier": "vyomi-conf-db",
                    "engine": "postgres",
                    "db_instance_class": "db.t3.micro",
@@ -170,6 +170,84 @@ def payload_for(provider: str, service: str) -> Optional[dict]:
     if raw is None:
         return None
     return _apply_run_suffix(raw)
+
+
+# ── Per-action sub-resource payloads ─────────────────────────────────────────
+#
+# Some catalog actions are sub-resource creates (createSubnet, addRoute, etc.)
+# whose payload depends on an id captured from an earlier create. Rather than
+# carry runtime context in this module, we publish a *template* keyed by
+# (provider, service, action) and let the harness do the substitution.
+#
+# Substitution markers (string contents):
+#   __VPC_ID__ → captured vpc.create vpc_id
+#   __SG_ID__  → captured vpc.createSecurityGroup security_group_id
+#   __RTB_ID__ → captured vpc.createRouteTable route_table_id
+#   __IGW_ID__ → captured vpc.createIgw internet_gateway_id
+#   __SUBNET_ID__ → captured vpc.createSubnet subnet_id
+#
+# An action payload is dropped only when ALL its placeholders resolved. Missing
+# any one → harness skips the action (records as parent-dependent).
+
+_SUB_ACTION_PAYLOADS: dict[tuple[str, str, str], dict] = {
+    # AWS S3
+    ("aws", "s3", "versioning"): {
+        "status": "Enabled",
+    },
+    ("aws", "s3", "notifications"): {
+        "event_bridge_enabled": False,
+        "rules": [],
+    },
+    # AWS VPC
+    ("aws", "vpc", "createSubnet"): {
+        "vpc_id": "__VPC_ID__",
+        "cidr_block": "10.99.1.0/24",
+        "availability_zone": "us-east-1a",
+        "name": "vyomi-conf-subnet",
+    },
+    ("aws", "vpc", "createSecurityGroup"): {
+        "vpc_id": "__VPC_ID__",
+        "group_name": "vyomi-conf-sg",
+        "description": "conformance security group",
+    },
+    ("aws", "vpc", "createRouteTable"): {
+        "vpc_id": "__VPC_ID__",
+        "name": "vyomi-conf-rtb",
+    },
+    ("aws", "vpc", "createIgw"): {
+        "name": "vyomi-conf-igw",
+    },
+    ("aws", "vpc", "attachIgw"): {
+        "vpc_id": "__VPC_ID__",
+    },
+    ("aws", "vpc", "addIngress"): {
+        "protocol": "tcp",
+        "from_port": 80,
+        "to_port": 80,
+        "cidr": "0.0.0.0/0",
+        "description": "conformance ingress",
+    },
+    ("aws", "vpc", "addRoute"): {
+        "destination_cidr": "0.0.0.0/0",
+        "target_type": "internet-gateway",
+        "target_id": "__IGW_ID__",
+    },
+    ("aws", "vpc", "associateSubnet"): {
+        "subnet_id": "__SUBNET_ID__",
+    },
+}
+
+
+def sub_action_payload(provider: str, service: str, action: str) -> Optional[dict]:
+    """Return the template for a sub-action's payload, or None if no entry.
+
+    The returned dict still contains __XXX__ markers — the harness substitutes
+    captured ids before sending. We deep-copy so each call gets a fresh dict.
+    """
+    raw = _SUB_ACTION_PAYLOADS.get((provider.lower(), service.lower(), action))
+    if raw is None:
+        return None
+    return copy.deepcopy(raw)
 
 
 def current_run_suffix() -> str:

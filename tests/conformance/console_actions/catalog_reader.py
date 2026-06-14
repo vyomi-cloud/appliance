@@ -236,8 +236,21 @@ def enumerate_actions(providers: Optional[list[str]] = None) -> list[ActionSpec]
         # destructive last
         "purge": 8, "terminate": 9, "delete": 9,
     }
+    # Sub-resource action prefixes that depend on a prior sub-create
+    # (e.g. addIngress needs createSecurityGroup; addRoute needs
+    # createRouteTable + createIgw). Schedule AFTER parent + sub-creates
+    # but before delete.
+    _DEP_PREFIXES = ("add", "attach", "associate", "put", "set")
+    def _order_for(action: str) -> int:
+        if action in _ACTION_ORDER:
+            return _ACTION_ORDER[action]
+        if action.startswith("create"):
+            return 3  # sub-resource creates run right after parent create
+        if action.startswith(_DEP_PREFIXES):
+            return 6  # depend on sub-create having captured an id
+        return 7
     def sort_key(s: ActionSpec):
-        return (s.provider, s.service, _ACTION_ORDER.get(s.action, 6), s.action)
+        return (s.provider, s.service, _order_for(s.action), s.action)
     out.sort(key=sort_key)
     return out
 

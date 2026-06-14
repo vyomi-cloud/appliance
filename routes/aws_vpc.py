@@ -61,12 +61,13 @@ def _vpc_attach_internet_gateway_record(igw_id: str, vpc_id: str) -> dict:
 
 def api_vpc_list_vpcs():
     vpcs = []
+    igws_state = vpc_state.setdefault("internet_gateways", {})
     for vpc in vpc_state["vpcs"].values():
         vpc_id = vpc["vpc_id"]
         subnets = [s for s in vpc_state["subnets"].values() if s.get("vpc_id") == vpc_id]
         route_tables = [r for r in vpc_state["route_tables"].values() if r.get("vpc_id") == vpc_id]
         security_groups = [g for g in vpc_state["security_groups"].values() if g.get("vpc_id") == vpc_id]
-        internet_gateways = [g for g in vpc_state["internet_gateways"].values() if g.get("attached_vpc_id") == vpc_id]
+        internet_gateways = [g for g in igws_state.values() if g.get("attached_vpc_id") == vpc_id]
         vpcs.append({
             **vpc,
             "subnet_count": len(subnets),
@@ -76,6 +77,28 @@ def api_vpc_list_vpcs():
             "availability_zones": sorted({s.get("availability_zone", "") for s in subnets if s.get("availability_zone")}),
         })
     return {"vpcs": vpcs, "count": len(vpc_state["vpcs"])}
+
+
+def api_vpc_get(vpc_id: str):
+    """GET /api/vpc/vpcs/{vpc_id} — return a single VPC with its
+    aggregate counts. Mirrors the entry in api_vpc_list_vpcs.
+    """
+    vpc = vpc_state["vpcs"].get(vpc_id)
+    if not vpc:
+        raise HTTPException(404, detail="NoSuchVpc")
+    igws_state = vpc_state.setdefault("internet_gateways", {})
+    subnets = [s for s in vpc_state["subnets"].values() if s.get("vpc_id") == vpc_id]
+    route_tables = [r for r in vpc_state["route_tables"].values() if r.get("vpc_id") == vpc_id]
+    security_groups = [g for g in vpc_state["security_groups"].values() if g.get("vpc_id") == vpc_id]
+    internet_gateways = [g for g in igws_state.values() if g.get("attached_vpc_id") == vpc_id]
+    return {
+        **vpc,
+        "subnet_count": len(subnets),
+        "route_table_count": len(route_tables),
+        "security_group_count": len(security_groups),
+        "internet_gateway_count": len(internet_gateways),
+        "availability_zones": sorted({s.get("availability_zone", "") for s in subnets if s.get("availability_zone")}),
+    }
 
 
 def api_vpc_create(req: VpcRequest):
@@ -231,13 +254,16 @@ def api_vpc_create_route_table(req: RouteTableRequest):
 
 
 def api_vpc_list_internet_gateways():
-    return {"internet_gateways": list(vpc_state["internet_gateways"].values()), "count": len(vpc_state["internet_gateways"])}
+    # Defensive: spaces created before internet_gateways was added to the
+    # default state schema don't have this key. Don't 500 — initialize lazily.
+    igws = vpc_state.setdefault("internet_gateways", {})
+    return {"internet_gateways": list(igws.values()), "count": len(igws)}
 
 
 def api_vpc_create_internet_gateway(req: InternetGatewayRequest):
     igw_id = ctx.id_gen("igw")
     igw = {"internet_gateway_id": igw_id, "name": req.name or igw_id, "attached_vpc_id": "", "created": ctx.now(), "tags": req.tags or []}
-    vpc_state["internet_gateways"][igw_id] = igw
+    vpc_state.setdefault("internet_gateways", {})[igw_id] = igw
     ctx.record_usage("vpc.create_internet_gateway", igw)
     return igw
 
@@ -277,7 +303,7 @@ def api_vpc_resources(vpc_id: str):
     subnets = [s for s in vpc_state["subnets"].values() if s.get("vpc_id") == vpc_id]
     route_tables = [r for r in vpc_state["route_tables"].values() if r.get("vpc_id") == vpc_id]
     security_groups = [g for g in vpc_state["security_groups"].values() if g.get("vpc_id") == vpc_id]
-    internet_gateways = [g for g in vpc_state["internet_gateways"].values() if g.get("attached_vpc_id") == vpc_id]
+    internet_gateways = [g for g in vpc_state.setdefault("internet_gateways", {}).values() if g.get("attached_vpc_id") == vpc_id]
     instances = [i for i in ec2_state["instances"].values() if i.get("vpc_id") == vpc_id]
     return {
         "vpc": vpc_state["vpcs"][vpc_id],
