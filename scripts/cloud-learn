@@ -331,26 +331,149 @@ runcmd:
 EOF
 }
 
-# Global wall-clock anchor — set once at script start so every progress
-# line can show elapsed since invocation. Lets users see at a glance
-# whether they're 30s into the launch or 4 minutes in.
+# ── Launcher UX framework ──────────────────────────────────────────────
+#
+# Goals (we're building a commercial appliance):
+#   1. Every run is logged to disk — when something fails the user has
+#      a path to send us.
+#   2. Phase counter `[3/7]` so the user knows where they are.
+#   3. The launcher NEVER exits silently. On any non-zero exit, a clear
+#      red FAILURE banner prints with: which phase, last log lines,
+#      and copy-paste recovery commands.
+#   4. On success, a green BANNER with the URL the user opens.
+#   5. Verbose mode for triage (CLOUD_LEARN_VERBOSE=1 or -v).
+
+# Global wall-clock anchor — set once at script start.
 _LAUNCH_STARTED_AT="${_LAUNCH_STARTED_AT:-$(date +%s)}"
+_PHASE_NUM=0
+_PHASE_TOTAL=8
+_PHASE_NAME=""
+_PHASE_STARTED_AT=$_LAUNCH_STARTED_AT
+
+# Persistent log under $HOME so the user always knows where to look
+# even if the brew bundle gets reinstalled. Keep last 10.
+_LOG_DIR="${HOME}/.cloud-learn/logs"
+_LOG_FILE="${_LOG_DIR}/up-$(date +%Y%m%d-%H%M%S).log"
+mkdir -p "$_LOG_DIR" 2>/dev/null || true
+# Prune to last 10
+ls -t "$_LOG_DIR"/up-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f 2>/dev/null || true
+
+# ANSI colours — disabled when not a TTY (so CI logs stay clean).
+if [ -t 2 ]; then
+  _C_RESET='\033[0m'  _C_BOLD='\033[1m'  _C_DIM='\033[2m'
+  _C_GREEN='\033[32m' _C_YELLOW='\033[33m' _C_RED='\033[31m' _C_CYAN='\033[36m'
+else
+  _C_RESET=''  _C_BOLD=''  _C_DIM=''
+  _C_GREEN='' _C_YELLOW='' _C_RED='' _C_CYAN=''
+fi
+
+VERBOSE="${CLOUD_LEARN_VERBOSE:-0}"
+
+# All progress lines go to stderr AND to the persistent log.
+_emit() {
+  local line="$1"
+  printf '%b\n' "$line" >&2
+  printf '%s\n' "$(printf '%b' "$line" | sed 's/\x1b\[[0-9;]*m//g')" >> "$_LOG_FILE" 2>/dev/null || true
+}
 
 progress() {
   local elapsed=$(( $(date +%s) - _LAUNCH_STARTED_AT ))
   local m=$(( elapsed / 60 )) s=$(( elapsed % 60 ))
-  printf '[%dm%02ds] %s\n' "$m" "$s" "$*" >&2
+  _emit "$(printf '[%dm%02ds] %s' "$m" "$s" "$*")"
 }
 
-# verbose() emits ONLY when CLOUD_LEARN_VERBOSE=1 (or -v/-vv was passed).
-# Used for sub-step detail that's noisy on normal runs but invaluable
-# during triage. Same elapsed-time prefix as progress().
-VERBOSE="${CLOUD_LEARN_VERBOSE:-0}"
 verbose() {
   [ "$VERBOSE" = "0" ] && return 0
   local elapsed=$(( $(date +%s) - _LAUNCH_STARTED_AT ))
   local m=$(( elapsed / 60 )) s=$(( elapsed % 60 ))
-  printf '[%dm%02ds]   · %s\n' "$m" "$s" "$*" >&2
+  _emit "$(printf '[%dm%02ds]   %b·%b %s' "$m" "$s" "$_C_DIM" "$_C_RESET" "$*")"
+}
+
+# phase() prints a numbered banner heading. Use at the start of each
+# top-level step in cmd_up. Increments the global counter.
+phase() {
+  _PHASE_NUM=$(( _PHASE_NUM + 1 ))
+  _PHASE_NAME="$1"
+  _PHASE_STARTED_AT=$(date +%s)
+  local elapsed=$(( _PHASE_STARTED_AT - _LAUNCH_STARTED_AT ))
+  local m=$(( elapsed / 60 )) s=$(( elapsed % 60 ))
+  _emit "$(printf '[%dm%02ds] %b[%d/%d]%b %b%s%b' \
+    "$m" "$s" "$_C_CYAN" "$_PHASE_NUM" "$_PHASE_TOTAL" "$_C_RESET" \
+    "$_C_BOLD" "$1" "$_C_RESET")"
+}
+
+# phase_done() prints "✓ done in Xs" line. Call after each phase succeeds.
+phase_done() {
+  local now elapsed_phase elapsed_total m s
+  now=$(date +%s)
+  elapsed_phase=$(( now - _PHASE_STARTED_AT ))
+  elapsed_total=$(( now - _LAUNCH_STARTED_AT ))
+  m=$(( elapsed_total / 60 )); s=$(( elapsed_total % 60 ))
+  _emit "$(printf '[%dm%02ds]       %b✓%b done in %ds' \
+    "$m" "$s" "$_C_GREEN" "$_C_RESET" "$elapsed_phase")"
+}
+
+# _die() — failure exit with a loud banner.
+# Args: $1 = short description of what failed, $2 = recovery hint(s).
+_die() {
+  local what="$1"
+  local hint="${2:-}"
+  local elapsed_total=$(( $(date +%s) - _LAUNCH_STARTED_AT ))
+  local m=$(( elapsed_total / 60 )) s=$(( elapsed_total % 60 ))
+  _emit ""
+  _emit "$(printf '%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b' "$_C_RED" "$_C_RESET")"
+  _emit "$(printf '%b✗ APPLIANCE LAUNCH FAILED%b after %dm%02ds' "$_C_BOLD$_C_RED" "$_C_RESET" "$m" "$s")"
+  _emit "$(printf '%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b' "$_C_RED" "$_C_RESET")"
+  _emit ""
+  _emit "  Failed at: %bPhase ${_PHASE_NUM}/${_PHASE_TOTAL} — ${_PHASE_NAME}%b"
+  _emit "  Reason:    %b${what}%b"
+  if [ -n "$hint" ]; then
+    _emit ""
+    _emit "  %bWhat to try:%b"
+    while IFS= read -r line; do _emit "    ${line}"; done <<<"$hint"
+  fi
+  _emit ""
+  _emit "  Full log:  ${_LOG_FILE}"
+  _emit "  Diagnose:  cloud-learn doctor"
+  _emit ""
+  exit 1
+}
+
+# Top-level ERR trap — fires on any uncaught non-zero exit. Even if a
+# specific phase forgot to call _die(), the user still sees a banner
+# instead of just a returned shell prompt.
+on_err() {
+  local rc=$?
+  # Skip benign exits (already handled by _die or returned through normal flow).
+  [ "$rc" -eq 0 ] && return 0
+  if [ "${_DIE_CALLED:-0}" = "1" ]; then return 0; fi
+  _die "command exited $rc inside Phase ${_PHASE_NUM}/${_PHASE_TOTAL} — ${_PHASE_NAME:-pre-flight}" \
+"Re-run with verbose output:
+  cloud-learn up -v
+Inspect the persistent log:
+  tail -n 80 ${_LOG_FILE}
+Check the VM directly:
+  multipass info ${APPLIANCE_NAME:-cloudlearn-appliance}
+  multipass exec ${APPLIANCE_NAME:-cloudlearn-appliance} -- sudo journalctl -xb --no-pager | tail -50"
+}
+trap 'on_err' ERR
+
+# Success banner — printed by cmd_up at the very end after health check.
+launch_success_banner() {
+  local url="$1"
+  local elapsed_total=$(( $(date +%s) - _LAUNCH_STARTED_AT ))
+  local m=$(( elapsed_total / 60 )) s=$(( elapsed_total % 60 ))
+  _emit ""
+  _emit "$(printf '%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b' "$_C_GREEN" "$_C_RESET")"
+  _emit "$(printf '%b✓ APPLIANCE READY%b in %dm%02ds' "$_C_BOLD$_C_GREEN" "$_C_RESET" "$m" "$s")"
+  _emit "$(printf '%b━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%b' "$_C_GREEN" "$_C_RESET")"
+  _emit ""
+  _emit "  Open in browser:  %b${_C_CYAN}${url}%b"
+  _emit "  Log:              ${_LOG_FILE}"
+  _emit ""
+  _emit "  Stop:    cloud-learn stop"
+  _emit "  Status:  cloud-learn status"
+  _emit ""
 }
 
 # Human-readable description of a runcmd / install command, so the
@@ -691,48 +814,55 @@ appliance_health_check() {
   compose="$(appliance_multipass_cmd)"
   local waited=0
   local max_wait="${CLOUD_LEARN_APPLIANCE_HEALTH_TIMEOUT:-180}"
+  local last_bridge_ok=0 last_sim_ok=0 last_cloudsim_ok=0
   while [ "$waited" -lt "$max_wait" ]; do
-    if [ $((waited % 10)) -eq 0 ]; then
-      progress "==> Appliance: waiting for simulator + CloudSim + bridge to come up (${waited}s / ${max_wait}s)"
-    fi
-    if "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "curl -fsS http://127.0.0.1:9171/health >/dev/null && curl -fsS http://127.0.0.1:9000/healthz >/dev/null && curl -fsS http://127.0.0.1:9010/health >/dev/null" >/dev/null 2>&1; then
-      progress "==> Appliance: runtime bridge, simulator, and CloudSim are healthy"
-      # Show the user where to go.
-      local vm_ip
-      vm_ip="$(multipass info "$APPLIANCE_NAME" --format=csv 2>/dev/null | awk -F, 'NR==2 {print $3}' | head -1)"
-      [ -z "$vm_ip" ] && vm_ip="<vm-ip>"
-      cat <<INFO
-
-  ╔══════════════════════════════════════════════════════════════╗
-  ║  CloudLearn is up — open in your browser:                    ║
-  ║                                                              ║
-  ║    http://${vm_ip}:9000/        (or http://localhost:9000/)
-  ║                                                              ║
-  ║  Useful endpoints:                                           ║
-  ║    /pricing                  — tier selection                ║
-  ║    /console/aws|gcp|azure    — native cloud consoles         ║
-  ║    /api/runtime/backends     — backend health status         ║
-  ║    /api/runtime/tier         — current tier policy           ║
-  ║                                                              ║
-  ║  Stop with:    cloud-learn down                              ║
-  ║  Status:       cloud-learn status                            ║
-  ╚══════════════════════════════════════════════════════════════╝
-
-INFO
+    # Probe each component individually so we can show WHICH is missing.
+    local bridge_ok sim_ok cloudsim_ok
+    bridge_ok=$("$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
+      "curl -fsS -o /dev/null -m 2 http://127.0.0.1:9171/health && echo 1 || echo 0" 2>/dev/null | tr -d '\r')
+    sim_ok=$("$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
+      "curl -fsS -o /dev/null -m 2 http://127.0.0.1:9000/healthz && echo 1 || echo 0" 2>/dev/null | tr -d '\r')
+    cloudsim_ok=$("$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
+      "curl -fsS -o /dev/null -m 2 http://127.0.0.1:9010/health && echo 1 || echo 0" 2>/dev/null | tr -d '\r')
+    if [ "$bridge_ok" = "1" ] && [ "$sim_ok" = "1" ] && [ "$cloudsim_ok" = "1" ]; then
+      progress "    ✓ runtime bridge, simulator, and CloudSim all healthy"
       return 0
     fi
+    # Print a single composite status line every 6s so the user can see
+    # which component is still missing.
+    if [ $((waited % 6)) -eq 0 ]; then
+      local status=""
+      [ "$bridge_ok"   = "1" ] && status+=" bridge=✓" || status+=" bridge=…"
+      [ "$sim_ok"      = "1" ] && status+="  sim=✓" || status+="  sim=…"
+      [ "$cloudsim_ok" = "1" ] && status+="  cloudsim=✓" || status+="  cloudsim=…"
+      progress "    [${waited}s/${max_wait}s] ${status}"
+    fi
+    last_bridge_ok=$bridge_ok
+    last_sim_ok=$sim_ok
+    last_cloudsim_ok=$cloudsim_ok
     sleep 2
     waited=$((waited + 2))
   done
-  cat >&2 <<EOF
-appliance health check failed after ${max_wait}s.
-Possible causes:
-  - Docker daemon inside VM didn't start (check: multipass exec $APPLIANCE_NAME -- systemctl status docker)
-  - Compose build failed (check: multipass exec $APPLIANCE_NAME -- docker compose -f ${APPLIANCE_WORKSPACE}/docker-compose.appliance.yml logs --tail 100)
-  - Port conflict on 9000/9010/9171 (check: multipass exec $APPLIANCE_NAME -- ss -tlnp)
-Run: cloud-learn doctor    for a deeper diagnostic.
-EOF
-  return 1
+  # Build a helpful diagnostic showing exactly which thing didn't start.
+  local what_failed=""
+  [ "$last_bridge_ok"   != "1" ] && what_failed+="\n    - runtime bridge (port 9171) — check: multipass exec $APPLIANCE_NAME -- sudo journalctl -u cloudlearn-runtime-bridge.service --no-pager -n 50"
+  [ "$last_sim_ok"      != "1" ] && what_failed+="\n    - simulator (port 9000) — check: multipass exec $APPLIANCE_NAME -- docker logs cloud-learn-simulator-1 --tail 80"
+  [ "$last_cloudsim_ok" != "1" ] && what_failed+="\n    - CloudSim (port 9010) — check: multipass exec $APPLIANCE_NAME -- docker logs cloud-learn-cloudsim-1 --tail 80"
+  _die "health check timed out after ${max_wait}s — the following components are not responding:${what_failed}" \
+"Inspect the docker compose logs:
+  multipass exec $APPLIANCE_NAME -- docker compose -f ${APPLIANCE_WORKSPACE}/docker-compose.appliance.yml logs --tail 100
+Check port conflicts:
+  multipass exec $APPLIANCE_NAME -- ss -tlnp
+Restart fresh:
+  cloud-learn down && cloud-learn up -v"
+}
+
+# Print the URL banner at the very end of a successful `cloud-learn up`.
+print_url_banner() {
+  local vm_ip
+  vm_ip="$(multipass info "$APPLIANCE_NAME" --format=csv 2>/dev/null | awk -F, 'NR==2 {print $3}' | head -1)"
+  [ -z "$vm_ip" ] && vm_ip="<vm-ip>"
+  launch_success_banner "http://${vm_ip}:9000/"
 }
 
 vyomi_host_ssh_bootstrap() {
@@ -794,19 +924,28 @@ appliance_start_runtime_bridge() {
   # bridge daemon doesn't care anymore.
   local bridge_src="${ROOT_DIR}/core/runtime_bridge.py"
   local bridge_dst="/var/lib/cloudlearn/runtime_bridge.py"
-  progress "==> Appliance: installing VM-local runtime bridge (systemd)"
   if [ ! -f "$bridge_src" ]; then
-    progress "    ⚠ bridge source not found at $bridge_src — skipping (lxd_available will be False)"
-    return 0
+    _die "runtime bridge source not found at $bridge_src" \
+"This usually means the brew bundle is corrupt. Try:
+  brew reinstall cloud-learn
+Or run from a workspace clone instead:
+  CLOUD_LEARN_HOME=/path/to/cloud-learn cloud-learn up"
   fi
   verbose "transferring $bridge_src → $APPLIANCE_NAME:$bridge_dst"
   # Push the script through the multipass channel (avoids SSHFS) and
   # install it into /var/lib/cloudlearn/ owned by root with mode 644.
-  "$compose" transfer "$bridge_src" "${APPLIANCE_NAME}:/tmp/runtime_bridge.py" >/dev/null 2>&1 || {
-    progress "    ⚠ multipass transfer failed — runtime bridge will be unavailable"
-    return 0
-  }
-  "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "set -e
+  if ! "$compose" transfer "$bridge_src" "${APPLIANCE_NAME}:/tmp/runtime_bridge.py" 2>/dev/null; then
+    _die "multipass transfer failed pushing runtime_bridge.py into VM" \
+"This usually means the VM is not in 'Running' state. Check:
+  multipass info $APPLIANCE_NAME
+If state is anything other than 'Running', recover with:
+  cloud-learn down && cloud-learn up"
+  fi
+  # Write the systemd unit, enable+start, then poll health. Capture the
+  # FULL stderr stream so on failure we can surface the real reason.
+  local install_log
+  install_log="$(mktemp -t cloud-learn-bridge-XXXXXX.log)"
+  if ! "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "set -e
     sudo mkdir -p /var/lib/cloudlearn
     sudo install -m 644 /tmp/runtime_bridge.py $bridge_dst
     rm -f /tmp/runtime_bridge.py
@@ -829,14 +968,39 @@ StandardError=journal
 WantedBy=multi-user.target
 UNIT
     sudo systemctl daemon-reload
-    sudo systemctl enable --now cloudlearn-runtime-bridge.service
+    sudo systemctl enable --now cloudlearn-runtime-bridge.service >/dev/null 2>&1
     for i in \$(seq 1 30); do
-      if curl -fsS http://127.0.0.1:9171/health >/dev/null 2>&1; then exit 0; fi
+      if curl -fsS http://127.0.0.1:9171/health >/dev/null 2>&1; then
+        echo READY
+        exit 0
+      fi
       sleep 1
     done
-    echo 'runtime bridge failed to start' >&2
-    sudo journalctl -u cloudlearn-runtime-bridge.service --no-pager -n 50 >&2
-    exit 1"
+    echo NOT_READY
+    echo '--- systemctl status ---'
+    sudo systemctl status cloudlearn-runtime-bridge.service --no-pager 2>&1 | head -20 || true
+    echo '--- journalctl ---'
+    sudo journalctl -u cloudlearn-runtime-bridge.service --no-pager -n 40 2>&1 || true
+    exit 1" > "$install_log" 2>&1; then
+    # Surface the captured failure into the user's terminal AND the log.
+    local last_lines
+    last_lines="$(tail -25 "$install_log" | sed 's/^/      /')"
+    progress "    Bridge install output (tail -25):"
+    while IFS= read -r line; do _emit "$line"; done <<<"$last_lines"
+    cat "$install_log" >> "$_LOG_FILE" 2>/dev/null || true
+    rm -f "$install_log"
+    _die "cloudlearn-runtime-bridge.service failed to become healthy on :9171 (30s timeout)" \
+"The simulator's lxd_available check will return False without this.
+Inspect the VM directly:
+  multipass exec $APPLIANCE_NAME -- sudo systemctl status cloudlearn-runtime-bridge.service
+  multipass exec $APPLIANCE_NAME -- sudo journalctl -u cloudlearn-runtime-bridge.service --no-pager -n 80
+Then re-run with verbose:
+  cloud-learn up -v"
+  fi
+  cat "$install_log" >> "$_LOG_FILE" 2>/dev/null || true
+  verbose "bridge install output:"
+  if [ "$VERBOSE" != "0" ]; then sed 's/^/  /' "$install_log" >&2; fi
+  rm -f "$install_log"
 }
 
 wait_for_inner_compose() {
@@ -1066,14 +1230,32 @@ outer_run() {
   case "$subcmd" in
     up)
       [ "$VERBOSE" != "0" ] && progress "==> Verbose mode on (CLOUD_LEARN_VERBOSE=1)"
+      progress "==> Logging to ${_LOG_FILE}"
+      phase "Pre-flight checks (multipass / docker available)"
       ensure_prereqs
+      phase_done
+      phase "Host SSH identity bootstrap"
       vyomi_host_ssh_bootstrap
+      phase_done
+      phase "Appliance manifest + cloud-init generation"
       write_appliance_manifest
+      phase_done
+      phase "Launching appliance VM (cold start: 3-5 min downloading image + LXD snap)"
       appliance_launch_vm
+      phase_done
+      phase "Pushing host SSH pubkey into appliance"
       vyomi_mount_host_pubkey_into_appliance
+      phase_done
+      phase "Installing runtime bridge (systemd unit on appliance VM)"
       appliance_start_runtime_bridge
+      phase_done
+      phase "Building + starting CloudLearn stack inside appliance (2-3 min on first run)"
       appliance_exec_launcher
+      phase_done
+      phase "Waiting for simulator, CloudSim, and runtime bridge to become healthy"
       appliance_health_check
+      phase_done
+      print_url_banner
       ;;
     down|stop)
       ensure_prereqs

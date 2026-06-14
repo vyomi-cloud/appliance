@@ -6,6 +6,32 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.5] — 2026-06-14
+
+**Commercial-grade launcher UX.** The previous launcher could exit silently on a runtime-bridge failure, leaving the user staring at a returned shell prompt with no clue what happened. This release makes the launcher loud, structured, and recoverable.
+
+### Added
+
+- **Persistent log per run.** Every `cloud-learn up` invocation streams its full output to `~/.cloud-learn/logs/up-<timestamp>.log`. Last 10 logs are kept. Whatever the user copies into a support thread, the full transcript is one path away.
+- **`[N/M]` phase counter.** Cmd `up` now prints `[1/8] Pre-flight checks`, `[2/8] Host SSH identity bootstrap`, … through `[8/8] Waiting for health`. At a glance the user knows where they are.
+- **Per-phase `✓ done in Xs` line.** Each phase prints its own elapsed time, so users can instantly see which step is the slow one (almost always Phase 4 — cold-start image + LXD snap install).
+- **Loud `✗ APPLIANCE LAUNCH FAILED` banner.** On any failure, a red banner prints with: which phase failed, the actual reason (not buried in stderr), 3-4 recovery commands specific to that phase, and the log path. No more silent exit-1.
+- **Loud `✓ APPLIANCE READY in Xm00s` banner with URL** at the very end of a successful run. The user knows they're done.
+- **Top-level `ERR` trap.** If any phase forgets to call `_die()` with a friendly message, the trap still fires the failure banner so the user never sees a bare shell prompt.
+- **Per-component health probe.** Health check now probes the bridge / simulator / CloudSim separately and prints `bridge=✓  sim=…  cloudsim=…` so the user sees exactly which thing is still coming up.
+
+### Fixed
+
+- **Runtime-bridge install failure was silent.** The bridge's systemctl `enable --now` output and journalctl tail were redirected to `/dev/null`. If the bridge crashed on startup the user only saw a returned prompt and a stuck "browser doesn't load". Now the full install output is captured to a temp file, surfaced into the failure banner (tail -25), AND appended to the persistent log.
+
+### Changed
+
+- **`appliance_health_check` no longer prints a multi-line dump on success — just the URL banner.** The old box-drawn banner had alignment issues on narrow terminals.
+
+### Why this matters
+
+We're building a commercial appliance. A user paying ₹299/month who hits a silent failure on first launch will assume it's broken and uninstall. v1.1.5's loud, structured UX means: every failure is actionable, every success is unambiguous, every run is reproducible.
+
 ## [1.1.4] — 2026-06-14
 
 Hotfix for zombie-VM recovery on `cloud-learn up`.
