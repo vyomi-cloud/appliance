@@ -6,6 +6,26 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.3] — 2026-06-14
+
+Hotfix continuation of v1.1.1 — same brew-sandbox class of bug, this time
+for the runtime bridge systemd unit.
+
+### Fixed
+
+- **`cloudlearn-runtime-bridge.service: Main process exited, code=exited, status=2/INVALIDARGUMENT`.** The systemd `ExecStart` pointed at `/workspace/cloud-learn/core/runtime_bridge.py`, which is the SSHFS-mounted brew libexec on macOS brew installs. The mount is unreadable from inside the VM (same brew-prefix sandbox issue v1.1.1 fixed for `host-sizing-report.json`), so Python sees "no such file" and exits with code 2 — which systemd reports as `status=2/INVALIDARGUMENT`.
+  - The launcher now `multipass transfer`s `core/runtime_bridge.py` into the VM at `/var/lib/cloudlearn/runtime_bridge.py`. Same `multipass transfer` pattern v1.1.1 introduced for the sizing report.
+  - systemd `ExecStart` now points at `/var/lib/cloudlearn/runtime_bridge.py` — a stable, sandbox-free path. Survives `multipass restart` (which the previous nohup approach didn't), `cloud-learn restart`, and any future workspace remounts.
+
+### Why this matters
+
+Without the bridge running, the simulator's `lxd_available` check returns False → EC2 / Compute Engine / Azure VM launches silently stay in `pending` state forever with no error. The launcher used to surface `runtime bridge failed to start` and dump 50 lines of journalctl, which was at least loud — but it was also fatal: `cloud-learn up` exited 1 and the user was stuck.
+
+### Backward compat
+
+- Existing non-brew installs (running from a workspace clone where the file actually IS readable through the mount) keep working — the transfer just becomes a redundant copy.
+- `cloud-learn restart` and `cloud-learn up` are both idempotent: re-transferring the script on every invocation is cheap (9KB) and ensures bug-fixes to `runtime_bridge.py` ship as soon as the user re-runs.
+
 ## [1.1.2] — 2026-06-14
 
 UX-only release. Cold-start verbosity overhaul.
