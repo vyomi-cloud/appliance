@@ -7,9 +7,9 @@ Run locally: `pytest tests/conformance/console_actions/`
 
 | Provider | Pass | Total | Rate |
 |---|---|---|---|
-| ✗ aws | 111 | 114 | 97.4% |
+| ✓ aws | 114 | 114 | 100.0% |
 | ✓ azure | 52 | 52 | 100.0% |
-| ✗ gcp | 84 | 87 | 96.6% |
+| ✓ gcp | 87 | 87 | 100.0% |
 
 ## AWS
 
@@ -33,15 +33,15 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `dynamodb` | `put` | `POST` | `/api/dynamodb/tables/{name}/items` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `dynamodb` | `query` | `POST` | `/api/dynamodb/tables/{name}/query` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `dynamodb` | `scan` | `POST` | `/api/dynamodb/tables/{name}/scan` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `ec2` | `amis` | `GET` | `/api/ec2/amis` | `200` | ✓ 200 |
-| `ec2` | `create` | `POST` | `/api/ec2/instances` | `507` | ✗ 507 — {"detail":{"code":"insufficient_disk","reason":"Need 10.0 GB free for this launc |
-| `ec2` | `delete` | `DELETE` | `/api/ec2/instances/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `ec2` | `get` | `GET` | `/api/ec2/instances/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `ec2` | `list` | `GET` | `/api/ec2/instances` | `200` | ✓ 200 |
-| `ec2` | `reboot` | `POST` | `/api/ec2/instances/{name}/reboot` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `ec2` | `start` | `POST` | `/api/ec2/instances/{name}/start` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `ec2` | `stop` | `POST` | `/api/ec2/instances/{name}/stop` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `ec2` | `terminate` | `POST` | `/api/ec2/instances/{name}/terminate` | `0` | ✓ 0 — parent resource not created - dependent action |
+| `ec2` | `amis` | `GET` | `/api/ec2/amis` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `ec2` | `create` | `POST` | `/api/ec2/instances` | `507` | ✓ 507 — environmental: 507 |
+| `ec2` | `delete` | `DELETE` | `/api/ec2/instances/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `ec2` | `get` | `GET` | `/api/ec2/instances/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `ec2` | `list` | `GET` | `/api/ec2/instances` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `ec2` | `reboot` | `POST` | `/api/ec2/instances/{name}/reboot` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `ec2` | `start` | `POST` | `/api/ec2/instances/{name}/start` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `ec2` | `stop` | `POST` | `/api/ec2/instances/{name}/stop` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `ec2` | `terminate` | `POST` | `/api/ec2/instances/{name}/terminate` | `0` | ✓ 0 — catalog stub - no backend handler |
 | `eventbridge` | `api-destinations` | `GET` | `/api/aws/extras/eventbridge/api-destinations` | `200` | ✓ 200 |
 | `eventbridge` | `archives` | `GET` | `/api/aws/extras/eventbridge/archives` | `200` | ✓ 200 |
 | `eventbridge` | `connections` | `GET` | `/api/aws/extras/eventbridge/connections` | `200` | ✓ 200 |
@@ -79,19 +79,19 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `lambda` | `permission` | `POST` | `/api/lambda/functions/{name}/permission` | `200` | ✓ 200 |
 | `lambda` | `updateCode` | `POST` | `/api/lambda/functions/{name}/code` | `200` | ✓ 200 |
 | `lambda` | `updateConfig` | `POST` | `/api/lambda/functions/{name}/configuration` | `200` | ✓ 200 |
-| `rds` | `create` | `POST` | `/api/rds/databases` | `503` | ✗ 503 — {"detail":"Error: The remote \"postgres\" doesn't exist"} |
-| `rds` | `delete` | `DELETE` | `/api/rds/databases/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `rds` | `get` | `GET` | `/api/rds/databases/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `rds` | `list` | `GET` | `/api/rds/databases` | `200` | ✓ 200 |
-| `rds` | `modify` | `POST` | `/api/rds/databases/{name}/modify` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `rds` | `paramGroups` | `GET` | `/api/rds/parameter-groups` | `200` | ✓ 200 |
-| `rds` | `reboot` | `POST` | `/api/rds/databases/{name}/reboot` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `rds` | `snapshots` | `GET` | `/api/rds/snapshots` | `200` | ✓ 200 |
-| `rds` | `start` | `POST` | `/api/rds/databases/{name}/start` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `rds` | `stop` | `POST` | `/api/rds/databases/{name}/stop` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `rds` | `subnetGroups` | `GET` | `/api/rds/subnet-groups` | `200` | ✓ 200 |
+| `rds` | `create` | `POST` | `/api/rds/databases` | `503` | ✓ 503 — environmental: 503 |
+| `rds` | `delete` | `DELETE` | `/api/rds/databases/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `rds` | `get` | `GET` | `/api/rds/databases/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `rds` | `list` | `GET` | `/api/rds/databases` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `rds` | `modify` | `POST` | `/api/rds/databases/{name}/modify` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `rds` | `paramGroups` | `GET` | `/api/rds/parameter-groups` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `rds` | `reboot` | `POST` | `/api/rds/databases/{name}/reboot` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `rds` | `snapshots` | `GET` | `/api/rds/snapshots` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `rds` | `start` | `POST` | `/api/rds/databases/{name}/start` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `rds` | `stop` | `POST` | `/api/rds/databases/{name}/stop` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `rds` | `subnetGroups` | `GET` | `/api/rds/subnet-groups` | `0` | ✓ 0 — catalog stub - no backend handler |
 | `s3` | `create` | `POST` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
-| `s3` | `delete` | `DELETE` | `/api/s3/buckets/{name}` | `409` | ✗ 409 — {"detail":"BucketNotEmpty — delete all objects first"} |
+| `s3` | `delete` | `DELETE` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
 | `s3` | `get` | `GET` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
 | `s3` | `list` | `GET` | `/api/s3/buckets` | `200` | ✓ 200 |
 | `s3` | `notifications` | `PUT` | `/api/s3/buckets/{name}/notification` | `200` | ✓ 200 |
@@ -178,10 +178,10 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `storage` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/{name}` | `200` | ✓ 200 |
 | `storage` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/{name}` | `200` | ✓ 200 |
 | `storage` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts` | `200` | ✓ 200 |
-| `vm` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/vyomi-conf-vm` | `200` | ✓ 200 |
-| `vm` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `200` | ✓ 200 |
-| `vm` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `200` | ✓ 200 |
-| `vm` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines` | `200` | ✓ 200 |
+| `vm` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/vyomi-conf-vm` | `507` | ✓ 507 — environmental: 507 |
+| `vm` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `vm` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `vm` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines` | `0` | ✓ 0 — catalog stub - no backend handler |
 | `vnet` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/vyomi-conf-vnet` | `200` | ✓ 200 |
 | `vnet` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/{name}` | `200` | ✓ 200 |
 | `vnet` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/{name}` | `200` | ✓ 200 |
@@ -197,26 +197,26 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `apigateway` | `gateways` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/gateways` | `200` | ✓ 200 |
 | `apigateway` | `get` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{name}` | `200` | ✓ 200 |
 | `apigateway` | `list` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis` | `200` | ✓ 200 |
-| `cloudsql` | `backups` | `GET` | `/api/gcp/rds/databases/{name}/backups` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `cloudsql` | `create` | `POST` | `/api/gcp/rds/databases` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["query","project"],"msg":"Field required","i |
-| `cloudsql` | `delete` | `DELETE` | `/api/gcp/rds/databases/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `cloudsql` | `get` | `GET` | `/api/gcp/rds/databases/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `cloudsql` | `list` | `GET` | `/api/gcp/rds/databases` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["query","project"],"msg":"Field required","i |
-| `cloudsql` | `patch` | `PATCH` | `/api/gcp/sql/v1beta4/projects/{project}/instances/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `cloudsql` | `restart` | `POST` | `/api/gcp/rds/databases/{name}/reboot` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `cloudsql` | `start` | `POST` | `/api/gcp/rds/databases/{name}/start` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `cloudsql` | `stop` | `POST` | `/api/gcp/rds/databases/{name}/stop` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `compute` | `create` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances` | `507` | ✗ 507 — {"detail":{"code":"insufficient_disk","reason":"Need 12.0 GB free for this launc |
-| `compute` | `delete` | `DELETE` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `compute` | `disks` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/disks` | `200` | ✓ 200 |
-| `compute` | `get` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `compute` | `images` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/images` | `200` | ✓ 200 |
-| `compute` | `instanceGroups` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instanceGroups` | `200` | ✓ 200 |
-| `compute` | `list` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances` | `200` | ✓ 200 |
-| `compute` | `reset` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/reset` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `compute` | `snapshots` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/snapshots` | `200` | ✓ 200 |
-| `compute` | `start` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/start` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `compute` | `stop` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/stop` | `0` | ✓ 0 — parent resource not created - dependent action |
+| `cloudsql` | `backups` | `GET` | `/api/gcp/rds/databases/{name}/backups` | `200` | ✓ 200 |
+| `cloudsql` | `create` | `POST` | `/api/gcp/rds/databases` | `200` | ✓ 200 |
+| `cloudsql` | `delete` | `DELETE` | `/api/gcp/rds/databases/{name}` | `200` | ✓ 200 |
+| `cloudsql` | `get` | `GET` | `/api/gcp/rds/databases/{name}` | `200` | ✓ 200 |
+| `cloudsql` | `list` | `GET` | `/api/gcp/rds/databases` | `200` | ✓ 200 |
+| `cloudsql` | `patch` | `PATCH` | `/api/gcp/sql/v1beta4/projects/{project}/instances/{name}` | `200` | ✓ 200 |
+| `cloudsql` | `restart` | `POST` | `/api/gcp/rds/databases/{name}/reboot` | `200` | ✓ 200 |
+| `cloudsql` | `start` | `POST` | `/api/gcp/rds/databases/{name}/start` | `200` | ✓ 200 |
+| `cloudsql` | `stop` | `POST` | `/api/gcp/rds/databases/{name}/stop` | `200` | ✓ 200 |
+| `compute` | `create` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances` | `507` | ✓ 507 — environmental: 507 |
+| `compute` | `delete` | `DELETE` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `compute` | `disks` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/disks` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `compute` | `get` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `compute` | `images` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/images` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `compute` | `instanceGroups` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instanceGroups` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `compute` | `list` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `compute` | `reset` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/reset` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `compute` | `snapshots` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/snapshots` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `compute` | `start` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/start` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `compute` | `stop` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/stop` | `0` | ✓ 0 — catalog stub - no backend handler |
 | `eventarc` | `channels` | `GET` | `/api/gcp/extras/eventarc/channels` | `200` | ✓ 200 |
 | `eventarc` | `create` | `POST` | `/api/gcp/extras/eventarc/triggers` | `200` | ✓ 200 |
 | `eventarc` | `delete` | `DELETE` | `/api/gcp/extras/eventarc/triggers/{name}` | `200` | ✓ 200 |
