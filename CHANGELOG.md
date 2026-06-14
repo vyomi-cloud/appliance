@@ -6,6 +6,18 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.6] — 2026-06-14
+
+Two follow-on fixes to v1.1.5 surfaced by the first real user.
+
+### Fixed
+
+- **Runtime-bridge poll timeout was too aggressive.** v1.1.5 polled `:9171/health` for 30s, but `systemd` queued the bridge start behind `snap.lxd.daemon.service` which on a fresh cold-start takes 1-3 min to settle. The launcher gave up at 30s even though the bridge came up healthy 2-3 min later. Two fixes:
+  - Drop `After=snap.lxd.daemon.service` and `Wants=snap.lxd.daemon.service` from the systemd unit. The bridge only checks LXD on-demand per HTTP request anyway — no need to block startup on it. `After=network.target` is enough.
+  - Bump the bridge poll timeout from 30s → 180s as a safety belt, plus a 15s heartbeat to the captured log so triage shows what state systemd is in.
+  - `systemctl reset-failed` before `enable --now` so a prior failed launch doesn't poison the next attempt.
+- **`%b` literal artifacts in the failure banner.** `_die()` embedded `%b` as colour-marker placeholders, but `_emit()`'s `printf '%b\n' "$line"` treats the string as the ARGUMENT to `%b`, not as a format string — so embedded `%b` characters printed as literals. Fix: `_emit()` now uses `printf '%s\n'` (no format interpretation at all) and every caller pre-formats with concrete `${_C_RED}…${_C_RESET}` interpolation. Cleaner AND safer.
+
 ## [1.1.5] — 2026-06-14
 
 **Commercial-grade launcher UX.** The previous launcher could exit silently on a runtime-bridge failure, leaving the user staring at a returned shell prompt with no clue what happened. This release makes the launcher loud, structured, and recoverable.
