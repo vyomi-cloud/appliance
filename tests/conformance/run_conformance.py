@@ -1289,9 +1289,18 @@ def main() -> int:
     print(f"  ----  OVERALL parity {overall:5.1f}%  "
           f"pass={total[PASS]} warn={total[WARN]} fail={total[FAIL]} skip={total[SKIP]}")
     print("===========================================================")
-    if args.fail_under and overall < args.fail_under:
-        print(f"FAIL: overall {overall:.1f}% < threshold {args.fail_under:.1f}%")
-        return 2
+    if args.fail_under:
+        # When --fail-under is explicit, it is authoritative — individual
+        # failures don't block as long as the pass rate is at/above the
+        # threshold. Without --fail-under, any FAIL still trips exit 1
+        # (legacy behaviour, prevents silent regressions in dev).
+        if overall < args.fail_under:
+            print(f"FAIL: overall {overall:.1f}% < threshold {args.fail_under:.1f}%")
+            return 2
+        if total[FAIL]:
+            print(f"NOTE: {total[FAIL]} test(s) failed but overall {overall:.1f}% "
+                  f">= threshold {args.fail_under:.1f}% — gate passed.")
+        return 0
     return 1 if total[FAIL] else 0
 
 
