@@ -16,8 +16,8 @@ REPORT="${1:-tests/conformance/console_actions/REPORT.md}"
 # + alias routes, gcp.vpc.patch handler, sql start/stop handlers).
 # AWS 76.5→97.4%, GCP 95.4%, Azure 100%.
 AWS_MIN="${AWS_MIN:-96}"      # current LIVE: 97.4%
-GCP_MIN="${GCP_MIN:-94}"      # current LIVE: 95.4%
-AZURE_MIN="${AZURE_MIN:-100}" # tier-skip baseline
+GCP_MIN="${GCP_MIN:-95}"      # current LIVE: 96.6%
+AZURE_MIN="${AZURE_MIN:-100}" # tier-skip baseline (vm.create timeout was a flake)
 
 if [ ! -f "$REPORT" ]; then
   echo "✗ REPORT.md not found at $REPORT — pytest didn't write it"
