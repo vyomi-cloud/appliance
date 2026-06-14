@@ -85,7 +85,7 @@ usage() {
 Vyomi simulator launcher (cloud-learn CLI) — local multi-cloud appliance
 
 Usage:
-  cloud-learn up
+  cloud-learn up [-v|--verbose]
   cloud-learn down
   cloud-learn stop
   cloud-learn force-stop
@@ -95,8 +95,14 @@ Usage:
   cloud-learn doctor
   cloud-learn help
 
+Flags:
+  -v, --verbose      Stream raw cloud-init log lines + sub-step detail.
+                     Useful during triage. Same effect as
+                     CLOUD_LEARN_VERBOSE=1 in the environment.
+
 Environment:
   CLOUD_LEARN_HOME         Root directory containing CloudLearn sources
+  CLOUD_LEARN_VERBOSE      Set to 1 to emit extra progress detail
   CLOUD_LEARN_COMPOSE_FILE Alternate compose file path
   CLOUD_LEARN_PROJECT_NAME Compose project name (default: cloud-learn)
   CLOUD_LEARN_RUNTIME_CONTEXT outer=manage appliance VM, inner=start stack in VM
@@ -325,8 +331,43 @@ runcmd:
 EOF
 }
 
+# Global wall-clock anchor — set once at script start so every progress
+# line can show elapsed since invocation. Lets users see at a glance
+# whether they're 30s into the launch or 4 minutes in.
+_LAUNCH_STARTED_AT="${_LAUNCH_STARTED_AT:-$(date +%s)}"
+
 progress() {
-  printf '%s\n' "$*" >&2
+  local elapsed=$(( $(date +%s) - _LAUNCH_STARTED_AT ))
+  local m=$(( elapsed / 60 )) s=$(( elapsed % 60 ))
+  printf '[%dm%02ds] %s\n' "$m" "$s" "$*" >&2
+}
+
+# verbose() emits ONLY when CLOUD_LEARN_VERBOSE=1 (or -v/-vv was passed).
+# Used for sub-step detail that's noisy on normal runs but invaluable
+# during triage. Same elapsed-time prefix as progress().
+VERBOSE="${CLOUD_LEARN_VERBOSE:-0}"
+verbose() {
+  [ "$VERBOSE" = "0" ] && return 0
+  local elapsed=$(( $(date +%s) - _LAUNCH_STARTED_AT ))
+  local m=$(( elapsed / 60 )) s=$(( elapsed % 60 ))
+  printf '[%dm%02ds]   · %s\n' "$m" "$s" "$*" >&2
+}
+
+# Human-readable description of a runcmd / install command, so the
+# cloud-init poll can print "(installing LXD container runtime ~150MB)"
+# instead of just dumping the raw process arglist.
+describe_step() {
+  case "$1" in
+    *"snap install lxd"*)     printf 'installing LXD container runtime (~150MB snap)' ;;
+    *"snap install"*)         printf 'installing snap package' ;;
+    *"apt-get install"*"docker"*) printf 'installing Docker engine' ;;
+    *"apt-get install"*"python3"*) printf 'installing Python 3 runtime' ;;
+    *"apt-get install"*)      printf 'installing apt packages' ;;
+    *"docker-compose"*)       printf 'configuring docker-compose plugin' ;;
+    *"systemctl"*"docker"*)   printf 'starting Docker daemon' ;;
+    *"usermod"*"docker"*)     printf 'granting ubuntu user docker access' ;;
+    *)                        printf '%s' "$1" ;;
+  esac
 }
 
 appliance_multipass_cmd() {
@@ -511,48 +552,71 @@ appliance_launch_vm() {
 }
 
 appliance_wait_for_cloud_init() {
-  # Poll cloud-init status periodically and surface what stage it's in so
-  # the user sees concrete progress instead of an unbounded silent wait.
-  # The phases on a fresh Ubuntu 24.04 are:
-  #   init   — kernel / network / package mirrors  (~10s)
-  #   config — apt-get install docker.io / python3 (~60-90s)
-  #   final  — runcmd: `snap install lxd`         (~90-180s — slowest)
-  # We print at most one line per phase change + a heartbeat every 30s.
+  # Poll cloud-init every 6s and surface concrete progress so the user
+  # sees "[42s] Installing LXD container runtime (~150MB snap)" instead
+  # of a silent "Waiting for initialization to complete" for 3-5 min.
+  #
+  # Cloud-init phases on a fresh Ubuntu 24.04 (timings for a typical
+  # 8 GB / 4 vCPU VM on home broadband):
+  #   init   — kernel / network / package mirrors    (~10s)
+  #   config — apt update + base packages            (~30s)
+  #   final  — runcmd: docker enable + snap lxd      (~120s)
+  #
+  # We track stage transitions, the current runcmd process, AND the
+  # tail of cloud-init-output.log (in verbose mode) so triage is fast.
   local compose
   compose="$(appliance_multipass_cmd)"
   progress "==> Appliance: waiting for cloud-init (LXD snap install is the slow step)"
-  local started_at last_status last_stage elapsed
+  local started_at last_status last_step elapsed heartbeat_at
   started_at=$(date +%s)
-  last_stage=""
+  last_step=""
+  heartbeat_at=$started_at
   while true; do
+    # cloud-init status: "not started" → "running" → "done" / "disabled"
     last_status=$("$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
       "cloud-init status 2>/dev/null | awk -F': ' '/^status:/{print \$2}' || echo unknown" 2>/dev/null \
       | tr -d '\r' | head -1)
     [ -z "$last_status" ] && last_status="unknown"
-    if [ "$last_status" = "done" ] || [ "$last_status" = "disabled" ]; then
-      progress "    cloud-init finished after $(( $(date +%s) - started_at ))s"
-      break
-    fi
-    # Probe which runcmd entry is currently running (if any) for a clearer
-    # progress hint. snap install is the long pole.
-    local current_step=""
-    current_step=$("$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
-      "ps -eo pid,args 2>/dev/null | grep -E 'snap install|apt-get install|docker' | grep -v grep | head -1 | sed 's/^[ ]*[0-9]*//' | cut -c1-80" 2>/dev/null \
-      | tr -d '\r' | head -1)
     elapsed=$(( $(date +%s) - started_at ))
-    local stage="$last_status"
-    [ -n "$current_step" ] && stage="${stage} — ${current_step}"
-    if [ "$stage" != "$last_stage" ]; then
-      progress "    [${elapsed}s] cloud-init: ${stage}"
-      last_stage="$stage"
-    fi
-    # Bail-out heartbeat at 10 min — something is clearly wrong by then.
-    if [ "$elapsed" -gt 600 ]; then
-      progress "    cloud-init has been running for >10 min — check"
-      progress "    'multipass exec $APPLIANCE_NAME -- sudo tail /var/log/cloud-init-output.log'"
+    if [ "$last_status" = "done" ] || [ "$last_status" = "disabled" ]; then
+      progress "    ✓ cloud-init finished (${elapsed}s)"
       break
     fi
-    sleep 12
+    # Identify the slowest currently-running runcmd entry — that's the
+    # bit the user actually wants to see described.
+    local current_step current_desc
+    current_step=$("$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
+      "ps -eo args 2>/dev/null | grep -E 'snap install|apt-get install|docker' | grep -v grep | head -1 | cut -c1-100" 2>/dev/null \
+      | tr -d '\r' | head -1 | sed 's/^[ \t]*//')
+    if [ -n "$current_step" ]; then
+      current_desc="$(describe_step "$current_step")"
+      if [ "$current_desc" != "$last_step" ]; then
+        progress "    [${elapsed}s] ${current_desc}"
+        last_step="$current_desc"
+      fi
+    fi
+    # Heartbeat every 30s so the user knows we're still alive even when
+    # the runcmd identity hasn't changed (e.g. snap install lxd phase).
+    if [ $(( $(date +%s) - heartbeat_at )) -ge 30 ] && [ -n "$last_step" ]; then
+      progress "    [${elapsed}s] still ${last_step}…"
+      heartbeat_at=$(date +%s)
+    fi
+    # Verbose mode: tail recent cloud-init log lines so the user sees
+    # the raw apt / snap output.
+    if [ "$VERBOSE" != "0" ]; then
+      local tail_line
+      tail_line=$("$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
+        "sudo tail -1 /var/log/cloud-init-output.log 2>/dev/null" 2>/dev/null \
+        | tr -d '\r' | head -1 | cut -c1-100)
+      [ -n "$tail_line" ] && verbose "cloud-init-output.log: ${tail_line}"
+    fi
+    # Bail-out at 10 min — something has gone wrong by then.
+    if [ "$elapsed" -gt 600 ]; then
+      progress "    ⚠ cloud-init has been running >10 min — check"
+      progress "      'multipass exec $APPLIANCE_NAME -- sudo tail -f /var/log/cloud-init-output.log'"
+      break
+    fi
+    sleep 6
   done
 }
 
@@ -564,6 +628,12 @@ appliance_exec_launcher() {
   local compose
   compose="$(appliance_multipass_cmd)"
   progress "==> Appliance: starting inner CloudLearn stack (direct compose)"
+  progress "    (first run rebuilds the simulator image ~2-3 min; subsequent runs are cached)"
+  # IMPORTANT: do NOT redirect inner output to /dev/null. The docker
+  # build prints the layer-by-layer status that takes the longest;
+  # showing it gives the user concrete feedback rather than a silent
+  # 3-minute wait. In quiet (non-verbose) mode we still let the
+  # progress lines flow because they're a real-time TTY for the user.
   "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "
     set -e
     # Bind-mounted into the simulator container at the same path; the
@@ -573,8 +643,12 @@ appliance_exec_launcher() {
     sudo chown -R 100:101 /var/lib/cloudlearn/deployments
     cd ${APPLIANCE_WORKSPACE}
     # Ensure docker daemon is ready
+    echo '    [inner] waiting for docker daemon…'
     for i in \$(seq 1 30); do
-      if docker info >/dev/null 2>&1; then break; fi
+      if docker info >/dev/null 2>&1; then
+        echo \"    [inner] docker daemon up after \${i}s\"
+        break
+      fi
       sleep 1
     done
     if ! docker info >/dev/null 2>&1; then
@@ -582,8 +656,11 @@ appliance_exec_launcher() {
       exit 1
     fi
     # Build + start; -d (detach) so we return immediately; rebuilds changed only.
-    docker compose -f docker-compose.appliance.yml up -d --build --remove-orphans
-    docker compose -f docker-compose.appliance.yml ps
+    echo '    [inner] docker compose up -d --build (output below):'
+    docker compose -f docker-compose.appliance.yml up -d --build --remove-orphans 2>&1 \
+      | sed 's/^/      /'
+    echo '    [inner] container summary:'
+    docker compose -f docker-compose.appliance.yml ps 2>&1 | sed 's/^/      /'
   "
 }
 
@@ -925,8 +1002,22 @@ outer_run() {
   if [ "$#" -gt 0 ]; then
     shift
   fi
+  # Parse global flags (positional after subcmd). Right now just -v.
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -v|--verbose)
+        VERBOSE=1
+        export CLOUD_LEARN_VERBOSE=1
+        shift
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
   case "$subcmd" in
     up)
+      [ "$VERBOSE" != "0" ] && progress "==> Verbose mode on (CLOUD_LEARN_VERBOSE=1)"
       ensure_prereqs
       vyomi_host_ssh_bootstrap
       write_appliance_manifest
