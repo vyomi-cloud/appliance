@@ -66,7 +66,7 @@ _AWS_PAYLOADS: dict[str, dict] = {
                    "allocated_storage": 20},
     "lambda":     {"function_name": "vyomi-conf-fn", "runtime": "python3.11",
                    "handler": "index.handler", "role": "arn:aws:iam::123:role/lambda-x",
-                   "code": {"zip_file": "print('hi')"}},
+                   "code": "print('hi')"},
     "apigateway": {"name": "vyomi-conf-api"},
     "dynamodb":   {"table_name": "vyomi-conf-table",
                    "attribute_definitions": [{"attribute_name": "id", "attribute_type": "S"}],
@@ -234,6 +234,18 @@ _SUB_ACTION_PAYLOADS: dict[tuple[str, str, str], dict] = {
     },
     ("aws", "vpc", "associateSubnet"): {
         "subnet_id": "__SUBNET_ID__",
+    },
+    # AWS Lambda sub-resources
+    ("aws", "lambda", "updateCode"): {
+        "code": "print('updated')",
+    },
+    ("aws", "lambda", "updateConfig"): {
+        "description": "conformance updated",
+    },
+    ("aws", "lambda", "permission"): {
+        "statement_id": "vyomi-conf-stmt",
+        "action": "lambda:InvokeFunction",
+        "principal": "events.amazonaws.com",
     },
     # AWS API Gateway sub-resources
     ("aws", "apigateway", "createResource"): {

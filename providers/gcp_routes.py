@@ -66,6 +66,8 @@ _TARGET_OVERRIDES = {
     "api_gcp_sql_get_instance": gcp_storage_sql_vpc.api_gcp_sql_get_instance,
     "api_gcp_sql_delete_instance": gcp_storage_sql_vpc.api_gcp_sql_delete_instance,
     "api_gcp_sql_restart_instance": gcp_storage_sql_vpc.api_gcp_sql_restart_instance,
+    "api_gcp_sql_start_instance": gcp_storage_sql_vpc.api_gcp_sql_start_instance,
+    "api_gcp_sql_stop_instance": gcp_storage_sql_vpc.api_gcp_sql_stop_instance,
     "api_gcp_sql_list_backups": gcp_storage_sql_vpc.api_gcp_sql_list_backups,
     "api_gcp_sql_create_backup": gcp_storage_sql_vpc.api_gcp_sql_create_backup,
     "api_gcp_sql_delete_backup": gcp_storage_sql_vpc.api_gcp_sql_delete_backup,
@@ -75,6 +77,7 @@ _TARGET_OVERRIDES = {
     "api_gcp_vpc_create_network": gcp_storage_sql_vpc.api_gcp_vpc_create_network,
     "api_gcp_vpc_get_network": gcp_storage_sql_vpc.api_gcp_vpc_get_network,
     "api_gcp_vpc_delete_network": gcp_storage_sql_vpc.api_gcp_vpc_delete_network,
+    "api_gcp_vpc_patch_network": gcp_storage_sql_vpc.api_gcp_vpc_patch_network,
     "api_gcp_vpc_list_subnetworks": gcp_storage_sql_vpc.api_gcp_vpc_list_subnetworks,
     "api_gcp_vpc_create_subnetwork": gcp_storage_sql_vpc.api_gcp_vpc_create_subnetwork,
     "api_gcp_vpc_list_firewalls": gcp_storage_sql_vpc.api_gcp_vpc_list_firewalls,
@@ -337,6 +340,11 @@ def register(app, h) -> None:
         ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/databases/{database}", "api_gcp_sql_get_database", "(project: str, instance: str, database: str)"),
         ("DELETE", "/sql/v1beta4/projects/{project}/instances/{instance}/databases/{database}", "api_gcp_sql_delete_database", "(project: str, instance: str, database: str)"),
         ("POST", "/api/gcp/rds/databases/{instance}/reboot", "api_gcp_sql_restart_instance", "(project: str, instance: str)"),
+        # /start and /stop — catalog publishes these; Cloud SQL implements them as activationPolicy flips.
+        ("POST", "/api/gcp/rds/databases/{instance}/start", "api_gcp_sql_start_instance", "(project: str = \"cloudlearn\", instance: str = \"\")"),
+        ("POST", "/api/gcp/rds/databases/{instance}/stop", "api_gcp_sql_stop_instance", "(project: str = \"cloudlearn\", instance: str = \"\")"),
+        ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/start", "api_gcp_sql_start_instance", "(project: str, instance: str)"),
+        ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/stop", "api_gcp_sql_stop_instance", "(project: str, instance: str)"),
         ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/backups", "api_gcp_sql_list_backups", "(project: str, instance: str = \"\")"),
         ("GET", "/api/gcp/rds/databases/{instance}/backups", "api_gcp_sql_list_backups", "(project: str, instance: str = \"\")"),
         ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/backups", "api_gcp_sql_create_backup", "(project: str, instance: str, request: Request)"),
@@ -350,6 +358,14 @@ def register(app, h) -> None:
         # Pub/Sub
         ("GET", "/v1/projects/{project}/topics", "api_gcp_pubsub_list_topics", "(project: str)"),
         ("GET", "/api/gcp/sqs/queues", "api_gcp_pubsub_list_topics", "(project: str)"),
+        # Canonical /api/gcp/pubsub/v1 aliases — match the console catalog
+        # so SDK / REST / console land on the same handlers (session-5 T3).
+        ("GET", "/api/gcp/pubsub/v1/projects/{project}/topics", "api_gcp_pubsub_list_topics", "(project: str)"),
+        ("POST", "/api/gcp/pubsub/v1/projects/{project}/topics", "api_gcp_pubsub_create_topic", "(project: str, request: Request)"),
+        ("GET", "/api/gcp/pubsub/v1/projects/{project}/topics/{topic}", "api_gcp_pubsub_get_topic", "(project: str, topic: str)"),
+        ("DELETE", "/api/gcp/pubsub/v1/projects/{project}/topics/{topic}", "api_gcp_pubsub_delete_topic", "(project: str, topic: str)"),
+        ("POST", "/api/gcp/pubsub/v1/projects/{project}/topics/{topic}:publish", "api_gcp_pubsub_publish", "(project: str, topic: str, request: Request)"),
+        ("GET", "/api/gcp/pubsub/v1/projects/{project}/subscriptions", "api_gcp_pubsub_list_subscriptions", "(project: str)"),
         ("POST", "/v1/projects/{project}/topics", "api_gcp_pubsub_create_topic", "(project: str, request: Request)"),
         ("PUT", "/v1/projects/{project}/topics/{topic}", "api_gcp_pubsub_put_topic", "(project: str, topic: str, request: Request)"),
         ("PUT", "/api/gcp/pubsub/v1/projects/{project}/topics/{topic}", "api_gcp_pubsub_put_topic", "(project: str, topic: str, request: Request)"),
@@ -416,6 +432,15 @@ def register(app, h) -> None:
         # Functions
         ("GET", "/v1/projects/{project}/locations/{location}/functions", "api_gcp_functions_list", "(project: str, location: str = \"us-central1\")"),
         ("GET", "/api/gcp/lambda/functions", "api_gcp_functions_list", "(project: str, location: str = \"us-central1\")"),
+        # Canonical /api/gcp/cloudfunctions/v2 aliases — what the console
+        # catalog declares. Maps onto the v1 handlers (same record shape,
+        # different URL prefix on the wire).
+        ("GET", "/api/gcp/cloudfunctions/v2/projects/{project}/locations/{location}/functions", "api_gcp_functions_list", "(project: str, location: str = \"us-central1\")"),
+        ("POST", "/api/gcp/cloudfunctions/v2/projects/{project}/locations/{location}/functions", "api_gcp_functions_create", "(project: str, request: Request, location: str = \"us-central1\")"),
+        ("GET", "/api/gcp/cloudfunctions/v2/projects/{project}/locations/{location}/functions/{function}", "api_gcp_functions_get", "(project: str, location: str, function: str)"),
+        ("PATCH", "/api/gcp/cloudfunctions/v2/projects/{project}/locations/{location}/functions/{function}", "api_gcp_functions_update", "(project: str, location: str, function: str, request: Request)"),
+        ("DELETE", "/api/gcp/cloudfunctions/v2/projects/{project}/locations/{location}/functions/{function}", "api_gcp_functions_delete", "(project: str, location: str, function: str)"),
+        ("POST", "/api/gcp/cloudfunctions/v2/projects/{project}/locations/{location}/functions/{function}:call", "api_gcp_functions_call", "(project: str, location: str, function: str, request: Request)"),
         ("POST", "/v1/projects/{project}/locations/{location}/functions", "api_gcp_functions_create", "(project: str, request: Request, location: str = \"us-central1\")"),
         ("POST", "/api/gcp/lambda/functions", "api_gcp_functions_create", "(project: str, request: Request, location: str = \"us-central1\")"),
         ("PATCH", "/v1/projects/{project}/locations/{location}/functions/{function}", "api_gcp_functions_update", "(project: str, location: str, function: str, request: Request)"),
@@ -458,6 +483,16 @@ def register(app, h) -> None:
         ("GET", "/compute/v1/projects/{project}/global/networks", "api_gcp_vpc_list_networks", "(project: str)"),
         ("GET", "/api/gcp/vpc/networks", "api_gcp_vpc_list_networks", "(project: str)"),
         ("GET", "/api/gcp/vpc/vpcs", "api_gcp_vpc_list_networks", "(project: str)"),
+        # Canonical /api/gcp/compute/v1 aliases — what the console catalog
+        # declares (session-5 T3).
+        ("GET", "/api/gcp/compute/v1/projects/{project}/global/networks", "api_gcp_vpc_list_networks", "(project: str)"),
+        ("POST", "/api/gcp/compute/v1/projects/{project}/global/networks", "api_gcp_vpc_create_network", "(project: str, request: Request)"),
+        ("GET", "/api/gcp/compute/v1/projects/{project}/global/networks/{network}", "api_gcp_vpc_get_network", "(project: str, network: str)"),
+        ("DELETE", "/api/gcp/compute/v1/projects/{project}/global/networks/{network}", "api_gcp_vpc_delete_network", "(project: str, network: str)"),
+        ("PATCH", "/api/gcp/compute/v1/projects/{project}/global/networks/{network}", "api_gcp_vpc_patch_network", "(project: str, network: str, request: Request)", "json", "payload"),
+        ("PATCH", "/compute/v1/projects/{project}/global/networks/{network}", "api_gcp_vpc_patch_network", "(project: str, network: str, request: Request)", "json", "payload"),
+        ("GET", "/api/gcp/compute/v1/projects/{project}/regions/{region}/subnetworks", "api_gcp_vpc_list_subnetworks", "(project: str, region: str)"),
+        ("GET", "/api/gcp/compute/v1/projects/{project}/global/firewalls", "api_gcp_vpc_list_firewalls", "(project: str)"),
         ("POST", "/compute/v1/projects/{project}/global/networks", "api_gcp_vpc_create_network", "(project: str, request: Request)"),
         ("POST", "/api/gcp/vpc/networks", "api_gcp_vpc_create_network", "(project: str, request: Request)"),
         ("POST", "/api/gcp/vpc/vpcs", "api_gcp_vpc_create_network", "(project: str, request: Request)"),
@@ -500,6 +535,14 @@ def register(app, h) -> None:
         ("POST", "/api/gcp/iam/policy", "api_gcp_iam_set_policy", "(project: str, request: Request)"),
         ("POST", "/v1/projects/{project}:testIamPermissions", "api_gcp_iam_test_permissions", "(project: str, request: Request)"),
         ("POST", "/api/gcp/iam/test-permissions", "api_gcp_iam_test_permissions", "(project: str, request: Request)"),
+        # Canonical /api/gcp/iam/v1 aliases — what the console catalog declares
+        # (session-5 T3).
+        ("GET", "/api/gcp/iam/v1/projects/{project}/serviceAccounts", "api_gcp_iam_list_service_accounts", "(project: str)"),
+        ("POST", "/api/gcp/iam/v1/projects/{project}/serviceAccounts", "api_gcp_iam_create_service_account", "(project: str, request: Request)"),
+        ("GET", "/api/gcp/iam/v1/projects/{project}/serviceAccounts/{account}", "api_gcp_iam_get_service_account", "(project: str, account: str)"),
+        ("DELETE", "/api/gcp/iam/v1/projects/{project}/serviceAccounts/{account}", "api_gcp_iam_delete_service_account", "(project: str, account: str)"),
+        ("GET", "/api/gcp/iam/v1/projects/{project}:getIamPolicy", "api_gcp_iam_get_policy", "(project: str)"),
+        ("POST", "/api/gcp/iam/v1/projects/{project}:setIamPolicy", "api_gcp_iam_set_policy", "(project: str, request: Request)"),
         ("GET", "/v1/projects/{project}/serviceAccounts", "api_gcp_iam_list_service_accounts", "(project: str)"),
         ("GET", "/api/gcp/iam/service-accounts", "api_gcp_iam_list_service_accounts", "(project: str)"),
         ("POST", "/v1/projects/{project}/serviceAccounts", "api_gcp_iam_create_service_account", "(project: str, request: Request)"),
