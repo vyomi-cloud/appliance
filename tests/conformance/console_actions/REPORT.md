@@ -7,7 +7,7 @@ Run locally: `pytest tests/conformance/console_actions/`
 
 | Provider | Pass | Total | Rate |
 |---|---|---|---|
-| ✗ aws | 52 | 124 | 41.9% |
+| ✗ aws | 51 | 124 | 41.1% |
 | ✓ azure | 52 | 52 | 100.0% |
 | ✗ gcp | 42 | 99 | 42.4% |
 
@@ -15,7 +15,7 @@ Run locally: `pytest tests/conformance/console_actions/`
 
 | Service | Action | Method | Path | Status | Result |
 |---|---|---|---|---|---|
-| `apigateway` | `create` | `POST` | `/api/apigateway/apis` | `200` | ✓ 200 |
+| `apigateway` | `create` | `POST` | `/api/apigateway/apis` | `0` | ✗ 0 — network: HTTPConnectionPool(host='127.0.0.1', port=9000): Read timed out. (read  |
 | `apigateway` | `createDeploy` | `POST` | `/api/apigateway/apis/{name}/deployments` | `404` | ✗ 404 — {"detail":"RestApiNotFound"} |
 | `apigateway` | `createResource` | `POST` | `/api/apigateway/apis/{name}/resources` | `404` | ✗ 404 — {"detail":"RestApiNotFound"} |
 | `apigateway` | `createStage` | `POST` | `/api/apigateway/apis/{name}/stages` | `500` | ✗ 500 — Internal Server Error |
@@ -36,14 +36,14 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `dynamodb` | `query` | `POST` | `/api/dynamodb/tables/{name}/query` | `404` | ✗ 404 — {"detail":"TableNotFound"} |
 | `dynamodb` | `scan` | `POST` | `/api/dynamodb/tables/{name}/scan` | `404` | ✗ 404 — {"detail":"TableNotFound"} |
 | `ec2` | `amis` | `GET` | `/api/ec2/amis` | `200` | ✓ 200 |
-| `ec2` | `create` | `POST` | `/api/ec2/instances` | `200` | ✓ 200 |
+| `ec2` | `create` | `POST` | `/api/ec2/instances` | `507` | ✗ 507 — {"detail":{"code":"insufficient_disk","reason":"Need 10.0 GB free for this launc |
 | `ec2` | `delete` | `DELETE` | `/api/ec2/instances/{name}` | `404` | ✗ 404 — <?xml version="1.0" encoding="UTF-8"?><Error><Code>NoSuchBucket</Code><Message>T |
 | `ec2` | `get` | `GET` | `/api/ec2/instances/{name}` | `404` | ✗ 404 — <?xml version="1.0" encoding="UTF-8"?><Error><Code>NoSuchBucket</Code><Message>T |
-| `ec2` | `list` | `GET` | `/api/ec2/instances` | `200` | ✓ 200 |
-| `ec2` | `reboot` | `POST` | `/api/ec2/instances/{name}/reboot` | `409` | ✗ 409 — {"detail":"InstanceNotRunning"} |
-| `ec2` | `start` | `POST` | `/api/ec2/instances/{name}/start` | `200` | ✓ 200 |
-| `ec2` | `stop` | `POST` | `/api/ec2/instances/{name}/stop` | `200` | ✓ 200 |
-| `ec2` | `terminate` | `POST` | `/api/ec2/instances/{name}/terminate` | `200` | ✓ 200 |
+| `ec2` | `list` | `GET` | `/api/ec2/instances` | `0` | ✗ 0 — network: HTTPConnectionPool(host='127.0.0.1', port=9000): Read timed out. (read  |
+| `ec2` | `reboot` | `POST` | `/api/ec2/instances/{name}/reboot` | `404` | ✗ 404 — {"detail":"NoSuchInstance"} |
+| `ec2` | `start` | `POST` | `/api/ec2/instances/{name}/start` | `404` | ✗ 404 — {"detail":"NoSuchInstance"} |
+| `ec2` | `stop` | `POST` | `/api/ec2/instances/{name}/stop` | `404` | ✗ 404 — {"detail":"NoSuchInstance"} |
+| `ec2` | `terminate` | `POST` | `/api/ec2/instances/{name}/terminate` | `404` | ✗ 404 — {"detail":"NoSuchInstance"} |
 | `eventbridge` | `api-destinations` | `GET` | `/api/aws/extras/eventbridge/api-destinations` | `200` | ✓ 200 |
 | `eventbridge` | `archives` | `GET` | `/api/aws/extras/eventbridge/archives` | `200` | ✓ 200 |
 | `eventbridge` | `connections` | `GET` | `/api/aws/extras/eventbridge/connections` | `200` | ✓ 200 |
@@ -51,7 +51,7 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `eventbridge` | `delete` | `DELETE` | `/api/aws/extras/eventbridge/rules/{name}` | `200` | ✓ 200 |
 | `eventbridge` | `delete` | `DELETE` | `/api/aws/extras/eventbridge/rules/{name}` | `200` | ✓ 200 |
 | `eventbridge` | `event-buses` | `GET` | `/api/aws/extras/eventbridge/event-buses` | `200` | ✓ 200 |
-| `eventbridge` | `get` | `GET` | `/api/aws/extras/eventbridge/rules/{name}` | `404` | ✗ 404 — {"detail":"Unknown stub: eventbridge/rules/vyomi-conf-rule"} |
+| `eventbridge` | `get` | `GET` | `/api/aws/extras/eventbridge/rules/{name}` | `200` | ✓ 200 |
 | `eventbridge` | `list` | `GET` | `/api/aws/extras/eventbridge/rules` | `200` | ✓ 200 |
 | `eventbridge` | `rules` | `GET` | `/api/aws/extras/eventbridge/rules` | `200` | ✓ 200 |
 | `iam` | `attachments` | `GET` | `/api/iam/attachments` | `200` | ✓ 200 |
@@ -72,7 +72,7 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `kms` | `custom-key-stores` | `GET` | `/api/aws/extras/kms/custom-key-stores` | `200` | ✓ 200 |
 | `kms` | `delete` | `DELETE` | `/api/aws/extras/kms/keys/{name}` | `200` | ✓ 200 |
 | `kms` | `delete` | `DELETE` | `/api/aws/extras/kms/keys/{name}` | `200` | ✓ 200 |
-| `kms` | `get` | `GET` | `/api/aws/extras/kms/keys/{name}` | `404` | ✗ 404 — {"detail":"Unknown stub: kms/keys/key-67086f3e"} |
+| `kms` | `get` | `GET` | `/api/aws/extras/kms/keys/{name}` | `200` | ✓ 200 |
 | `kms` | `keys` | `GET` | `/api/aws/extras/kms/keys` | `200` | ✓ 200 |
 | `kms` | `list` | `GET` | `/api/aws/extras/kms/keys` | `200` | ✓ 200 |
 | `lambda` | `create` | `POST` | `/api/lambda/functions` | `500` | ✗ 500 — Internal Server Error |
@@ -97,18 +97,18 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `rds` | `start` | `POST` | `/api/rds/databases/{name}/start` | `404` | ✗ 404 — {"detail":"DBInstanceNotFound"} |
 | `rds` | `stop` | `POST` | `/api/rds/databases/{name}/stop` | `404` | ✗ 404 — {"detail":"DBInstanceNotFound"} |
 | `rds` | `subnetGroups` | `GET` | `/api/rds/subnet-groups` | `200` | ✓ 200 |
-| `s3` | `create` | `POST` | `/api/s3/buckets` | `404` | ✗ 404 — <?xml version="1.0" encoding="UTF-8"?><Error><Code>NoSuchBucket</Code><Message>T |
+| `s3` | `create` | `POST` | `/api/s3/buckets/{name}` | `409` | ✗ 409 — {"detail":"BucketAlreadyOwnedByYou"} |
 | `s3` | `delete` | `DELETE` | `/api/s3/buckets/{name}` | `404` | ✗ 404 — <?xml version="1.0" encoding="UTF-8"?><Error><Code>NoSuchBucket</Code><Message>T |
-| `s3` | `get` | `GET` | `/api/s3/buckets/{name}` | `404` | ✗ 404 — {"detail":"NoSuchBucket"} |
+| `s3` | `get` | `GET` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
 | `s3` | `list` | `GET` | `/api/s3/buckets` | `200` | ✓ 200 |
 | `s3` | `notifications` | `PUT` | `/api/s3/buckets/{name}/notification` | `404` | ✗ 404 — <?xml version="1.0" encoding="UTF-8"?><Error><Code>NoSuchBucket</Code><Message>T |
-| `s3` | `objects` | `GET` | `/api/s3/buckets/{name}/objects` | `404` | ✗ 404 — {"detail":"NoSuchBucket"} |
+| `s3` | `objects` | `GET` | `/api/s3/buckets/{name}/objects` | `200` | ✓ 200 |
 | `s3` | `uploadObject` | `POST` | `/api/s3/buckets/{name}/objects` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["body","file"],"msg":"Field required","input |
 | `s3` | `versioning` | `PUT` | `/api/s3/buckets/{name}/versioning` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["body"],"msg":"Field required","input":null} |
 | `secretsmanager` | `create` | `POST` | `/api/aws/extras/secretsmanager/secrets` | `200` | ✓ 200 |
 | `secretsmanager` | `delete` | `DELETE` | `/api/aws/extras/secretsmanager/secrets/{name}` | `200` | ✓ 200 |
 | `secretsmanager` | `delete` | `DELETE` | `/api/aws/extras/secretsmanager/secrets/{name}` | `200` | ✓ 200 |
-| `secretsmanager` | `get` | `GET` | `/api/aws/extras/secretsmanager/secrets/{name}` | `404` | ✗ 404 — {"detail":"Unknown stub: secretsmanager/secrets/vyomi-conf-secret"} |
+| `secretsmanager` | `get` | `GET` | `/api/aws/extras/secretsmanager/secrets/{name}` | `200` | ✓ 200 |
 | `secretsmanager` | `list` | `GET` | `/api/aws/extras/secretsmanager/secrets` | `200` | ✓ 200 |
 | `secretsmanager` | `replicas` | `GET` | `/api/aws/extras/secretsmanager/replicas` | `200` | ✓ 200 |
 | `secretsmanager` | `rotation` | `GET` | `/api/aws/extras/secretsmanager/rotation` | `200` | ✓ 200 |
@@ -263,7 +263,7 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `kms` | `delete` | `DELETE` | `/api/gcp/extras/kms/keys/{name}` | `200` | ✓ 200 |
 | `kms` | `delete` | `DELETE` | `/api/gcp/extras/kms/keys/{name}` | `200` | ✓ 200 |
 | `kms` | `ekmConnections` | `GET` | `/api/gcp/extras/kms/ekmConnections` | `200` | ✓ 200 |
-| `kms` | `get` | `GET` | `/api/gcp/extras/kms/keys/{name}` | `404` | ✗ 404 — {"detail":"Unknown GCP stub: kms/keys/key-6cd0649c"} |
+| `kms` | `get` | `GET` | `/api/gcp/extras/kms/keys/{name}` | `404` | ✗ 404 — {"detail":"Unknown GCP stub: kms/keys/key-b27ac8ed"} |
 | `kms` | `importJobs` | `GET` | `/api/gcp/extras/kms/importJobs` | `200` | ✓ 200 |
 | `kms` | `keyrings` | `GET` | `/api/gcp/extras/kms/keyrings` | `200` | ✓ 200 |
 | `kms` | `keys` | `GET` | `/api/gcp/extras/kms/keys` | `200` | ✓ 200 |
@@ -279,7 +279,7 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `secretmanager` | `create` | `POST` | `/api/gcp/extras/secretmanager/secrets` | `200` | ✓ 200 |
 | `secretmanager` | `delete` | `DELETE` | `/api/gcp/extras/secretmanager/secrets/{name}` | `200` | ✓ 200 |
 | `secretmanager` | `delete` | `DELETE` | `/api/gcp/extras/secretmanager/secrets/{name}` | `200` | ✓ 200 |
-| `secretmanager` | `get` | `GET` | `/api/gcp/extras/secretmanager/secrets/{name}` | `404` | ✗ 404 — {"detail":"Unknown GCP stub: secretmanager/secrets/sec-bce5291e"} |
+| `secretmanager` | `get` | `GET` | `/api/gcp/extras/secretmanager/secrets/{name}` | `404` | ✗ 404 — {"detail":"Unknown GCP stub: secretmanager/secrets/sec-5181c3da"} |
 | `secretmanager` | `list` | `GET` | `/api/gcp/extras/secretmanager/secrets` | `200` | ✓ 200 |
 | `secretmanager` | `rotation` | `GET` | `/api/gcp/extras/secretmanager/rotation` | `200` | ✓ 200 |
 | `secretmanager` | `secrets` | `GET` | `/api/gcp/extras/secretmanager/secrets` | `200` | ✓ 200 |
