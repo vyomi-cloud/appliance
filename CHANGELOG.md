@@ -6,6 +6,23 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-06-15
+
+First post-launch release with the launcher pipeline stable. Two functional bugs from the v1.1.11 walkthrough are fixed here — both user-facing, both shipped behind the now-validated bundle pipeline.
+
+### Fixed
+
+- **"Activate appliance" returned `Failed: {"detail":"portal_unreachable: URLError: "}`.** `core/license_remote.DEFAULT_BACKEND_URL` was hard-coded to the placeholder `https://license.cloudlearn.io`, which never had a DNS record. Activation, device-flow polling, JWKS fetch, and the revocation daemon all silently failed with `Name or service not known`. Default is now `https://vyomi.cloud` (the live portal that already serves `/api/oauth/device`, `/api/license/revocation`, and `/.well-known/jwks.json`). The `CLOUDLEARN_LICENSE_BACKEND_URL` env var still overrides for self-hosted portals.
+
+- **EC2 console listed new instances as `stopped` and never refreshed without a hard reload.** The state badge mapping was already correct (`pending` → warn-yellow), but the AWS console did exactly one fetch per `navigate()` call. State transitions (`pending → running`, `creating → available`) only became visible after the user hit Cmd-R.
+  - Added a 5-second auto-refresh polling loop scoped to mutable-state services (`ec2`, `rds`, `lambda`) on BOTH the list view AND the detail blade.
+  - Polling cancels itself when the user navigates away (the `setInterval` checks `STATE.view` and `STATE.service` before re-rendering and tears itself down on mismatch).
+  - `clearAutoRefresh()` is also called at the top of `navigate()` so no stale timer survives a route change.
+
+### Why this matters
+
+The "appliance can't talk to its portal" bug made the brew install effectively unusable for any tier-gated feature (cloud-shell, audit sinks, CI integration) — users would activate, see green, and then every subsequent feature would 403 silently. The "EC2 stuck on stopped" bug made every demo of the AWS console look broken. Both shipped here behind the v1.1.10/v1.1.11 verification pipeline, so the brew bundle is guaranteed launchable before the tag goes out.
+
 ## [1.1.11] — 2026-06-15
 
 User report on v1.1.10: phases 1-7 ran green (build + start succeeded!) but Phase 8 hung indefinitely. Diagnosis: the launcher's health probe used `multipass exec ... curl 127.0.0.1:Port` three times per iteration, and one of those `multipass exec` calls was stuck for 3+ minutes even though the VM and the simulator inside it were both fully healthy. Same `multipass exec` quirk class we've hit twice before.

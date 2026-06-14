@@ -545,9 +545,26 @@ async function boot(){
 // =====================================================================
 // Router (state-based, no URL hash for now)
 // =====================================================================
+// Auto-refresh timer for grid/detail views. Cleared on every navigation
+// so we never run two intervals at once or against a stale view.
+let _AUTO_REFRESH_TIMER = null;
+function clearAutoRefresh(){
+  if (_AUTO_REFRESH_TIMER) { clearInterval(_AUTO_REFRESH_TIMER); _AUTO_REFRESH_TIMER = null; }
+}
+// Services with mutable state (instances transition pending→running→stopped,
+// DBs transition creating→available, lambdas have execution status, etc.).
+// We poll the list/detail view every 5s while the user is looking at these.
+// Static services (VPC, IAM users, S3 buckets) don't get polling — no
+// transitions to surface.
+const _AUTO_REFRESH_SERVICES = new Set(["ec2","rds","lambda"]);
+const _AUTO_REFRESH_MS = 5000;
+
 function navigate(next){
   // Track recently visited services (fed into Console Home widget)
   if (next && next.service && next.service !== STATE.service) recordRecentVisit(next.service);
+  // Cancel any running poll — we'll start a new one for the new view
+  // in renderList/renderDetail if appropriate.
+  clearAutoRefresh();
   STATE = {...STATE, ...next};
   render();
 }
@@ -881,6 +898,23 @@ async function renderList(main){
   const pager = el("div",{class:"pager"});
   tableWrap.append(pager);
   main.append(tableWrap);
+
+  // Kick off auto-refresh for mutable-state services so pending→running
+  // transitions show up without a hard reload. Cleared on navigation.
+  // We re-render the entire view to keep the code path consistent with
+  // the manual Refresh action — no risk of partial updates leaving the
+  // table in a weird state.
+  clearAutoRefresh();
+  if (_AUTO_REFRESH_SERVICES.has(svc.key)) {
+    _AUTO_REFRESH_TIMER = setInterval(() => {
+      // Only refresh if STILL on this list view (no race with nav)
+      if (STATE.view === "list" && STATE.service === svc.key) {
+        renderList(main).catch(()=>{});
+      } else {
+        clearAutoRefresh();
+      }
+    }, _AUTO_REFRESH_MS);
+  }
 
   // Load
   tableHolder.innerHTML = '<div class="empty">Loading…</div>';
@@ -1497,6 +1531,19 @@ async function renderDetail(main){
   const svc = svcByKey(STATE.service);
   const itemStub = STATE.item || {};
   const name = String(getPath(itemStub, svc.name_field) || itemStub.name || "");
+  // Auto-refresh: poll the detail view every 5s on mutable-state services
+  // so state transitions (pending→running, creating→available) show up
+  // without a hard reload. Cleared on navigation away.
+  clearAutoRefresh();
+  if (_AUTO_REFRESH_SERVICES.has(svc.key)) {
+    _AUTO_REFRESH_TIMER = setInterval(() => {
+      if (STATE.view === "detail" && STATE.service === svc.key) {
+        renderDetail(main).catch(()=>{});
+      } else {
+        clearAutoRefresh();
+      }
+    }, _AUTO_REFRESH_MS);
+  }
   // Refetch
   const path = fillPath(svc.resource_path, {name});
   const r = await api("GET", path);
