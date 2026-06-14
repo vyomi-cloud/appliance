@@ -235,6 +235,22 @@ _SUB_ACTION_PAYLOADS: dict[tuple[str, str, str], dict] = {
     ("aws", "vpc", "associateSubnet"): {
         "subnet_id": "__SUBNET_ID__",
     },
+    # AWS API Gateway sub-resources
+    ("aws", "apigateway", "createResource"): {
+        "path_part": "items",
+    },
+    ("aws", "apigateway", "createStage"): {
+        "stage_name": "v1",
+        "description": "conformance stage",
+    },
+    ("aws", "apigateway", "createDeploy"): {
+        "stage_name": "v1",
+        "description": "conformance deployment",
+    },
+    ("aws", "apigateway", "putMethod"): {
+        "authorization_type": "NONE",
+        "api_key_required": False,
+    },
 }
 
 
