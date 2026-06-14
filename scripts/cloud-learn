@@ -1337,6 +1337,119 @@ install_compose() {
   return 1
 }
 
+maybe_install_multipass() {
+  # If multipass isn't on PATH, offer to install it for the user.
+  # Brew formulae cannot `depends_on` casks (multipass is a cask on macOS),
+  # so we handle it here at runtime. Honors -y/CLOUD_LEARN_YES for
+  # non-interactive use.
+  #
+  # macOS:  brew install --cask multipass        (pops a sudo password prompt
+  #                                                for the embedded .pkg)
+  # Linux:  sudo snap install multipass          (requires snapd)
+  # Other:  fall through — caller emits the not-installed error
+  if command -v multipass >/dev/null 2>&1; then
+    return 0
+  fi
+  case "$PARENT_OS" in
+    darwin)
+      if ! command -v brew >/dev/null 2>&1; then
+        return 1   # caller will print the friendly error
+      fi
+      _emit ""
+      _emit "${_C_BOLD}${_C_YELLOW}┌─ Multipass is not installed ───────────────────────────────${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}   The appliance runs inside a Multipass-managed Ubuntu VM."
+      _emit "${_C_YELLOW}│${_C_RESET}   Multipass ships as a brew ${_C_BOLD}cask${_C_RESET}, not a formula, so brew can't"
+      _emit "${_C_YELLOW}│${_C_RESET}   pull it in as a dependency — but cloud-learn can install it"
+      _emit "${_C_YELLOW}│${_C_RESET}   for you now:"
+      _emit "${_C_YELLOW}│${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}     ${_C_BOLD}brew install --cask multipass${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}   Download:   ~150 MB    (canonical/multipass .pkg)"
+      _emit "${_C_YELLOW}│${_C_RESET}   Disk after: ~250 MB    (/Applications/Multipass.app)"
+      _emit "${_C_YELLOW}│${_C_RESET}   ${_C_BOLD}macOS will pop a sudo password prompt${_C_RESET} for the pkg install."
+      _emit "${_C_YELLOW}│${_C_RESET}"
+      _emit "${_C_YELLOW}└────────────────────────────────────────────────────────────${_C_RESET}"
+      _emit ""
+      if [ "${CLOUD_LEARN_YES:-0}" = "1" ] || [ "${ASSUME_YES:-0}" = "1" ]; then
+        _emit "  (CLOUD_LEARN_YES=1 — installing without prompt)"
+      elif [ ! -t 0 ] || [ ! -t 2 ]; then
+        verbose "multipass-install: non-interactive shell — skipping prompt"
+        return 1
+      else
+        local ans
+        printf '  Install Multipass now? [Y/n] (auto-yes in 30s): ' >&2
+        if ! read -r -t 30 ans; then
+          _emit ""
+          _emit "  (no answer in 30s — proceeding with install)"
+        else
+          case "${ans:-y}" in
+            n|N|no|NO|No)
+              _emit ""
+              _emit "  ${_C_YELLOW}Skipped.${_C_RESET} Install Multipass yourself, then re-run ${_C_BOLD}cloud-learn up${_C_RESET}:"
+              _emit "      brew install --cask multipass"
+              return 1
+              ;;
+          esac
+        fi
+      fi
+      _emit ""
+      _emit "${_C_BOLD}  ==> Installing Multipass via brew${_C_RESET}  (sudo password may be requested)..."
+      if ! brew install --cask multipass; then
+        _emit ""
+        _emit "  ${_C_RED}brew install --cask multipass failed.${_C_RESET}"
+        _emit "  Install it manually from ${_C_BOLD}https://multipass.run${_C_RESET} and re-run."
+        return 1
+      fi
+      # Newly installed binary path — fall through to the command -v check below.
+      if ! command -v multipass >/dev/null 2>&1; then
+        if [ -x "/usr/local/bin/multipass" ]; then
+          export PATH="/usr/local/bin:$PATH"
+        elif [ -x "/opt/homebrew/bin/multipass" ]; then
+          export PATH="/opt/homebrew/bin:$PATH"
+        fi
+      fi
+      _emit "${_C_GREEN}  ✓ Multipass installed.${_C_RESET}"
+      return 0
+      ;;
+    linux)
+      if ! command -v snap >/dev/null 2>&1; then
+        return 1
+      fi
+      _emit ""
+      _emit "${_C_BOLD}${_C_YELLOW}Multipass is not installed.${_C_RESET}"
+      _emit "  cloud-learn can install it for you via snap:"
+      _emit "      ${_C_BOLD}sudo snap install multipass${_C_RESET}"
+      _emit ""
+      if [ "${CLOUD_LEARN_YES:-0}" != "1" ] && [ "${ASSUME_YES:-0}" != "1" ]; then
+        if [ ! -t 0 ] || [ ! -t 2 ]; then
+          return 1
+        fi
+        local ans
+        printf '  Install Multipass now? [Y/n] (auto-yes in 30s): ' >&2
+        if read -r -t 30 ans; then
+          case "${ans:-y}" in
+            n|N|no|NO|No)
+              _emit "  ${_C_YELLOW}Skipped.${_C_RESET} Install Multipass yourself, then re-run cloud-learn up."
+              return 1
+              ;;
+          esac
+        fi
+      fi
+      _emit "  ==> ${_C_BOLD}sudo snap install multipass${_C_RESET}"
+      if ! sudo snap install multipass; then
+        _emit "  ${_C_RED}snap install multipass failed.${_C_RESET}"
+        return 1
+      fi
+      _emit "${_C_GREEN}  ✓ Multipass installed.${_C_RESET}"
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 ensure_prereqs() {
   if [ "$RUNTIME_CONTEXT" = "inner" ]; then
     wait_for_inner_compose
@@ -1356,9 +1469,41 @@ ensure_prereqs() {
     return "$missing"
   fi
 
+  # Offer to auto-install multipass (macOS via brew, Linux via snap) if it's
+  # missing. Falls through to the friendly error if the install is refused
+  # or the platform's package manager isn't present.
+  maybe_install_multipass || true
+
   if ! command -v multipass >/dev/null 2>&1; then
-    printf '%s\n' 'multipass is not installed or not on PATH' >&2
-    return 1
+    case "$PARENT_OS" in
+      darwin)
+        _die "multipass is not installed" \
+"Multipass is required for the appliance VM but isn't on PATH.
+
+Install it with:
+    brew install --cask multipass
+
+(macOS will request your sudo password to install the .pkg.)
+
+Then re-run:
+    cloud-learn up"
+        ;;
+      linux)
+        _die "multipass is not installed" \
+"Multipass is required for the appliance VM but isn't on PATH.
+
+Install it with:
+    sudo snap install multipass
+
+Then re-run:
+    cloud-learn up"
+        ;;
+      *)
+        _die "multipass is not installed" \
+"Multipass is required for the appliance VM but isn't on PATH.
+Download it from https://multipass.run for your platform, then re-run cloud-learn up."
+        ;;
+    esac
   fi
   return 0
 }

@@ -6,6 +6,35 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-06-15
+
+UX polish: `cloud-learn up` now installs Multipass for the user when it's missing, instead of just emitting "multipass is not installed". The brew formula structurally can't `depends_on` Multipass (formulae cannot depend on casks), so the launcher closes the gap at runtime.
+
+### Added
+
+- **`maybe_install_multipass()` helper in `scripts/cloud-learn`.** Called from `ensure_prereqs()` before the multipass PATH check. Platform-aware:
+  - **macOS** + brew available → shows a yellow notice box with size/disk/sudo-prompt expectations, prompts `[Y/n] (auto-yes in 30s)`, then runs `brew install --cask multipass`. After install, re-resolves PATH for `/usr/local/bin` and `/opt/homebrew/bin`.
+  - **Linux** + snap available → prompts and runs `sudo snap install multipass`.
+  - Honors `-y` / `CLOUD_LEARN_YES=1` for non-interactive installs (CI, scripted bootstrap).
+  - Non-interactive shells (no TTY) skip the prompt and fall through to the friendly error.
+- **Friendly error if auto-install can't proceed.** When brew/snap aren't available or the user declines, the launcher emits a multi-line `_die()` block with the exact `brew install --cask multipass` or `sudo snap install multipass` command — no more bare "multipass is not installed".
+
+### Fixed
+
+- **Stale `depends_on "multipass" => :recommended` / `depends_on "docker" => :recommended`** in `packaging/homebrew/Formula/cloud-learn.rb`. These were invalid against casks and would fail `brew audit`; replaced with a comment that points to `maybe_install_multipass`. End users were never affected (the live formula in `sudhirkumarganti/homebrew-tap` is overwritten by `release.yml` on every tag), but the in-repo copy was misleading anyone reading the source.
+
+### Why this matters
+
+End-to-end on a fresh macOS:
+```
+brew install cloud-learn
+cloud-learn up
+# (sees yellow box, types Y, sudo password for the .pkg, multipass installs,
+#  appliance VM boots — single command from a fresh laptop to running stack)
+```
+
+No more two-step `brew install --cask multipass && cloud-learn up`. The launcher pipeline now bridges the brew-formula/brew-cask gap at runtime, which is exactly where it should live for an appliance distribution.
+
 ## [1.2.0] — 2026-06-15
 
 First post-launch release with the launcher pipeline stable. Two functional bugs from the v1.1.11 walkthrough are fixed here — both user-facing, both shipped behind the now-validated bundle pipeline.
