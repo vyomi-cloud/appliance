@@ -6,6 +6,28 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.3] — 2026-06-15
+
+The appliance is now reachable at `http://vyomi.local:9000/` — no more pasting bridged Multipass IPs into a browser. Hostname resolution uses standard mDNS (Bonjour on macOS, avahi on Linux, native mDNS on Windows 10 1809+) so it works on any local network that doesn't actively block multicast, with zero `/etc/hosts` modification.
+
+### Added
+
+- **cloud-init.yaml** now installs `avahi-daemon` + `libnss-mdns`, sets the VM hostname to `vyomi`, patches `/etc/nsswitch.conf` to query mDNS, and enables the avahi service. A fresh `cloud-learn up` makes `vyomi.local` resolvable from the host within seconds of boot.
+- **`ensure_vyomi_mdns_active()`** runs on every `cloud-learn up` and idempotently brings legacy VMs (launched before v1.2.3) up to the same state. Fast no-op (~50 ms) when avahi is already publishing; ~30s one-time fix-up otherwise. Bounded by a 60s wall-clock cap so it can never hang the launcher.
+- **`print_url_banner()`** probes `vyomi.local:9000/healthz` and prefers the hostname URL when reachable. The bridged IP is always shown as a fallback so users on multicast-blocked networks (corporate, some VPNs) still have a copy-pasteable URL.
+- **Phase 8 status output** now shows both URLs as soon as the VM IP is known, so the user can open either in a browser while the health check is still polling.
+
+### Fixed
+
+- The portal `/install` page's hero subtitle previously claimed all paths land on `http://localhost:9000` — accurate only for Docker Compose. Now the copy distinguishes the Multipass-based paths (Brew/.deb/.rpm/Scoop → `http://vyomi.local:9000`) from Compose (still `http://localhost:9000`). The "After install" block has the same fix.
+- Per-method comment examples in `install_catalog.py` swapped `http://192.168.x.x:9000` for `http://vyomi.local:9000`, matching what the launcher actually prints.
+
+### Operational notes
+
+- Networks that block multicast (corporate switches with IGMP snooping misconfigured, some hotel WiFi, certain VPN clients) will fail mDNS resolution. The launcher's URL banner shows the IP fallback for exactly this case.
+- Linux server installs without `libnss-mdns` on the HOST won't resolve `vyomi.local` from that host either — `apt install libnss-mdns` once on the host and it works. Default on Ubuntu desktop, Fedora, Debian with the standard meta-packages.
+- Windows users on Windows 10 builds older than 1809 (October 2018 Update) need Apple Bonjour Print Services installed, or they should use the IP fallback.
+
 ## [1.2.2] — 2026-06-15
 
 Distribution-parity release: every package-manager install path that ships cloud-learn now gets the same first-launch experience — `cloud-learn up` detects missing Multipass and installs it via the platform-native package manager. Closes the Windows (Scoop) and Linux-without-snapd gaps that v1.2.1 left open. Also fixes a docker-compose .env.example bug that made the Compose install path 404 on `docker compose pull`.
