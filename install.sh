@@ -170,8 +170,41 @@ echo "    ${D}starting containers...${R}"
 docker compose $COMPOSE_FLAGS up -d 2>&1 | sed 's/^/    /'
 ok "containers started"
 
+# ─── one-time hosts entry so http://vyomi.local:9000 works ─────────────
+# Multipass-based install paths publish vyomi.local via mDNS. Docker
+# Desktop on macOS/Windows runs in a Linux VM and can't broadcast mDNS
+# to the host, so we map the same hostname to 127.0.0.1 with a single
+# /etc/hosts line. Idempotent — only adds the line if it isn't already
+# there. Skipped on Windows (PowerShell admin is the cleaner path).
+HOSTS_FILE="/etc/hosts"
+PORT="${CLOUDLEARN_SIMULATOR_PORT:-9000}"
+VYOMI_URL="http://vyomi.local:${PORT}"
+LOCAL_URL="http://localhost:${PORT}"
+URL="$LOCAL_URL"
+if [ -w "$HOSTS_FILE" ] || command -v sudo >/dev/null 2>&1; then
+  if ! grep -qE '^127\.0\.0\.1[[:space:]]+vyomi\.local([[:space:]]|$)' "$HOSTS_FILE" 2>/dev/null; then
+    step "Adding 127.0.0.1 vyomi.local to $HOSTS_FILE (sudo prompt)"
+    if [ -w "$HOSTS_FILE" ]; then
+      printf '\n# Added by cloud-learn install.sh — maps vyomi.local to the host\n127.0.0.1 vyomi.local\n' >> "$HOSTS_FILE" 2>/dev/null && URL="$VYOMI_URL"
+    else
+      printf '\n# Added by cloud-learn install.sh — maps vyomi.local to the host\n127.0.0.1 vyomi.local\n' | sudo tee -a "$HOSTS_FILE" >/dev/null 2>&1 && URL="$VYOMI_URL"
+    fi
+    if [ "$URL" = "$VYOMI_URL" ]; then
+      # Best-effort DNS-cache flush so the browser picks up the new entry.
+      sudo dscacheutil -flushcache >/dev/null 2>&1 \
+        || sudo systemd-resolve --flush-caches >/dev/null 2>&1 \
+        || true
+      ok "vyomi.local mapped — simulator reachable as $VYOMI_URL or $LOCAL_URL"
+    else
+      echo "    ${D}couldn't update hosts file — falling back to localhost URL${R}"
+    fi
+  else
+    URL="$VYOMI_URL"
+    ok "vyomi.local already in $HOSTS_FILE — reachable as $VYOMI_URL or $LOCAL_URL"
+  fi
+fi
+
 # ─── wait for healthy ──────────────────────────────────────────────────
-URL="http://localhost:${CLOUDLEARN_SIMULATOR_PORT:-9000}"
 step "Waiting for $URL to respond"
 for i in $(seq 1 60); do
   if curl -fsS --max-time 2 "$URL/healthz" >/dev/null 2>&1; then
@@ -194,7 +227,7 @@ echo
 echo "    Useful commands (from $CL_HOME/compose):"
 echo "      ${C}docker compose logs -f simulator${R}      tail logs"
 echo "      ${C}docker compose down${R}                   stop everything"
-echo "      ${C}docker compose pull && up -d${R}           upgrade to latest"
+echo "      ${C}docker compose pull && docker compose up -d${R}   upgrade to latest"
 echo
 
 # Try to open the browser (best-effort, ignore failures)
