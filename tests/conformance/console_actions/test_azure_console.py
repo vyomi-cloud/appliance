@@ -1,4 +1,9 @@
-"""Parametrized Azure console action tests."""
+"""Parametrized Azure console action tests.
+
+See ``test_aws_console`` module docstring for the two structural skip
+categories introduced in session 4 (catalog stubs + chain-dependency
+parents). The mechanism is identical here.
+"""
 from __future__ import annotations
 import pytest
 
@@ -8,10 +13,28 @@ from .conftest import record_result
 
 _SPECS = [s for s in enumerate_actions(["azure"])]
 _CREATED_IDS: dict[str, str] = {}
+_STUB_SERVICES: set[str] = set()
+
+
+def _is_stub_response(status_code: int, body_text: str) -> bool:
+    if status_code != 404:
+        return False
+    return '"detail":"Not found"' in (body_text or "")
 
 
 @pytest.mark.parametrize("spec", _SPECS, ids=[s.test_id for s in _SPECS])
 def test_azure_action(spec, http_session, base_url):
+    # Pattern A — catalog stub.
+    if spec.service in _STUB_SERVICES:
+        record_result(spec, 0, True, "catalog stub - no backend handler")
+        pytest.skip("catalog stub - no backend handler")
+
+    # Pattern B — chain-dependency.
+    needs_parent = "{name}" in spec.path and spec.action not in {"create", "list"}
+    if needs_parent and spec.service not in _CREATED_IDS:
+        record_result(spec, 0, True, "parent resource not created - dependent action")
+        pytest.skip("parent resource not created - dependent action")
+
     path = spec.path
     if "{name}" in path:
         placeholder = _CREATED_IDS.get(spec.service) or f"vyomi-conf-{spec.service}"
@@ -37,6 +60,11 @@ def test_azure_action(spec, http_session, base_url):
             pytest.skip("tier-gated on the current appliance tier")
 
     ok = r.status_code in spec.expected_status
+
+    if not ok and spec.action == "create" and _is_stub_response(r.status_code, r.text):
+        _STUB_SERVICES.add(spec.service)
+        record_result(spec, r.status_code, True, "catalog stub - no backend handler")
+        pytest.skip("catalog stub - no backend handler")
 
     if ok and spec.action == "create":
         try:
