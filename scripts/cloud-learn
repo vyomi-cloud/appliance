@@ -17,7 +17,18 @@ COMPOSE_FILE="${CLOUD_LEARN_COMPOSE_FILE:-${ROOT_DIR}/docker-compose.appliance.y
 PARENT_OS="${CLOUD_LEARN_PARENT_OS:-$(uname -s)}"
 DISTRIBUTION_MODE="appliance"
 APPLIANCE_NAME="${CLOUD_LEARN_APPLIANCE_NAME:-cloudlearn-appliance}"
-APPLIANCE_DIR="${CLOUD_LEARN_APPLIANCE_DIR:-${ROOT_DIR}/.cloudlearn-appliance}"
+# APPLIANCE_DIR lives under the user's HOME by default — not the launcher's
+# ROOT_DIR — so that when cloud-learn is installed via brew (ROOT_DIR is
+# /opt/homebrew/Cellar/cloud-learn/<v>/libexec) the bootstrap artifacts
+# (cloud-init.yaml, appliance-bootstrap.json, host-sizing-report.json) live
+# in a path that:
+#   1. is writeable by the launching user (brew's libexec is read-only on
+#      stricter setups, and we don't want to mutate it anyway)
+#   2. is reachable via `multipass transfer` (we don't need SSHFS access to
+#      these files from inside the VM — SSHFS into brew-controlled paths
+#      hits permission denials on macOS because the path is sandboxed)
+# Per-VM subdir so multiple appliances on the same host don't collide.
+APPLIANCE_DIR="${CLOUD_LEARN_APPLIANCE_DIR:-${HOME}/.cloud-learn/appliance/${APPLIANCE_NAME}}"
 APPLIANCE_IMAGE="${CLOUD_LEARN_APPLIANCE_IMAGE:-24.04}"
 APPLIANCE_CPUS="${CLOUD_LEARN_APPLIANCE_CPUS:-4}"
 APPLIANCE_MEMORY="${CLOUD_LEARN_APPLIANCE_MEMORY:-8G}"
@@ -262,9 +273,28 @@ PY
 appliance_sync_host_sizing_into_vm() {
   local compose
   compose="$(appliance_multipass_cmd)"
-  local source_path="${APPLIANCE_WORKSPACE}/.cloudlearn-appliance/${HOST_SIZING_FILE_NAME}"
+  local local_path="${APPLIANCE_DIR}/${HOST_SIZING_FILE_NAME}"
   progress "==> Appliance: syncing host sizing into VM-local storage"
-  "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "sudo mkdir -p /var/lib/cloudlearn && sudo install -m 644 '$source_path' /var/lib/cloudlearn/${HOST_SIZING_FILE_NAME}"
+  if [ ! -f "$local_path" ]; then
+    progress "    (skipping — ${HOST_SIZING_FILE_NAME} not written yet)"
+    return 0
+  fi
+  # Use `multipass transfer` to push the file from the host directly into
+  # the VM's /tmp, then sudo-install it into /var/lib/cloudlearn. This
+  # avoids depending on the SSHFS workspace mount being readable — which
+  # fails on macOS when ROOT_DIR is inside the brew prefix because the
+  # multipass SSHFS connection can't traverse /opt/homebrew sandbox
+  # boundaries. APPLIANCE_DIR lives under $HOME by default → always
+  # transferable.
+  "$compose" transfer "$local_path" "${APPLIANCE_NAME}:/tmp/${HOST_SIZING_FILE_NAME}" >/dev/null 2>&1 || {
+    progress "    (warning: could not transfer ${HOST_SIZING_FILE_NAME} to VM)"
+    return 0
+  }
+  "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
+    "sudo mkdir -p /var/lib/cloudlearn && sudo install -m 644 '/tmp/${HOST_SIZING_FILE_NAME}' /var/lib/cloudlearn/${HOST_SIZING_FILE_NAME} && rm -f /tmp/${HOST_SIZING_FILE_NAME}" >/dev/null 2>&1 || {
+    progress "    (warning: could not install ${HOST_SIZING_FILE_NAME} on VM — continuing)"
+    return 0
+  }
 }
 
 write_appliance_cloud_init() {
@@ -470,13 +500,60 @@ appliance_launch_vm() {
     esac
   else
     progress "==> Appliance: launching Multipass VM ${APPLIANCE_NAME}"
+    progress "    (first launch needs to: download Ubuntu image ~600MB, install"
+    progress "     LXD snap ~150MB, run cloud-init — total cold start 5-8 min)"
     "$compose" launch "$APPLIANCE_IMAGE" --name "$APPLIANCE_NAME" --cpus "$APPLIANCE_CPUS" --memory "$APPLIANCE_MEMORY" --disk "$APPLIANCE_DISK" --cloud-init "$APPLIANCE_DIR/cloud-init.yaml"
   fi
   progress "==> Appliance: mounting workspace into VM"
   "$compose" mount "$ROOT_DIR" "$APPLIANCE_NAME:$APPLIANCE_WORKSPACE" >/dev/null 2>&1 || true
   appliance_sync_host_sizing_into_vm
-  progress "==> Appliance: waiting for cloud-init"
-  "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "cloud-init status --wait >/dev/null 2>&1 || true" >/dev/null 2>&1 || true
+  appliance_wait_for_cloud_init
+}
+
+appliance_wait_for_cloud_init() {
+  # Poll cloud-init status periodically and surface what stage it's in so
+  # the user sees concrete progress instead of an unbounded silent wait.
+  # The phases on a fresh Ubuntu 24.04 are:
+  #   init   — kernel / network / package mirrors  (~10s)
+  #   config — apt-get install docker.io / python3 (~60-90s)
+  #   final  — runcmd: `snap install lxd`         (~90-180s — slowest)
+  # We print at most one line per phase change + a heartbeat every 30s.
+  local compose
+  compose="$(appliance_multipass_cmd)"
+  progress "==> Appliance: waiting for cloud-init (LXD snap install is the slow step)"
+  local started_at last_status last_stage elapsed
+  started_at=$(date +%s)
+  last_stage=""
+  while true; do
+    last_status=$("$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
+      "cloud-init status 2>/dev/null | awk -F': ' '/^status:/{print \$2}' || echo unknown" 2>/dev/null \
+      | tr -d '\r' | head -1)
+    [ -z "$last_status" ] && last_status="unknown"
+    if [ "$last_status" = "done" ] || [ "$last_status" = "disabled" ]; then
+      progress "    cloud-init finished after $(( $(date +%s) - started_at ))s"
+      break
+    fi
+    # Probe which runcmd entry is currently running (if any) for a clearer
+    # progress hint. snap install is the long pole.
+    local current_step=""
+    current_step=$("$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
+      "ps -eo pid,args 2>/dev/null | grep -E 'snap install|apt-get install|docker' | grep -v grep | head -1 | sed 's/^[ ]*[0-9]*//' | cut -c1-80" 2>/dev/null \
+      | tr -d '\r' | head -1)
+    elapsed=$(( $(date +%s) - started_at ))
+    local stage="$last_status"
+    [ -n "$current_step" ] && stage="${stage} — ${current_step}"
+    if [ "$stage" != "$last_stage" ]; then
+      progress "    [${elapsed}s] cloud-init: ${stage}"
+      last_stage="$stage"
+    fi
+    # Bail-out heartbeat at 10 min — something is clearly wrong by then.
+    if [ "$elapsed" -gt 600 ]; then
+      progress "    cloud-init has been running for >10 min — check"
+      progress "    'multipass exec $APPLIANCE_NAME -- sudo tail /var/log/cloud-init-output.log'"
+      break
+    fi
+    sleep 12
+  done
 }
 
 appliance_exec_launcher() {
