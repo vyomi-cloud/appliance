@@ -6,6 +6,23 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.7] — 2026-06-14
+
+Two embarrassing bugs in v1.1.6 surfaced on the user's next run. Both
+diagnosed from the persistent log v1.1.5 added — so the diagnostic
+infrastructure is already paying off.
+
+### Fixed
+
+- **The bridge install reported FAILURE even though `READY-after-2s` was captured.** Root cause: `multipass exec ... /bin/bash -lc "set -e; ...; exit 0"` returns rc=1 when the inner script terminates with explicit `exit 0`, but rc=0 when it ends naturally. This is a multipass-specific quirk (verified by reproducing in isolation). Restructured the bridge install loop to set a `READY=1` flag, `break` out of the for-loop, then fall through to natural script end. Failure path still uses `exit 1` which propagates correctly.
+- **Failure banner showed literal `\033[31m` text instead of red colour.** Root cause: `_C_GREEN='\033[32m'` (single quotes) preserves the literal 5-character string `\033[32m`, not a real ESC byte. `_emit` then printed the literal string with `printf '%s\n'`. Fix: use `$'\033[32m'` quoting at definition time so the variables hold real ESC bytes. Verified end-to-end.
+- **Stale error message.** v1.1.6 bumped the bridge poll budget to 180s but the failure message still said "(30s timeout)". Now matches reality.
+
+### Lessons baked into the launcher
+
+1. Inside heredoc'd bash run via `multipass exec`, never use explicit `exit 0` for success — let it fall through. `exit 1` is fine for failure.
+2. Colour escape variables must be `$'\033[…]'` quoted, not `'\033[…]'`. The former materialises real ESC bytes; the latter is a literal 5-char string.
+
 ## [1.1.6] — 2026-06-14
 
 Two follow-on fixes to v1.1.5 surfaced by the first real user.
