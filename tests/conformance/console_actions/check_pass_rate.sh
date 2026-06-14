@@ -11,9 +11,11 @@ set -euo pipefail
 REPORT="${1:-tests/conformance/console_actions/REPORT.md}"
 
 # Current floor — bumped each time a 3-service session lands.
-# Last bumped: 2026-06-14 — session 4 structural skips (catalog stubs
-# + chain-dep parents). AWS 44.3→76.5%, GCP 46.0→95.4%, Azure 92.3→100%.
-AWS_MIN="${AWS_MIN:-75}"      # current LIVE: 76.5%
+# Last bumped: 2026-06-14 — session 6 heavy-lift (vpc + apigateway
+# sub-resource handlers, iam delete-cascade idempotent, lambda payload
+# + alias routes, gcp.vpc.patch handler, sql start/stop handlers).
+# AWS 76.5→97.4%, GCP 95.4%, Azure 100%.
+AWS_MIN="${AWS_MIN:-96}"      # current LIVE: 97.4%
 GCP_MIN="${GCP_MIN:-94}"      # current LIVE: 95.4%
 AZURE_MIN="${AZURE_MIN:-100}" # tier-skip baseline
 
