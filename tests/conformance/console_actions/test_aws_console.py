@@ -144,10 +144,9 @@ def _is_stub_response(status_code: int, body_text: str) -> bool:
 # free today). Adding to the list takes a real-failure proof: the
 # response body must clearly point at the host, not the API contract.
 _ENV_PATTERNS = (
-    (507, "insufficient_disk"),  # disk preflight gate
-    (503, "remote \"postgres\""),  # LXD postgres image missing
-    (503, "LXDUnavailable"),     # LXD daemon not running
-    (503, "postgres"),           # generic LXD postgres remote
+    (507, "insufficient_disk"),    # disk preflight gate (EC2/Compute/VM)
+    (503, "remote \"postgres\""),  # LXD postgres image not loaded (RDS/CloudSQL)
+    (503, "lxdunavailable"),       # LXD daemon not running
 )
 
 

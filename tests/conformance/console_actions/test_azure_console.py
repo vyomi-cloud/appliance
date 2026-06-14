@@ -27,8 +27,7 @@ def _is_stub_response(status_code: int, body_text: str) -> bool:
 _ENV_PATTERNS = (
     (507, "insufficient_disk"),
     (503, "remote \"postgres\""),
-    (503, "LXDUnavailable"),
-    (503, "postgres"),
+    (503, "lxdunavailable"),
 )
 
 
