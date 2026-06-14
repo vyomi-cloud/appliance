@@ -6,6 +6,27 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.2] — 2026-06-14
+
+UX-only release. Cold-start verbosity overhaul.
+
+### Added
+
+- **Wall-clock prefix on every progress line.** `[2m13s] ==> Appliance: …` instead of bare arrows — at a glance the user knows whether they're 30s or 4 min into the launch.
+- **`-v / --verbose` flag + `CLOUD_LEARN_VERBOSE=1` env var.** Streams raw `cloud-init-output.log` tail lines + sub-step detail. Useful when triaging a slow / stuck launch without having to SSH into the VM.
+- **`describe_step()` lookup table.** Translates the active runcmd's raw argv into a human description. E.g. `snap install lxd` now prints as `installing LXD container runtime (~150MB snap)`. Covers the 7-8 commands a fresh Ubuntu cold-start actually runs.
+- **30-second heartbeat during long-running runcmd steps.** When `snap install lxd` is grinding for 2-3 min, the launcher prints `still installing LXD container runtime…` every 30s so the user knows it isn't hung.
+- **Inner `docker compose up --build` output is no longer silenced.** Layer-by-layer build progress is indented and surfaced to the outer launcher, so users see Dockerfile build steps in real time instead of waiting blind for 2-3 min.
+
+### Changed
+
+- **Cloud-init poll interval 12s → 6s.** Stage transitions show up sooner.
+- **The `launch` banner now hints at expected timing up-front** (5-8 min cold start, image ~600MB, LXD snap ~150MB).
+
+### Internal
+
+- `progress()` now derives elapsed seconds from `_LAUNCH_STARTED_AT`, set once at script invocation. No-cost — uses `date +%s`.
+
 ## [1.1.1] — 2026-06-14
 
 Hotfix for the launcher on brew-installed setups (macOS).
