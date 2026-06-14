@@ -87,7 +87,13 @@ _GCP_PAYLOADS: dict[str, dict] = {
                     "disks": [{"boot": True, "initializeParams": {"sourceImage": "sim-ubuntu-22.04"}}],
                     "networkInterfaces": [{"network": "default"}]},
     "storage":     {"name": "vyomi-conf-gcs"},
-    "sql":         {"name": "vyomi-conf-sql", "databaseVersion": "POSTGRES_15",
+    # NOTE: key matches the catalog's "key" field (gcp_catalog.py uses
+    # "cloudsql"), NOT the legacy short alias "sql". The harness calls
+    # payload_for(provider, spec.service) where spec.service comes from
+    # the catalog key. A mismatch silently sends an empty body → the
+    # handler falls back to default name "sql-instance" which then
+    # collides across runs.
+    "cloudsql":    {"name": "vyomi-conf-sql", "databaseVersion": "POSTGRES_15",
                     "settings": {"tier": "db-f1-micro"}},
     "pubsub":      {"name": "projects/cloudlearn/topics/vyomi-conf-topic"},
     "firestore":   {"name": "(default)", "type": "FIRESTORE_NATIVE"},

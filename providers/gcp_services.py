@@ -389,7 +389,12 @@ async def api_gcp_sql_patch_instance(project: str, instance: str, request: Reque
     rec = gcp_sql_state.get("instances", {}).get(instance)
     if not rec or str(rec.get("project") or project) != project:
         raise HTTPException(404, detail="Instance not found")
-    payload = await request.json() if request is not None else {}
+    # Defensive parse — conformance tooling sends empty body to verify
+    # the URL is wired; an empty body raises JSONDecodeError → 500.
+    try:
+        payload = await request.json() if request is not None else {}
+    except Exception:
+        payload = {}
     payload = payload if isinstance(payload, dict) else {}
     if isinstance(payload.get("settings"), dict):
         cur = rec.get("settings") if isinstance(rec.get("settings"), dict) else {}

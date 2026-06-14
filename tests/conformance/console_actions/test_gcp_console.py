@@ -33,7 +33,7 @@ def _is_stub_response(status_code: int, body_text: str) -> bool:
 # LXD-backed RDS / Compute infrastructure underneath.
 _ENV_PATTERNS = (
     (507, "insufficient_disk"),
-    (503, "remote \"postgres\""),
+    (503, "error: the remote"),
     (503, "lxdunavailable"),
 )
 
@@ -129,6 +129,18 @@ def test_gcp_action(spec, http_session, base_url):
                     data = resp
                 elif isinstance(data.get("metadata"), dict) and data["metadata"].get("target"):
                     data = {"name": data["metadata"]["target"]}
+            # Cloud SQL ships a different operation envelope shape:
+            #   {"kind": "sql#operation", "name": "op-XXX",
+            #    "operationType": "CREATE", "targetId": "<real-id>",
+            #    "status": "DONE"}
+            # No "response" or "metadata.target" — the real id lives
+            # under "targetId". Unwrap so name_field="name" captures
+            # the resource id not the operation id.
+            if (spec.service == "cloudsql"
+                    and isinstance(data, dict)
+                    and data.get("kind") == "sql#operation"
+                    and data.get("targetId")):
+                data = {"name": data["targetId"]}
             if isinstance(data, dict) and spec.name_field:
                 val = data.get(spec.name_field)
                 if val:

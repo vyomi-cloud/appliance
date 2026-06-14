@@ -26,7 +26,7 @@ def _is_stub_response(status_code: int, body_text: str) -> bool:
 # test_aws_console for rationale.
 _ENV_PATTERNS = (
     (507, "insufficient_disk"),
-    (503, "remote \"postgres\""),
+    (503, "error: the remote"),
     (503, "lxdunavailable"),
 )
 
