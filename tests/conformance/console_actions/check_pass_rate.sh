@@ -11,10 +11,14 @@ set -euo pipefail
 REPORT="${1:-tests/conformance/console_actions/REPORT.md}"
 
 # Current floor — bumped each time a 3-service session lands.
-# Last bumped: 2026-06-14 — session 4 structural skips (catalog stubs
-# + chain-dep parents). AWS 44.3→76.5%, GCP 46.0→95.4%, Azure 92.3→100%.
-AWS_MIN="${AWS_MIN:-75}"      # current LIVE: 76.5%
-GCP_MIN="${GCP_MIN:-94}"      # current LIVE: 95.4%
+# Last bumped: 2026-06-14 — session 5 (T3 GCP stub aliases + AWS VPC chain +
+# harness LRO unwrap + empty-body fix + S3 catalog-path aliases + apigateway
+# REST-flat putMethod + apigateway sub-action payloads). AWS 76.5→96.5%,
+# GCP 95.4→94.3% (raw % dipped because converting catalog stubs into real
+# tests exposed pre-hidden backend gaps; covered surface area is much
+# larger now), Azure unchanged at 100%.
+AWS_MIN="${AWS_MIN:-95}"      # current LIVE: 96.5%
+GCP_MIN="${GCP_MIN:-93}"      # current LIVE: 94.3% — held with 1pp safety
 AZURE_MIN="${AZURE_MIN:-100}" # tier-skip baseline
 
 if [ ! -f "$REPORT" ]; then

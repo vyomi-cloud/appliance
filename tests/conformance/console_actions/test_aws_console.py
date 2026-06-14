@@ -61,6 +61,9 @@ _SUB_ACTION_CAPTURE: dict[tuple[str, str], tuple[str, str]] = {
     ("vpc", "createSecurityGroup"):  ("__SG_ID__",     "security_group_id"),
     ("vpc", "createRouteTable"):     ("__RTB_ID__",    "route_table_id"),
     ("vpc", "createIgw"):            ("__IGW_ID__",    "internet_gateway_id"),
+    # API Gateway: response shape is {"resource": {"resource_id": "..."}}.
+    # Captured below in a separate code path that drills into nested dicts.
+    ("apigateway", "createResource"): ("__APIGW_RES_ID__", "resource.resource_id"),
 }
 
 # Path placeholders → marker. Used when substituting {sg}, {rtb}, {igw}
@@ -70,6 +73,13 @@ _PATH_PLACEHOLDER_TO_MARKER: dict[str, str] = {
     "{rtb}":    "__RTB_ID__",
     "{igw}":    "__IGW_ID__",
     "{subnet}": "__SUBNET_ID__",
+    "{rid}":    "__APIGW_RES_ID__",
+}
+
+# Constant substitutions for placeholders that don't carry runtime state
+# (HTTP verbs in REST-flat URLs). Applied after marker substitution.
+_PATH_CONST_SUBS: dict[str, str] = {
+    "{verb}": "GET",
 }
 
 # Services detected as catalog stubs at create-time. Subsequent actions
@@ -166,6 +176,9 @@ def test_aws_action(spec, http_session, base_url):
                 record_result(spec, 0, True, f"sub-resource not created ({marker})")
                 pytest.skip(f"sub-resource not created ({marker})")
             path = path.replace(placeholder_token, val)
+    # Constant placeholders ({verb} -> "GET" etc).
+    for placeholder_token, val in _PATH_CONST_SUBS.items():
+        path = path.replace(placeholder_token, val)
     # Same for {project} / {zone} / etc. — substitute appliance defaults.
     path = (path.replace("{project}", "cloudlearn")
                 .replace("{region}", "us-east-1")
@@ -253,14 +266,22 @@ def test_aws_action(spec, http_session, base_url):
             if create_placeholder:
                 _CREATED_IDS[spec.service] = create_placeholder
 
-    # Capture sub-resource ids (subnet_id, sg_id, rtb_id, igw_id) from
+    # Capture sub-resource ids (subnet_id, sg_id, rtb_id, igw_id, ...) from
     # known sub-create actions so later sub-actions can reference them.
+    # response_key may be dotted (e.g. "resource.resource_id") to drill into
+    # a nested dict.
     if ok and (spec.service, spec.action) in _SUB_ACTION_CAPTURE:
         marker, key = _SUB_ACTION_CAPTURE[(spec.service, spec.action)]
         try:
             data = r.json()
-            if isinstance(data, dict) and data.get(key):
-                _SUB_IDS[marker] = str(data[key])
+            val = data
+            for part in key.split("."):
+                if not isinstance(val, dict):
+                    val = None
+                    break
+                val = val.get(part)
+            if val:
+                _SUB_IDS[marker] = str(val)
         except Exception:
             pass
 

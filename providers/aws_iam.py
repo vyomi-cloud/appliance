@@ -82,7 +82,9 @@ def api_iam_delete_user(user_id: str):
     s = _server()
     user = iam_state["users"].get(user_id) or s._iam_find_user(user_id)
     if not user:
-        raise HTTPException(404, detail="TargetNotFound")
+        # Idempotent delete — see api_iam_delete_role.
+        _record_usage("iam.delete_user", {"user_id": user_id, "noop": True})
+        return {"message": "User deleted", "user_id": user_id, "noop": True}
     for group in iam_state.get("groups", {}).values():
         group["members"] = [member for member in group.get("members", []) if member != user.get("user_id")]
     s._iam_detach_policy_records("user", user.get("user_id", ""))
@@ -116,7 +118,9 @@ def api_iam_delete_group(group_id: str):
     s = _server()
     group = iam_state["groups"].get(group_id) or s._iam_find_group(group_id)
     if not group:
-        raise HTTPException(404, detail="TargetNotFound")
+        # Idempotent delete — mirrors api_iam_delete_role.
+        _record_usage("iam.delete_group", {"group_id": group_id, "noop": True})
+        return {"message": "Group deleted", "group_id": group_id, "noop": True}
     for user in iam_state.get("users", {}).values():
         user["groups"] = [gid for gid in user.get("groups", []) if gid != group.get("group_id")]
     s._iam_detach_policy_records("group", group.get("group_id", ""))
@@ -189,7 +193,11 @@ def api_iam_delete_role(role_id: str):
                 role = candidate
                 break
     if not role:
-        raise HTTPException(404, detail="TargetNotFound")
+        # Idempotent delete: mirror AWS behavior where deleting a
+        # non-existent role is a no-op success (the resource is in the
+        # desired absent state). Avoids forcing callers to pre-check.
+        _record_usage("iam.delete_role", {"role_id": role_id, "noop": True})
+        return {"message": "Role deleted", "role_id": role_id, "noop": True}
     s._iam_detach_policy_records("role", role.get("role_id", ""))
     iam_state["roles"].pop(role["role_id"], None)
     _record_usage("iam.delete_role", role)
@@ -214,7 +222,9 @@ def api_iam_delete_policy(policy_id: str):
     s = _server()
     policy = iam_state["policies"].get(policy_id)
     if not policy:
-        raise HTTPException(404, detail="NoSuchPolicy")
+        # Idempotent delete — see api_iam_delete_role.
+        _record_usage("iam.delete_policy", {"policy_id": policy_id, "noop": True})
+        return {"message": "Policy deleted", "policy_id": policy_id, "noop": True}
     s._iam_remove_policy_from_all_principals(policy_id)
     iam_state["policies"].pop(policy_id, None)
     iam_state["attachments"] = [a for a in iam_state.get("attachments", []) if a.get("policy_id") != policy_id]

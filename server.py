@@ -5987,6 +5987,7 @@ def api_get_bucket_versioning(name: str):
     return {"name": name, "versioning": _s3_bucket_versioning_status(name)}
 
 
+@api.delete("/buckets/{name}")
 def api_delete_bucket(name: str):
     if name not in buckets:
         raise HTTPException(404, detail="NoSuchBucket")
@@ -6020,6 +6021,7 @@ def api_get_bucket_notifications(name: str):
     }
 
 
+@api.put("/buckets/{name}/notification")
 @api.put("/buckets/{name}/notifications")
 def api_set_bucket_notifications(name: str, payload: BucketNotificationRequest):
     if name not in buckets:

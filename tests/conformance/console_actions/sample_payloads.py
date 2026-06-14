@@ -190,6 +190,14 @@ def payload_for(provider: str, service: str) -> Optional[dict]:
 # any one → harness skips the action (records as parent-dependent).
 
 _SUB_ACTION_PAYLOADS: dict[tuple[str, str, str], dict] = {
+    # AWS S3
+    ("aws", "s3", "versioning"): {
+        "status": "Enabled",
+    },
+    ("aws", "s3", "notifications"): {
+        "event_bridge_enabled": False,
+        "rules": [],
+    },
     # AWS VPC
     ("aws", "vpc", "createSubnet"): {
         "vpc_id": "__VPC_ID__",
@@ -226,6 +234,22 @@ _SUB_ACTION_PAYLOADS: dict[tuple[str, str, str], dict] = {
     },
     ("aws", "vpc", "associateSubnet"): {
         "subnet_id": "__SUBNET_ID__",
+    },
+    # AWS API Gateway sub-resources
+    ("aws", "apigateway", "createResource"): {
+        "path_part": "items",
+    },
+    ("aws", "apigateway", "createStage"): {
+        "stage_name": "v1",
+        "description": "conformance stage",
+    },
+    ("aws", "apigateway", "createDeploy"): {
+        "stage_name": "v1",
+        "description": "conformance deployment",
+    },
+    ("aws", "apigateway", "putMethod"): {
+        "authorization_type": "NONE",
+        "api_key_required": False,
     },
 }
 

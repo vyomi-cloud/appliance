@@ -135,7 +135,8 @@ for _name in [
     "api_apigateway_list_apis", "api_apigateway_create_api",
     "api_apigateway_get_api", "api_apigateway_delete_api",
     "api_apigateway_list_resources", "api_apigateway_create_resource",
-    "api_apigateway_put_method", "api_apigateway_put_integration",
+    "api_apigateway_put_method", "api_apigateway_put_method_rest",
+    "api_apigateway_put_integration",
     "api_apigateway_create_deployment", "api_apigateway_list_deployments",
     "api_apigateway_create_stage", "api_apigateway_list_stages",
     "api_apigateway_list_logs",
@@ -412,6 +413,8 @@ def register(app, h) -> None:
         ("GET", "/api/apigateway/apis/{api_id}/resources", "api_apigateway_list_resources", "(api_id: str)"),
         ("POST", "/api/apigateway/apis/{api_id}/resources", "api_apigateway_create_resource", "(api_id: str, request: Request)", "model", "req", "APIGatewayResourceRequest"),
         ("POST", "/api/apigateway/apis/{api_id}/methods", "api_apigateway_put_method", "(api_id: str, request: Request)", "model", "req", "APIGatewayMethodRequest"),
+        # REST-flat alias matching the catalog path. resource_id+http_method come from the URL.
+        ("PUT", "/api/apigateway/apis/{api_id}/resources/{resource_id}/methods/{http_method}", "api_apigateway_put_method_rest", "(api_id: str, resource_id: str, http_method: str, request: Request)", "model", "req", "APIGatewayMethodRequest"),
         ("POST", "/api/apigateway/apis/{api_id}/integrations", "api_apigateway_put_integration", "(api_id: str, request: Request)", "model", "req", "APIGatewayIntegrationRequest"),
         ("POST", "/api/apigateway/apis/{api_id}/deployments", "api_apigateway_create_deployment", "(api_id: str, request: Request)", "model", "req", "APIGatewayDeploymentRequest"),
         ("GET", "/api/apigateway/apis/{api_id}/deployments", "api_apigateway_list_deployments", "(api_id: str)"),

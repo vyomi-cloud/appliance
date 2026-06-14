@@ -57,8 +57,12 @@ def test_gcp_action(spec, http_session, base_url):
                 .replace("{database}", "(default)"))
     url = f"{base_url}{path}"
     kwargs = {"timeout": 30}
-    if spec.method in {"POST", "PUT", "PATCH"} and spec.payload is not None:
-        kwargs["json"] = spec.payload
+    if spec.method in {"POST", "PUT", "PATCH"}:
+        # GCP handlers do `await request.json()` unconditionally — sending
+        # an empty body triggers StopIteration → 500. Always provide a
+        # JSON body, even when the catalog spec has no payload for the
+        # sub-action.
+        kwargs["json"] = spec.payload if spec.payload is not None else {}
     try:
         r = http_session.request(spec.method, url, **kwargs)
     except Exception as e:
@@ -81,6 +85,21 @@ def test_gcp_action(spec, http_session, base_url):
     if ok and spec.action == "create":
         try:
             data = r.json()
+            # GCP LRO unwrap — when the create response is an Operation,
+            # the resource id lives under response.name (or .target). The
+            # top-level "name" of an LRO is "operations/<id>" which is NOT
+            # what subsequent get/delete URLs want.
+            if isinstance(data, dict) and isinstance(data.get("name"), str) \
+                    and data["name"].startswith("operations/"):
+                resp = data.get("response") if isinstance(data.get("response"), dict) else {}
+                resource_ref = (
+                    resp.get("name")
+                    or data.get("metadata", {}).get("target")
+                    or ""
+                )
+                if resource_ref:
+                    # Strip trailing query/fragment and use the last URL segment.
+                    data = {**data, "name": str(resource_ref).split("?")[0]}
             captured = ""
             if isinstance(data, dict) and spec.name_field:
                 val = data.get(spec.name_field)
