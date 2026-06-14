@@ -6,6 +6,25 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.9] — 2026-06-14
+
+Critical hotfix for v1.1.8's silent-exit bug + the underlying brew tarball regression.
+
+### Fixed
+
+- **Launcher exited with a returned shell prompt and no banner.** v1.1.8's `appliance_sync_workspace_into_vm` listed `cloudsim-backbone/` in its tar inputs, but the brew bundle (and every release tarball v1.0.0–v1.1.8) was missing that directory — the release.yml workflow's tar allowlist never included it. The launcher's tar call ran inside a `( ... )` subshell with stderr redirected to `/dev/null`. When tar failed, the subshell exited 1, `set -e` killed the script, but the **ERR trap did not fire** because bash's default doesn't inherit ERR into subshells. Net result: user saw `==> Appliance: packaging source for VM` and then a returned shell prompt with zero feedback.
+
+  Three fixes:
+  - **`set -E`** added at the top of the launcher. Makes the ERR trap inherit into subshells, command substitutions, and functions. Now any silent failure trips the loud red banner.
+  - **Required / optional split** in the workspace sync. `cloudsim-backbone` is treated as optional (it's missing from older bundles); a missing required file calls `_die()` with a clear pointer to `brew reinstall` or `CLOUD_LEARN_HOME=…`.
+  - **`tar` stderr is now captured to a log** and surfaced into the failure banner instead of suppressed to `/dev/null`.
+
+- **`cloudsim-backbone/` added to the release tarball allowlist** (`.github/workflows/release.yml`). Going forward every release bundle has it. Older v1.1.x bundles can still work — the launcher just skips that path.
+
+### Why this matters
+
+The whole point of v1.1.5's UX overhaul was that the launcher would never again exit silently. v1.1.8 regressed that invariant in a subshell-shaped blind spot. v1.1.9 closes the hole with `set -E` so future silent exits are impossible by construction.
+
 ## [1.1.8] — 2026-06-14
 
 **Replaces the SSHFS workspace mount with tar+transfer.** The third (and last) brew-prefix sandbox issue in the launcher.

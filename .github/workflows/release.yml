@@ -103,12 +103,18 @@ jobs:
       - name: Build source tarball
         run: |
           mkdir -p dist
+          # IMPORTANT: cloudsim-backbone is the Java-based simulator
+          # backbone that docker-compose.appliance.yml builds at startup.
+          # Missing from v1.0.0 - v1.1.8 tarballs (regression). The
+          # appliance launcher's tar+transfer step would silently fail
+          # when this dir was absent. Always include it going forward.
           tar czf "dist/cloud-learn-${{ steps.ver.outputs.version }}.tar.gz" \
             --exclude='.git' --exclude='__pycache__' --exclude='node_modules' \
             --exclude='dist' --exclude='**/target' --exclude='**/playwright-report' \
             --transform "s,^,cloud-learn-${{ steps.ver.outputs.version }}/," \
             core providers packs server.py static requirements.txt VERSION \
             Dockerfile docker-compose.yml docker-compose.appliance.yml \
+            cloudsim-backbone \
             .env.example packaging scripts docs install.sh \
             README.md CHANGELOG.md LICENSE
 

@@ -8,6 +8,11 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 
 set -euo pipefail
+# -E makes the ERR trap inherit into command substitutions, subshells,
+# and functions. Without it, `( false )` silently exits the script
+# (set -e fires) but never triggers the ERR trap — user sees a returned
+# prompt with no banner. Found the hard way in v1.1.8.
+set -E
 
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${CLOUD_LEARN_HOME:-$(cd "${SCRIPT_PATH}/.." && pwd)}"
@@ -298,25 +303,58 @@ appliance_sync_workspace_into_vm() {
   local tarball
   tarball="$(mktemp -t cloud-learn-src-XXXXXX.tgz)"
   # Minimal allowlist — everything docker-compose.appliance.yml and the
-  # two Dockerfiles need at build/runtime. Skip noise.
-  (
-    cd "$ROOT_DIR" || exit 1
-    tar czf "$tarball" \
-      --exclude '__pycache__' \
-      --exclude '*.pyc' \
-      --exclude 'target' \
-      --exclude 'dist' \
-      --exclude '.git' \
-      --exclude '*.log' \
-      Dockerfile \
-      docker-compose.appliance.yml \
-      docker-compose.yml \
-      server.py \
-      requirements.txt \
-      core providers packs static \
-      cloudsim-backbone \
-      2>/dev/null
-  )
+  # two Dockerfiles need at build/runtime. We split required from
+  # optional so a missing optional dir doesn't blow up the launcher
+  # (cloudsim-backbone is missing in older brew bundles — see release.yml).
+  local required=(Dockerfile docker-compose.appliance.yml server.py requirements.txt core providers packs static)
+  local optional=(docker-compose.yml cloudsim-backbone)
+  # Validate required files first → clear error if anything is missing.
+  local missing=()
+  local f
+  for f in "${required[@]}"; do
+    [ ! -e "${ROOT_DIR}/${f}" ] && missing+=("$f")
+  done
+  if [ "${#missing[@]}" -gt 0 ]; then
+    _die "required source files missing from launcher bundle: ${missing[*]}" \
+"This usually means the brew tarball is incomplete. Try:
+  brew reinstall cloud-learn
+Or run from a workspace clone:
+  CLOUD_LEARN_HOME=/path/to/workspace cloud-learn up"
+  fi
+  # Build the tar arg list with only what's actually present.
+  local tar_args=()
+  for f in "${required[@]}"; do tar_args+=("$f"); done
+  for f in "${optional[@]}"; do
+    if [ -e "${ROOT_DIR}/${f}" ]; then
+      tar_args+=("$f")
+    else
+      verbose "optional source skipped (not in bundle): $f"
+    fi
+  done
+  # Run tar without a subshell so a failure goes through the ERR trap
+  # cleanly. The 2>&1 capture lets _die surface tar's stderr if something
+  # else (out-of-disk, permission) goes wrong.
+  local tar_log
+  tar_log="$(mktemp -t cloud-learn-tar-XXXXXX.log)"
+  if ! ( cd "$ROOT_DIR" && tar czf "$tarball" \
+       --exclude '__pycache__' \
+       --exclude '*.pyc' \
+       --exclude 'target' \
+       --exclude 'dist' \
+       --exclude '.git' \
+       --exclude '*.log' \
+       "${tar_args[@]}" ) 2>"$tar_log"; then
+    progress "    tar output:"
+    while IFS= read -r line; do _emit "      $line"; done < "$tar_log"
+    rm -f "$tar_log" "$tarball"
+    _die "tar failed packaging the source bundle (see lines above)" \
+"This is usually an out-of-disk or missing-file issue.
+Inspect the bundle:
+  ls -la ${ROOT_DIR}
+Re-run with verbose:
+  cloud-learn up -v"
+  fi
+  rm -f "$tar_log"
   local sz
   sz=$(du -h "$tarball" 2>/dev/null | awk '{print $1}')
   verbose "tarball: ${tarball} (${sz})"
