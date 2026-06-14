@@ -108,11 +108,18 @@ jobs:
           # Missing from v1.0.0 - v1.1.8 tarballs (regression). The
           # appliance launcher's tar+transfer step would silently fail
           # when this dir was absent. Always include it going forward.
+          # The allowlist below MUST include every path the appliance
+          # Dockerfile + cloudsim Dockerfile COPY from build context.
+          # Verified by scripts/verify-bundle.sh — please re-run it after
+          # editing this list (or adding a new COPY directive).
+          # Past regressions: cloudsim-backbone was missing v1.0.0-v1.1.8;
+          # routes + setup_cython.py were missing v1.0.0-v1.1.9.
           tar czf "dist/cloud-learn-${{ steps.ver.outputs.version }}.tar.gz" \
             --exclude='.git' --exclude='__pycache__' --exclude='node_modules' \
             --exclude='dist' --exclude='**/target' --exclude='**/playwright-report' \
             --transform "s,^,cloud-learn-${{ steps.ver.outputs.version }}/," \
-            core providers packs server.py static requirements.txt VERSION \
+            core providers packs routes static \
+            server.py setup_cython.py requirements.txt VERSION \
             Dockerfile docker-compose.yml docker-compose.appliance.yml \
             cloudsim-backbone \
             .env.example packaging scripts docs install.sh \
