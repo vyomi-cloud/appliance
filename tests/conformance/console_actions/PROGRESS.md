@@ -192,3 +192,43 @@ The `/app` mount is read-only on the live container — hot-patching
 requires writing to `/workspace/cloud-learn/<file>` in the VM (which
 is the bind-mount source), then `docker restart`.
 
+
+---
+
+## Session 3 (foreground, 2026-06-14) — KEY DISCOVERY
+
+### What we tried
+
+Targeted Phase 4 quick-wins: `gcp.kms`, `gcp.eventarc`, `gcp.secretmanager`, `gcp.storage` — each reported as 7-9 passing of 7-10 in the latest committed REPORT.md, so "1 failure each" expected.
+
+### What we found
+
+**These 4 services are already at 100% on the live appliance — when run in isolation.**
+
+Running each service individually:
+```
+gcp.kms          9/9   ✓ 100%
+gcp.eventarc     7/7   ✓ 100%
+gcp.secretmanager 7/7  ✓ 100%
+gcp.storage      7/7   ✓ 100%
+Combined (filtered):  30/30  ✓ 100%
+```
+
+But when run as part of the full suite they previously appeared as 7/8 / 9/10. The difference is **state leakage** — one service's test resources break another's.
+
+### Implications
+
+The path to higher pass-rate isn't (only) fixing service code. It's adding **test isolation**:
+
+1. **Per-test resource cleanup** — a pytest fixture that drops all `vyomi-conf-*` resources after each test
+2. **Unique resource names per test run** — append a timestamp or random suffix so retries don't collide
+3. **Provider-scoped resource namespaces** — separate `gcp.kms.test1` from `gcp.kms.test2` to avoid cross-test pollution
+
+### Effort to reach 100% — revised estimate
+
+| Approach | Sessions | Outcome |
+|---|---|---|
+| Build test isolation layer | 1-2 | Likely unlocks +20-30pp at once (services that "already work" but fail in suite) |
+| Continue per-service fixes | many | Slow per-pp progress; doesn't address root cause |
+
+**Recommended next move**: structural acceleration before more service-by-service work.
