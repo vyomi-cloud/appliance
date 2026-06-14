@@ -8,7 +8,7 @@ Run locally: `pytest tests/conformance/console_actions/`
 | Provider | Pass | Total | Rate |
 |---|---|---|---|
 | ✗ aws | 111 | 114 | 97.4% |
-| ✗ azure | 51 | 52 | 98.1% |
+| ✓ azure | 52 | 52 | 100.0% |
 | ✗ gcp | 84 | 87 | 96.6% |
 
 ## AWS
@@ -178,9 +178,9 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `storage` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/{name}` | `200` | ✓ 200 |
 | `storage` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/{name}` | `200` | ✓ 200 |
 | `storage` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts` | `200` | ✓ 200 |
-| `vm` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/vyomi-conf-vm` | `0` | ✗ 0 — network: HTTPConnectionPool(host='127.0.0.1', port=9000): Read timed out. (read  |
-| `vm` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `vm` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
+| `vm` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/vyomi-conf-vm` | `200` | ✓ 200 |
+| `vm` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `200` | ✓ 200 |
+| `vm` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `200` | ✓ 200 |
 | `vm` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines` | `200` | ✓ 200 |
 | `vnet` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/vyomi-conf-vnet` | `200` | ✓ 200 |
 | `vnet` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/{name}` | `200` | ✓ 200 |
