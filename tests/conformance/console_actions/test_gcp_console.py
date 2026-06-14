@@ -42,11 +42,18 @@ def test_gcp_action(spec, http_session, base_url):
     if ok and spec.action == "create":
         try:
             data = r.json()
-            for k in ("name", "id", "selfLink", "topic", "secretId", "keyRingId"):
-                if isinstance(data, dict) and k in data and data[k]:
-                    raw = str(data[k]).rstrip("/").split("/")[-1]
-                    _CREATED_IDS[spec.service] = raw
-                    break
+            captured = ""
+            if isinstance(data, dict) and spec.name_field:
+                val = data.get(spec.name_field)
+                if val:
+                    captured = str(val).rstrip("/").split("/")[-1]
+            if not captured:
+                for k in ("name", "id", "selfLink", "topic", "secretId", "keyRingId"):
+                    if isinstance(data, dict) and k in data and data[k]:
+                        captured = str(data[k]).rstrip("/").split("/")[-1]
+                        break
+            if captured:
+                _CREATED_IDS[spec.service] = captured
         except Exception:
             pass
 

@@ -1,0 +1,38 @@
+services:
+  cloudlearn-sql-postgres:
+    ports: !override
+      - "25432:5432"
+  cloudlearn-sql-mysql:
+    ports: !override
+      - "23306:3306"
+  cloudlearn-gcs:
+    ports: !override
+      - "24443:4443"
+  cloudlearn-vault:
+    ports: !override
+      - "28200:8200"
+  cloudlearn-minio:
+    ports: !override
+      - "29000:9000"
+      - "29001:9001"
+  cloudlearn-nats:
+    ports: !override
+      - "24222:4222"
+  cloudlearn-dynamodb:
+    ports: !override
+      - "28000:8000"
+  cloudlearn-elasticmq:
+    ports: !override
+      - "29324:9324"
+  simulator:
+    ports: !override
+      - "9100:9000"
+    environment:
+      CLOUDLEARN_DEV_MODE: "1"
+      CLOUDLEARN_DISTRIBUTION_MODE: developer
+    volumes:
+      - ./tests:/app/tests:ro
+      - ./server.py:/app/server.py:ro
+      - ./core:/app/core:ro
+      - ./providers:/app/providers:ro
+      - ./routes:/app/routes:ro
