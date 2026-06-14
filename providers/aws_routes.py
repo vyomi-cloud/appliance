@@ -223,7 +223,15 @@ def _proxy(target_name: str, signature: str, body_mode: str = "none", body_targe
                 except Exception:
                     payload = {}
             model_cls = getattr(_models, model_name, None) or getattr(_server(), model_name)
-            kwargs[body_target] = model_cls(**(payload if isinstance(payload, dict) else {}))
+            try:
+                kwargs[body_target] = model_cls(**(payload if isinstance(payload, dict) else {}))
+            except Exception as _exc:
+                # Pydantic ValidationError surfaces here; map to a proper 422 with the
+                # validator's error list rather than letting it bubble up as a 500.
+                from fastapi import HTTPException as _HTTPException
+                errs = getattr(_exc, "errors", None)
+                detail = errs() if callable(errs) else str(_exc)
+                raise _HTTPException(status_code=422, detail=detail)
         target = _TARGET_OVERRIDES.get(target_name) or getattr(_server(), target_name)
         result = target(**kwargs)
         if inspect.isawaitable(result):

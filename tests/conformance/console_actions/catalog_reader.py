@@ -29,6 +29,12 @@ class ActionSpec:
     requires_resource:  bool = False
     expected_status:    tuple[int, ...] = field(default_factory=lambda: (200, 201, 202, 204))
     notes:              str = ""
+    # Backend's canonical id field on the create response. Pulled from the
+    # catalog's `name_field`. The harness uses this when capturing the
+    # created resource's identifier so subsequent get/delete tests target
+    # the correct resource (avoids picking "name" when the resource_path
+    # actually wants "vpc_id" — that was the classic 404-after-create bug).
+    name_field:         str = ""
 
     @property
     def test_id(self) -> str:
@@ -64,10 +70,11 @@ def _read_aws() -> list[ActionSpec]:
             continue
         coll = str(svc.get("collection_path", "")).strip()
         res = str(svc.get("resource_path", "")).strip()
+        name_field = str(svc.get("name_field") or "").strip()
         if coll:
             specs.append(ActionSpec(
                 provider="aws", service=key, action="list",
-                method="GET", path=coll,
+                method="GET", path=coll, name_field=name_field,
             ))
             # Honor create_path override (S3 — POST /api/s3/buckets/{name})
             create_template = str(svc.get("create_path") or coll)
@@ -76,11 +83,13 @@ def _read_aws() -> list[ActionSpec]:
                 method=str(svc.get("create_method") or "POST").upper(),
                 path=create_template, payload=payload_for("aws", key),
                 requires_resource="{name}" in create_template,
+                name_field=name_field,
             ))
         if res:
             specs.append(ActionSpec(
                 provider="aws", service=key, action="get",
                 method="GET", path=res, requires_resource=True,
+                name_field=name_field,
             ))
         for action_name, api_path in (svc.get("api_paths") or {}).items():
             if not isinstance(api_path, dict):
@@ -90,11 +99,13 @@ def _read_aws() -> list[ActionSpec]:
                 method=str(api_path.get("method", "POST")).upper(),
                 path=str(api_path.get("path", "")),
                 requires_resource="{name}" in str(api_path.get("path", "")),
+                name_field=name_field,
             ))
         if res:
             specs.append(ActionSpec(
                 provider="aws", service=key, action="delete",
                 method="DELETE", path=res, requires_resource=True,
+                name_field=name_field,
             ))
     return specs
 
@@ -116,20 +127,23 @@ def _read_gcp() -> list[ActionSpec]:
             continue
         coll = str(svc.get("collection_path", "")).strip()
         res = str(svc.get("resource_path", "")).strip()
+        name_field = str(svc.get("name_field") or "").strip()
         if coll:
             specs.append(ActionSpec(
                 provider="gcp", service=key, action="list",
-                method="GET", path=coll,
+                method="GET", path=coll, name_field=name_field,
             ))
             specs.append(ActionSpec(
                 provider="gcp", service=key, action="create",
                 method=str(svc.get("create_method") or "POST").upper(),
                 path=coll, payload=payload_for("gcp", key),
+                name_field=name_field,
             ))
         if res:
             specs.append(ActionSpec(
                 provider="gcp", service=key, action="get",
                 method="GET", path=res, requires_resource=True,
+                name_field=name_field,
             ))
         for action_name, api_path in (svc.get("api_paths") or {}).items():
             if not isinstance(api_path, dict):
@@ -139,11 +153,13 @@ def _read_gcp() -> list[ActionSpec]:
                 method=str(api_path.get("method", "POST")).upper(),
                 path=str(api_path.get("path", "")),
                 requires_resource="{name}" in str(api_path.get("path", "")),
+                name_field=name_field,
             ))
         if res:
             specs.append(ActionSpec(
                 provider="gcp", service=key, action="delete",
                 method="DELETE", path=res, requires_resource=True,
+                name_field=name_field,
             ))
     return specs
 
