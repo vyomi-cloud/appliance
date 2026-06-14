@@ -77,17 +77,23 @@ def test_aws_action(spec, http_session, base_url):
         try:
             data = r.json()
             captured = ""
+            # Some backends populate columns with an em-dash placeholder when
+            # the caller didn't supply a value — treat those as "unset" rather
+            # than trusting them as the resource id.
+            _PLACEHOLDERS = {"", "—", "-", "null", "None"}
             if isinstance(data, dict) and spec.name_field:
                 val = data.get(spec.name_field)
-                if val:
+                if val and str(val) not in _PLACEHOLDERS:
                     captured = str(val).rstrip("/").split("/")[-1]
             if not captured:
                 for k in ("instance_id", "vpc_id", "user_name",
                           "table_name", "queue_url", "function_name",
                           "db_instance_identifier", "name", "id", "key_id"):
                     if isinstance(data, dict) and k in data and data[k]:
-                        captured = str(data[k]).rstrip("/").split("/")[-1]
-                        break
+                        v = str(data[k])
+                        if v not in _PLACEHOLDERS:
+                            captured = v.rstrip("/").split("/")[-1]
+                            break
             if captured:
                 _CREATED_IDS[spec.service] = captured
         except Exception:
