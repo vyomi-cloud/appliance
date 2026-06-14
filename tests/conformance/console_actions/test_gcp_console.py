@@ -9,11 +9,13 @@ import pytest
 
 from .catalog_reader import enumerate_actions
 from .conftest import record_result
+from .sample_payloads import current_run_suffix
 
 
 _SPECS = [s for s in enumerate_actions(["gcp"])]
 _CREATED_IDS: dict[str, str] = {}
 _STUB_SERVICES: set[str] = set()
+_RUN_SUFFIX = current_run_suffix()
 
 
 def _is_stub_response(status_code: int, body_text: str) -> bool:
@@ -40,8 +42,13 @@ def test_gcp_action(spec, http_session, base_url):
         pytest.skip("parent resource not created - dependent action")
 
     path = spec.path
+    create_placeholder = ""
     if "{name}" in path:
-        placeholder = _CREATED_IDS.get(spec.service) or f"vyomi-conf-{spec.service}"
+        if spec.action == "create" and spec.service not in _CREATED_IDS:
+            create_placeholder = f"vyomi-conf-{spec.service}-{_RUN_SUFFIX}"
+            placeholder = create_placeholder
+        else:
+            placeholder = _CREATED_IDS.get(spec.service) or f"vyomi-conf-{spec.service}"
         path = path.replace("{name}", placeholder)
     path = (path.replace("{project}", "cloudlearn")
                 .replace("{region}", "us-central1")
@@ -86,8 +93,11 @@ def test_gcp_action(spec, http_session, base_url):
                         break
             if captured:
                 _CREATED_IDS[spec.service] = captured
+            elif create_placeholder:
+                _CREATED_IDS[spec.service] = create_placeholder
         except Exception:
-            pass
+            if create_placeholder:
+                _CREATED_IDS[spec.service] = create_placeholder
 
     detail = ""
     if not ok:

@@ -35,9 +35,11 @@ import pytest
 
 from .catalog_reader import enumerate_actions
 from .conftest import record_result
+from .sample_payloads import current_run_suffix
 
 
 _SPECS = [s for s in enumerate_actions(["aws"])]
+_RUN_SUFFIX = current_run_suffix()
 
 # Cache of created resource identifiers per service so lifecycle
 # actions can fill the {name} placeholder. Populated during a passing
@@ -85,8 +87,17 @@ def test_aws_action(spec, http_session, base_url):
     # have no created id yet, substitute a deterministic placeholder
     # so we can still observe what the backend does.
     path = spec.path
+    create_placeholder = ""  # set when we synthesized a name into the URL
     if "{name}" in path:
-        placeholder = _CREATED_IDS.get(spec.service) or f"vyomi-conf-{spec.service}"
+        # For create-in-path (S3-style POST /api/s3/buckets/{name}) we want
+        # a UNIQUE-per-run name so the second back-to-back run doesn't 409.
+        # For follow-up actions we want the actually-captured id so they
+        # target the resource just created.
+        if spec.action == "create" and spec.service not in _CREATED_IDS:
+            create_placeholder = f"vyomi-conf-{spec.service}-{_RUN_SUFFIX}"
+            placeholder = create_placeholder
+        else:
+            placeholder = _CREATED_IDS.get(spec.service) or f"vyomi-conf-{spec.service}"
         path = path.replace("{name}", placeholder)
     # Same for {project} / {zone} / etc. — substitute appliance defaults.
     path = (path.replace("{project}", "cloudlearn")
@@ -146,7 +157,8 @@ def test_aws_action(spec, http_session, base_url):
             if not captured:
                 for k in ("instance_id", "vpc_id", "user_name",
                           "table_name", "queue_url", "function_name",
-                          "db_instance_identifier", "name", "id", "key_id"):
+                          "db_instance_identifier", "rest_api_id",
+                          "name", "id", "key_id"):
                     if isinstance(data, dict) and k in data and data[k]:
                         v = str(data[k])
                         if v not in _PLACEHOLDERS:
@@ -154,8 +166,14 @@ def test_aws_action(spec, http_session, base_url):
                             break
             if captured:
                 _CREATED_IDS[spec.service] = captured
+            elif create_placeholder:
+                # Response had no recognizable id field but create succeeded
+                # against a URL we synthesized — use what we sent so
+                # subsequent get/delete still target the right resource.
+                _CREATED_IDS[spec.service] = create_placeholder
         except Exception:
-            pass
+            if create_placeholder:
+                _CREATED_IDS[spec.service] = create_placeholder
 
     # Record + assert
     detail = ""
