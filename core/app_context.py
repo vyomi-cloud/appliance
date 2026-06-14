@@ -516,10 +516,14 @@ def _migrate_state(state: dict) -> dict:
     spaces_state["settings"].setdefault("default_provider", "aws")
     spaces_state["settings"].setdefault("default_region", "us-east-1")
     if not spaces_state["spaces"]:
+        # "space-legacy" is preserved as the AWS default space ID for
+        # backwards-compat — cloudsim_runtime_id and lxd_project_name
+        # are derived from it. Display name is "aws-default" (the
+        # documented v1.2.5 convention).
         legacy_space_id = "space-legacy"
         spaces_state["spaces"][legacy_space_id] = {
             "space_id": legacy_space_id,
-            "name": "Legacy Workspace",
+            "name": "aws-default",
             "provider": "aws",
             "status": "running",
             "seed": state.get("license", {}).get("device_id") or "legacy",
@@ -568,8 +572,8 @@ def _migrate_state(state: dict) -> dict:
         # Auto-create default GCP and Azure spaces so all 3 consoles work
         # out of the box without requiring the user to manually create them.
         for _prov, _sid, _label, _region in [
-            ("gcp", "space-gcp-default", "GCP Project", "us-central1"),
-            ("azure", "space-azure-default", "Azure Subscription", "eastus"),
+            ("gcp", "space-gcp-default", "gcp-default", "us-central1"),
+            ("azure", "space-azure-default", "azure-default", "eastus"),
         ]:
             spaces_state["spaces"][_sid] = {
                 "space_id": _sid,
@@ -656,6 +660,44 @@ def ensure_default_tenant() -> None:
     for sid, sp in spaces_map.items():
         if isinstance(sp, dict) and not sp.get("tenant_id"):
             sp["tenant_id"] = DEFAULT_TENANT_ID
+    migrate_default_space_names()
+
+
+# Rename map for the one-shot migration. Keys are the legacy display
+# names that older builds shipped with; values are the v1.2.5+ names
+# that match the documented "aws-default / gcp-default / azure-default"
+# convention. We only rename a space if its CURRENT name matches the
+# legacy string exactly — so users who renamed spaces themselves are
+# untouched.
+_LEGACY_NAME_RENAMES = {
+    "space-legacy":       "aws-default",
+    "space-gcp-default":  "gcp-default",
+    "space-azure-default": "azure-default",
+}
+_LEGACY_NAME_PRIOR_NAMES = {
+    "space-legacy":       "Legacy Workspace",
+    "space-gcp-default":  "GCP Project",
+    "space-azure-default": "Azure Subscription",
+}
+
+
+def migrate_default_space_names() -> None:
+    """One-shot migration (v1.2.5): rename the three default-seeded spaces
+    from their legacy display names ("Legacy Workspace", "GCP Project",
+    "Azure Subscription") to the documented convention ("aws-default",
+    "gcp-default", "azure-default"). Idempotent — only renames spaces whose
+    current name still matches the legacy string, so any user-renamed
+    spaces survive untouched."""
+    spaces_map = STATE.setdefault("spaces", {}).setdefault("spaces", {})
+    for sid, new_name in _LEGACY_NAME_RENAMES.items():
+        sp = spaces_map.get(sid)
+        if not isinstance(sp, dict):
+            continue
+        current = sp.get("name", "")
+        legacy = _LEGACY_NAME_PRIOR_NAMES.get(sid, "")
+        if current == legacy or current == "":
+            sp["name"] = new_name
+            sp["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
 
 
 ensure_default_tenant()

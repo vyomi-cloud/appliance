@@ -6,6 +6,19 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.5] — 2026-06-15
+
+Default-space naming convention. The three out-of-the-box spaces are now `aws-default`, `gcp-default`, and `azure-default` — matching how every other identifier in the appliance and SDK examples talks about per-provider defaults. Previous names (`Legacy Workspace`, `GCP Project`, `Azure Subscription`) were inconsistent and looked like manually-created spaces rather than defaults.
+
+### Changed
+
+- **Fresh installs** now seed three spaces named `aws-default`, `gcp-default`, `azure-default` (was: `Legacy Workspace`, `GCP Project`, `Azure Subscription`). Space IDs are unchanged (`space-legacy`, `space-gcp-default`, `space-azure-default`) so `cloudsim_runtime_id` / `lxd_project_name` references in persisted state stay valid.
+- **Existing installs** get a one-shot migration on first v1.2.5 boot (`migrate_default_space_names()` in `core/app_context.py`) — renames spaces only when the current name still matches the legacy default. Any space the user renamed themselves is untouched.
+
+### Why
+
+The pricing/upgrade flow, the per-cloud console gates, and the docs all reference `aws-default` etc. as the canonical names. Having the UI show a different label was a needless source of "wait, which space am I in?" confusion for new users.
+
 ## [1.2.4] — 2026-06-15
 
 URL parity: every install path now lands on `http://vyomi.local:9000`. v1.2.3 made the Multipass-based paths (Brew/.deb/.rpm/Scoop) reachable via mDNS at `vyomi.local`. This release extends the same hostname to the Docker Compose path so users never have to remember a different URL based on which install method they picked.
