@@ -342,6 +342,9 @@ def register(app, h) -> None:
         ("POST", "/api/rds/databases/{db_instance_identifier}/stop", "api_rds_stop_database", "(db_instance_identifier: str)"),
         ("POST", "/api/rds/databases/{db_instance_identifier}/reboot", "api_rds_reboot_database", "(db_instance_identifier: str)"),
         ("PUT", "/api/rds/databases/{db_instance_identifier}", "api_rds_modify_database", "(db_instance_identifier: str, request: Request)", "model", "req", "RDSModifyRequest"),
+        # Alias for AWS catalog's "modify" action — POST /modify mirrors PUT /databases/{name}.
+        # Console publishes /modify; SDK ModifyDBInstance uses the resource URL with PUT.
+        ("POST", "/api/rds/databases/{db_instance_identifier}/modify", "api_rds_modify_database", "(db_instance_identifier: str, request: Request)", "model", "req", "RDSModifyRequest"),
         ("DELETE", "/api/rds/databases/{db_instance_identifier}", "api_rds_delete_database", "(db_instance_identifier: str, skip_final_snapshot: bool = True, final_snapshot_identifier: str = \"\")"),
         ("GET", "/api/rds/subnet-groups", "api_rds_list_subnet_groups", "()"),
         ("POST", "/api/rds/subnet-groups", "api_rds_create_subnet_group", "(request: Request)", "model", "req", "RDSSubnetGroupRequest"),
@@ -366,6 +369,9 @@ def register(app, h) -> None:
         ("DELETE", "/api/sqs/queues/{queue_name}", "api_sqs_delete_queue", "(queue_name: str)"),
         ("GET", "/api/sqs/queues/{queue_name}/messages", "api_sqs_list_messages", "(queue_name: str)"),
         ("POST", "/api/sqs/queues/{queue_name}/messages", "api_sqs_send_message", "(queue_name: str, request: Request)", "model", "req", "SQSMessageSendRequest"),
+        # Alias for AWS catalog's "send" action — same handler as POST /messages.
+        # Console + catalog publish /send; SDKs use /messages. Both work.
+        ("POST", "/api/sqs/queues/{queue_name}/send", "api_sqs_send_message", "(queue_name: str, request: Request)", "model", "req", "SQSMessageSendRequest"),
         ("POST", "/api/sqs/queues/{queue_name}/receive", "api_sqs_receive_message", "(queue_name: str, request: Request)", "model", "req", "SQSReceiveRequest"),
         ("DELETE", "/api/sqs/queues/{queue_name}/messages/{receipt_handle}", "api_sqs_delete_message", "(queue_name: str, receipt_handle: str)"),
         ("POST", "/api/sqs/queues/{queue_name}/messages/{receipt_handle}/visibility", "api_sqs_change_visibility", "(queue_name: str, receipt_handle: str, request: Request)", "model", "req", "SQSVisibilityRequest"),

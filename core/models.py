@@ -220,7 +220,9 @@ class RDSSnapshotRequest(BaseModel):
 
 
 class RDSModifyRequest(BaseModel):
-    db_instance_identifier: str
+    # Path already supplies this; making it optional lets a bare `{}` body
+    # work for "modify nothing" probes (console action with no fields touched).
+    db_instance_identifier: str = ""
     db_instance_class: str | None = None
     allocated_storage: int | None = None
     backup_retention_period: int | None = None

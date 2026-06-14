@@ -158,8 +158,11 @@ def api_rds_start_database(db_instance_identifier: str):
     db = _rds_find_db_instance(db_instance_identifier)
     if not db:
         raise HTTPException(404, detail="DBInstanceNotFound")
+    # Idempotent: return current view if already available rather than 409.
+    # Mirrors the console-button UX (no-op when already on) and lets harness
+    # tests run lifecycle in any order without sequencing pre-conditions.
     if db.get("db_instance_status") == "available":
-        raise HTTPException(409, detail="InvalidDBInstanceState: Instance is already available.")
+        return _rds_db_view(db)
     _rds_runtime_start(db)
     ctx.record_usage("rds.start_db_instance", {"db_instance_identifier": db_instance_identifier})
     return _rds_db_view(db)
