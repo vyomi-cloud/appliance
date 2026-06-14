@@ -90,7 +90,7 @@ usage() {
 Vyomi simulator launcher (cloud-learn CLI) — local multi-cloud appliance
 
 Usage:
-  cloud-learn up [-v|--verbose]
+  cloud-learn up [-v|--verbose] [-y|--yes]
   cloud-learn down
   cloud-learn stop
   cloud-learn force-stop
@@ -104,10 +104,15 @@ Flags:
   -v, --verbose      Stream raw cloud-init log lines + sub-step detail.
                      Useful during triage. Same effect as
                      CLOUD_LEARN_VERBOSE=1 in the environment.
+  -y, --yes          Skip the first-launch confirmation prompt that
+                     summarizes the ~3.5 GB of container images about
+                     to be downloaded. Use in CI / automation. Same
+                     effect as CLOUD_LEARN_YES=1 in the environment.
 
 Environment:
   CLOUD_LEARN_HOME         Root directory containing CloudLearn sources
   CLOUD_LEARN_VERBOSE      Set to 1 to emit extra progress detail
+  CLOUD_LEARN_YES          Set to 1 to skip the download-confirm prompt
   CLOUD_LEARN_COMPOSE_FILE Alternate compose file path
   CLOUD_LEARN_PROJECT_NAME Compose project name (default: cloud-learn)
   CLOUD_LEARN_RUNTIME_CONTEXT outer=manage appliance VM, inner=start stack in VM
@@ -302,11 +307,28 @@ appliance_sync_workspace_into_vm() {
   progress "==> Appliance: packaging source for VM (no SSHFS dependency)"
   local tarball
   tarball="$(mktemp -t cloud-learn-src-XXXXXX.tgz)"
-  # Minimal allowlist — everything docker-compose.appliance.yml and the
-  # two Dockerfiles need at build/runtime. We split required from
-  # optional so a missing optional dir doesn't blow up the launcher
-  # (cloudsim-backbone is missing in older brew bundles — see release.yml).
-  local required=(Dockerfile docker-compose.appliance.yml server.py requirements.txt core providers packs static)
+  # The full set of paths the appliance Dockerfile + cloudsim Dockerfile
+  # COPY from the build context. Verified by scripts/verify-bundle.sh —
+  # please re-run it after editing this list or after either Dockerfile
+  # gains a new COPY directive.
+  #
+  # If a required file is missing, the docker compose build fails with
+  # "failed to compute cache key" partway through Phase 7 — leaving the
+  # appliance VM in a half-built state. Don't trim without re-verifying.
+  local required=(
+    Dockerfile
+    docker-compose.appliance.yml
+    VERSION
+    server.py
+    requirements.txt
+    setup_cython.py
+    core
+    providers
+    packs
+    routes
+    scripts
+    static
+  )
   local optional=(docker-compose.yml cloudsim-backbone)
   # Validate required files first → clear error if anything is missing.
   local missing=()
@@ -871,11 +893,85 @@ appliance_wait_for_cloud_init() {
   done
 }
 
+appliance_confirm_images() {
+  # Show the user what container images the appliance is about to pull
+  # so the bandwidth + storage cost isn't a surprise on first launch.
+  # Skipped on subsequent runs (when the simulator image already exists
+  # in the VM's docker), in non-interactive shells, or when -y/--yes /
+  # CLOUD_LEARN_YES=1 is set.
+  if [ "${CLOUD_LEARN_YES:-0}" = "1" ] || [ "${ASSUME_YES:-0}" = "1" ]; then
+    verbose "image-confirm: skipped (CLOUD_LEARN_YES=1)"
+    return 0
+  fi
+  local compose
+  compose="$(appliance_multipass_cmd)"
+  # Has the user already downloaded the bulk on a prior launch?
+  # If the simulator image exists in the VM, treat this as a re-run.
+  if "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
+       "docker image inspect cloud-learn-simulator >/dev/null 2>&1 || \
+        docker image inspect cloud-learn-cloudsim >/dev/null 2>&1 || \
+        docker image inspect \$(docker compose -f ${APPLIANCE_WORKSPACE}/docker-compose.appliance.yml config 2>/dev/null | grep -E '^  *image:' | head -1 | awk '{print \$2}') >/dev/null 2>&1" >/dev/null 2>&1; then
+    verbose "image-confirm: skipped (some images already pulled)"
+    return 0
+  fi
+  if [ ! -t 0 ] || [ ! -t 2 ]; then
+    verbose "image-confirm: skipped (non-interactive)"
+    return 0
+  fi
+  _emit ""
+  _emit "${_C_BOLD}${_C_YELLOW}┌─ First-launch download notice ─────────────────────────────${_C_RESET}"
+  _emit "${_C_YELLOW}│${_C_RESET}"
+  _emit "${_C_YELLOW}│${_C_RESET}   The appliance is about to pull / build the following:"
+  _emit "${_C_YELLOW}│${_C_RESET}"
+  _emit "${_C_YELLOW}│${_C_RESET}   ${_C_BOLD}Container images${_C_RESET}     (downloaded once, cached forever)"
+  _emit "${_C_YELLOW}│${_C_RESET}     postgres:16-alpine               ~70 MB"
+  _emit "${_C_YELLOW}│${_C_RESET}     mysql:8.0                        ~640 MB"
+  _emit "${_C_YELLOW}│${_C_RESET}     google-cloud-cli:emulators       ~1.4 GB   (pubsub + firestore)"
+  _emit "${_C_YELLOW}│${_C_RESET}     hashicorp/vault:1.15             ~70 MB"
+  _emit "${_C_YELLOW}│${_C_RESET}     nats:2-alpine                    ~25 MB"
+  _emit "${_C_YELLOW}│${_C_RESET}     minio/minio                      ~150 MB"
+  _emit "${_C_YELLOW}│${_C_RESET}     amazon/dynamodb-local            ~200 MB"
+  _emit "${_C_YELLOW}│${_C_RESET}     softwaremill/elasticmq-native    ~50 MB"
+  _emit "${_C_YELLOW}│${_C_RESET}     fsouza/fake-gcs-server           ~30 MB"
+  _emit "${_C_YELLOW}│${_C_RESET}     python:3.14-slim (build base)    ~150 MB"
+  _emit "${_C_YELLOW}│${_C_RESET}     maven + eclipse-temurin-17       ~600 MB"
+  _emit "${_C_YELLOW}│${_C_RESET}"
+  _emit "${_C_YELLOW}│${_C_RESET}   ${_C_BOLD}Local builds${_C_RESET}        (cached after first build)"
+  _emit "${_C_YELLOW}│${_C_RESET}     cloud-learn-simulator            ~400 MB"
+  _emit "${_C_YELLOW}│${_C_RESET}     cloud-learn-cloudsim             ~300 MB"
+  _emit "${_C_YELLOW}│${_C_RESET}"
+  _emit "${_C_YELLOW}│${_C_RESET}   ${_C_BOLD}Total first-run download${_C_RESET}     ~3.5 GB"
+  _emit "${_C_YELLOW}│${_C_RESET}   ${_C_BOLD}First-run time on broadband${_C_RESET}  5-10 min"
+  _emit "${_C_YELLOW}│${_C_RESET}   Subsequent runs reuse the cache and start in <30s."
+  _emit "${_C_YELLOW}│${_C_RESET}"
+  _emit "${_C_YELLOW}└────────────────────────────────────────────────────────────${_C_RESET}"
+  _emit ""
+  # 30-second auto-yes so the prompt never blocks an automation.
+  local ans
+  printf '  Proceed with download? [Y/n] (auto-yes in 30s): ' >&2
+  if ! read -r -t 30 ans; then
+    _emit ""
+    _emit "  (no answer in 30s — proceeding)"
+    return 0
+  fi
+  case "${ans:-y}" in
+    n|N|no|NO|No)
+      _emit ""
+      _emit "  ${_C_YELLOW}Halted at your request.${_C_RESET} The VM is up but no containers were built."
+      _emit "  Resume any time with:  cloud-learn up"
+      _emit ""
+      _DIE_CALLED=1
+      exit 0
+      ;;
+  esac
+}
+
 appliance_exec_launcher() {
   # Deploy the inner compose stack DIRECTLY via docker compose — bypasses the
   # `cloud-learn up --detach` chain which aborted before building in some
   # environments (see memory: appliance-up-bridge-bug). Idempotent: docker
   # compose up -d only rebuilds changed services.
+  appliance_confirm_images
   local compose
   compose="$(appliance_multipass_cmd)"
   progress "==> Appliance: starting inner CloudLearn stack (direct compose)"
@@ -1353,6 +1449,11 @@ outer_run() {
       -v|--verbose)
         VERBOSE=1
         export CLOUD_LEARN_VERBOSE=1
+        shift
+        ;;
+      -y|--yes)
+        CLOUD_LEARN_YES=1
+        export CLOUD_LEARN_YES=1
         shift
         ;;
       *)
