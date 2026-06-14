@@ -133,3 +133,62 @@ Run the suite for fresh data; based on session 2's totals, candidates are:
 - `gcp.compute` (large but high-value — cuts into the VM lifecycle story)
 - `aws.lambda` or `aws.apigateway` (paired wins; same handler patterns)
 
+---
+
+## Session 3 (2026-06-14 — agent-aa039f0bee7a5de48 — LIVE appliance)
+
+### Targets re-validated against the rebuilt LIVE appliance
+
+The session-2 numbers (54.8% / 46.0%) did NOT carry over to a fresh
+rebuild from `865059a`. Mission baseline against the live appliance was
+AWS 41.1% / GCP 42.4% / Azure 100% = 52.7% overall.
+
+### 4 services confirmed at 100% on LIVE
+
+When run **in isolation** against the live appliance, all 4 of the
+"almost-100%" gcp targets pass cleanly:
+
+| # | Service | Tests | Note |
+|---|---|---|---|
+| 1 | gcp.kms          | 9/9 | already green — REPORT.md stale |
+| 2 | gcp.eventarc     | 7/7 | already green — REPORT.md stale |
+| 3 | gcp.secretmanager| 7/7 | already green — REPORT.md stale |
+| 4 | gcp.storage      | 7/7 | already green — REPORT.md stale |
+
+These show as failing in the FULL multi-provider run due to intermittent
+HTTP `ReadTimeout`s when the simulator container is under load (running
+~254 tests back-to-back through a single requests.Session). NOT a real
+backend bug — the routes all answer 200 OK to `curl -m 30` after the
+load lifts.
+
+### 1 real bug fix shipped
+
+| # | Service | Before | After | Commit | Bug |
+|---|---|---|---|---|---|
+| 5 | aws.iam | 8/12 | 10/12 | 7ef75ff | no GET /api/iam/users/{id} handler existed; S3 catch-all ate it and returned `NoSuchBucket` XML. Added `api_iam_get_user/group/role/policy` to providers/aws_iam.py |
+
+Remaining 2 aws.iam failures (`deletePolicy`, `deleteRole`) are
+**catalog/harness limitations** — the harness reuses the captured
+`user_name` as the `{name}` placeholder for ALL iam api_paths actions,
+so deleteRole/deletePolicy hit non-existent role/policy and 404 with
+the correct AWS contract response. Fixing requires harness changes
+(per-action create-cascades).
+
+### Session 3 movement
+
+| Provider | Live baseline | After session 3 | Δ |
+|---|---|---|---|
+| aws   | 51/124 (41.1%) | 53/124 (42.7%) | +1.6pp |
+| gcp   | 42/99  (42.4%) | depends on full-suite stability | — |
+| azure | 52/52  (100%)  | 52/52  (100%)  | 0 |
+
+### Key learning — live appliance vs compose stack
+
+Sessions 1+2 ran against their own compose stacks and the numbers
+didn't transfer cleanly to the user's live appliance. Future sessions
+should **always probe the live appliance first** before scoping work.
+
+The `/app` mount is read-only on the live container — hot-patching
+requires writing to `/workspace/cloud-learn/<file>` in the VM (which
+is the bind-mount source), then `docker restart`.
+
