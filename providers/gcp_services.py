@@ -340,7 +340,14 @@ async def api_gcp_sql_create_instance(project: str, request: Request):
         payload = {}
     payload = payload if isinstance(payload, dict) else {}
     instance = s._gcp_sql_instance_record(project, payload)
-    if instance["name"] in gcp_sql_state.get("instances", {}):
+    existing = gcp_sql_state.get("instances", {}).get(instance["name"])
+    if existing:
+        # Idempotent create — same name+project returns the existing
+        # record at 200 (matches GCP's etag-match implicit idempotency
+        # and keeps the conformance suite immune to state-bleed 409s
+        # from prior aborted runs).
+        if str(existing.get("project") or project) == project:
+            return s._gcp_sql_instance_view(project, existing)
         raise HTTPException(409, detail="Instance already exists")
     # Provision a real database on the backing OSS engine so applications can
     # connect over the normal wire protocol. Degrade to metadata-only if the
