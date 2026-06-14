@@ -126,7 +126,7 @@ for _name in [
     "api_vpc_create_route_table", "api_vpc_list_internet_gateways",
     "api_vpc_create_internet_gateway", "api_vpc_attach_internet_gateway",
     "api_vpc_add_route", "api_vpc_associate_subnet", "api_vpc_resources",
-    "api_vpc_query",
+    "api_vpc_get", "api_vpc_query",
 ]:
     if hasattr(_routes_vpc, _name):
         _TARGET_OVERRIDES[_name] = getattr(_routes_vpc, _name)
@@ -135,7 +135,8 @@ for _name in [
     "api_apigateway_list_apis", "api_apigateway_create_api",
     "api_apigateway_get_api", "api_apigateway_delete_api",
     "api_apigateway_list_resources", "api_apigateway_create_resource",
-    "api_apigateway_put_method", "api_apigateway_put_integration",
+    "api_apigateway_put_method", "api_apigateway_put_method_rest",
+    "api_apigateway_put_integration",
     "api_apigateway_create_deployment", "api_apigateway_list_deployments",
     "api_apigateway_create_stage", "api_apigateway_list_stages",
     "api_apigateway_list_logs",
@@ -328,6 +329,7 @@ def register(app, h) -> None:
         # VPC
         ("GET", "/api/vpc/vpcs", "api_vpc_list_vpcs", "()"),
         ("POST", "/api/vpc/vpcs", "api_vpc_create", "(request: Request)", "model", "req", "VpcRequest"),
+        ("GET", "/api/vpc/vpcs/{vpc_id}", "api_vpc_get", "(vpc_id: str)"),
         ("DELETE", "/api/vpc/vpcs/{vpc_id}", "api_vpc_delete", "(vpc_id: str, force: bool = False)"),
         ("POST", "/api/vpc/subnets", "api_vpc_create_subnet", "(request: Request)", "model", "req", "SubnetRequest"),
         ("POST", "/api/vpc/security-groups", "api_vpc_create_security_group", "(request: Request)", "model", "req", "SecurityGroupRequest"),
@@ -341,6 +343,8 @@ def register(app, h) -> None:
         ("POST", "/api/vpc/internet-gateways/{igw_id}/attach", "api_vpc_attach_internet_gateway", "(igw_id: str, request: Request)", "json", "payload"),
         ("POST", "/api/vpc/route-tables/{rt_id}/routes", "api_vpc_add_route", "(rt_id: str, request: Request)", "json", "payload"),
         ("POST", "/api/vpc/route-tables/{rt_id}/associate-subnet", "api_vpc_associate_subnet", "(rt_id: str, request: Request)", "model", "req", "SubnetAssociationRequest"),
+        # Catalog alias — AWS catalog publishes /associations; handler logic is identical.
+        ("POST", "/api/vpc/route-tables/{rt_id}/associations", "api_vpc_associate_subnet", "(rt_id: str, request: Request)", "model", "req", "SubnetAssociationRequest"),
         ("GET", "/api/vpc/vpcs/{vpc_id}/resources", "api_vpc_resources", "(vpc_id: str)"),
         # RDS
         ("GET", "/api/rds/databases", "api_rds_list_databases", "()"),
@@ -409,6 +413,8 @@ def register(app, h) -> None:
         ("GET", "/api/apigateway/apis/{api_id}/resources", "api_apigateway_list_resources", "(api_id: str)"),
         ("POST", "/api/apigateway/apis/{api_id}/resources", "api_apigateway_create_resource", "(api_id: str, request: Request)", "model", "req", "APIGatewayResourceRequest"),
         ("POST", "/api/apigateway/apis/{api_id}/methods", "api_apigateway_put_method", "(api_id: str, request: Request)", "model", "req", "APIGatewayMethodRequest"),
+        # REST-flat alias matching the catalog path. resource_id+http_method come from the URL.
+        ("PUT", "/api/apigateway/apis/{api_id}/resources/{resource_id}/methods/{http_method}", "api_apigateway_put_method_rest", "(api_id: str, resource_id: str, http_method: str, request: Request)", "model", "req", "APIGatewayMethodRequest"),
         ("POST", "/api/apigateway/apis/{api_id}/integrations", "api_apigateway_put_integration", "(api_id: str, request: Request)", "model", "req", "APIGatewayIntegrationRequest"),
         ("POST", "/api/apigateway/apis/{api_id}/deployments", "api_apigateway_create_deployment", "(api_id: str, request: Request)", "model", "req", "APIGatewayDeploymentRequest"),
         ("GET", "/api/apigateway/apis/{api_id}/deployments", "api_apigateway_list_deployments", "(api_id: str)"),

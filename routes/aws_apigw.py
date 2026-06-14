@@ -485,6 +485,19 @@ def api_apigateway_put_method(api_id: str, req: APIGatewayMethodRequest):
     return {"method": method}
 
 
+def api_apigateway_put_method_rest(api_id: str, resource_id: str, http_method: str, req: APIGatewayMethodRequest):
+    """REST-style alias for PUT /apis/{api_id}/resources/{rid}/methods/{verb}.
+
+    The catalog publishes this REST-flat shape; the body carries auth
+    settings only, with resource_id / http_method coming from the URL.
+    """
+    if not req.resource_id:
+        req.resource_id = resource_id
+    req.http_method = (http_method or req.http_method or "GET").upper()
+    method = _apigw_put_method_record(api_id, req)
+    return {"method": method}
+
+
 def api_apigateway_put_integration(api_id: str, req: APIGatewayIntegrationRequest):
     integration = _apigw_put_integration_record(api_id, req)
     return {"integration": integration}

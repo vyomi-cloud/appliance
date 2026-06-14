@@ -7,25 +7,25 @@ Run locally: `pytest tests/conformance/console_actions/`
 
 | Provider | Pass | Total | Rate |
 |---|---|---|---|
-| ✗ aws | 88 | 115 | 76.5% |
+| ✗ aws | 110 | 114 | 96.5% |
 | ✓ azure | 52 | 52 | 100.0% |
-| ✗ gcp | 83 | 87 | 95.4% |
+| ✗ gcp | 82 | 87 | 94.3% |
 
 ## AWS
 
 | Service | Action | Method | Path | Status | Result |
 |---|---|---|---|---|---|
 | `apigateway` | `create` | `POST` | `/api/apigateway/apis` | `200` | ✓ 200 |
-| `apigateway` | `createDeploy` | `POST` | `/api/apigateway/apis/{name}/deployments` | `404` | ✗ 404 — {"detail":"RestApiNotFound"} |
-| `apigateway` | `createResource` | `POST` | `/api/apigateway/apis/{name}/resources` | `404` | ✗ 404 — {"detail":"RestApiNotFound"} |
-| `apigateway` | `createStage` | `POST` | `/api/apigateway/apis/{name}/stages` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["stage_name"],"msg":"Field required","input" |
-| `apigateway` | `delete` | `DELETE` | `/api/apigateway/apis/{name}` | `404` | ✗ 404 — {"detail":"RestApiNotFound"} |
-| `apigateway` | `get` | `GET` | `/api/apigateway/apis/{name}` | `404` | ✗ 404 — {"detail":"RestApiNotFound"} |
+| `apigateway` | `createDeploy` | `POST` | `/api/apigateway/apis/{name}/deployments` | `200` | ✓ 200 |
+| `apigateway` | `createResource` | `POST` | `/api/apigateway/apis/{name}/resources` | `200` | ✓ 200 |
+| `apigateway` | `createStage` | `POST` | `/api/apigateway/apis/{name}/stages` | `200` | ✓ 200 |
+| `apigateway` | `delete` | `DELETE` | `/api/apigateway/apis/{name}` | `200` | ✓ 200 |
+| `apigateway` | `get` | `GET` | `/api/apigateway/apis/{name}` | `200` | ✓ 200 |
 | `apigateway` | `list` | `GET` | `/api/apigateway/apis` | `200` | ✓ 200 |
-| `apigateway` | `putMethod` | `PUT` | `/api/apigateway/apis/{name}/resources/{rid}/methods/{verb}` | `404` | ✗ 404 — {"detail":"Not found"} |
-| `apigateway` | `resources` | `GET` | `/api/apigateway/apis/{name}/resources` | `404` | ✗ 404 — {"detail":"RestApiNotFound"} |
-| `apigateway` | `stages` | `GET` | `/api/apigateway/apis/{name}/stages` | `404` | ✗ 404 — {"detail":"RestApiNotFound"} |
-| `dynamodb` | `create` | `POST` | `/api/dynamodb/tables` | `409` | ✗ 409 — {"detail":"ResourceInUseException: Table already exists."} |
+| `apigateway` | `putMethod` | `PUT` | `/api/apigateway/apis/{name}/resources/{rid}/methods/{verb}` | `200` | ✓ 200 |
+| `apigateway` | `resources` | `GET` | `/api/apigateway/apis/{name}/resources` | `200` | ✓ 200 |
+| `apigateway` | `stages` | `GET` | `/api/apigateway/apis/{name}/stages` | `200` | ✓ 200 |
+| `dynamodb` | `create` | `POST` | `/api/dynamodb/tables` | `200` | ✓ 200 |
 | `dynamodb` | `delete` | `DELETE` | `/api/dynamodb/tables/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `dynamodb` | `get` | `GET` | `/api/dynamodb/tables/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `dynamodb` | `items` | `GET` | `/api/dynamodb/tables/{name}/items` | `0` | ✓ 0 — parent resource not created - dependent action |
@@ -53,9 +53,8 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `eventbridge` | `rules` | `GET` | `/api/aws/extras/eventbridge/rules` | `200` | ✓ 200 |
 | `iam` | `attachments` | `GET` | `/api/iam/attachments` | `200` | ✓ 200 |
 | `iam` | `create` | `POST` | `/api/iam/users` | `200` | ✓ 200 |
-| `iam` | `delete` | `DELETE` | `/api/iam/users/{name}` | `404` | ✗ 404 — {"detail":"TargetNotFound"} |
-| `iam` | `deletePolicy` | `DELETE` | `/api/iam/policies/{name}` | `404` | ✗ 404 — {"detail":"NoSuchPolicy"} |
-| `iam` | `deleteRole` | `DELETE` | `/api/iam/roles/{name}` | `404` | ✗ 404 — {"detail":"TargetNotFound"} |
+| `iam` | `deletePolicy` | `DELETE` | `/api/iam/policies/{name}` | `200` | ✓ 200 |
+| `iam` | `deleteRole` | `DELETE` | `/api/iam/roles/{name}` | `200` | ✓ 200 |
 | `iam` | `deleteUser` | `DELETE` | `/api/iam/users/{name}` | `200` | ✓ 200 |
 | `iam` | `get` | `GET` | `/api/iam/users/{name}` | `200` | ✓ 200 |
 | `iam` | `groups` | `GET` | `/api/iam/groups` | `200` | ✓ 200 |
@@ -91,14 +90,14 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `rds` | `start` | `POST` | `/api/rds/databases/{name}/start` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `rds` | `stop` | `POST` | `/api/rds/databases/{name}/stop` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `rds` | `subnetGroups` | `GET` | `/api/rds/subnet-groups` | `200` | ✓ 200 |
-| `s3` | `create` | `POST` | `/api/s3/buckets/{name}` | `409` | ✗ 409 — {"detail":"BucketAlreadyOwnedByYou"} |
-| `s3` | `delete` | `DELETE` | `/api/s3/buckets/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `s3` | `get` | `GET` | `/api/s3/buckets/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
+| `s3` | `create` | `POST` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
+| `s3` | `delete` | `DELETE` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
+| `s3` | `get` | `GET` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
 | `s3` | `list` | `GET` | `/api/s3/buckets` | `200` | ✓ 200 |
-| `s3` | `notifications` | `PUT` | `/api/s3/buckets/{name}/notification` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `s3` | `objects` | `GET` | `/api/s3/buckets/{name}/objects` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `s3` | `uploadObject` | `POST` | `/api/s3/buckets/{name}/objects` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `s3` | `versioning` | `PUT` | `/api/s3/buckets/{name}/versioning` | `0` | ✓ 0 — parent resource not created - dependent action |
+| `s3` | `notifications` | `PUT` | `/api/s3/buckets/{name}/notification` | `200` | ✓ 200 |
+| `s3` | `objects` | `GET` | `/api/s3/buckets/{name}/objects` | `200` | ✓ 200 |
+| `s3` | `uploadObject` | `POST` | `/api/s3/buckets/{name}/objects` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["body","file"],"msg":"Field required","input |
+| `s3` | `versioning` | `PUT` | `/api/s3/buckets/{name}/versioning` | `200` | ✓ 200 |
 | `secretsmanager` | `create` | `POST` | `/api/aws/extras/secretsmanager/secrets` | `200` | ✓ 200 |
 | `secretsmanager` | `delete` | `DELETE` | `/api/aws/extras/secretsmanager/secrets/{name}` | `200` | ✓ 200 |
 | `secretsmanager` | `get` | `GET` | `/api/aws/extras/secretsmanager/secrets/{name}` | `200` | ✓ 200 |
@@ -106,27 +105,27 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `secretsmanager` | `replicas` | `GET` | `/api/aws/extras/secretsmanager/replicas` | `200` | ✓ 200 |
 | `secretsmanager` | `rotation` | `GET` | `/api/aws/extras/secretsmanager/rotation` | `200` | ✓ 200 |
 | `secretsmanager` | `secrets` | `GET` | `/api/aws/extras/secretsmanager/secrets` | `200` | ✓ 200 |
-| `sqs` | `create` | `POST` | `/api/sqs/queues` | `409` | ✗ 409 — {"detail":"QueueAlreadyExists"} |
-| `sqs` | `delete` | `DELETE` | `/api/sqs/queues/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `sqs` | `get` | `GET` | `/api/sqs/queues/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
+| `sqs` | `create` | `POST` | `/api/sqs/queues` | `200` | ✓ 200 |
+| `sqs` | `delete` | `DELETE` | `/api/sqs/queues/{name}` | `200` | ✓ 200 |
+| `sqs` | `get` | `GET` | `/api/sqs/queues/{name}` | `200` | ✓ 200 |
 | `sqs` | `list` | `GET` | `/api/sqs/queues` | `200` | ✓ 200 |
-| `sqs` | `purge` | `POST` | `/api/sqs/queues/{name}/purge` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `sqs` | `receive` | `POST` | `/api/sqs/queues/{name}/receive` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `sqs` | `send` | `POST` | `/api/sqs/queues/{name}/send` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `vpc` | `addIngress` | `POST` | `/api/vpc/security-groups/{sg}/ingress` | `404` | ✗ 404 — {"detail":"NoSuchSecurityGroup"} |
-| `vpc` | `addRoute` | `POST` | `/api/vpc/route-tables/{rtb}/routes` | `404` | ✗ 404 — {"detail":"NoSuchRouteTable"} |
-| `vpc` | `associateSubnet` | `POST` | `/api/vpc/route-tables/{rtb}/associations` | `404` | ✗ 404 — {"detail":"Not found"} |
-| `vpc` | `attachIgw` | `POST` | `/api/vpc/internet-gateways/{igw}/attach` | `500` | ✗ 500 — Internal Server Error |
-| `vpc` | `create` | `POST` | `/api/vpc/vpcs` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["name"],"msg":"Field required","input":{"cid |
-| `vpc` | `createIgw` | `POST` | `/api/vpc/internet-gateways` | `500` | ✗ 500 — Internal Server Error |
-| `vpc` | `createRouteTable` | `POST` | `/api/vpc/route-tables` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["vpc_id"],"msg":"Field required","input":{}, |
-| `vpc` | `createSecurityGroup` | `POST` | `/api/vpc/security-groups` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["vpc_id"],"msg":"Field required","input":{}, |
-| `vpc` | `createSubnet` | `POST` | `/api/vpc/subnets` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["vpc_id"],"msg":"Field required","input":{}, |
-| `vpc` | `delete` | `DELETE` | `/api/vpc/vpcs/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `vpc` | `get` | `GET` | `/api/vpc/vpcs/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `vpc` | `internetGateways` | `GET` | `/api/vpc/internet-gateways` | `500` | ✗ 500 — Internal Server Error |
+| `sqs` | `purge` | `POST` | `/api/sqs/queues/{name}/purge` | `200` | ✓ 200 |
+| `sqs` | `receive` | `POST` | `/api/sqs/queues/{name}/receive` | `200` | ✓ 200 |
+| `sqs` | `send` | `POST` | `/api/sqs/queues/{name}/send` | `200` | ✓ 200 |
+| `vpc` | `addIngress` | `POST` | `/api/vpc/security-groups/{sg}/ingress` | `200` | ✓ 200 |
+| `vpc` | `addRoute` | `POST` | `/api/vpc/route-tables/{rtb}/routes` | `200` | ✓ 200 |
+| `vpc` | `associateSubnet` | `POST` | `/api/vpc/route-tables/{rtb}/associations` | `200` | ✓ 200 |
+| `vpc` | `attachIgw` | `POST` | `/api/vpc/internet-gateways/{igw}/attach` | `200` | ✓ 200 |
+| `vpc` | `create` | `POST` | `/api/vpc/vpcs` | `200` | ✓ 200 |
+| `vpc` | `createIgw` | `POST` | `/api/vpc/internet-gateways` | `200` | ✓ 200 |
+| `vpc` | `createRouteTable` | `POST` | `/api/vpc/route-tables` | `200` | ✓ 200 |
+| `vpc` | `createSecurityGroup` | `POST` | `/api/vpc/security-groups` | `200` | ✓ 200 |
+| `vpc` | `createSubnet` | `POST` | `/api/vpc/subnets` | `200` | ✓ 200 |
+| `vpc` | `delete` | `DELETE` | `/api/vpc/vpcs/{name}` | `200` | ✓ 200 |
+| `vpc` | `get` | `GET` | `/api/vpc/vpcs/{name}` | `200` | ✓ 200 |
+| `vpc` | `internetGateways` | `GET` | `/api/vpc/internet-gateways` | `200` | ✓ 200 |
 | `vpc` | `list` | `GET` | `/api/vpc/vpcs` | `200` | ✓ 200 |
-| `vpc` | `resources` | `GET` | `/api/vpc/vpcs/{name}/resources` | `0` | ✓ 0 — parent resource not created - dependent action |
+| `vpc` | `resources` | `GET` | `/api/vpc/vpcs/{name}/resources` | `200` | ✓ 200 |
 | `vpc` | `routeTables` | `GET` | `/api/vpc/route-tables` | `200` | ✓ 200 |
 | `vpc` | `securityGroups` | `GET` | `/api/vpc/security-groups` | `200` | ✓ 200 |
 | `vpc` | `subnets` | `GET` | `/api/vpc/subnets` | `200` | ✓ 200 |
@@ -196,7 +195,7 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `apigateway` | `create` | `POST` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis` | `200` | ✓ 200 |
 | `apigateway` | `delete` | `DELETE` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{name}` | `200` | ✓ 200 |
 | `apigateway` | `gateways` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/gateways` | `200` | ✓ 200 |
-| `apigateway` | `get` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{name}` | `404` | ✗ 404 — {"detail":"API 'op-1f946c99' not found"} |
+| `apigateway` | `get` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{name}` | `404` | ✗ 404 — {"detail":"API 'op-eef8d2d7' not found"} |
 | `apigateway` | `list` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis` | `200` | ✓ 200 |
 | `cloudsql` | `backups` | `GET` | `/api/gcp/rds/databases/{name}/backups` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `cloudsql` | `create` | `POST` | `/api/gcp/rds/databases` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["query","project"],"msg":"Field required","i |
@@ -231,18 +230,18 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `firestore` | `get` | `GET` | `/api/gcp/firestore/v1/projects/{project}/databases/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
 | `firestore` | `indexes` | `GET` | `/api/gcp/firestore/v1/projects/{project}/databases/{name}/collectionGroups/-/indexes` | `0` | ✓ 0 — catalog stub - no backend handler |
 | `firestore` | `list` | `GET` | `/api/gcp/firestore/v1/projects/{project}/databases` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `functions` | `call` | `POST` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions/{name}:call` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `functions` | `create` | `POST` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions` | `404` | ✓ 404 — catalog stub - no backend handler |
-| `functions` | `delete` | `DELETE` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `functions` | `get` | `GET` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `functions` | `list` | `GET` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `functions` | `update` | `PATCH` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `iam` | `create` | `POST` | `/api/gcp/iam/v1/projects/{project}/serviceAccounts` | `404` | ✓ 404 — catalog stub - no backend handler |
-| `iam` | `delete` | `DELETE` | `/api/gcp/iam/v1/projects/{project}/serviceAccounts/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `iam` | `get` | `GET` | `/api/gcp/iam/v1/projects/{project}/serviceAccounts/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `iam` | `list` | `GET` | `/api/gcp/iam/v1/projects/{project}/serviceAccounts` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `iam` | `policy` | `GET` | `/api/gcp/iam/v1/projects/{project}:getIamPolicy` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `iam` | `setPolicy` | `POST` | `/api/gcp/iam/v1/projects/{project}:setIamPolicy` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `functions` | `call` | `POST` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions/{name}:call` | `200` | ✓ 200 |
+| `functions` | `create` | `POST` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions` | `200` | ✓ 200 |
+| `functions` | `delete` | `DELETE` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions/{name}` | `200` | ✓ 200 |
+| `functions` | `get` | `GET` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions/{name}` | `200` | ✓ 200 |
+| `functions` | `list` | `GET` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions` | `200` | ✓ 200 |
+| `functions` | `update` | `PATCH` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions/{name}` | `200` | ✓ 200 |
+| `iam` | `create` | `POST` | `/api/gcp/iam/v1/projects/{project}/serviceAccounts` | `200` | ✓ 200 |
+| `iam` | `delete` | `DELETE` | `/api/gcp/iam/v1/projects/{project}/serviceAccounts/{name}` | `200` | ✓ 200 |
+| `iam` | `get` | `GET` | `/api/gcp/iam/v1/projects/{project}/serviceAccounts/{name}` | `200` | ✓ 200 |
+| `iam` | `list` | `GET` | `/api/gcp/iam/v1/projects/{project}/serviceAccounts` | `200` | ✓ 200 |
+| `iam` | `policy` | `GET` | `/api/gcp/iam/v1/projects/{project}:getIamPolicy` | `200` | ✓ 200 |
+| `iam` | `setPolicy` | `POST` | `/api/gcp/iam/v1/projects/{project}:setIamPolicy` | `200` | ✓ 200 |
 | `kms` | `create` | `POST` | `/api/gcp/extras/kms/keys` | `200` | ✓ 200 |
 | `kms` | `delete` | `DELETE` | `/api/gcp/extras/kms/keys/{name}` | `200` | ✓ 200 |
 | `kms` | `ekmConnections` | `GET` | `/api/gcp/extras/kms/ekmConnections` | `200` | ✓ 200 |
@@ -252,12 +251,12 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `kms` | `keys` | `GET` | `/api/gcp/extras/kms/keys` | `200` | ✓ 200 |
 | `kms` | `keyversions` | `GET` | `/api/gcp/extras/kms/keyversions` | `200` | ✓ 200 |
 | `kms` | `list` | `GET` | `/api/gcp/extras/kms/keys` | `200` | ✓ 200 |
-| `pubsub` | `create` | `PUT` | `/api/gcp/pubsub/v1/projects/{project}/topics` | `404` | ✓ 404 — catalog stub - no backend handler |
-| `pubsub` | `delete` | `DELETE` | `/api/gcp/pubsub/v1/projects/{project}/topics/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `pubsub` | `get` | `GET` | `/api/gcp/pubsub/v1/projects/{project}/topics/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `pubsub` | `list` | `GET` | `/api/gcp/pubsub/v1/projects/{project}/topics` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `pubsub` | `publish` | `POST` | `/api/gcp/pubsub/v1/projects/{project}/topics/{name}:publish` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `pubsub` | `subscriptions` | `GET` | `/api/gcp/pubsub/v1/projects/{project}/subscriptions` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `pubsub` | `create` | `POST` | `/api/gcp/pubsub/v1/projects/{project}/topics` | `200` | ✓ 200 |
+| `pubsub` | `delete` | `DELETE` | `/api/gcp/pubsub/v1/projects/{project}/topics/{name}` | `200` | ✓ 200 |
+| `pubsub` | `get` | `GET` | `/api/gcp/pubsub/v1/projects/{project}/topics/{name}` | `200` | ✓ 200 |
+| `pubsub` | `list` | `GET` | `/api/gcp/pubsub/v1/projects/{project}/topics` | `200` | ✓ 200 |
+| `pubsub` | `publish` | `POST` | `/api/gcp/pubsub/v1/projects/{project}/topics/{name}:publish` | `200` | ✓ 200 |
+| `pubsub` | `subscriptions` | `GET` | `/api/gcp/pubsub/v1/projects/{project}/subscriptions` | `200` | ✓ 200 |
 | `secretmanager` | `create` | `POST` | `/api/gcp/extras/secretmanager/secrets` | `200` | ✓ 200 |
 | `secretmanager` | `delete` | `DELETE` | `/api/gcp/extras/secretmanager/secrets/{name}` | `200` | ✓ 200 |
 | `secretmanager` | `get` | `GET` | `/api/gcp/extras/secretmanager/secrets/{name}` | `200` | ✓ 200 |
@@ -272,11 +271,11 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `storage` | `list` | `GET` | `/api/gcp/storage/v1/b` | `200` | ✓ 200 |
 | `storage` | `list` | `GET` | `/api/gcp/storage/v1/b` | `200` | ✓ 200 |
 | `storage` | `objects` | `GET` | `/api/gcp/storage/v1/b/{name}/o` | `200` | ✓ 200 |
-| `vpc` | `create` | `POST` | `/api/gcp/compute/v1/projects/{project}/global/networks` | `404` | ✓ 404 — catalog stub - no backend handler |
-| `vpc` | `delete` | `DELETE` | `/api/gcp/compute/v1/projects/{project}/global/networks/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `vpc` | `firewalls` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/firewalls` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `vpc` | `get` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/networks/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `vpc` | `list` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/networks` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `vpc` | `patch` | `PATCH` | `/api/gcp/compute/v1/projects/{project}/global/networks/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `vpc` | `subnetworks` | `GET` | `/api/gcp/compute/v1/projects/{project}/regions/{region}/subnetworks` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `vpc` | `create` | `POST` | `/api/gcp/compute/v1/projects/{project}/global/networks` | `200` | ✓ 200 |
+| `vpc` | `delete` | `DELETE` | `/api/gcp/compute/v1/projects/{project}/global/networks/{name}` | `200` | ✓ 200 |
+| `vpc` | `firewalls` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/firewalls` | `200` | ✓ 200 |
+| `vpc` | `get` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/networks/{name}` | `200` | ✓ 200 |
+| `vpc` | `list` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/networks` | `200` | ✓ 200 |
+| `vpc` | `patch` | `PATCH` | `/api/gcp/compute/v1/projects/{project}/global/networks/{name}` | `405` | ✗ 405 — {"detail":"Method Not Allowed"} |
+| `vpc` | `subnetworks` | `GET` | `/api/gcp/compute/v1/projects/{project}/regions/{region}/subnetworks` | `200` | ✓ 200 |
 

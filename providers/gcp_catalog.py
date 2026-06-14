@@ -115,7 +115,11 @@ RESOURCE_CATALOG_GCP = [
         "collection_path": "/api/gcp/pubsub/v1/projects/{project}/topics",
         "resource_path":   "/api/gcp/pubsub/v1/projects/{project}/topics/{name}",
         "name_field":      "name",
-        "create_method":   "PUT",
+        # Real GCP supports BOTH `PUT /topics/{topic}` (id-in-path, canonical
+        # REST) and `POST /topics` (alias method, id in body). We pick POST
+        # to match the SDK auto-generated client default and avoid forcing
+        # the catalog consumer to construct a {name} URL before knowing it.
+        "create_method":   "POST",
         "api_paths": {
             "subscriptions": {"method": "GET",  "path": "/api/gcp/pubsub/v1/projects/{project}/subscriptions"},
             "publish":       {"method": "POST", "path": "/api/gcp/pubsub/v1/projects/{project}/topics/{name}:publish"},

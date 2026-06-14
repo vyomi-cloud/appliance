@@ -5987,6 +5987,7 @@ def api_get_bucket_versioning(name: str):
     return {"name": name, "versioning": _s3_bucket_versioning_status(name)}
 
 
+@api.delete("/buckets/{name}")
 def api_delete_bucket(name: str):
     if name not in buckets:
         raise HTTPException(404, detail="NoSuchBucket")
@@ -6020,6 +6021,7 @@ def api_get_bucket_notifications(name: str):
     }
 
 
+@api.put("/buckets/{name}/notification")
 @api.put("/buckets/{name}/notifications")
 def api_set_bucket_notifications(name: str, payload: BucketNotificationRequest):
     if name not in buckets:
@@ -16051,7 +16053,7 @@ def _vpc_disassociate_subnet_from_route_table(rt_id: str, subnet_id: str) -> str
 
 
 def _vpc_attach_internet_gateway_record(igw_id: str, vpc_id: str) -> dict:
-    igw = vpc_state["internet_gateways"].get(igw_id)
+    igw = vpc_state.setdefault("internet_gateways", {}).get(igw_id)
     if not igw:
         raise HTTPException(404, detail="NoSuchInternetGateway")
     if vpc_id not in vpc_state["vpcs"]:
