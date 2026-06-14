@@ -50,6 +50,38 @@ S3_NS = ctx.S3_NS
 AWS_ACCOUNT_ID = ctx.AWS_ACCOUNT_ID
 
 # ---------------------------------------------------------------------------
+# Reserved bucket names — path prefixes the S3 catch-all MUST NOT match.
+# ---------------------------------------------------------------------------
+# The S3 wire protocol uses /{bucket}[/{key:path}] at the URL root. That
+# pattern also matches every appliance-internal API path like
+# /api/aws/ec2/... or /api/gcp/compute/... when no explicit handler is
+# registered. Without this guard the catch-all eats those requests and
+# returns NoSuchBucket XML — which makes ~50 conformance tests fail
+# with a misleading error, AND breaks any future API path that hasn't
+# been registered yet. Reject these at the top of every catch-all
+# handler so FastAPI's standard 404 wins instead. Users can't create
+# buckets with these names — a tiny limitation worth the observability.
+_RESERVED_BUCKET_NAMES: frozenset[str] = frozenset({
+    "api",          # all /api/* paths
+    "static",       # static assets
+    "assets",       # /assets/*
+    "console",      # /console/aws etc.
+    "clouds",       # SPA entry
+    "ws",           # websocket routes
+    "healthz",      # health endpoint
+    "metrics",      # prometheus etc.
+    "docs", "openapi.json", "redoc",  # FastAPI auto-docs
+})
+
+
+def _is_reserved_bucket(bucket: str) -> bool:
+    """True when the path's first segment is a reserved name (i.e. NOT
+    a user-created bucket). Catch-all handlers should bail with a
+    FastAPI HTTPException(404) so the next router in the chain — or
+    the default 404 handler — gets a chance to respond."""
+    return bucket in _RESERVED_BUCKET_NAMES
+
+# ---------------------------------------------------------------------------
 # State access
 # ---------------------------------------------------------------------------
 
@@ -1101,6 +1133,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     @app.head("/{bucket}")
     async def s3_head_bucket(bucket: str, request: Request) -> Response:
         """HEAD /{bucket} -> HeadBucket"""
+        # Skip if path collides with a reserved appliance prefix
+        # (/api/*, /static/*, /console/*, etc.) — let FastAPI 404.
+        if _is_reserved_bucket(bucket):
+            raise HTTPException(status_code=404, detail="Not found")
         if not _bucket_exists(bucket):
             return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
         return _empty_response(200)
@@ -1108,6 +1144,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     @app.put("/{bucket}")
     async def s3_put_bucket(bucket: str, request: Request) -> Response:
         """PUT /{bucket}[?versioning|?tagging|?cors|?lifecycle|?acl] -> Create/Configure Bucket"""
+        # Skip if path collides with a reserved appliance prefix
+        # (/api/*, /static/*, /console/*, etc.) — let FastAPI 404.
+        if _is_reserved_bucket(bucket):
+            raise HTTPException(status_code=404, detail="Not found")
         params = dict(request.query_params)
 
         # Versioning
@@ -1222,6 +1262,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     @app.get("/{bucket}")
     async def s3_get_bucket(bucket: str, request: Request) -> Response:
         """GET /{bucket}[?versioning|?tagging|?location|?list-type=2|...] -> List/Get Bucket Config"""
+        # Skip if path collides with a reserved appliance prefix
+        # (/api/*, /static/*, /console/*, etc.) — let FastAPI 404.
+        if _is_reserved_bucket(bucket):
+            raise HTTPException(status_code=404, detail="Not found")
         params = dict(request.query_params)
 
         if not _bucket_exists(bucket):
@@ -1381,6 +1425,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     @app.delete("/{bucket}")
     async def s3_delete_bucket(bucket: str, request: Request) -> Response:
         """DELETE /{bucket} -> DeleteBucket"""
+        # Skip if path collides with a reserved appliance prefix
+        # (/api/*, /static/*, /console/*, etc.) — let FastAPI 404.
+        if _is_reserved_bucket(bucket):
+            raise HTTPException(status_code=404, detail="Not found")
         params = dict(request.query_params)
         if not _bucket_exists(bucket):
             return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
@@ -1407,6 +1455,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     @app.head("/{bucket}/{key:path}")
     async def s3_head_object(bucket: str, key: str, request: Request) -> Response:
         """HEAD /{bucket}/{key} -> HeadObject"""
+        # Skip if path collides with a reserved appliance prefix
+        # (/api/*, /static/*, /console/*, etc.) — let FastAPI 404.
+        if _is_reserved_bucket(bucket):
+            raise HTTPException(status_code=404, detail="Not found")
         if not _bucket_exists(bucket):
             return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}/{key}", 404)
         entry = _s3_ensure_object_entry(bucket, key, create=False)
@@ -1433,6 +1485,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     @app.put("/{bucket}/{key:path}")
     async def s3_put_object(bucket: str, key: str, request: Request) -> Response:
         """PUT /{bucket}/{key}[?tagging|?acl|?uploadId&partNumber] -> PutObject/UploadPart/CopyObject/Tagging"""
+        # Skip if path collides with a reserved appliance prefix
+        # (/api/*, /static/*, /console/*, etc.) — let FastAPI 404.
+        if _is_reserved_bucket(bucket):
+            raise HTTPException(status_code=404, detail="Not found")
         params = dict(request.query_params)
 
         if not _bucket_exists(bucket):
@@ -1536,6 +1592,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     @app.get("/{bucket}/{key:path}")
     async def s3_get_object(bucket: str, key: str, request: Request) -> Response:
         """GET /{bucket}/{key}[?tagging|?acl|?uploadId] -> GetObject/GetObjectTagging/ListParts"""
+        # Skip if path collides with a reserved appliance prefix
+        # (/api/*, /static/*, /console/*, etc.) — let FastAPI 404.
+        if _is_reserved_bucket(bucket):
+            raise HTTPException(status_code=404, detail="Not found")
         params = dict(request.query_params)
 
         if not _bucket_exists(bucket):
@@ -1660,6 +1720,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     @app.delete("/{bucket}/{key:path}")
     async def s3_delete_object(bucket: str, key: str, request: Request) -> Response:
         """DELETE /{bucket}/{key}[?tagging|?uploadId] -> DeleteObject/AbortMultipartUpload/DeleteObjectTagging"""
+        # Skip if path collides with a reserved appliance prefix
+        # (/api/*, /static/*, /console/*, etc.) — let FastAPI 404.
+        if _is_reserved_bucket(bucket):
+            raise HTTPException(status_code=404, detail="Not found")
         params = dict(request.query_params)
 
         if not _bucket_exists(bucket):
@@ -1700,6 +1764,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     @app.post("/{bucket}")
     async def s3_post_bucket(bucket: str, request: Request) -> Response:
         """POST /{bucket}[?delete] -> DeleteObjects (batch)"""
+        # Skip if path collides with a reserved appliance prefix
+        # (/api/*, /static/*, /console/*, etc.) — let FastAPI 404.
+        if _is_reserved_bucket(bucket):
+            raise HTTPException(status_code=404, detail="Not found")
         params = dict(request.query_params)
 
         if not _bucket_exists(bucket):
@@ -1742,6 +1810,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     async def s3_post_object(bucket: str, key: str, request: Request) -> Response:
         """POST /{bucket}/{key}?uploads -> CreateMultipartUpload
            POST /{bucket}/{key}?uploadId=... -> CompleteMultipartUpload"""
+        # Skip if path collides with a reserved appliance prefix
+        # (/api/*, /static/*, /console/*, etc.) — let FastAPI 404.
+        if _is_reserved_bucket(bucket):
+            raise HTTPException(status_code=404, detail="Not found")
         params = dict(request.query_params)
 
         if not _bucket_exists(bucket):
