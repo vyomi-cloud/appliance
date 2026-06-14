@@ -276,6 +276,73 @@ Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 PY
 }
 
+appliance_sync_workspace_into_vm() {
+  # Replaces the legacy SSHFS workspace mount. We tar+gzip just the files
+  # the appliance docker stack needs, `multipass transfer` the tarball
+  # in, and untar at $APPLIANCE_WORKSPACE on the VM.
+  #
+  # Why: on macOS brew installs ROOT_DIR is /opt/homebrew/Cellar/
+  # cloud-learn/<v>/libexec which sits behind the brew-prefix sandbox.
+  # Multipass's SSHFS mount cannot read THROUGH that sandbox from inside
+  # the VM — every file shows as "Permission denied", even to root. The
+  # symptom users hit on v1.1.7: docker compose up reported
+  # `open /workspace/cloud-learn/docker-compose.appliance.yml: permission denied`.
+  #
+  # Tar+transfer side-steps SSHFS entirely. ~3 MB gzipped, transfers in
+  # 2-3s. Trade-off: live-edit on host doesn't auto-propagate to VM —
+  # users must `cloud-learn restart` to re-sync. For the brew install
+  # target (always a pinned snapshot anyway) this is exactly right.
+  local compose
+  compose="$(appliance_multipass_cmd)"
+  progress "==> Appliance: packaging source for VM (no SSHFS dependency)"
+  local tarball
+  tarball="$(mktemp -t cloud-learn-src-XXXXXX.tgz)"
+  # Minimal allowlist — everything docker-compose.appliance.yml and the
+  # two Dockerfiles need at build/runtime. Skip noise.
+  (
+    cd "$ROOT_DIR" || exit 1
+    tar czf "$tarball" \
+      --exclude '__pycache__' \
+      --exclude '*.pyc' \
+      --exclude 'target' \
+      --exclude 'dist' \
+      --exclude '.git' \
+      --exclude '*.log' \
+      Dockerfile \
+      docker-compose.appliance.yml \
+      docker-compose.yml \
+      server.py \
+      requirements.txt \
+      core providers packs static \
+      cloudsim-backbone \
+      2>/dev/null
+  )
+  local sz
+  sz=$(du -h "$tarball" 2>/dev/null | awk '{print $1}')
+  verbose "tarball: ${tarball} (${sz})"
+  if ! "$compose" transfer "$tarball" "${APPLIANCE_NAME}:/tmp/cloud-learn-src.tgz" >/dev/null 2>&1; then
+    rm -f "$tarball"
+    _die "multipass transfer failed pushing source tarball to VM" \
+"Verify the VM is running:
+  multipass info $APPLIANCE_NAME
+And free /tmp space inside the VM:
+  multipass exec $APPLIANCE_NAME -- df -h /tmp"
+  fi
+  rm -f "$tarball"
+  if ! "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "
+    sudo mkdir -p ${APPLIANCE_WORKSPACE}
+    sudo tar xzf /tmp/cloud-learn-src.tgz -C ${APPLIANCE_WORKSPACE}
+    sudo chown -R ubuntu:ubuntu ${APPLIANCE_WORKSPACE}
+    rm -f /tmp/cloud-learn-src.tgz
+  " >/dev/null 2>&1; then
+    _die "failed to untar source into VM at ${APPLIANCE_WORKSPACE}" \
+"Inspect the VM:
+  multipass exec $APPLIANCE_NAME -- ls -la ${APPLIANCE_WORKSPACE}
+  multipass exec $APPLIANCE_NAME -- df -h ${APPLIANCE_WORKSPACE}"
+  fi
+  verbose "workspace synced to ${APPLIANCE_NAME}:${APPLIANCE_WORKSPACE} (${sz} extracted)"
+}
+
 appliance_sync_host_sizing_into_vm() {
   local compose
   compose="$(appliance_multipass_cmd)"
@@ -692,8 +759,7 @@ appliance_launch_vm() {
     progress "     LXD snap ~150MB, run cloud-init — total cold start 5-8 min)"
     "$compose" launch "$APPLIANCE_IMAGE" --name "$APPLIANCE_NAME" --cpus "$APPLIANCE_CPUS" --memory "$APPLIANCE_MEMORY" --disk "$APPLIANCE_DISK" --cloud-init "$APPLIANCE_DIR/cloud-init.yaml"
   fi
-  progress "==> Appliance: mounting workspace into VM"
-  "$compose" mount "$ROOT_DIR" "$APPLIANCE_NAME:$APPLIANCE_WORKSPACE" >/dev/null 2>&1 || true
+  appliance_sync_workspace_into_vm
   appliance_sync_host_sizing_into_vm
   appliance_wait_for_cloud_init
 }
