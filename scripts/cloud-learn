@@ -359,9 +359,13 @@ mkdir -p "$_LOG_DIR" 2>/dev/null || true
 ls -t "$_LOG_DIR"/up-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f 2>/dev/null || true
 
 # ANSI colours — disabled when not a TTY (so CI logs stay clean).
+# IMPORTANT: use $'…' quoting so the backslash escapes resolve to real
+# ESC bytes at variable-definition time. Plain single quotes preserve
+# the literal text "\033[32m" which then prints as "\033[32m" instead
+# of a real green colour.
 if [ -t 2 ]; then
-  _C_RESET='\033[0m'  _C_BOLD='\033[1m'  _C_DIM='\033[2m'
-  _C_GREEN='\033[32m' _C_YELLOW='\033[33m' _C_RED='\033[31m' _C_CYAN='\033[36m'
+  _C_RESET=$'\033[0m'  _C_BOLD=$'\033[1m'  _C_DIM=$'\033[2m'
+  _C_GREEN=$'\033[32m' _C_YELLOW=$'\033[33m' _C_RED=$'\033[31m' _C_CYAN=$'\033[36m'
 else
   _C_RESET=''  _C_BOLD=''  _C_DIM=''
   _C_GREEN='' _C_YELLOW='' _C_RED='' _C_CYAN=''
@@ -948,6 +952,11 @@ If state is anything other than 'Running', recover with:
   # was queueing our bridge start behind it. Even though we drop the
   # LXD After= dependency below, a generous timeout keeps things
   # robust across slow first-boot conditions.
+  # NOTE on the inner script structure: multipass exec under `set -e`
+  # has a quirk where explicit `exit 0` from a child returns rc=1 to
+  # the parent. The script therefore signals success by FALLING THROUGH
+  # past the for-loop (break out, don't exit 0). Failure still uses
+  # `exit 1` which propagates fine.
   if ! "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "set -e
     sudo mkdir -p /var/lib/cloudlearn
     sudo install -m 644 /tmp/runtime_bridge.py $bridge_dst
@@ -979,24 +988,29 @@ UNIT
     # clears any prior 'failed' state from earlier launches.
     sudo systemctl reset-failed cloudlearn-runtime-bridge.service >/dev/null 2>&1 || true
     sudo systemctl enable --now cloudlearn-runtime-bridge.service >/dev/null 2>&1
+    READY=0
     for i in \$(seq 1 180); do
       if curl -fsS http://127.0.0.1:9171/health >/dev/null 2>&1; then
         echo READY-after-\${i}s
-        exit 0
+        READY=1
+        break
       fi
-      # Echo a heartbeat to the captured install_log every 15s so the
-      # user can see it's polling, not hung.
+      # Heartbeat every 15s so triage shows it's polling, not hung.
       if [ \$((i % 15)) -eq 0 ]; then
         echo \"  polling /health … \${i}s elapsed; systemctl says: \$(sudo systemctl is-active cloudlearn-runtime-bridge.service 2>&1 | head -1)\"
       fi
       sleep 1
     done
-    echo NOT_READY
-    echo '--- systemctl status ---'
-    sudo systemctl status cloudlearn-runtime-bridge.service --no-pager 2>&1 | head -20 || true
-    echo '--- journalctl ---'
-    sudo journalctl -u cloudlearn-runtime-bridge.service --no-pager -n 40 2>&1 || true
-    exit 1" > "$install_log" 2>&1; then
+    if [ \"\$READY\" = \"0\" ]; then
+      echo NOT_READY
+      echo '--- systemctl status ---'
+      sudo systemctl status cloudlearn-runtime-bridge.service --no-pager 2>&1 | head -20 || true
+      echo '--- journalctl ---'
+      sudo journalctl -u cloudlearn-runtime-bridge.service --no-pager -n 40 2>&1 || true
+      exit 1
+    fi
+    # Fall through — natural script end → bash exits 0 → multipass
+    # exec correctly propagates 0 to the caller." > "$install_log" 2>&1; then
     # Surface the captured failure into the user's terminal AND the log.
     local last_lines
     last_lines="$(tail -25 "$install_log" | sed 's/^/      /')"
@@ -1004,7 +1018,7 @@ UNIT
     while IFS= read -r line; do _emit "$line"; done <<<"$last_lines"
     cat "$install_log" >> "$_LOG_FILE" 2>/dev/null || true
     rm -f "$install_log"
-    _die "cloudlearn-runtime-bridge.service failed to become healthy on :9171 (30s timeout)" \
+    _die "cloudlearn-runtime-bridge.service failed to become healthy on :9171 (180s timeout)" \
 "The simulator's lxd_available check will return False without this.
 Inspect the VM directly:
   multipass exec $APPLIANCE_NAME -- sudo systemctl status cloudlearn-runtime-bridge.service
