@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import Response
 from core import app_context as ctx
+from core.models import LicenseSignupRequest
 
 
 def _get_current_spend() -> float:
@@ -352,7 +353,7 @@ def register(app: FastAPI) -> None:
     # ── License signup / status / switch-cloud / activate ─────────────────
 
     @app.post("/api/license/signup")
-    def api_license_signup(req):
+    def api_license_signup(req: LicenseSignupRequest):
         if ctx.appliance_mode_enabled():
             raise HTTPException(status_code=403, detail={
                 "ok": False, "code": "appliance_mode",

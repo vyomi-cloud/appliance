@@ -52,14 +52,37 @@ def wait_for_appliance(http_session, base_url):
         time.sleep(1.5)
     else:
         pytest.fail(f"Appliance never came up at {base_url}: {last_err}")
-    # Surface live tier so the harness summary makes sense
+    # Force the appliance to the requested tier — fresh containers boot at
+    # "free", which trips both rate-limits and tier_provider_locked on most
+    # services. The harness needs Developer (or whatever VYOMI_TIER is) so
+    # every service is callable. POST /api/license/signup works in DEV mode;
+    # this is a no-op if already on the right tier.
     try:
         r = http_session.get(f"{base_url}/api/runtime/tier", timeout=5)
-        if r.status_code == 200:
-            tier = (r.json() or {}).get("active_tier", "unknown")
+        current = (r.json() or {}).get("active_tier") if r.status_code == 200 else ""
+        if (current or "").lower() != DEFAULT_TIER:
+            primary = "aws" if DEFAULT_TIER == "student" else ""
+            seats = 10 if DEFAULT_TIER == "enterprise" else 1
+            sign = http_session.post(
+                f"{base_url}/api/license/signup",
+                json={
+                    "tier": DEFAULT_TIER,
+                    "user": "conformance",
+                    "email": "conformance@vyomi.cloud",
+                    "primary_cloud": primary,
+                    "seats": seats,
+                    "period": "monthly",
+                },
+                timeout=10,
+            )
+            if sign.status_code not in (200, 201):
+                print(f"\n[conformance] signup→{DEFAULT_TIER} returned {sign.status_code}: {sign.text[:160]}\n")
+        r2 = http_session.get(f"{base_url}/api/runtime/tier", timeout=5)
+        if r2.status_code == 200:
+            tier = (r2.json() or {}).get("active_tier", "unknown")
             print(f"\n[conformance] appliance tier: {tier}\n")
-    except Exception:
-        pass
+    except Exception as _e:
+        print(f"\n[conformance] tier setup failed: {_e}\n")
 
 
 # Services that only unlock on the named tier. A 403 with
