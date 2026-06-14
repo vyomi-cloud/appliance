@@ -82,6 +82,28 @@ def test_gcp_action(spec, http_session, base_url):
         try:
             data = r.json()
             captured = ""
+            # GCP operation-envelope unwrap — applies to services that
+            # mint long-running operations (apigateway / functions). The
+            # response shape is:
+            #   {"name": ".../operations/op-XXX",
+            #    "metadata": {"target": ".../<kind>/<id>"},
+            #    "done": true,
+            #    "response": {"name": ".../<kind>/<id>", ...}}
+            # The bare top-level "name" is the operation id, NOT the
+            # resource; prefer `response.name`, else `metadata.target`,
+            # so subsequent get / delete target the actual resource.
+            #
+            # Excludes: pubsub (returns the topic directly under "name"
+            # — and conformance handler isn't an LRO). storage uses
+            # "selfLink" not "name" so it's unaffected.
+            if (spec.service in {"apigateway", "functions"}
+                    and isinstance(data, dict)
+                    and data.get("done") is True):
+                resp = data.get("response")
+                if isinstance(resp, dict) and resp.get("name"):
+                    data = resp
+                elif isinstance(data.get("metadata"), dict) and data["metadata"].get("target"):
+                    data = {"name": data["metadata"]["target"]}
             if isinstance(data, dict) and spec.name_field:
                 val = data.get(spec.name_field)
                 if val:
@@ -91,7 +113,11 @@ def test_gcp_action(spec, http_session, base_url):
                     if isinstance(data, dict) and k in data and data[k]:
                         captured = str(data[k]).rstrip("/").split("/")[-1]
                         break
+            # Strip trailing action-suffix (Functions selfLink can include
+            # ":call" or ":getIamPolicy") and any trailing slash.
             if captured:
+                if ":" in captured:
+                    captured = captured.rsplit(":", 1)[0]
                 _CREATED_IDS[spec.service] = captured
             elif create_placeholder:
                 _CREATED_IDS[spec.service] = create_placeholder

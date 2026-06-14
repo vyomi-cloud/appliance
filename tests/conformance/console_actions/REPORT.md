@@ -8,8 +8,8 @@ Run locally: `pytest tests/conformance/console_actions/`
 | Provider | Pass | Total | Rate |
 |---|---|---|---|
 | ✗ aws | 111 | 114 | 97.4% |
-| ✓ azure | 52 | 52 | 100.0% |
-| ✗ gcp | 83 | 87 | 95.4% |
+| ✗ azure | 51 | 52 | 98.1% |
+| ✗ gcp | 84 | 87 | 96.6% |
 
 ## AWS
 
@@ -91,12 +91,12 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `rds` | `stop` | `POST` | `/api/rds/databases/{name}/stop` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `rds` | `subnetGroups` | `GET` | `/api/rds/subnet-groups` | `200` | ✓ 200 |
 | `s3` | `create` | `POST` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
-| `s3` | `delete` | `DELETE` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
+| `s3` | `delete` | `DELETE` | `/api/s3/buckets/{name}` | `409` | ✗ 409 — {"detail":"BucketNotEmpty — delete all objects first"} |
 | `s3` | `get` | `GET` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
 | `s3` | `list` | `GET` | `/api/s3/buckets` | `200` | ✓ 200 |
 | `s3` | `notifications` | `PUT` | `/api/s3/buckets/{name}/notification` | `200` | ✓ 200 |
 | `s3` | `objects` | `GET` | `/api/s3/buckets/{name}/objects` | `200` | ✓ 200 |
-| `s3` | `uploadObject` | `POST` | `/api/s3/buckets/{name}/objects` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["body","file"],"msg":"Field required","input |
+| `s3` | `uploadObject` | `POST` | `/api/s3/buckets/{name}/objects` | `200` | ✓ 200 |
 | `s3` | `versioning` | `PUT` | `/api/s3/buckets/{name}/versioning` | `200` | ✓ 200 |
 | `secretsmanager` | `create` | `POST` | `/api/aws/extras/secretsmanager/secrets` | `200` | ✓ 200 |
 | `secretsmanager` | `delete` | `DELETE` | `/api/aws/extras/secretsmanager/secrets/{name}` | `200` | ✓ 200 |
@@ -178,9 +178,9 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `storage` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/{name}` | `200` | ✓ 200 |
 | `storage` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/{name}` | `200` | ✓ 200 |
 | `storage` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts` | `200` | ✓ 200 |
-| `vm` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/vyomi-conf-vm` | `200` | ✓ 200 |
-| `vm` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `200` | ✓ 200 |
-| `vm` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `200` | ✓ 200 |
+| `vm` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/vyomi-conf-vm` | `0` | ✗ 0 — network: HTTPConnectionPool(host='127.0.0.1', port=9000): Read timed out. (read  |
+| `vm` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
+| `vm` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `vm` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines` | `200` | ✓ 200 |
 | `vnet` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/vyomi-conf-vnet` | `200` | ✓ 200 |
 | `vnet` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/{name}` | `200` | ✓ 200 |
@@ -195,7 +195,7 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `apigateway` | `create` | `POST` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis` | `200` | ✓ 200 |
 | `apigateway` | `delete` | `DELETE` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{name}` | `200` | ✓ 200 |
 | `apigateway` | `gateways` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/gateways` | `200` | ✓ 200 |
-| `apigateway` | `get` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{name}` | `404` | ✗ 404 — {"detail":"API 'op-6567a94a' not found"} |
+| `apigateway` | `get` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{name}` | `200` | ✓ 200 |
 | `apigateway` | `list` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis` | `200` | ✓ 200 |
 | `cloudsql` | `backups` | `GET` | `/api/gcp/rds/databases/{name}/backups` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `cloudsql` | `create` | `POST` | `/api/gcp/rds/databases` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["query","project"],"msg":"Field required","i |
