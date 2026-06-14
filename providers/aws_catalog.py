@@ -336,7 +336,7 @@ RESOURCE_CATALOG_AWS = [
         "namespace": "AWS/ApiGateway", "service": "apigateway",
         "collection_path": "/api/apigateway/apis",
         "resource_path":   "/api/apigateway/apis/{name}",
-        "name_field":      "id",
+        "name_field":      "rest_api_id",
         "create_method":   "POST",
         "rail_items": [
             {"key": "apis",          "label": "APIs",                 "icon": "api",          "type": "primary"},

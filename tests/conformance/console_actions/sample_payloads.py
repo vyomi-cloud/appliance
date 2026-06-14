@@ -8,9 +8,48 @@ spawn) so the suite stays fast and deterministic.
 `payload_for(provider, service)` returns the dict or None. None means
 "the test harness should skip create for this service" (use sparingly —
 prefer adding a sensible payload).
+
+## Per-run uniqueness (session 5)
+
+Backends like S3 / DynamoDB / SQS / Lambda return ``409`` (or the AWS
+contract-equivalent) when a name collides with an existing resource.
+The conformance state DB is persistent across runs, so the second run
+in a row gets ``409`` on every name-collision-sensitive ``create``.
+
+To keep the suite idempotent we append a per-process random suffix to
+the canonical name field(s) before returning the payload. The harness
+captures the actual name back out of the create response, so subsequent
+``get`` / ``delete`` still target the right resource.
+
+The suffix is picked once at import time (kept stable within a test
+session) so reruns inside one pytest invocation are still
+deterministic.
 """
 from __future__ import annotations
+import copy
+import os
 from typing import Optional
+
+
+# Stable per-process suffix appended to name-like fields in create
+# payloads so two back-to-back conformance runs don't 409 each other.
+_RUN_SUFFIX = os.urandom(2).hex()
+
+
+# Field paths within payloads that hold the canonical resource name.
+# Format: list of (dotted-path, …) per (provider, service); the first
+# matching path that exists in the payload gets the suffix appended.
+# We don't enumerate every payload — instead, we use a generic strategy
+# below: any top-level string field named "name" / "queue_name" /
+# "table_name" / "function_name" / "user_name" / "secretId" /
+# "accountId" / "keyRingId" / "apiId" / "db_instance_identifier" /
+# "tag_name" gets the suffix. For nested GCP-style paths like
+# "projects/<p>/topics/<t>" we extend the trailing segment.
+_NAME_KEYS = {
+    "name", "queue_name", "table_name", "function_name", "user_name",
+    "secretId", "accountId", "keyRingId", "apiId", "tag_name",
+    "db_instance_identifier",
+}
 
 
 _AWS_PAYLOADS: dict[str, dict] = {
@@ -97,7 +136,44 @@ _AZURE_PAYLOADS: dict[str, dict] = {
 }
 
 
+def _apply_run_suffix(payload: dict) -> dict:
+    """Append the per-run suffix to any name-like field so two back-to-back
+    runs don't collide. Mutates a deep-copy and returns it.
+
+    Strategy:
+      - top-level keys in ``_NAME_KEYS`` whose value is a string get the
+        suffix appended after a ``-`` separator
+      - GCP "fully-qualified" names like ``projects/p/topics/foo`` keep
+        their prefix and only the trailing segment is suffixed
+      - non-string / nested / unrecognized fields are left alone
+    """
+    out = copy.deepcopy(payload)
+    for k in list(out.keys()):
+        if k not in _NAME_KEYS:
+            continue
+        v = out[k]
+        if not isinstance(v, str) or not v:
+            continue
+        if "/" in v:
+            # GCP-style "projects/<p>/topics/<t>" — suffix the last segment
+            parts = v.rsplit("/", 1)
+            out[k] = f"{parts[0]}/{parts[1]}-{_RUN_SUFFIX}"
+        else:
+            out[k] = f"{v}-{_RUN_SUFFIX}"
+    return out
+
+
 def payload_for(provider: str, service: str) -> Optional[dict]:
     table = {"aws": _AWS_PAYLOADS, "gcp": _GCP_PAYLOADS, "azure": _AZURE_PAYLOADS}.get(
         provider.lower(), {})
-    return table.get(service.lower())
+    raw = table.get(service.lower())
+    if raw is None:
+        return None
+    return _apply_run_suffix(raw)
+
+
+def current_run_suffix() -> str:
+    """Exposed for the harness so it can document the suffix in REPORT.md
+    or use it when constructing cleanup queries.
+    """
+    return _RUN_SUFFIX
