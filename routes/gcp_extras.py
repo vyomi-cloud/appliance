@@ -83,6 +83,19 @@ def register(app: FastAPI) -> None:
     def api_gcp_extras_get(stub_path: str):
         from core.gcp_rail_extras import EXTRAS
         schema = EXTRAS.get(stub_path)
+        # If stub_path doesn't match a known stub, try peeling off a trailing
+        # /{name} segment — the catalog's resource_path is `.../<stub>/{name}`
+        # and a console GET to that URL should return the single item.
+        if not schema and "/" in stub_path:
+            parent, _, name = stub_path.rpartition("/")
+            schema_parent = EXTRAS.get(parent)
+            if schema_parent and schema_parent.get("category") != "config":
+                _gcp_extras_seed_if_needed(parent)
+                slot = _gcp_extras_state(parent)
+                item = slot["items"].get(name)
+                if item is not None:
+                    return item
+                raise HTTPException(status_code=404, detail=f"Not found: {parent}/{name}")
         if not schema:
             raise HTTPException(status_code=404, detail=f"Unknown GCP stub: {stub_path}")
         _gcp_extras_seed_if_needed(stub_path)
