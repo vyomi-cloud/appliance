@@ -22,7 +22,19 @@ What happens, in order:
    | `cloudlearn-sql-postgres` | `postgres:16-alpine` | SQL data plane |
    | `cloudlearn-gcs` | `fsouza/fake-gcs-server` | GCS data plane |
 
-5. Opens **http://localhost:9000** in your browser.
+5. (Optional) Adds a one-time `127.0.0.1 vyomi.local` line to your `/etc/hosts`
+   (sudo prompt) so the simulator is reachable at the same `vyomi.local`
+   URL that the Multipass-based install paths publish. Idempotent — skipped
+   if the line already exists.
+6. Opens **http://vyomi.local:9000** in your browser (falls back to
+   `http://localhost:9000` if you skipped step 5).
+
+> **Why `vyomi.local`?** The Multipass-based install paths (Brew, .deb, .rpm,
+> Scoop) publish the appliance VM at `vyomi.local` via mDNS so users don't
+> have to memorise an IP that changes between runs. Docker Compose runs in
+> your host Docker so it can't broadcast mDNS — but a single `/etc/hosts`
+> entry (`127.0.0.1 vyomi.local`) maps the same hostname to localhost,
+> so you can use the same URL across every install path.
 
 Heavy backends (Vault, NATS, MinIO, DynamoDB-local, ElasticMQ, MySQL)
 **don't get pulled** until you actually use a feature that needs them.

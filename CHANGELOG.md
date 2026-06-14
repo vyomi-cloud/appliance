@@ -6,6 +6,25 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.4] — 2026-06-15
+
+URL parity: every install path now lands on `http://vyomi.local:9000`. v1.2.3 made the Multipass-based paths (Brew/.deb/.rpm/Scoop) reachable via mDNS at `vyomi.local`. This release extends the same hostname to the Docker Compose path so users never have to remember a different URL based on which install method they picked.
+
+### Added
+
+- **`install.sh` now adds `127.0.0.1 vyomi.local` to `/etc/hosts`** at the end of the one-liner install — idempotent (only inserts if the line is absent), interactive sudo prompt, best-effort DNS-cache flush (macOS `dscacheutil`, Linux `systemd-resolve`). Falls back to `http://localhost:9000` cleanly if the user declines sudo or `/etc/hosts` isn't writable.
+- **INSTALL.md** documents the one-time hosts entry as step 5 of the quick-install flow with a "Why vyomi.local?" explainer.
+- **Portal `/install` page** Docker Compose entry now has a "Step 3: One-time hosts entry so http://vyomi.local:9000 works" with copy-pasteable macOS / Linux / Windows-PowerShell commands. Step 4/5 commands updated to use the new URL.
+
+### Fixed
+
+- `.env.example` image pin bumped to `gansudkum/cloud-learn:1.2.4` (was 1.2.2).
+- `install.sh` day-2 hint had the same `pull && up -d` typo as INSTALL.md before v1.2.2 — fixed to `docker compose pull && docker compose up -d`.
+
+### Why this matters
+
+Before v1.2.3, every install path landed on a different URL (an IP for the appliance, `localhost` for Compose). v1.2.3 unified the Multipass paths on `vyomi.local`. v1.2.4 finishes the job — one URL across all 5 install methods on every supported OS.
+
 ## [1.2.3] — 2026-06-15
 
 The appliance is now reachable at `http://vyomi.local:9000/` — no more pasting bridged Multipass IPs into a browser. Hostname resolution uses standard mDNS (Bonjour on macOS, avahi on Linux, native mDNS on Windows 10 1809+) so it works on any local network that doesn't actively block multicast, with zero `/etc/hosts` modification.
