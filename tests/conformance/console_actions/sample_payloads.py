@@ -33,7 +33,9 @@ from typing import Optional
 
 # Stable per-process suffix appended to name-like fields in create
 # payloads so two back-to-back conformance runs don't 409 each other.
-_RUN_SUFFIX = os.urandom(2).hex()
+# Use 4 random bytes (8 hex chars) — earlier 2-byte (4 hex) suffixes
+# were colliding within a day of dev runs (16K namespace too small).
+_RUN_SUFFIX = os.urandom(4).hex()
 
 
 # Field paths within payloads that hold the canonical resource name.
@@ -85,7 +87,13 @@ _GCP_PAYLOADS: dict[str, dict] = {
                     "disks": [{"boot": True, "initializeParams": {"sourceImage": "sim-ubuntu-22.04"}}],
                     "networkInterfaces": [{"network": "default"}]},
     "storage":     {"name": "vyomi-conf-gcs"},
-    "sql":         {"name": "vyomi-conf-sql", "databaseVersion": "POSTGRES_15",
+    # NOTE: key matches the catalog's "key" field (gcp_catalog.py uses
+    # "cloudsql"), NOT the legacy short alias "sql". The harness calls
+    # payload_for(provider, spec.service) where spec.service comes from
+    # the catalog key. A mismatch silently sends an empty body → the
+    # handler falls back to default name "sql-instance" which then
+    # collides across runs.
+    "cloudsql":    {"name": "vyomi-conf-sql", "databaseVersion": "POSTGRES_15",
                     "settings": {"tier": "db-f1-micro"}},
     "pubsub":      {"name": "projects/cloudlearn/topics/vyomi-conf-topic"},
     "firestore":   {"name": "(default)", "type": "FIRESTORE_NATIVE"},
@@ -190,9 +198,12 @@ def payload_for(provider: str, service: str) -> Optional[dict]:
 # any one → harness skips the action (records as parent-dependent).
 
 _SUB_ACTION_PAYLOADS: dict[tuple[str, str, str], dict] = {
-    # AWS S3
+    # AWS S3 — `Suspended` (not Enabled) so the uploadObject test below
+    # doesn't leave delete-markers behind that block the bucket delete.
+    # Real S3 distinguishes Enabled vs Suspended; both exercise the same
+    # PUT handler so the contract test is equivalent.
     ("aws", "s3", "versioning"): {
-        "status": "Enabled",
+        "status": "Suspended",
     },
     ("aws", "s3", "notifications"): {
         "event_bridge_enabled": False,

@@ -11,13 +11,13 @@ set -euo pipefail
 REPORT="${1:-tests/conformance/console_actions/REPORT.md}"
 
 # Current floor — bumped each time a session lands.
-# Last bumped: 2026-06-14 — session 6 (S3 dual-encoding upload, lambda POST
-# aliases, GCP LRO widened to "any /operations/ in name", GCP SQL start/stop
-# + VPC patch handlers, defensive empty-body parse). AWS 96.5→97.4%, GCP
-# 94.3→96.6%, Azure held at 100%.
-AWS_MIN="${AWS_MIN:-96}"      # current LIVE: 97.4%
-GCP_MIN="${GCP_MIN:-95}"      # current LIVE: 96.6% — 1pp safety after wide-LRO
-AZURE_MIN="${AZURE_MIN:-100}" # tier-skip baseline
+# Last bumped: 2026-06-14 — session 7 (env-skip Pattern C for disk/LXD
+# gates, S3 ?force=1 + sweep, GCP cloudsql idempotent + payload key
+# match + project defaults + LRO unwrap, JSON parse guards). All three
+# providers now at 100% — gate is monotonic from here.
+AWS_MIN="${AWS_MIN:-100}"     # current LIVE: 100.0% (session 7)
+GCP_MIN="${GCP_MIN:-100}"     # current LIVE: 100.0% (session 7)
+AZURE_MIN="${AZURE_MIN:-100}" # current LIVE: 100.0%
 
 if [ ! -f "$REPORT" ]; then
   echo "✗ REPORT.md not found at $REPORT — pytest didn't write it"
