@@ -6,6 +6,27 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.10] — 2026-06-15
+
+The first release validated by an automated bundle-verification step
+**before** the tag was cut. No more shipping broken bundles.
+
+### Fixed
+
+- **`docker compose build` failed with `"/setup_cython.py": not found` / `"/routes": not found` / `"/scripts": not found` / `"/VERSION": not found`.** v1.1.8/v1.1.9 transferred only a subset of what the appliance Dockerfile actually `COPY`s — the build context inside the VM was missing 4 paths. The user paid 4-5 minutes of docker compose build time before the failure surfaced.
+  - `appliance_sync_workspace_into_vm()` required list expanded to all 12 paths the Dockerfile + cloudsim Dockerfile reference.
+  - `release.yml` allowlist updated to match — every release tarball v1.1.10+ has the full set.
+
+### Added
+
+- **`scripts/verify-bundle.sh`** — a 5-second local check that simulates the launcher's tar logic against any candidate bundle directory and asserts every Dockerfile `COPY` source resolves inside the resulting tarball. Caught the v1.1.9 regression in dry-run before it shipped. Now run as a pre-tag gate.
+- **First-launch download notice + confirmation prompt** (user request). Before Phase 7 starts, the launcher prints a yellow box listing every container image about to be pulled (postgres, mysql, google-cloud-cli, vault, nats, minio, dynamodb, elasticmq, fake-gcs-server, python+maven build bases), with size estimates and a ~3.5 GB total. User is prompted `Proceed? [Y/n]` with a 30-second auto-yes so it never blocks automation. Skipped on second+ launches (when the simulator image is already cached in the VM).
+- **`-y` / `--yes` flag** + `CLOUD_LEARN_YES=1` env var to skip the prompt for CI / scripted use.
+
+### Why "validated before tag" matters
+
+Every regression we shipped in v1.1.1 → v1.1.9 was something an offline check could have caught. The bundle verifier is the gate now. If `scripts/verify-bundle.sh` fails locally, the launcher will fail on the user's machine the same way — fix it before tagging.
+
 ## [1.1.9] — 2026-06-14
 
 Critical hotfix for v1.1.8's silent-exit bug + the underlying brew tarball regression.
