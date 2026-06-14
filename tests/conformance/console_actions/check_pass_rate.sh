@@ -10,15 +10,13 @@ set -euo pipefail
 
 REPORT="${1:-tests/conformance/console_actions/REPORT.md}"
 
-# Current floor — bumped each time a 3-service session lands.
-# Last bumped: 2026-06-14 — session 5 (T3 GCP stub aliases + AWS VPC chain +
-# harness LRO unwrap + empty-body fix + S3 catalog-path aliases + apigateway
-# REST-flat putMethod + apigateway sub-action payloads). AWS 76.5→96.5%,
-# GCP 95.4→94.3% (raw % dipped because converting catalog stubs into real
-# tests exposed pre-hidden backend gaps; covered surface area is much
-# larger now), Azure unchanged at 100%.
-AWS_MIN="${AWS_MIN:-95}"      # current LIVE: 96.5%
-GCP_MIN="${GCP_MIN:-93}"      # current LIVE: 94.3% — held with 1pp safety
+# Current floor — bumped each time a session lands.
+# Last bumped: 2026-06-14 — session 6 (S3 dual-encoding upload, lambda POST
+# aliases, GCP LRO widened to "any /operations/ in name", GCP SQL start/stop
+# + VPC patch handlers, defensive empty-body parse). AWS 96.5→97.4%, GCP
+# 94.3→96.6%, Azure held at 100%.
+AWS_MIN="${AWS_MIN:-96}"      # current LIVE: 97.4%
+GCP_MIN="${GCP_MIN:-95}"      # current LIVE: 96.6% — 1pp safety after wide-LRO
 AZURE_MIN="${AZURE_MIN:-100}" # tier-skip baseline
 
 if [ ! -f "$REPORT" ]; then
