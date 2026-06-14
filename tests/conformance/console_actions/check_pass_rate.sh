@@ -12,7 +12,7 @@ REPORT="${1:-tests/conformance/console_actions/REPORT.md}"
 
 # Current floor — bumped each time a 3-service session lands.
 # Last bumped: 2026-06-14 — session 3 added aws.iam GET handlers (+2 tests)
-AWS_MIN="${AWS_MIN:-41}"      # current LIVE: ~42.7% (10/12 aws.iam shipped)
+AWS_MIN="${AWS_MIN:-42}"      # current LIVE: ~42.7% (10/12 aws.iam shipped)
 GCP_MIN="${GCP_MIN:-41}"      # current LIVE: 42.4% (full-suite variance)
 AZURE_MIN="${AZURE_MIN:-100}" # tier-skip baseline
 
