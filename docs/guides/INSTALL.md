@@ -43,11 +43,13 @@ First S3 click → MinIO is fetched + started in the background, takes
 After install, your compose context lives at `~/.cloudlearn/compose`. From there:
 
 ```bash
-docker compose logs -f simulator       # tail logs
-docker compose down                     # stop everything
-docker compose pull && up -d            # upgrade to latest tag
-docker compose --profile full up -d     # bring up the 6 lazy backends eagerly
+docker compose logs -f simulator               # tail logs
+docker compose down                             # stop everything
+docker compose pull && docker compose up -d     # upgrade — Compose does NOT auto-pull on `up`
+docker compose --profile full up -d             # bring up the 6 lazy backends eagerly
 ```
+
+> **Why `pull` is explicit:** `docker compose up` only pulls when the image is missing locally. To force-check Docker Hub on every `up`, either run `docker compose pull` first OR pass `--pull always`. The default `.env.example` pins to a specific version (e.g. `gansudkum/cloud-learn:1.2.2`); set `CLOUDLEARN_SIMULATOR_IMAGE=gansudkum/cloud-learn:latest` for rolling updates.
 
 ## Lazy backend provisioning
 
