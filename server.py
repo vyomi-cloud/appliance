@@ -16051,7 +16051,7 @@ def _vpc_disassociate_subnet_from_route_table(rt_id: str, subnet_id: str) -> str
 
 
 def _vpc_attach_internet_gateway_record(igw_id: str, vpc_id: str) -> dict:
-    igw = vpc_state["internet_gateways"].get(igw_id)
+    igw = vpc_state.setdefault("internet_gateways", {}).get(igw_id)
     if not igw:
         raise HTTPException(404, detail="NoSuchInternetGateway")
     if vpc_id not in vpc_state["vpcs"]:
