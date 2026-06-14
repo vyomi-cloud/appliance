@@ -26,9 +26,13 @@ from typing import Optional
 
 
 # Default backend URL — override via env in production
+# Was https://license.cloudlearn.io (a placeholder host that never had DNS).
+# The live portal lives at https://vyomi.cloud and serves /api/oauth/device,
+# /api/license/revocation, and /.well-known/jwks.json. Users hit the old
+# default and got `portal_unreachable: URLError: Name or service not known`.
 DEFAULT_BACKEND_URL = os.environ.get(
     "CLOUDLEARN_LICENSE_BACKEND_URL",
-    "https://license.cloudlearn.io",
+    "https://vyomi.cloud",
 )
 
 # Local pubkey fallback (air-gapped). If present, used WITHOUT fetching JWKS.
