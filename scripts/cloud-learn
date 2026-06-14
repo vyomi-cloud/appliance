@@ -1012,26 +1012,46 @@ appliance_exec_launcher() {
 }
 
 appliance_health_check() {
-  local compose
-  compose="$(appliance_multipass_cmd)"
+  # Probe the three health endpoints DIRECTLY from the Mac via the VM's
+  # bridged IP. We used to call `multipass exec ... curl 127.0.0.1:Port`
+  # three times per iteration but that turned out to be brittle —
+  # multipass exec would hang for minutes at a time even when the VM
+  # was healthy (verified: PID stuck 3+ min on a single `curl` call).
+  # Going direct over the bridged network is faster, more reliable,
+  # and has a real socket-level timeout we control via `curl -m`.
+  local vm_ip
+  vm_ip="$(multipass info "$APPLIANCE_NAME" --format=csv 2>/dev/null | awk -F, 'NR==2 {print $3}' | head -1)"
+  if [ -z "$vm_ip" ]; then
+    _die "could not resolve VM IP for ${APPLIANCE_NAME}" \
+"Check VM state:
+  multipass info ${APPLIANCE_NAME}
+Or try again:
+  cloud-learn restart"
+  fi
+  # Tell the user where to go BEFORE we start waiting — even if the
+  # health check turns out to hang (which shouldn't anymore, but
+  # belt-and-suspenders), they can already paste the URL into a browser.
+  _emit ""
+  _emit "    ${_C_BOLD}Appliance URL${_C_RESET}  ${_C_CYAN}http://${vm_ip}:9000/${_C_RESET}"
+  _emit "    (you can open this now — health check below confirms it)"
+  _emit ""
+
   local waited=0
   local max_wait="${CLOUD_LEARN_APPLIANCE_HEALTH_TIMEOUT:-180}"
   local last_bridge_ok=0 last_sim_ok=0 last_cloudsim_ok=0
   while [ "$waited" -lt "$max_wait" ]; do
-    # Probe each component individually so we can show WHICH is missing.
-    local bridge_ok sim_ok cloudsim_ok
-    bridge_ok=$("$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
-      "curl -fsS -o /dev/null -m 2 http://127.0.0.1:9171/health && echo 1 || echo 0" 2>/dev/null | tr -d '\r')
-    sim_ok=$("$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
-      "curl -fsS -o /dev/null -m 2 http://127.0.0.1:9000/healthz && echo 1 || echo 0" 2>/dev/null | tr -d '\r')
-    cloudsim_ok=$("$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc \
-      "curl -fsS -o /dev/null -m 2 http://127.0.0.1:9010/health && echo 1 || echo 0" 2>/dev/null | tr -d '\r')
+    local bridge_ok=0 sim_ok=0 cloudsim_ok=0
+    # `curl -m 2` is a hard wall-clock cap — no DNS / TCP wait can
+    # stall us beyond that. `|| true` so a non-zero return doesn't
+    # trip set -e mid-loop.
+    curl -fsS -o /dev/null -m 2 "http://${vm_ip}:9171/health"  2>/dev/null && bridge_ok=1   || true
+    curl -fsS -o /dev/null -m 2 "http://${vm_ip}:9000/healthz" 2>/dev/null && sim_ok=1      || true
+    curl -fsS -o /dev/null -m 2 "http://${vm_ip}:9010/health"  2>/dev/null && cloudsim_ok=1 || true
     if [ "$bridge_ok" = "1" ] && [ "$sim_ok" = "1" ] && [ "$cloudsim_ok" = "1" ]; then
       progress "    ✓ runtime bridge, simulator, and CloudSim all healthy"
       return 0
     fi
-    # Print a single composite status line every 6s so the user can see
-    # which component is still missing.
+    # Status line every 6s so user sees what's pending.
     if [ $((waited % 6)) -eq 0 ]; then
       local status=""
       [ "$bridge_ok"   = "1" ] && status+=" bridge=✓" || status+=" bridge=…"
@@ -1047,11 +1067,15 @@ appliance_health_check() {
   done
   # Build a helpful diagnostic showing exactly which thing didn't start.
   local what_failed=""
-  [ "$last_bridge_ok"   != "1" ] && what_failed+="\n    - runtime bridge (port 9171) — check: multipass exec $APPLIANCE_NAME -- sudo journalctl -u cloudlearn-runtime-bridge.service --no-pager -n 50"
-  [ "$last_sim_ok"      != "1" ] && what_failed+="\n    - simulator (port 9000) — check: multipass exec $APPLIANCE_NAME -- docker logs cloud-learn-simulator-1 --tail 80"
-  [ "$last_cloudsim_ok" != "1" ] && what_failed+="\n    - CloudSim (port 9010) — check: multipass exec $APPLIANCE_NAME -- docker logs cloud-learn-cloudsim-1 --tail 80"
-  _die "health check timed out after ${max_wait}s — the following components are not responding:${what_failed}" \
-"Inspect the docker compose logs:
+  [ "$last_bridge_ok"   != "1" ] && what_failed+=$'\n    - runtime bridge (port 9171) — check: multipass exec '${APPLIANCE_NAME}' -- sudo journalctl -u cloudlearn-runtime-bridge.service --no-pager -n 50'
+  [ "$last_sim_ok"      != "1" ] && what_failed+=$'\n    - simulator (port 9000) — check: multipass exec '${APPLIANCE_NAME}' -- docker logs cloud-learn-simulator-1 --tail 80'
+  [ "$last_cloudsim_ok" != "1" ] && what_failed+=$'\n    - CloudSim (port 9010) — check: multipass exec '${APPLIANCE_NAME}' -- docker logs cloud-learn-cloudsim-1 --tail 80'
+  _die "health check timed out after ${max_wait}s — components not responding:${what_failed}" \
+"The VM and its docker stack appear to be running but at least one
+service isn't answering on the bridged network. You can still open
+the URL we printed above — that probe might succeed if curl was the
+issue.
+Inspect the docker compose logs:
   multipass exec $APPLIANCE_NAME -- docker compose -f ${APPLIANCE_WORKSPACE}/docker-compose.appliance.yml logs --tail 100
 Check port conflicts:
   multipass exec $APPLIANCE_NAME -- ss -tlnp

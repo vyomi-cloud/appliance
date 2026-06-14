@@ -6,6 +6,27 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.11] — 2026-06-15
+
+User report on v1.1.10: phases 1-7 ran green (build + start succeeded!) but Phase 8 hung indefinitely. Diagnosis: the launcher's health probe used `multipass exec ... curl 127.0.0.1:Port` three times per iteration, and one of those `multipass exec` calls was stuck for 3+ minutes even though the VM and the simulator inside it were both fully healthy. Same `multipass exec` quirk class we've hit twice before.
+
+### Fixed
+
+- **Health probes now go DIRECTLY from the Mac to the VM's bridged IP**, bypassing `multipass exec` entirely. `curl -fsS -m 2 http://<vm-ip>:Port` has a real wall-clock cap and finishes in ~1 second per iteration. Verified live against the user's stuck appliance: new probe correctly detected all three services healthy in 1s; the old probe was hung for 3+ minutes.
+
+### Added
+
+- **Appliance URL is printed BEFORE health check starts.** Even if anything in Phase 8 ever hangs again, the user can already open the URL in a browser. A pinned line:
+  ```
+      Appliance URL  http://<vm-ip>:9000/
+      (you can open this now — health check below confirms it)
+  ```
+  shows up at the top of Phase 8 so the URL never gets buried in scroll-history when something goes wrong.
+
+### Why this matters
+
+Three classes of "user is clueless after the prompt returns" have now been fixed: silent subshell exits (v1.1.9 `set -E`), bundle COPY mismatch (v1.1.10), and now `multipass exec` hangs (v1.1.11 direct curl). The launcher's reliability surface is now small enough that the next regression should be quick to spot.
+
 ## [1.1.10] — 2026-06-15
 
 The first release validated by an automated bundle-verification step
