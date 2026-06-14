@@ -1,0 +1,29 @@
+services:
+  cloudlearn-sql-postgres:
+    ports: !override
+      - "15432:5432"
+  cloudlearn-sql-mysql:
+    ports: !override
+      - "13306:3306"
+  cloudlearn-gcs:
+    ports: !override
+      - "14443:4443"
+  cloudlearn-vault:
+    ports: !override
+      - "18200:8200"
+  cloudlearn-minio:
+    ports: !override
+      - "19000:9000"
+      - "19001:9001"
+  cloudlearn-nats:
+    ports: !override
+      - "14222:4222"
+  cloudlearn-dynamodb:
+    ports: !override
+      - "18000:8000"
+  cloudlearn-elasticmq:
+    ports: !override
+      - "19324:9324"
+  simulator:
+    ports: !override
+      - "9000:9000"
