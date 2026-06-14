@@ -70,16 +70,32 @@ def test_aws_action(spec, http_session, base_url):
     ok = r.status_code in spec.expected_status
 
     # Probe the response body for an identifier when create succeeded —
-    # later lifecycle tests need it. We accept several common shapes.
+    # later lifecycle tests need it. Honor the catalog's `name_field`
+    # FIRST so the placeholder we substitute into resource paths matches
+    # what the backend actually keys on (e.g. VPC's vpc_id, not name).
     if ok and spec.action == "create":
         try:
             data = r.json()
-            for k in ("instance_id", "name", "id", "user_name",
-                      "table_name", "queue_url", "function_name",
-                      "db_instance_identifier", "vpc_id"):
-                if isinstance(data, dict) and k in data and data[k]:
-                    _CREATED_IDS[spec.service] = str(data[k])
-                    break
+            captured = ""
+            # Some backends populate columns with an em-dash placeholder when
+            # the caller didn't supply a value — treat those as "unset" rather
+            # than trusting them as the resource id.
+            _PLACEHOLDERS = {"", "—", "-", "null", "None"}
+            if isinstance(data, dict) and spec.name_field:
+                val = data.get(spec.name_field)
+                if val and str(val) not in _PLACEHOLDERS:
+                    captured = str(val).rstrip("/").split("/")[-1]
+            if not captured:
+                for k in ("instance_id", "vpc_id", "user_name",
+                          "table_name", "queue_url", "function_name",
+                          "db_instance_identifier", "name", "id", "key_id"):
+                    if isinstance(data, dict) and k in data and data[k]:
+                        v = str(data[k])
+                        if v not in _PLACEHOLDERS:
+                            captured = v.rstrip("/").split("/")[-1]
+                            break
+            if captured:
+                _CREATED_IDS[spec.service] = captured
         except Exception:
             pass
 
