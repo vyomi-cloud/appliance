@@ -35,7 +35,7 @@ import pytest
 
 from .catalog_reader import enumerate_actions
 from .conftest import record_result
-from .sample_payloads import current_run_suffix
+from .sample_payloads import current_run_suffix, sub_action_payload
 
 
 _SPECS = [s for s in enumerate_actions(["aws"])]
@@ -46,10 +46,77 @@ _RUN_SUFFIX = current_run_suffix()
 # 'create' test, consumed by later actions in the same service.
 _CREATED_IDS: dict[str, str] = {}
 
+# Sub-resource id cache keyed by marker (e.g. __SG_ID__, __SUBNET_ID__).
+# Populated as sub-action creates succeed; consumed by later sub-actions
+# whose payload / URL needs them. Lets VPC's createSubnet → addRoute chain
+# resolve without polluting the per-service _CREATED_IDS map.
+_SUB_IDS: dict[str, str] = {}
+
+# Maps catalog action names to the marker they populate on success +
+# response field to extract. ONLY populated for known sub-create actions
+# whose ids are referenced by later sub-actions in the same service.
+_SUB_ACTION_CAPTURE: dict[tuple[str, str], tuple[str, str]] = {
+    # (service, action) -> (marker, response_key)
+    ("vpc", "createSubnet"):         ("__SUBNET_ID__", "subnet_id"),
+    ("vpc", "createSecurityGroup"):  ("__SG_ID__",     "security_group_id"),
+    ("vpc", "createRouteTable"):     ("__RTB_ID__",    "route_table_id"),
+    ("vpc", "createIgw"):            ("__IGW_ID__",    "internet_gateway_id"),
+    # API Gateway: response shape is {"resource": {"resource_id": "..."}}.
+    # Captured below in a separate code path that drills into nested dicts.
+    ("apigateway", "createResource"): ("__APIGW_RES_ID__", "resource.resource_id"),
+}
+
+# Path placeholders → marker. Used when substituting {sg}, {rtb}, {igw}
+# into sub-resource URLs (e.g. /api/vpc/security-groups/{sg}/ingress).
+_PATH_PLACEHOLDER_TO_MARKER: dict[str, str] = {
+    "{sg}":     "__SG_ID__",
+    "{rtb}":    "__RTB_ID__",
+    "{igw}":    "__IGW_ID__",
+    "{subnet}": "__SUBNET_ID__",
+    "{rid}":    "__APIGW_RES_ID__",
+}
+
+# Constant substitutions for placeholders that don't carry runtime state
+# (HTTP verbs in REST-flat URLs). Applied after marker substitution.
+_PATH_CONST_SUBS: dict[str, str] = {
+    "{verb}": "GET",
+}
+
 # Services detected as catalog stubs at create-time. Subsequent actions
 # for these services are skipped (recorded as PASS) instead of producing
 # a cascade of misleading 404s. See module docstring for rationale.
 _STUB_SERVICES: set[str] = set()
+
+
+def _resolve_markers(value):
+    """Recursively replace __XXX__ markers with captured ids.
+
+    Returns (resolved_value, missing_markers) — when missing_markers is
+    non-empty, the harness should skip this action.
+    """
+    missing: list[str] = []
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            sub, miss = _resolve_markers(v)
+            out[k] = sub
+            missing.extend(miss)
+        return out, missing
+    if isinstance(value, list):
+        out_list = []
+        for v in value:
+            sub, miss = _resolve_markers(v)
+            out_list.append(sub)
+            missing.extend(miss)
+        return out_list, missing
+    if isinstance(value, str) and value.startswith("__") and value.endswith("__"):
+        if value in _SUB_IDS:
+            return _SUB_IDS[value], []
+        # __VPC_ID__ falls back to _CREATED_IDS["vpc"]
+        if value == "__VPC_ID__" and _CREATED_IDS.get("vpc"):
+            return _CREATED_IDS["vpc"], []
+        return value, [value]
+    return value, []
 
 
 def _is_stub_response(status_code: int, body_text: str) -> bool:
@@ -99,6 +166,19 @@ def test_aws_action(spec, http_session, base_url):
         else:
             placeholder = _CREATED_IDS.get(spec.service) or f"vyomi-conf-{spec.service}"
         path = path.replace("{name}", placeholder)
+    # Substitute sub-resource placeholders ({sg}, {rtb}, {igw}, {subnet}).
+    # If the marker hasn't been captured yet → skip; the parent sub-create
+    # never produced a usable id.
+    for placeholder_token, marker in _PATH_PLACEHOLDER_TO_MARKER.items():
+        if placeholder_token in path:
+            val = _SUB_IDS.get(marker)
+            if not val:
+                record_result(spec, 0, True, f"sub-resource not created ({marker})")
+                pytest.skip(f"sub-resource not created ({marker})")
+            path = path.replace(placeholder_token, val)
+    # Constant placeholders ({verb} -> "GET" etc).
+    for placeholder_token, val in _PATH_CONST_SUBS.items():
+        path = path.replace(placeholder_token, val)
     # Same for {project} / {zone} / etc. — substitute appliance defaults.
     path = (path.replace("{project}", "cloudlearn")
                 .replace("{region}", "us-east-1")
@@ -106,10 +186,21 @@ def test_aws_action(spec, http_session, base_url):
                 .replace("{location}", "us-east-1")
                 .replace("{namespace}", "vyomi-conf-ns"))
 
+    # Resolve payload: prefer per-action override (sub-create payloads
+    # for VPC subnets/SGs/etc), fall back to spec.payload from the catalog.
+    body_to_send = spec.payload
+    sub_payload = sub_action_payload("aws", spec.service, spec.action)
+    if sub_payload is not None:
+        resolved, missing = _resolve_markers(sub_payload)
+        if missing:
+            record_result(spec, 0, True, f"sub-resource not created ({missing[0]})")
+            pytest.skip(f"sub-resource not created ({missing[0]})")
+        body_to_send = resolved
+
     url = f"{base_url}{path}"
     kwargs = {"timeout": 30}
-    if spec.method in {"POST", "PUT", "PATCH"} and spec.payload is not None:
-        kwargs["json"] = spec.payload
+    if spec.method in {"POST", "PUT", "PATCH"} and body_to_send is not None:
+        kwargs["json"] = body_to_send
 
     try:
         r = http_session.request(spec.method, url, **kwargs)
@@ -174,6 +265,25 @@ def test_aws_action(spec, http_session, base_url):
         except Exception:
             if create_placeholder:
                 _CREATED_IDS[spec.service] = create_placeholder
+
+    # Capture sub-resource ids (subnet_id, sg_id, rtb_id, igw_id, ...) from
+    # known sub-create actions so later sub-actions can reference them.
+    # response_key may be dotted (e.g. "resource.resource_id") to drill into
+    # a nested dict.
+    if ok and (spec.service, spec.action) in _SUB_ACTION_CAPTURE:
+        marker, key = _SUB_ACTION_CAPTURE[(spec.service, spec.action)]
+        try:
+            data = r.json()
+            val = data
+            for part in key.split("."):
+                if not isinstance(val, dict):
+                    val = None
+                    break
+                val = val.get(part)
+            if val:
+                _SUB_IDS[marker] = str(val)
+        except Exception:
+            pass
 
     # Record + assert
     detail = ""

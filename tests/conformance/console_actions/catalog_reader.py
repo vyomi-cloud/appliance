@@ -106,12 +106,23 @@ def _read_aws() -> list[ActionSpec]:
         # didn't already declare its own delete. Otherwise the harness runs
         # the same delete twice and the second one 404s on a tombstone — a
         # false negative that masks real failures.
+        #
+        # IAM declares deleteUser/deleteRole/deletePolicy (no plain "delete"
+        # key), but deleteUser points at the SAME URL as the auto-appended
+        # delete would. Detect that collision and suppress the duplicate.
         if res and "delete" not in api_paths:
-            specs.append(ActionSpec(
-                provider="aws", service=key, action="delete",
-                method="DELETE", path=res, requires_resource=True,
-                name_field=name_field,
-            ))
+            already = False
+            for ap in api_paths.values():
+                if isinstance(ap, dict) and ap.get("method", "").upper() == "DELETE" \
+                        and str(ap.get("path", "")) == res:
+                    already = True
+                    break
+            if not already:
+                specs.append(ActionSpec(
+                    provider="aws", service=key, action="delete",
+                    method="DELETE", path=res, requires_resource=True,
+                    name_field=name_field,
+                ))
     return specs
 
 
@@ -236,8 +247,21 @@ def enumerate_actions(providers: Optional[list[str]] = None) -> list[ActionSpec]
         # destructive last
         "purge": 8, "terminate": 9, "delete": 9,
     }
+    # Sub-resource action prefixes that depend on a prior sub-create
+    # (e.g. addIngress needs createSecurityGroup; addRoute needs
+    # createRouteTable + createIgw). Schedule AFTER parent + sub-creates
+    # but before delete.
+    _DEP_PREFIXES = ("add", "attach", "associate", "put", "set")
+    def _order_for(action: str) -> int:
+        if action in _ACTION_ORDER:
+            return _ACTION_ORDER[action]
+        if action.startswith("create"):
+            return 3  # sub-resource creates run right after parent create
+        if action.startswith(_DEP_PREFIXES):
+            return 6  # depend on sub-create having captured an id
+        return 7
     def sort_key(s: ActionSpec):
-        return (s.provider, s.service, _ACTION_ORDER.get(s.action, 6), s.action)
+        return (s.provider, s.service, _order_for(s.action), s.action)
     out.sort(key=sort_key)
     return out
 
