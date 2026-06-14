@@ -97,3 +97,39 @@ docker exec conf-a9a5-simulator-1 head -200 /tmp/REPORT.md
 The source bind-mounts in `docker-compose.override.yml` mean Python
 edits to `server.py`, `core/`, `providers/`, `routes/`, and `tests/` land
 without a docker rebuild — just `docker compose restart simulator`.
+
+---
+
+## Session 2 (2026-06-14 — agent-ac7d87aea25259bd0)
+
+### 3 services brought to 100%
+
+| # | Service | Tests | Commit |
+|---|---|---|---|
+| 1 | gcp.storage | 7/7 | `215ce16` |
+| 2 | aws.sqs     | 7/7 | `86fd29d` |
+| 3 | aws.rds     | 5/5 | `a0385c7` |
+
+### Pass-rate movement
+
+| Provider | After session 1 | After session 2 | Δ |
+|---|---|---|---|
+| aws   | 49.2%  (61/124) | 54.8%  (?)   | +5.6pp |
+| gcp   | 44.4%  (44/99)  | 46.0%  (?)   | +1.6pp |
+| azure | 100%   | 100% | 0 |
+| **All** | **57.1%** | **61.0%** | **+3.9pp** |
+
+### Key learning
+
+aws.rds had to be hardened for "simulated mode" (no LXD daemon present)
+— `_rds_runtime_{start,stop,reboot}` now book-keep on the record when
+LXD isn't available, instead of 503'ing. This pattern likely applies
+to other VM/DB-style services in subsequent sessions.
+
+### Recommended next 3 services for session 3
+
+Run the suite for fresh data; based on session 2's totals, candidates are:
+- `aws.dynamodb` (gated on tier — check if Developer unlocks it cleanly)
+- `gcp.compute` (large but high-value — cuts into the VM lifecycle story)
+- `aws.lambda` or `aws.apigateway` (paired wins; same handler patterns)
+

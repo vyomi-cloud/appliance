@@ -11,9 +11,9 @@ set -euo pipefail
 REPORT="${1:-tests/conformance/console_actions/REPORT.md}"
 
 # Current floor — bumped each time a 3-service session lands.
-# Last bumped: 2026-06-14 after PR #1 (52.7% → 57.1%)
-AWS_MIN="${AWS_MIN:-49}"      # current: 49.2%
-GCP_MIN="${GCP_MIN:-44}"      # current: 44.4%
+# Last bumped: 2026-06-14 after PR #2 (session 2: 57.1% → 61.0%)
+AWS_MIN="${AWS_MIN:-54}"      # current: 54.8% (was 49.2% after session 1)
+GCP_MIN="${GCP_MIN:-46}"      # current: 46.0% (was 44.4%)
 AZURE_MIN="${AZURE_MIN:-100}" # tier-skip baseline
 
 if [ ! -f "$REPORT" ]; then
