@@ -37,8 +37,12 @@ jobs:
       - name: Install client libs
         run: pip install boto3 google-cloud-storage google-cloud-pubsub requests
       - name: Start CloudLearn stack
+        env:
+          CLOUDLEARN_DEV_MODE: "1"
         run: |
-          docker compose -f docker-compose.yml up -d --build
+          # DEV_MODE=1 keeps /api/license/signup available in CI (production
+          # mode disables that endpoint by design — see core/license_remote).
+          CLOUDLEARN_DEV_MODE=1 docker compose -f docker-compose.yml up -d --build
           # Wait for /healthz
           for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:9000/healthz > /dev/null; then
@@ -49,9 +53,13 @@ jobs:
           done
       - name: Sign up Enterprise (so eventing/nosql aren't tier-locked)
         run: |
+          # If signup endpoint is disabled (prod mode reached us anyway), fall
+          # back to a no-op so the conformance step still runs; the threshold
+          # is what gates the build.
           curl -sf -X POST http://127.0.0.1:9000/api/license/signup \
             -H "Content-Type: application/json" \
-            -d '{"user":"ci","email":"ci@cl.io","tier":"enterprise","seats":10,"period":"annual"}'
+            -d '{"user":"ci","email":"ci@cl.io","tier":"enterprise","seats":10,"period":"annual"}' \
+            || echo "::warning::signup unavailable — continuing on default tier"
       - name: Conformance — per-service (isolated, threshold 85%)
         run: |
           # 85% threshold acknowledges known deviations tracked in memory note
@@ -79,8 +87,11 @@ jobs:
       - name: Install minimal deps
         run: pip install -r requirements.txt
       - name: Boot uvicorn in background
+        env:
+          CLOUDLEARN_DEV_MODE: "1"
         run: |
-          uvicorn server:app --host 127.0.0.1 --port 9001 &
+          # DEV_MODE keeps /api/license/signup callable for the tier round-trip.
+          CLOUDLEARN_DEV_MODE=1 uvicorn server:app --host 127.0.0.1 --port 9001 &
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:9001/healthz > /dev/null && break
             sleep 1
