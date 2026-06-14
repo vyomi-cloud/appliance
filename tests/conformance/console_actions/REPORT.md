@@ -7,9 +7,9 @@ Run locally: `pytest tests/conformance/console_actions/`
 
 | Provider | Pass | Total | Rate |
 |---|---|---|---|
-| ✗ aws | 110 | 114 | 96.5% |
+| ✗ aws | 111 | 114 | 97.4% |
 | ✓ azure | 52 | 52 | 100.0% |
-| ✗ gcp | 82 | 87 | 94.3% |
+| ✗ gcp | 84 | 87 | 96.6% |
 
 ## AWS
 
@@ -70,15 +70,15 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `kms` | `get` | `GET` | `/api/aws/extras/kms/keys/{name}` | `200` | ✓ 200 |
 | `kms` | `keys` | `GET` | `/api/aws/extras/kms/keys` | `200` | ✓ 200 |
 | `kms` | `list` | `GET` | `/api/aws/extras/kms/keys` | `200` | ✓ 200 |
-| `lambda` | `create` | `POST` | `/api/lambda/functions` | `422` | ✗ 422 — {"detail":[{"type":"string_type","loc":["code"],"msg":"Input should be a valid s |
-| `lambda` | `delete` | `DELETE` | `/api/lambda/functions/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `lambda` | `get` | `GET` | `/api/lambda/functions/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `lambda` | `invocations` | `GET` | `/api/lambda/functions/{name}/invocations` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `lambda` | `invoke` | `POST` | `/api/lambda/functions/{name}/invoke` | `0` | ✓ 0 — parent resource not created - dependent action |
+| `lambda` | `create` | `POST` | `/api/lambda/functions` | `200` | ✓ 200 |
+| `lambda` | `delete` | `DELETE` | `/api/lambda/functions/{name}` | `200` | ✓ 200 |
+| `lambda` | `get` | `GET` | `/api/lambda/functions/{name}` | `200` | ✓ 200 |
+| `lambda` | `invocations` | `GET` | `/api/lambda/functions/{name}/invocations` | `200` | ✓ 200 |
+| `lambda` | `invoke` | `POST` | `/api/lambda/functions/{name}/invoke` | `200` | ✓ 200 |
 | `lambda` | `list` | `GET` | `/api/lambda/functions` | `200` | ✓ 200 |
-| `lambda` | `permission` | `POST` | `/api/lambda/functions/{name}/permission` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `lambda` | `updateCode` | `POST` | `/api/lambda/functions/{name}/code` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `lambda` | `updateConfig` | `POST` | `/api/lambda/functions/{name}/configuration` | `0` | ✓ 0 — parent resource not created - dependent action |
+| `lambda` | `permission` | `POST` | `/api/lambda/functions/{name}/permission` | `200` | ✓ 200 |
+| `lambda` | `updateCode` | `POST` | `/api/lambda/functions/{name}/code` | `200` | ✓ 200 |
+| `lambda` | `updateConfig` | `POST` | `/api/lambda/functions/{name}/configuration` | `200` | ✓ 200 |
 | `rds` | `create` | `POST` | `/api/rds/databases` | `503` | ✗ 503 — {"detail":"Error: The remote \"postgres\" doesn't exist"} |
 | `rds` | `delete` | `DELETE` | `/api/rds/databases/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `rds` | `get` | `GET` | `/api/rds/databases/{name}` | `0` | ✓ 0 — parent resource not created - dependent action |
@@ -91,12 +91,12 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `rds` | `stop` | `POST` | `/api/rds/databases/{name}/stop` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `rds` | `subnetGroups` | `GET` | `/api/rds/subnet-groups` | `200` | ✓ 200 |
 | `s3` | `create` | `POST` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
-| `s3` | `delete` | `DELETE` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
+| `s3` | `delete` | `DELETE` | `/api/s3/buckets/{name}` | `409` | ✗ 409 — {"detail":"BucketNotEmpty — delete all objects first"} |
 | `s3` | `get` | `GET` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
 | `s3` | `list` | `GET` | `/api/s3/buckets` | `200` | ✓ 200 |
 | `s3` | `notifications` | `PUT` | `/api/s3/buckets/{name}/notification` | `200` | ✓ 200 |
 | `s3` | `objects` | `GET` | `/api/s3/buckets/{name}/objects` | `200` | ✓ 200 |
-| `s3` | `uploadObject` | `POST` | `/api/s3/buckets/{name}/objects` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["body","file"],"msg":"Field required","input |
+| `s3` | `uploadObject` | `POST` | `/api/s3/buckets/{name}/objects` | `200` | ✓ 200 |
 | `s3` | `versioning` | `PUT` | `/api/s3/buckets/{name}/versioning` | `200` | ✓ 200 |
 | `secretsmanager` | `create` | `POST` | `/api/aws/extras/secretsmanager/secrets` | `200` | ✓ 200 |
 | `secretsmanager` | `delete` | `DELETE` | `/api/aws/extras/secretsmanager/secrets/{name}` | `200` | ✓ 200 |
@@ -195,7 +195,7 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `apigateway` | `create` | `POST` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis` | `200` | ✓ 200 |
 | `apigateway` | `delete` | `DELETE` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{name}` | `200` | ✓ 200 |
 | `apigateway` | `gateways` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/gateways` | `200` | ✓ 200 |
-| `apigateway` | `get` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{name}` | `404` | ✗ 404 — {"detail":"API 'op-eef8d2d7' not found"} |
+| `apigateway` | `get` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis/{name}` | `200` | ✓ 200 |
 | `apigateway` | `list` | `GET` | `/api/gcp/apigateway/v1/projects/{project}/locations/global/apis` | `200` | ✓ 200 |
 | `cloudsql` | `backups` | `GET` | `/api/gcp/rds/databases/{name}/backups` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `cloudsql` | `create` | `POST` | `/api/gcp/rds/databases` | `422` | ✗ 422 — {"detail":[{"type":"missing","loc":["query","project"],"msg":"Field required","i |
@@ -276,6 +276,6 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `vpc` | `firewalls` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/firewalls` | `200` | ✓ 200 |
 | `vpc` | `get` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/networks/{name}` | `200` | ✓ 200 |
 | `vpc` | `list` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/networks` | `200` | ✓ 200 |
-| `vpc` | `patch` | `PATCH` | `/api/gcp/compute/v1/projects/{project}/global/networks/{name}` | `405` | ✗ 405 — {"detail":"Method Not Allowed"} |
+| `vpc` | `patch` | `PATCH` | `/api/gcp/compute/v1/projects/{project}/global/networks/{name}` | `200` | ✓ 200 |
 | `vpc` | `subnetworks` | `GET` | `/api/gcp/compute/v1/projects/{project}/regions/{region}/subnetworks` | `200` | ✓ 200 |
 

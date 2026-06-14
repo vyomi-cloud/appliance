@@ -57,12 +57,8 @@ def test_gcp_action(spec, http_session, base_url):
                 .replace("{database}", "(default)"))
     url = f"{base_url}{path}"
     kwargs = {"timeout": 30}
-    if spec.method in {"POST", "PUT", "PATCH"}:
-        # GCP handlers do `await request.json()` unconditionally — sending
-        # an empty body triggers StopIteration → 500. Always provide a
-        # JSON body, even when the catalog spec has no payload for the
-        # sub-action.
-        kwargs["json"] = spec.payload if spec.payload is not None else {}
+    if spec.method in {"POST", "PUT", "PATCH"} and spec.payload is not None:
+        kwargs["json"] = spec.payload
     try:
         r = http_session.request(spec.method, url, **kwargs)
     except Exception as e:
@@ -85,22 +81,29 @@ def test_gcp_action(spec, http_session, base_url):
     if ok and spec.action == "create":
         try:
             data = r.json()
-            # GCP LRO unwrap — when the create response is an Operation,
-            # the resource id lives under response.name (or .target). The
-            # top-level "name" of an LRO is "operations/<id>" which is NOT
-            # what subsequent get/delete URLs want.
-            if isinstance(data, dict) and isinstance(data.get("name"), str) \
-                    and data["name"].startswith("operations/"):
-                resp = data.get("response") if isinstance(data.get("response"), dict) else {}
-                resource_ref = (
-                    resp.get("name")
-                    or data.get("metadata", {}).get("target")
-                    or ""
-                )
-                if resource_ref:
-                    # Strip trailing query/fragment and use the last URL segment.
-                    data = {**data, "name": str(resource_ref).split("?")[0]}
             captured = ""
+            # GCP operation-envelope unwrap — applies to services that
+            # mint long-running operations (apigateway / functions). The
+            # response shape is:
+            #   {"name": ".../operations/op-XXX",
+            #    "metadata": {"target": ".../<kind>/<id>"},
+            #    "done": true,
+            #    "response": {"name": ".../<kind>/<id>", ...}}
+            # The bare top-level "name" is the operation id, NOT the
+            # resource; prefer `response.name`, else `metadata.target`,
+            # so subsequent get / delete target the actual resource.
+            #
+            # Excludes: pubsub (returns the topic directly under "name"
+            # — and conformance handler isn't an LRO). storage uses
+            # "selfLink" not "name" so it's unaffected.
+            if (spec.service in {"apigateway", "functions"}
+                    and isinstance(data, dict)
+                    and data.get("done") is True):
+                resp = data.get("response")
+                if isinstance(resp, dict) and resp.get("name"):
+                    data = resp
+                elif isinstance(data.get("metadata"), dict) and data["metadata"].get("target"):
+                    data = {"name": data["metadata"]["target"]}
             if isinstance(data, dict) and spec.name_field:
                 val = data.get(spec.name_field)
                 if val:
@@ -110,7 +113,11 @@ def test_gcp_action(spec, http_session, base_url):
                     if isinstance(data, dict) and k in data and data[k]:
                         captured = str(data[k]).rstrip("/").split("/")[-1]
                         break
+            # Strip trailing action-suffix (Functions selfLink can include
+            # ":call" or ":getIamPolicy") and any trailing slash.
             if captured:
+                if ":" in captured:
+                    captured = captured.rsplit(":", 1)[0]
                 _CREATED_IDS[spec.service] = captured
             elif create_placeholder:
                 _CREATED_IDS[spec.service] = create_placeholder
