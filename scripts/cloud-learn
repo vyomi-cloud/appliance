@@ -1209,14 +1209,19 @@ print_url_banner() {
   local vm_ip
   vm_ip="$(multipass info "$APPLIANCE_NAME" --format=csv 2>/dev/null | awk -F, 'NR==2 {print $3}' | head -1)"
   [ -z "$vm_ip" ] && vm_ip="<vm-ip>"
-  # Probe mDNS by hitting the simulator's /healthz at vyomi.local. If
-  # curl succeeds within 2s, mDNS is working — primary URL goes to the
-  # hostname. Otherwise primary stays as the IP.
-  local primary="http://${vm_ip}:9000/"
-  local fallback=""
-  if curl -fsS -o /dev/null -m 2 "http://${_VYOMI_MDNS_HOST}:9000/healthz" 2>/dev/null; then
+  # Phase 12 (v2.0.0): prefer the HTTPS URL when TLS is provisioned AND
+  # the Caddy sidecar is actually answering. Probe :9443 first; if that
+  # fails, fall back to the HTTP URL flow (mDNS hostname → IP).
+  local primary fallback=""
+  if [ -f "${TLS_DIR}/cert.pem" ] \
+     && curl -fsS -k -o /dev/null -m 2 "https://${_VYOMI_MDNS_HOST}:9443/healthz" 2>/dev/null; then
+    primary="https://${_VYOMI_MDNS_HOST}:9443/"
+    fallback="http://${_VYOMI_MDNS_HOST}:9000/"
+  elif curl -fsS -o /dev/null -m 2 "http://${_VYOMI_MDNS_HOST}:9000/healthz" 2>/dev/null; then
     primary="http://${_VYOMI_MDNS_HOST}:9000/"
     fallback="http://${vm_ip}:9000/"
+  else
+    primary="http://${vm_ip}:9000/"
   fi
   launch_success_banner "$primary" "$fallback"
 }
@@ -1465,6 +1470,139 @@ install_compose() {
       ;;
   esac
   return 1
+}
+
+# ── mkcert / TLS provisioning (Phase 12 — vyomi rebrand) ──────────────
+# mkcert provides a locally-trusted CA + per-name leaf cert so the
+# browser shows a real green padlock at https://vyomi.local:9443 with
+# no warning. The CA is installed in the system trust store once
+# (sudo/UAC prompt accepted forever), then certs sign off it.
+#
+# maybe_install_mkcert: same auto-install UX as maybe_install_multipass.
+#   macOS: brew install mkcert
+#   Linux: apt install mkcert (Debian/Ubuntu) or dnf install (Fedora)
+#   Windows: winget install FiloSottile.mkcert
+#
+# ensure_vyomi_tls_cert: idempotent. Runs `mkcert -install` once (if
+# the local CA isn't already in the trust store), then generates the
+# cert+key at ~/.vyomi/tls/{cert,key}.pem if missing.
+TLS_DIR="${VYOMI_TLS_DIR:-${HOME}/.vyomi/tls}"
+
+maybe_install_mkcert() {
+  if command -v mkcert >/dev/null 2>&1; then
+    return 0
+  fi
+  case "$PARENT_OS" in
+    darwin)
+      if ! command -v brew >/dev/null 2>&1; then
+        return 1
+      fi
+      _emit ""
+      _emit "${_C_BOLD}${_C_YELLOW}┌─ mkcert is not installed ──────────────────────────────────${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}   mkcert provides a locally-trusted certificate so your browser"
+      _emit "${_C_YELLOW}│${_C_RESET}   shows a real ${_C_BOLD}green padlock${_C_RESET} at ${_C_BOLD}https://vyomi.local:9443${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}   instead of the 'Not Secure' warning."
+      _emit "${_C_YELLOW}│${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}     ${_C_BOLD}brew install mkcert${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}"
+      _emit "${_C_YELLOW}│${_C_RESET}   Then ${_C_BOLD}mkcert -install${_C_RESET} adds a local CA to your system"
+      _emit "${_C_YELLOW}│${_C_RESET}   trust store (one sudo prompt, accepted forever after)."
+      _emit "${_C_YELLOW}│${_C_RESET}"
+      _emit "${_C_YELLOW}└────────────────────────────────────────────────────────────${_C_RESET}"
+      _emit ""
+      if [ "${CLOUD_LEARN_YES:-0}" != "1" ] && [ "${VYOMI_NO_TLS:-0}" != "1" ]; then
+        if [ ! -t 0 ] || [ ! -t 2 ]; then
+          return 1
+        fi
+        local ans
+        printf '  Install mkcert + provision TLS now? [Y/n] (auto-yes in 30s): ' >&2
+        if read -r -t 30 ans; then
+          case "${ans:-y}" in
+            n|N|no|NO|No)
+              _emit "  ${_C_YELLOW}Skipped — HTTPS will not be available; HTTP on :9000 still works.${_C_RESET}"
+              _emit "  Set VYOMI_NO_TLS=1 to skip this prompt on every run."
+              return 1
+              ;;
+          esac
+        fi
+      fi
+      _emit "${_C_BOLD}  ==> Installing mkcert via brew${_C_RESET}..."
+      brew install mkcert >/dev/null 2>&1 || { _emit "  ${_C_RED}brew install mkcert failed${_C_RESET}"; return 1; }
+      _emit "${_C_GREEN}  ✓ mkcert installed${_C_RESET}"
+      return 0
+      ;;
+    linux)
+      if command -v apt-get >/dev/null 2>&1; then
+        _emit "  ${_C_YELLOW}mkcert needed for HTTPS — install with: sudo apt-get install -y mkcert${_C_RESET}"
+      elif command -v dnf >/dev/null 2>&1; then
+        _emit "  ${_C_YELLOW}mkcert needed for HTTPS — install with: sudo dnf install -y mkcert${_C_RESET}"
+      else
+        _emit "  ${_C_YELLOW}mkcert needed for HTTPS — see https://github.com/FiloSottile/mkcert${_C_RESET}"
+      fi
+      return 1
+      ;;
+    windows)
+      if command -v winget >/dev/null 2>&1; then
+        _emit "  ${_C_YELLOW}mkcert needed for HTTPS — install with: winget install FiloSottile.mkcert${_C_RESET}"
+      else
+        _emit "  ${_C_YELLOW}mkcert needed for HTTPS — see https://github.com/FiloSottile/mkcert${_C_RESET}"
+      fi
+      return 1
+      ;;
+  esac
+  return 1
+}
+
+ensure_vyomi_tls_cert() {
+  # Fast path: cert + key already exist and we're not forced to re-issue.
+  if [ -f "${TLS_DIR}/cert.pem" ] && [ -f "${TLS_DIR}/key.pem" ] \
+     && [ "${VYOMI_REISSUE_TLS:-0}" != "1" ]; then
+    verbose "tls: cert already present at ${TLS_DIR}/ — skipping mkcert"
+    return 0
+  fi
+  if ! maybe_install_mkcert; then
+    verbose "tls: mkcert install declined or unavailable — Caddy will run cert-less"
+    return 0
+  fi
+  mkdir -p "$TLS_DIR"
+  # mkcert -install is idempotent — exits 0 if the local CA is already
+  # in the trust store. Silently re-adds on second machine accounts etc.
+  _emit "${_C_BOLD}  ==> Installing local CA to system trust store (one-time)${_C_RESET}..."
+  mkcert -install >/dev/null 2>&1 || true
+  _emit "${_C_BOLD}  ==> Generating cert for vyomi.local + localhost + 127.0.0.1${_C_RESET}..."
+  ( cd "$TLS_DIR" && mkcert \
+      -cert-file cert.pem -key-file key.pem \
+      vyomi.local localhost 127.0.0.1 >/dev/null 2>&1 ) \
+    || { _emit "  ${_C_RED}mkcert generation failed${_C_RESET}"; return 1; }
+  chmod 0644 "${TLS_DIR}/cert.pem" "${TLS_DIR}/key.pem"
+  _emit "${_C_GREEN}  ✓ TLS cert provisioned at ${TLS_DIR}/{cert,key}.pem${_C_RESET}"
+  return 0
+}
+
+push_tls_into_vm() {
+  # Multipass appliance path: cert+key live on the host at $TLS_DIR.
+  # Push them into the VM at /etc/vyomi/tls/ where docker-compose mounts
+  # them into the Caddy container. Also push the Caddyfile.
+  if [ ! -f "${TLS_DIR}/cert.pem" ] || [ ! -f "${TLS_DIR}/key.pem" ]; then
+    verbose "tls: no cert to push; Caddy will run cert-less in the VM"
+    return 0
+  fi
+  local compose
+  compose="$(appliance_multipass_cmd)" || return 0
+  # Ensure target dir exists inside the VM
+  "$compose" exec "$APPLIANCE_NAME" -- sudo mkdir -p /etc/vyomi/tls 2>/dev/null || true
+  "$compose" transfer "${TLS_DIR}/cert.pem" "${APPLIANCE_NAME}:/tmp/vyomi-cert.pem" 2>/dev/null
+  "$compose" transfer "${TLS_DIR}/key.pem"  "${APPLIANCE_NAME}:/tmp/vyomi-key.pem"  2>/dev/null
+  "$compose" transfer "${ROOT_DIR}/packaging/caddy/Caddyfile" "${APPLIANCE_NAME}:/tmp/Caddyfile" 2>/dev/null
+  "$compose" exec "$APPLIANCE_NAME" -- sudo bash -c '
+    mkdir -p /etc/vyomi/tls
+    mv /tmp/vyomi-cert.pem /etc/vyomi/tls/cert.pem
+    mv /tmp/vyomi-key.pem  /etc/vyomi/tls/key.pem
+    mv /tmp/Caddyfile      /etc/vyomi/Caddyfile
+    chmod 0644 /etc/vyomi/tls/cert.pem /etc/vyomi/tls/key.pem /etc/vyomi/Caddyfile
+  ' 2>/dev/null
+  verbose "tls: cert + key + Caddyfile pushed into VM at /etc/vyomi/"
 }
 
 maybe_install_multipass() {
@@ -1898,6 +2036,12 @@ outer_run() {
       phase "Building + starting CloudLearn stack inside appliance (2-3 min on first run)"
       appliance_exec_launcher
       phase_done
+      # Phase 12 (v2.0.0): provision a mkcert-signed TLS cert on the host
+      # at ~/.vyomi/tls/ and push it into the appliance VM so the bundled
+      # Caddy sidecar serves https://vyomi.local:9443 with a green padlock.
+      # Honors VYOMI_NO_TLS=1 to skip (HTTP on :9000 still works).
+      ensure_vyomi_tls_cert
+      push_tls_into_vm
       phase "Waiting for simulator, CloudSim, and runtime bridge to become healthy"
       appliance_health_check
       phase_done

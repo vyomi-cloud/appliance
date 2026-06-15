@@ -230,6 +230,30 @@ services:
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-demo}
     restart: unless-stopped
 
+  # ── Caddy TLS terminator (Phase 12 — vyomi rebrand) ────────────────────
+  # Serves https://vyomi.local:9443 with a mkcert-signed cert provisioned
+  # by the launcher. See packaging/caddy/Caddyfile.
+  #
+  # The simulator stays HTTP on :9000 — Caddy fully terminates TLS and
+  # reverse-proxies. Cert files mount from ${VYOMI_TLS_DIR:-~/.vyomi/tls}.
+  #
+  # If the cert files aren't present (user skipped mkcert, e.g. on a
+  # restricted machine), Caddy's healthcheck fails but the simulator
+  # remains reachable on :9000 HTTP. Graceful degradation.
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "${VYOMI_HTTPS_PORT:-${CLOUDLEARN_HTTPS_PORT:-9443}}:9443"
+    depends_on:
+      - simulator
+    volumes:
+      - ${VYOMI_TLS_DIR:-~/.vyomi/tls}:/etc/caddy/tls:ro
+      - ${VYOMI_CADDYFILE:-./packaging/caddy/Caddyfile}:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    profiles: ["tls", "full"]
+
 volumes:
   vyomi-data:
   cloudsim-data:
@@ -241,3 +265,5 @@ volumes:
   vyomi-dynamodb:
   vyomi-portal-keys:
   vyomi-portal-data:
+  caddy-data:
+  caddy-config:
