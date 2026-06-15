@@ -1,0 +1,57 @@
+# Vyomi appliance — Caddy TLS terminator config
+#
+# Provisioned by the launcher (`cloud-learn up` / `vyomi up`) which:
+#   1. Auto-installs mkcert if missing (brew / apt / dnf / winget)
+#   2. Runs `mkcert -install` once to add the local CA to the system
+#      trust store (sudo/UAC prompt, accepted once forever)
+#   3. Generates a cert for vyomi.local + localhost + 127.0.0.1 via
+#      `mkcert vyomi.local localhost 127.0.0.1`
+#   4. Bind-mounts the cert + key into this Caddy container as
+#      /etc/caddy/tls/cert.pem and /etc/caddy/tls/key.pem
+#
+# Result: https://vyomi.local:9443 serves the simulator with a green
+# padlock — no browser "Not Secure" warning, no click-through.
+#
+# Why Caddy and not uvicorn-native TLS:
+#   - Cert rotation is handled by Caddy without touching server.py
+#   - Reverse-proxy lets us add HTTP/3, HSTS, compression for free
+#   - Swappable TLS terminator — we can move to nginx/Traefik later
+#     without touching the simulator container
+
+{
+    # Disable Caddy's auto-HTTPS (ACME etc.) — we use the mkcert-issued
+    # local cert exclusively.
+    auto_https off
+    admin off
+}
+
+# HTTPS — bind to all hostnames on :9443. The mkcert cert has SANs for
+# vyomi.local + localhost + 127.0.0.1 so browsers validate against
+# whichever SNI they sent.
+:9443 {
+    tls /etc/caddy/tls/cert.pem /etc/caddy/tls/key.pem
+
+    # HSTS — once a user has visited via HTTPS, the browser refuses
+    # any HTTP downgrade for 6 months. Local-network only so safe.
+    header Strict-Transport-Security "max-age=15552000; includeSubDomains"
+
+    # Reverse-proxy to the simulator on the internal docker network.
+    # The simulator stays HTTP — TLS is fully terminated here.
+    reverse_proxy simulator:9000 {
+        # Pass through the original Host header so the simulator can
+        # build proper vyomi.local-relative URLs for redirects, etc.
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto https
+    }
+}
+
+# Optional HTTP → HTTPS redirect on :9000 (legacy bookmarks).
+# Disabled by default to keep the simulator reachable on :9000 for
+# health checks + scripts that don't validate certs. Uncomment to
+# force HTTPS:
+#
+# :9000 {
+#     redir https://{host}:9443{uri} permanent
+# }

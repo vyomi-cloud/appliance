@@ -103,6 +103,8 @@ services:
     restart: unless-stopped
 
   vyomi-dynamodb:
+  caddy-data:
+  caddy-config:
     image: amazon/dynamodb-local:latest
     command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
     working_dir: /home/dynamodblocal
@@ -182,6 +184,28 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:9000/healthz').read().decode())"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+
+  # ── Caddy TLS terminator (Phase 12 — vyomi rebrand) ────────────────────
+  # Serves https://vyomi.local:9443 with the mkcert-signed cert pushed
+  # into the appliance VM by the launcher (multipass transfer of cert.pem
+  # + key.pem from ~/.vyomi/tls/ on the host → /etc/vyomi/tls/ in the VM).
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "9443:9443"
+    depends_on:
+      - simulator
+    volumes:
+      - /etc/vyomi/tls:/etc/caddy/tls:ro
+      - /etc/vyomi/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--no-check-certificate", "-O-", "https://127.0.0.1:9443/healthz"]
       interval: 20s
       timeout: 5s
       retries: 3
