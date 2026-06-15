@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from xml.etree import ElementTree as ET
 
-from core.cloudlearn_platform import CloudLearnPlatform
+from core.vyomi_platform import VyomiPlatform as CloudLearnPlatform
 from core.pack_catalog import default_packs as load_default_packs
 
 # ── Constants ───────────────────────────────────────────────────────────────
