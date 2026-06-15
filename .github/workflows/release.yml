@@ -147,7 +147,7 @@ jobs:
           fpm -s dir -t rpm \
             -n cloud-learn -v "${{ steps.ver.outputs.version }}" \
             --license BUSL-1.1 --architecture noarch \
-            --maintainer "CloudLearn <support@cloudlearn.io>" \
+            --maintainer "Vyomi <support@vyomi.cloud>" \
             --url "https://github.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}" \
             --description "Local multi-cloud simulator (AWS/GCP/Azure) with real backends" \
             --depends bash --depends curl \
