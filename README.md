@@ -1,12 +1,13 @@
 # Vyomi
 
-[![CI](https://github.com/cloudlearn/cloud-learn/actions/workflows/ci.yml/badge.svg)](https://github.com/cloudlearn/cloud-learn/actions/workflows/ci.yml)
+[![CI](https://github.com/vyomi-cloud/appliance/actions/workflows/ci.yml/badge.svg)](https://github.com/vyomi-cloud/appliance/actions/workflows/ci.yml)
 [![License: BSL 1.1](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](docs/RELEASE_NOTES_v1.0.md)
+[![Version](https://img.shields.io/badge/version-2.0.0-green.svg)](CHANGELOG.md)
+[![Docker](https://img.shields.io/badge/docker-vyomi%2Fappliance-blue.svg)](https://hub.docker.com/r/vyomi/appliance)
 
-**Local-first multi-cloud simulator. Real SDKs, real CLIs, real backends — no network required.**
+**Local-first multi-cloud simulator. Real SDKs, real CLIs, real backends — no network required. Now with HTTPS by default.**
 
-> Note: Vyomi is the customer-facing brand at [vyomi.cloud](https://vyomi.cloud). The codebase, the `cloud-learn` CLI, the Docker image (`cloudlearn/simulator`), and the GitHub repo stay named `cloudlearn` / `cloud-learn` so existing installs keep working.
+> **v2.0.0 is the vyomi-branded release.** The CLI is `vyomi` (with a `cloud-learn` deprecation shim through v2.x), the Docker image is `vyomi/appliance`, the brew tap is `vyomi-cloud/tap`, and the GitHub org is `vyomi-cloud`. Existing installs upgrade transparently via runtime aliases for headers, env vars, paths, volumes, and modules. **Upgrading from v1.x?** Read [`docs/MIGRATION-v2.md`](docs/MIGRATION-v2.md) first.
 
 Vyomi gives you AWS, GCP, and Azure-like experiences on your laptop, with cloud-faithful APIs that work with the standard `boto3`, `aws-sdk-java`, `google-cloud-*`, `azure-sdk-for-*`, plus the `aws` / `gcloud` / `gsutil` / `az` / `terraform` CLIs. Override the endpoint, point at `http://localhost:9000`, and your existing code runs.
 

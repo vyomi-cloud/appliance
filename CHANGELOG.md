@@ -6,7 +6,11 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Changed — BREAKING (v2.0.0)
+## [2.0.0] — 2026-06-15
+
+The vyomi-branded release. 13-phase rebrand campaign: CLI binary, brew formula, Docker Hub namespace, GitHub org, license (MIT → BSL 1.1), HTTP headers, env vars, Python modules, filesystem paths, Docker volumes, Multipass VM name, and HTTPS by default. Every layer ships with runtime back-compat so v1.x upgrades are transparent. See [`docs/MIGRATION-v2.md`](docs/MIGRATION-v2.md) for the upgrade guide.
+
+### Changed — BREAKING
 
 - **HTTPS via mkcert + Caddy** — the simulator is now reachable at `https://vyomi.local:9443` with a **green padlock** (no 'Not Secure' browser warning). On first `vyomi up` (or `install.sh` curl-bash run), the launcher detects missing `mkcert`, offers to install it (brew/apt/dnf/winget), runs `mkcert -install` once to add a local CA to the system trust store (one sudo/UAC prompt accepted forever), then generates a cert+key for `vyomi.local + localhost + 127.0.0.1` at `~/.vyomi/tls/`. The cert is bind-mounted into a Caddy sidecar container (added to both `docker-compose.yml` and `docker-compose.appliance.yml`) that terminates TLS and reverse-proxies to the simulator on port 9000. HTTP on `:9000` remains reachable as a fallback for scripts that don't validate certs. Set `VYOMI_NO_TLS=1` to skip the whole flow. `VYOMI_REISSUE_TLS=1` to force regenerate. `VYOMI_TLS_DIR` to override the cert location. Caddyfile lives at `packaging/caddy/Caddyfile` — swappable to nginx/Traefik later without touching `server.py`.
 - **Docker volumes renamed `cloudlearn-*` → `vyomi-*`** in both `docker-compose.yml` (compose path) and `docker-compose.appliance.yml` (Multipass appliance path). 9 volumes: `vyomi-data`, `vyomi-sql-pg`, `vyomi-sql-mysql`, `vyomi-gcs`, `vyomi-nats`, `vyomi-minio`, `vyomi-dynamodb`, `vyomi-portal-keys`, `vyomi-portal-data` (`cloudsim-data` already neutral, untouched). Fresh installs use the new names. **Existing users upgrading from v1.x must run `bash scripts/migrate-volumes-vyomi.sh` ONCE** between `docker compose down` and `docker compose up -d` — copies all data from `cloudlearn-*` volumes into the new `vyomi-*` equivalents. The legacy volumes are left in place after migration for safe rollback; delete them with `docker volume rm cloudlearn-*` once satisfied.
