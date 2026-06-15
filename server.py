@@ -186,6 +186,14 @@ for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
 from core.middleware import register_middleware
 register_middleware(app)
 
+# ── Header alias middleware (Phase 7 — vyomi rebrand) ─────────────────
+# Bridges X-CloudLearn-* ↔ X-Vyomi-* on both request and response so the
+# canonical X-Vyomi-* names work without touching the 24 read/write call
+# sites scattered across core/. Registered LAST so it wraps every other
+# middleware (FastAPI's middleware order is reverse-LIFO).
+from core.header_aliases import HeaderAliasMiddleware
+app.add_middleware(HeaderAliasMiddleware)
+
 # ── Azure state injection ────────────────────────────────────────────
 init_azure_state()
 

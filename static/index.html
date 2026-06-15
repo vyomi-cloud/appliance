@@ -1335,8 +1335,8 @@ async function api(method, path, body, isForm, extraHeaders = {}) {
   // Tenant isolation: every request carries the active tenant header so the
   // server-side proxy + tenant guards scope reads/writes to this tenant only.
   const tenant = window.localStorage.getItem('cloudlearn.tenant') || '';
-  opts.headers = {'X-CloudLearn-Principal': principal};
-  if (tenant) opts.headers['X-CloudLearn-Tenant'] = tenant;
+  opts.headers = {'X-Vyomi-Principal': principal};
+  if (tenant) opts.headers['X-Vyomi-Tenant'] = tenant;
   if (extraHeaders && typeof extraHeaders === 'object') {
     opts.headers = {...opts.headers, ...extraHeaders};
   }
@@ -1659,7 +1659,7 @@ function detectBrowserHostOs() {
 
 function browserHostOsHeader() {
   const hostOs = detectBrowserHostOs();
-  return hostOs ? {'X-CloudLearn-Host-OS': hostOs} : {};
+  return hostOs ? {'X-Vyomi-Host-OS': hostOs} : {};
 }
 
 function cloudSimNodeLabel(node) {
@@ -6231,7 +6231,7 @@ function GCPListShell({
 
 function TenantBar({notify, onOpenTier}) {
   // Tenant = the licensing/isolation boundary above Space. Active tenant is
-  // stored in localStorage and sent as X-CloudLearn-Tenant on every api() call;
+  // stored in localStorage and sent as X-Vyomi-Tenant on every api() call;
   // server filters spaces / blocks cross-tenant access by it.
   const [tenants, setTenants] = useState([]);
   const [activeTid, setActiveTid] = useState(window.localStorage.getItem('cloudlearn.tenant') || '');
