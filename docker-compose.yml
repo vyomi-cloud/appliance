@@ -119,12 +119,12 @@ services:
     # :latest pinned to the most recent STABLE tag (not RCs). Pin explicitly
     # in your .env for production:
     #   CLOUDLEARN_SIMULATOR_IMAGE=vyomi/appliance:0.1.0
-    image: ${CLOUDLEARN_SIMULATOR_IMAGE:-vyomi/appliance:latest}
+    image: ${VYOMI_SIMULATOR_IMAGE:-${CLOUDLEARN_SIMULATOR_IMAGE:-vyomi/appliance:latest}}
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "${CLOUDLEARN_SIMULATOR_PORT:-9000}:9000"
+      - "${VYOMI_SIMULATOR_PORT:-${CLOUDLEARN_SIMULATOR_PORT:-9000}}:9000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -136,26 +136,26 @@ services:
     environment:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
       # PRODUCTION: override CLOUDLEARN_LICENSE_SECRET via env or .env file
-      CLOUDLEARN_LICENSE_SECRET: ${CLOUDLEARN_LICENSE_SECRET:-cloudlearn-dev-secret}
+      CLOUDLEARN_LICENSE_SECRET: ${VYOMI_LICENSE_SECRET:-${CLOUDLEARN_LICENSE_SECRET:-cloudlearn-dev-secret}}
       # Identity-first license backend (CloudLearn Portal). Reachable from
       # inside the container. Override per environment:
       #   - Production:    https://portal.cloudlearn.io
       #   - Local Mac:     http://host.docker.internal:8001
       #   - Compose net:   http://cloudlearn-portal:8000  (if portal in same compose)
-      CLOUDLEARN_LICENSE_BACKEND_URL: ${CLOUDLEARN_LICENSE_BACKEND_URL:-https://vyomi.cloud}
+      CLOUDLEARN_LICENSE_BACKEND_URL: ${VYOMI_LICENSE_BACKEND_URL:-${CLOUDLEARN_LICENSE_BACKEND_URL:-https://vyomi.cloud}}
       # Refresh interval (seconds) — appliance validates with portal to pick
       # up subscription changes. Default 24h — matches JWT TTL and the
       # user-facing "validate once per day" promise. The JWT's
       # sub_expires_at claim is the real hard enforcement signal; shorter
       # intervals just add network chatter without improving security.
-      CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS: ${CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS:-86400}
+      CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS: ${VYOMI_LICENSE_REFRESH_INTERVAL_SECONDS:-${CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS:-86400}}
       CLOUDLEARN_CLOUDSIM_URL: http://cloudsim:9010
       CLOUDLEARN_DEPLOY_DIR: /var/lib/cloudlearn/deployments
       CLOUDLEARN_HOST_CONFIG_FILE: /config/cloudlearn-host.json
       CLOUDLEARN_HOST_SIZING_FILE: /config/cloudlearn-host-sizing.json
-      CLOUDLEARN_PARENT_OS: ${CLOUDLEARN_PARENT_OS:-linux}
-      CLOUDLEARN_DISTRIBUTION_MODE: ${CLOUDLEARN_DISTRIBUTION_MODE:-developer}
-      CLOUDLEARN_RUNTIME_BRIDGE_URL: ${CLOUDLEARN_RUNTIME_BRIDGE_URL:-http://host.docker.internal:9171}
+      CLOUDLEARN_PARENT_OS: ${VYOMI_PARENT_OS:-${CLOUDLEARN_PARENT_OS:-linux}}
+      CLOUDLEARN_DISTRIBUTION_MODE: ${VYOMI_DISTRIBUTION_MODE:-${CLOUDLEARN_DISTRIBUTION_MODE:-developer}}
+      CLOUDLEARN_RUNTIME_BRIDGE_URL: ${VYOMI_RUNTIME_BRIDGE_URL:-${CLOUDLEARN_RUNTIME_BRIDGE_URL:-http://host.docker.internal:9171}}
       CLOUDLEARN_SQL_PG_HOST: cloudlearn-sql-postgres
       CLOUDLEARN_SQL_PG_PORT: "5432"
       CLOUDLEARN_SQL_PG_ADMIN_USER: postgres
