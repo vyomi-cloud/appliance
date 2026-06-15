@@ -1174,13 +1174,20 @@ ensure_vyomi_mdns_active() {
   # Quick exit when avahi-daemon is already running and the hostname is
   # already 'vyomi'. Bounded `multipass exec` (10s wall-clock cap via
   # background subshell) so it can never hang the launcher.
+  #
+  # NOTE: the inner `wait $pid` is the LAST statement in the command
+  # substitution — its exit status becomes the substitution's exit
+  # status. When the 10s timeout kills $pid, wait returns non-zero,
+  # which (under set -e + ERR trap) fires the on_err handler and prints
+  # the FAIL banner even though we recover and keep going. Suffix
+  # `; true` to neutralise it — we only care about $quick's contents.
   local quick
   quick="$(
     ( multipass exec "$APPLIANCE_NAME" -- bash -lc \
         'systemctl is-active avahi-daemon 2>/dev/null; hostname' 2>/dev/null ) &
     local pid=$!
     ( sleep 10 && kill -9 $pid 2>/dev/null ) &
-    wait $pid 2>/dev/null
+    wait $pid 2>/dev/null; true
   )"
   case "$quick" in
     *active*$'\n'vyomi*)
