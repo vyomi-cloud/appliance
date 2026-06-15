@@ -14,6 +14,29 @@ set -euo pipefail
 # prompt with no banner. Found the hard way in v1.1.8.
 set -E
 
+# ── Env-var alias bridge (Phase 8 — vyomi rebrand) ─────────────────────
+# Mirror CLOUDLEARN_* ↔ VYOMI_* and CLOUD_LEARN_* ↔ VYOMI_* so the
+# launcher and any subshells (docker compose, multipass exec) see both
+# spellings regardless of which one the user set. Same back-compat
+# pattern as core/env_aliases.py on the Python side.
+#
+# Idempotent. Doesn't overwrite when both are already set.
+_vyomi_mirror_env() {
+  local k v alias
+  while IFS='=' read -r k v; do
+    case "$k" in
+      CLOUDLEARN_*)  alias="VYOMI_${k#CLOUDLEARN_}" ;;
+      CLOUD_LEARN_*) alias="VYOMI_${k#CLOUD_LEARN_}" ;;
+      VYOMI_*)       alias="CLOUDLEARN_${k#VYOMI_}" ;;
+      *) continue ;;
+    esac
+    # Only set if the alias isn't already exported
+    eval ": \${${alias}+set}" 2>/dev/null && continue
+    export "$alias=$v"
+  done < <(env)
+}
+_vyomi_mirror_env
+
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${CLOUD_LEARN_HOME:-$(cd "${SCRIPT_PATH}/.." && pwd)}"
 PROJECT_NAME="${CLOUD_LEARN_PROJECT_NAME:-cloud-learn}"

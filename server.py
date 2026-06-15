@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CloudLearn — Cloud Simulator (slim orchestrator)
+Vyomi — Cloud Simulator (slim orchestrator)
 
 This module wires together the extracted subsystems:
   - core.app_context   — shared state, constants, proxies, tenants, utilities
@@ -12,6 +12,13 @@ This module wires together the extracted subsystems:
 All business-logic helper functions that are still lazily imported by
 provider and route modules (``import server``) remain here.
 """
+
+# ── Env-var alias bridge (Phase 8 — vyomi rebrand) ────────────────────
+# Import this FIRST, before any other core/* import, so the runtime
+# mirror runs before any module reads os.environ via app_context, etc.
+# Side-effect of import: CLOUDLEARN_* ↔ VYOMI_* aliases populated in
+# os.environ. See core/env_aliases.py for the rationale.
+from core import env_aliases  # noqa: F401
 
 import base64
 import copy
