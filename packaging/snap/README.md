@@ -1,10 +1,10 @@
 # Snap packaging
 
-This directory contains the Snap metadata scaffold for CloudLearn.
+This directory contains the Snap metadata scaffold for Vyomi.
 
 ## Intended flow
 
-1. Build or publish the CloudLearn source bundle.
+1. Build or publish the Vyomi source bundle.
 2. Use `packaging/snap/snapcraft.yaml` as the Snap definition.
 3. Package the launcher so `cloud-learn` starts in appliance mode by default.
 4. Install the snap on Linux with Snap support.

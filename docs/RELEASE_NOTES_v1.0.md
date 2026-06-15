@@ -1,4 +1,4 @@
-# CloudLearn v1.0.0 — Release Notes
+# Vyomi v1.0.0 — Release Notes
 
 **Released:** 2026-06-01
 **License:** MIT
@@ -6,7 +6,7 @@
 
 ## TL;DR
 
-CloudLearn v1.0 is the first general-availability release of the local-first multi-cloud simulator. It delivers cloud-faithful APIs across AWS, GCP, and Azure that work with the standard provider SDKs and CLIs — `boto3`, `aws-sdk-java`, `aws`, `google-cloud-*`, `gcloud`, `azure-sdk-for-*`, `az`, `terraform` — by overriding the endpoint URL. No custom client is required.
+Vyomi v1.0 is the first general-availability release of the local-first multi-cloud simulator. It delivers cloud-faithful APIs across AWS, GCP, and Azure that work with the standard provider SDKs and CLIs — `boto3`, `aws-sdk-java`, `aws`, `google-cloud-*`, `gcloud`, `azure-sdk-for-*`, `az`, `terraform` — by overriding the endpoint URL. No custom client is required.
 
 This release covers:
 
@@ -76,7 +76,7 @@ Each app has its own API-pass test (`api_pass_test.go` / `ApiPassTest.java`) tha
 
 ### 8 real backend integrations
 
-CloudLearn doesn't pretend — when fidelity matters, it routes to a real sidecar:
+Vyomi doesn't pretend — when fidelity matters, it routes to a real sidecar:
 
 | Backend | Services it powers |
 |---|---|
@@ -101,7 +101,7 @@ For Enterprise tier customers:
 - **Custom domain** — map your tenant to `cloud.acme.com` via `POST /api/runtime/custom-domain`; middleware resolves Host → tenant
 - **Per-tenant branding** — logo, colors, name override exposed as CSS at `/api/runtime/branding/{tenant}.css`
 - **Audit export sinks** — every `_record_usage` event is POSTed to your configured webhooks
-- **Cross-tenant RBAC** — grant viewer/operator/admin role to another tenant's resources, controlled via `X-CloudLearn-Acting-As-Tenant` header
+- **Cross-tenant RBAC** — grant viewer/operator/admin role to another tenant's resources, controlled via `X-Vyomi-Acting-As-Tenant` header
 
 ### Rate-limiting (per-tenant token bucket)
 
@@ -160,7 +160,7 @@ These are documented gaps, not bugs:
 
 1. **Observability** — No Prometheus `/metrics`, no structured JSON logging, no distributed tracing. Logs go to stdout. Mitigation: scrape `docker logs` for now; full observability lands in v1.1.
 
-2. **Single-instance only** — Running > 1 CloudLearn instance against the same volumes will produce race conditions on the in-memory cache. Multi-instance coordination is a v1.1+ design decision (likely via Redis session store). Documented in `docs/PRODUCTION_DEPLOYMENT.md`.
+2. **Single-instance only** — Running > 1 Vyomi instance against the same volumes will produce race conditions on the in-memory cache. Multi-instance coordination is a v1.1+ design decision (likely via Redis session store). Documented in `docs/PRODUCTION_DEPLOYMENT.md`.
 
 3. **Cedar auto-enforcement** — Cedar policies are evaluated when `cedar_engine.evaluate()` is called explicitly. Automatic per-call middleware enforcement is planned for v1.1.
 
@@ -184,7 +184,7 @@ docker compose down -v && docker compose up -d
 
 ## Acknowledgments
 
-CloudLearn v1.0 is built on a foundation of open-source projects:
+Vyomi v1.0 is built on a foundation of open-source projects:
 
 - **HashiCorp Vault**, **NATS**, **MinIO**, **Cedar** for the backend integrations
 - **CloudSim Plus** for the simulation backbone

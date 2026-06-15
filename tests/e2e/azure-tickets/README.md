@@ -1,7 +1,7 @@
-# azure-tickets — Azure reference app for CloudLearn
+# azure-tickets — Azure reference app for Vyomi
 
 Go + chi web app that exercises **7 Azure services** through the real
-`azure-sdk-for-go` SDK, all pointed at the CloudLearn simulator endpoint.
+`azure-sdk-for-go` SDK, all pointed at the Vyomi simulator endpoint.
 Symmetric to `tests/e2e/java-orders` (AWS) and `tests/e2e/go-inventory` (GCP).
 
 ## Services exercised

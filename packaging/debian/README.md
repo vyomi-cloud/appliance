@@ -25,7 +25,7 @@ cloud-learn up
 ## Direct .deb install (no repo)
 
 ```bash
-wget https://github.com/sudhirkumarganti/cloud-learn/releases/download/v1.0.0/cloud-learn_1.0.0_all.deb
+wget https://github.com/vyomi-cloud/appliance/releases/download/v1.0.0/cloud-learn_1.0.0_all.deb
 sudo dpkg -i cloud-learn_1.0.0_all.deb
 sudo apt-get install -f   # pulls in `multipass` etc.
 ```

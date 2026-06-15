@@ -1,6 +1,6 @@
-# CloudLearn Provider Gap Matrix
+# Vyomi Provider Gap Matrix
 
-This matrix is the current parity backlog for CloudLearn. It is aligned to official provider documentation so implementation work can be checked against the vendor API, utility, SDK, and console references.
+This matrix is the current parity backlog for Vyomi. It is aligned to official provider documentation so implementation work can be checked against the vendor API, utility, SDK, and console references.
 
 ## Official Reference Set
 

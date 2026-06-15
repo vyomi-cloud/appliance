@@ -1,4 +1,4 @@
-# CloudLearn Component Diagram
+# Vyomi Component Diagram
 
 Paste this into Mermaid Live:
 

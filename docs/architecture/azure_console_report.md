@@ -209,7 +209,7 @@ Per-service sub-navs differ (Storage has "Containers", "File shares", "Access ke
 | **Cosmos SDK** full protocol (resource tokens, partition keys, RU consumption) | large | `azure-cosmos` SDK works end-to-end against the sim |
 | **Service Bus AMQP** via official emulator | large (+ disk for MS SQL Edge) | `azure-messaging-servicebus` SDK works |
 | **Azure CLI** conformance harness | medium | `az` smoke test in `tests/conformance/azure-cli/` |
-| **Per-tenant SDK conformance** | small | Re-run Go/Java harnesses with `X-CloudLearn-Tenant` header set; verify isolation |
+| **Per-tenant SDK conformance** | small | Re-run Go/Java harnesses with `X-Vyomi-Tenant` header set; verify isolation |
 | **Terraform `hashicorp/azurerm`** round-trip gate | medium | Mirror the GCP terraform-gate |
 | **Cloud Shell** real terminal in console (xterm.js + WebSocket to container) | medium | Click Cloud Shell icon → working bash in active VM |
 | **In-console tenant switcher chip** | small | Top-bar dropdown like the SPA's TenantBar |

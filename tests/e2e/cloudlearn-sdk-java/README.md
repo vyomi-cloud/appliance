@@ -1,6 +1,6 @@
 # cloudlearn-tier-sdk-java
 
-Thin Java client for the CloudLearn simulator's tier API. Wraps `/api/license/*` and `/api/runtime/tier`, parses the structured 403 bodies into typed `TierLimitException`s, and provides a `withFallback()` helper for treating tier denials as soft enhancements rather than hard failures.
+Thin Java client for the Vyomi simulator's tier API. Wraps `/api/license/*` and `/api/runtime/tier`, parses the structured 403 bodies into typed `TierLimitException`s, and provides a `withFallback()` helper for treating tier denials as soft enhancements rather than hard failures.
 
 ## Install
 

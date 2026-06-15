@@ -1,4 +1,4 @@
-# CloudLearn — Fidelity Master Plan (AWS / GCP / Azure)
+# Vyomi — Fidelity Master Plan (AWS / GCP / Azure)
 
 Status: living document. Owner: platform. Created 2026-05-25.
 

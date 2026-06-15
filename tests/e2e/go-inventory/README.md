@@ -1,6 +1,6 @@
 # go-inventory
 
-Real Go web app (chi router + pgx + google-cloud-go SDKs) that exercises the **full GCP surface** of the CloudLearn simulator end-to-end.
+Real Go web app (chi router + pgx + google-cloud-go SDKs) that exercises the **full GCP surface** of the Vyomi simulator end-to-end.
 
 ## What it touches
 

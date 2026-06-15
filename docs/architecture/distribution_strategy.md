@@ -1,8 +1,8 @@
-# CloudLearn Distribution Strategy
+# Vyomi Distribution Strategy
 
 ## Goal
 
-Make CloudLearn easy to install and operate on macOS, Linux, and Windows using one of three familiar patterns:
+Make Vyomi easy to install and operate on macOS, Linux, and Windows using one of three familiar patterns:
 - package managers,
 - `docker compose`,
 - or OS-native installers.
@@ -15,7 +15,7 @@ The cleanest operational model is:
 
 1. The host installs a small launcher and Multipass.
 2. The launcher creates one durable Multipass VM appliance.
-3. The VM runs the full CloudLearn runtime.
+3. The VM runs the full Vyomi runtime.
 4. The host only starts, stops, and updates the appliance.
 
 This gives us:
@@ -25,7 +25,7 @@ This gives us:
 
 ## Single Launcher
 
-CloudLearn now has one launcher path:
+Vyomi now has one launcher path:
 
 ```bash
 bash ./scripts/cloud-learn up
@@ -37,7 +37,7 @@ or on Windows:
 .\scripts\cloud-learn.ps1 up
 ```
 
-The launcher starts one durable Multipass VM appliance and then starts the full CloudLearn runtime inside that VM from `docker-compose.appliance.yml`.
+The launcher starts one durable Multipass VM appliance and then starts the full Vyomi runtime inside that VM from `docker-compose.appliance.yml`.
 
 ## Packaging
 

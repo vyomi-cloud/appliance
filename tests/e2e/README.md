@@ -1,6 +1,6 @@
 # tests/e2e — reference web apps + two-pass validation
 
-End-to-end tests for the CloudLearn simulator's reference web apps. Each app
+End-to-end tests for the Vyomi simulator's reference web apps. Each app
 is a **real production-shape application** that exercises every relevant
 backend on its target cloud. Each app is validated through **two passes** so
 both the console and the API surfaces are proven end-to-end.

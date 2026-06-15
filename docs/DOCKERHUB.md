@@ -1,4 +1,4 @@
-# gansudkum/cloud-learn
+# vyomi/appliance
 
 **Local multi-cloud simulator. Real SDKs, real CLIs, real backends — no network required.**
 
@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/cloudlearn/cloud-learn/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-readme-orange)](https://github.com/cloudlearn/cloud-learn/blob/main/README.md)
 
-CloudLearn gives you AWS, GCP, and Azure-like experiences on your laptop, with cloud-faithful APIs that work with the standard provider SDKs — `boto3`, `aws-sdk-java`, `google-cloud-*`, `azure-sdk-for-*` — and CLIs — `aws`, `gcloud`, `gsutil`, `bq`, `az`, `terraform`. Override the endpoint, point at `http://localhost:9000`, your existing code runs.
+Vyomi gives you AWS, GCP, and Azure-like experiences on your laptop, with cloud-faithful APIs that work with the standard provider SDKs — `boto3`, `aws-sdk-java`, `google-cloud-*`, `azure-sdk-for-*` — and CLIs — `aws`, `gcloud`, `gsutil`, `bq`, `az`, `terraform`. Override the endpoint, point at `http://localhost:9000`, your existing code runs.
 
 ## Quick start
 
@@ -14,7 +14,7 @@ The simulator image is the FastAPI control plane. For a full local stack with th
 
 ### One-container quick try
 ```bash
-docker run --rm -p 9000:9000 gansudkum/cloud-learn:1.0.0
+docker run --rm -p 9000:9000 vyomi/appliance:1.0.0
 # Open http://localhost:9000/pricing
 ```
 
@@ -36,7 +36,7 @@ docker compose up -d
 | `edge` | latest `main` commit | every push to main |
 | `sha-<short>` | specific commit | every push to main |
 
-Use a pinned version (`gansudkum/cloud-learn:1.0.0`) in production. `latest` is OK for dev/CI.
+Use a pinned version (`vyomi/appliance:1.0.0`) in production. `latest` is OK for dev/CI.
 
 ## Architectures
 

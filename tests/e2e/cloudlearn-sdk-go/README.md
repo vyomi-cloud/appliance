@@ -1,6 +1,6 @@
 # cloudlearn-tier-sdk-go
 
-Thin Go client for the CloudLearn simulator's tier API. Same shape as the Java SDK (`cloudlearn-tier-sdk-java`). Wraps `/api/license/*` and `/api/runtime/tier`, parses structured 403/429 bodies into typed `*tier.LimitError`, and provides `WithFallback()` for treating tier denials as soft enhancements.
+Thin Go client for the Vyomi simulator's tier API. Same shape as the Java SDK (`cloudlearn-tier-sdk-java`). Wraps `/api/license/*` and `/api/runtime/tier`, parses structured 403/429 bodies into typed `*tier.LimitError`, and provides `WithFallback()` for treating tier denials as soft enhancements.
 
 ## Install
 

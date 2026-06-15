@@ -1,4 +1,4 @@
-# GCP Parity Gap Analysis — CloudLearn Simulator
+# GCP Parity Gap Analysis — Vyomi Simulator
 
 _Generated 2026-05-26. Scope: all GCP services, four dimensions — **Console**, **API (REST)**, **Java/Go SDK**, **Utilities (gcloud/gsutil + data-plane CLIs)**._
 

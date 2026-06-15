@@ -1,10 +1,10 @@
 # Homebrew packaging
 
-This directory contains the Homebrew formula scaffold for CloudLearn.
+This directory contains the Homebrew formula scaffold for Vyomi.
 
 ## Intended flow
 
-1. Publish a release tarball for CloudLearn.
+1. Publish a release tarball for Vyomi.
 2. Run `bash ./scripts/build-release.sh`.
 3. Run `bash ./scripts/update-homebrew-formula.sh <sha256>`.
 4. Update `Formula/cloud-learn.rb` with the release `url` and `sha256`.
@@ -30,7 +30,7 @@ The installed launcher expects:
 - Multipass
 
 The Homebrew package defaults to appliance mode. The launcher brings up the
-local Multipass VM and then starts the full CloudLearn stack inside that VM.
+local Multipass VM and then starts the full Vyomi stack inside that VM.
 The source checkout also uses the same appliance launcher:
 
 ```bash

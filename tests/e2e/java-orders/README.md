@@ -1,6 +1,6 @@
 # java-orders
 
-Real Spring Boot 3 / Java 17 web app that exercises the **full AWS surface** of the CloudLearn simulator end-to-end.
+Real Spring Boot 3 / Java 17 web app that exercises the **full AWS surface** of the Vyomi simulator end-to-end.
 
 ## What it touches
 
