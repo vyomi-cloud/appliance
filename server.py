@@ -68,7 +68,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.routing import APIRouter
 from pydantic import BaseModel
 
-from core.cloudlearn_platform import CloudLearnPlatform
+from core.vyomi_platform import VyomiPlatform as CloudLearnPlatform
 from core.pack_catalog import default_packs as load_default_packs
 from core.pack_catalog import fragment_for_pack
 from core.pack_catalog import PROVIDER_PACK_GROUPS
