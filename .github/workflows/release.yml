@@ -210,9 +210,13 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.build.outputs.version }}
-          name: CloudLearn v${{ needs.build.outputs.version }}
+          name: Vyomi v${{ needs.build.outputs.version }}
           body: ${{ steps.changelog.outputs.body }}
           files: dist/*
+          # Mark *-rc*, *-beta*, *-alpha* tags as prereleases so they
+          # don't update :latest or appear as the "Latest" release on
+          # the GitHub repo home page.
+          prerelease: ${{ contains(needs.build.outputs.version, '-rc') || contains(needs.build.outputs.version, '-beta') || contains(needs.build.outputs.version, '-alpha') }}
 
   # ── Brew tap auto-bump ──────────────────────────────────────────────────
   # Bumps cloud-learn.rb in the vyomi-cloud/homebrew-tap repo with the
