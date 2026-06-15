@@ -35,12 +35,22 @@ cp -r core providers packs static scripts \
       docker-compose.yml docker-compose.appliance.yml .env.example \
       "$STAGE/usr/lib/cloud-learn/"
 
-# Launcher wrapper
-cat > "$STAGE/usr/bin/cloud-learn" <<'EOF'
+# Primary launcher: /usr/bin/vyomi
+cat > "$STAGE/usr/bin/vyomi" <<'EOF'
 #!/usr/bin/env bash
 export CLOUD_LEARN_HOME="${CLOUD_LEARN_HOME:-/usr/lib/cloud-learn}"
 export CLOUDLEARN_DISTRIBUTION_MODE="${CLOUDLEARN_DISTRIBUTION_MODE:-appliance}"
 exec bash "$CLOUD_LEARN_HOME/scripts/cloud-learn" "$@"
+EOF
+chmod 0755 "$STAGE/usr/bin/vyomi"
+
+# Legacy shim: /usr/bin/cloud-learn → /usr/bin/vyomi with deprecation warning
+cat > "$STAGE/usr/bin/cloud-learn" <<'EOF'
+#!/usr/bin/env bash
+if [ -z "$VYOMI_NO_DEPRECATION_WARN" ] && [ -t 2 ]; then
+  printf '\033[33mNote:\033[0m \033[2m`cloud-learn` is deprecated. Use `vyomi` instead. Suppress: VYOMI_NO_DEPRECATION_WARN=1\033[0m\n' >&2
+fi
+exec /usr/bin/vyomi "$@"
 EOF
 chmod 0755 "$STAGE/usr/bin/cloud-learn"
 

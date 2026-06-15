@@ -8,6 +8,16 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed — BREAKING (v2.0.0)
 
+- **CLI binary renamed `cloud-learn` → `vyomi`** with a `cloud-learn` deprecation shim. The shim prints a one-line yellow warning to stderr on every interactive invocation (suppressible via `VYOMI_NO_DEPRECATION_WARN=1`) and then `exec`s `vyomi` with the same args. End users on every install path see the binary rename simultaneously:
+  - **Brew**: `bin/vyomi` (primary) and `bin/cloud-learn` (shim) both shipped with the formula
+  - **DEB/RPM**: `/usr/bin/vyomi` (primary) and `/usr/bin/cloud-learn` (shim) installed by the package
+  - **Scoop**: `scoop install vyomi` is the new canonical; `scoop install cloud-learn` keeps working via a separate deprecation manifest that prints the rename notice on install
+  - **Docker Compose**: unaffected — the container runs `python server.py` directly
+- Bash completion now registers against both `vyomi` and `cloud-learn` so tab-complete works on legacy invocations.
+- Shim removal slated for **v3.0** — users have at least one major version cycle to migrate.
+
+### Changed — BREAKING (v2.0.0)
+
 - **Brew formula renamed `cloud-learn.rb` → `vyomi.rb`**. New canonical install: `brew install vyomi-cloud/tap/vyomi`. Back-compat: `Aliases/cloud-learn → Formula/vyomi.rb` symlink in the tap, so `brew install cloud-learn` continues to work indefinitely (both resolve to the same package). Existing `brew upgrade cloud-learn` users pick up new releases without any action. Formula class renamed `CloudLearn → Vyomi`, license metadata `MIT → :cannot_represent` (BSL 1.1 isn't in SPDX simple form), homepage now `https://vyomi.cloud`.
 
 ### Changed — BREAKING (v2.0.0)
