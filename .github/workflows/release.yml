@@ -136,11 +136,21 @@ jobs:
                 server.py requirements.txt VERSION Dockerfile \
                 docker-compose.yml docker-compose.appliance.yml .env.example install.sh \
                 "$STAGE/usr/lib/cloud-learn/"
-          cat > "$STAGE/usr/bin/cloud-learn" <<'EOF'
+          # Primary launcher: /usr/bin/vyomi
+          cat > "$STAGE/usr/bin/vyomi" <<'EOF'
           #!/usr/bin/env bash
           export CLOUD_LEARN_HOME="${CLOUD_LEARN_HOME:-/usr/lib/cloud-learn}"
           export CLOUDLEARN_DISTRIBUTION_MODE="${CLOUDLEARN_DISTRIBUTION_MODE:-appliance}"
           exec bash "$CLOUD_LEARN_HOME/scripts/cloud-learn" "$@"
+          EOF
+          chmod 0755 "$STAGE/usr/bin/vyomi"
+          # Legacy shim: /usr/bin/cloud-learn → /usr/bin/vyomi (deprecation warning)
+          cat > "$STAGE/usr/bin/cloud-learn" <<'EOF'
+          #!/usr/bin/env bash
+          if [ -z "$VYOMI_NO_DEPRECATION_WARN" ] && [ -t 2 ]; then
+            printf '\033[33mNote:\033[0m \033[2m`cloud-learn` is deprecated. Use `vyomi` instead. Suppress: VYOMI_NO_DEPRECATION_WARN=1\033[0m\n' >&2
+          fi
+          exec /usr/bin/vyomi "$@"
           EOF
           chmod 0755 "$STAGE/usr/bin/cloud-learn"
           cp README.md LICENSE CHANGELOG.md "$STAGE/usr/share/doc/cloud-learn/"
@@ -314,30 +324,35 @@ jobs:
         with:
           path: cloud-learn
 
-      - name: Bump manifest
+      - name: Bump both manifests (vyomi primary + cloud-learn deprecation shim)
         run: |
           VER="${{ needs.build.outputs.version }}"
           SHA="${{ needs.build.outputs.tarball_sha256 }}"
-          SRC=cloud-learn/packaging/scoop/cloud-learn.json
-          DST=scoop-bucket/bucket/cloud-learn.json
           mkdir -p scoop-bucket/bucket
-          # Substitute version + hash + url into the template
-          python3 - "$SRC" "$DST" "$VER" "$SHA" "${{ env.GH_OWNER }}" "${{ env.GH_REPO }}" <<'PY'
-          import json, sys
-          src, dst, ver, sha, owner, repo = sys.argv[1:7]
-          with open(src) as f:
-              m = json.load(f)
-          m["version"] = ver
-          m["url"] = f"https://github.com/{owner}/{repo}/releases/download/v{ver}/cloud-learn-{ver}.tar.gz"
-          m["hash"] = sha
-          m["extract_dir"] = f"cloud-learn-{ver}"
-          with open(dst, "w") as f:
-              json.dump(m, f, indent=2)
-              f.write("\n")
+          # Substitute version/hash/url into BOTH manifests so `scoop install vyomi`
+          # and `scoop install cloud-learn` (deprecated, will be removed in v3.0)
+          # both stay valid until the cloud-learn manifest is retired.
+          python3 - "$VER" "$SHA" "${{ env.GH_OWNER }}" "${{ env.GH_REPO }}" <<'PY'
+          import json, sys, pathlib
+          ver, sha, owner, repo = sys.argv[1:5]
+          url = f"https://github.com/{owner}/{repo}/releases/download/v{ver}/cloud-learn-{ver}.tar.gz"
+          for name in ("vyomi", "cloud-learn"):
+              src = pathlib.Path(f"cloud-learn/packaging/scoop/{name}.json")
+              dst = pathlib.Path(f"scoop-bucket/bucket/{name}.json")
+              with open(src) as f:
+                  m = json.load(f)
+              m["version"] = ver
+              m["url"] = url
+              m["hash"] = sha
+              m["extract_dir"] = f"cloud-learn-{ver}"
+              with open(dst, "w") as f:
+                  json.dump(m, f, indent=2)
+                  f.write("\n")
+              print(f"  bumped bucket/{name}.json → {ver}")
           PY
           cd scoop-bucket
           git config user.email "bot@vyomi.cloud"
           git config user.name  "Vyomi Release Bot"
-          git add bucket/cloud-learn.json
+          git add bucket/vyomi.json bucket/cloud-learn.json
           git commit -m "vyomi ${VER}"
           git push

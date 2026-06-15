@@ -1,6 +1,6 @@
 {
   "version": "0.2.0",
-  "description": "[Deprecated] Local multi-cloud simulator (AWS/GCP/Azure) with real backends \u2014 full SDK + CLI parity for boto3, aws-cli, google-cloud-*, azure-sdk-*, Terraform. \u2014 install 'vyomi' instead. The 'cloud-learn' Scoop alias will be removed in v3.0.",
+  "description": "Local multi-cloud simulator (AWS/GCP/Azure) with real backends \u2014 full SDK + CLI parity for boto3, aws-cli, google-cloud-*, azure-sdk-*, Terraform.",
   "homepage": "https://vyomi.cloud",
   "license": "Business Source License 1.1",
   "url": "https://github.com/vyomi-cloud/appliance/releases/download/v0.2.0/cloud-learn-0.2.0.tar.gz",
@@ -12,15 +12,12 @@
   "bin": [
     [
       "scripts\\cloud-learn.ps1",
-      "cloud-learn"
+      "vyomi"
     ]
   ],
   "post_install": [
     "Write-Host ''",
-    "Write-Host 'Note: `cloud-learn` is deprecated. The new canonical install is `scoop install vyomi`.' -ForegroundColor Yellow",
-    "Write-Host '      Both packages install the same binary; the cloud-learn alias is slated for removal in v3.0.' -ForegroundColor Yellow",
-    "Write-Host ''",
-    "Write-Host '==> Run `cloud-learn up` to start the simulator (still works during transition).' -ForegroundColor Green",
+    "Write-Host '==> Vyomi installed. Run `vyomi up` to start the simulator.' -ForegroundColor Green",
     "Write-Host '==> Docs: https://vyomi.cloud/install' -ForegroundColor Cyan"
   ],
   "uninstaller": {

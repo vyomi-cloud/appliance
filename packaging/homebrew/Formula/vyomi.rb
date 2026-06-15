@@ -30,24 +30,42 @@ class Vyomi < Formula
     # syncs in as /workspace/cloud-learn.
     libexec.install Dir["*"]
 
-    # Wrapper that sets CLOUD_LEARN_HOME and shells into the bundled launcher
-    (bin/"cloud-learn").write <<~EOS
+    # ── Primary binary: vyomi ──────────────────────────────────────────────
+    # The actual command users should type going forward. Sets the launcher
+    # environment and shells into the bundled bash launcher.
+    (bin/"vyomi").write <<~EOS
       #!/usr/bin/env bash
       export CLOUD_LEARN_HOME="#{libexec}"
       export CLOUDLEARN_DISTRIBUTION_MODE="appliance"
       exec bash "#{libexec}/scripts/cloud-learn" "$@"
     EOS
+    chmod 0555, bin/"vyomi"
+
+    # ── Legacy shim: cloud-learn → vyomi with deprecation warning ──────────
+    # Existing muscle memory keeps working. The warning is brief (one line)
+    # and printed on every invocation by default, but can be suppressed via
+    # VYOMI_NO_DEPRECATION_WARN=1 for scripts that hit the shim often.
+    # Slated for removal in v3.0.
+    (bin/"cloud-learn").write <<~EOS
+      #!/usr/bin/env bash
+      if [ -z "$VYOMI_NO_DEPRECATION_WARN" ] && [ -t 2 ]; then
+        printf '\033[33mNote:\033[0m \033[2m`cloud-learn` is deprecated. Use `vyomi` instead. Suppress: VYOMI_NO_DEPRECATION_WARN=1\033[0m\n' >&2
+      fi
+      exec "#{bin}/vyomi" "$@"
+    EOS
     chmod 0555, bin/"cloud-learn"
 
-    # Bash + zsh completions (lightweight; just lists the subcommands)
-    (bash_completion/"cloud-learn").write <<~EOS
-      _cloud_learn() {
+    # ── Bash completion (for both invocations) ─────────────────────────────
+    completion = <<~EOS
+      _vyomi() {
         local cur="${COMP_WORDS[COMP_CWORD]}"
         local cmds="up down stop restart status doctor help"
         COMPREPLY=( $(compgen -W "$cmds" -- "$cur") )
       }
-      complete -F _cloud_learn cloud-learn
+      complete -F _vyomi vyomi
+      complete -F _vyomi cloud-learn
     EOS
+    (bash_completion/"vyomi").write completion
   end
 
   def caveats
@@ -73,7 +91,11 @@ class Vyomi < Formula
   end
 
   test do
-    # `cloud-learn help` runs without needing Multipass or Docker present.
+    # Both invocations should work — vyomi as primary, cloud-learn as the
+    # back-compat shim. `help` runs without Multipass / Docker present.
+    assert_match "vyomi", shell_output("#{bin}/vyomi help 2>&1", 0)
+    # Shim should also work but prints the deprecation warning to stderr
+    # (which our shell_output capture includes when 2>&1).
     assert_match "cloud-learn", shell_output("#{bin}/cloud-learn help 2>&1", 0)
   end
 end
