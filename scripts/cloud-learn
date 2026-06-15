@@ -63,7 +63,19 @@ RUNTIME_CONTEXT="${CLOUD_LEARN_RUNTIME_CONTEXT:-outer}"
 COMPOSE_FILE="${CLOUD_LEARN_COMPOSE_FILE:-${ROOT_DIR}/docker-compose.appliance.yml}"
 PARENT_OS="${CLOUD_LEARN_PARENT_OS:-$(uname -s)}"
 DISTRIBUTION_MODE="appliance"
-APPLIANCE_NAME="${CLOUD_LEARN_APPLIANCE_NAME:-cloudlearn-appliance}"
+# Multipass VM name — default `vyomi-appliance` for fresh installs.
+# For existing installs with a `cloudlearn-appliance` VM (created
+# before v2.0.0), keep using the old name to avoid destroying state.
+# CLOUD_LEARN_APPLIANCE_NAME and VYOMI_APPLIANCE_NAME env overrides
+# both honored (the env-alias mirror in Phase 8 keeps them in lockstep).
+_default_appliance_name="vyomi-appliance"
+if command -v multipass >/dev/null 2>&1; then
+  if multipass info cloudlearn-appliance >/dev/null 2>&1 \
+     && ! multipass info vyomi-appliance >/dev/null 2>&1; then
+    _default_appliance_name="cloudlearn-appliance"
+  fi
+fi
+APPLIANCE_NAME="${VYOMI_APPLIANCE_NAME:-${CLOUD_LEARN_APPLIANCE_NAME:-${_default_appliance_name}}}"
 # APPLIANCE_DIR lives under the user's HOME by default — not the launcher's
 # ROOT_DIR — so that when cloud-learn is installed via brew (ROOT_DIR is
 # /opt/homebrew/Cellar/cloud-learn/<v>/libexec) the bootstrap artifacts
