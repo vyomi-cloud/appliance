@@ -8,6 +8,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed — BREAKING (v2.0.0)
 
+- **HTTP headers renamed `X-CloudLearn-*` → `X-Vyomi-*`** with full back-compat. A new ASGI middleware (`core/header_aliases.HeaderAliasMiddleware`) transparently bridges both names on every request and response: clients can send either spelling, the server reflects both back on responses. SPA + portal-shipped SDKs now send `X-Vyomi-*` exclusively; legacy `X-CloudLearn-*` consumers (older SPA cached in browsers, third-party scripts) keep working. Affected headers: Tenant, Tier, Tier-Denied, Principal, Acting-As-Tenant, XTRBAC-Denied, Cedar-Denied, SSO-Denied, Admin-Key, Bridge-Token, CI-Secret, Notif-Secret, Sink-Secret, Host-OS. Removal slated for v3.0.
 - **CLI binary renamed `cloud-learn` → `vyomi`** with a `cloud-learn` deprecation shim. The shim prints a one-line yellow warning to stderr on every interactive invocation (suppressible via `VYOMI_NO_DEPRECATION_WARN=1`) and then `exec`s `vyomi` with the same args. End users on every install path see the binary rename simultaneously:
   - **Brew**: `bin/vyomi` (primary) and `bin/cloud-learn` (shim) both shipped with the formula
   - **DEB/RPM**: `/usr/bin/vyomi` (primary) and `/usr/bin/cloud-learn` (shim) installed by the package
