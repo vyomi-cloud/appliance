@@ -20,9 +20,9 @@ license: MIT
 grade: stable
 confinement: classic   # needs to control Multipass + docker on the host
 contact: support@cloudlearn.io
-issues: https://github.com/sudhirkumarganti/cloud-learn/issues
-source-code: https://github.com/sudhirkumarganti/cloud-learn
-website: https://github.com/sudhirkumarganti/cloud-learn
+issues: https://github.com/vyomi-cloud/appliance/issues
+source-code: https://github.com/vyomi-cloud/appliance
+website: https://github.com/vyomi-cloud/appliance
 title: CloudLearn
 
 # snapcraft 8+ with base: core24 uses 'platforms', not 'architectures'.
@@ -67,7 +67,7 @@ parts:
     override-pull: |
       VER="${CL_VERSION}"
       echo "Fetching cloud-learn ${VER} source tarball..."
-      curl -fsSL "https://github.com/sudhirkumarganti/cloud-learn/releases/download/v${VER}/cloud-learn-${VER}.tar.gz" \
+      curl -fsSL "https://github.com/vyomi-cloud/appliance/releases/download/v${VER}/cloud-learn-${VER}.tar.gz" \
         | tar xz --strip-components=1
       craftctl set version="${VER}"
     override-build: |

@@ -10,7 +10,7 @@
 #   5. Polls until /healthz responds, then opens the browser
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/sudhirkumarganti/cloud-learn/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/vyomi-cloud/appliance/main/install.sh | bash
 #
 #   # With all 10 services eager (instead of lazy):
 #   curl -fsSL ... | bash -s -- --full
@@ -42,7 +42,7 @@ step() { printf "\n${B}${M}▶${R} ${B}%s${R}\n" "$*"; }
 PROFILE=""
 DRY_RUN="0"
 IMAGE_TAG=""
-REPO_RAW="https://raw.githubusercontent.com/sudhirkumarganti/cloud-learn/main"
+REPO_RAW="https://raw.githubusercontent.com/vyomi-cloud/appliance/main"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -118,8 +118,8 @@ else
 
 # Image tag — leave blank to use the compose default (:latest).
 # Pin a version for production:
-#   CLOUDLEARN_SIMULATOR_IMAGE=gansudkum/cloud-learn:0.1.0
-${IMAGE_TAG:+CLOUDLEARN_SIMULATOR_IMAGE=gansudkum/cloud-learn:${IMAGE_TAG#v}}
+#   CLOUDLEARN_SIMULATOR_IMAGE=vyomi/appliance:0.1.0
+${IMAGE_TAG:+CLOUDLEARN_SIMULATOR_IMAGE=vyomi/appliance:${IMAGE_TAG#v}}
 
 # Host port for the simulator UI.
 CLOUDLEARN_SIMULATOR_PORT=9000
