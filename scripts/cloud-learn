@@ -2184,12 +2184,23 @@ outer_run() {
       ;;
     restart)
       ensure_prereqs
+      # Kill any old host-side socat tunnel pointing at the (about-to-
+      # change) VM IP — we'll start a fresh one after the IP is stable.
+      vyomi_localhost_bridge_down
       if command -v multipass >/dev/null 2>&1; then
         multipass restart "$APPLIANCE_NAME" >/dev/null 2>&1 || true
       fi
       appliance_start_runtime_bridge
       appliance_exec_launcher
+      # Push TLS cert + Caddyfile back in (VM bind mounts persist, but
+      # this is cheap and idempotent — covers cert rotation since last up).
+      push_tls_into_vm
       appliance_health_check
+      ensure_vyomi_mdns_active
+      # v2.0.1: restart now ends with the same URL banner as up so the
+      # user always sees where to go (and the browser auto-opens). Also
+      # restarts the localhost socat bridge against the new VM IP.
+      print_url_banner
       ;;
     status|ps)
       ensure_prereqs
