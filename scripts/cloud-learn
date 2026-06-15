@@ -1170,25 +1170,35 @@ _VYOMI_MDNS_HOST="vyomi.local"
 # before v1.2.3 (when avahi-daemon was added to cloud-init). Fast no-op
 # when avahi is already active. Idempotent — safe to call on every
 # `cloud-learn up`.
+_bounded_multipass_exec() {
+  # Run `multipass exec ... -- bash -lc "<cmd>"` with a wall-clock cap.
+  # Prints the command's stdout. ALWAYS exits 0 (we don't want ERR trap
+  # firing on a timeout). Caller checks the printed text to decide.
+  local timeout_s="$1" cmd="$2"
+  # macOS doesn't ship `timeout`; gnu coreutils provides `gtimeout`.
+  local timeout_bin=""
+  if command -v timeout >/dev/null 2>&1; then timeout_bin="timeout"
+  elif command -v gtimeout >/dev/null 2>&1; then timeout_bin="gtimeout"
+  fi
+  if [ -n "$timeout_bin" ]; then
+    "$timeout_bin" "$timeout_s" multipass exec "$APPLIANCE_NAME" -- bash -lc "$cmd" 2>/dev/null || true
+  else
+    # No `timeout` available — use a plain run. Multipass exec itself
+    # has internal timeouts so this won't hang forever; just slower
+    # than the bounded path.
+    multipass exec "$APPLIANCE_NAME" -- bash -lc "$cmd" 2>/dev/null || true
+  fi
+  return 0
+}
+
 ensure_vyomi_mdns_active() {
   # Quick exit when avahi-daemon is already running and the hostname is
-  # already 'vyomi'. Bounded `multipass exec` (10s wall-clock cap via
-  # background subshell) so it can never hang the launcher.
-  #
-  # NOTE: the inner `wait $pid` is the LAST statement in the command
-  # substitution — its exit status becomes the substitution's exit
-  # status. When the 10s timeout kills $pid, wait returns non-zero,
-  # which (under set -e + ERR trap) fires the on_err handler and prints
-  # the FAIL banner even though we recover and keep going. Suffix
-  # `; true` to neutralise it — we only care about $quick's contents.
+  # already 'vyomi'. Bounded so it never hangs the launcher AND never
+  # propagates a non-zero up to the outer ERR trap (old subshell+wait
+  # implementation was firing a false-positive FAIL banner; see
+  # v2.0.2 changelog).
   local quick
-  quick="$(
-    ( multipass exec "$APPLIANCE_NAME" -- bash -lc \
-        'systemctl is-active avahi-daemon 2>/dev/null; hostname' 2>/dev/null ) &
-    local pid=$!
-    ( sleep 10 && kill -9 $pid 2>/dev/null ) &
-    wait $pid 2>/dev/null; true
-  )"
+  quick="$(_bounded_multipass_exec 10 'systemctl is-active avahi-daemon 2>/dev/null; hostname')"
   case "$quick" in
     *active*$'\n'vyomi*)
       verbose "mdns: avahi already running + hostname=vyomi — no fixup needed"
@@ -1197,17 +1207,15 @@ ensure_vyomi_mdns_active() {
   esac
   verbose "mdns: legacy VM (no avahi or wrong hostname) — running fixup"
   # Match the cloud-init runcmd exactly so behaviour is identical on a
-  # fresh launch vs an upgrade. `|| true` so this step never aborts up.
-  ( multipass exec "$APPLIANCE_NAME" -- sudo bash -lc "
+  # fresh launch vs an upgrade. All inner cmds `|| true` so this step
+  # never aborts up.
+  _bounded_multipass_exec 60 'sudo bash -lc "
       DEBIAN_FRONTEND=noninteractive apt-get install -y avahi-daemon libnss-mdns >/dev/null 2>&1 || true
       hostnamectl set-hostname vyomi || true
-      sed -i 's/^hosts:.*/hosts: files mdns4_minimal [NOTFOUND=return] dns mdns4/' /etc/nsswitch.conf || true
+      sed -i \"s/^hosts:.*/hosts: files mdns4_minimal [NOTFOUND=return] dns mdns4/\" /etc/nsswitch.conf || true
       systemctl enable --now avahi-daemon >/dev/null 2>&1 || true
-    " 2>/dev/null
-  ) &
-  local pid=$!
-  ( sleep 60 && kill -9 $pid 2>/dev/null ) &
-  wait $pid 2>/dev/null || true
+    "' >/dev/null
+  return 0
 }
 
 # ── localhost bridge (v2.0.1 — "Zero-config first launch") ──────────────
@@ -1263,8 +1271,19 @@ vyomi_localhost_bridge_up() {
     echo "$pid" > "$pid_file"
     verbose "bridge: 127.0.0.1:${port} → ${vm_ip}:${port} (pid=${pid})"
   done
-  # Give socat a beat to bind before the URL probe runs.
-  sleep 0.3 2>/dev/null || sleep 1
+  # Actively wait for socat to bind by curl-probing the upstream that
+  # the bridge fronts. 0.3s sleep was too short on some macs (probe ran
+  # before the listener accepted) — the banner then defaulted to the
+  # vyomi.local fallback. 10 × 0.5s = 5s upper bound.
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -fsS -o /dev/null -m 1 "http://127.0.0.1:9000/healthz" 2>/dev/null; then
+      verbose "bridge: confirmed bound on 127.0.0.1:9000 (iteration ${i})"
+      return 0
+    fi
+    sleep 0.5 2>/dev/null || sleep 1
+  done
+  verbose "bridge: socat didn't bind within 5s — banner will fall back"
   return 0
 }
 
