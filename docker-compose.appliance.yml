@@ -20,10 +20,10 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - cloudlearn-sql-pg:/var/lib/postgresql/data
+      - vyomi-sql-pg:/var/lib/postgresql/data
     restart: unless-stopped
 
-  cloudlearn-sql-mysql:
+  vyomi-sql-mysql:
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: cloudlearn
@@ -31,16 +31,16 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - cloudlearn-sql-mysql:/var/lib/mysql
+      - vyomi-sql-mysql:/var/lib/mysql
     restart: unless-stopped
 
-  cloudlearn-gcs:
+  vyomi-gcs:
     image: fsouza/fake-gcs-server:latest
     command: ["-scheme", "http", "-port", "4443", "-backend", "filesystem", "-data", "/data"]
     ports:
       - "4443:4443"
     volumes:
-      - cloudlearn-gcs:/data
+      - vyomi-gcs:/data
     restart: unless-stopped
 
   # P1: official Google emulators — let real gRPC client libraries (Pub/Sub,
@@ -79,17 +79,17 @@ services:
       - "8200:8200"
     restart: unless-stopped
 
-  cloudlearn-nats:
+  vyomi-nats:
     image: nats:2-alpine
     command: ["-js", "-sd", "/data", "-m", "8222"]
     ports:
       - "4222:4222"
       - "8222:8222"
     volumes:
-      - cloudlearn-nats:/data
+      - vyomi-nats:/data
     restart: unless-stopped
 
-  cloudlearn-minio:
+  vyomi-minio:
     image: minio/minio:latest
     command: ["server", "/data", "--address", ":9000", "--console-address", ":9001"]
     environment:
@@ -99,10 +99,10 @@ services:
       - "9100:9000"
       - "9101:9001"
     volumes:
-      - cloudlearn-minio:/data
+      - vyomi-minio:/data
     restart: unless-stopped
 
-  cloudlearn-dynamodb:
+  vyomi-dynamodb:
     image: amazon/dynamodb-local:latest
     command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
     working_dir: /home/dynamodblocal
@@ -110,7 +110,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - cloudlearn-dynamodb:/data
+      - vyomi-dynamodb:/data
     restart: unless-stopped
 
   cloudlearn-elasticmq:
@@ -128,14 +128,14 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       - cloudlearn-sql-postgres
-      - cloudlearn-sql-mysql
-      - cloudlearn-gcs
+      - vyomi-sql-mysql
+      - vyomi-gcs
       - cloudlearn-pubsub
       - cloudlearn-firestore
       - cloudlearn-vault
-      - cloudlearn-nats
-      - cloudlearn-minio
-      - cloudlearn-dynamodb
+      - vyomi-nats
+      - vyomi-minio
+      - vyomi-dynamodb
       - cloudlearn-elasticmq
     environment:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
@@ -150,12 +150,12 @@ services:
       CLOUDLEARN_SQL_PG_PORT: "5432"
       CLOUDLEARN_SQL_PG_ADMIN_USER: postgres
       CLOUDLEARN_SQL_PG_ADMIN_PASSWORD: cloudlearn
-      CLOUDLEARN_SQL_MYSQL_HOST: cloudlearn-sql-mysql
+      CLOUDLEARN_SQL_MYSQL_HOST: vyomi-sql-mysql
       CLOUDLEARN_SQL_MYSQL_PORT: "3306"
       CLOUDLEARN_SQL_MYSQL_ADMIN_USER: root
       CLOUDLEARN_SQL_MYSQL_ADMIN_PASSWORD: cloudlearn
       # Real Cloud Storage data plane (P1b): object bytes live in fake-gcs-server.
-      CLOUDLEARN_GCS_URL: http://cloudlearn-gcs:4443
+      CLOUDLEARN_GCS_URL: http://vyomi-gcs:4443
       # P1: official Pub/Sub + Firestore emulators back the gRPC data planes.
       PUBSUB_EMULATOR_HOST: cloudlearn-pubsub:8085
       FIRESTORE_EMULATOR_HOST: cloudlearn-firestore:8080
@@ -164,14 +164,14 @@ services:
       # MVP P0 backends — see compose service block above.
       CLOUDLEARN_VAULT_URL: http://cloudlearn-vault:8200
       CLOUDLEARN_VAULT_TOKEN: cloudlearn-dev-token
-      CLOUDLEARN_NATS_URL: nats://cloudlearn-nats:4222
-      CLOUDLEARN_MINIO_URL: http://cloudlearn-minio:9000
+      CLOUDLEARN_NATS_URL: nats://vyomi-nats:4222
+      CLOUDLEARN_MINIO_URL: http://vyomi-minio:9000
       CLOUDLEARN_MINIO_ACCESS_KEY: cloudlearn
       CLOUDLEARN_MINIO_SECRET_KEY: cloudlearn-dev-secret-key
-      CLOUDLEARN_DYNAMODB_URL: http://cloudlearn-dynamodb:8000
+      CLOUDLEARN_DYNAMODB_URL: http://vyomi-dynamodb:8000
       CLOUDLEARN_ELASTICMQ_URL: http://cloudlearn-elasticmq:9324
     volumes:
-      - cloudlearn-data:/data
+      - vyomi-data:/data
       - /var/lib/cloudlearn/deployments:/var/lib/cloudlearn/deployments
       - /var/lib/cloudlearn/host-sizing-report.json:/config/cloudlearn-host-sizing.json:ro
       # Host SSH pubkey for the Connect feature. Populated during
@@ -187,11 +187,11 @@ services:
       retries: 3
 
 volumes:
-  cloudlearn-data:
+  vyomi-data:
   cloudsim-data:
-  cloudlearn-sql-pg:
-  cloudlearn-sql-mysql:
-  cloudlearn-gcs:
-  cloudlearn-nats:
-  cloudlearn-minio:
-  cloudlearn-dynamodb:
+  vyomi-sql-pg:
+  vyomi-sql-mysql:
+  vyomi-gcs:
+  vyomi-nats:
+  vyomi-minio:
+  vyomi-dynamodb:
