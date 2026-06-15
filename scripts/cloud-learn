@@ -667,12 +667,13 @@ launch_success_banner() {
   _emit ""
   _emit "  Open in browser:  ${_C_BOLD}${_C_CYAN}${url}${_C_RESET}"
   if [ -n "$fallback_url" ]; then
-    _emit "  Or via IP:        ${_C_CYAN}${fallback_url}${_C_RESET}   ${_C_DIM}(works without mDNS)${_C_RESET}"
+    _emit "  Alternate URL:    ${_C_CYAN}${fallback_url}${_C_RESET}"
   fi
+  _emit "  ${_C_DIM}(opened in your default browser automatically — set VYOMI_NO_OPEN=1 to skip)${_C_RESET}"
   _emit "  Log:              ${_LOG_FILE}"
   _emit ""
-  _emit "  Stop:    cloud-learn stop"
-  _emit "  Status:  cloud-learn status"
+  _emit "  Stop:    vyomi stop"
+  _emit "  Status:  vyomi status"
   _emit ""
 }
 
@@ -1105,9 +1106,10 @@ Or try again:
   # We print BOTH the mDNS hostname (vyomi.local) and the raw IP. The
   # banner at the end will narrow it down to whichever one is reachable.
   _emit ""
-  _emit "    ${_C_BOLD}Appliance URL${_C_RESET}  ${_C_CYAN}http://${_VYOMI_MDNS_HOST}:9000/${_C_RESET}   ${_C_DIM}(preferred — mDNS-resolved)${_C_RESET}"
-  _emit "                   ${_C_CYAN}http://${vm_ip}:9000/${_C_RESET}     ${_C_DIM}(fallback — bridged IP)${_C_RESET}"
-  _emit "    (you can open either now — health check below confirms it)"
+  _emit "    ${_C_BOLD}Appliance URL${_C_RESET}  ${_C_CYAN}https://localhost:9443/${_C_RESET}    ${_C_DIM}(preferred — green padlock, zero config)${_C_RESET}"
+  _emit "                   ${_C_CYAN}https://${_VYOMI_MDNS_HOST}:9443/${_C_RESET}  ${_C_DIM}(mDNS HTTPS)${_C_RESET}"
+  _emit "                   ${_C_CYAN}http://${vm_ip}:9000/${_C_RESET}      ${_C_DIM}(bridged IP, no TLS)${_C_RESET}"
+  _emit "    (the final banner picks whichever is reachable)"
   _emit ""
 
   local waited=0
@@ -1201,21 +1203,119 @@ ensure_vyomi_mdns_active() {
   wait $pid 2>/dev/null || true
 }
 
+# ── localhost bridge (v2.0.1 — "Zero-config first launch") ──────────────
+# Browsers (especially Chrome) have a stack of gotchas around custom
+# hostnames + self-signed certs: HSTS cache, HTTPS-First Mode, Secure DNS
+# bypassing /etc/hosts. We sidestep ALL of them by giving the user a URL
+# that Chrome universally trusts: https://localhost:9443/. We do that by
+# running socat on the host, forwarding 127.0.0.1:9443 → VM_IP:9443 (and
+# the HTTP path 127.0.0.1:9000 → VM_IP:9000 for back-compat). The mkcert
+# leaf already covers `localhost` + `127.0.0.1` in its SAN list, so the
+# padlock is green out of the box — zero browser config needed.
+#
+# vyomi.local + the raw IP continue to work as before for users who want
+# them; this just adds a third, friction-free path that we make primary.
+_VYOMI_BRIDGE_DIR="${VYOMI_HOME:-${HOME}/.vyomi}/run"
+
+vyomi_localhost_bridge_up() {
+  # Start (or restart) two socat processes on the host:
+  #   127.0.0.1:9000 → vm_ip:9000  (HTTP / SPA Hub)
+  #   127.0.0.1:9443 → vm_ip:9443  (HTTPS via Caddy in VM)
+  # Linux + macOS only. Windows uses `netsh interface portproxy` (TODO).
+  local vm_ip="$1"
+  [ -z "$vm_ip" ] && return 0
+  case "$PARENT_OS" in
+    darwin|linux) ;;
+    *) return 0 ;;  # Windows path not implemented in v2.0.1
+  esac
+  if ! command -v socat >/dev/null 2>&1; then
+    verbose "bridge: socat not installed — skipping localhost forward"
+    return 0
+  fi
+  mkdir -p "$_VYOMI_BRIDGE_DIR"
+  local port
+  for port in 9000 9443; do
+    local pid_file="${_VYOMI_BRIDGE_DIR}/socat-${port}.pid"
+    # Kill any stale instance pointing at the wrong IP / dead PID.
+    if [ -f "$pid_file" ]; then
+      local old_pid
+      old_pid="$(cat "$pid_file" 2>/dev/null)"
+      if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+        kill "$old_pid" 2>/dev/null || true
+      fi
+      rm -f "$pid_file"
+    fi
+    # nohup + & so the tunnel survives this shell exiting. fork=so each
+    # accepted conn gets its own child. reuseaddr=lets us re-bind fast
+    # after a restart. bind=127.0.0.1 keeps it loopback-only (private).
+    nohup socat \
+      "TCP-LISTEN:${port},reuseaddr,fork,bind=127.0.0.1" \
+      "TCP:${vm_ip}:${port}" \
+      >/dev/null 2>&1 &
+    local pid=$!
+    echo "$pid" > "$pid_file"
+    verbose "bridge: 127.0.0.1:${port} → ${vm_ip}:${port} (pid=${pid})"
+  done
+  # Give socat a beat to bind before the URL probe runs.
+  sleep 0.3 2>/dev/null || sleep 1
+  return 0
+}
+
+vyomi_localhost_bridge_down() {
+  # Tear down both socat processes started by _bridge_up. Idempotent.
+  [ -d "$_VYOMI_BRIDGE_DIR" ] || return 0
+  local pid_file
+  for pid_file in "${_VYOMI_BRIDGE_DIR}"/socat-*.pid; do
+    [ -f "$pid_file" ] || continue
+    local pid
+    pid="$(cat "$pid_file" 2>/dev/null)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      verbose "bridge: killed socat pid=${pid}"
+    fi
+    rm -f "$pid_file"
+  done
+}
+
+vyomi_open_browser() {
+  # Best-effort browser launch. Honors VYOMI_NO_OPEN=1 (CI, headless, or
+  # users who already have the tab open). Failure is silent — the URL is
+  # also printed in the banner so the user can copy it.
+  [ "${VYOMI_NO_OPEN:-0}" = "1" ] && return 0
+  local url="$1"
+  [ -z "$url" ] && return 0
+  case "$PARENT_OS" in
+    darwin)  ( open "$url" >/dev/null 2>&1 & ) ;;
+    linux)   ( command -v xdg-open >/dev/null 2>&1 && xdg-open "$url" >/dev/null 2>&1 & ) ;;
+    windows) ( command -v powershell.exe >/dev/null 2>&1 && powershell.exe -NoProfile -Command "Start-Process '$url'" >/dev/null 2>&1 & ) ;;
+  esac
+  return 0
+}
+
 # Print the URL banner at the very end of a successful `cloud-learn up`.
-# Prefer vyomi.local over the raw IP — that's the whole point of mDNS.
-# Fall back to the IP if mDNS isn't reachable (e.g. corporate network
-# blocking multicast, VPN shadowing .local, host without nss-mdns).
+# v2.0.1: prefer https://localhost:9443/ (via the socat bridge) because
+# that URL avoids every Chrome gotcha (HSTS, Secure DNS, HTTPS-First
+# Mode). Fall back to vyomi.local / IP if the bridge or TLS aren't up.
 print_url_banner() {
   local vm_ip
   vm_ip="$(multipass info "$APPLIANCE_NAME" --format=csv 2>/dev/null | awk -F, 'NR==2 {print $3}' | head -1)"
   [ -z "$vm_ip" ] && vm_ip="<vm-ip>"
-  # Phase 12 (v2.0.0): prefer the HTTPS URL when TLS is provisioned AND
-  # the Caddy sidecar is actually answering. Probe :9443 first; if that
-  # fails, fall back to the HTTP URL flow (mDNS hostname → IP).
-  local primary fallback=""
+  # Start the host-side socat bridge BEFORE probing — it's what makes
+  # 127.0.0.1:9443 reachable in the first place.
+  vyomi_localhost_bridge_up "$vm_ip"
+  local primary="" fallback=""
+  # Probe ladder, best → worst. First green probe wins as "primary"; if
+  # we land on the HTTPS-localhost path the others become fallbacks.
   if [ -f "${TLS_DIR}/cert.pem" ] \
+     && curl -fsS -k -o /dev/null -m 2 "https://127.0.0.1:9443/healthz" 2>/dev/null; then
+    primary="https://localhost:9443/"
+    fallback="https://${_VYOMI_MDNS_HOST}:9443/"
+  elif [ -f "${TLS_DIR}/cert.pem" ] \
      && curl -fsS -k -o /dev/null -m 2 "https://${_VYOMI_MDNS_HOST}:9443/healthz" 2>/dev/null; then
     primary="https://${_VYOMI_MDNS_HOST}:9443/"
+    fallback="http://${_VYOMI_MDNS_HOST}:9000/"
+  elif curl -fsS -o /dev/null -m 2 "http://127.0.0.1:9000/healthz" 2>/dev/null; then
+    primary="http://localhost:9000/"
     fallback="http://${_VYOMI_MDNS_HOST}:9000/"
   elif curl -fsS -o /dev/null -m 2 "http://${_VYOMI_MDNS_HOST}:9000/healthz" 2>/dev/null; then
     primary="http://${_VYOMI_MDNS_HOST}:9000/"
@@ -1224,6 +1324,9 @@ print_url_banner() {
     primary="http://${vm_ip}:9000/"
   fi
   launch_success_banner "$primary" "$fallback"
+  # Auto-open the browser at the working URL. Belt-and-suspenders — the
+  # user can also copy the URL from the banner above.
+  vyomi_open_browser "$primary"
 }
 
 vyomi_host_ssh_bootstrap() {
@@ -1562,18 +1665,28 @@ ensure_vyomi_tls_cert() {
     return 0
   fi
   if ! maybe_install_mkcert; then
-    verbose "tls: mkcert install declined or unavailable — Caddy will run cert-less"
+    # v2.0.1: louder than the old silent skip — users were missing it.
+    _emit ""
+    _emit "  ${_C_YELLOW}⚠  mkcert not installed — HTTPS will be self-signed (browser warning).${_C_RESET}"
+    _emit "     HTTP on :9000 still works. Fix later with:"
+    _emit "       ${_C_BOLD}brew install mkcert && vyomi restart${_C_RESET}"
+    _emit ""
     return 0
   fi
   mkdir -p "$TLS_DIR"
   # mkcert -install is idempotent — exits 0 if the local CA is already
   # in the trust store. Silently re-adds on second machine accounts etc.
   _emit "${_C_BOLD}  ==> Installing local CA to system trust store (one-time)${_C_RESET}..."
-  mkcert -install >/dev/null 2>&1 || true
-  _emit "${_C_BOLD}  ==> Generating cert for vyomi.local + localhost + 127.0.0.1${_C_RESET}..."
+  if ! mkcert -install >/dev/null 2>&1; then
+    _emit "  ${_C_YELLOW}⚠  mkcert -install dismissed (sudo cancelled?) — browser will warn on HTTPS.${_C_RESET}"
+    _emit "     Re-run with: ${_C_BOLD}mkcert -install && vyomi restart${_C_RESET}"
+  fi
+  _emit "${_C_BOLD}  ==> Generating cert for localhost + vyomi.local + 127.0.0.1${_C_RESET}..."
+  # SAN order: localhost first so the cert's primary subject is the URL
+  # we now point users at by default (https://localhost:9443/).
   ( cd "$TLS_DIR" && mkcert \
       -cert-file cert.pem -key-file key.pem \
-      vyomi.local localhost 127.0.0.1 >/dev/null 2>&1 ) \
+      localhost 127.0.0.1 vyomi.local >/dev/null 2>&1 ) \
     || { _emit "  ${_C_RED}mkcert generation failed${_C_RESET}"; return 1; }
   chmod 0644 "${TLS_DIR}/cert.pem" "${TLS_DIR}/key.pem"
   _emit "${_C_GREEN}  ✓ TLS cert provisioned at ${TLS_DIR}/{cert,key}.pem${_C_RESET}"
@@ -2054,12 +2167,17 @@ outer_run() {
       ;;
     down|stop)
       ensure_prereqs
+      # v2.0.1: tear down the host-side socat bridge first so we don't
+      # leak a process pointing at a dead VM. Idempotent — no-op when no
+      # bridge was running.
+      vyomi_localhost_bridge_down
       if command -v multipass >/dev/null 2>&1; then
         multipass stop "$APPLIANCE_NAME" >/dev/null 2>&1 || true
       fi
       ;;
     force-stop|kill)
       ensure_prereqs
+      vyomi_localhost_bridge_down
       if command -v multipass >/dev/null 2>&1; then
         multipass stop --force "$APPLIANCE_NAME" >/dev/null 2>&1 || true
       fi

@@ -6,6 +6,29 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-06-15
+
+**Zero-config first launch.** v2.0.0 shipped HTTPS via mkcert + Caddy at `https://vyomi.local:9443`, but a fresh laptop hit three Chrome gotchas in sequence: (1) Secure DNS bypassing `/etc/hosts` for `.local` TLDs, (2) HSTS cache locking failed early attempts into HTTPS-only, (3) HTTPS-First Mode auto-upgrading `http://` requests. Users were dropped into `chrome://net-internals/#hsts` to debug. v2.0.1 sidesteps all three by pivoting the canonical URL to `https://localhost:9443/` — a hostname Chrome universally trusts. mkcert already covered `localhost` in its SAN list, so the green padlock works without any browser config changes.
+
+### Added
+
+- **`socat` localhost bridge** — `vyomi up` now forwards `127.0.0.1:9000` → `VM_IP:9000` and `127.0.0.1:9443` → `VM_IP:9443` via two host-side `socat` processes (PIDs tracked at `~/.vyomi/run/socat-*.pid`). Bridge is loopback-only (`bind=127.0.0.1`) — not reachable from outside the laptop. Idempotent — old PIDs killed before respawn. `vyomi down`/`stop`/`kill` tear it down cleanly.
+- **Auto browser open** — after the health check passes, the launcher opens the working URL in the default browser (`open` on macOS, `xdg-open` on Linux, `Start-Process` on Windows). Honors `VYOMI_NO_OPEN=1` for CI / headless / scripted environments.
+- **Loud mkcert failure surface** — if the user dismisses the sudo prompt for `mkcert -install`, the launcher now prints a clearly-visible yellow `⚠` warning with the exact remediation command (`brew install mkcert && vyomi restart`). Old behaviour was a silent `verbose-mode-only` log line that users missed.
+
+### Changed
+
+- **Default appliance URL → `https://localhost:9443/`** (was `https://vyomi.local:9443/`). Banner probe ladder tries `localhost:9443` (TLS) → `vyomi.local:9443` (TLS) → `localhost:9000` (HTTP) → `vyomi.local:9000` (HTTP) → IP, and picks the first reachable one as primary. The other reachable URLs are advertised as fallbacks. **Existing v2.0.0 URLs continue to work** — this is purely a default-routing change.
+- **mkcert SAN order** — the leaf cert is now generated with `localhost 127.0.0.1 vyomi.local` (was `vyomi.local localhost 127.0.0.1`). The cert covers the exact same names — just primary subject swapped to match the new default URL. Existing certs from v2.0.0 stay valid (all SANs preserved). Force regeneration with `VYOMI_REISSUE_TLS=1 vyomi up`.
+- **Brew formula adds `depends_on "socat"` and `depends_on "mkcert"`** — both are required for the green-padlock-by-default UX. Pre-fetching them at `brew install vyomi` time means the first `vyomi up` has one fewer interactive prompt. Reinstall to pick up: `brew reinstall vyomi`.
+
+### Notes for users on v2.0.0
+
+- After `brew reinstall vyomi`, run `vyomi restart` once. The new launcher will start the socat bridge against your existing VM and your browser will land on `https://localhost:9443/`.
+- The `vyomi.local` and `192.168.x.x` URLs from v2.0.0 still work — they're now listed as fallbacks rather than primary.
+- If your Chrome had cached HSTS / HTTPS-First Mode for `vyomi.local`, the localhost pivot makes that irrelevant. You don't need to clear anything.
+- Windows: the localhost bridge is not yet wired (no `socat` in standard tools). Windows users continue to hit `vyomi.local:9443` directly. `netsh interface portproxy`-based bridge is a v2.1.0 follow-up.
+
 ## [2.0.0] — 2026-06-15
 
 The vyomi-branded release. 13-phase rebrand campaign: CLI binary, brew formula, Docker Hub namespace, GitHub org, license (MIT → BSL 1.1), HTTP headers, env vars, Python modules, filesystem paths, Docker volumes, Multipass VM name, and HTTPS by default. Every layer ships with runtime back-compat so v1.x upgrades are transparent. See [`docs/MIGRATION-v2.md`](docs/MIGRATION-v2.md) for the upgrade guide.
