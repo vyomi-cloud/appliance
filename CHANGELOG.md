@@ -6,6 +6,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — BREAKING (v2.0.0)
+
+- **License: MIT → Business Source License 1.1** with a Vyomi-specific Additional Use Grant. Source-available, not open-source-OSI. Change Date 4 years from release, Change License Apache 2.0. The Additional Use Grant blocks (a) hosting Vyomi as a third-party commercial multi-cloud simulator service, (b) modifying/bypassing tier-enforcement code, (c) rebranding for commercial redistribution. Non-commercial use and internal evaluation remain unrestricted. See [`LICENSE`](LICENSE) for full text. Existing forks pre-v2.0.0 retain MIT under the historical commit terms.
+
 ## [1.2.5] — 2026-06-15
 
 Default-space naming convention. The three out-of-the-box spaces are now `aws-default`, `gcp-default`, and `azure-default` — matching how every other identifier in the appliance and SDK examples talks about per-provider defaults. Previous names (`Legacy Workspace`, `GCP Project`, `Azure Subscription`) were inconsistent and looked like manually-created spaces rather than defaults.

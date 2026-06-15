@@ -1,7 +1,7 @@
 # Vyomi
 
 [![CI](https://github.com/cloudlearn/cloud-learn/actions/workflows/ci.yml/badge.svg)](https://github.com/cloudlearn/cloud-learn/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: BSL 1.1](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](docs/RELEASE_NOTES_v1.0.md)
 
 **Local-first multi-cloud simulator. Real SDKs, real CLIs, real backends — no network required.**
@@ -170,4 +170,12 @@ CI workflows in `.github/workflows/`:
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+Source-available under the **Business Source License 1.1** with a Vyomi-specific Additional Use Grant. Auto-converts to Apache 2.0 four years after each release.
+
+What this means in plain English:
+
+- **You can:** read the source, use Vyomi non-commercially, run it internally at your company, audit the licensing/tier code, send pull requests
+- **You can't (without a separate commercial agreement):** offer Vyomi as a hosted multi-cloud simulator service, modify/bypass the tier-enforcement code, or rebrand and resell it
+
+See [`LICENSE`](LICENSE) for the full text. For commercial hosting, white-label, or OEM arrangements, contact licensing@vyomi.cloud.
+
