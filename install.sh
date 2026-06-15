@@ -178,6 +178,29 @@ echo "    ${D}starting containers...${R}"
 docker compose $COMPOSE_FLAGS up -d 2>&1 | sed 's/^/    /'
 ok "containers started"
 
+# ─── one-time mkcert TLS provisioning (Phase 12 — vyomi rebrand) ──────
+# Provision a locally-trusted cert so the browser opens
+# https://vyomi.local:9443 with a green padlock (Caddy sidecar
+# terminates TLS, reverse-proxies to the simulator). Honors
+# VYOMI_NO_TLS=1 to skip.
+TLS_DIR="${VYOMI_TLS_DIR:-$HOME/.vyomi/tls}"
+if [ "${VYOMI_NO_TLS:-0}" != "1" ] && [ ! -f "$TLS_DIR/cert.pem" ]; then
+  if command -v mkcert >/dev/null 2>&1; then
+    step "Provisioning local TLS cert via mkcert (one-time)"
+    mkdir -p "$TLS_DIR"
+    mkcert -install >/dev/null 2>&1 || true
+    ( cd "$TLS_DIR" && mkcert -cert-file cert.pem -key-file key.pem \
+        vyomi.local localhost 127.0.0.1 >/dev/null 2>&1 ) \
+      && ok "TLS cert provisioned at $TLS_DIR" \
+      || echo "    ${D}cert generation failed — Caddy will run cert-less${R}"
+  else
+    echo "    ${D}mkcert not installed — skipping HTTPS provisioning${R}"
+    echo "    ${D}  macOS:   brew install mkcert${R}"
+    echo "    ${D}  Linux:   sudo apt install mkcert  (or dnf install)${R}"
+    echo "    ${D}HTTP on :9000 still works without mkcert.${R}"
+  fi
+fi
+
 # ─── one-time hosts entry so http://vyomi.local:9000 works ─────────────
 # Multipass-based install paths publish vyomi.local via mDNS. Docker
 # Desktop on macOS/Windows runs in a Linux VM and can't broadcast mDNS
