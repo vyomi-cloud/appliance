@@ -238,7 +238,7 @@ jobs:
         run: |
           VER="${{ needs.build.outputs.version }}"
           SHA="${{ needs.build.outputs.tarball_sha256 }}"
-          F=tap/Formula/cloud-learn.rb
+          F=tap/Formula/vyomi.rb
           # Point at the workflow-built RELEASE-ASSET tarball — that's the
           # file whose SHA we compute in the build job (the GitHub
           # auto-tarball at /archive/refs/tags/* has different bytes and
@@ -252,8 +252,8 @@ jobs:
           cd tap
           git config user.email "bot@cloudlearn.io"
           git config user.name  "CloudLearn Release Bot"
-          git add Formula/cloud-learn.rb
-          git commit -m "cloud-learn ${VER}"
+          git add Formula/vyomi.rb
+          git commit -m "vyomi ${VER}"
           git push
 
   # ── Snap Store publish ──────────────────────────────────────────────────
@@ -339,5 +339,5 @@ jobs:
           git config user.email "bot@cloudlearn.io"
           git config user.name  "CloudLearn Release Bot"
           git add bucket/cloud-learn.json
-          git commit -m "cloud-learn ${VER}"
+          git commit -m "vyomi ${VER}"
           git push

@@ -8,6 +8,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed — BREAKING (v2.0.0)
 
+- **Brew formula renamed `cloud-learn.rb` → `vyomi.rb`**. New canonical install: `brew install vyomi-cloud/tap/vyomi`. Back-compat: `Aliases/cloud-learn → Formula/vyomi.rb` symlink in the tap, so `brew install cloud-learn` continues to work indefinitely (both resolve to the same package). Existing `brew upgrade cloud-learn` users pick up new releases without any action. Formula class renamed `CloudLearn → Vyomi`, license metadata `MIT → :cannot_represent` (BSL 1.1 isn't in SPDX simple form), homepage now `https://vyomi.cloud`.
+
+### Changed — BREAKING (v2.0.0)
+
 - **License: MIT → Business Source License 1.1** with a Vyomi-specific Additional Use Grant. Source-available, not open-source-OSI. Change Date 4 years from release, Change License Apache 2.0. The Additional Use Grant blocks (a) hosting Vyomi as a third-party commercial multi-cloud simulator service, (b) modifying/bypassing tier-enforcement code, (c) rebranding for commercial redistribution. Non-commercial use and internal evaluation remain unrestricted. See [`LICENSE`](LICENSE) for full text. Existing forks pre-v2.0.0 retain MIT under the historical commit terms.
 
 ## [1.2.5] — 2026-06-15
