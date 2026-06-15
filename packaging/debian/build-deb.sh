@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a .deb package from the CloudLearn source tree using fpm.
+# Build a .deb package from the Vyomi source tree using fpm.
 #
 # Usage:  bash packaging/debian/build-deb.sh [version]
 #         version defaults to the contents of VERSION at repo root.
@@ -57,8 +57,8 @@ fpm \
   --version "$VERSION" \
   --architecture all \
   --license MIT \
-  --maintainer "CloudLearn <support@cloudlearn.io>" \
-  --vendor "CloudLearn" \
+  --maintainer "Vyomi <support@vyomi.cloud>" \
+  --vendor "Vyomi" \
   --description "Local multi-cloud simulator (AWS/GCP/Azure) with real backends" \
   --url "https://github.com/vyomi-cloud/appliance" \
   --depends "bash" \

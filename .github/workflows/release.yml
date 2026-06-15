@@ -250,8 +250,8 @@ jobs:
             "$F"
           rm -f "$F.bak"
           cd tap
-          git config user.email "bot@cloudlearn.io"
-          git config user.name  "CloudLearn Release Bot"
+          git config user.email "bot@vyomi.cloud"
+          git config user.name  "Vyomi Release Bot"
           git add Formula/vyomi.rb
           git commit -m "vyomi ${VER}"
           git push
@@ -336,8 +336,8 @@ jobs:
               f.write("\n")
           PY
           cd scoop-bucket
-          git config user.email "bot@cloudlearn.io"
-          git config user.name  "CloudLearn Release Bot"
+          git config user.email "bot@vyomi.cloud"
+          git config user.name  "Vyomi Release Bot"
           git add bucket/cloud-learn.json
           git commit -m "vyomi ${VER}"
           git push
