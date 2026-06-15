@@ -14,15 +14,28 @@
 class Vyomi < Formula
   desc "Local multi-cloud simulator (AWS/GCP/Azure) with real backends"
   homepage "https://vyomi.cloud"
-  url "https://github.com/vyomi-cloud/appliance/archive/refs/tags/v1.0.0.tar.gz"
+  url "https://github.com/vyomi-cloud/appliance/archive/refs/tags/v2.0.1.tar.gz"
   sha256 "REPLACED_BY_RELEASE_WORKFLOW"
   license :cannot_represent  # BSL 1.1 — not in SPDX simple form
-  version "1.0.0"
+  version "2.0.1"
+
+  # v2.0.1 — the launcher uses socat to forward 127.0.0.1:{9000,9443} →
+  # VM_IP:{9000,9443} so users always hit https://localhost:9443/ (which
+  # browsers universally trust, sidestepping HSTS / Secure DNS / HTTPS-
+  # First Mode gotchas). Bash launcher falls back gracefully if socat is
+  # missing, but it's the recommended path now.
+  depends_on "socat"
+  # mkcert provides the locally-trusted CA so the HTTPS cert at
+  # ~/.vyomi/tls/ shows a green padlock. The launcher auto-installs it
+  # via `brew install mkcert` on first run if missing — but declaring it
+  # here means brew pre-fetches it during `brew install vyomi`, so the
+  # first `vyomi up` is one prompt shorter.
+  depends_on "mkcert"
 
   # Note: multipass and Docker Desktop ship as casks, not formulae, so we
   # can't `depends_on` them directly from a Formula. They're listed in
   # `caveats` instead — users install them via `brew install --cask`, OR
-  # `cloud-learn up` itself offers to run `brew install --cask multipass`
+  # `vyomi up` itself offers to run `brew install --cask multipass`
   # for them on first launch (see maybe_install_multipass in scripts/cloud-learn).
 
   def install
@@ -79,11 +92,11 @@ class Vyomi < Formula
         • ~32 GB free disk  (VM image + container layers)
 
       Get started:
-        cloud-learn up                # boots VM + simulator (5-10 min first run)
-        open http://192.168.x.x:9000  # URL printed in the launcher banner
+        vyomi up                          # boots VM + simulator (5-10 min first run)
+        # Browser opens automatically at https://localhost:9443/ (green padlock).
 
       Stop with:
-        cloud-learn down
+        vyomi down
 
       Full docs:
         https://github.com/vyomi-cloud/appliance/blob/main/README.md
