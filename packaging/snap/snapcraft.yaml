@@ -3,7 +3,7 @@ base: core24
 adopt-info: cloud-learn  # part-name whose override-pull calls craftctl set version=...
 summary: Local multi-cloud simulator with AWS/GCP/Azure parity
 description: |
-  CloudLearn runs AWS, GCP, and Azure simulation locally with cloud-faithful
+  Vyomi runs AWS, GCP, and Azure simulation locally with cloud-faithful
   APIs that work with standard provider SDKs (boto3, aws-sdk-java, google-cloud-*,
   azure-sdk-for-*) and CLIs (aws, gcloud, gsutil, bq, az, terraform) — no shim
   required, just override the endpoint URL.
@@ -19,11 +19,11 @@ description: |
 license: MIT
 grade: stable
 confinement: classic   # needs to control Multipass + docker on the host
-contact: support@cloudlearn.io
+contact: support@vyomi.cloud
 issues: https://github.com/vyomi-cloud/appliance/issues
 source-code: https://github.com/vyomi-cloud/appliance
 website: https://github.com/vyomi-cloud/appliance
-title: CloudLearn
+title: Vyomi
 
 # snapcraft 8+ with base: core24 uses 'platforms', not 'architectures'.
 # Each platform maps a build host arch → target arch. GitHub Actions

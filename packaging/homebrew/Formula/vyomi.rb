@@ -52,7 +52,7 @@ class Vyomi < Formula
 
   def caveats
     <<~EOS
-      CloudLearn ships as an appliance — it starts a single Multipass VM
+      Vyomi ships as an appliance — it starts a single Multipass VM
       and runs the full simulator stack (FastAPI + 8 real backends) inside.
 
       Prerequisites:
