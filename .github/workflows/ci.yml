@@ -36,7 +36,7 @@ jobs:
           python-version: "3.14"
       - name: Install client libs
         run: pip install boto3 google-cloud-storage google-cloud-pubsub requests
-      - name: Start CloudLearn stack
+      - name: Start Vyomi stack
         env:
           CLOUDLEARN_DEV_MODE: "1"
         run: |

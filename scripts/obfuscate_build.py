@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Multi-layer code obfuscation for CloudLearn appliance builds.
+"""Multi-layer code obfuscation for Vyomi appliance builds.
 
 Applies 6 obfuscation passes to all Python source before .pyc compilation,
 making the code virtually unreadable even if an attacker extracts .pyc files
@@ -65,7 +65,7 @@ PROTECTED_NAMES = {
     "app", "request", "Request", "Response", "HTTPException", "Query",
     "FastAPI", "BaseModel", "JSONResponse", "HTMLResponse",
     "StreamingResponse", "RedirectResponse", "WebSocket",
-    # CloudLearn public API names that other modules import
+    # Vyomi public API names that other modules import
     "register", "PLATFORM", "STATE", "STATE_LOCK", "RESOURCE_CATALOG",
     "REQUEST_PROVIDER", "REQUEST_TENANT", "REQUEST_PUBLIC_BASE",
 }

@@ -4,14 +4,14 @@ Build via `fpm` from the release CI workflow — `fpm` is the cross-distro
 package builder Ruby gem that converts a directory tree into a `.deb`.
 
 The CI publishes the resulting `cloud-learn_<version>_all.deb` to the
-GitHub Release and the repo at https://apt.cloudlearn.io.
+GitHub Release and the repo at https://apt.vyomi.cloud.
 
 ## End-user install
 
 ```bash
 # Add the apt repo
-curl -fsSL https://apt.cloudlearn.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloudlearn.gpg
-echo "deb [signed-by=/usr/share/keyrings/cloudlearn.gpg] https://apt.cloudlearn.io stable main" \
+curl -fsSL https://apt.vyomi.cloud/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/vyomi.gpg
+echo "deb [signed-by=/usr/share/keyrings/vyomi.gpg] https://apt.vyomi.cloud stable main" \
   | sudo tee /etc/apt/sources.list.d/cloudlearn.list
 
 # Install

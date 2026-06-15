@@ -5,7 +5,7 @@ set -e
 if ! command -v multipass >/dev/null 2>&1; then
   echo
   echo "==> Note: Multipass not detected."
-  echo "    CloudLearn appliance mode requires Multipass for VM provisioning."
+  echo "    Vyomi appliance mode requires Multipass for VM provisioning."
   echo "    Install via:  sudo snap install multipass"
   echo "    Or:           https://multipass.run/install"
   echo

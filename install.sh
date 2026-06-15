@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CloudLearn — laptop installer (curl-bash style).
+# Vyomi — laptop installer (curl-bash style).
 #
 # What it does:
 #   1. Verifies Docker + Docker Compose v2 are present
