@@ -55,11 +55,23 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-# Buildx imagetools needs the auth, but `docker info` is the simplest probe.
-echo "${YELLOW}==> Sanity check: are you logged in as the vyomi Docker Hub account?${RESET}"
-docker info 2>/dev/null | grep -E "Username:|Registry:" || true
+# We use `crane` rather than `docker buildx imagetools create` because
+# imagetools fails with HTTP 400 on cross-namespace multi-arch copies
+# when the source and destination are different Docker Hub accounts
+# (verified: gansudkum → vyomi fails at the blob upload stage).
+# Crane uses the registry's native blob-mount + pull-then-push fallback
+# and works reliably for cross-namespace copies. Reads auth from the
+# same ~/.docker/config.json so `docker login -u vyomi` is reused.
+if ! command -v crane >/dev/null 2>&1; then
+  echo "${RED}✗ crane not on PATH${RESET}" >&2
+  echo "  Install with:  brew install crane" >&2
+  echo "  Or download:   https://github.com/google/go-containerregistry/releases" >&2
+  exit 1
+fi
+echo "${YELLOW}==> Crane found:${RESET} $(crane version 2>&1 | head -1)"
+echo "${YELLOW}==> Docker Hub auth: ~/.docker/config.json (reused from \`docker login -u vyomi\`)${RESET}"
 echo ""
-echo "If 'Username' above is NOT 'vyomi', stop here and run:"
+echo "If you're not logged in as 'vyomi' yet, stop and run:"
 echo "   docker logout && docker login -u vyomi"
 echo ""
 read -r -p "Continue? [y/N] " ans
@@ -75,11 +87,11 @@ for tag in "${TAGS[@]}"; do
   dst="${DST_REPO}:${tag}"
   echo "${BOLD}==> ${src} → ${dst}${RESET}"
   if [ "$DRY_RUN" = "1" ]; then
-    echo "    (dry-run)  docker buildx imagetools create -t ${dst} ${src}"
+    echo "    (dry-run)  crane copy ${src} ${dst}"
     ok=$((ok + 1))
     continue
   fi
-  if docker buildx imagetools create -t "$dst" "$src" 2>&1 | sed 's/^/    /'; then
+  if crane copy "$src" "$dst" 2>&1 | sed 's/^/    /'; then
     echo "    ${GREEN}✓ ${dst} published${RESET}"
     ok=$((ok + 1))
   else
