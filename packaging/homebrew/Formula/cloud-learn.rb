@@ -16,7 +16,7 @@ class CloudLearn < Formula
   homepage "https://github.com/vyomi-cloud/appliance"
   url "https://github.com/vyomi-cloud/appliance/archive/refs/tags/v1.0.0.tar.gz"
   sha256 "REPLACED_BY_RELEASE_WORKFLOW"
-  license "MIT"
+  license :cannot_represent  # BSL 1.1 — not in SPDX simple form
   version "1.0.0"
 
   # Note: multipass and Docker Desktop ship as casks, not formulae, so we
