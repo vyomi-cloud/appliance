@@ -146,7 +146,7 @@ jobs:
           cp README.md LICENSE CHANGELOG.md "$STAGE/usr/share/doc/cloud-learn/"
           fpm -s dir -t rpm \
             -n cloud-learn -v "${{ steps.ver.outputs.version }}" \
-            --license MIT --architecture noarch \
+            --license BUSL-1.1 --architecture noarch \
             --maintainer "CloudLearn <support@cloudlearn.io>" \
             --url "https://github.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}" \
             --description "Local multi-cloud simulator (AWS/GCP/Azure) with real backends" \
