@@ -2,7 +2,7 @@
 
 ## Goal
 
-Run the entire CloudLearn platform inside one host-launched Multipass VM and treat that VM as the durable appliance boundary.
+Run the entire Vyomi platform inside one host-launched Multipass VM and treat that VM as the durable appliance boundary.
 
 The host OS should only:
 - launch the VM,
@@ -25,7 +25,7 @@ The second half of the goal is to make the local simulator the source of truth f
 
 - Starts one Multipass VM.
 - Mounts or exposes the platform data volume.
-- Does not run CloudLearn business logic directly.
+- Does not run Vyomi business logic directly.
 
 ### Appliance VM
 

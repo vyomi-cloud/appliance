@@ -1,8 +1,8 @@
-# CloudLearn Simulator - Low Level Design
+# Vyomi Simulator - Low Level Design
 
 ## 1. Objective
 
-CloudLearn is a local-first, multi-space cloud simulator that gives users an AWS-like, GCP-like, Azure-like, and future multi-cloud experience for learning, app validation, workflow practice, and intercloud federation without requiring cloud hosting or cloud licenses. The simulator must:
+Vyomi is a local-first, multi-space cloud simulator that gives users an AWS-like, GCP-like, Azure-like, and future multi-cloud experience for learning, app validation, workflow practice, and intercloud federation without requiring cloud hosting or cloud licenses. The simulator must:
 
 - Run entirely on the user's machine.
 - Persist simulator state locally across stop/start cycles.

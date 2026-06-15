@@ -1,4 +1,4 @@
-# CloudLearn — Cloud Simulator Platform
+# Vyomi — Cloud Simulator Platform
 ## Full Design & Implementation Context
 
 ---
@@ -371,7 +371,7 @@ karaf> service:list com.cloudlearn.simulator.s3.api.S3Service  # see live region
 
 Use the following prompt to continue design and implementation in a new session:
 
-> I am building **CloudLearn** — a cloud simulator platform that runs entirely on a laptop (localhost). Think of it as a **flight simulator for cloud learners**: all the AWS/GCP/Azure console controls and workflows, but not actually connected to real infrastructure.
+> I am building **Vyomi** — a cloud simulator platform that runs entirely on a laptop (localhost). Think of it as a **flight simulator for cloud learners**: all the AWS/GCP/Azure console controls and workflows, but not actually connected to real infrastructure.
 >
 > **Current state**: A working Python/FastAPI POC for S3 exists with a React UI that looks like the AWS S3 Console and full AWS CLI/boto3 compatibility via S3 REST XML API. See the attached `docs/design/CLOUDLEARN_DESIGN.md` for full context.
 >

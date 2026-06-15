@@ -1,8 +1,8 @@
-# CloudLearn - Full Simulator Architecture
+# Vyomi - Full Simulator Architecture
 
 ## 1. Product Definition
 
-CloudLearn is a local-first, multi-space cloud simulation platform built on a CloudSim backbone and a VM-like LXD runtime layer. It gives users AWS-like, GCP-like, Azure-like, OCI-like, and Tencent-like experiences on their own machine while keeping the simulation boundary local.
+Vyomi is a local-first, multi-space cloud simulation platform built on a CloudSim backbone and a VM-like LXD runtime layer. It gives users AWS-like, GCP-like, Azure-like, OCI-like, and Tencent-like experiences on their own machine while keeping the simulation boundary local.
 
 It is designed to:
 
@@ -180,7 +180,7 @@ The compatibility layer should not own business state.
 
 ## 8. Entitlements, Credits, and Lockout
 
-CloudLearn uses a capability system to gate premium features.
+Vyomi uses a capability system to gate premium features.
 
 Plan tiers:
 
@@ -654,7 +654,7 @@ The provider-neutral core should remain stable while adapters and UI skins chang
 
 ## 22. Summary
 
-CloudLearn is best implemented as:
+Vyomi is best implemented as:
 
 - a local control plane,
 - a persistent simulation kernel,

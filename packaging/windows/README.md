@@ -1,10 +1,10 @@
 # Windows packaging
 
-This directory contains the Windows installer metadata scaffold for CloudLearn.
+This directory contains the Windows installer metadata scaffold for Vyomi.
 
 ## Intended flow
 
-1. Build or publish the CloudLearn source bundle.
+1. Build or publish the Vyomi source bundle.
 2. Use `packaging/windows/cloudlearn.wxs` as the MSI source.
 3. Install the launcher and shortcut into Program Files.
 4. Use the installed shortcut to start appliance mode.

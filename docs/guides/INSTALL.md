@@ -1,11 +1,11 @@
-# CloudLearn — Install
+# Vyomi — Install
 
 The fastest path is the one-liner. Everything else is a variation of it.
 
 ## Quick install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sudhirkumarganti/cloud-learn/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/vyomi-cloud/appliance/main/install.sh | bash
 ```
 
 What happens, in order:
@@ -17,7 +17,7 @@ What happens, in order:
 
    | Service | Image | Role |
    |---|---|---|
-   | `simulator` | `gansudkum/cloud-learn:latest` | The AWS / GCP / Azure API surface |
+   | `simulator` | `vyomi/appliance:latest` | The AWS / GCP / Azure API surface |
    | `cloudsim` | locally-built | The Java CloudSim backbone |
    | `cloudlearn-sql-postgres` | `postgres:16-alpine` | SQL data plane |
    | `cloudlearn-gcs` | `fsouza/fake-gcs-server` | GCS data plane |
@@ -61,7 +61,7 @@ docker compose pull && docker compose up -d     # upgrade — Compose does NOT a
 docker compose --profile full up -d             # bring up the 6 lazy backends eagerly
 ```
 
-> **Why `pull` is explicit:** `docker compose up` only pulls when the image is missing locally. To force-check Docker Hub on every `up`, either run `docker compose pull` first OR pass `--pull always`. The default `.env.example` pins to a specific version (e.g. `gansudkum/cloud-learn:1.2.2`); set `CLOUDLEARN_SIMULATOR_IMAGE=gansudkum/cloud-learn:latest` for rolling updates.
+> **Why `pull` is explicit:** `docker compose up` only pulls when the image is missing locally. To force-check Docker Hub on every `up`, either run `docker compose pull` first OR pass `--pull always`. The default `.env.example` pins to a specific version (e.g. `vyomi/appliance:1.2.2`); set `CLOUDLEARN_SIMULATOR_IMAGE=vyomi/appliance:latest` for rolling updates.
 
 ## Lazy backend provisioning
 
@@ -94,11 +94,11 @@ mkdir -p ~/.cloudlearn/{compose,deployments,config}
 cd ~/.cloudlearn/compose
 
 # 1. Get the compose file + host config
-curl -O https://raw.githubusercontent.com/sudhirkumarganti/cloud-learn/main/docker-compose.yml
-curl -O https://raw.githubusercontent.com/sudhirkumarganti/cloud-learn/main/.cloudlearn-host.json
+curl -O https://raw.githubusercontent.com/vyomi-cloud/appliance/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/vyomi-cloud/appliance/main/.cloudlearn-host.json
 mkdir .cloudlearn-appliance
 curl -o .cloudlearn-appliance/host-sizing-report.json \
-  https://raw.githubusercontent.com/sudhirkumarganti/cloud-learn/main/.cloudlearn-appliance/host-sizing-report.json
+  https://raw.githubusercontent.com/vyomi-cloud/appliance/main/.cloudlearn-appliance/host-sizing-report.json
 
 # 2. Bring it up
 docker compose up -d
@@ -120,8 +120,8 @@ fetches the same Docker images.
 | Ubuntu / Debian | `sudo apt install cloud-learn && cloud-learn up` |
 | Fedora / RHEL | `sudo dnf install cloud-learn && cloud-learn up` |
 | Ubuntu (Snap) | `sudo snap install cloud-learn --classic` |
-| Windows (Scoop) | `scoop bucket add cloudlearn https://github.com/sudhirkumarganti/scoop-bucket && scoop install cloud-learn` |
-| Windows (winget) | `winget install CloudLearn.CloudLearn` _(awaiting MSI)_ |
+| Windows (Scoop) | `scoop bucket add cloudlearn https://github.com/vyomi-cloud/scoop-bucket && scoop install cloud-learn` |
+| Windows (winget) | `winget install Vyomi.Vyomi` _(awaiting MSI)_ |
 
 Use these if you need the Multipass-VM isolation. The `curl-bash` path
 above is simpler if you already have Docker.
@@ -129,7 +129,7 @@ above is simpler if you already have Docker.
 ## From source
 
 ```bash
-git clone https://github.com/sudhirkumarganti/cloud-learn.git
+git clone https://github.com/vyomi-cloud/appliance.git
 cd cloud-learn
 sudo mkdir -p /var/lib/cloudlearn/deployments
 docker compose up -d

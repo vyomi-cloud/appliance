@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to CloudLearn will be documented in this file.
+All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -31,7 +31,7 @@ URL parity: every install path now lands on `http://vyomi.local:9000`. v1.2.3 ma
 
 ### Fixed
 
-- `.env.example` image pin bumped to `gansudkum/cloud-learn:1.2.4` (was 1.2.2).
+- `.env.example` image pin bumped to `vyomi/appliance:1.2.4` (was 1.2.2).
 - `install.sh` day-2 hint had the same `pull && up -d` typo as INSTALL.md before v1.2.2 — fixed to `docker compose pull && docker compose up -d`.
 
 ### Why this matters
@@ -71,7 +71,7 @@ Distribution-parity release: every package-manager install path that ships cloud
 
 ### Fixed
 
-- **`.env.example` image pin was broken.** Was `CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:1.0.0` — wrong namespace (`cloudlearn/simulator` does not exist on Docker Hub) AND stale version (months behind). Any user running `cp .env.example .env && docker compose pull` got `pull access denied`. Now pins to `gansudkum/cloud-learn:1.2.2` (the real, current image). Comment explains how to opt into rolling `:latest` updates.
+- **`.env.example` image pin was broken.** Was `CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:1.0.0` — wrong namespace (`cloudlearn/simulator` does not exist on Docker Hub) AND stale version (months behind). Any user running `cp .env.example .env && docker compose pull` got `pull access denied`. Now pins to `vyomi/appliance:1.2.2` (the real, current image). Comment explains how to opt into rolling `:latest` updates.
 - **INSTALL.md docker-compose upgrade step clarified.** `docker compose up` does NOT auto-pull on existing images — added an explicit `docker compose pull && docker compose up -d` recipe with a note about `--pull always` semantics. The previous one-liner `docker compose pull && up -d` was a typo (missing the second `docker compose`).
 
 ### Coverage matrix after this release
@@ -103,7 +103,7 @@ UX polish: `cloud-learn up` now installs Multipass for the user when it's missin
 
 ### Fixed
 
-- **Stale `depends_on "multipass" => :recommended` / `depends_on "docker" => :recommended`** in `packaging/homebrew/Formula/cloud-learn.rb`. These were invalid against casks and would fail `brew audit`; replaced with a comment that points to `maybe_install_multipass`. End users were never affected (the live formula in `sudhirkumarganti/homebrew-tap` is overwritten by `release.yml` on every tag), but the in-repo copy was misleading anyone reading the source.
+- **Stale `depends_on "multipass" => :recommended` / `depends_on "docker" => :recommended`** in `packaging/homebrew/Formula/cloud-learn.rb`. These were invalid against casks and would fail `brew audit`; replaced with a comment that points to `maybe_install_multipass`. End users were never affected (the live formula in `vyomi-cloud/homebrew-tap` is overwritten by `release.yml` on every tag), but the in-repo copy was misleading anyone reading the source.
 
 ### Why this matters
 
@@ -420,7 +420,7 @@ provider — any regression blocks the build, future climbs only ratchet up.
 
 ## [1.0.0] — 2026-06-01
 
-First general-availability release. CloudLearn is a local-first multi-cloud
+First general-availability release. Vyomi is a local-first multi-cloud
 simulator with cloud-faithful APIs across AWS, GCP, and Azure. Standard
 provider SDKs and CLIs work natively against the simulator — no shim
 required — by overriding the endpoint URL.

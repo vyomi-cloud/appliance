@@ -1,6 +1,6 @@
-# CloudLearn — Production Deployment Guide
+# Vyomi — Production Deployment Guide
 
-This guide covers production-mode deployment of the CloudLearn simulator.
+This guide covers production-mode deployment of the Vyomi simulator.
 For local dev, use `docker compose up` and skip this doc.
 
 ## Differences from dev mode
@@ -163,7 +163,7 @@ parses logs. Real metrics + tracing planned for v1.1.
 
 ## Single-instance constraint
 
-CloudLearn v1.0 runs as a single instance. State is stored in:
+Vyomi v1.0 runs as a single instance. State is stored in:
 - `.cloudlearn_state.sqlite3` (tenants, spaces, license, audit log)
 - Vault `/vault/data/` (KMS keys + secrets)
 - Postgres/MySQL persistent volumes (RDS/Cloud SQL surrogates)

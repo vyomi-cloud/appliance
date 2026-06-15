@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-28
 **Authors:** Audit conducted post-Phase E (Azure roadmap A–E complete)
-**Scope:** Compare AWS, GCP, and Azure console surfaces in the CloudLearn simulator across architecture, create flows, detail blades, rich-config sub-blades, and ancillary UX (action toolbars / activity / metrics / tags / notifications / space gate).
+**Scope:** Compare AWS, GCP, and Azure console surfaces in the Vyomi simulator across architecture, create flows, detail blades, rich-config sub-blades, and ancillary UX (action toolbars / activity / metrics / tags / notifications / space gate).
 
 ---
 
