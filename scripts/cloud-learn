@@ -37,6 +37,25 @@ _vyomi_mirror_env() {
 }
 _vyomi_mirror_env
 
+# ── Path migration (Phase 10 — vyomi rebrand) ──────────────────────────
+# Canonical host-side state dir is now ~/.vyomi/ (was ~/.cloud-learn/).
+# On first v2.0.0 launch: if ~/.cloud-learn/ exists and ~/.vyomi/ doesn't,
+# atomically rename + create a back-compat symlink at the old path so
+# any external script using ~/.cloud-learn/ still resolves correctly.
+# Idempotent — does nothing once ~/.vyomi/ is the real directory.
+_vyomi_migrate_state_dir() {
+  local old="${HOME}/.cloud-learn"
+  local new="${HOME}/.vyomi"
+  if [ -d "$old" ] && [ ! -L "$old" ] && [ ! -e "$new" ]; then
+    mv "$old" "$new" 2>/dev/null || return 0
+    # Best-effort back-compat symlink. Failures (e.g. read-only HOME) are
+    # non-fatal — the new path is canonical regardless.
+    ln -s "$new" "$old" 2>/dev/null || true
+  fi
+}
+_vyomi_migrate_state_dir
+
+
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${CLOUD_LEARN_HOME:-$(cd "${SCRIPT_PATH}/.." && pwd)}"
 PROJECT_NAME="${CLOUD_LEARN_PROJECT_NAME:-cloud-learn}"
@@ -56,7 +75,7 @@ APPLIANCE_NAME="${CLOUD_LEARN_APPLIANCE_NAME:-cloudlearn-appliance}"
 #      these files from inside the VM — SSHFS into brew-controlled paths
 #      hits permission denials on macOS because the path is sandboxed)
 # Per-VM subdir so multiple appliances on the same host don't collide.
-APPLIANCE_DIR="${CLOUD_LEARN_APPLIANCE_DIR:-${HOME}/.cloud-learn/appliance/${APPLIANCE_NAME}}"
+APPLIANCE_DIR="${CLOUD_LEARN_APPLIANCE_DIR:-${HOME}/.vyomi/appliance/${APPLIANCE_NAME}}"
 APPLIANCE_IMAGE="${CLOUD_LEARN_APPLIANCE_IMAGE:-24.04}"
 APPLIANCE_CPUS="${CLOUD_LEARN_APPLIANCE_CPUS:-4}"
 APPLIANCE_MEMORY="${CLOUD_LEARN_APPLIANCE_MEMORY:-8G}"
@@ -515,7 +534,7 @@ _PHASE_STARTED_AT=$_LAUNCH_STARTED_AT
 
 # Persistent log under $HOME so the user always knows where to look
 # even if the brew bundle gets reinstalled. Keep last 10.
-_LOG_DIR="${HOME}/.cloud-learn/logs"
+_LOG_DIR="${HOME}/.vyomi/logs"
 _LOG_FILE="${_LOG_DIR}/up-$(date +%Y%m%d-%H%M%S).log"
 mkdir -p "$_LOG_DIR" 2>/dev/null || true
 # Prune to last 10

@@ -3,7 +3,7 @@
 #
 # What it does:
 #   1. Verifies Docker + Docker Compose v2 are present
-#   2. Creates ~/.cloudlearn/{compose,data,deployments}  (no sudo)
+#   2. Creates ~/.vyomi/{compose,data,deployments}  (no sudo)
 #   3. Downloads docker-compose.yml + host config defaults from GitHub
 #   4. Runs `docker compose up -d`  (4 services: simulator, cloudsim,
 #      postgres, gcs — heavy backends provision lazily on first use)
@@ -83,7 +83,15 @@ fi
 ok "docker daemon reachable"
 
 # ─── install dir ────────────────────────────────────────────────────────
-CL_HOME="${CLOUDLEARN_HOME:-$HOME/.cloudlearn}"
+# ── Path migration (Phase 10 — vyomi rebrand) ──────────────────────────
+# Canonical compose state dir is now ~/.vyomi/ (was ~/.cloudlearn/). If
+# the old dir exists and the new one doesn't, rename it once and
+# symlink the old path for back-compat.
+if [ -d "$HOME/.cloudlearn" ] && [ ! -L "$HOME/.cloudlearn" ] && [ ! -e "$HOME/.vyomi" ]; then
+  mv "$HOME/.cloudlearn" "$HOME/.vyomi" 2>/dev/null && \
+    ln -s "$HOME/.vyomi" "$HOME/.cloudlearn" 2>/dev/null || true
+fi
+CL_HOME="${VYOMI_HOME:-${CLOUDLEARN_HOME:-$HOME/.vyomi}}"
 step "Installing to ${B}${CL_HOME}${R}"
 mkdir -p "$CL_HOME"/{compose,data,deployments,config}
 ok "created $CL_HOME/{compose,data,deployments,config}"
