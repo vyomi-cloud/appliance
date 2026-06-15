@@ -103,8 +103,6 @@ services:
     restart: unless-stopped
 
   vyomi-dynamodb:
-  caddy-data:
-  caddy-config:
     image: amazon/dynamodb-local:latest
     command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
     working_dir: /home/dynamodblocal
@@ -219,3 +217,5 @@ volumes:
   vyomi-nats:
   vyomi-minio:
   vyomi-dynamodb:
+  caddy-data:
+  caddy-config:
