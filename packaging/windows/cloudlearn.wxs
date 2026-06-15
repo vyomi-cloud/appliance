@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="CloudLearn"
-           Manufacturer="CloudLearn"
+  <Package Name="Vyomi"
+           Manufacturer="Vyomi"
            Version="0.1.0"
            UpgradeCode="7b95b0f4-1e4d-4e0e-9c8d-29d2f1d93a11"
            Language="1033"
            InstallerVersion="500"
            Compressed="yes"
            Scope="perMachine">
-    <MajorUpgrade DowngradeErrorMessage="A newer version of CloudLearn is already installed." />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Vyomi is already installed." />
     <MediaTemplate />
 
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="CloudLearn">
+      <Directory Id="INSTALLFOLDER" Name="Vyomi">
         <Directory Id="BINFOLDER" Name="bin" />
         <Directory Id="SCRIPTSDIR" Name="scripts" />
         <Directory Id="DOCSDIR" Name="docs" />
@@ -21,10 +21,10 @@
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="AppProgramsFolder" Name="CloudLearn" />
+      <Directory Id="AppProgramsFolder" Name="Vyomi" />
     </StandardDirectory>
 
-    <Feature Id="MainFeature" Title="CloudLearn" Level="1">
+    <Feature Id="MainFeature" Title="Vyomi" Level="1">
       <ComponentGroupRef Id="CloudLearnFiles" />
       <ComponentRef Id="AppShortcutComponent" />
     </Feature>
