@@ -35,8 +35,8 @@ permissions:
   packages: write     # if any job ever needs to push to GHCR
 
 env:
-  GH_OWNER: sudhirkumarganti
-  GH_REPO:  cloud-learn
+  GH_OWNER: vyomi-cloud
+  GH_REPO:  appliance
 
 jobs:
   # ── Preflight: which downstream PMs have credentials? ───────────────────
@@ -201,7 +201,7 @@ jobs:
             echo
             ls dist | sed 's/^/- /'
             echo
-            echo "**Docker image:** \`docker pull gansudkum/cloud-learn:${VER}\`"
+            echo "**Docker image:** \`docker pull vyomi/appliance:${VER}\`"
             echo "**Install:** \`curl -fsSL https://raw.githubusercontent.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}/main/install.sh | bash\`"
             echo "**SHA256 checksums:** see \`SHA256SUMS\` in attached artifacts."
             echo 'EOF'
@@ -215,9 +215,9 @@ jobs:
           files: dist/*
 
   # ── Brew tap auto-bump ──────────────────────────────────────────────────
-  # Bumps cloud-learn.rb in the sudhirkumarganti/homebrew-tap repo with the
+  # Bumps cloud-learn.rb in the vyomi-cloud/homebrew-tap repo with the
   # new url + sha256. Requires HOMEBREW_TAP_TOKEN secret (PAT with `contents:write`
-  # on sudhirkumarganti/homebrew-tap). Falls back to a no-op if missing.
+  # on vyomi-cloud/homebrew-tap). Falls back to a no-op if missing.
   brew-bump:
     needs: [preflight, build]
     if: needs.preflight.outputs.has_brew == 'true'
@@ -288,10 +288,10 @@ jobs:
           token: ${{ secrets.WINGET_TOKEN }}
 
   # ── Scoop bucket auto-bump ──────────────────────────────────────────────
-  # Updates cloud-learn.json in the sudhirkumarganti/scoop-bucket repo with
+  # Updates cloud-learn.json in the vyomi-cloud/scoop-bucket repo with
   # the new url + sha256. Scoop is the Brew of Windows: manifest-based, no
   # review queue, no MSI. Requires SCOOP_BUCKET_TOKEN secret (PAT with
-  # `contents:write` on sudhirkumarganti/scoop-bucket). Falls back to a
+  # `contents:write` on vyomi-cloud/scoop-bucket). Falls back to a
   # no-op if missing.
   scoop-publish:
     needs: [preflight, build]

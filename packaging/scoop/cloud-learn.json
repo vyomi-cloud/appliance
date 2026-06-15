@@ -1,9 +1,9 @@
 {
   "version": "0.2.0",
   "description": "Local multi-cloud simulator (AWS/GCP/Azure) with real backends — full SDK + CLI parity for boto3, aws-cli, google-cloud-*, azure-sdk-*, Terraform.",
-  "homepage": "https://github.com/sudhirkumarganti/cloud-learn",
+  "homepage": "https://github.com/vyomi-cloud/appliance",
   "license": "MIT",
-  "url": "https://github.com/sudhirkumarganti/cloud-learn/releases/download/v0.2.0/cloud-learn-0.2.0.tar.gz",
+  "url": "https://github.com/vyomi-cloud/appliance/releases/download/v0.2.0/cloud-learn-0.2.0.tar.gz",
   "hash": "REPLACED_BY_RELEASE_WORKFLOW",
   "extract_dir": "cloud-learn-0.2.0",
   "depends": [
@@ -18,7 +18,7 @@
   "post_install": [
     "Write-Host ''",
     "Write-Host '==> CloudLearn installed. Run `cloud-learn up` to start the simulator.' -ForegroundColor Green",
-    "Write-Host '==> Docs: https://github.com/sudhirkumarganti/cloud-learn' -ForegroundColor Cyan"
+    "Write-Host '==> Docs: https://github.com/vyomi-cloud/appliance' -ForegroundColor Cyan"
   ],
   "uninstaller": {
     "script": [
@@ -31,10 +31,10 @@
     ]
   },
   "checkver": {
-    "github": "https://github.com/sudhirkumarganti/cloud-learn"
+    "github": "https://github.com/vyomi-cloud/appliance"
   },
   "autoupdate": {
-    "url": "https://github.com/sudhirkumarganti/cloud-learn/releases/download/v$version/cloud-learn-$version.tar.gz",
+    "url": "https://github.com/vyomi-cloud/appliance/releases/download/v$version/cloud-learn-$version.tar.gz",
     "extract_dir": "cloud-learn-$version",
     "hash": {
       "url": "$baseurl/SHA256SUMS"
@@ -54,6 +54,6 @@
     "Stop with:",
     "  cloud-learn down",
     "",
-    "Full docs: https://github.com/sudhirkumarganti/cloud-learn/blob/main/README.md"
+    "Full docs: https://github.com/vyomi-cloud/appliance/blob/main/README.md"
   ]
 }

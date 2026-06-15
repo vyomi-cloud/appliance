@@ -17,6 +17,6 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 echo "==> CloudLearn installed. Run 'cloud-learn up' to start the simulator."
-echo "==> Docs: https://github.com/sudhirkumarganti/cloud-learn"
+echo "==> Docs: https://github.com/vyomi-cloud/appliance"
 
 exit 0

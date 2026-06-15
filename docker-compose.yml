@@ -118,8 +118,8 @@ services:
     # Default to :latest — the publish workflow's pre-release guard keeps
     # :latest pinned to the most recent STABLE tag (not RCs). Pin explicitly
     # in your .env for production:
-    #   CLOUDLEARN_SIMULATOR_IMAGE=gansudkum/cloud-learn:0.1.0
-    image: ${CLOUDLEARN_SIMULATOR_IMAGE:-gansudkum/cloud-learn:latest}
+    #   CLOUDLEARN_SIMULATOR_IMAGE=vyomi/appliance:0.1.0
+    image: ${CLOUDLEARN_SIMULATOR_IMAGE:-vyomi/appliance:latest}
     build:
       context: .
       dockerfile: Dockerfile
