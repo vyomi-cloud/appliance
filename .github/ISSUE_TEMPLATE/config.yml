@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Ask a question
+    url: https://github.com/vyomi-cloud/appliance/discussions/new?category=q-a
+    about: For usage questions, not bugs. Discussions get faster answers from the community.
+  - name: 💡 Share an idea
+    url: https://github.com/vyomi-cloud/appliance/discussions/new?category=ideas
+    about: Feature ideas live in Discussions before they're concrete enough for an issue.
+  - name: 📧 Enterprise support
+    url: https://vyomi.cloud/support
+    about: Paid Enterprise customers — email support@vyomi.cloud for SLA-backed help.

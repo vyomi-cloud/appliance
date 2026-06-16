@@ -1,0 +1,41 @@
+name: 📚 Docs issue (vyomi.cloud)
+description: Something in the docs is wrong, outdated, confusing, or missing.
+title: "[docs] "
+labels: ["docs"]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page or URL
+      placeholder: https://vyomi.cloud/docs/architecture
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: What kind of docs issue?
+      options:
+        - Factually wrong
+        - Out of date (says something we no longer do)
+        - Confusing wording
+        - Missing — we should document this
+        - Typo / small fix
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What did you read, what did you expect, what was the gap?
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested
+    attributes:
+      label: Suggested fix (optional)
+      description: Even a rough sentence helps us write the patch faster.
+    validations:
+      required: false

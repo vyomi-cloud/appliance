@@ -1,0 +1,34 @@
+title: "[Q&A] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Asking a great question
+        - **Search first** — your question might already be answered.
+        - Tell us what you tried + what you expected.
+        - Paste error messages as text, not screenshots — easier to search.
+        - For appliance/simulator questions: include `vyomi --version` output.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried so far?
+      description: What did you try and what happened?
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Vyomi version (if relevant)
+      placeholder: "v2.0.1"
+    validations:
+      required: false

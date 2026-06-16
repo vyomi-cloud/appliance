@@ -1,0 +1,38 @@
+name: 🔒 Security report (DO NOT use for serious vulns)
+description: For non-sensitive security improvements. Critical CVEs go to security@vyomi.cloud instead.
+title: "[security] "
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🚨 Do you have a critical security issue?
+
+        **Stop. Don't file a public issue.** Email **security@vyomi.cloud** instead so we can
+        coordinate a disclosure timeline. Critical issues filed publicly here may be exploited
+        before we can ship a fix.
+
+        Use this template only for **non-critical** security hardening suggestions — content
+        security policy tweaks, dependency upgrades, missing HTTP security headers, etc.
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: What's the issue?
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact / risk
+      description: Who is affected, how bad is it, and how likely is exploitation?
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested-fix
+    attributes:
+      label: Suggested fix
+    validations:
+      required: false
