@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 /**
  * Thrown when the simulator returns a 403 with a {@code tier_*} code.
  * The structured response body is exposed via getters so callers can
- * decide what UI to surface (upgrade modal, retry-on-Developer, etc.).
+ * decide what UI to surface (upgrade modal, retry-on-Max, etc.).
  *
  * Body shape (matches the simulator's 403 contract):
  * <pre>
@@ -16,7 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  *                                     //    tier_provider_locked / tier_max_spaces
  *                                     //    tier_feature_locked
  *   "reason": "human-readable why",
- *   "upgrade_to": "developer",
+ *   "upgrade_to": "max",
  *   "active_tier": "free",
  *   "docs": "https://..."
  * }}

@@ -57,8 +57,8 @@ from typing import Any, Optional
 # Freeze threshold is what triggers refuse-to-launch responses.
 _TIER_THRESHOLDS = {
     "free":       {"warn_pct": 80, "freeze_pct": 92, "safety_gb": 2.0},
-    "student":    {"warn_pct": 75, "freeze_pct": 90, "safety_gb": 3.0},
-    "developer":  {"warn_pct": 70, "freeze_pct": 88, "safety_gb": 5.0},
+    "pro":        {"warn_pct": 75, "freeze_pct": 90, "safety_gb": 3.0},
+    "max":        {"warn_pct": 70, "freeze_pct": 88, "safety_gb": 5.0},
     "enterprise": {"warn_pct": 65, "freeze_pct": 85, "safety_gb": 8.0},
 }
 

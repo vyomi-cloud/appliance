@@ -8,7 +8,7 @@ import java.util.Map;
  *
  * <pre>{@code
  * SignupRequest req = SignupRequest.builder("alice@example.com")
- *     .tier("student")
+ *     .tier("pro")
  *     .primaryCloud("aws")
  *     .period("annual")
  *     .build();
