@@ -1,0 +1,30 @@
+title: "[Idea] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Sharing an idea
+        Ideas at this stage don't need to be fully spec'd — a rough thought is fine.
+        We'll discuss + refine in the thread before it graduates to a tracked issue.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem you're hitting?
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else (use case, examples, prior art)
+    validations:
+      required: false

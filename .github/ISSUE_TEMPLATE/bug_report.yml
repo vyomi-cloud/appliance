@@ -1,0 +1,115 @@
+name: 🐛 Bug report (appliance / simulator)
+description: Something in the Vyomi appliance is broken or behaves wrong.
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please fill out the form below so we can
+        reproduce + triage quickly. **Before filing**, please search existing issues — yours
+        might already be tracked.
+
+        Issues with the marketing website (vyomi.cloud) go to the
+        [portal repo](https://github.com/vyomi-cloud/portal/issues/new/choose) instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A one-paragraph description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered list — the simpler the better.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Vyomi version
+      description: Run `vyomi --version` and paste here.
+      placeholder: "v2.0.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install Vyomi?
+      options:
+        - Homebrew
+        - Docker Compose
+        - APT (Debian/Ubuntu)
+        - RPM (Fedora/RHEL)
+        - Scoop (Windows)
+        - Tarball (manual)
+        - Snap
+        - Other (specify below)
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system + version
+      placeholder: macOS 14.5 (Apple Silicon) · Windows 11 · Ubuntu 24.04
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cloud
+    attributes:
+      label: Which cloud surface is affected?
+      multiple: true
+      options:
+        - AWS
+        - GCP
+        - Azure
+        - All
+        - N/A — CLI / installer / portal
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / error output
+      description: Paste relevant logs (will auto-format as code).
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots (optional)
+      description: Drag & drop image files into this textarea.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: license
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I searched existing issues + discussions and didn't find this.
+          required: true
+        - label: I'm willing to share my use case so we can prioritize.
+          required: false

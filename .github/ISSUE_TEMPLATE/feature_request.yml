@@ -1,0 +1,54 @@
+name: ✨ Feature request
+description: Suggest a new service, capability, or change to existing behavior.
+title: "[feature] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Big feature ideas are usually better as a
+        [💡 Idea discussion](https://github.com/vyomi-cloud/appliance/discussions/new?category=ideas)
+        first — that way the community can shape it before we lock the scope into an issue.
+
+        Use this template only when:
+          - The need is concrete + specific
+          - You've already discussed it (or it's small enough to skip discussion)
+          - You'd be happy to test the implementation when it lands
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the friction you hit today. The "why" matters more than the "what".
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered (optional)
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - New AWS service
+        - New GCP service
+        - New Azure service
+        - SDK / CLI / console
+        - Terraform export
+        - Installer / packaging
+        - Documentation
+        - Other (specify above)
+    validations:
+      required: true
