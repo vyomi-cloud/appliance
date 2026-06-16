@@ -150,7 +150,12 @@ def verify_license_jwt(
     if install_id and claims.get("install_id") and claims["install_id"] != install_id:
         raise ValueError(f"install_id_mismatch (claim={claims['install_id']!r}, this={install_id!r})")
 
-    if claims.get("tier") not in ("free", "student", "developer", "enterprise"):
+    # Accept both new canonical names (Pro/Max) and legacy names (Student/
+    # Developer) so JWTs minted before the 2026-06-17 rename still validate.
+    # The tier_policy.normalize_tier() at the consumption boundary maps
+    # the legacy names to canonical ones — see core/tier_policy.py.
+    if claims.get("tier") not in ("free", "pro", "max", "enterprise",
+                                  "student", "developer"):
         raise ValueError(f"invalid_tier_claim ({claims.get('tier')!r})")
 
     # Subscription-level hard expiry. Independent of JWT exp — the JWT could

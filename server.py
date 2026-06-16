@@ -8587,35 +8587,35 @@ def api_create_space(payload: dict[str, Any]):
         if not _primary_cloud:
             raise HTTPException(status_code=403, detail={
                 "ok": False, "code": "tier_primary_cloud_unset",
-                "reason": ("Student tier requires a primary cloud to be selected. "
+                "reason": ("Pro tier requires a primary cloud to be selected. "
                            "Re-activate from the dashboard or pick one on /pricing."),
-                "upgrade_to": "developer",
+                "upgrade_to": "max",
                 "active_tier": _tier_norm,
-                "docs": "https://cloudlearn.io/docs/tiers",
+                "docs": "https://vyomi.cloud/docs/tiers",
             })
         if provider != _primary_cloud:
             raise HTTPException(status_code=403, detail={
                 "ok": False, "code": "tier_provider_locked",
-                "reason": (f"Student tier is locked to {_primary_cloud}; "
+                "reason": (f"Pro tier is locked to {_primary_cloud}; "
                            f"cannot create a {provider} space"),
-                "upgrade_to": "developer",
+                "upgrade_to": "max",
                 "active_tier": _tier_norm,
                 "primary_cloud": _primary_cloud,
                 "requested_provider": provider,
-                "docs": "https://cloudlearn.io/docs/tiers",
+                "docs": "https://vyomi.cloud/docs/tiers",
             })
     elif isinstance(_providers, list) and provider not in _providers:
         raise HTTPException(status_code=403, detail={
             "ok": False, "code": "tier_provider_locked",
             "reason": f"{provider} not available on {_tier_norm} tier",
-            "upgrade_to": "student" if _tier_norm == "free" else "developer",
+            "upgrade_to": "pro" if _tier_norm == "free" else "max",
             "active_tier": _tier_norm,
             "requested_provider": provider,
-            "docs": "https://cloudlearn.io/docs/tiers",
+            "docs": "https://vyomi.cloud/docs/tiers",
         })
 
     # PER-TENANT QUOTA — tier-derived. The tier policy's `max_spaces` is the
-    # active source of truth (Free=1, Student=5, Developer=25, Enterprise=∞).
+    # active source of truth (Free=1, Pro=5, Max=25, Enterprise=∞).
     # Falls back to the tenant's stored `settings.max_spaces` if the tier
     # policy doesn't define a cap (custom-quota Enterprise instances).
     _policy_cap = _policy.get("max_spaces")
@@ -10433,7 +10433,7 @@ async def api_auth_device_start(req: _DeviceStartReq):
 async def api_auth_device_poll(req: _DevicePollReq | None = None):
     """SPA polls this every few seconds. Returns:
        {status: 'pending'}  while waiting
-       {status: 'approved', active_tier: 'developer'}  on success
+       {status: 'approved', active_tier: 'max'}  on success
        {status: 'expired'}  if user took too long
     """
     pending = (STATE.get("device_auth") or {}).get("pending") or {}
@@ -10710,7 +10710,10 @@ def api_license_signup(req: LicenseSignupRequest):
         grace_until = (now_dt + delta + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # Per-tier credit allowance (used for soft API-call metering).
-    credit_table = {"free": 100, "student": 1000, "developer": 10000, "enterprise": 50000}
+    # Legacy "student"/"developer" keys retained so JWTs minted before the
+    # 2026-06-17 rename still get the right credit count.
+    credit_table = {"free": 100, "pro": 1000, "max": 10000, "enterprise": 50000,
+                    "student": 1000, "developer": 10000}
     payload = {
         "license_id":      _id("lic"),
         "user":            req.user,
@@ -10921,7 +10924,7 @@ def api_license_switch_cloud(payload: dict[str, Any]):
                     "ok": False, "code": "rate_limited",
                     "reason": f"primary_cloud can be changed once per year; try again in {days_left} day(s)",
                     "days_until_next_change": days_left,
-                    "upgrade_to": "developer",
+                    "upgrade_to": "max",
                     "current_primary_cloud": tenant.get("primary_cloud", ""),
                 })
         except HTTPException:

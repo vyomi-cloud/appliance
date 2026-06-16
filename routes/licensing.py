@@ -460,7 +460,7 @@ def register(app: FastAPI) -> None:
                         "ok": False, "code": "rate_limited",
                         "reason": f"primary_cloud can be changed once per year; try again in {days_left} day(s)",
                         "days_until_next_change": days_left,
-                        "upgrade_to": "developer",
+                        "upgrade_to": "max",
                         "current_primary_cloud": tenant.get("primary_cloud", ""),
                     })
             except HTTPException:

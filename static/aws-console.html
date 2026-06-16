@@ -2920,7 +2920,8 @@ function renderDiskWidget(d) {
   const statusLabel = status === "green" ? "Healthy"
                     : status === "warn"  ? "Warning · " + pct + "% used"
                     :                      "Critical · " + pct + "% used — new launches will be refused";
-  const canGrow = ["student", "developer", "enterprise"].includes(String(d.tier || "").toLowerCase());
+  // Accept both new (pro/max) and legacy (student/developer) tier names.
+  const canGrow = ["pro", "max", "enterprise", "student", "developer"].includes(String(d.tier || "").toLowerCase());
   slot.innerHTML =
     '<div style="background:' + bg + ';border:1.5px solid ' + accent + ';border-radius:10px;padding:12px 16px;margin-bottom:12px">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +

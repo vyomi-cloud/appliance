@@ -2,7 +2,8 @@
 
 Configurable via env vars (so CI and local runs share the same harness):
   VYOMI_BASE_URL — defaults to http://127.0.0.1:9000
-  VYOMI_TIER     — defaults to "developer" (so tier-gated services unlock)
+  VYOMI_TIER     — defaults to "max" (so tier-gated services unlock).
+                   Legacy alias "developer" still accepted by the appliance.
   VYOMI_ACK_PUBLIC — defaults to "1" to bypass first-visit pricing redirect
 """
 from __future__ import annotations
@@ -13,7 +14,7 @@ import pytest
 
 
 BASE_URL = os.environ.get("VYOMI_BASE_URL", "http://127.0.0.1:9000").rstrip("/")
-DEFAULT_TIER = os.environ.get("VYOMI_TIER", "developer").lower()
+DEFAULT_TIER = os.environ.get("VYOMI_TIER", "max").lower()
 
 
 @pytest.fixture(scope="session")
@@ -54,14 +55,16 @@ def wait_for_appliance(http_session, base_url):
         pytest.fail(f"Appliance never came up at {base_url}: {last_err}")
     # Force the appliance to the requested tier — fresh containers boot at
     # "free", which trips both rate-limits and tier_provider_locked on most
-    # services. The harness needs Developer (or whatever VYOMI_TIER is) so
-    # every service is callable. POST /api/license/signup works in DEV mode;
+    # services. The harness needs Max (or whatever VYOMI_TIER is) so every
+    # service is callable. POST /api/license/signup works in DEV mode;
     # this is a no-op if already on the right tier.
     try:
         r = http_session.get(f"{base_url}/api/runtime/tier", timeout=5)
         current = (r.json() or {}).get("active_tier") if r.status_code == 200 else ""
         if (current or "").lower() != DEFAULT_TIER:
-            primary = "aws" if DEFAULT_TIER == "student" else ""
+            # Pro is single-cloud; pick AWS as a deterministic default for the
+            # harness. Legacy "student" alias still picks AWS the same way.
+            primary = "aws" if DEFAULT_TIER in ("pro", "student") else ""
             seats = 10 if DEFAULT_TIER == "enterprise" else 1
             sign = http_session.post(
                 f"{base_url}/api/license/signup",
@@ -92,7 +95,12 @@ def wait_for_appliance(http_session, base_url):
 _TIER_GATED = {
     # AWS — Free tier locks NoSQL + eventing
     "free": {"aws": {"dynamodb", "eventbridge"}},
-    # Student is single-cloud (their primary_cloud only)
+    # Pro is single-cloud (their primary_cloud only). Legacy "student" alias
+    # kept so older CI invocations don't break — both behave identically.
+    "pro": {
+        "azure": "ALL", "gcp": "ALL",
+        "aws":   {"dynamodb", "eventbridge"},
+    },
     "student": {
         "azure": "ALL", "gcp": "ALL",
         "aws":   {"dynamodb", "eventbridge"},

@@ -34,7 +34,7 @@ import java.util.function.Supplier;
  *
  * // Sign up at a new tier
  * client.signup(SignupRequest.builder("dev@example.com")
- *         .tier("developer").period("annual").build());
+ *         .tier("max").period("annual").build());
  * }</pre>
  */
 public class TierClient {
@@ -96,7 +96,7 @@ public class TierClient {
         }
     }
 
-    /** POST /api/license/switch-cloud → Student tier primary_cloud change (1/year). */
+    /** POST /api/license/switch-cloud → Pro tier primary_cloud change (1/year). */
     public Map<String, Object> switchPrimaryCloud(String newCloud) {
         try {
             String body = M.writeValueAsString(Map.of("primary_cloud", newCloud));

@@ -1,6 +1,8 @@
 """Tier policy — single source of truth for what each license tier unlocks.
 
-CloudLearn licensing model (locked in 2026-06-01):
+Vyomi licensing model (rebranded 2026-06-17 from Free/Student/Developer/
+Enterprise to Free/Pro/Max/Enterprise — see _LEGACY_TIER_MAP for the
+back-compat alias rules that keep old JWTs valid):
 
     free       — build ONE complete e2e app per cloud, all 3 providers visible
                  (10 services per provider: compute + serverless + storage + DB
@@ -8,22 +10,25 @@ CloudLearn licensing model (locked in 2026-06-01):
                  + eventing. Tight quantity caps (1 of each resource per space).
                  ₹0/mo forever.
 
-    student    — pick ONE primary cloud at signup, get all 12 services on it.
+    pro        — pick ONE primary cloud at signup, get all 12 services on it.
                  Other 2 clouds visible but locked. 5 spaces · medium VM size
                  · 10 GB storage · Cloud Shell · CloudSim Power model. ₹299/mo
-                 or ₹2099/yr.
+                 or ₹2099/yr. (Was "Student" pre-2026-06-17.)
 
-    developer  — all 35 services × all 3 clouds. 25 spaces · large VM size ·
+    max        — all 35 services × all 3 clouds. 25 spaces · large VM size ·
                  100 GB storage · Cedar IAM enforcement · full CloudSim · cost
-                 simulation · CI integration. ₹599/mo or ₹5099/yr.
+                 simulation · CI integration. ₹599/mo (₹539/mo with verified
+                 .edu/.ac.in email — 10 % student discount applied via coupon
+                 at checkout, not a separate tier). (Was "Developer" pre-
+                 2026-06-17.)
 
-    enterprise — everything in developer + multi-tenant · SSO · audit-log
-                 sinks · Helm + air-gapped · custom domain · 24/7 support.
+    enterprise — everything in max + multi-tenant · SSO · audit-log sinks ·
+                 Helm + air-gapped · custom domain · 24/7 support.
                  ₹99/dev/mo, 10-dev minimum (= ₹990/mo).
 
 The reference apps (tests/e2e/java-orders + go-inventory) both fit ENTIRELY
 within the Free tier — that's intentional. Free user can run our reference
-apps as their first hands-on; building app #2 forces the Student upgrade.
+apps as their first hands-on; building app #2 forces the Pro upgrade.
 """
 from __future__ import annotations
 
@@ -32,7 +37,7 @@ from typing import Any
 
 # ---------------------------------------------------------------------------
 # Service category buckets — each provider's catalog services map to one.
-# Used by the Free + Student tiers to allow/deny by category, not by per-
+# Used by the Free + Pro tiers to allow/deny by category, not by per-
 # service key (so adding a new EC2-like service later doesn't need a tier
 # policy update).
 # ---------------------------------------------------------------------------
@@ -97,8 +102,8 @@ UNLIMITED = -1
 # the limit, while Enterprise gets effectively no ceiling.
 RATE_LIMITS_RPS: dict[str, int] = {
     "free":       10,
-    "student":    50,
-    "developer":  200,
+    "pro":        50,
+    "max":        200,
     "enterprise": UNLIMITED,
 }
 
@@ -106,6 +111,13 @@ RATE_LIMITS_RPS: dict[str, int] = {
 def rate_limit_rps(tier: str) -> int:
     """Return per-tenant requests/second cap. UNLIMITED → no throttle."""
     return RATE_LIMITS_RPS.get(normalize_tier(tier), 10)
+
+
+# Education discount: verified .edu / .ac.in emails get 10 % off Max at
+# checkout. Applied as a coupon code by the portal payments layer — NOT a
+# separate tier, NOT enforced here. This constant is the single source of
+# truth so checkout / pricing-page / marketing all stay in sync.
+EDU_DISCOUNT_PCT_ON_MAX = 10
 
 
 def _free_quantities() -> dict[str, int]:
@@ -123,7 +135,7 @@ def _free_quantities() -> dict[str, int]:
     }
 
 
-def _student_quantities() -> dict[str, int]:
+def _pro_quantities() -> dict[str, int]:
     return {
         "vm":              10,
         "database":        5,
@@ -137,7 +149,7 @@ def _student_quantities() -> dict[str, int]:
     }
 
 
-def _developer_quantities() -> dict[str, int]:
+def _max_quantities() -> dict[str, int]:
     return {
         "vm":              50,
         "database":        UNLIMITED,
@@ -213,8 +225,8 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "support":        "community",
         "update_channel": "quarterly",
     },
-    "student": {
-        "label":                       "Student",
+    "pro": {
+        "label":                       "Pro",
         "headline":                    "All services on one cloud, build many apps",
         "price_inr_monthly":           299,
         "price_inr_annual":            2099,
@@ -226,7 +238,7 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "providers":                   "primary_cloud_only",
         "service_categories_unlocked": "ALL",  # all categories — but only on primary cloud
         "service_categories_locked":   [],
-        "per_space_quantities":        _student_quantities(),
+        "per_space_quantities":        _pro_quantities(),
         "max_vm_size_tier":            "medium",
         "max_db_size_tier":            "medium",
         "storage_bytes_cap":           10 * 1024 ** 3,
@@ -262,8 +274,8 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "support":        "community + monthly office hours",
         "update_channel": "monthly",
     },
-    "developer": {
-        "label":                       "Developer",
+    "max": {
+        "label":                       "Max",
         "headline":                    "All clouds + advanced features + CI",
         "price_inr_monthly":           599,
         "price_inr_annual":            5099,
@@ -275,7 +287,7 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "providers":                   ["aws", "gcp", "azure"],
         "service_categories_unlocked": "ALL",
         "service_categories_locked":   [],
-        "per_space_quantities":        _developer_quantities(),
+        "per_space_quantities":        _max_quantities(),
         "max_vm_size_tier":            "large",
         "max_db_size_tier":            "large",
         "storage_bytes_cap":           100 * 1024 ** 3,
@@ -365,19 +377,24 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
 
 
 # ---------------------------------------------------------------------------
-# Legacy tier name migration. Old tier names (still in some signed JWTs):
-#   "pro" → "developer"
-#   "max" → "developer"  (consolidated; both were "more than free, less than ent")
+# Legacy tier name migration. Old JWTs (issued before 2026-06-17 rename) used
+# the names "student" and "developer" — we keep accepting those forever so
+# already-issued licenses don't break. _LEGACY_TIER_MAP folds them into the
+# new canonical names at the normalize_tier() boundary.
+#
+#   "student" / "edu"        → "pro"
+#   "developer" / "dev"      → "max"
+#   "ent"                    → "enterprise"
 # ---------------------------------------------------------------------------
 _LEGACY_TIER_MAP = {
-    "pro":  "developer",
-    "max":  "developer",
-    "dev":  "developer",
-    "edu":  "student",
-    "ent":  "enterprise",
+    "student":   "pro",
+    "edu":       "pro",
+    "developer": "max",
+    "dev":       "max",
+    "ent":       "enterprise",
 }
 
-KNOWN_TIERS = ("free", "student", "developer", "enterprise")
+KNOWN_TIERS = ("free", "pro", "max", "enterprise")
 
 
 def normalize_tier(tier: str | None) -> str:
@@ -418,16 +435,16 @@ def check_service(tier: str, service_key: str,
     service_key — one of the keys in SERVICE_CATEGORY (e.g. "ec2", "rds",
                   "dynamodb"). Unknown service keys default to ALLOWED — we
                   don't want to break new services we haven't categorized.
-    primary_cloud — for Student tier, the cloud they picked at signup.
+    primary_cloud — for Pro tier, the cloud they picked at signup.
     request_cloud — which provider the current request is hitting.
     """
     p = policy_for(tier)
     tier_norm = normalize_tier(tier)
 
-    # Provider gate — Student is locked to one cloud.
+    # Provider gate — Pro is locked to one cloud.
     providers = p.get("providers", [])
     if providers == "primary_cloud_only":
-        # Fail-safe: a Student tier subscription with an empty primary_cloud
+        # Fail-safe: a Pro tier subscription with an empty primary_cloud
         # is a misconfiguration upstream (UI picker must have failed). Deny
         # ALL clouds rather than silently letting the user in — otherwise an
         # empty primary_cloud + the truthy-AND below would short-circuit to
@@ -436,22 +453,22 @@ def check_service(tier: str, service_key: str,
             return {
                 "ok": False, "code": "tier_primary_cloud_unset",
                 "reason": (
-                    "Student tier requires a primary cloud to be selected. "
+                    "Pro tier requires a primary cloud to be selected. "
                     "Re-activate from the dashboard or pick one on /pricing."
                 ),
-                "upgrade_to": "developer",
+                "upgrade_to": "max",
             }
         if request_cloud and primary_cloud and request_cloud != primary_cloud:
             return {
                 "ok": False, "code": "tier_provider_locked",
-                "reason": f"Student tier is locked to {primary_cloud}; switch primary cloud or upgrade to Developer",
-                "upgrade_to": "developer",
+                "reason": f"Pro tier is locked to {primary_cloud}; switch primary cloud or upgrade to Max",
+                "upgrade_to": "max",
             }
     elif isinstance(providers, list) and request_cloud and request_cloud not in providers:
         return {
             "ok": False, "code": "tier_provider_locked",
             "reason": f"{request_cloud} not available on {tier_norm} tier",
-            "upgrade_to": "student" if tier_norm == "free" else "developer",
+            "upgrade_to": "pro" if tier_norm == "free" else "max",
         }
 
     # Service category gate.
@@ -465,8 +482,8 @@ def check_service(tier: str, service_key: str,
     if category not in unlocked:
         return {
             "ok": False, "code": "tier_service_locked",
-            "reason": f"{service_key} ({category}) requires {'Developer' if category in {'nosql', 'eventing'} else 'Student'} tier or higher",
-            "upgrade_to": "developer" if category in {"nosql", "eventing"} else "student",
+            "reason": f"{service_key} ({category}) requires {'Max' if category in {'nosql', 'eventing'} else 'Pro'} tier or higher",
+            "upgrade_to": "max" if category in {"nosql", "eventing"} else "pro",
             "service": service_key, "category": category,
         }
     return {"ok": True}
@@ -537,9 +554,9 @@ def check_max_spaces(tier: str, current_spaces: int) -> dict[str, Any]:
 
 
 def _next_tier(tier: str) -> str:
-    order = ["free", "student", "developer", "enterprise"]
+    order = ["free", "pro", "max", "enterprise"]
     try:
         i = order.index(tier)
         return order[min(i + 1, len(order) - 1)]
     except ValueError:
-        return "student"
+        return "pro"

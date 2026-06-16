@@ -2762,7 +2762,9 @@ function DiskHealthWidget() {
   const disk = data.disk || {};
   const pct = Math.round(disk.pct_used || 0);
   const tier = (data.tier || 'free').toUpperCase();
-  const canGrow = ['student', 'developer', 'enterprise'].includes(data.tier);
+  // Accept both new (pro/max) and legacy (student/developer) tier names —
+  // legacy preserved so JWTs minted before the 2026-06-17 rename still work.
+  const canGrow = ['pro', 'max', 'enterprise', 'student', 'developer'].includes(data.tier);
   const statusLabel = status === 'green' ? 'Healthy'
                     : status === 'warn'  ? `Warning · ${pct}% used`
                     :                      `Critical · ${pct}% used — new launches will be refused`;

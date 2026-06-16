@@ -1,12 +1,12 @@
-// Package tier provides a Go client for the CloudLearn simulator's tier API.
-// Companion to cloudlearn-tier-sdk-java with the same shape.
+// Package tier provides a Go client for the Vyomi simulator's tier API.
+// Companion to vyomi-tier-sdk-java with the same shape.
 //
 // Wraps:
 //
 //	GET  /api/license/status      → Status
 //	GET  /api/runtime/tier        → RuntimeTier (full policy table)
 //	POST /api/license/signup      → activate a tier
-//	POST /api/license/switch-cloud → Student primary_cloud change
+//	POST /api/license/switch-cloud → Pro primary_cloud change
 //
 // Plus a WithFallback helper for treating tier denials as soft enhancements
 // rather than hard failures.
@@ -59,7 +59,7 @@ type SignupRequest struct {
 // SignupBuilder is a fluent constructor for SignupRequest.
 //
 //	req := tier.NewSignup("dev@example.com").
-//	    Tier("developer").
+//	    Tier("max").
 //	    Period("annual").
 //	    Build()
 type SignupBuilder struct{ r SignupRequest }
