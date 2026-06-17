@@ -1145,6 +1145,52 @@
   <div class="toast" id="toast"></div>
 
   <script>
+    // Map raw tier names (which may be legacy "student" / "developer" on
+    // old JWTs) to the customer-facing display label "Pro" / "Max" etc.
+    // The server-side tier_policy.normalize_tier() handles the same job
+    // for enforcement; this is the display-side equivalent so toasts +
+    // top-bar pills + activation banners always read the new names even
+    // when the appliance is bound to a legacy license.
+    function tierDisplayLabel(tier) {
+      const t = String(tier || 'free').toLowerCase();
+      const map = {
+        'free':       'Free',
+        'pro':        'Pro',
+        'student':    'Pro',         // legacy alias
+        'edu':        'Pro',         // legacy alias
+        'max':        'Max',
+        'developer':  'Max',         // legacy alias
+        'dev':        'Max',         // legacy alias
+        'enterprise': 'Enterprise',
+        'ent':        'Enterprise',  // legacy alias
+      };
+      return map[t] || (t.charAt(0).toUpperCase() + t.slice(1));
+    }
+
+    // Canonical key normalization for COMPARISONS — collapse legacy
+    // ("student", "developer", "edu", "dev", "ent") and current ("pro",
+    // "max") names to the same canonical key so the "Current Plan"
+    // highlight matches whether STATE.activeTier comes from a brand-new
+    // JWT (tier="pro") or a legacy one (tier="student"). Mirror of
+    // tierDisplayLabel; same map, lowercase output. Returns '' for
+    // empty input so cards with no data-tier never spuriously match.
+    function tierCanonicalKey(tier) {
+      if (!tier) return '';
+      const t = String(tier).toLowerCase();
+      const map = {
+        'free':       'free',
+        'pro':        'pro',
+        'student':    'pro',         // legacy alias
+        'edu':        'pro',         // legacy alias
+        'max':        'max',
+        'developer':  'max',         // legacy alias
+        'dev':        'max',         // legacy alias
+        'enterprise': 'enterprise',
+        'ent':        'enterprise',  // legacy alias
+      };
+      return map[t] || t;
+    }
+
     let STATE = {
       tiers: null,        // /api/runtime/tier all_tiers
       activeTier: 'free', // /api/runtime/tier active_tier
@@ -1223,10 +1269,14 @@
     function highlightActivePlan() {
       const cards = document.querySelectorAll('.tier-grid .tier[data-tier]');
       if (!cards.length) return;
-      const activeKey = (STATE.activeTier || 'free').toLowerCase();
+      // Normalize through the canonical map so a legacy JWT (tier="student")
+      // still highlights the new "Pro" card, and vice-versa for "developer"
+      // / "Max". Without this, the user's "Current Plan" badge never shows
+      // after activation when there's a name-version mismatch.
+      const activeKey = tierCanonicalKey(STATE.activeTier || 'free');
       cards.forEach((card) => {
-        const key = (card.getAttribute('data-tier') || '').toLowerCase();
-        const isActive = key === activeKey;
+        const key = tierCanonicalKey(card.getAttribute('data-tier'));
+        const isActive = !!activeKey && key === activeKey;
         card.classList.toggle('active', isActive);
         // Swap CTA button. The .tier-cta class lives on the static buttons.
         const cta = card.querySelector('.tier-cta');
@@ -1285,7 +1335,9 @@
         return;
       }
       const portalBase = (window.VYOMI_PORTAL_URL || 'https://vyomi.cloud').replace(/\/$/, '');
-      const tierLabel = tier.toUpperCase();
+      // Use the display-mapped label so a legacy "student" / "developer"
+      // JWT still surfaces the customer-facing "Pro" / "Max" name.
+      const tierLabel = tierDisplayLabel(tier).toUpperCase();
       const pillClass = STATE.pillState === 'green' ? 'tb-activated'
                       : STATE.pillState === 'warn'  ? 'tb-activated warn'
                       :                                'tb-activated danger';
@@ -1351,7 +1403,7 @@
         const r = await fetch('/api/license/refresh', {method: 'POST'});
         const d = await r.json();
         if (!r.ok) throw new Error((d.detail && (d.detail.reason || d.detail.code)) || JSON.stringify(d));
-        toast('✓ Validated — tier: ' + d.active_tier);
+        toast('✓ Validated — tier: ' + tierDisplayLabel(d.active_tier));
         setTimeout(load, 400);
       } catch (e) {
         toast('Validation failed: ' + e.message, true);
@@ -1827,10 +1879,10 @@
             if (pd.status === 'approved') {
               clearInterval(_activationPollTimer);
               document.getElementById('dp-status').innerHTML =
-                `✅ <strong>Activated</strong> — tier <strong>${pd.active_tier}</strong>` +
+                `✅ <strong>Activated</strong> — tier <strong>${tierDisplayLabel(pd.active_tier)}</strong>` +
                 (pd.issued_to ? ` for <strong>${pd.issued_to}</strong>` : '');
               btn.disabled = false;
-              toast(`License activated — tier: ${pd.active_tier}`);
+              toast(`License activated — tier: ${tierDisplayLabel(pd.active_tier)}`);
               // load() refreshes STATE.activeTier + renderTopBar() so the
               // top bar flips from [Activate appliance] to the green pill
               // even if the user hasn't closed the modal yet.
@@ -1874,9 +1926,9 @@
           out.innerHTML = `<div class="status-error">Activation failed: ${reason}</div>`;
           return;
         }
-        out.innerHTML = `<div class="status-ok">✅ Activated — tier <strong>${d.active_tier}</strong>${d.issued_to ? ` for <strong>${d.issued_to}</strong>` : ''}.</div>`;
+        out.innerHTML = `<div class="status-ok">✅ Activated — tier <strong>${tierDisplayLabel(d.active_tier)}</strong>${d.issued_to ? ` for <strong>${d.issued_to}</strong>` : ''}.</div>`;
         ta.value = '';
-        toast(`License activated — tier: ${d.active_tier}`);
+        toast(`License activated — tier: ${tierDisplayLabel(d.active_tier)}`);
         setTimeout(load, 800);   // refreshes tier cards AND the green pill
         setTimeout(closeActivateModal, 1800);
       } catch (e) {
@@ -1899,7 +1951,7 @@
         const r = await fetch('/api/license/refresh', {method:'POST'});
         const d = await r.json();
         if (!r.ok) throw new Error((d.detail && (d.detail.reason || d.detail.code)) || JSON.stringify(d));
-        toast(`Refreshed from portal — active tier: ${d.active_tier}`);
+        toast(`Refreshed from portal — active tier: ${tierDisplayLabel(d.active_tier)}`);
         setTimeout(load, 400);
       } catch (e) {
         toast('Refresh failed: ' + e.message, true);

@@ -141,7 +141,17 @@ services:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
       CLOUDLEARN_LICENSE_SECRET: cloudlearn-dev-secret
       CLOUDLEARN_CLOUDSIM_URL: http://cloudsim:9010
-      CLOUDLEARN_DISTRIBUTION_MODE: appliance
+      # Distribution mode — customer-safe default. Override to `developer`
+      # via a host `.env` file alongside this compose file when running the
+      # internal UI-conformance harness in tests/conformance/ui/ (which
+      # needs /api/license/signup to be unlocked for tier promotion).
+      CLOUDLEARN_DISTRIBUTION_MODE: ${CLOUDLEARN_DISTRIBUTION_MODE:-appliance}
+      CLOUDLEARN_DEV_MODE: ${CLOUDLEARN_DEV_MODE:-0}
+      # Disk-health gate. Default ON (enabled) — refuses VM creates the
+      # host can't safely back. Set CLOUDLEARN_DISK_GATE=disabled in a
+      # host-side `.env` for tight-disk dogfood runs only. Customer
+      # installs MUST NOT set this.
+      CLOUDLEARN_DISK_GATE: ${CLOUDLEARN_DISK_GATE:-enabled}
       CLOUDLEARN_DEPLOY_DIR: /var/lib/cloudlearn/deployments
       CLOUDLEARN_HOST_SIZING_FILE: /config/cloudlearn-host-sizing.json
       CLOUDLEARN_RUNTIME_BRIDGE_URL: http://host.docker.internal:9171

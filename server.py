@@ -12403,8 +12403,16 @@ async def api_gcp_compute_create_instance(project: str, zone: str, request: Requ
     # Host-budget gate (clamp 30%-50% of host CPU+RAM).
     _check_budget_for_launch(str(getattr(req, "machineType", "") or payload.get("machineType") or ""), "gcp")
     # Disk pre-flight — refuse early with 507 rather than half-creating
-    # a container that won't fit. See _disk_preflight definition.
-    _disk_preflight(getattr(req, "diskSizeGb", None) or 10)
+    # a container that won't fit. See _disk_preflight definition. The
+    # GCPComputeInstanceRequest model exposes the disk size as
+    # `bootDiskSizeGb` (the canonical GCP Compute name), NOT `diskSizeGb`
+    # — falling back through both keeps backward-compat with any caller
+    # that hand-rolls the older spelling.
+    _disk_preflight(
+        getattr(req, "bootDiskSizeGb", None)
+        or getattr(req, "diskSizeGb", None)
+        or 10
+    )
     _enforce_quantity_cap("vm")  # tier cap — Free=1 VM/space
     _enforce_size_cap("vm", "gcp", str(getattr(req, "machineType", "") or payload.get("machineType") or ""))
     instance = _gcp_compute_create_instance_instance(project, zone, req.dict())
@@ -17289,6 +17297,115 @@ def _rds_parse_tags(params: dict[str, Any]) -> list[dict[str, str]]:
     return tags
 
 
+# ── Real RDS data-plane provisioning ────────────────────────────────────────
+#
+# Mirrors the proven pattern that GCP Cloud SQL + Azure Database for
+# PostgreSQL already use (see core/gcp_sql_engine.py): create a real
+# database + login role on the shared cloudlearn-sql-postgres /
+# vyomi-sql-mysql container, return the connection endpoint. boto3 +
+# Terraform + psql all see a real, connectable Postgres backed by the
+# shipped engine — no LXD-image-catalog brittleness.
+#
+# Difference from gcp_sql_engine.provision(): we honor the AWS-contract
+# master_username verbatim instead of the slugified physical_name, so
+# `psql -U <master_username>` works exactly as it would on real AWS.
+
+def _rds_real_provision(db_id: str, engine: str, version: str,
+                        master_username: str, master_user_password: str) -> dict | None:
+    """Provision a real database + role on the shared shipped engine.
+    Returns {host, port, database, user, password} on success.
+    Returns None if the engine isn't reachable — caller degrades to
+    simulated control-plane lifecycle (still SDK-conformant)."""
+    eng = (engine or "postgres").lower()
+    if eng not in ("postgres", "mysql"):
+        return None
+    try:
+        from core import gcp_sql_engine
+        cfg = gcp_sql_engine._engine_config(eng)
+        if not gcp_sql_engine.available(eng):
+            return None
+        # AWS RDS db identifiers are globally unique already — use db_id as
+        # the physical database name (lowercase, alphanum + hyphen sanitized).
+        db_name = re.sub(r"[^a-z0-9_]", "_", db_id.lower()).strip("_") or "rds"
+        role = re.sub(r"[^a-zA-Z0-9_]", "_", (master_username or "dbadmin")).strip("_") or "dbadmin"
+        pwd = master_user_password or "Password123!"
+        if eng == "postgres":
+            conn = gcp_sql_engine._pg_connect(cfg)
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT 1 FROM pg_roles WHERE rolname=%s", (role,))
+                if cur.fetchone():
+                    cur.execute(f'ALTER ROLE "{role}" WITH LOGIN PASSWORD %s', (pwd,))
+                else:
+                    cur.execute(f'CREATE ROLE "{role}" WITH LOGIN PASSWORD %s', (pwd,))
+                cur.execute("SELECT 1 FROM pg_database WHERE datname=%s", (db_name,))
+                if not cur.fetchone():
+                    cur.execute(f'CREATE DATABASE "{db_name}" OWNER "{role}"')
+                cur.close()
+            finally:
+                conn.close()
+        else:  # mysql
+            conn = gcp_sql_engine._mysql_connect(cfg)
+            try:
+                cur = conn.cursor()
+                cur.execute(f"CREATE DATABASE IF NOT EXISTS `{db_name}`")
+                cur.execute("CREATE USER IF NOT EXISTS %s@'%%' IDENTIFIED BY %s", (role, pwd))
+                cur.execute("ALTER USER %s@'%%' IDENTIFIED BY %s", (role, pwd))
+                cur.execute(f"GRANT ALL PRIVILEGES ON `{db_name}`.* TO %s@'%%'", (role,))
+                cur.execute("FLUSH PRIVILEGES")
+                cur.close()
+            finally:
+                conn.close()
+        return {
+            "host":     gcp_sql_engine.public_host(""),
+            "port":     cfg["public_port"],
+            "database": db_name,
+            "user":     role,
+            "password": pwd,
+        }
+    except Exception:
+        return None
+
+
+def _rds_real_deprovision(db_id: str, engine: str, master_username: str) -> bool:
+    """Drop the real database + role. Best-effort; True if it ran."""
+    eng = (engine or "postgres").lower()
+    if eng not in ("postgres", "mysql"):
+        return False
+    try:
+        from core import gcp_sql_engine
+        if not gcp_sql_engine.available(eng):
+            return False
+        cfg = gcp_sql_engine._engine_config(eng)
+        db_name = re.sub(r"[^a-z0-9_]", "_", db_id.lower()).strip("_") or "rds"
+        role = re.sub(r"[^a-zA-Z0-9_]", "_", (master_username or "dbadmin")).strip("_") or "dbadmin"
+        if eng == "postgres":
+            conn = gcp_sql_engine._pg_connect(cfg)
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=%s",
+                    (db_name,),
+                )
+                cur.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
+                cur.execute(f'DROP ROLE IF EXISTS "{role}"')
+                cur.close()
+            finally:
+                conn.close()
+        else:
+            conn = gcp_sql_engine._mysql_connect(cfg)
+            try:
+                cur = conn.cursor()
+                cur.execute(f"DROP DATABASE IF EXISTS `{db_name}`")
+                cur.execute("DROP USER IF EXISTS %s@'%%'", (role,))
+                cur.close()
+            finally:
+                conn.close()
+        return True
+    except Exception:
+        return False
+
+
 def _rds_prepare_db_instance(payload: RDSDatabaseRequest, source_snapshot: dict | None = None) -> dict:
     db_id = payload.db_instance_identifier.strip().lower()
     if not db_id:
@@ -17314,13 +17431,34 @@ def _rds_prepare_db_instance(payload: RDSDatabaseRequest, source_snapshot: dict 
         payload.storage_type = source_snapshot.get("storage_type", payload.storage_type)
         payload.master_username = source_snapshot.get("master_username", payload.master_username)
         vpc_id = source_snapshot.get("vpc_id", vpc_id)
-    endpoint_address = f"{db_id}.rds.local"
-    # Data-plane backing: provision a real DB container when LXD is available
-    # (e.g. inside the appliance VM); otherwise degrade to a simulated control-plane
-    # record so the API/lifecycle stays conformant for SDK/Terraform clients.
-    runtime_backend = "lxd" if _lxd_available() else "simulated"
+    # Resolve engine version first — needed by both the real provisioner and
+    # the metadata fields the API returns.
     resolved_engine_version = _rds_resolve_engine_version(payload.engine, payload.engine_version)
     runtime_image = _rds_runtime_image(payload.engine, resolved_engine_version)
+
+    # Data-plane backing — same pattern GCP Cloud SQL + Azure Database for
+    # PostgreSQL already use: real database + login role on the shared
+    # cloudlearn-sql-postgres / vyomi-sql-mysql backend, so a `psql` /
+    # `mysql` client + boto3 + Terraform clients all hit a real database
+    # over the regular wire protocol. Degrades to a metadata-only
+    # "simulated" record when the engine isn't reachable (still SDK-
+    # conformant for lifecycle calls). The old LXD-image path was
+    # broken because "postgres:16" parses as remote='postgres' to lxc.
+    real_endpoint = _rds_real_provision(
+        db_id=db_id,
+        engine=payload.engine,
+        version=resolved_engine_version,
+        master_username=payload.master_username,
+        master_user_password=payload.master_user_password,
+    )
+    if real_endpoint:
+        runtime_backend = "real-pg" if (payload.engine or "").lower() == "postgres" else "real-mysql"
+        endpoint_address = real_endpoint["host"]
+        endpoint_port_override = real_endpoint["port"]
+    else:
+        runtime_backend = "simulated"
+        endpoint_address = f"{db_id}.rds.local"
+        endpoint_port_override = None
     db = {
         "db_instance_identifier": db_id,
         "db_instance_class": payload.db_instance_class,
@@ -17340,7 +17478,7 @@ def _rds_prepare_db_instance(payload: RDSDatabaseRequest, source_snapshot: dict 
         "backup_retention_period": int(payload.backup_retention_period or 7),
         "preferred_maintenance_window": payload.preferred_maintenance_window,
         "endpoint_address": endpoint_address,
-        "endpoint_port": engine_profile["port"],
+        "endpoint_port": endpoint_port_override if endpoint_port_override is not None else engine_profile["port"],
         "db_instance_arn": _rds_db_arn("db", db_id),
         "security_group_ids": sg_ids,
         "tags": list(payload.tags or []),
@@ -17361,10 +17499,24 @@ def _rds_prepare_db_instance(payload: RDSDatabaseRequest, source_snapshot: dict 
         "container_port": engine_profile["port"],
     }
     db["subnet_ids"] = list(subnet_group.get("subnet_ids", []))
-    if runtime_backend == "lxd":
+    # When the real shared-engine provisioner succeeded, the database is
+    # immediately available + connectable. The container_status field is
+    # retained for backward compat with consumers expecting the LXD shape;
+    # we just mark it "running" since the shared engine container IS
+    # running (it's part of the appliance compose stack).
+    if runtime_backend in ("real-pg", "real-mysql"):
+        db["db_instance_status"] = "available"
+        db["container_status"] = "running"
+    elif runtime_backend == "lxd":
+        # Legacy LXD path — left in for any non-pg/mysql engine that may be
+        # added later (e.g. Oracle, SQL Server). Untouched here.
         _rds_runtime_ensure_container(db)
         db["db_instance_status"] = "available"
         db["container_status"] = "running" if _lxd_status(db.get("container_id") or db.get("container_name")) == "running" else "created"
+    else:
+        # Simulated control-plane only — still SDK/Terraform conformant.
+        db["db_instance_status"] = "available"
+        db["container_status"] = "simulated"
     rds_state["db_instances"][db_id] = db
     _rds_emit_event("CreateDBInstance", {"db_instance_identifier": db_id, "engine": db["engine"], "vpc_id": vpc_id})
     return db
@@ -17404,7 +17556,11 @@ def _rds_delete_db_instance(db_id: str, skip_final_snapshot: bool = True, final_
     if not skip_final_snapshot:
         final_snapshot_identifier = final_snapshot_identifier or f"{db_id}-final-{secrets.token_hex(3)}"
         _rds_create_snapshot_from_db(db, final_snapshot_identifier)
-    _rds_runtime_delete(db)
+    # Best-effort cleanup based on which backend actually ran the instance.
+    if db.get("runtime_backend") in ("real-pg", "real-mysql"):
+        _rds_real_deprovision(db_id, db.get("engine", "postgres"), db.get("master_username", ""))
+    else:
+        _rds_runtime_delete(db)  # legacy LXD path / no-op for simulated
     del rds_state["db_instances"][db_id.lower()]
     _rds_emit_event("DeleteDBInstance", {"db_instance_identifier": db_id, "skip_final_snapshot": skip_final_snapshot})
 
@@ -20989,7 +21145,14 @@ from core import disk_health as _disk_health
 def _disk_preflight(storage_gb_hint: Optional[float] = None) -> None:
     """Pre-flight any VM launch. Caller passes the requested
     instance.storage_gb when available. Pad with the rootfs base size
-    (Ubuntu 22.04 sqaushfs ~1.2 GB) and a slop margin."""
+    (Ubuntu 22.04 sqaushfs ~1.2 GB) and a slop margin.
+
+    Bypass: set CLOUDLEARN_DISK_GATE=disabled to short-circuit. Used by
+    the local conformance harness — tests aim to exercise the control-
+    plane contract, not the actual LXD provisioning. Customer installs
+    keep the gate ON (default)."""
+    if os.environ.get("CLOUDLEARN_DISK_GATE", "").strip().lower() in ("disabled", "off", "0", "false"):
+        return
     base_rootfs_gb = 1.5  # ubuntu:22.04 unpacked rootfs
     slop_gb = 0.5
     required = base_rootfs_gb + float(storage_gb_hint or 0) + slop_gb

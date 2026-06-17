@@ -21,12 +21,13 @@
     .hdr{background:#ffffff;color:#16191f;display:flex;align-items:center;padding:0 8px 0 14px;height:50px;position:fixed;top:0;width:100%;z-index:1000;gap:6px;border-bottom:1px solid #e7e7e9;box-shadow:0 1px 0 rgba(0,0,0,0.02)}
     .hdr-logo{display:flex;align-items:center;padding-right:6px;text-decoration:none}
     .hdr-logo span{color:#16191f;font-weight:400}
-    /* Vyomi wordmark — height-locked to 40px to match the portal's visual
-       weight (~84px wide). Our source has a 1.88:1 aspect (vs portal's 3:1
-       because we cropped wider to preserve the orbit swoosh), so at 40px
-       tall it renders ~75x40 — comparable visual prominence to the
-       portal's 84x28. width:auto preserves the ratio. */
-    .hdr-logo-img{height:40px;width:auto;display:block;flex-shrink:0}
+    /* Vyomi wordmark — height bumped 40 → 44 on 2026-06-17 after cropping
+       the source PNG to its content bounds (was 82.5 % whitespace). Image
+       is now ~3.37:1 aspect (~1149 × 341 source), so at 44 px tall it
+       renders ~148 px wide — clearly readable .cloud suffix included.
+       Header is 50 px tall so 44 px logo leaves a tight but balanced 3 px
+       clearance top + bottom. width:auto preserves the ratio. */
+    .hdr-logo-img{height:44px;width:auto;display:block;flex-shrink:0}
     /* Light-theme header — dark text on white. Hover states use a soft
        neutral instead of the old AWS-navy hover so it matches the white bg. */
     .hdr-svc{color:#16191f;font-size:14px;font-weight:700;padding-left:2px;white-space:nowrap}
@@ -5768,43 +5769,39 @@ function GCPConsoleView({onOpen, onBack, notify, onExportTerraform}) {
   );
 }
 
-const SIMULATION_SPACES_STORAGE_KEY = 'cloudlearn.simulation.spaces.v1';
+// Bumped v1 → v2 on 2026-06-17 to invalidate the stale legacy seed
+// (aws-dev / gcp-dev / azure-dev / aws-lab) that didn't match the
+// documented canonical defaults shipped by the platform-side seeder
+// in core/app_context.py. Existing users will get the fresh list
+// the moment this loads.
+const SIMULATION_SPACES_STORAGE_KEY = 'vyomi.simulation.spaces.v2';
 
 const seedSimulationSpaces = () => ([
   {
-    id: 'space-aws-dev',
-    name: 'aws-dev',
+    id: 'space-aws-default',
+    name: 'aws-default',
     provider_id: 'aws',
     status: 'active',
     region: 'us-east-1',
-      description: 'AWS simulation space for EC2, S3, IAM, and connected services.',
+    description: 'AWS simulation space for EC2, S3, IAM, and connected services.',
     created_at: new Date().toISOString(),
   },
   {
-    id: 'space-gcp-dev',
-    name: 'gcp-dev',
+    id: 'space-gcp-default',
+    name: 'gcp-default',
     provider_id: 'gcp',
     status: 'active',
     region: 'us-central1',
-      description: 'GCP simulation space for Compute Engine, Cloud Storage, Cloud SQL, and more.',
+    description: 'GCP simulation space for Compute Engine, Cloud Storage, Cloud SQL, and more.',
     created_at: new Date().toISOString(),
   },
   {
-    id: 'space-azure-dev',
-    name: 'azure-dev',
+    id: 'space-azure-default',
+    name: 'azure-default',
     provider_id: 'azure',
     status: 'active',
     region: 'eastus',
     description: 'Azure simulation space for ARM-native services (VMs, Storage, SQL, Cosmos, Functions, APIM, Service Bus, VNet).',
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'space-aws-lab',
-    name: 'aws-lab',
-    provider_id: 'aws',
-    status: 'stopped',
-    region: 'us-east-1',
-    description: 'Sandbox space for AWS service workflows and route testing.',
     created_at: new Date().toISOString(),
   },
 ]);
@@ -13325,7 +13322,7 @@ function App() {
                     id: Date.now(),
                     type: 'error',
                     msg: providers === 'primary_cloud_only'
-                      ? `Your ${tier.toUpperCase()} plan is locked to ${primary.toUpperCase()}; cannot connect to ${space.provider_id.toUpperCase()}. Switch primary cloud from the dashboard or upgrade to Developer.`
+                      ? `Your ${tier.toUpperCase()} plan is locked to ${primary.toUpperCase()}; cannot connect to ${space.provider_id.toUpperCase()}. Switch primary cloud from the dashboard or upgrade to Max.`
                       : `${space.provider_id.toUpperCase()} is not included in your ${tier.toUpperCase()} plan. Upgrade to access it.`,
                   });
                   return;
