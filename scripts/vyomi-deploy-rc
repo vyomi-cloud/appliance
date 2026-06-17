@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+# Vyomi RC deploy — pushes a Release Candidate artifact onto the
+# vyomi-ec2-rc multipass VM (the dev validation rig) and brings up the
+# docker compose stack inside it.
+#
+# Workflow this implements:
+#   1. `git tag v2.0.4-rc1 && git push --tags`
+#   2. CI release-candidate.yml builds + publishes the GitHub Pre-release
+#   3. `vyomi deploy-rc v2.0.4-rc1`            ← THIS SCRIPT
+#        → downloads the tarball from the GitHub Pre-release
+#        → multipass-transfers it onto vyomi-ec2-rc
+#        → extracts, builds docker image, brings up the stack
+#        → waits for /healthz to be green
+#        → prints the dev validation URL
+#   4. Dev exercises the RC at https://192.168.252.24:9000/
+#   5. If validated → `vyomi promote-rc v2.0.4-rc1`
+#
+# Prerequisites (one-time setup):
+#   * vyomi-ec2-rc multipass VM exists with docker installed
+#     (provisioned by `vyomi rc-init` — see scripts/vyomi-rc-init)
+#   * Mac runtime bridge is running on :9172 (started by `vyomi up`)
+#   * `gh` CLI is authenticated (uses your GitHub credentials)
+#
+# Options:
+#   --local <path>     Use a local .tar.gz instead of downloading from GH
+#   --no-build         Pull the published docker image instead of building
+#                      (requires vyomi/appliance:<tag> on Docker Hub)
+#   --vm <name>        Override target multipass VM (default: vyomi-ec2-rc)
+#   --port <port>      Override host port to expose simulator (default: 9000)
+#   --skip-restart     Don't bring the stack up — only stage the source
+#   -v, --verbose      Stream docker build / compose output
+
+set -euo pipefail
+
+# ── Defaults ──────────────────────────────────────────────────────────────
+VYOMI_RC_VM="${VYOMI_RC_VM:-vyomi-ec2-rc}"
+VYOMI_RC_PORT="${VYOMI_RC_PORT:-9000}"
+GH_OWNER="vyomi-cloud"
+GH_REPO="appliance"
+LOCAL_TARBALL=""
+NO_BUILD=0
+SKIP_RESTART=0
+VERBOSE=0
+TAG=""
+
+# ── Argparse ──────────────────────────────────────────────────────────────
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --local)        LOCAL_TARBALL="$2"; shift 2 ;;
+    --no-build)     NO_BUILD=1; shift ;;
+    --vm)           VYOMI_RC_VM="$2"; shift 2 ;;
+    --port)         VYOMI_RC_PORT="$2"; shift 2 ;;
+    --skip-restart) SKIP_RESTART=1; shift ;;
+    -v|--verbose)   VERBOSE=1; shift ;;
+    -h|--help)
+      sed -n '/^# Vyomi RC deploy/,/^set -e/p' "$0" | sed 's/^# \?//' | head -n -1
+      exit 0 ;;
+    -*)
+      echo "Unknown flag: $1" >&2; exit 2 ;;
+    *)
+      [ -z "$TAG" ] && TAG="$1" || { echo "Multiple tags: $TAG and $1" >&2; exit 2; }
+      shift ;;
+  esac
+done
+
+if [ -z "$TAG" ] && [ -z "$LOCAL_TARBALL" ]; then
+  echo "Usage: vyomi deploy-rc <tag>          (e.g. v2.0.4-rc1)" >&2
+  echo "   or: vyomi deploy-rc --local <path>" >&2
+  exit 2
+fi
+
+# Strip optional v prefix — accept both v2.0.4-rc1 and 2.0.4-rc1
+TAG="${TAG#v}"
+
+# ── Step 1: Verify target VM ──────────────────────────────────────────────
+echo "▸ Verifying $VYOMI_RC_VM is running..."
+# Parse via python3 — `multipass list --format json` puts whitespace
+# between keys + values, so naive grep doesn't match reliably.
+VM_INFO=$(multipass list --format json | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+for vm in d.get('list', []):
+    if vm.get('name') == '$VYOMI_RC_VM':
+        ipv4 = vm.get('ipv4') or []
+        print(f\"{vm.get('state')}|{ipv4[0] if ipv4 else ''}\")
+        break
+")
+if [ -z "$VM_INFO" ]; then
+  echo "✗ Multipass VM '$VYOMI_RC_VM' does not exist." >&2
+  echo "  Provision it first:  vyomi rc-init" >&2
+  exit 3
+fi
+VM_STATE="${VM_INFO%%|*}"
+VM_IP="${VM_INFO##*|}"
+if [ "$VM_STATE" != "Running" ]; then
+  echo "  ↳ VM is $VM_STATE — starting..."
+  multipass start "$VYOMI_RC_VM"
+  # Re-read IP after start
+  VM_IP=$(multipass info "$VYOMI_RC_VM" --format json | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(d['info']['$VYOMI_RC_VM']['ipv4'][0])
+")
+fi
+echo "  ✓ $VYOMI_RC_VM running at $VM_IP"
+
+# ── Step 2: Acquire tarball ───────────────────────────────────────────────
+if [ -n "$LOCAL_TARBALL" ]; then
+  [ -f "$LOCAL_TARBALL" ] || { echo "✗ Local tarball not found: $LOCAL_TARBALL" >&2; exit 4; }
+  TARBALL="$LOCAL_TARBALL"
+  # Infer tag from filename
+  if [ -z "$TAG" ]; then
+    TAG=$(basename "$TARBALL" .tar.gz | sed -E 's/^cloud-learn-//')
+  fi
+  echo "▸ Using local tarball: $TARBALL  (tag: $TAG)"
+else
+  TARBALL="/tmp/cloud-learn-${TAG}.tar.gz"
+  if [ -f "$TARBALL" ] && [ "$(stat -f %z "$TARBALL")" -gt 1000000 ]; then
+    echo "▸ Cached tarball: $TARBALL"
+  else
+    URL="https://github.com/${GH_OWNER}/${GH_REPO}/releases/download/v${TAG}/cloud-learn-${TAG}.tar.gz"
+    echo "▸ Downloading: $URL"
+    curl -fL --progress-bar -o "$TARBALL" "$URL" || {
+      echo "✗ Download failed. Either the release doesn't exist or v${TAG} hasn't been built yet." >&2
+      echo "  Check: https://github.com/${GH_OWNER}/${GH_REPO}/releases/tag/v${TAG}" >&2
+      exit 5
+    }
+  fi
+  echo "  ✓ $(du -h "$TARBALL" | cut -f1) downloaded"
+fi
+
+# ── Step 3: Transfer to VM ────────────────────────────────────────────────
+REMOTE_TARBALL="/home/ubuntu/cloud-learn-${TAG}.tar.gz"
+REMOTE_DIR="/home/ubuntu/cloud-learn-${TAG}"
+echo "▸ Pushing tarball to $VYOMI_RC_VM..."
+multipass transfer "$TARBALL" "${VYOMI_RC_VM}:${REMOTE_TARBALL}"
+
+echo "▸ Extracting..."
+multipass exec "$VYOMI_RC_VM" -- bash -c "
+  rm -rf '${REMOTE_DIR}'
+  cd /home/ubuntu
+  tar xzf '${REMOTE_TARBALL}'
+  echo '  ✓ extracted'
+"
+
+if [ "$SKIP_RESTART" -eq 1 ]; then
+  echo "▸ --skip-restart set — source staged but stack NOT restarted."
+  echo "  Manually start with:"
+  echo "    multipass exec $VYOMI_RC_VM -- sudo sh -c 'cd $REMOTE_DIR && docker compose -f docker-compose.appliance.yml up -d'"
+  exit 0
+fi
+
+# ── Step 4: Bring the stack up ────────────────────────────────────────────
+echo "▸ Stopping any previous RC stack..."
+multipass exec "$VYOMI_RC_VM" -- bash -c "
+  find /home/ubuntu/cloud-learn-* -maxdepth 1 -name docker-compose.appliance.yml 2>/dev/null | while read f; do
+    d=\$(dirname \$f)
+    if [ \"\$d\" != '${REMOTE_DIR}' ]; then
+      cd \"\$d\" && sudo docker compose -f docker-compose.appliance.yml down --remove-orphans 2>/dev/null || true
+    fi
+  done
+"
+
+echo "▸ Building simulator image (this takes 5-10 min on first run)..."
+COMPOSE_LOG="/home/ubuntu/cloud-learn-${TAG}-compose.log"
+BUILD_CMD="cd ${REMOTE_DIR} && sudo docker compose -f docker-compose.appliance.yml build simulator 2>&1 | tee ${COMPOSE_LOG}"
+if [ "$VERBOSE" -eq 1 ]; then
+  multipass exec "$VYOMI_RC_VM" -- bash -c "$BUILD_CMD"
+else
+  multipass exec "$VYOMI_RC_VM" -- bash -c "$BUILD_CMD" | tail -10
+fi
+
+echo "▸ Bringing stack up..."
+UP_CMD="cd ${REMOTE_DIR} && sudo docker compose -f docker-compose.appliance.yml up -d 2>&1 | tee -a ${COMPOSE_LOG}"
+if [ "$VERBOSE" -eq 1 ]; then
+  multipass exec "$VYOMI_RC_VM" -- bash -c "$UP_CMD"
+else
+  multipass exec "$VYOMI_RC_VM" -- bash -c "$UP_CMD" | tail -10
+fi
+
+# ── Step 5: Health check ──────────────────────────────────────────────────
+echo "▸ Waiting for /healthz to be green (max 180s)..."
+deadline=$(($(date +%s) + 180))
+healthy=0
+while [ "$(date +%s)" -lt "$deadline" ]; do
+  body=$(curl -s --max-time 3 "http://${VM_IP}:9000/healthz" 2>/dev/null || true)
+  if echo "$body" | grep -q '"status":"ok"'; then
+    healthy=1
+    break
+  fi
+  sleep 5
+done
+
+# ── Step 6: Report ────────────────────────────────────────────────────────
+echo ""
+if [ "$healthy" -eq 1 ]; then
+  cat <<EOF
+╔══════════════════════════════════════════════════════════════════════╗
+║  ✓ RC v${TAG} deployed and healthy                                   ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  VM:    $VYOMI_RC_VM
+║  IP:    $VM_IP
+║  URL:   http://${VM_IP}:9000/      (HTTP)
+║         https://${VM_IP}:9443/     (HTTPS — Caddy + mkcert)
+║  Logs:  multipass exec $VYOMI_RC_VM -- tail -f ${COMPOSE_LOG}
+║
+║  Next: validate the RC, then sign off:
+║         vyomi promote-rc v${TAG}
+╚══════════════════════════════════════════════════════════════════════╝
+EOF
+  exit 0
+else
+  cat <<EOF
+╔══════════════════════════════════════════════════════════════════════╗
+║  ✗ RC v${TAG} deployment health-check FAILED                         ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  /healthz didn't return ok within 180s.
+║
+║  Inspect:
+║    multipass exec $VYOMI_RC_VM -- sudo docker compose -f ${REMOTE_DIR}/docker-compose.appliance.yml ps
+║    multipass exec $VYOMI_RC_VM -- sudo docker logs cloud-learn-simulator-1 --tail 50
+║    multipass exec $VYOMI_RC_VM -- tail -50 ${COMPOSE_LOG}
+║
+║  Don't promote this RC. Cut a new -rc tag with the fix.
+╚══════════════════════════════════════════════════════════════════════╝
+EOF
+  exit 6
+fi

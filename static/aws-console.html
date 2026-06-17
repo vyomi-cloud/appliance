@@ -290,6 +290,65 @@
   .toast{background:#16191f;color:#fff;font-size:13px;padding:10px 14px;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.2);max-width:380px}
   .toast.err{background:var(--err)}
   .toast.ok{background:var(--ok)}
+
+/* ── Disk chip (v2.0.4) — small top-right pill; click to maximize ── */
+#disk-widget-slot {
+  position: fixed !important;
+  top: 56px !important;
+  right: 16px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: none !important;
+  z-index: 80 !important;
+  width: auto !important;
+}
+#disk-widget-slot .disk-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 6px 12px 6px 8px;
+  font-size: 12px; font-weight: 600; color: #1a2330;
+  cursor: pointer; font-family: inherit;
+  box-shadow: 0 2px 8px rgba(15,27,45,0.10);
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+#disk-widget-slot .disk-chip:hover {
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15,27,45,0.16);
+}
+#disk-widget-slot .disk-chip .disk-chip-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.18);
+}
+#disk-widget-slot .disk-chip.warn   .disk-chip-dot { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.20); }
+#disk-widget-slot .disk-chip.danger .disk-chip-dot { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.20); animation: chipPulse 1400ms ease-in-out infinite; }
+@keyframes chipPulse {
+  0%,100% { box-shadow: 0 0 0 3px rgba(239,68,68,0.20); }
+  50%     { box-shadow: 0 0 0 6px rgba(239,68,68,0.10); }
+}
+#disk-widget-slot .disk-chip .disk-chip-pct { font-variant-numeric: tabular-nums; }
+#disk-widget-slot .disk-chip .disk-chip-caret { font-size: 10px; color: #5f6b7a; }
+#disk-widget-slot .disk-popover {
+  display: none;
+  position: absolute; top: calc(100% + 6px); right: 0;
+  width: 320px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(15,27,45,0.18);
+  border: 1px solid #e7e7e9;
+  overflow: hidden;
+}
+#disk-widget-slot.open .disk-popover { display: block; }
+#disk-widget-slot .disk-popover .dp-close {
+  position: absolute; top: 8px; right: 10px;
+  background: none; border: 0; font-size: 22px; color: #5f6b7a;
+  cursor: pointer; line-height: 1; padding: 2px 6px;
+  z-index: 1;
+}
+#disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
 </style>
 </head>
 <body>
@@ -553,11 +612,26 @@ function clearAutoRefresh(){
 }
 // Services with mutable state (instances transition pending→running→stopped,
 // DBs transition creating→available, lambdas have execution status, etc.).
-// We poll the list/detail view every 5s while the user is looking at these.
+// We poll the list/detail view while the user is looking at these.
 // Static services (VPC, IAM users, S3 buckets) don't get polling — no
 // transitions to surface.
+//
+// Interval was 5s but that was too aggressive: it re-rendered the table
+// every 5s, wiping the user's row selections so any subsequent
+// multi-select action (Stop, Terminate, etc.) failed silently with
+// "Select at least one item". The AWS console itself polls every 30s
+// on its EC2 list — we match that. Also added _shouldSkipAutoRefresh()
+// which pauses the timer when the user has live selections OR is
+// hovering an action menu, so the click→act flow is never disrupted.
 const _AUTO_REFRESH_SERVICES = new Set(["ec2","rds","lambda"]);
-const _AUTO_REFRESH_MS = 5000;
+const _AUTO_REFRESH_MS = 30000;
+function _shouldSkipAutoRefresh(){
+  // Don't re-render if the user has anything selected (would wipe checkboxes).
+  // Also skip if a dropdown / modal is open (would close it under their cursor).
+  const selectedCount = document.querySelectorAll('input[type="checkbox"]:checked').length;
+  const hasOpenDropdown = !!document.querySelector('.dropdown.open, .modal.open');
+  return selectedCount > 0 || hasOpenDropdown;
+}
 
 function navigate(next){
   // Track recently visited services (fed into Console Home widget)
@@ -908,7 +982,9 @@ async function renderList(main){
   if (_AUTO_REFRESH_SERVICES.has(svc.key)) {
     _AUTO_REFRESH_TIMER = setInterval(() => {
       // Only refresh if STILL on this list view (no race with nav)
+      // AND user isn't mid-action (selections / open dropdown).
       if (STATE.view === "list" && STATE.service === svc.key) {
+        if (_shouldSkipAutoRefresh()) return;
         renderList(main).catch(()=>{});
       } else {
         clearAutoRefresh();
@@ -924,7 +1000,14 @@ async function renderList(main){
   // Envelope shapes across services: native AWS endpoints use their service
   // name as the key ({instances:[...], buckets:[...]}); the generic extras
   // backend (EventBridge / Secrets Manager / KMS) uses {items:[...]}.
+  // Envelope shapes vary by service. Keep this list in sync with the
+  // backend response shapes. The RDS list returns `db_instances` (snake
+  // case — what the real AWS SDK normalises to) AND `DBInstances` (the
+  // PascalCase form some clients prefer). v2.0.4 added them after a user
+  // reported "create → list shows empty" — the data was there, the SPA
+  // was just looking for `instances` first.
   const items = data.instances || data.buckets || data.users || data.databases
+              || data.db_instances || data.DBInstances
               || data.tables || data.queues || data.functions || data.apis
               || data.vpcs || data.items || data.value
               || (Array.isArray(data)?data:[]);
@@ -1538,6 +1621,7 @@ async function renderDetail(main){
   if (_AUTO_REFRESH_SERVICES.has(svc.key)) {
     _AUTO_REFRESH_TIMER = setInterval(() => {
       if (STATE.view === "detail" && STATE.service === svc.key) {
+        if (_shouldSkipAutoRefresh()) return;
         renderDetail(main).catch(()=>{});
       } else {
         clearAutoRefresh();
@@ -2899,6 +2983,46 @@ SUB_RENDERERS.apistages = function(svc, full, host){
 //   warn   = ≤7 days OR ≥warn_pct used OR refresh stale >48h
 //   freeze = ≥freeze_pct OR sub expired — new launches will be refused
 let _diskWidgetState = null;
+
+function _diskStatusToClass(s) {
+  if (s === "warn") return "warn";
+  if (s === "freeze" || s === "danger") return "danger";
+  return "";
+}
+function _toggleDiskPopover() {
+  const el = document.getElementById("disk-widget-slot");
+  if (!el) return;
+  el.classList.toggle("open");
+}
+function _closeDiskPopover(ev) {
+  if (ev) { ev.stopPropagation(); }
+  const el = document.getElementById("disk-widget-slot");
+  if (el) el.classList.remove("open");
+}
+function _wrapWithChip(cardHtml, d) {
+  const disk = d.disk || {};
+  const pct = Math.round(disk.pct_used || 0);
+  const klass = _diskStatusToClass(d.status);
+  return (
+    '<button class="disk-chip ' + klass + '" type="button" onclick="_toggleDiskPopover()" title="Click to expand disk health">'+
+      '<span class="disk-chip-dot"></span>'+
+      '<span>Disk</span>'+
+      '<span class="disk-chip-pct">' + pct + '%</span>'+
+      '<span class="disk-chip-caret">▾</span>'+
+    '</button>'+
+    '<div class="disk-popover" onclick="event.stopPropagation()">'+
+      '<button class="dp-close" type="button" onclick="_closeDiskPopover(event)" title="Minimize">×</button>'+
+      cardHtml +
+    '</div>'
+  );
+}
+// Close popover when clicking outside the chip
+document.addEventListener("click", function(ev) {
+  const el = document.getElementById("disk-widget-slot");
+  if (!el || !el.classList.contains("open")) return;
+  if (!el.contains(ev.target)) el.classList.remove("open");
+});
+
 function renderDiskWidget(d) {
   const slot = document.getElementById("disk-widget-slot");
   if (!slot) return;
@@ -2922,8 +3046,7 @@ function renderDiskWidget(d) {
                     :                      "Critical · " + pct + "% used — new launches will be refused";
   // Accept both new (pro/max) and legacy (student/developer) tier names.
   const canGrow = ["pro", "max", "enterprise", "student", "developer"].includes(String(d.tier || "").toLowerCase());
-  slot.innerHTML =
-    '<div style="background:' + bg + ';border:1.5px solid ' + accent + ';border-radius:10px;padding:12px 16px;margin-bottom:12px">' +
+  slot.innerHTML = _wrapWithChip('<div style="background:' + bg + ';border:1.5px solid ' + accent + ';border-radius:10px;padding:12px 16px;margin-bottom:12px">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
         '<div style="font-size:13.5px;font-weight:600;color:#1f2937">' +
           'Appliance disk' +
@@ -2945,7 +3068,7 @@ function renderDiskWidget(d) {
           ? '<button class="btn" onclick="openDiskGrow()" style="font-size:12px;padding:6px 12px;background:#fff;color:#1a2330;border:1px solid #d8e0ea">Grow disk</button>'
           : '') +
       '</div>' +
-    '</div>';
+    '</div>', d);
 }
 async function fetchDiskHealth() {
   try {

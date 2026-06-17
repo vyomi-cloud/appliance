@@ -6863,6 +6863,18 @@ def _ensure_container(instance: dict) -> str:
             "-c", f"limits.memory={sizing['memory_mb']}MB",
         ])
         instance["runtime_sizing"] = sizing
+    # v2.0.4: enable docker-in-LXD. Without security.nesting=true, the
+    # standard `apt-get install docker.io` succeeds but dockerd fails
+    # to start (cgroup mounts blocked). With nesting=true, docker runs
+    # inside the LXD container using its own overlay storage driver.
+    # This unblocks the user story:
+    #     Host → Vyomi appliance VM → Vyomi-EC2 (LXD) → docker compose
+    # i.e. users can spin up a real web stack inside a Vyomi-managed EC2.
+    #
+    # Honoured opt-out via CLOUDLEARN_LXD_NO_NESTING=1 for tiny
+    # instances where the user explicitly doesn't want docker capability.
+    if not os.environ.get("CLOUDLEARN_LXD_NO_NESTING"):
+        run_args.extend(["-c", "security.nesting=true"])
     completed = _lxd_run_checked(run_args, timeout=120)
     instance["container_id"] = instance["container_name"]
     instance["container_status"] = "created"
@@ -6927,7 +6939,56 @@ def _start_lxd_instance(instance: dict) -> dict:
     if instance.get("command"):
         _start_instance_command(instance)
     instance["pid"] = None
+    # v2.0.4: bootstrap docker inside the container ON FIRST START. This
+    # is the user-facing payoff of A1 — when a user spins up a t3.large
+    # (or larger) via the Vyomi console, docker + docker-compose are
+    # ready to use for THEIR application without any manual apt-install.
+    #
+    # Runs in the background (Popen + don't block on completion) since
+    # apt-update + install takes ~30-60s. The container is marked
+    # running immediately; docker becomes available a moment later.
+    # The instance dict tracks `docker_bootstrap_state` for the SPA
+    # to surface a "Setting up docker…" badge if the user opens the
+    # detail view in the first minute after launch.
+    #
+    # Opt-out via:
+    #   * CLOUDLEARN_LXD_NO_DOCKER_BOOTSTRAP=1 (env, deployment-wide)
+    #   * instance request `runtime_backend_requested=python` (per-instance)
+    if (not os.environ.get("CLOUDLEARN_LXD_NO_DOCKER_BOOTSTRAP")
+            and str(instance.get("runtime_backend_requested") or "").lower() != "python"
+            and not instance.get("docker_bootstrap_state")):
+        instance["docker_bootstrap_state"] = "installing"
+        try:
+            _lxd_docker_bootstrap_async(container_ref, instance)
+        except Exception as e:
+            instance["docker_bootstrap_state"] = f"failed: {e}"
     return instance
+
+
+def _lxd_docker_bootstrap_async(container_ref: str, instance: dict) -> None:
+    """Run `apt-get install docker.io docker-compose-v2` inside the LXD
+    container in a background thread. Marks instance['docker_bootstrap_state']
+    when complete. Idempotent — apt-get exits cleanly if docker already
+    present.
+    """
+    import threading
+    def _run():
+        try:
+            cmd = ("apt-get update -q 2>&1 | tail -1 && "
+                   "DEBIAN_FRONTEND=noninteractive apt-get install -y -q "
+                   "docker.io docker-compose-v2 2>&1 | tail -3 && "
+                   "systemctl enable --now docker 2>&1 | tail -1 && "
+                   "usermod -aG docker ubuntu 2>&1 | head -1 || true && "
+                   "docker --version")
+            result = _lxd_run_checked(
+                ["exec", container_ref, "--", "bash", "-lc", cmd],
+                timeout=180,
+            )
+            tail = (result.stdout or "").strip().split("\n")[-1]
+            instance["docker_bootstrap_state"] = "ready: " + tail[:80]
+        except Exception as e:
+            instance["docker_bootstrap_state"] = f"failed: {e}"
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _stop_lxd_instance(instance: dict) -> dict:
@@ -21217,6 +21278,178 @@ def api_runtime_disk_cleanup_run(req: _DiskCleanupRequest):
 
 class _DiskGrowRequest(BaseModel):
     target_gb: int
+
+
+@app.get("/api/runtime/host-distribution")
+def api_runtime_host_distribution():
+    """Aggregated per-provider footprint across ALL spaces, without
+    needing to switch active context.
+
+    Powers the 3 donut pies on /clouds (CPU / RAM / Disk distribution).
+    Walks each space's service_states, sums dicts that hold tracked
+    resources (instances / buckets / queues / tables / databases / etc.),
+    and weights each as either VM-class or light-resource so the pies
+    reflect rough host pressure, not just raw counts.
+
+    NOTE: per-resource weights are approximations. v2.0.5 will replace
+    them with real LXD-summed limits per container.
+    """
+    spaces = (_spaces_state().get("spaces") or {}) if isinstance(_spaces_state(), dict) else {}
+
+    # Canonical (service, child_key) pairs that hold the CURRENT resource
+    # state — same paths /api/cloudsim/summary uses to derive per-service
+    # counts at lines 2680-2750. Avoids accidentally counting the
+    # accumulating `events`, `operations`, `audit_log`, and
+    # `aws_extras`/`gcp_extras` cross-provider trackers that grow over
+    # the session.
+    AWS_SCAN = [
+        ("ec2", "instances", True),   # is_vm = True
+        ("lambda", "functions", False),
+        ("rds", "db_instances", False),
+        ("sqs", "queues", False),
+        ("dynamodb", "tables", False),
+        ("s3", "buckets", False),
+        ("vpc", "vpcs", False),
+        ("apigateway", "apis", False),
+        ("eventbridge", "buses", False),
+        ("secretsmanager", "secrets", False),
+        ("kms", "keys", False),
+        ("iam", "users", False),
+    ]
+    GCP_SCAN = [
+        ("gcp_compute", "instances", True),
+        ("gcp_storage", "buckets", False),
+        ("gcp_sql", "instances", False),
+        ("gcp_pubsub", "topics", False),
+        ("gcp_pubsub", "subscriptions", False),
+        ("gcp_functions", "functions", False),
+        ("gcp_apigateway", "apis", False),
+        ("gcp_vpc", "networks", False),
+        ("gcp_iam", "service_accounts", False),
+        ("gcp_eventarc", "triggers", False),
+        ("gcp_secretmanager", "secrets", False),
+        ("gcp_kms", "keys", False),
+        ("gcp_firestore", "databases", False),
+    ]
+    # Azure ARM stores everything keyed by the full resourceId at the
+    # top level of the service_state — values are themselves resources
+    # (no sub-collection). We count by resource type extracted from the
+    # resourceId. Only the active-state ARM service gets walked.
+    AZURE_ARM_SVC = "azure_arm"
+    AZURE_VM_TYPES = {"microsoft.compute/virtualmachines"}
+
+    # State strings that mean "currently consuming host resources".
+    # Stopped/terminated VMs sit in persisted state but don't reserve
+    # CPU/RAM/disk on the host (the LXD container is down), so they
+    # MUST NOT count toward the pies — that was the v2.0.4-rc1 bug
+    # the user spotted.
+    LIVE_VM_STATES = {
+        "running", "pending", "starting", "starting up", "provisioning",
+        "available", "active",
+    }
+    DEAD_VM_STATES = {"stopped", "terminated", "deallocated", "shutting-down", "stopping"}
+
+    def _is_live_vm(body, provider):
+        """Returns True if the persisted VM record represents a running
+        container. Defensive: unknown/missing state defaults to LIVE so
+        we don't accidentally hide newly-created VMs whose state field
+        hasn't been populated yet."""
+        if not isinstance(body, dict):
+            return True
+        # AWS EC2: State.Name or state
+        if provider == "aws":
+            s = ((body.get("State") or {}).get("Name") or body.get("state") or "").lower()
+        elif provider == "gcp":
+            s = (body.get("status") or body.get("state") or "").lower()
+        elif provider == "azure":
+            s = (
+                (body.get("properties") or {}).get("provisioningState") or
+                body.get("power_state") or body.get("state") or ""
+            ).lower()
+        else:
+            return True
+        if s in DEAD_VM_STATES:
+            return False
+        return True
+
+    per_provider = {
+        "aws":   {"resources": 0, "vms": 0, "by_service": {}},
+        "gcp":   {"resources": 0, "vms": 0, "by_service": {}},
+        "azure": {"resources": 0, "vms": 0, "by_service": {}},
+    }
+    for sid, sp in (spaces.items() if isinstance(spaces, dict) else []):
+        if not isinstance(sp, dict):
+            continue
+        prov = (sp.get("provider") or "").lower()
+        if prov not in per_provider:
+            continue
+        svc_states = sp.get("service_states") or {}
+        if not isinstance(svc_states, dict):
+            continue
+        scan = AWS_SCAN if prov == "aws" else GCP_SCAN if prov == "gcp" else []
+        for svc_key, child_key, is_vm in scan:
+            svc = svc_states.get(svc_key) or {}
+            if not isinstance(svc, dict):
+                continue
+            coll = svc.get(child_key) or {}
+            if not isinstance(coll, dict):
+                continue
+            if is_vm:
+                # Only count VMs whose persisted state is "live"
+                live = [body for body in coll.values() if _is_live_vm(body, prov)]
+                n = len(live)
+            else:
+                n = len(coll)
+            if n == 0:
+                continue
+            per_provider[prov]["resources"] += n
+            if is_vm:
+                per_provider[prov]["vms"] += n
+            label = svc_key + "." + child_key
+            per_provider[prov]["by_service"][label] = per_provider[prov]["by_service"].get(label, 0) + n
+        # Azure ARM walk
+        if prov == "azure":
+            arm = svc_states.get(AZURE_ARM_SVC) or {}
+            if isinstance(arm, dict):
+                for rid, body in arm.items():
+                    if not isinstance(body, dict):
+                        continue
+                    parts = (rid or "").lower().split("/providers/", 1)
+                    rtype = ""
+                    if len(parts) == 2:
+                        tail = parts[1].split("/")
+                        if len(tail) >= 2:
+                            rtype = tail[0] + "/" + tail[1]
+                    # If this is a VM, gate on live state
+                    if rtype in AZURE_VM_TYPES and not _is_live_vm(body, "azure"):
+                        continue
+                    per_provider["azure"]["resources"] += 1
+                    if rtype in AZURE_VM_TYPES:
+                        per_provider["azure"]["vms"] += 1
+                    bs = per_provider["azure"]["by_service"]
+                    bs[rtype or "azure_arm"] = bs.get(rtype or "azure_arm", 0) + 1
+
+    # Approximate per-resource weights — VM ~ 2 vCPU/2 GiB/8 GB, light ~ 1/4 VM.
+    PER_VM     = {"vcpu": 2,    "ram_mb": 2048, "disk_mb": 8192}
+    PER_LIGHT  = {"vcpu": 0.5,  "ram_mb": 512,  "disk_mb": 2048}
+    for p, info in per_provider.items():
+        vms   = info["vms"]
+        light = max(0, info["resources"] - vms)
+        info["vcpus"]   = round(vms * PER_VM["vcpu"]    + light * PER_LIGHT["vcpu"],    2)
+        info["ram_mb"]  = int(vms * PER_VM["ram_mb"]   + light * PER_LIGHT["ram_mb"])
+        info["disk_mb"] = int(vms * PER_VM["disk_mb"]  + light * PER_LIGHT["disk_mb"])
+
+    sizing = _host_sizing() if "_host_sizing" in globals() else {}
+    return {
+        "providers": per_provider,
+        "host": {
+            "vcpus":   int(sizing.get("cpu_count", 4)),
+            "ram_mb":  int((sizing.get("memory_gib", 16) or 16) * 1024),
+            "disk_mb": int((sizing.get("disk_total_gib", 30) or 30) * 1024),
+        },
+        "grand_total_resources": sum(p["resources"] for p in per_provider.values()),
+        "approximation_note": "Per-VM 2 vCPU/2 GiB/8 GB; light resource = 1/4 VM. Real LXD-summed limits planned for v2.0.5.",
+    }
 
 
 @app.post("/api/runtime/disk-grow")

@@ -524,7 +524,14 @@
     .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 64px; }
 
     /* ---- header ------------------------------------------------------- */
-    header { text-align: center; margin-bottom: 32px; }
+    header { text-align: center; margin-bottom: 40px; }
+    header .hero-eyebrow {
+      display: inline-block;
+      font-size: 11.5px; font-weight: 700; letter-spacing: 0.16em;
+      text-transform: uppercase; color: #5f6b7a;
+      padding: 4px 12px; border: 1px solid #e7e7e9; border-radius: 999px;
+      background: #f7f8fa; margin-bottom: 16px;
+    }
     header .logo {
       display: inline-flex; align-items: center; gap: 10px;
       margin-bottom: 24px;
@@ -535,8 +542,14 @@
     header .logo img.vyomi-logo {
       height: 40px; width: auto; display: block;
     }
-    header h1 { font-size: 32px; font-weight: 700; margin: 0 0 8px; color: #0f1b2d; }
-    header .sub { font-size: 16px; color: #607080; margin-bottom: 24px; }
+    header h1 {
+      font-size: 38px; font-weight: 700; margin: 0 0 10px; color: #0f1b2d;
+      letter-spacing: -0.025em; line-height: 1.1;
+    }
+    header .sub {
+      font-size: 16px; color: #5f6b7a; margin: 0 auto 24px;
+      max-width: 620px; line-height: 1.45;
+    }
 
     /* ---- billing toggle ----------------------------------------------- */
     .toggle {
@@ -787,9 +800,192 @@
     }
     .toast.show { transform: translateY(0); opacity: 1; }
     .toast.error { background: #c92929; }
+
+    /* ── Splash screen (v2.0.4) ──────────────────────────────────────
+       Full-screen overlay shown on first visit per 24h. Vyomi wordmark
+       fades in, holds, fades out at 4.6s, removed from DOM at 5.0s.
+       Cookie `vyomi_splash_seen=v1` (24h) suppresses on repeat visits.
+       Hidden by default via `[hidden]` so wire-clients never see flicker.
+       prefers-reduced-motion: skip the animation entirely. */
+    .vyomi-splash {
+      position: fixed; inset: 0; z-index: 10000;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 24px;
+      background: radial-gradient(ellipse at center,
+                  #ffffff 0%, #f4f6fb 60%, #e9edf6 100%);
+      opacity: 0; animation: vyomi-splash-fade 5000ms ease-in-out forwards;
+    }
+    .vyomi-splash .vyomi-splash-logo {
+      width: 280px; max-width: 60vw; height: auto; display: block;
+      transform: translateY(8px) scale(0.96);
+      animation: vyomi-splash-logo 5000ms ease-out forwards;
+    }
+    .vyomi-splash .vyomi-splash-tag {
+      font-size: 13.5px; font-weight: 500; color: #5f6b7a;
+      letter-spacing: 0.04em; opacity: 0;
+      animation: vyomi-splash-tag 5000ms ease-out forwards;
+    }
+    .vyomi-splash .vyomi-splash-dots {
+      display: flex; gap: 6px; margin-top: 4px;
+    }
+    .vyomi-splash .vyomi-splash-dots span {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #cbd5e1; opacity: 0.6;
+      animation: vyomi-splash-pulse 1200ms ease-in-out infinite;
+    }
+    .vyomi-splash .vyomi-splash-dots span:nth-child(2) { animation-delay: 200ms; }
+    .vyomi-splash .vyomi-splash-dots span:nth-child(3) { animation-delay: 400ms; }
+    @keyframes vyomi-splash-fade {
+      0%   { opacity: 0; }
+      8%   { opacity: 1; }
+      88%  { opacity: 1; }
+      100% { opacity: 0; pointer-events: none; }
+    }
+    @keyframes vyomi-splash-logo {
+      0%   { transform: translateY(8px) scale(0.96); opacity: 0; }
+      14%  { transform: translateY(0)    scale(1.00); opacity: 1; }
+      100% { transform: translateY(0)    scale(1.00); opacity: 1; }
+    }
+    @keyframes vyomi-splash-tag {
+      0%   { opacity: 0; transform: translateY(4px); }
+      24%  { opacity: 1; transform: translateY(0); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes vyomi-splash-pulse {
+      0%, 100% { background: #cbd5e1; transform: scale(1); }
+      50%      { background: #0f1b2d; transform: scale(1.3); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .vyomi-splash { animation: none; opacity: 1; }
+      .vyomi-splash .vyomi-splash-logo,
+      .vyomi-splash .vyomi-splash-tag { animation: none; opacity: 1; transform: none; }
+      .vyomi-splash .vyomi-splash-dots span { animation: none; }
+    }
+
+    /* ── Local-fidelity emulation services section ────────────────────
+       Per-cloud cards moved here from /clouds in v2.0.4 — landing now
+       owns the marketing surface; /clouds is just workspace management.
+       Horizontal 3-column grid (was vertical on the old clouds page). */
+    .local-fidelity { margin-top: 56px; }
+    .local-fidelity > .lf-head { text-align: center; margin-bottom: 28px; }
+    .local-fidelity > .lf-head h2 {
+      font-size: 28px; font-weight: 700; color: #0f1b2d;
+      margin: 0 0 8px; letter-spacing: -0.02em;
+    }
+    .local-fidelity > .lf-head p {
+      font-size: 15px; color: #5f6b7a; margin: 0 auto;
+      max-width: 620px; line-height: 1.5;
+    }
+    .lf-row {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+    @media (max-width: 1100px) { .lf-row { grid-template-columns: 1fr; } }
+    .lf-card {
+      background: #ffffff;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 14px;
+      padding: 22px 22px 20px;
+      display: flex; flex-direction: column;
+      box-shadow: 0 2px 8px rgba(15,27,45,0.04), 0 12px 24px rgba(15,27,45,0.05);
+      transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+    }
+    .lf-card:hover {
+      border-color: #94a3b8;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 10px rgba(15,27,45,0.06), 0 18px 36px rgba(15,27,45,0.10);
+    }
+    .lf-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin-bottom: 12px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 6px 16px -6px rgba(15,27,45,0.20);
+    }
+    .lf-icon.aws   { background: linear-gradient(135deg, #ff9900 0%, #ec7211 100%); }
+    .lf-icon.gcp   { background: linear-gradient(135deg, #5b8def 0%, #1a73e8 100%); }
+    .lf-icon.azure { background: linear-gradient(135deg, #0089d6 0%, #005a9e 100%); }
+    .lf-icon svg { width: 22px; height: 22px; }
+    .lf-card h3 {
+      font-size: 16px; font-weight: 700; color: #0f1b2d;
+      margin: 0 0 14px; letter-spacing: -0.005em;
+    }
+    .lf-svc-grid {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px; flex: 1;
+    }
+    @media (max-width: 540px) { .lf-svc-grid { grid-template-columns: repeat(2, 1fr); } }
+    .lf-svc {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 7px 9px; border-radius: 7px;
+      background: #f7f8fc; border: 1px solid #e7e7e9;
+      font-size: 11.5px; color: #1a2330; min-width: 0;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .lf-svc:hover { border-color: #c5cfd9; background: #ffffff; }
+    .lf-svc .name {
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-weight: 500;
+    }
+    .lf-svc-ico {
+      width: 20px; height: 20px; border-radius: 5px;
+      display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .lf-svc-ico svg { width: 13px; height: 13px; color: #fff; }
+    .lf-svc-ico.aws   {
+      background: linear-gradient(135deg, #ff9900 0%, #ec7211 100%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 2px rgba(236,114,17,0.20);
+    }
+    .lf-svc-ico.gcp   {
+      background: linear-gradient(135deg, #5b8def 0%, #1a73e8 100%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.20), 0 1px 2px rgba(26,115,232,0.22);
+    }
+    .lf-svc-ico.azure {
+      background: linear-gradient(135deg, #00a4ef 0%, #0078d4 100%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.20), 0 1px 2px rgba(0,120,212,0.22);
+    }
+    .lf-meta {
+      margin-top: 14px; padding-top: 14px;
+      border-top: 1px solid #e7e7e9;
+      font-size: 12px; color: #5f6b7a; line-height: 1.5;
+    }
   </style>
 </head>
 <body>
+  <!-- ── Splash overlay — Vyomi-branded first-paint, 5s, cookie-suppressed.
+       Inserted at the very top of <body> so it covers all content
+       during page hydration. JS at end of body removes it after 5s
+       (or instantly if the cookie is already set). ──────────────────── -->
+  <div class="vyomi-splash" id="vyomi-splash" hidden>
+    <img class="vyomi-splash-logo" src="/assets/brand/vyomi-wordmark-light.png" alt="Vyomi">
+    <div class="vyomi-splash-tag">Local multi-cloud, in seconds.</div>
+    <div class="vyomi-splash-dots"><span></span><span></span><span></span></div>
+  </div>
+  <script>
+    // Splash gate — run BEFORE any heavy SPA logic so the user sees brand
+    // immediately. Cookie `vyomi_splash_seen=v1` valid 24h suppresses on
+    // repeat visits. The `?nosplash=1` query param also suppresses (handy
+    // for screenshot/conformance harness).
+    (function() {
+      try {
+        var url = new URL(window.location.href);
+        if (url.searchParams.get('nosplash') === '1') return;
+        if (document.cookie.split(';').some(function(c){
+          return c.trim().indexOf('vyomi_splash_seen=v1') === 0;
+        })) return;
+        var el = document.getElementById('vyomi-splash');
+        if (!el) return;
+        el.hidden = false;
+        // Set cookie immediately so a fast refresh doesn't re-show.
+        var d = new Date(); d.setTime(d.getTime() + 24 * 3600 * 1000);
+        document.cookie = 'vyomi_splash_seen=v1; expires=' + d.toUTCString() +
+                          '; path=/; SameSite=Lax';
+        // Remove from DOM after the animation completes so it stops
+        // capturing scroll/focus.
+        setTimeout(function() { try { el.remove(); } catch(_) {} }, 5100);
+      } catch (_) { /* never block page load on splash failure */ }
+    })();
+  </script>
   <!-- ── Sticky top action bar — Activate appliance + Continue to console ── -->
   <nav class="top-bar">
     <a class="tb-brand" href="/pricing" aria-label="vyomi">
@@ -814,8 +1010,9 @@
 
   <div class="container">
     <header>
-      <h1>Choose your tier</h1>
-      <div class="sub">All plans include real backends, multi-cloud consoles, and conformance tests.</div>
+      <div class="hero-eyebrow">Welcome to Vyomi</div>
+      <h1>Choose your tier.</h1>
+      <div class="sub">Every plan ships with real backends, multi-cloud consoles, and the same conformance harness — pick the surface area you need today.</div>
 
       <div class="toggle">
         <button id="bill-monthly" class="active" onclick="setBilling('monthly')">Monthly</button>
@@ -987,106 +1184,96 @@
 
     </div>
 
-    <!-- ── Compare table (matches the portal /pricing) ───────────────── -->
-    <section class="compare">
-      <div class="compare-head">
-        <h2>Compare all features</h2>
-        <p>Full breakdown across all 4 tiers.</p>
+    <!-- ── Local-fidelity emulation services (moved from /clouds) ──────
+         Replaces the v2.0.3 "Compare all features" table. Horizontal
+         3-column grid of cloud cards, each listing the services we
+         emulate at high fidelity. Standard SDKs hit a real backend. -->
+    <section class="local-fidelity">
+      <div class="lf-head">
+        <h2>Local-fidelity emulation services</h2>
+        <p>Every service below runs on a real local backend — your SDKs hit it unchanged. Click a card after activation to open its console.</p>
       </div>
-      <div class="compare-table-wrap">
-        <table class="compare-table">
-          <thead>
-            <tr>
-              <th style="width:32%">Feature</th>
-              <th class="col" style="color:#5f6b7a">Free</th>
-              <th class="col" style="color:#2563eb">Pro</th>
-              <th class="col" style="color:#059669">Max</th>
-              <th class="col" style="color:#7e22ce">Enterprise</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr class="category"><td colspan="5">Core platform</td></tr>
-            <tr><td class="feature-name">Cloud providers</td>
-                <td class="col">3 (locked)</td><td class="col">1 primary</td>
-                <td class="col">3 full</td><td class="col">3 + orchestration</td></tr>
-            <tr><td class="feature-name">Services unlocked</td>
-                <td class="col">10 cats</td><td class="col">All 35</td>
-                <td class="col">All 35</td><td class="col">All 35</td></tr>
-            <tr><td class="feature-name">Spaces per tenant</td>
-                <td class="col">1</td><td class="col">5</td>
-                <td class="col">25</td><td class="col">∞</td></tr>
-            <tr><td class="feature-name">Tenants</td>
-                <td class="col">1</td><td class="col">1</td>
-                <td class="col">1</td><td class="col">∞</td></tr>
-            <tr><td class="feature-name">Seats</td>
-                <td class="col">1</td><td class="col">1</td>
-                <td class="col">1</td><td class="col">10+ per-seat</td></tr>
+      <div class="lf-row">
 
-            <tr class="category"><td colspan="5">Development tools</td></tr>
-            <tr><td class="feature-name">Standard SDKs</td>
-                <td class="col"><span class="ck">✓</span></td>
-                <td class="col"><span class="ck">✓</span></td>
-                <td class="col"><span class="ck">✓</span></td>
-                <td class="col"><span class="ck">✓</span></td></tr>
-            <tr><td class="feature-name">Cedar IAM enforcement</td>
-                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
-                <td class="col"><span class="ck">✓</span></td><td class="col"><span class="ck">✓</span></td></tr>
-            <tr><td class="feature-name">CI integration</td>
-                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
-                <td class="col"><span class="ck">✓</span></td><td class="col"><span class="ck">✓</span></td></tr>
-            <tr><td class="feature-name">Cloud Shell drawer</td>
-                <td class="col"><span class="xx">—</span></td>
-                <td class="col"><span class="ck">✓</span></td>
-                <td class="col"><span class="ck">✓</span></td>
-                <td class="col"><span class="ck">✓</span></td></tr>
-            <tr><td class="feature-name">Cost simulation</td>
-                <td class="col"><span class="xx">—</span></td>
-                <td class="col">Totals</td><td class="col">Per-resource</td>
-                <td class="col">+ chargeback</td></tr>
-            <tr><td class="feature-name">CloudSim power + SLA</td>
-                <td class="col"><span class="xx">—</span></td>
-                <td class="col">Power only</td>
-                <td class="col"><span class="ck">✓</span></td>
-                <td class="col"><span class="ck">✓</span></td></tr>
+        <!-- AWS -->
+        <div class="lf-card">
+          <div class="lf-icon aws">
+            <svg viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L4 6v6c0 4.5 3.4 8.7 8 10 4.6-1.3 8-5.5 8-10V6l-8-4z" opacity="0.95"/>
+              <path d="M12 6.5L8 8.5v3.4c0 2.3 1.7 4.4 4 5 2.3-.6 4-2.7 4-5V8.5l-4-2z" fill="#ec7211"/>
+            </svg>
+          </div>
+          <h3>AWS · 12 services</h3>
+          <div class="lf-svc-grid">
+            <div class="lf-svc"><span class="lf-svc-ico aws"><svg viewBox="0 0 20 20" fill="#fff"><path d="M3 4h14v3H3V4zm0 5h14v3H3V9zm0 5h14v2H3v-2zM5 5.5v.5h2v-.5H5zm0 5v.5h2v-.5H5zm10-5h-1V6h1v-.5z"/></svg></span><span class="name">EC2</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico aws"><svg viewBox="0 0 20 20" fill="#fff"><path d="M4 3h3.5L13 17H9.5L8 13.4 5 17H2l5-6.2L4 3zm5 5l2 4.8L13.5 7H17l-4 10h-3l-1-2.5z" opacity="0.85"/><path d="M5 4h2.2L12 16H9.8L4.5 4H5z"/></svg></span><span class="name">Lambda</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico aws"><svg viewBox="0 0 20 20" fill="#fff"><path d="M4 4l6-2 6 2v2c0 4-2.5 8-6 10-3.5-2-6-6-6-10V4z" opacity="0.95"/><path d="M10 5L7 6.5v3.5c0 2.3 1.3 4.5 3 5.8 1.7-1.3 3-3.5 3-5.8V6.5L10 5z" fill="#ec7211"/></svg></span><span class="name">S3</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico aws"><svg viewBox="0 0 20 20" fill="#fff"><ellipse cx="10" cy="5" rx="6" ry="2"/><path d="M4 6v8c0 1.1 2.7 2 6 2s6-.9 6-2V6c0 1.1-2.7 2-6 2S4 7.1 4 6zm0 4v4c0 1.1 2.7 2 6 2s6-.9 6-2v-4c0 1.1-2.7 2-6 2s-6-.9-6-2z"/></svg></span><span class="name">RDS</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico aws"><svg viewBox="0 0 20 20" fill="#fff"><path d="M3 5h6v3H3V5zm8 0h6v3h-6V5zM3 9h6v3H3V9zm8 0h6v3h-6V9zM3 13h6v3H3v-3zm8 0h6v3h-6v-3z"/></svg></span><span class="name">DynamoDB</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico aws"><svg viewBox="0 0 20 20" fill="#fff"><path d="M3 4h14v3H3V4zm0 5h14v3H3V9zm0 5h14v2H3v-2z" opacity="0.85"/><circle cx="6" cy="5.5" r="1"/><circle cx="6" cy="10.5" r="1"/></svg></span><span class="name">SQS</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico aws"><svg viewBox="0 0 20 20" fill="#fff" stroke="#fff" stroke-width="1.2"><circle cx="10" cy="4" r="1.8"/><circle cx="4" cy="14" r="1.8"/><circle cx="10" cy="14" r="1.8"/><circle cx="16" cy="14" r="1.8"/><path d="M10 6v6m0 0l-6 2m6-2h6" fill="none"/></svg></span><span class="name">EventBridge</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico aws"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="10" cy="6" r="3"/><path d="M4 17v-1.5c0-2.5 2.7-4.5 6-4.5s6 2 6 4.5V17H4z"/></svg></span><span class="name">IAM</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico aws"><svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.4"><circle cx="6" cy="10" r="1.8" fill="#fff"/><circle cx="14" cy="10" r="1.8" fill="#fff"/><circle cx="10" cy="6" r="1.5" fill="#fff"/><circle cx="10" cy="14" r="1.5" fill="#fff"/><path d="M6 10h8M10 6v8" stroke-width="1"/></svg></span><span class="name">VPC</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico aws"><svg viewBox="0 0 20 20" fill="#fff"><path d="M5 9V6a5 5 0 0110 0v3h1v8H4V9h1zm2 0h6V6a3 3 0 00-6 0v3z"/></svg></span><span class="name">Secrets Mgr</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico aws"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="14" cy="7" r="4"/><path d="M11.5 9.5L4 17v1h2v-2h2v-2h2l1.5-1.5-0.5-0.5-1 1z"/></svg></span><span class="name">KMS</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico aws"><svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M5 12l3-3 3 3 4-4" stroke-linejoin="round" stroke-linecap="round" fill="none"/></svg></span><span class="name">CloudWatch</span></div>
+          </div>
+          <div class="lf-meta">boto3 · aws-sdk-java · aws-sdk-go · aws CLI — unchanged</div>
+        </div>
 
-            <tr class="category"><td colspan="5">Terraform</td></tr>
-            <tr><td class="feature-name">Export to HCL</td>
-                <td class="col">Basic</td><td class="col">Full</td>
-                <td class="col">Full</td><td class="col">Full + import</td></tr>
-            <tr><td class="feature-name">Deploy to real cloud</td>
-                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
-                <td class="col">1 cloud</td><td class="col">Multi-cloud</td></tr>
+        <!-- GCP -->
+        <div class="lf-card">
+          <div class="lf-icon gcp">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="7" r="2.4" fill="#fbbc04"/>
+              <circle cx="17" cy="12" r="2.4" fill="#34a853"/>
+              <circle cx="12" cy="17" r="2.4" fill="#ea4335"/>
+              <circle cx="7"  cy="12" r="2.4" fill="#fff"/>
+            </svg>
+          </div>
+          <h3>GCP · 12 services</h3>
+          <div class="lf-svc-grid">
+            <div class="lf-svc"><span class="lf-svc-ico gcp"><svg viewBox="0 0 20 20" fill="#fff"><rect x="3" y="4" width="14" height="12" rx="1"/><rect x="5" y="6" width="10" height="2" rx="0.3" fill="#1a73e8"/><rect x="5" y="9" width="10" height="2" rx="0.3" fill="#1a73e8"/><rect x="5" y="12" width="10" height="2" rx="0.3" fill="#1a73e8"/></svg></span><span class="name">Compute</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico gcp"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="2" width="16" height="16" rx="4" fill="#fff"/><path d="M7 14c2.5 0 3-2 3.5-4 .4-2 1-3.5 3-3.5h1l-1 2h-.5c-.7 0-1 .8-1.3 2.5-.5 2.5-1.4 4.5-4.7 4.5H7v-1.5z" fill="#4285f4"/></svg></span><span class="name">Functions</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico gcp"><svg viewBox="0 0 20 20" fill="#fff"><path d="M3 6h14l-2 10H5L3 6z"/><path d="M5 6l1-3h8l1 3H5z" fill="#1a73e8"/></svg></span><span class="name">GCS</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico gcp"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="2" width="16" height="16" rx="3" fill="#1a73e8"/><ellipse cx="10" cy="6" rx="5" ry="1.5" fill="#fff"/><path d="M5 6v8c0 .8 2.2 1.5 5 1.5s5-.7 5-1.5V6c0 .8-2.2 1.5-5 1.5S5 6.8 5 6z" fill="#fff"/></svg></span><span class="name">Cloud SQL</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico gcp"><svg viewBox="0 0 20 20" fill="#fff"><path d="M4 6l6-3 6 3-6 3-6-3z"/><path d="M4 10l6 3 6-3" stroke="#fff" stroke-width="1.5" fill="none"/></svg></span><span class="name">Firestore</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico gcp"><svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.5"><path d="M4 8c0-3 3-5 6-5s6 2 6 5-3 5-6 5c-1.5 0-3-.5-4-1.3" fill="none" stroke-linecap="round"/><path d="M5 10l-2 2 2 2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="name">Pub/Sub</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico gcp"><svg viewBox="0 0 20 20" fill="#fff" stroke="#fff" stroke-width="1.2"><circle cx="4" cy="10" r="2"/><circle cx="16" cy="5" r="2"/><circle cx="16" cy="15" r="2"/><path d="M5.5 9l9-3.5M5.5 11l9 3.5" fill="none"/></svg></span><span class="name">Eventarc</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico gcp"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="10" cy="6" r="3"/><path d="M4 17v-1.5c0-2.5 2.7-4.5 6-4.5s6 2 6 4.5V17H4z"/></svg></span><span class="name">IAM</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico gcp"><svg viewBox="0 0 20 20" fill="#fff" stroke="#fff" stroke-width="1.3"><circle cx="10" cy="10" r="6" fill="none"/><circle cx="10" cy="4" r="1.5"/><circle cx="10" cy="16" r="1.5"/><circle cx="4" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg></span><span class="name">VPC</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico gcp"><svg viewBox="0 0 20 20" fill="#fff"><path d="M10 2L4 5v4c0 4 2.5 7.5 6 9 3.5-1.5 6-5 6-9V5l-6-3z"/></svg></span><span class="name">Secret Mgr</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico gcp"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="14" cy="7" r="4"/><path d="M11.5 9.5L4 17v1h2v-2h2v-2h2l1.5-1.5-0.5-0.5-1 1z"/></svg></span><span class="name">KMS</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico gcp"><svg viewBox="0 0 20 20" fill="#fff"><rect x="3" y="3" width="14" height="14" rx="1.5"/><path d="M5 7h10M5 10h10M5 13h8" stroke="#1a73e8" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="name">Logging</span></div>
+          </div>
+          <div class="lf-meta">google-cloud-* (Python/Java/Go) + gcloud CLI</div>
+        </div>
 
-            <tr class="category"><td colspan="5">Enterprise</td></tr>
-            <tr><td class="feature-name">SSO (SAML/OIDC)</td>
-                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
-                <td class="col"><span class="xx">—</span></td>
-                <td class="col"><span class="ck">✓</span></td></tr>
-            <tr><td class="feature-name">Helm + air-gapped install</td>
-                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
-                <td class="col"><span class="xx">—</span></td>
-                <td class="col"><span class="ck">✓</span></td></tr>
-            <tr><td class="feature-name">Custom domain + branding</td>
-                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
-                <td class="col"><span class="xx">—</span></td>
-                <td class="col"><span class="ck">✓</span></td></tr>
-            <tr><td class="feature-name">Audit-log export</td>
-                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
-                <td class="col"><span class="xx">—</span></td>
-                <td class="col"><span class="ck">✓</span></td></tr>
-            <tr><td class="feature-name">Cross-tenant RBAC</td>
-                <td class="col"><span class="xx">—</span></td><td class="col"><span class="xx">—</span></td>
-                <td class="col"><span class="xx">—</span></td>
-                <td class="col"><span class="ck">✓</span></td></tr>
+        <!-- Azure -->
+        <div class="lf-card">
+          <div class="lf-icon azure">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M11.5 3 4 19.5h6.2l3.2-9.5L11.5 3z" fill="#50e6ff"/>
+              <path d="M13 7.2 10.4 14h5l.4 2-4.5 2H20l-7-10.8z" fill="#fff"/>
+            </svg>
+          </div>
+          <h3>Azure · 11 services</h3>
+          <div class="lf-svc-grid">
+            <div class="lf-svc"><span class="lf-svc-ico azure"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="3" width="16" height="11" rx="1.5"/><path d="M2 14h16v1H2z" opacity="0.8"/><rect x="4" y="5" width="12" height="7" rx="0.5" fill="#0078d4"/></svg></span><span class="name">VM</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico azure"><svg viewBox="0 0 20 20" fill="#fff"><path d="M10 2L3 6v8l7 4 7-4V6l-7-4z" opacity="0.9"/><path d="M7 12c1.5 0 2-1 2.3-2.5.3-1.5.7-2.5 2-2.5h.5L11 8.5h-.3c-.4 0-.5.6-.7 1.6-.3 1.5-.9 2.9-3 2.9z" fill="#0078d4"/></svg></span><span class="name">Function App</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico azure"><svg viewBox="0 0 20 20" fill="#fff"><rect x="3" y="5" width="14" height="11" rx="1"/><circle cx="7" cy="9" r="1.4" fill="#0078d4"/><circle cx="11" cy="9" r="1.4" fill="#0078d4"/><circle cx="15" cy="9" r="1.4" fill="#0078d4"/></svg></span><span class="name">Blob</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico azure"><svg viewBox="0 0 20 20" fill="#fff"><ellipse cx="10" cy="5" rx="6" ry="2"/><path d="M4 6v8c0 1.1 2.7 2 6 2s6-.9 6-2V6c0 1.1-2.7 2-6 2S4 7.1 4 6zm0 4v4c0 1.1 2.7 2 6 2s6-.9 6-2v-4c0 1.1-2.7 2-6 2s-6-.9-6-2z"/></svg></span><span class="name">SQL</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico azure"><svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.5"><circle cx="10" cy="10" r="2.5" fill="#fff"/><ellipse cx="10" cy="10" rx="8" ry="3.5"/><ellipse cx="10" cy="10" rx="8" ry="3.5" transform="rotate(60 10 10)"/><ellipse cx="10" cy="10" rx="8" ry="3.5" transform="rotate(120 10 10)"/></svg></span><span class="name">Cosmos DB</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico azure"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="6" width="16" height="8" rx="1"/><rect x="4" y="8" width="3" height="4" rx="0.3" fill="#0078d4"/><rect x="8.5" y="8" width="3" height="4" rx="0.3" fill="#0078d4"/><rect x="13" y="8" width="3" height="4" rx="0.3" fill="#0078d4"/></svg></span><span class="name">Service Bus</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico azure"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="12" y="2" width="6" height="6" rx="1"/><rect x="2" y="12" width="6" height="6" rx="1"/><rect x="12" y="12" width="6" height="6" rx="1"/></svg></span><span class="name">Event Grid</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico azure"><svg viewBox="0 0 20 20" fill="#fff"><rect x="3" y="6" width="14" height="11" rx="1.5"/><circle cx="10" cy="11" r="2.5" fill="#0078d4"/><path d="M6 4h8l-1 2H7l-1-2z" opacity="0.85"/></svg></span><span class="name">Key Vault</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico azure"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="10" cy="10" r="7" opacity="0.95"/><circle cx="10" cy="10" r="3" fill="#0078d4"/></svg></span><span class="name">APIM</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico azure"><svg viewBox="0 0 20 20" fill="#fff" stroke="#fff" stroke-width="1.3"><path d="M4 4h12v12H4V4z" fill="none"/><circle cx="4" cy="4" r="1.5"/><circle cx="16" cy="4" r="1.5"/><circle cx="4" cy="16" r="1.5"/><circle cx="16" cy="16" r="1.5"/><circle cx="10" cy="10" r="1.5"/></svg></span><span class="name">VNet</span></div>
+            <div class="lf-svc"><span class="lf-svc-ico azure"><svg viewBox="0 0 20 20" fill="#fff"><path d="M2 6c0-1 1-2 2-2h4l2 2h6c1 0 2 1 2 2v8c0 1-1 2-2 2H4c-1 0-2-1-2-2V6z" opacity="0.95"/><rect x="5" y="9" width="10" height="1.5" fill="#0078d4"/><rect x="5" y="12" width="10" height="1.5" fill="#0078d4"/></svg></span><span class="name">Storage Mgmt</span></div>
+          </div>
+          <div class="lf-meta">azure-sdk-for-* (Python/Java/Go/.NET) + az CLI</div>
+        </div>
 
-            <tr class="category"><td colspan="5">Support</td></tr>
-            <tr><td class="feature-name">Support tier</td>
-                <td class="col">Community</td>
-                <td class="col">Discord</td>
-                <td class="col">Email 48h</td>
-                <td class="col">Slack · SLA</td></tr>
-          </tbody>
-        </table>
       </div>
     </section>
 

@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# Vyomi RC init — one-time setup of the dev validation rig.
+#
+# Creates the vyomi-ec2-rc multipass VM (4 vCPU / 8GB RAM / 30GB disk)
+# and installs docker + docker compose inside. This VM is where every
+# Release Candidate gets deployed via `vyomi deploy-rc <tag>` before
+# promotion to a final release.
+#
+# Idempotent — re-running on an existing vyomi-ec2-rc reinstalls docker
+# without recreating the VM (preserves any RC stack volumes).
+#
+# Options:
+#   --cpus <n>     Default: 4
+#   --memory <g>   Default: 8G
+#   --disk <g>     Default: 30G
+#   --name <name>  Override VM name (default: vyomi-ec2-rc)
+
+set -euo pipefail
+
+VM_NAME="${VYOMI_RC_VM:-vyomi-ec2-rc}"
+CPUS=4
+MEMORY="8G"
+DISK="30G"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --cpus)   CPUS="$2"; shift 2 ;;
+    --memory) MEMORY="$2"; shift 2 ;;
+    --disk)   DISK="$2"; shift 2 ;;
+    --name)   VM_NAME="$2"; shift 2 ;;
+    -h|--help)
+      sed -n '/^# Vyomi RC init/,/^set -e/p' "$0" | sed 's/^# \?//' | head -n -1
+      exit 0 ;;
+    *) echo "Unknown flag: $1" >&2; exit 2 ;;
+  esac
+done
+
+# ── Prerequisites ─────────────────────────────────────────────────────────
+command -v multipass >/dev/null || {
+  echo "✗ multipass not installed on host." >&2
+  echo "  Install: brew install multipass" >&2
+  exit 3
+}
+
+# ── Step 1: Create VM (if needed) ─────────────────────────────────────────
+EXISTS=$(multipass list --format json | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print('yes' if any(vm.get('name') == '$VM_NAME' for vm in d.get('list', [])) else 'no')
+")
+if [ "$EXISTS" = "yes" ]; then
+  echo "▸ $VM_NAME exists — verifying state..."
+  STATE=$(multipass info "$VM_NAME" --format json | python3 -c "import json,sys;print(json.load(sys.stdin)['info']['$VM_NAME']['state'])")
+  if [ "$STATE" != "Running" ]; then
+    echo "  ↳ Starting (state was $STATE)..."
+    multipass start "$VM_NAME"
+  fi
+else
+  echo "▸ Creating $VM_NAME (cpus=$CPUS memory=$MEMORY disk=$DISK)..."
+  multipass launch --name "$VM_NAME" --cpus "$CPUS" --memory "$MEMORY" --disk "$DISK" 24.04
+fi
+
+# ── Step 2: Install docker + compose (idempotent) ─────────────────────────
+echo "▸ Installing docker + docker-compose + jq inside $VM_NAME..."
+multipass exec "$VM_NAME" -- bash -c '
+  set -e
+  if ! command -v docker >/dev/null; then
+    sudo apt-get update -q 2>&1 | tail -1
+    sudo apt-get install -y -q docker.io docker-compose-v2 jq curl
+    sudo usermod -aG docker ubuntu
+    sudo systemctl enable --now docker
+  fi
+  docker --version
+  docker compose version
+'
+
+# ── Step 3: Pre-pull common base images (saves build time later) ──────────
+echo "▸ Pre-pulling base images (saves time on first deploy)..."
+multipass exec "$VM_NAME" -- sudo bash -c '
+  for img in python:3.14-slim postgres:16-alpine mysql:8.0 hashicorp/vault:1.15 \
+             nats:2-alpine minio/minio:latest amazon/dynamodb-local:latest \
+             softwaremill/elasticmq-native:latest fsouza/fake-gcs-server:latest \
+             gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators caddy:2-alpine; do
+    docker pull "$img" 2>&1 | tail -1
+  done
+' 2>&1 | tail -15
+
+# ── Step 4: Report ────────────────────────────────────────────────────────
+IP=$(multipass info "$VM_NAME" --format json | python3 -c "import json,sys;print(json.load(sys.stdin)['info']['$VM_NAME']['ipv4'][0])")
+cat <<EOF
+
+╔══════════════════════════════════════════════════════════════════════╗
+║  ✓ $VM_NAME ready for RC validation
+╠══════════════════════════════════════════════════════════════════════╣
+║  IP:    $IP
+║  Docker: $(multipass exec "$VM_NAME" -- docker --version | head -1)
+║
+║  Next steps:
+║    1. Tag a Release Candidate:
+║       git tag v2.0.4-rc1 && git push origin v2.0.4-rc1
+║
+║    2. Wait for release-candidate.yml CI to publish the Pre-release
+║       (https://github.com/vyomi-cloud/appliance/releases)
+║
+║    3. Deploy it onto $VM_NAME:
+║       vyomi deploy-rc v2.0.4-rc1
+║
+║    4. Open http://$IP:9000/ to validate the RC
+║
+║    5. When happy:  vyomi promote-rc v2.0.4-rc1
+╚══════════════════════════════════════════════════════════════════════╝
+EOF

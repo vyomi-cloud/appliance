@@ -1,0 +1,225 @@
+name: Release Candidate
+
+# On every v*-rc*, v*-beta*, v*-alpha* tag:
+#   1. Build the source tarball + .deb + .rpm + SHA256SUMS (same artifacts
+#      release.yml ships for final releases — bit-identical build steps,
+#      same Dockerfile, so what you validate on an RC is what users get
+#      after promotion).
+#   2. Publish a GitHub **Pre-release** with the artifacts attached.
+#   3. **DO NOT** fan out to downstream package managers (brew tap, snap,
+#      scoop, winget). RC artifacts must only be reachable to dev/canary
+#      installs (via the Pre-release URL or the `vyomi upgrade --channel rc`
+#      CLI flag), never to `brew upgrade vyomi` running on a customer
+#      laptop.
+#
+# The docker image for an RC tag is published by docker-publish.yml,
+# which already detects pre-release versions and skips updating :latest.
+# So `docker pull vyomi/appliance:2.0.4-rc1` works after this fires,
+# without affecting the :latest pointer.
+#
+# Promotion path (separate workflow):
+#   When a dev signs off on an RC via `vyomi promote-rc v2.0.4-rc1`,
+#   promote-rc.yml re-tags the same commit as `v2.0.4` (no -rc suffix),
+#   which fires release.yml — that's when downstream channels light up.
+#
+# Permissions:
+#   contents: write — required by softprops/action-gh-release to write
+#                     the GitHub Release page.
+
+on:
+  push:
+    tags:
+      - 'v*-rc*'
+      - 'v*-beta*'
+      - 'v*-alpha*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "RC version (e.g. 2.0.4-rc1)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  GH_OWNER: vyomi-cloud
+  GH_REPO:  appliance
+
+jobs:
+  build:
+    name: Build RC artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tarball_sha256: ${{ steps.shas.outputs.tarball_sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.14"}
+      - uses: ruby/setup-ruby@v1
+        with: {ruby-version: '3.3'}
+
+      - name: Install fpm (for .deb + .rpm)
+        run: gem install --no-document fpm
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VER="${{ github.event.inputs.version }}"
+          else
+            VER="${GITHUB_REF#refs/tags/v}"
+          fi
+          # Sanity check — refuse to build a non-prerelease via this
+          # workflow. Belt and suspenders for accidental manual dispatch.
+          if ! echo "$VER" | grep -qE -- '-(rc|beta|alpha)'; then
+            echo "::error::Version '$VER' is not a prerelease (no -rc/-beta/-alpha suffix)."
+            echo "::error::Final releases must go through release.yml."
+            exit 1
+          fi
+          echo "$VER" > VERSION
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Build source tarball
+        run: |
+          mkdir -p dist
+          # MUST match release.yml's allowlist 1:1 — see that file's comment
+          # for why each path is included (cloudsim-backbone regression,
+          # routes + setup_cython.py regression, etc.).
+          tar czf "dist/cloud-learn-${{ steps.ver.outputs.version }}.tar.gz" \
+            --exclude='.git' --exclude='__pycache__' --exclude='node_modules' \
+            --exclude='dist' --exclude='**/target' --exclude='**/playwright-report' \
+            --transform "s,^,cloud-learn-${{ steps.ver.outputs.version }}/," \
+            core providers packs routes static \
+            server.py setup_cython.py requirements.txt VERSION \
+            Dockerfile docker-compose.yml docker-compose.appliance.yml \
+            cloudsim-backbone \
+            .env.example packaging scripts docs install.sh \
+            README.md CHANGELOG.md LICENSE
+
+      - name: Build .deb
+        run: bash packaging/debian/build-deb.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Build .rpm via fpm
+        run: |
+          STAGE="$(mktemp -d)"
+          mkdir -p "$STAGE/usr/lib/cloud-learn" "$STAGE/usr/bin" "$STAGE/usr/share/doc/cloud-learn"
+          cp -r core providers packs static scripts \
+                server.py requirements.txt VERSION Dockerfile \
+                docker-compose.yml docker-compose.appliance.yml .env.example install.sh \
+                "$STAGE/usr/lib/cloud-learn/"
+          cat > "$STAGE/usr/bin/vyomi" <<'EOF'
+          #!/usr/bin/env bash
+          export CLOUD_LEARN_HOME="${CLOUD_LEARN_HOME:-/usr/lib/cloud-learn}"
+          export CLOUDLEARN_DISTRIBUTION_MODE="${CLOUDLEARN_DISTRIBUTION_MODE:-appliance}"
+          exec bash "$CLOUD_LEARN_HOME/scripts/cloud-learn" "$@"
+          EOF
+          chmod 0755 "$STAGE/usr/bin/vyomi"
+          cat > "$STAGE/usr/bin/cloud-learn" <<'EOF'
+          #!/usr/bin/env bash
+          if [ -z "$VYOMI_NO_DEPRECATION_WARN" ] && [ -t 2 ]; then
+            printf '\033[33mNote:\033[0m \033[2m`cloud-learn` is deprecated. Use `vyomi` instead. Suppress: VYOMI_NO_DEPRECATION_WARN=1\033[0m\n' >&2
+          fi
+          exec /usr/bin/vyomi "$@"
+          EOF
+          chmod 0755 "$STAGE/usr/bin/cloud-learn"
+          cp README.md LICENSE CHANGELOG.md "$STAGE/usr/share/doc/cloud-learn/"
+          fpm -s dir -t rpm \
+            -n cloud-learn -v "${{ steps.ver.outputs.version }}" \
+            --license BUSL-1.1 --architecture noarch \
+            --maintainer "Vyomi <support@vyomi.cloud>" \
+            --url "https://github.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}" \
+            --description "Local multi-cloud simulator (AWS/GCP/Azure) — Release Candidate" \
+            --depends bash --depends curl \
+            --chdir "$STAGE" \
+            --package "dist/cloud-learn-${{ steps.ver.outputs.version }}-1.noarch.rpm" \
+            .
+
+      - name: Compute SHA256 checksums
+        id: shas
+        run: |
+          TARBALL_SHA="$(sha256sum dist/cloud-learn-${{ steps.ver.outputs.version }}.tar.gz | awk '{print $1}')"
+          echo "tarball_sha256=$TARBALL_SHA" >> "$GITHUB_OUTPUT"
+          {
+            for f in dist/*; do sha256sum "$f"; done
+          } > dist/SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rc-artifacts
+          path: dist/
+          retention-days: 30
+
+  # ── GitHub Pre-release page ─────────────────────────────────────────────
+  # Marks the release as prerelease=true so:
+  #   • GitHub doesn't surface it as "Latest" on the repo home page
+  #   • softprops marks it as Pre-release (orange chip in the UI)
+  #   • The `gh release list` command shows it with the Pre-release flag
+  #   • Anyone running `brew upgrade vyomi` on the stable channel is NOT
+  #     affected (no formula bump fires from this workflow)
+  github-prerelease:
+    name: Publish GitHub Pre-release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {name: rc-artifacts, path: dist}
+
+      - name: Extract changelog entry (if any) for this RC
+        id: changelog
+        run: |
+          VER="${{ needs.build.outputs.version }}"
+          # RC notes often live under the FINAL version's header in
+          # CHANGELOG.md (since the RC is a candidate for that release).
+          # Look up the final version (strip -rc*/-beta*/-alpha*).
+          FINAL_VER=$(echo "$VER" | sed -E 's/-(rc|beta|alpha)[0-9.]*$//')
+          awk -v v="$FINAL_VER" '
+            /^## \[/ {
+              if (in_section) exit
+              if ($0 ~ "^## \\[" v "\\]") { in_section=1; next }
+            }
+            in_section { print }
+          ' CHANGELOG.md > /tmp/changelog-section.md || true
+          [ -s /tmp/changelog-section.md ] || {
+            echo "_Release Candidate for v${FINAL_VER}. Notes will be finalized on promotion._" \
+              > /tmp/changelog-section.md
+          }
+          {
+            echo 'body<<EOF'
+            echo "## ⚠ Release Candidate"
+            echo
+            echo "This is a pre-release build of **v${FINAL_VER}**. Do not install on production"
+            echo "appliances. Dev appliances can opt in via:"
+            echo
+            echo '```bash'
+            echo "vyomi upgrade --channel rc      # if you're tracking RCs"
+            echo "# or download directly:"
+            echo "curl -fsSL https://github.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}/releases/download/v${VER}/cloud-learn-${VER}.tar.gz | tar xz"
+            echo '```'
+            echo
+            echo "---"
+            echo
+            cat /tmp/changelog-section.md
+            echo
+            echo "---"
+            echo "## Artifacts"
+            echo
+            ls dist | sed 's/^/- /'
+            echo
+            echo "**Docker image (no \`:latest\` update):** \`docker pull vyomi/appliance:${VER}\`"
+            echo "**SHA256 checksums:** see \`SHA256SUMS\` in attached artifacts."
+            echo
+            echo "**Promotion to stable**: when validated, run \`vyomi promote-rc v${VER}\` —"
+            echo "that re-tags the same commit as \`v${FINAL_VER}\`, which fires \`release.yml\`"
+            echo "and lights up the downstream channels (Brew tap, Scoop bucket, etc.)."
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build.outputs.version }}
+          name: Vyomi v${{ needs.build.outputs.version }} (RC)
+          body: ${{ steps.changelog.outputs.body }}
+          files: dist/*
+          prerelease: true

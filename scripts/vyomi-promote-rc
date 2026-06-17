@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# Vyomi RC promote — sign off on an RC and promote it to a final release.
+#
+# This is the "RELEASE the candidate" step in the dev cycle:
+#
+#   1. v2.0.4-rc1 was deployed to vyomi-ec2-rc and validated
+#   2. `vyomi promote-rc v2.0.4-rc1`        ← THIS SCRIPT
+#       → re-tags the same git commit as v2.0.4 (strips -rc1)
+#       → pushes the new tag
+#       → CI release.yml fires, lights up brew/scoop/docker downstream
+#   3. Mac appliance can now `brew upgrade vyomi` to v2.0.4
+#   4. Development continues against v2.0.4 — next cycle begins
+#
+# Safety checks before promotion:
+#   * RC must exist as a GitHub Pre-release
+#   * Final version tag must NOT already exist
+#   * The RC must have been deployed onto vyomi-ec2-rc (sign of validation)
+#   * `--force` overrides the deployment check (rare — emergency promotions)
+#
+# Options:
+#   --force        Skip the "deployed onto vyomi-ec2-rc" safety check
+#   --dry-run      Show what would happen without actually pushing tags
+
+set -euo pipefail
+
+RC_TAG=""
+FORCE=0
+DRY_RUN=0
+GH_OWNER="vyomi-cloud"
+GH_REPO="appliance"
+VM_NAME="${VYOMI_RC_VM:-vyomi-ec2-rc}"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --force)   FORCE=1; shift ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    -h|--help)
+      sed -n '/^# Vyomi RC promote/,/^set -e/p' "$0" | sed 's/^# \?//' | head -n -1
+      exit 0 ;;
+    -*) echo "Unknown flag: $1" >&2; exit 2 ;;
+    *)  [ -z "$RC_TAG" ] && RC_TAG="$1" || { echo "Multiple tags: $RC_TAG and $1" >&2; exit 2; }
+        shift ;;
+  esac
+done
+
+if [ -z "$RC_TAG" ]; then
+  echo "Usage: vyomi promote-rc <rc-tag>   (e.g. v2.0.4-rc1)" >&2
+  exit 2
+fi
+
+# Normalise: accept both v2.0.4-rc1 and 2.0.4-rc1
+RC_TAG="v${RC_TAG#v}"
+# Derive the final tag by stripping -rcN / -betaN / -alphaN
+FINAL_TAG=$(echo "$RC_TAG" | sed -E 's/-(rc|beta|alpha)[0-9.]*$//')
+
+if [ "$RC_TAG" = "$FINAL_TAG" ]; then
+  echo "✗ '$RC_TAG' is not a pre-release tag (no -rc/-beta/-alpha suffix)." >&2
+  echo "  Use a tag like v2.0.4-rc1." >&2
+  exit 3
+fi
+
+echo "▸ Promoting $RC_TAG → $FINAL_TAG"
+echo ""
+
+# ── Prerequisite checks ───────────────────────────────────────────────────
+command -v gh >/dev/null || { echo "✗ gh CLI required: https://cli.github.com" >&2; exit 4; }
+command -v git >/dev/null || { echo "✗ git required" >&2; exit 4; }
+
+cd "$(dirname "$0")/.."
+
+# (1) RC must exist as a published GitHub Pre-release
+echo "▸ Checking $RC_TAG exists as a GitHub Pre-release..."
+RC_INFO=$(gh release view "$RC_TAG" --json isPrerelease,targetCommitish,name 2>/dev/null || true)
+if [ -z "$RC_INFO" ]; then
+  echo "✗ $RC_TAG is not a published release. Did CI finish?" >&2
+  echo "  Check: https://github.com/${GH_OWNER}/${GH_REPO}/releases/tag/${RC_TAG}" >&2
+  exit 5
+fi
+IS_PRE=$(echo "$RC_INFO" | python3 -c "import json,sys;print(json.load(sys.stdin).get('isPrerelease', False))")
+RC_COMMIT=$(echo "$RC_INFO" | python3 -c "import json,sys;print(json.load(sys.stdin).get('targetCommitish', ''))")
+if [ "$IS_PRE" != "True" ]; then
+  echo "✗ $RC_TAG is not marked as a Pre-release — refusing to promote." >&2
+  echo "  Final tags should be cut directly via release.yml, not promote-rc." >&2
+  exit 6
+fi
+echo "  ✓ $RC_TAG is a Pre-release at commit ${RC_COMMIT:0:7}"
+
+# (2) Final version tag must NOT already exist
+if git rev-parse "$FINAL_TAG" >/dev/null 2>&1; then
+  echo "✗ Tag $FINAL_TAG already exists locally. Refusing to overwrite." >&2
+  exit 7
+fi
+if gh release view "$FINAL_TAG" >/dev/null 2>&1; then
+  echo "✗ Release $FINAL_TAG already exists on GitHub. Refusing to overwrite." >&2
+  exit 7
+fi
+
+# (3) Deployment evidence on vyomi-ec2-rc
+if [ "$FORCE" -eq 0 ]; then
+  echo "▸ Checking $RC_TAG was deployed to $VM_NAME..."
+  DEPLOY_DIR_NAME="cloud-learn-${RC_TAG#v}"
+  if ! multipass exec "$VM_NAME" -- test -d "/home/ubuntu/$DEPLOY_DIR_NAME" 2>/dev/null; then
+    echo "✗ /home/ubuntu/$DEPLOY_DIR_NAME does not exist on $VM_NAME." >&2
+    echo "  This means the RC was never deployed for validation." >&2
+    echo "  Either deploy first:    vyomi deploy-rc $RC_TAG" >&2
+    echo "  Or override with:       vyomi promote-rc $RC_TAG --force" >&2
+    exit 8
+  fi
+  echo "  ✓ Deployment evidence found on $VM_NAME"
+else
+  echo "▸ --force set — skipping deployment-evidence check"
+fi
+
+# ── Promote ──────────────────────────────────────────────────────────────
+echo ""
+echo "▸ About to:"
+echo "    git tag $FINAL_TAG ${RC_COMMIT:0:7}     # tag the exact RC commit"
+echo "    git push origin $FINAL_TAG              # fires release.yml → downstream"
+echo ""
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "▸ --dry-run set — exiting without pushing."
+  exit 0
+fi
+
+# Last-chance confirmation unless running non-interactively
+if [ -t 0 ]; then
+  printf "Proceed? [y/N] "
+  read -r answer
+  case "$answer" in
+    y|Y|yes|YES) ;;
+    *) echo "Aborted."; exit 0 ;;
+  esac
+fi
+
+# Fetch + tag + push
+echo ""
+echo "▸ Fetching latest from origin..."
+git fetch origin --tags >/dev/null 2>&1
+echo "▸ Tagging $FINAL_TAG at $RC_COMMIT..."
+git tag -a "$FINAL_TAG" "$RC_COMMIT" -m "Promoted from $RC_TAG"
+echo "▸ Pushing $FINAL_TAG..."
+git push origin "$FINAL_TAG"
+
+cat <<EOF
+
+╔══════════════════════════════════════════════════════════════════════╗
+║  ✓ Promoted $RC_TAG → $FINAL_TAG
+╠══════════════════════════════════════════════════════════════════════╣
+║  CI will now run release.yml + docker-publish.yml for $FINAL_TAG.
+║  Downstream package managers (Brew tap, Scoop bucket) auto-bump.
+║
+║  Watch: https://github.com/${GH_OWNER}/${GH_REPO}/actions
+║
+║  When CI completes (~5 min):
+║    brew upgrade vyomi          # on the Mac appliance
+║    vyomi restart               # pick up the new release
+╚══════════════════════════════════════════════════════════════════════╝
+EOF

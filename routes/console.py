@@ -199,14 +199,23 @@ def register(app: FastAPI) -> None:
         return RedirectResponse(url="/", status_code=302)
 
     @app.get("/clouds", include_in_schema=False)
+    def clouds_page_landing():
+        # /clouds (exact) now serves the polished standalone workspaces
+        # landing — eyebrow + hero + 'Active spaces' grid + per-cloud
+        # provider cards. Was briefly merged into the SPA for v2.0.x;
+        # restored as a separate page in v2.0.4 because the SPA's
+        # spaces view reads as a dashboard, not a "pick up where you
+        # left off" landing surface.
+        html_path = os.path.join(os.path.dirname(__file__), "..", "static", "clouds.html")
+        with open(html_path, "rb") as f:
+            return HTMLResponse(content=f.read().decode("utf-8"),
+                                headers={"Cache-Control": "no-store, max-age=0"})
+
     @app.get("/clouds/{path:path}", include_in_schema=False)
-    def clouds_page(path: str = ""):
-        # /clouds is now the merged workspaces view — serves the SPA
-        # (index.html) directly. Previously a separate static page with
-        # cloud-provider cards, but those were redundant against the
-        # SPA's own Spaces view, so we just point at the SPA. The legacy
-        # /ui route 302-redirects here for back-compat with the dozens
-        # of "Go to Spaces" buttons inside the console pages.
+    def clouds_page_deep(path: str = ""):
+        # Deep links (/clouds/aws-prod-1 etc.) remain SPA-routed so the
+        # dozens of "Go to Spaces" buttons inside per-cloud consoles
+        # still work — they were built against the SPA's URL handling.
         html_path = os.path.join(os.path.dirname(__file__), "..", "static", "index.html")
         with open(html_path, "rb") as f:
             return HTMLResponse(content=f.read().decode("utf-8"),

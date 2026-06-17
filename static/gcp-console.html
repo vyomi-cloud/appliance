@@ -263,6 +263,65 @@
   .notif-pop .body{flex:1;overflow-y:auto}
   .notif-pop .item{padding:12px 18px;border-bottom:1px solid var(--line);font-size:13px}
   .notif-pop .empty{padding:36px 18px;text-align:center;color:var(--sub);font-size:13px}
+
+/* ── Disk chip (v2.0.4) — small top-right pill; click to maximize ── */
+#disk-widget-slot {
+  position: fixed !important;
+  top: 56px !important;
+  right: 16px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: none !important;
+  z-index: 80 !important;
+  width: auto !important;
+}
+#disk-widget-slot .disk-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 6px 12px 6px 8px;
+  font-size: 12px; font-weight: 600; color: #1a2330;
+  cursor: pointer; font-family: inherit;
+  box-shadow: 0 2px 8px rgba(15,27,45,0.10);
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+#disk-widget-slot .disk-chip:hover {
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15,27,45,0.16);
+}
+#disk-widget-slot .disk-chip .disk-chip-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.18);
+}
+#disk-widget-slot .disk-chip.warn   .disk-chip-dot { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.20); }
+#disk-widget-slot .disk-chip.danger .disk-chip-dot { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.20); animation: chipPulse 1400ms ease-in-out infinite; }
+@keyframes chipPulse {
+  0%,100% { box-shadow: 0 0 0 3px rgba(239,68,68,0.20); }
+  50%     { box-shadow: 0 0 0 6px rgba(239,68,68,0.10); }
+}
+#disk-widget-slot .disk-chip .disk-chip-pct { font-variant-numeric: tabular-nums; }
+#disk-widget-slot .disk-chip .disk-chip-caret { font-size: 10px; color: #5f6b7a; }
+#disk-widget-slot .disk-popover {
+  display: none;
+  position: absolute; top: calc(100% + 6px); right: 0;
+  width: 320px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(15,27,45,0.18);
+  border: 1px solid #e7e7e9;
+  overflow: hidden;
+}
+#disk-widget-slot.open .disk-popover { display: block; }
+#disk-widget-slot .disk-popover .dp-close {
+  position: absolute; top: 8px; right: 10px;
+  background: none; border: 0; font-size: 22px; color: #5f6b7a;
+  cursor: pointer; line-height: 1; padding: 2px 6px;
+  z-index: 1;
+}
+#disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
 </style>
 </head>
 <body>
@@ -310,6 +369,7 @@
     <button title="Settings"><span class="material-symbols-outlined" style="font-size:20px">settings</span></button>
     <button class="avatar" id="avatarBtn" title="Account">U</button>
   </div>
+<div id="disk-widget-slot"></div>
 </header>
 
 <!-- ==================== PROJECT PICKER MODAL ==================== -->
@@ -643,6 +703,41 @@ async function renderList(main){
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
     icon("add"), primaryLabel));
   ab.append(el("button",{class:"btn",onclick:()=>renderList(main)}, icon("refresh"), "Refresh"));
+
+  // Lifecycle actions for VM-class services. Mirrors the AWS console's
+  // "Instance state" dropdown — without these, the user could see their
+  // GCP instances in the list but had no UI path to stop/start them
+  // (the backend routes /instances/{name}/{start,stop,reset} existed in
+  // the catalog's api_paths but no buttons referenced them).
+  // We keep them flat (not nested in a dropdown) for now — Compute is the
+  // only service that needs them.
+  if (svc.key === "compute" && (svc.api_paths || {}).stop) {
+    const lifecycleAction = async (action, confirmFirst) => {
+      const rows = Array.from(document.querySelectorAll('tr[data-row-name]'))
+        .filter(tr => tr.querySelector('input[type="checkbox"]:checked'));
+      if (!rows.length) { toast("Select at least one instance", "err"); return; }
+      if (confirmFirst && !confirm(`${action} ${rows.length} instance(s)?`)) return;
+      const ap = svc.api_paths[action];
+      if (!ap) { toast(`No ${action} path configured for ${svc.label}`, "err"); return; }
+      let ok = 0, fail = 0;
+      for (const tr of rows) {
+        const name = tr.getAttribute('data-row-name');
+        const path = fillCommon(ap.path, {name});
+        const r = await api(ap.method, path);
+        if (r && (r.ok || [200, 201, 202, 204].includes(r.status))) ok++; else fail++;
+      }
+      toast(`${action}: ${ok} ok${fail ? `, ${fail} failed` : ""}`, fail ? "err" : null);
+      renderList(main).catch(()=>{});
+    };
+    ab.append(el("button",{class:"btn",onclick:()=>lifecycleAction("stop", true)},
+      icon("stop"), "Stop"));
+    ab.append(el("button",{class:"btn",onclick:()=>lifecycleAction("start", false)},
+      icon("play_arrow"), "Start"));
+    ab.append(el("button",{class:"btn",onclick:()=>lifecycleAction("reset", true)},
+      icon("refresh"), "Reset"));
+    ab.append(el("button",{class:"btn danger",onclick:()=>lifecycleAction("delete", true)},
+      icon("delete"), "Delete"));
+  }
   wrap.append(ab);
 
   const tableWrap = el("div",{class:"table-wrap"});
@@ -708,7 +803,11 @@ async function renderList(main){
     });
     t.append(hdr);
     filtered.forEach(it => {
-      const tr = el("tr",{});
+      // data-row-name lets the new lifecycle-action buttons (Stop/Start/
+      // Reset/Delete in the actions bar) discover selected rows without
+      // re-walking the filtered array.
+      const rowName = String(getPath(it, svc.name_field) || it.name || "");
+      const tr = el("tr",{"data-row-name": rowName});
       tr.append(el("td",{class:"chk"}, el("input",{type:"checkbox",onclick:e=>e.stopPropagation()})));
       svc.columns.forEach((c,i) => {
         const v = getPath(it, c[0]);
@@ -1104,6 +1203,143 @@ function renderCollapsibleWizard(host, svc){
 
 boot();
 </script>
-<script src="/assets/lazy_backends.js"></script>
+<script>
+
+// ── Disk health widget (added in v2.0.4 — chip-by-default) ──
+let _diskWidgetState = null;
+
+function _diskStatusToClass(s) {
+  if (s === "warn") return "warn";
+  if (s === "freeze" || s === "danger") return "danger";
+  return "";
+}
+function _toggleDiskPopover() {
+  const el = document.getElementById("disk-widget-slot");
+  if (!el) return;
+  el.classList.toggle("open");
+}
+function _closeDiskPopover(ev) {
+  if (ev) { ev.stopPropagation(); }
+  const el = document.getElementById("disk-widget-slot");
+  if (el) el.classList.remove("open");
+}
+function _wrapWithChip(cardHtml, d) {
+  const disk = d.disk || {};
+  const pct = Math.round(disk.pct_used || 0);
+  const klass = _diskStatusToClass(d.status);
+  return (
+    '<button class="disk-chip ' + klass + '" type="button" onclick="_toggleDiskPopover()" title="Click to expand disk health">'+
+      '<span class="disk-chip-dot"></span>'+
+      '<span>Disk</span>'+
+      '<span class="disk-chip-pct">' + pct + '%</span>'+
+      '<span class="disk-chip-caret">▾</span>'+
+    '</button>'+
+    '<div class="disk-popover" onclick="event.stopPropagation()">'+
+      '<button class="dp-close" type="button" onclick="_closeDiskPopover(event)" title="Minimize">×</button>'+
+      cardHtml +
+    '</div>'
+  );
+}
+// Close popover when clicking outside the chip
+document.addEventListener("click", function(ev) {
+  const el = document.getElementById("disk-widget-slot");
+  if (!el || !el.classList.contains("open")) return;
+  if (!el.contains(ev.target)) el.classList.remove("open");
+});
+
+function renderDiskWidget(d) {
+  const slot = document.getElementById("disk-widget-slot");
+  if (!slot) return;
+  if (!d || !d.available) { slot.innerHTML = ""; return; }
+  _diskWidgetState = d;
+  const disk = d.disk || {};
+  const pct = Math.round(disk.pct_used || 0);
+  const tier = String(d.tier || "free").toUpperCase();
+  const status = d.status;
+  const accent = status === "green" ? "#10b981" : status === "warn" ? "#f59e0b" : "#ef4444";
+  const bg = status === "green" ? "#fff" : status === "warn" ? "#fffbeb" : "#fef2f2";
+  const statusLabel = status === "green" ? "Healthy"
+                    : status === "warn"  ? "Warning · " + pct + "% used"
+                    :                      "Critical · " + pct + "% used";
+  const canGrow = ["pro","max","enterprise","student","developer"].includes(String(d.tier||"").toLowerCase());
+  const cardHtml =
+    '<div style="background:'+bg+';padding:14px 16px 12px 16px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-right:24px">'+
+        '<div style="font-size:13.5px;font-weight:600;color:#1f2937">Appliance disk'+
+          '<span style="display:inline-block;margin-left:8px;padding:2px 8px;background:#ede9fe;color:#6d28d9;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.05em">'+tier+'</span>'+
+        '</div>'+
+      '</div>'+
+      '<div style="font-size:12px;font-weight:600;color:'+accent+';margin-bottom:8px">'+statusLabel+'</div>'+
+      '<div style="height:8px;background:#f3f4f6;border-radius:999px;overflow:hidden">'+
+        '<div style="height:100%;width:'+pct+'%;background:'+accent+';transition:width 0.3s"></div>'+
+      '</div>'+
+      '<div style="font-size:11px;color:#6b7280;margin-top:6px;margin-bottom:10px">'+disk.used_gb+' / '+disk.total_gb+' GB · '+disk.avail_gb+' GB free</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button onclick="openDiskCleanup()" style="font-size:12px;padding:6px 12px;background:#1a73e8;color:#fff;border:0;border-radius:6px;cursor:pointer">Free up space</button>'+
+        (canGrow ? '<button onclick="openDiskGrow()" style="font-size:12px;padding:6px 12px;background:#fff;color:#1a2330;border:1px solid #d8e0ea;border-radius:6px;cursor:pointer">Grow disk</button>' : '')+
+      '</div>'+
+    '</div>';
+  slot.innerHTML = _wrapWithChip(cardHtml, d);
+}
+async function fetchDiskHealth() {
+  try { renderDiskWidget(await (await fetch("/api/runtime/disk-health")).json()); } catch (e) {}
+}
+async function openDiskCleanup() {
+  const modal = document.createElement("div");
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,0.5);display:flex;align-items:center;justify-content:center;z-index:99999";
+  modal.innerHTML = '<div style="background:#fff;border-radius:10px;max-width:640px;width:90%;max-height:80vh;display:flex;flex-direction:column">'+
+    '<div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;font-size:16px">Free up appliance disk</h3><button onclick="this.closest(\'div[style*=position:fixed]\').remove()" style="background:none;border:0;font-size:24px;cursor:pointer">×</button></div>'+
+    '<div id="cleanup-body" style="padding:20px;overflow-y:auto;flex:1">Scanning…</div>'+
+    '<div id="cleanup-foot" style="padding:12px 20px;border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:flex-end"></div>'+
+  '</div>';
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+  const d = await (await fetch("/api/runtime/disk-cleanup/suggestions")).json();
+  const body = modal.querySelector("#cleanup-body");
+  const foot = modal.querySelector("#cleanup-foot");
+  body.innerHTML = '<div style="margin-bottom:12px;font-size:13px;color:#475569">Select what to clean. All options below are safe.</div>'+
+    (d.suggestions||[]).map(s =>
+      '<label style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><input type="checkbox" data-key="'+s.key+'"'+(s.safe?' checked':'')+' style="margin-top:3px"><div style="flex:1"><div style="font-size:13.5px;font-weight:500">'+s.label+(s.est_reclaim_gb?' <span style="color:#059669;font-weight:600;margin-left:6px">≈ '+s.est_reclaim_gb+' GB</span>':'')+'</div><div style="font-size:12px;color:#6b7280;margin-top:2px">'+s.detail+'</div></div></label>'
+    ).join("");
+  foot.innerHTML = '<button onclick="this.closest(\'div[style*=position:fixed]\').remove()" style="padding:8px 14px;background:#fff;border:1px solid #d8e0ea;color:#1a2330;border-radius:6px;cursor:pointer">Cancel</button><button id="cleanup-run" style="padding:8px 14px;background:#0f1b2d;color:#fff;border:0;border-radius:6px;cursor:pointer">Run cleanup</button>';
+  foot.querySelector("#cleanup-run").onclick = async () => {
+    const cats = [...body.querySelectorAll("input:checked")].map(i => i.dataset.key);
+    foot.querySelector("#cleanup-run").textContent = "Running…";
+    const out = await (await fetch("/api/runtime/disk-cleanup/run", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({categories:cats})})).json();
+    body.innerHTML = '<div style="background:#ecfdf5;color:#047857;padding:10px 14px;border-radius:6px;margin-bottom:12px">✓ Cleanup complete.</div><pre style="background:#0f172a;color:#e2e8f0;padding:10px;border-radius:6px;font-size:11px;overflow:auto;max-height:300px">'+JSON.stringify(out,null,2)+'</pre>';
+    foot.innerHTML = '<button onclick="this.closest(\'div[style*=position:fixed]\').remove(); fetchDiskHealth()" style="padding:8px 14px;background:#0f1b2d;color:#fff;border:0;border-radius:6px;cursor:pointer">Done</button>';
+  };
+}
+function openDiskGrow() {
+  const current = (_diskWidgetState && _diskWidgetState.disk && _diskWidgetState.disk.total_gb) || 30;
+  const modal = document.createElement("div");
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,0.5);display:flex;align-items:center;justify-content:center;z-index:99999";
+  const suggested = Math.ceil(current + 10);
+  modal.innerHTML = '<div style="background:#fff;border-radius:10px;width:420px;max-width:90%"><div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;font-size:16px">Grow appliance disk</h3><button onclick="this.closest(\'div[style*=position:fixed]\').remove()" style="background:none;border:0;font-size:24px;cursor:pointer">×</button></div><div style="padding:18px 20px"><div style="font-size:13px;color:#5f6b7a">Current</div><div style="font-size:18px;font-weight:700;margin-bottom:14px">'+current.toFixed(1)+' GB</div><label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:6px">Target size (GB)</label><input id="gd-target" type="number" value="'+suggested+'" min="'+Math.ceil(current+1)+'" max="500" style="width:100%;padding:9px 12px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px"><div style="font-size:12px;color:#5f6b7a;margin-top:10px;padding:10px 12px;background:#f7f8fa;border-radius:6px">Resizes the underlying multipass VM disk. Simulator briefly pauses (~5–10s).</div><div id="gd-err" style="margin-top:8px"></div></div><div style="padding:12px 20px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:8px"><button onclick="this.closest(\'div[style*=position:fixed]\').remove()" style="padding:8px 14px;background:#fff;border:1px solid #d8e0ea;border-radius:6px;cursor:pointer">Cancel</button><button id="gd-run" style="padding:8px 14px;background:#0f1b2d;color:#fff;border:0;border-radius:6px;cursor:pointer">Grow disk →</button></div></div>';
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+  modal.querySelector("#gd-run").onclick = async () => {
+    const target = parseInt(modal.querySelector("#gd-target").value, 10);
+    if (!target || target <= current) { modal.querySelector("#gd-err").innerHTML = '<div style="color:#b91c1c;font-size:13px">Target must be larger than current.</div>'; return; }
+    modal.querySelector("#gd-run").disabled = true;
+    modal.querySelector("#gd-run").textContent = "Resizing…";
+    try {
+      const r = await fetch("/api/runtime/disk-grow", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({target_gb:target})});
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      modal.querySelector("#gd-err").innerHTML = '<div style="color:#047857;font-size:13px;padding:8px 12px;background:#ecfdf5;border-radius:6px">✓ Disk grown to ' + target + ' GB</div>';
+      modal.querySelector("#gd-run").textContent = "Done";
+      modal.querySelector("#gd-run").onclick = () => { modal.remove(); fetchDiskHealth(); };
+    } catch (e) {
+      modal.querySelector("#gd-err").innerHTML = '<div style="color:#b91c1c;font-size:13px">' + (e.message||e) + '</div>';
+      modal.querySelector("#gd-run").disabled = false;
+      modal.querySelector("#gd-run").textContent = "Retry";
+    }
+  };
+}
+fetchDiskHealth();
+setInterval(fetchDiskHealth, 30000);
+</script>
+<script src="/assets/lazy_backends.js">
+</script>
 </body>
 </html>

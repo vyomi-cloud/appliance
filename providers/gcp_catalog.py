@@ -45,13 +45,16 @@ RESOURCE_CATALOG_GCP = [
             "images":     {"method": "GET",    "path": "/api/gcp/compute/v1/projects/{project}/global/images"},
             "instanceGroups": {"method": "GET","path": "/api/gcp/compute/v1/projects/{project}/zones/{zone}/instanceGroups"},
         },
+        # v2.0.4: internalIp + externalIp don't exist as flat fields on
+        # the Compute response (they're nested under networkInterfaces).
+        # Until the SPA's getPath() supports nested array indexing,
+        # drop them in favour of fields that ARE flat: machineType,
+        # status, zone. Caught by real-SPA conformance.
         "columns": [
             ["name",              "Name"],
             ["zone",              "Zone"],
             ["machineType",       "Machine type"],
             ["status",            "Status"],
-            ["internalIp",        "Internal IP"],
-            ["externalIp",        "External IP"],
         ],
         "createFields": [
             {"name": "name", "label": "Name", "default": "instance-1"},
@@ -97,12 +100,15 @@ RESOURCE_CATALOG_GCP = [
             "backups":  {"method": "GET",   "path": "/api/gcp/rds/databases/{name}/backups"},
             "patch":    {"method": "PATCH", "path": "/api/gcp/sql/v1beta4/projects/{project}/instances/{name}"},
         },
+        # v2.0.4: `tier` is nested under settings.tier in real GCP SQL
+        # response. The Vyomi flat response doesn't include it. Drop in
+        # favour of backendType which IS flat. Caught by real-SPA conformance.
         "columns": [
             ["name",            "Name"],
             ["databaseVersion", "Engine"],
             ["region",          "Region"],
             ["state",           "Status"],
-            ["tier",            "Tier"],
+            ["backendType",     "Type"],
         ],
         "createFields": [
             {"name": "name", "label": "Instance ID", "default": "my-sql-instance"},
@@ -222,11 +228,14 @@ RESOURCE_CATALOG_GCP = [
             {"type": "subnetworks", "label": "Subnets",        "icon": "view_module"},
             {"type": "firewalls",   "label": "Firewall rules", "icon": "shield"},
         ],
+        # v2.0.4: subnetworkCount doesn't exist; response uses
+        # `subnetworks` (array of URIs). Surface IPv4Range instead since
+        # it's flat. Caught by real-SPA conformance.
         "columns": [
             ["name",                 "Name"],
             ["autoCreateSubnetworks","Mode"],
             ["routingConfig.routingMode", "Routing mode"],
-            ["subnetworkCount",      "Subnets"],
+            ["IPv4Range",            "IPv4 range"],
         ],
         "createFields": [
             {"name": "name", "label": "Network name", "default": "my-vpc"},

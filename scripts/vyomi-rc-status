@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Vyomi RC status — show what RC is currently deployed on vyomi-ec2-rc.
+#
+# Outputs:
+#   * VM state
+#   * Currently-deployed RC version (from /VERSION inside the running stack)
+#   * /healthz status
+#   * Compose service health
+#   * URL to the dev validation appliance
+
+set -euo pipefail
+
+VM_NAME="${VYOMI_RC_VM:-vyomi-ec2-rc}"
+
+# ── VM existence ──────────────────────────────────────────────────────────
+VM_INFO=$(multipass list --format json | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+for vm in d.get('list', []):
+    if vm.get('name') == '$VM_NAME':
+        ipv4 = vm.get('ipv4') or []
+        print(f\"{vm.get('state')}|{ipv4[0] if ipv4 else ''}\")
+        break
+") || true
+if [ -z "$VM_INFO" ]; then
+  echo "✗ $VM_NAME does not exist."
+  echo "  Provision it:  vyomi rc-init"
+  exit 0
+fi
+VM_STATE="${VM_INFO%%|*}"
+VM_IP="${VM_INFO##*|}"
+
+# ── Currently deployed version ───────────────────────────────────────────
+DEPLOYED_VER="(none)"
+DEPLOYED_DIR=""
+if [ "$VM_STATE" = "Running" ]; then
+  # Find the highest-version cloud-learn-* dir on the VM (last deployed)
+  DEPLOYED_DIR=$(multipass exec "$VM_NAME" -- bash -c "
+    ls -td /home/ubuntu/cloud-learn-*/ 2>/dev/null | head -1
+  " || true)
+  if [ -n "$DEPLOYED_DIR" ]; then
+    DEPLOYED_DIR="${DEPLOYED_DIR%/}"
+    DEPLOYED_VER=$(basename "$DEPLOYED_DIR" | sed 's/^cloud-learn-//')
+  fi
+fi
+
+# ── /healthz ──────────────────────────────────────────────────────────────
+HEALTH="(unreachable)"
+TIER=""
+PACKS=""
+if [ "$VM_STATE" = "Running" ]; then
+  body=$(curl -s --max-time 3 "http://${VM_IP}:9000/healthz" 2>/dev/null || true)
+  if echo "$body" | grep -q '"status":"ok"'; then
+    HEALTH="ok"
+    TIER=$(echo "$body" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('tier',''))" 2>/dev/null || true)
+    PACKS=$(echo "$body" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('packs_active',''))" 2>/dev/null || true)
+  fi
+fi
+
+# ── Compose service inventory ─────────────────────────────────────────────
+SERVICES=""
+if [ "$VM_STATE" = "Running" ] && [ -n "$DEPLOYED_DIR" ]; then
+  SERVICES=$(multipass exec "$VM_NAME" -- sudo bash -c "
+    cd '$DEPLOYED_DIR' && docker compose -f docker-compose.appliance.yml ps --format json 2>/dev/null
+  " | python3 -c "
+import json, sys
+text = sys.stdin.read().strip()
+if not text:
+    sys.exit(0)
+# compose ps --format json emits one JSON object per line
+for line in text.splitlines():
+    try:
+        d = json.loads(line)
+        state = d.get('State', '?')
+        name = d.get('Name', '?')
+        print(f'    {state:10s}  {name}')
+    except json.JSONDecodeError:
+        pass
+" 2>/dev/null || true)
+fi
+
+# ── Render ────────────────────────────────────────────────────────────────
+cat <<EOF
+╔══════════════════════════════════════════════════════════════════════╗
+║  RC validation environment status
+╠══════════════════════════════════════════════════════════════════════╣
+║  VM:               $VM_NAME ($VM_STATE)
+║  IP:               $VM_IP
+║  Deployed RC:      $DEPLOYED_VER
+║  Simulator /healthz:  $HEALTH${TIER:+   tier=$TIER}${PACKS:+   packs_active=$PACKS}
+║  URL (HTTP):       http://${VM_IP}:9000/
+║  URL (HTTPS):      https://${VM_IP}:9443/
+╠══════════════════════════════════════════════════════════════════════╣
+║  Stack services:
+$([ -z "$SERVICES" ] && echo "║    (no compose stack running)" || echo "$SERVICES" | sed 's/^/║ /')
+╚══════════════════════════════════════════════════════════════════════╝
+EOF

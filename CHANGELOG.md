@@ -6,6 +6,46 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.4] — 2026-06-17
+
+**Workspaces dashboard + live host telemetry + docker-in-Vyomi-EC2.** v2.0.4 is the largest UX pass since the v2.0 rename — a new `/clouds` workspaces dashboard with per-cloud distribution donuts and live CPU/RAM/Disk gauges, a comprehensive splash + landing redesign, a floating disk-health chip on every cloud console, plus the A1 docker-in-LXD work that lets users run their own apps inside the simulator's "EC2" instances. Also adds a real-SPA Playwright conformance harness so regressions like the v2.0.3 RDS `db_instances` envelope bug get caught at the DOM level, not just the API level.
+
+### Added
+
+- **Vyomi splash screen** — full-screen wordmark overlay on `/`, fades in/out over 5s, cookie-suppressed for 24h after first view, honors `prefers-reduced-motion`, `?nosplash=1` query param skips it (used by the Playwright harness).
+- **Local-fidelity emulation services section on `/`** — 3 horizontal cloud cards (AWS 12 / GCP 12 / Azure 11 services) moved up from `/clouds` to the launch page. Replaces the old "Compare all features" tier-comparison table — pricing now leads with what's emulated, not what's gated.
+- **Workspaces dashboard `/clouds`** — split into two surface cards:
+  - **Appliance health card** — 3 donut pies (CPU / RAM / Disk distribution per cloud) + 3 live stat cards (host CPU%, RAM total, Disk usage with color-coded amber/red thresholds at 70/88%). New `/api/runtime/host-distribution` aggregates per-provider resource footprint across ALL spaces (no active-space switching). Live VM filter: stopped/terminated/deallocated VMs no longer count toward the pies (matches LXD reality).
+  - **Active spaces card** — provider filter pills (All / AWS / GCP / Azure with live counts) + `+ Create Space` modal (name validation + per-cloud picker + region) + filtered grid. Empty-state surfaces when a pill filters everything out.
+- **Floating disk-health chip** — every cloud console (`/console/aws`, `/console/gcp`, `/console/azure`) now shows a small `● Disk N% ▾` pill in the top-right corner with pulsing color indicator (green/amber/red). Click to expand into the full disk widget (Free up space + Grow disk actions). GCP console gets its first disk widget at all (AWS + Azure had one previously but always-expanded).
+- **`Back to Spaces` link in Azure console header** — matches the pattern that AWS already had, returns the user to `/clouds`.
+- **A1 docker-in-Vyomi-EC2** — Vyomi-managed EC2 instances now run real Docker + compose. LXD containers launch with `security.nesting=true`; an idempotent `_lxd_docker_bootstrap_async` background job installs Docker engine on first start. Host-side `appliance_install_lxd_docker_bridge_fix` systemd unit restores `iptables FORWARD ACCEPT` + MASQUERADE so docker's default policy doesn't break LXD outbound. Enables customers to deploy their own apps directly inside the simulator's instances, and enables Vyomi-on-Vyomi dogfood.
+- **Real-SPA Playwright conformance harness** — `tests/conformance/ui_real/` boots a real Chromium, walks every wizard, asserts DOM contents. 19/35 services pass, 16 deliberately skipped with documented framework gaps. Closes the gap the API-only suite missed.
+- **Vyomi-on-Vyomi proof** — appliance source builds + runs healthy inside a Vyomi-managed EC2 instance (12 backend containers up at `vyomi.local:9001`, sharing Postgres with an inner portal at `:8081`). Validation milestone for v2.0.4 and forward.
+
+### Changed
+
+- **Auto-refresh interval bumped 5s → 30s** with modal-aware skip — the cloud-console resource list view used to repaint every 5s, which fought form input + lost cursor focus. Now 30s, plus an `_shouldSkipAutoRefresh()` gate that pauses entirely when a modal is open.
+- **Landing page hero + workspaces hero** — both rewritten with "eyebrow chip + larger H1 + max-width subtitle" pattern. `Choose your tier.` becomes `Welcome to Vyomi · Choose your tier.`; `Your workspaces` becomes `Workspaces · Pick up where you left off.`
+- **`/clouds` route split** — exact `/clouds` serves the polished standalone, `/clouds/<path>` remains SPA-routed (so deep links inside the workspaces view still work via the React app).
+- **GCP Compute lifecycle actions** — Stop / Start / Reset / Delete buttons on the SPA grid (matching what AWS EC2 already had).
+- **AWS catalog field-name fixes** — 5 column-path mismatches corrected (`rds`, `sqs`, `dynamodb`, `apigateway`, `iam`, `vpc`).
+- **GCP catalog field-name fixes** — 3 column-path mismatches corrected (`compute` `internalIp`/`externalIp` dropped, `cloudsql` `tier→backendType`, `vpc` `subnetworkCount→IPv4Range`).
+
+### Fixed
+
+- **RDS empty-list bug** — `static/aws-console.html` envelope parser added `|| data.db_instances || data.DBInstances` so the RDS list view populates after Create. Previously required hard refresh.
+- **Tier sizer host-budget rewrite** — `core/runtime_sizer.py` now uses `host_cpu-1` / `host_mem-2GB` instead of dividing the simulator's own budget; medium and large tiers bumped to 2c/3072MB and 3c/4096MB respectively.
+- **`/clouds` nested-section markup bug** — the previous standalone page opened a `<section>` inside another `<section>` with a redundant heading "Real cloud APIs, on your laptop." right under "Start a new workspace". Collapsed into one clean section.
+- **Disk chip syntax error (AWS + Azure consoles)** — first-pass chip integration captured the closing semicolon of the existing card markup inside the `_wrapWithChip(...)` call, killing the entire script block. Fix in the second pass.
+- **GCP disk module dead-script** — the GCP module was injected inside a `<script src="...">` tag, which browsers ignore by spec. Moved to its own `<script>` block.
+
+### Release-pipeline plumbing
+
+- New `.github/workflows/release-candidate.yml` for the `-rc*` tag flow (this v2.0.4 cut is final, not RC).
+- New `scripts/vyomi-rc-init` / `vyomi-deploy-rc` / `vyomi-rc-status` / `vyomi-promote-rc` companion CLI subcommands.
+- New `docs/RUNBOOK-rc-cycle.md` documenting the RC discipline.
+
 ## [2.0.1] — 2026-06-15
 
 **Zero-config first launch.** v2.0.0 shipped HTTPS via mkcert + Caddy at `https://vyomi.local:9443`, but a fresh laptop hit three Chrome gotchas in sequence: (1) Secure DNS bypassing `/etc/hosts` for `.local` TLDs, (2) HSTS cache locking failed early attempts into HTTPS-only, (3) HTTPS-First Mode auto-upgrading `http://` requests. Users were dropped into `chrome://net-internals/#hsts` to debug. v2.0.1 sidesteps all three by pivoting the canonical URL to `https://localhost:9443/` — a hostname Chrome universally trusts. mkcert already covered `localhost` in its SAN list, so the green padlock works without any browser config changes.

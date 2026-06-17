@@ -171,9 +171,14 @@ RESOURCE_CATALOG_AWS = [
             "deleteRole": {"method": "DELETE", "path": "/api/iam/roles/{name}"},
             "deletePolicy":{"method":"DELETE", "path": "/api/iam/policies/{name}"},
         },
+        # v2.0.4: IAM user response doesn't include `arn` — only
+        # `user_id` + `user_name`. Show user_id as the second column.
+        # The real AWS IAM does include ARN; the simulator's IAM
+        # response generation is a v2.1.0 follow-up. For now the SPA
+        # surfaces what the backend actually returns.
         "columns": [
             ["user_name", "User name"],
-            ["arn",       "ARN"],
+            ["user_id",   "User ID"],
             ["created",   "Created"],
         ],
         "createFields": [
@@ -212,12 +217,16 @@ RESOURCE_CATALOG_AWS = [
         "children": [
             {"type": "snapshots", "label": "Snapshots", "icon": "photo_camera"},
         ],
+        # v2.0.4: aligned column keys with actual RDS response. Was
+        # showing every Class + Endpoint cell as `—` because the
+        # response uses `db_instance_class` + `endpoint_address`, not
+        # the short forms.
         "columns": [
             ["db_instance_identifier", "Identifier"],
             ["engine",                 "Engine"],
-            ["instance_class",         "Class"],
+            ["db_instance_class",      "Class"],
             ["status",                 "Status"],
-            ["endpoint",               "Endpoint"],
+            ["endpoint_address",       "Endpoint"],
         ],
         "createFields": [
             {"name": "name", "label": "DB identifier", "default": "database-1"},
@@ -250,12 +259,18 @@ RESOURCE_CATALOG_AWS = [
             "scan":   {"method": "POST", "path": "/api/dynamodb/tables/{name}/scan"},
             "delete": {"method": "DELETE","path": "/api/dynamodb/tables/{name}"},
         },
+        # v2.0.4: column keys must match the field names in the actual
+        # /api/dynamodb/tables response. Old values (`name`,
+        # `partition_key`, `sort_key`) returned undefined → SPA rendered
+        # every cell as `—`. Real response uses `table_name`,
+        # `partition_key_name`, `sort_key_name`. Caught by the new
+        # tests/conformance/ui_real/ Playwright suite.
         "columns": [
-            ["name",         "Name"],
-            ["partition_key","Partition key"],
-            ["sort_key",     "Sort key"],
-            ["billing_mode", "Billing mode"],
-            ["item_count",   "Items"],
+            ["table_name",          "Name"],
+            ["partition_key_name",  "Partition key"],
+            ["sort_key_name",       "Sort key"],
+            ["billing_mode",        "Billing mode"],
+            ["item_count",          "Items"],
         ],
         "createFields": [
             {"name": "name", "label": "Table name", "default": "MyTable"},
@@ -281,11 +296,15 @@ RESOURCE_CATALOG_AWS = [
             "purge":          {"method": "POST",   "path": "/api/sqs/queues/{name}/purge"},
             "delete":         {"method": "DELETE", "path": "/api/sqs/queues/{name}"},
         },
+        # v2.0.4: same fix as DynamoDB — column keys must match the
+        # actual /api/sqs/queues response field names. Was `name`/`url`/
+        # `arn` → all empty cells. Real keys are `queue_name`,
+        # `queue_url`, `queue_arn`.
         "columns": [
-            ["name",        "Name"],
-            ["queue_type",  "Type"],
-            ["url",         "URL"],
-            ["arn",         "ARN"],
+            ["queue_name",   "Name"],
+            ["queue_type",   "Type"],
+            ["queue_url",    "URL"],
+            ["queue_arn",    "ARN"],
             ["message_count","Messages"],
         ],
         "createFields": [
@@ -359,8 +378,10 @@ RESOURCE_CATALOG_AWS = [
             {"type": "resources", "label": "Resources", "icon": "account_tree"},
             {"type": "stages",    "label": "Stages",    "icon": "rocket_launch"},
         ],
+        # v2.0.4: API ID column was `id` but real response uses
+        # `rest_api_id`. Caught by real-SPA conformance.
         "columns": [
-            ["id",            "API ID"],
+            ["rest_api_id",   "API ID"],
             ["name",          "Name"],
             ["endpoint_type", "Endpoint type"],
             ["created",       "Created"],
@@ -421,12 +442,15 @@ RESOURCE_CATALOG_AWS = [
             {"type": "route-tables",    "label": "Route tables",     "icon": "route"},
             {"type": "internet-gateways","label": "Internet gateways","icon": "language"},
         ],
+        # v2.0.4: VPC response doesn't return `is_default` — backend
+        # treats every VPC as user-created. Replaced with the subnet
+        # count which is actually useful to surface.
         "columns": [
-            ["vpc_id",     "VPC ID"],
-            ["name",       "Name"],
-            ["cidr_block", "IPv4 CIDR"],
-            ["state",      "State"],
-            ["is_default", "Default"],
+            ["vpc_id",            "VPC ID"],
+            ["name",              "Name"],
+            ["cidr_block",        "IPv4 CIDR"],
+            ["state",             "State"],
+            ["subnet_count",      "Subnets"],
         ],
         "createFields": [
             {"name": "name", "label": "Name", "default": "my-vpc"},

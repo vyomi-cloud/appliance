@@ -250,6 +250,65 @@
   .wiz-review-grid{display:grid;grid-template-columns:200px 1fr;padding:8px 14px;font-size:12.5px;gap:6px 14px}
   .wiz-review-grid .k{color:var(--sub)}
   .wiz-review-grid .v{color:var(--ink);word-break:break-all}
+
+/* ── Disk chip (v2.0.4) — small top-right pill; click to maximize ── */
+#disk-widget-slot {
+  position: fixed !important;
+  top: 56px !important;
+  right: 16px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: none !important;
+  z-index: 80 !important;
+  width: auto !important;
+}
+#disk-widget-slot .disk-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 6px 12px 6px 8px;
+  font-size: 12px; font-weight: 600; color: #1a2330;
+  cursor: pointer; font-family: inherit;
+  box-shadow: 0 2px 8px rgba(15,27,45,0.10);
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+#disk-widget-slot .disk-chip:hover {
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15,27,45,0.16);
+}
+#disk-widget-slot .disk-chip .disk-chip-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.18);
+}
+#disk-widget-slot .disk-chip.warn   .disk-chip-dot { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.20); }
+#disk-widget-slot .disk-chip.danger .disk-chip-dot { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.20); animation: chipPulse 1400ms ease-in-out infinite; }
+@keyframes chipPulse {
+  0%,100% { box-shadow: 0 0 0 3px rgba(239,68,68,0.20); }
+  50%     { box-shadow: 0 0 0 6px rgba(239,68,68,0.10); }
+}
+#disk-widget-slot .disk-chip .disk-chip-pct { font-variant-numeric: tabular-nums; }
+#disk-widget-slot .disk-chip .disk-chip-caret { font-size: 10px; color: #5f6b7a; }
+#disk-widget-slot .disk-popover {
+  display: none;
+  position: absolute; top: calc(100% + 6px); right: 0;
+  width: 320px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(15,27,45,0.18);
+  border: 1px solid #e7e7e9;
+  overflow: hidden;
+}
+#disk-widget-slot.open .disk-popover { display: block; }
+#disk-widget-slot .disk-popover .dp-close {
+  position: absolute; top: 8px; right: 10px;
+  background: none; border: 0; font-size: 22px; color: #5f6b7a;
+  cursor: pointer; line-height: 1; padding: 2px 6px;
+  z-index: 1;
+}
+#disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
 </style>
 </head>
 <body>
@@ -260,6 +319,22 @@
   <a class="logo" href="/console/azure">
     <svg width="22" height="22" viewBox="0 0 24 24"><path fill="#3CCBF4" d="M13.1 3.3 7 20.5h4l1.2-3.6 5.1 3.6h2.9L13.1 3.3zM6.4 14.9 3 20.7h6.2l3.4-9.7-6.2 3.9z"/></svg>
     Microsoft Azure
+  </a>
+  <!-- Back to Spaces — mirrors aws-console.html's .back-spaces link.
+       Inline-styled (no shared stylesheet) to avoid touching the Azure
+       portal-style theme tokens. Returns the user to /clouds where they
+       can switch space/provider or create a new one. -->
+  <a class="az-back-spaces" href="/clouds"
+     title="Return to Workspaces — switch space, provider, or create a new one"
+     style="display:inline-flex; align-items:center; gap:6px;
+            margin-left:8px; padding:6px 12px; border-radius:6px;
+            background:rgba(255,255,255,0.08); color:#cfe0ee;
+            text-decoration:none; font-size:13px; font-weight:500;
+            white-space:nowrap; transition:background 0.15s, color 0.15s;"
+     onmouseover="this.style.background='rgba(60,203,244,0.18)'; this.style.color='#fff';"
+     onmouseout="this.style.background='rgba(255,255,255,0.08)'; this.style.color='#cfe0ee';">
+    <span class="material-symbols-outlined" style="font-size:16px">arrow_back</span>
+    <span>Back to Spaces</span>
   </a>
   <div class="search"><span class="material-symbols-outlined" style="font-size:18px">search</span>
     <input placeholder="Search resources, services, and docs (simulated)"></div>
@@ -3109,6 +3184,46 @@ document.getElementById("menuBtn").addEventListener("click",()=>document.getElem
 // Renders into #disk-widget-slot. Auto-refreshes every 30s. See
 // aws-console.html for the shared design notes.
 let _diskWidgetState = null;
+
+function _diskStatusToClass(s) {
+  if (s === "warn") return "warn";
+  if (s === "freeze" || s === "danger") return "danger";
+  return "";
+}
+function _toggleDiskPopover() {
+  const el = document.getElementById("disk-widget-slot");
+  if (!el) return;
+  el.classList.toggle("open");
+}
+function _closeDiskPopover(ev) {
+  if (ev) { ev.stopPropagation(); }
+  const el = document.getElementById("disk-widget-slot");
+  if (el) el.classList.remove("open");
+}
+function _wrapWithChip(cardHtml, d) {
+  const disk = d.disk || {};
+  const pct = Math.round(disk.pct_used || 0);
+  const klass = _diskStatusToClass(d.status);
+  return (
+    '<button class="disk-chip ' + klass + '" type="button" onclick="_toggleDiskPopover()" title="Click to expand disk health">'+
+      '<span class="disk-chip-dot"></span>'+
+      '<span>Disk</span>'+
+      '<span class="disk-chip-pct">' + pct + '%</span>'+
+      '<span class="disk-chip-caret">▾</span>'+
+    '</button>'+
+    '<div class="disk-popover" onclick="event.stopPropagation()">'+
+      '<button class="dp-close" type="button" onclick="_closeDiskPopover(event)" title="Minimize">×</button>'+
+      cardHtml +
+    '</div>'
+  );
+}
+// Close popover when clicking outside the chip
+document.addEventListener("click", function(ev) {
+  const el = document.getElementById("disk-widget-slot");
+  if (!el || !el.classList.contains("open")) return;
+  if (!el.contains(ev.target)) el.classList.remove("open");
+});
+
 function renderDiskWidget(d) {
   const slot = document.getElementById("disk-widget-slot");
   if (!slot) return;
@@ -3125,8 +3240,7 @@ function renderDiskWidget(d) {
                     :                      "Critical · " + pct + "% used — new launches will be refused";
   // Accept both new (pro/max) and legacy (student/developer) tier names.
   const canGrow = ["pro","max","enterprise","student","developer"].includes(String(d.tier||"").toLowerCase());
-  slot.innerHTML =
-    '<div style="background:'+bg+';border:1.5px solid '+accent+';border-radius:10px;padding:12px 16px;margin-bottom:8px">'+
+  slot.innerHTML = _wrapWithChip('<div style="background:'+bg+';border:1.5px solid '+accent+';border-radius:10px;padding:12px 16px;margin-bottom:8px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
         '<div style="font-size:13.5px;font-weight:600;color:#1f2937">Appliance disk'+
           '<span style="display:inline-block;margin-left:8px;padding:2px 8px;background:#ede9fe;color:#6d28d9;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.05em">'+tier+'</span>'+
@@ -3143,7 +3257,7 @@ function renderDiskWidget(d) {
         '<button onclick="openDiskCleanup()" style="font-size:12px;padding:6px 12px;background:#0f1b2d;color:#fff;border:0;border-radius:6px;cursor:pointer">Free up space →</button>'+
         (canGrow ? '<button onclick="openDiskGrow()" style="font-size:12px;padding:6px 12px;background:#fff;color:#1a2330;border:1px solid #d8e0ea;border-radius:6px;cursor:pointer">Grow disk</button>' : '')+
       '</div>'+
-    '</div>';
+    '</div>', d);
 }
 async function fetchDiskHealth() {
   try { renderDiskWidget(await (await fetch("/api/runtime/disk-health")).json()); } catch (e) {}

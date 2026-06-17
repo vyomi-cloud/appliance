@@ -1394,6 +1394,46 @@ vyomi_mount_host_pubkey_into_appliance() {
   ' >/dev/null 2>&1 || progress "host pubkey push failed (non-fatal) — Connect will fall back to per-instance keys"
 }
 
+appliance_install_lxd_docker_bridge_fix() {
+  # v2.0.4 (2026-06-17): docker's iptables rules clobber LXD's NAT.
+  # When the appliance VM boots both docker (running the simulator stack)
+  # AND LXD (hosting user EC2 instances), docker sets FORWARD policy to
+  # DROP and overwrites the POSTROUTING chain. That leaves LXD containers
+  # with no internet access — apt-get / pip / docker pull all fail with
+  # "Unable to connect" errors.
+  #
+  # Fix: install a systemd one-shot unit that runs AFTER docker.service
+  # and re-adds the LXD-side rules:
+  #   * POSTROUTING -s 10.89.75.0/24 ! -o lxdbr0 -j MASQUERADE
+  #   * FORWARD -i lxdbr0 -j ACCEPT
+  #   * FORWARD -o lxdbr0 -j ACCEPT
+  #
+  # This unblocks the user story: spin up a Vyomi EC2, install docker
+  # inside, run your own web app. The user never sees the LXD-vs-docker
+  # iptables tussle — it's a one-shot at boot, idempotent across reboots.
+  local compose
+  compose="$(appliance_multipass_cmd)"
+  verbose "installing LXD↔docker iptables coexistence helper"
+  "$compose" exec "$APPLIANCE_NAME" -- sudo bash -lc 'cat > /etc/systemd/system/cloudlearn-lxd-network-fix.service <<UNIT
+[Unit]
+Description=CloudLearn: re-apply LXD masquerade after docker rewrites iptables
+After=docker.service snap.lxd.daemon.service
+Wants=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c "iptables -t nat -C POSTROUTING -s 10.89.75.0/24 ! -o lxdbr0 -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s 10.89.75.0/24 ! -o lxdbr0 -j MASQUERADE; iptables -C FORWARD -i lxdbr0 -j ACCEPT 2>/dev/null || iptables -I FORWARD -i lxdbr0 -j ACCEPT; iptables -C FORWARD -o lxdbr0 -j ACCEPT 2>/dev/null || iptables -I FORWARD -o lxdbr0 -j ACCEPT"
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    systemctl daemon-reload
+    systemctl enable --now cloudlearn-lxd-network-fix.service >/dev/null 2>&1
+    systemctl is-active cloudlearn-lxd-network-fix.service' 2>&1 | head -5
+}
+
 appliance_start_runtime_bridge() {
   local compose
   compose="$(appliance_multipass_cmd)"
@@ -2175,6 +2215,14 @@ outer_run() {
       phase "Building + starting CloudLearn stack inside appliance (2-3 min on first run)"
       appliance_exec_launcher
       phase_done
+      # v2.0.4: docker rewrites iptables FORWARD policy to DROP +
+      # clobbers POSTROUTING. That leaves any LXD container (Vyomi-EC2,
+      # GCP-Compute, Azure-VM) without internet — apt / pip / docker
+      # pull fail. The systemd one-shot we install here restores the
+      # LXD-side rules every time docker.service starts. Idempotent.
+      phase "Installing LXD↔docker iptables coexistence helper"
+      appliance_install_lxd_docker_bridge_fix
+      phase_done
       # Phase 12 (v2.0.0): provision a mkcert-signed TLS cert on the host
       # at ~/.vyomi/tls/ and push it into the appliance VM so the bundled
       # Caddy sidecar serves https://vyomi.local:9443 with a green padlock.
@@ -2236,6 +2284,23 @@ outer_run() {
       ;;
     doctor)
       doctor
+      ;;
+    # ── RC dev-cycle subcommands (Vyomi built on Vyomi) ──────────────────
+    # These delegate to focused helper scripts in the same dir so the
+    # main launcher stays readable. The helpers manage a multipass-backed
+    # Vyomi-EC2 (`vyomi-ec2-rc`) where every Release Candidate is
+    # deployed for validation BEFORE the final release tag goes out.
+    rc-init)
+      exec bash "$(dirname "$0")/vyomi-rc-init" "$@"
+      ;;
+    deploy-rc)
+      exec bash "$(dirname "$0")/vyomi-deploy-rc" "$@"
+      ;;
+    rc-status)
+      exec bash "$(dirname "$0")/vyomi-rc-status" "$@"
+      ;;
+    promote-rc)
+      exec bash "$(dirname "$0")/vyomi-promote-rc" "$@"
       ;;
     help|-h|--help)
       usage

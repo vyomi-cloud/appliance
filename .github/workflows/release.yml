@@ -1,10 +1,17 @@
 name: Release
 
-# On every v*.*.* tag (or manual dispatch):
+# On every STABLE v*.*.* tag (no -rc/-beta/-alpha suffix) or manual dispatch:
 #   1. Build the source tarball + .deb + .rpm
 #   2. Publish a GitHub Release with all artifacts attached
 #   3. Fan out to downstream package managers (Brew tap, Snap Store,
-#      winget, Chocolatey) — each one is OPT-IN via its secret being set
+#      winget, Scoop) — each one is OPT-IN via its secret being set
+#
+# Release Candidate tags (v*-rc*, v*-beta*, v*-alpha*) are handled by
+# the separate release-candidate.yml workflow, which builds the SAME
+# artifacts but publishes them as a GitHub Pre-release and skips all
+# downstream channel promotion. The promotion path from RC → final is
+# manual: `vyomi promote-rc v2.0.4-rc1` re-tags the same commit as
+# v2.0.4 (no -rc suffix), which fires THIS workflow.
 #
 # Required secrets — none for a default release (just builds the tarball
 # + .deb + .rpm + GitHub Release). Each downstream PM is gated on its
@@ -23,7 +30,15 @@ name: Release
 
 on:
   push:
-    tags: ['v*.*.*']
+    tags:
+      - 'v*.*.*'
+      # Exclude pre-release suffixes — those route through
+      # release-candidate.yml. GitHub Actions tag filters support
+      # negation via `!` (the positive pattern above keeps this list
+      # syntactically valid — negation alone wouldn't fire anything).
+      - '!v*-rc*'
+      - '!v*-beta*'
+      - '!v*-alpha*'
   workflow_dispatch:
     inputs:
       version:
