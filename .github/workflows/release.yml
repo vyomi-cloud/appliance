@@ -31,7 +31,8 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'v*.*.*'       # 3-segment: v2.0.4
+      - 'v*.*.*.*'     # 4-segment patch hotfix: v2.0.4.1
       # Exclude pre-release suffixes — those route through
       # release-candidate.yml. GitHub Actions tag filters support
       # negation via `!` (the positive pattern above keeps this list

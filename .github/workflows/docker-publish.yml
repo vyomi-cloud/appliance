@@ -28,7 +28,10 @@ name: Docker Publish
 
 on:
   push:
-    tags: ['v*.*.*']      # release tags ONLY — branch pushes are ignored
+    # release tags ONLY — branch pushes are ignored.
+    # 3-segment (v2.0.4) for regular releases, 4-segment (v2.0.4.1)
+    # for patch hotfixes that don't warrant a minor bump.
+    tags: ['v*.*.*', 'v*.*.*.*']
   workflow_dispatch:
     inputs:
       tag:

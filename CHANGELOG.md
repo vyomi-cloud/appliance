@@ -6,6 +6,19 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.4.1] — 2026-06-18
+
+**Hot-fix patch on top of v2.0.4.** Two UX bugs surfaced within hours of cutting v2.0.4; this 4-segment patch ships them without bumping the minor version (since the underlying behaviour is unchanged).
+
+### Fixed
+
+- **Cloud-locked space click now shows a modal, not a silent redirect** — clicking a GCP/Azure space card while on the Pro tier (`primary_cloud_only`) used to 302-redirect to `/console/<primary>?denied=<provider>`, which whisked the user to a different cloud's console with cryptic query params. `static/clouds.html` now pre-checks the tier policy via `/api/runtime/tier` and surfaces a clear modal: "Not enabled for your current subscription" + plan context + Upgrade CTA. Server-side gate at `routes/console.py` is unchanged (defence-in-depth).
+- **"✓ Current Plan" badge centered on the tier card** — `.tier.active::before` used `right: 16px` which right-aligned the badge above the highlighted tier card. Now uses `left: 50%; transform: translateX(-50%);` so it sits dead-centre over the card.
+
+### Release pipeline
+
+- `release.yml` + `docker-publish.yml` tag filters extended to also match `v*.*.*.*` so 4-segment patch tags trigger the same image build + Docker Hub publish flow as 3-segment ones.
+
 ## [2.0.4] — 2026-06-17
 
 **Workspaces dashboard + live host telemetry + docker-in-Vyomi-EC2.** v2.0.4 is the largest UX pass since the v2.0 rename — a new `/clouds` workspaces dashboard with per-cloud distribution donuts and live CPU/RAM/Disk gauges, a comprehensive splash + landing redesign, a floating disk-health chip on every cloud console, plus the A1 docker-in-LXD work that lets users run their own apps inside the simulator's "EC2" instances. Also adds a real-SPA Playwright conformance harness so regressions like the v2.0.3 RDS `db_instances` envelope bug get caught at the DOM level, not just the API level.

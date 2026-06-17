@@ -490,6 +490,69 @@
     }
     .pie-card.empty .pie-svg-wrap svg circle.seg { stroke: #e7e7e9; }
     .pie-card.empty .pie-center .pc-val { color: #94a3b8; font-size: 14px; }
+
+    /* ── Cloud-locked modal (tier gate) ────────────────────────────
+       Shown when the user clicks a space on a cloud their current
+       subscription doesn't include. Replaces the silent 302 redirect
+       to "/console/<primary>?denied=<provider>" the v2.0.4 server
+       still emits — we intercept BEFORE the navigation so the user
+       gets a clear "not enabled, here's how to fix" dialog instead
+       of being whisked to a different cloud's console. */
+    .cl-modal {
+      position: fixed; inset: 0; z-index: 9700;
+      background: rgba(15, 27, 45, 0.5);
+      display: none; align-items: center; justify-content: center;
+      backdrop-filter: blur(2px);
+    }
+    .cl-modal.open { display: flex; }
+    .cl-modal .cl-box {
+      background: #fff; border-radius: 14px;
+      width: 460px; max-width: calc(100vw - 32px);
+      padding: 28px 30px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+      text-align: center;
+    }
+    .cl-modal .cl-glyph {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: #fef3c7; color: #92400e;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 30px; line-height: 1;
+      margin-bottom: 16px;
+    }
+    .cl-modal h3 {
+      margin: 0 0 6px; font-size: 19px; font-weight: 700;
+      color: #0f1b2d; letter-spacing: -0.01em;
+    }
+    .cl-modal .cl-sub {
+      margin: 0 0 16px; font-size: 13.5px;
+      color: #5f6b7a; line-height: 1.55;
+    }
+    .cl-modal .cl-context {
+      margin: 0 0 20px; padding: 12px 14px;
+      background: #f7f8fa; border-radius: 8px;
+      font-size: 12.5px; color: #1a2330; line-height: 1.5;
+    }
+    .cl-modal .cl-context strong { color: #0f1b2d; }
+    .cl-modal .cl-actions {
+      display: flex; gap: 10px; justify-content: center;
+    }
+    .cl-modal .cl-actions button,
+    .cl-modal .cl-actions a {
+      padding: 9px 18px; border-radius: 8px;
+      font-size: 13.5px; font-weight: 600;
+      cursor: pointer; font-family: inherit;
+      text-decoration: none; line-height: 1;
+    }
+    .cl-modal .cl-cancel {
+      background: #fff; color: #1a2330;
+      border: 1.5px solid #cbd5e1;
+    }
+    .cl-modal .cl-cancel:hover { border-color: #1a2330; }
+    .cl-modal .cl-upgrade {
+      background: #0f1b2d; color: #fff;
+      border: 1.5px solid #0f1b2d;
+    }
+    .cl-modal .cl-upgrade:hover { background: #1a2c44; }
     /* Provider color tokens — match the rest of the SPA's brand chips */
     :root {
       --prov-aws: #ff9900;
@@ -691,6 +754,22 @@
       </div>
     </div><!-- /spaces surface card -->
 
+    <!-- ── Cloud-locked modal (Pro tier non-primary-cloud click) ────── -->
+    <div class="cl-modal" id="cl-modal" onclick="onClModalBackdrop(event)">
+      <div class="cl-box" onclick="event.stopPropagation()">
+        <div class="cl-glyph">🔒</div>
+        <h3 id="cl-modal-title">Not enabled for the current subscription</h3>
+        <p class="cl-sub" id="cl-modal-sub">
+          This cloud isn't included in your active plan.
+        </p>
+        <div class="cl-context" id="cl-modal-ctx"></div>
+        <div class="cl-actions">
+          <button class="cl-cancel" type="button" onclick="closeClModal()">Stay here</button>
+          <a class="cl-upgrade" href="/pricing">Upgrade plan &rarr;</a>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Create Space modal ──────────────────────────────────────── -->
     <div class="modal-backdrop" id="create-space-modal" onclick="onModalBackdropClick(event)">
       <div class="modal" role="dialog" aria-labelledby="csm-title">
@@ -890,7 +969,68 @@
       }
     }
 
+    // Tier policy cache — fetched once per page load. Used to gate
+    // space clicks BEFORE the server-side /console/<provider> redirect
+    // fires, so the user gets a clean modal instead of being whisked
+    // to a different cloud's console with ?denied=… in the URL.
+    let _tierPolicy = null;
+    async function ensureTierPolicy() {
+      if (_tierPolicy) return _tierPolicy;
+      try {
+        const r = await fetch('/api/runtime/tier');
+        if (r.ok) _tierPolicy = await r.json();
+      } catch (_) { /* fall through — null means we don't gate */ }
+      return _tierPolicy;
+    }
+
+    function _canAccessProvider(provider, policy) {
+      if (!policy) return true;  // unknown policy → fail open
+      const ap = policy.active_policy || policy.policy || policy;
+      const provs = ap.providers;
+      if (provs === 'primary_cloud_only') {
+        const primary = (policy.primary_cloud || ap.primary_cloud || '').toLowerCase();
+        if (!primary) return false;
+        return provider === primary;
+      }
+      if (Array.isArray(provs)) return provs.includes(provider);
+      return true;  // unrecognized shape → fail open
+    }
+
+    function openClModal(provider, policy) {
+      const tier   = (policy && policy.active_tier) || 'free';
+      const ap     = (policy && policy.active_policy) || {};
+      const primary= (policy && policy.primary_cloud) || ap.primary_cloud || '—';
+      const label  = { aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
+      document.getElementById('cl-modal-sub').textContent =
+        `Your ${tier.charAt(0).toUpperCase()+tier.slice(1)} plan doesn't include ${label[provider]||provider}.`;
+      let ctx = `<div>Active plan: <strong>${tier.charAt(0).toUpperCase()+tier.slice(1)}</strong></div>`;
+      if (ap.providers === 'primary_cloud_only' && primary) {
+        ctx += `<div style="margin-top:4px">Primary cloud: <strong>${label[primary]||primary}</strong></div>`;
+      }
+      ctx += `<div style="margin-top:8px">Upgrade to <strong>Max</strong> for all 3 clouds simultaneously.</div>`;
+      document.getElementById('cl-modal-ctx').innerHTML = ctx;
+      document.getElementById('cl-modal').classList.add('open');
+    }
+    function closeClModal() {
+      document.getElementById('cl-modal').classList.remove('open');
+    }
+    function onClModalBackdrop(ev) {
+      if (ev.target.id === 'cl-modal') closeClModal();
+    }
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') closeClModal();
+    });
+
     async function switchAndOpen(spaceId, provider) {
+      // Pre-check the tier policy: if the user's subscription doesn't
+      // include this cloud, surface a friendly modal instead of letting
+      // the server's 302 send them to a different /console/<x>?denied=…
+      // URL.
+      const policy = await ensureTierPolicy();
+      if (!_canAccessProvider(provider, policy)) {
+        openClModal(provider, policy);
+        return;
+      }
       try {
         await fetch(`/api/spaces/${ spaceId }/switch`, { method: 'POST' });
       } catch (e) { /* swallow — opening console works without explicit switch */ }
