@@ -46,18 +46,45 @@ services:
   # P1: official Google emulators — let real gRPC client libraries (Pub/Sub,
   # Firestore) work by pointing PUBSUB_EMULATOR_HOST / FIRESTORE_EMULATOR_HOST
   # at these; the simulator delegates its console/REST handlers to them too.
+  #
+  # v2.0.3+: both emulators now persist to named volumes so topics /
+  # subscriptions / messages / collections / documents survive a
+  # `docker compose up --force-recreate` (which is what `vyomi upgrade`
+  # does to swap in a new image). See packaging/firestore/firestore-start.sh
+  # for the Firestore import-on-restart wrapper (Firestore's --import-data
+  # needs a real metadata file; the wrapper handles first-boot gracefully).
+  # Pub/Sub: gcloud emulator's --data-dir flag was found to write only
+  # env.yaml (not actual topic WAL). v2.0.3 ships the volume mount +
+  # scaffolding so when v2.1.0 adds STATE-write to the simulator's GCP
+  # Pub/Sub proxy endpoints, the rehydrate_pubsub_topics() hook in
+  # core/backend_rehydrate.py will recover everything. Today: topics +
+  # subscriptions created via direct emulator hits do NOT survive
+  # `vyomi upgrade`. Topics created via the simulator's catalog
+  # endpoints will survive once v2.1.0 lands.
   cloudlearn-pubsub:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
-    command: ["gcloud","beta","emulators","pubsub","start","--host-port=0.0.0.0:8085","--project=cloudlearn"]
+    command: ["gcloud","beta","emulators","pubsub","start","--host-port=0.0.0.0:8085","--project=cloudlearn","--data-dir=/data"]
     ports:
       - "8085:8085"
+    volumes:
+      - cloudlearn-pubsub:/data
     restart: unless-stopped
 
+  # Firestore: persistence via REST-export-on-SIGTERM + import-on-boot.
+  # See packaging/firestore/firestore-start.sh — the gcloud --export-on-
+  # exit flag was found to be a no-op when SIGTERM isn't forwarded
+  # cleanly to the JVM, so we POST /emulator/v1/projects/<id>:export
+  # ourselves before letting the container die. stop_grace_period
+  # gives the REST call up to 30s + a bit of slack for big collections.
   cloudlearn-firestore:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
-    command: ["gcloud","beta","emulators","firestore","start","--host-port=0.0.0.0:8080","--project=cloudlearn"]
+    entrypoint: ["/bin/bash", "/etc/vyomi/firestore-start.sh"]
     ports:
       - "8080:8080"
+    volumes:
+      - cloudlearn-firestore:/data
+      - ./packaging/firestore/firestore-start.sh:/etc/vyomi/firestore-start.sh:ro
+    stop_grace_period: 45s
     restart: unless-stopped
 
   # MVP P0 backends — fidelity-first: real engines back the simulator's surfaces.
@@ -67,16 +94,31 @@ services:
   # DynamoDB  → AWS DynamoDB (official Amazon emulator; real PartiQL)
   # ElasticMQ → AWS SQS (real FIFO + visibility timeout)
 
+  # v2.0.3+: Vault now runs in PROD mode with a file backend so KMS keys
+  # (transit/) and secrets (cloudlearn-kv/) survive container recreate.
+  # vault-init.sh runs `vault operator init` on first boot and stores the
+  # single unseal key + root token in /vault/data/init.json. Subsequent
+  # boots unseal automatically from that file. The root token is then
+  # written to /vault/shared/root_token where the simulator container
+  # reads it on startup (see core/vault_client.py).
+  #
+  # Upgrade-from-v2.0.2 note: dev-mode Vault was in-memory; users who
+  # upgrade will need to recreate any KMS keys / secrets they had in
+  # v2.0.2. The simulator detects this and surfaces a one-time banner.
   cloudlearn-vault:
     image: hashicorp/vault:1.15
-    command: ["server", "-dev", "-dev-root-token-id=cloudlearn-dev-token", "-dev-listen-address=0.0.0.0:8200"]
-    environment:
-      VAULT_DEV_ROOT_TOKEN_ID: cloudlearn-dev-token
-      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    entrypoint: ["/bin/sh", "/etc/vyomi/vault-init.sh"]
     cap_add:
       - IPC_LOCK
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
     ports:
       - "8200:8200"
+    volumes:
+      - cloudlearn-vault-data:/vault/data
+      - cloudlearn-vault-shared:/vault/shared
+      - ./packaging/vault/vault-config.hcl:/vault/config/vault-config.hcl:ro
+      - ./packaging/vault/vault-init.sh:/etc/vyomi/vault-init.sh:ro
     restart: unless-stopped
 
   vyomi-nats:
@@ -113,11 +155,20 @@ services:
       - vyomi-dynamodb:/data
     restart: unless-stopped
 
+  # v2.0.3+: ElasticMQ now reads a HOCON config from a mounted file +
+  # has a /data volume mount. Queue DEFINITIONS survive container recreate
+  # because the simulator re-declares them from cloudlearn_state.sqlite3
+  # on startup (core/backend_rehydrate.py). In-flight messages don't
+  # survive (ElasticMQ OSS is in-memory only) — matches real SQS's
+  # best-effort message durability semantics.
   cloudlearn-elasticmq:
     image: softwaremill/elasticmq-native:latest
     ports:
       - "9324:9324"
       - "9325:9325"
+    volumes:
+      - cloudlearn-elasticmq:/data
+      - ./packaging/elasticmq/elasticmq.conf:/opt/elasticmq.conf:ro
     restart: unless-stopped
 
   simulator:
@@ -172,8 +223,14 @@ services:
       CLOUDLEARN_PUBSUB_EMULATOR_HOST: cloudlearn-pubsub:8085
       CLOUDLEARN_FIRESTORE_EMULATOR_HOST: cloudlearn-firestore:8080
       # MVP P0 backends — see compose service block above.
+      # v2.0.3+: Vault now runs in prod mode. The root token is generated on
+      # first boot by vault-init.sh and written to the shared volume mounted
+      # at /run/vault/root_token. core/vault_client.py reads that file (with
+      # a short retry loop in case vault-init is still bringing the server
+      # up). The env-var fallback below is kept for tests / one-off runs.
       CLOUDLEARN_VAULT_URL: http://cloudlearn-vault:8200
-      CLOUDLEARN_VAULT_TOKEN: cloudlearn-dev-token
+      CLOUDLEARN_VAULT_TOKEN_FILE: /run/vault/root_token
+      CLOUDLEARN_VAULT_TOKEN: ""
       CLOUDLEARN_NATS_URL: nats://vyomi-nats:4222
       CLOUDLEARN_MINIO_URL: http://vyomi-minio:9000
       CLOUDLEARN_MINIO_ACCESS_KEY: cloudlearn
@@ -189,6 +246,10 @@ services:
       # vm_connect.py reads it and pushes it into every new LXD container
       # as ~ubuntu/.ssh/authorized_keys, so users never download a key.
       - /etc/vyomi/host-ssh-pubkey.pub:/config/host-ssh-pubkey.pub:ro
+      # v2.0.3+: shared volume with cloudlearn-vault so the simulator can
+      # read the prod-mode root token written by vault-init.sh. Mounted
+      # read-only — only the vault container writes here.
+      - cloudlearn-vault-shared:/run/vault:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:9000/healthz').read().decode())"]
@@ -227,5 +288,14 @@ volumes:
   vyomi-nats:
   vyomi-minio:
   vyomi-dynamodb:
+  # v2.0.3+ — close the 4 state-persistence gaps (Pub/Sub topics,
+  # Firestore collections, Vault KMS keys + secrets, ElasticMQ queue
+  # defs) so `docker compose up --force-recreate` (what `vyomi upgrade`
+  # does) doesn't silently wipe user resources.
+  cloudlearn-pubsub:
+  cloudlearn-firestore:
+  cloudlearn-vault-data:
+  cloudlearn-vault-shared:
+  cloudlearn-elasticmq:
   caddy-data:
   caddy-config:

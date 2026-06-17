@@ -30,7 +30,43 @@ except ImportError:  # hvac not installed yet — keep import-safe.
 
 
 _VAULT_URL = os.environ.get("CLOUDLEARN_VAULT_URL", "http://cloudlearn-vault:8200")
-_VAULT_TOKEN = os.environ.get("CLOUDLEARN_VAULT_TOKEN", "cloudlearn-dev-token")
+
+
+def _read_vault_token() -> str:
+    """Resolve the Vault root token at runtime.
+
+    v2.0.3+ — prefer a file written by the vault sidecar's init script
+    (packaging/vault/vault-init.sh writes the prod-mode-generated root
+    token to a shared volume). Token-file path is configurable via
+    CLOUDLEARN_VAULT_TOKEN_FILE (default /run/vault/root_token).
+
+    Falls back to CLOUDLEARN_VAULT_TOKEN env (used in tests / one-off
+    runs that point at a dev-mode Vault), and finally to the dev-token
+    default for backward compatibility with v2.0.2 dev-mode containers.
+    """
+    token_file = os.environ.get("CLOUDLEARN_VAULT_TOKEN_FILE", "/run/vault/root_token")
+    try:
+        if token_file and os.path.isfile(token_file):
+            with open(token_file, "r", encoding="utf-8") as f:
+                tok = f.read().strip()
+                if tok:
+                    return tok
+    except OSError:
+        pass
+    env_tok = os.environ.get("CLOUDLEARN_VAULT_TOKEN") or ""
+    if env_tok:
+        return env_tok
+    # Backstop — matches the v2.0.2 dev-mode default. Lets local pytest runs
+    # work without setting any env var.
+    return "cloudlearn-dev-token"
+
+
+_VAULT_TOKEN = _read_vault_token()
+
+# v2.0.3 prod-mode Vault stores secrets at cloudlearn-kv/ (explicit mount).
+# Dev-mode Vault used secret/ (auto-mounted kv-v2). Honour whichever the
+# environment has, with cloudlearn-kv preferred when both are reachable.
+_KV_MOUNT_PREFERRED = os.environ.get("CLOUDLEARN_VAULT_KV_MOUNT", "cloudlearn-kv")
 
 # Provider → vault path prefix. Keep these stable; conformance asserts on them.
 _TRANSIT_PREFIX = {
@@ -46,7 +82,7 @@ _KV_PREFIX = {
 
 # Mount points; created lazily on first call to _ensure_mounts().
 _TRANSIT_MOUNT = "transit"
-_KV_MOUNT = "secret"  # Vault dev-mode ships secret/ as kv-v2 by default.
+_KV_MOUNT = _KV_MOUNT_PREFERRED
 
 _client_cache: dict[str, Any] = {"client": None, "ensured_at": 0.0}
 
@@ -56,6 +92,12 @@ def _client() -> Any | None:
 
     hvac is optional — if it's not installed, return None and let callers decide
     whether to fall back to metadata-only mode.
+
+    v2.0.3+: re-reads the Vault token from disk on every cache miss. The
+    prod-mode vault sidecar's init script (packaging/vault/vault-init.sh)
+    can take a few seconds to generate + publish the token file on first
+    boot; this lets the simulator keep retrying rather than capturing a
+    stale token from module-import time.
     """
     if hvac is None:
         return None
@@ -63,7 +105,10 @@ def _client() -> Any | None:
     if c is not None:
         return c
     try:
-        c = hvac.Client(url=_VAULT_URL, token=_VAULT_TOKEN, timeout=3)
+        token = _read_vault_token()
+        if not token:
+            return None
+        c = hvac.Client(url=_VAULT_URL, token=token, timeout=3)
         if not c.is_authenticated():
             return None
         _client_cache["client"] = c
@@ -76,7 +121,13 @@ def _client() -> Any | None:
 def _ensure_mounts(c: Any) -> None:
     """Idempotently enable the transit + kv-v2 mounts. Re-check at most every
     60 s so we don't beat on Vault if many calls come in.
+
+    v2.0.3+: prod-mode Vault (file backend) has neither transit/ nor any
+    kv mount pre-enabled. vault-init.sh enables both on its first boot,
+    so the typical path is a no-op here; we keep the safety re-check for
+    cases where Vault is reset out-of-band.
     """
+    global _KV_MOUNT
     now = time.time()
     if now - float(_client_cache.get("ensured_at", 0.0)) < 60:
         return
@@ -90,7 +141,19 @@ def _ensure_mounts(c: Any) -> None:
             c.sys.enable_secrets_engine(backend_type="transit", path=_TRANSIT_MOUNT)
         except Exception:
             pass
-    # secret/ is enabled by default in dev mode; skip otherwise.
+    # Prefer the configured kv mount; fall back to whichever kv-v2 mount
+    # already exists (dev-mode Vault auto-mounts `secret/`).
+    if f"{_KV_MOUNT}/" not in existing:
+        for fallback in ("cloudlearn-kv/", "secret/"):
+            if fallback in existing:
+                _KV_MOUNT = fallback.rstrip("/")
+                return
+        try:
+            c.sys.enable_secrets_engine(
+                backend_type="kv", path=_KV_MOUNT, options={"version": "2"},
+            )
+        except Exception:
+            pass
 
 
 def available() -> bool:

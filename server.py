@@ -10578,6 +10578,29 @@ def _start_license_background_tasks():
         # from this cache.
         from core import disk_health as _dh
         _dh.start_disk_health_monitor(STATE)
+        # v2.0.3+ backend-state rehydration. The two emulators whose
+        # state doesn't survive container recreate (ElasticMQ and the
+        # Pub/Sub emulator — both in-memory only) get re-seeded from the
+        # simulator's persisted state DB on every appliance boot. Runs
+        # once at startup (no daemon thread), synchronous, ~1-2s for a
+        # few dozen queues + topics. Failures are logged and swallowed.
+        # (Vault + Firestore + all other backends persist natively via
+        # volume mounts.)
+        try:
+            from core import backend_rehydrate as _br
+            _sqs = _br.rehydrate_sqs_queues(STATE)
+            _ps  = _br.rehydrate_pubsub_topics(STATE)
+            STATE.setdefault("runtime", {})["backend_rehydration"] = {
+                "ran_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "sqs":    _sqs,
+                "pubsub": _ps,
+            }
+        except Exception as _e:
+            # Don't fail simulator startup if rehydration trips.
+            STATE.setdefault("runtime", {})["backend_rehydration"] = {
+                "ran_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "error": str(_e),
+            }
     except Exception:
         pass
 
