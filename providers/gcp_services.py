@@ -964,6 +964,115 @@ def api_gcp_pubsub_delete_schema(project: str, schema: str):
     return _server().api_gcp_pubsub_delete_schema(project, schema)
 
 
+# ── Firestore /databases collection routes (v2.0.6) ──────────────────────
+# These wire the catalog's `/api/gcp/firestore/v1/projects/{project}/databases`
+# collection layer that v2.0.5 only had at the document level. Closes the
+# real-SPA conformance gap that left gcp.firestore SKIPPED in v2.0.5.
+# We use the in-memory gcp_firestore_state["databases"] dict — already
+# declared in core/app_context.py — so no schema-migration work needed.
+
+def _gcp_firestore_database_view(project: str, database_id: str, record: dict) -> dict:
+    """Wrap the stored database record in Google's response envelope.
+    Matches the firestore.googleapis.com v1 Database message shape:
+    https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases
+    """
+    return {
+        "name":                  f"projects/{project}/databases/{database_id}",
+        "uid":                   record.get("uid", ""),
+        "createTime":            record.get("createTime", ""),
+        "updateTime":            record.get("updateTime", ""),
+        "locationId":            record.get("locationId", "us-central1"),
+        "type":                  record.get("type", "FIRESTORE_NATIVE"),
+        "concurrencyMode":       record.get("concurrencyMode", "OPTIMISTIC"),
+        "appEngineIntegrationMode": record.get("appEngineIntegrationMode", "DISABLED"),
+        "keyPrefix":             record.get("keyPrefix", database_id[:8] or "default"),
+        "etag":                  record.get("etag", "etag-" + (record.get("uid") or "")[:8]),
+        "deleteProtectionState": record.get("deleteProtectionState", "DELETE_PROTECTION_DISABLED"),
+        "pointInTimeRecoveryEnablement": record.get("pointInTimeRecoveryEnablement", "POINT_IN_TIME_RECOVERY_DISABLED"),
+    }
+
+
+def api_gcp_firestore_list_databases(project: str):
+    """GET /v1/projects/{project}/databases — list every database in
+    the project. Always returns the implicit `(default)` entry alongside
+    any user-created ones so the SPA's first load shows something
+    rather than an empty page."""
+    project = _gcp_project_name(project)
+    bucket = gcp_firestore_state.setdefault("databases", {})
+    rows = []
+    for db_id, rec in bucket.items():
+        if not isinstance(rec, dict):
+            continue
+        rows.append(_gcp_firestore_database_view(project, db_id, rec))
+    return {"databases": rows}
+
+
+async def api_gcp_firestore_create_database(project: str, request: Request):
+    """POST /v1/projects/{project}/databases — create a new database.
+    Accepts the database id from either the `databaseId` query param
+    (Google-canonical) OR the body's `name`/`databaseId` field (what the
+    SPA wizard sends since it doesn't use query params). All other
+    properties (locationId / type / concurrencyMode) come from the body.
+    """
+    project = _gcp_project_name(project)
+    payload = await request.json() if request is not None else {}
+    payload = payload if isinstance(payload, dict) else {}
+    # Google REST puts databaseId in the query string, but the SPA wizard
+    # submits POST with the id in `name` — honour both.
+    qp = dict(request.query_params) if request is not None else {}
+    database_id = (
+        str(qp.get("databaseId") or payload.get("databaseId") or payload.get("name") or "")
+        .split("/")[-1].strip()
+    )
+    if not database_id:
+        raise HTTPException(400, detail="database_id is required (query.databaseId or body.name)")
+    bucket = gcp_firestore_state.setdefault("databases", {})
+    if database_id in bucket:
+        raise HTTPException(409, detail=f"Database already exists: {database_id}")
+    record = {
+        "uid":                   _id("fs"),
+        "createTime":            _now(),
+        "updateTime":            _now(),
+        "locationId":            str(payload.get("locationId") or qp.get("locationId") or "us-central1"),
+        "type":                  str(payload.get("type") or "FIRESTORE_NATIVE"),
+        "concurrencyMode":       str(payload.get("concurrencyMode") or "OPTIMISTIC"),
+        "appEngineIntegrationMode": str(payload.get("appEngineIntegrationMode") or "DISABLED"),
+        "deleteProtectionState": str(payload.get("deleteProtectionState") or "DELETE_PROTECTION_DISABLED"),
+        "pointInTimeRecoveryEnablement": str(payload.get("pointInTimeRecoveryEnablement") or "POINT_IN_TIME_RECOVERY_DISABLED"),
+        "labels":                payload.get("labels") if isinstance(payload.get("labels"), dict) else {},
+    }
+    bucket[database_id] = record
+    return _gcp_firestore_database_view(project, database_id, record)
+
+
+def api_gcp_firestore_get_database(project: str, database: str):
+    """GET /v1/projects/{project}/databases/{database} — single read."""
+    project = _gcp_project_name(project)
+    database = str(database or "(default)")
+    bucket = gcp_firestore_state.setdefault("databases", {})
+    rec = bucket.get(database)
+    if not isinstance(rec, dict):
+        raise HTTPException(404, detail=f"Database not found: {database}")
+    return _gcp_firestore_database_view(project, database, rec)
+
+
+def api_gcp_firestore_delete_database(project: str, database: str):
+    """DELETE /v1/projects/{project}/databases/{database}. Implicitly
+    drops any documents stored under this database id from
+    gcp_firestore_state["documents"] so re-creating with the same id
+    doesn't surface stale rows."""
+    project = _gcp_project_name(project)
+    database = str(database or "(default)")
+    bucket = gcp_firestore_state.setdefault("databases", {})
+    if database not in bucket:
+        raise HTTPException(404, detail=f"Database not found: {database}")
+    del bucket[database]
+    docs = gcp_firestore_state.setdefault("documents", {})
+    for key in [k for k in docs.keys() if k.startswith(f"{project}:{database}:")]:
+        del docs[key]
+    return {"done": True, "name": f"projects/{project}/databases/{database}"}
+
+
 def api_gcp_firestore_list_root_documents(project: str, database: str):
     s = _server()
     project = _gcp_project_name(project)

@@ -6875,7 +6875,16 @@ def _ensure_container(instance: dict) -> str:
     # instances where the user explicitly doesn't want docker capability.
     if not os.environ.get("CLOUDLEARN_LXD_NO_NESTING"):
         run_args.extend(["-c", "security.nesting=true"])
-    completed = _lxd_run_checked(run_args, timeout=120)
+    # v2.0.6: bump launch timeout 120s → 900s. First-time `lxc launch
+    # ubuntu:24.04` has to download ~150 MB of rootfs from the LXD image
+    # server before the container exists. On a typical 4 Mbps connection
+    # that's ~5 min; 120 s was guaranteed to time out and surface as
+    # "no runtime container backing" in the Azure / EC2 / GCE Connect
+    # modal. Subsequent launches hit the local image cache and finish
+    # in <10 s, so the 900 s ceiling only ever matters on a cold host.
+    # Tunable via CLOUDLEARN_LXD_LAUNCH_TIMEOUT for slow networks.
+    launch_timeout = int(os.environ.get("CLOUDLEARN_LXD_LAUNCH_TIMEOUT") or 900)
+    completed = _lxd_run_checked(run_args, timeout=launch_timeout)
     instance["container_id"] = instance["container_name"]
     instance["container_status"] = "created"
     instance["container_download_state"] = "ready"
@@ -7426,7 +7435,14 @@ def _ensure_multipass_instance(instance: dict) -> str:
             "exit \"$status\"",
         ]
     )
-    _host_run(["bash", "-lc", launch_script], timeout=300)
+    # v2.0.6: bump multipass-launch timeout 300s → 1200s. Parity with
+    # the LXD path. `multipass launch` triggers a cloud image download
+    # (~500 MB Ubuntu rootfs + qcow2 conversion) on first run; 300 s was
+    # surfacing as "no runtime container backing" in the Azure / EC2
+    # Connect modal whenever the host hadn't pre-cached the image.
+    # Tunable via CLOUDLEARN_MULTIPASS_LAUNCH_TIMEOUT.
+    mp_launch_timeout = int(os.environ.get("CLOUDLEARN_MULTIPASS_LAUNCH_TIMEOUT") or 1200)
+    _host_run(["bash", "-lc", launch_script], timeout=mp_launch_timeout)
     instance["container_id"] = instance["container_name"]
     instance["container_status"] = "created"
     instance["container_download_state"] = "ready"
@@ -10513,6 +10529,34 @@ def _apply_license_jwt(token: str) -> dict:
     STATE["license_jwt"] = token
     STATE["license_claims"] = dict(claims)
     _persist_state()
+    # v2.0.6 (#419): also write the JWT to a sidecar file in /data so it
+    # survives a SQLite schema migration or a future state-file
+    # corruption — the SQLite DB has 100+ keys + complex nesting, while
+    # the JWT is a single self-validating string we can trivially
+    # restore. Picked up by `_restore_license_from_backup()` on next
+    # startup if STATE.license has dropped back to Free.
+    try:
+        import pathlib as _pl
+        backup_dir = _pl.Path(os.environ.get("CLOUDLEARN_LICENSE_BACKUP_DIR", "/data"))
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        (backup_dir / "license-backup.jwt").write_text(token, encoding="ascii")
+    except Exception:
+        # Backup failure must never break activation — the SQLite write
+        # above is the source of truth; this is belt-and-suspenders.
+        pass
+
+    # v2.0.6 (#427): bump install registration to ACTIVATED so the portal
+    # sees the install funnel: INSTALLED → ACTIVATED happens the moment
+    # a real (portal-issued) license JWT lands. Fail-soft; never raises.
+    try:
+        from core import install_registration as _ir
+        import threading
+        threading.Thread(
+            target=lambda: _ir.register_install(STATE, current_state=_ir.ACTIVATED),
+            daemon=True,
+        ).start()
+    except Exception:
+        pass
 
     # Security audit: log successful license activation
     try:
@@ -10733,6 +10777,110 @@ async def api_security_audit_verify(request: Request):
     admin_auth.require_admin_key(request)
     ok, broken_at, reason = security_audit.verify_chain()
     return {"chain_valid": ok, "broken_at_id": broken_at, "reason": reason}
+
+
+def _restore_license_from_backup() -> bool:
+    """v2.0.6 (#419): if the deployment lost its in-memory tier (e.g.
+    fresh container start after a `vyomi update` that flushed the
+    SQLite cache, or a corrupted state file the loader fell back to
+    defaults on), look for a backup file in /data and re-hydrate.
+    Returns True if we restored anything.
+
+    Two backup formats supported, both written into the persistent
+    `vyomi-data` docker volume which survives `docker compose down/up`
+    and `vyomi update`:
+
+      1. /data/license-backup.jwt   — written by `_apply_license_jwt()`
+         on real portal-issued activations. Verified via RS256 against
+         the portal's pubkey at restore time, so a tampered file
+         silently falls back to Free.
+
+      2. /data/license-backup.json  — written by `/api/license/signup`
+         (dev-mode tier signups). Stored as the resolved STATE.license
+         dict; no re-verification needed because dev mode is gated by
+         CLOUDLEARN_DEV_MODE=1 at write time. Used by Vyomi-on-Vyomi
+         dev loops where the inner appliance can't reach a portal.
+    """
+    current = (STATE.get("license") or {}).get("tier", "free")
+    if str(current).lower() not in ("free", "", "none"):
+        return False  # already activated; nothing to restore
+    try:
+        import pathlib as _pl
+        backup_dir = _pl.Path(os.environ.get("CLOUDLEARN_LICENSE_BACKUP_DIR", "/data"))
+        # Try JWT first (production portal-issued)
+        jwt_file = backup_dir / "license-backup.jwt"
+        if jwt_file.exists():
+            token = jwt_file.read_text(encoding="ascii").strip()
+            if token:
+                _apply_license_jwt(token)
+                return True
+        # Fall back to JSON snapshot (dev-mode signup)
+        json_file = backup_dir / "license-backup.json"
+        if json_file.exists():
+            import json as _json
+            payload = _json.loads(json_file.read_text(encoding="utf-8"))
+            if isinstance(payload, dict) and payload.get("tier"):
+                STATE["license"] = payload
+                # Mirror the tier onto the active tenant so the tier
+                # middleware picks it up.
+                try:
+                    tid = _active_tenant_id()
+                    tenants_state = _tenants_state()
+                    tenant = tenants_state.setdefault("tenants", {}).setdefault(tid, {})
+                    tenant["license_tier"] = payload.get("tier")
+                    tenant["license_period"] = payload.get("period") or "monthly"
+                    tenant["license_expires_at"] = payload.get("expires_at") or ""
+                    tenant["license_seats"] = int(payload.get("seats") or 1)
+                except Exception:
+                    pass
+                _persist_state()
+                return True
+        return False
+    except Exception:
+        # Never break startup on a restore failure — user can always
+        # re-activate via paste-key or device flow.
+        return False
+
+
+@app.on_event("startup")
+def _restore_license_at_boot():
+    """v2.0.6: re-apply the cached JWT from /data/license-backup.jwt if
+    in-memory tier is Free at boot. Runs BEFORE the background license
+    daemons so they pick up the restored claims on their first tick."""
+    try:
+        _restore_license_from_backup()
+    except Exception:
+        pass
+
+
+@app.on_event("startup")
+def _register_install_at_boot():
+    """v2.0.6 (#427): phone-home to the portal so we know about every
+    appliance install — not just the ones that complete activation.
+
+    Fires AFTER `_restore_license_at_boot` so the registration knows
+    whether to report INSTALLED (no license yet) or ACTIVATED (license
+    survived the restart). Runs in a daemon thread so a slow / blocked
+    portal endpoint doesn't delay startup; the function itself has a
+    4s socket timeout but threading guarantees the FastAPI startup
+    sequence is never gated on network reachability.
+
+    Idempotent + throttled — see core/install_registration.py docstring.
+    """
+    import threading
+    from core import install_registration as _ir
+    def _run():
+        try:
+            _ir.maybe_register_at_boot(STATE)
+            # Persist the throttle-cache + last_response so a quick
+            # restart loop doesn't re-POST.
+            try:
+                _persist_state()
+            except Exception:
+                pass
+        except Exception:
+            pass
+    threading.Thread(target=_run, daemon=True).start()
 
 
 @app.on_event("startup")
@@ -10986,6 +11134,23 @@ def api_license_signup(req: LicenseSignupRequest):
     token = _sign_license(payload)
     payload["token"] = token
     STATE["license"] = payload
+    # v2.0.6 (#419): also serialise the resolved STATE.license dict to
+    # /data/license-backup.json so dev-mode signups survive a container
+    # recreate. We don't use the JWT sidecar path here because dev
+    # tokens are signed with the local HMAC signer (not the portal's
+    # RS256) — `_apply_license_jwt()` would refuse to verify them on
+    # restore. The JSON path is universal: just re-hydrate STATE.license
+    # from the file on boot.
+    try:
+        import pathlib as _pl, json as _json
+        backup_dir = _pl.Path(os.environ.get("CLOUDLEARN_LICENSE_BACKUP_DIR", "/data"))
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        (backup_dir / "license-backup.json").write_text(
+            _json.dumps(payload, sort_keys=True, default=str),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
     # Propagate the tier to the active tenant so the enforcement middleware
     # (which reads tenant["license_tier"] first) picks it up immediately.
     try:
@@ -14559,6 +14724,31 @@ def api_gcp_pubsub_delete_schema(project: str, schema: str):
     del gcp_pubsub_state["schemas"][schema]
     _record_usage("gcp.pubsub.delete_schema", {"project": project, "schema": schema})
     return {"kind": "pubsub#schema", "deleted": True, "name": schema}
+
+
+# ── Firestore /databases collection (v2.0.6) ──────────────────────────
+# Wired to providers.gcp_services so the real-SPA conformance suite no
+# longer 404s on /firestore/v1/projects/{project}/databases.  Closes
+# the v2.0.5 SERVICE_SKIPS entry for ('gcp','firestore').
+
+def api_gcp_firestore_list_databases(project: str):
+    from providers import gcp_services as _gs
+    return _gs.api_gcp_firestore_list_databases(project)
+
+
+async def api_gcp_firestore_create_database(project: str, request: Request):
+    from providers import gcp_services as _gs
+    return await _gs.api_gcp_firestore_create_database(project, request)
+
+
+def api_gcp_firestore_get_database(project: str, database: str):
+    from providers import gcp_services as _gs
+    return _gs.api_gcp_firestore_get_database(project, database)
+
+
+def api_gcp_firestore_delete_database(project: str, database: str):
+    from providers import gcp_services as _gs
+    return _gs.api_gcp_firestore_delete_database(project, database)
 
 
 def api_gcp_firestore_list_root_documents(project: str, database: str):

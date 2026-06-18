@@ -38,14 +38,14 @@ cloud-learn up
 
 ### Docker Compose (development)
 ```bash
-git clone https://github.com/cloudlearn/cloud-learn && cd cloud-learn
+git clone https://github.com/vyomi-cloud/appliance && cd appliance
 docker compose up -d
 open http://localhost:9000/pricing
 ```
 
 ### From source
 ```bash
-git clone https://github.com/cloudlearn/cloud-learn && cd cloud-learn
+git clone https://github.com/vyomi-cloud/appliance && cd appliance
 pip install -r requirements.txt
 uvicorn server:app --host 0.0.0.0 --port 9000
 ```

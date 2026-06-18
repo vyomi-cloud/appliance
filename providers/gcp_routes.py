@@ -410,7 +410,18 @@ def register(app, h) -> None:
         ("POST", "/api/gcp/pubsub/schemas", "api_gcp_pubsub_create_schema", "(project: str, request: Request)"),
         ("DELETE", "/v1/projects/{project}/schemas/{schema}", "api_gcp_pubsub_delete_schema", "(project: str, schema: str)"),
         ("DELETE", "/api/gcp/pubsub/schemas/{schema}", "api_gcp_pubsub_delete_schema", "(project: str, schema: str)"),
-        # Firestore
+        # Firestore /databases collection (v2.0.6 — was missing in v2.0.5).
+        # Wired at both /firestore/v1/... (Google-canonical, for real SDKs) AND
+        # /api/gcp/firestore/v1/... (catalog path, for the SPA wizard).
+        ("GET",    "/firestore/v1/projects/{project}/databases",            "api_gcp_firestore_list_databases",   "(project: str)"),
+        ("GET",    "/api/gcp/firestore/v1/projects/{project}/databases",    "api_gcp_firestore_list_databases",   "(project: str)"),
+        ("POST",   "/firestore/v1/projects/{project}/databases",            "api_gcp_firestore_create_database",  "(project: str, request: Request)"),
+        ("POST",   "/api/gcp/firestore/v1/projects/{project}/databases",    "api_gcp_firestore_create_database",  "(project: str, request: Request)"),
+        ("GET",    "/firestore/v1/projects/{project}/databases/{database}", "api_gcp_firestore_get_database",     "(project: str, database: str)"),
+        ("GET",    "/api/gcp/firestore/v1/projects/{project}/databases/{database}", "api_gcp_firestore_get_database", "(project: str, database: str)"),
+        ("DELETE", "/firestore/v1/projects/{project}/databases/{database}", "api_gcp_firestore_delete_database",  "(project: str, database: str)"),
+        ("DELETE", "/api/gcp/firestore/v1/projects/{project}/databases/{database}", "api_gcp_firestore_delete_database", "(project: str, database: str)"),
+        # Firestore documents
         ("GET", "/firestore/v1/projects/{project}/databases/{database}/documents", "api_gcp_firestore_list_root_documents", "(project: str, database: str)"),
         ("GET", "/api/gcp/dynamodb/tables", "api_gcp_firestore_list_root_documents", "(project: str, database: str)"),
         # Native Firestore document API uses path-segment parity to distinguish a

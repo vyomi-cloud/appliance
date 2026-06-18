@@ -81,6 +81,35 @@ class Vyomi < Formula
     (bash_completion/"vyomi").write completion
   end
 
+  # ── Install-funnel phone-home ───────────────────────────────────────────
+  # Fires a single anonymous POST to https://vyomi.cloud/api/install/register
+  # marking this install as DOWNLOADED state, channel=brew. The portal
+  # later upgrades the same install_id to INSTALLED on first `vyomi up`,
+  # so we can measure brew→activation conversion.
+  #
+  # No PII: just install_id (random 16-char hex, persisted at
+  # ~/.vyomi/install_id), version, host_os, channel.
+  #
+  # Opt-out: HOMEBREW_NO_ANALYTICS or VYOMI_NO_TELEMETRY env vars suppress
+  # the call. Fail-soft — a network error never breaks `brew install`.
+  def post_install
+    # Honour brew's standard telemetry opt-out as well as ours.
+    return if ENV["HOMEBREW_NO_ANALYTICS"].to_s != "" && ENV["HOMEBREW_NO_ANALYTICS"] != "0"
+    return if ENV["VYOMI_NO_TELEMETRY"].to_s != "" && ENV["VYOMI_NO_TELEMETRY"] != "0"
+    script = "#{libexec}/packaging/common/phone-home.sh"
+    return unless File.executable?(script)
+    # `system` returns false on non-zero; we ignore the return value because
+    # telemetry failures must never propagate. 4s wall-clock cap: 3s curl
+    # timeout + ~1s for the rest.
+    Process.fork do
+      ENV["VYOMI_VERSION"] = version.to_s
+      exec("/bin/sh", script, "brew")
+    end
+  rescue StandardError
+    # Swallow anything (no curl, no /bin/sh, no fork) — telemetry is
+    # strictly best-effort.
+  end
+
   def caveats
     <<~EOS
       Vyomi ships as an appliance — it starts a single Multipass VM

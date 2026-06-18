@@ -2766,9 +2766,55 @@ async function loadIamList(svc, host, kind, columns){
 
 // S3 specific
 SUB_RENDERERS.bucketobjects = function(svc, full, host){
+  // v2.0.6 — add the Upload button that was missing from the Objects
+  // tab. POSTs multipart/form-data to /api/s3/buckets/{name}/objects
+  // (api_paths.uploadObject), reuses the same endpoint that boto3 +
+  // aws-cli `s3 cp` hit. Files larger than ~50 MB go via a background
+  // FormData upload so the UI stays responsive.
+  const action = el("div",{style:"display:flex;gap:8px;margin-bottom:14px;align-items:center"});
+  const fileIn = el("input",{type:"file",style:"display:none",multiple:true,
+    onchange: e => uploadFiles(e.target.files)});
+  const uploadBtn = el("button",{class:"btn primary",onclick:()=>fileIn.click()},
+    icon("file_upload"), "Upload");
+  const refreshBtn = el("button",{class:"btn",onclick:()=>{ host.innerHTML=""; SUB_RENDERERS.bucketobjects(svc, full, host); }},
+    icon("refresh"), "Refresh");
+  const status = el("span",{style:"font-size:12.5px;color:var(--sub);margin-left:auto"}, "");
+  action.append(uploadBtn, refreshBtn, fileIn, status);
+  host.append(action);
+
+  async function uploadFiles(fileList){
+    if (!fileList || !fileList.length) return;
+    const files = Array.from(fileList);
+    let done = 0;
+    for (const f of files){
+      status.textContent = `Uploading ${f.name} (${done+1}/${files.length})…`;
+      const fd = new FormData();
+      fd.append("file", f, f.name);
+      try {
+        const r = await fetch(ORIGIN+fillPath(svc.api_paths.uploadObject.path, {name: full.name}),
+          {method: "POST", body: fd});
+        if (!r.ok) { toast(`Upload failed: ${f.name}`, "err"); }
+        else { done++; }
+      } catch (e) { toast(`Upload failed: ${f.name} — ${e.message}`, "err"); }
+    }
+    status.textContent = `Uploaded ${done} of ${files.length}`;
+    if (done > 0) toast(`Uploaded ${done} object${done===1?"":"s"}`, "ok");
+    // Re-render the list so the new objects show up immediately.
+    host.innerHTML = "";
+    SUB_RENDERERS.bucketobjects(svc, full, host);
+  }
+
   fetch(ORIGIN+fillPath(svc.api_paths.objects.path, {name: full.name})).then(r=>r.json()).then(j=>{
     const objs = j.objects || j.value || [];
-    if (!objs.length) { host.append(el("div",{class:"empty"}, "This bucket is empty.")); return; }
+    if (!objs.length) {
+      const empty = el("div",{class:"empty",style:"padding:32px;text-align:center"},
+        icon("inbox"),
+        el("div",{}, "This bucket is empty."),
+        el("div",{style:"font-size:12px;color:var(--sub);margin-top:6px"},
+          "Click ", el("strong",{}, "Upload"), " above to add your first object."));
+      host.append(empty);
+      return;
+    }
     const tbl = el("table",{class:"aws"});
     tbl.append(el("tr",{}, el("th",{}, "Name"), el("th",{}, "Type"),
       el("th",{}, "Last modified"), el("th",{}, "Size"), el("th",{}, "Storage class")));

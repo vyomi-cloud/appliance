@@ -43,11 +43,20 @@ Multipass VM that 'cloud-learn up' provisions.
 mkdir -p %{buildroot}/usr/lib/cloud-learn
 mkdir -p %{buildroot}/usr/bin
 mkdir -p %{buildroot}/usr/share/doc/cloud-learn
+# Phone-home script lives in /usr/share so it stays a tiny standalone
+# shell script — no dependency on the bundled Python tree under
+# /usr/lib/cloud-learn (which a hardened sysadmin may chmod 0700).
+mkdir -p %{buildroot}/usr/share/vyomi/packaging/common
 
 cp -r core providers packs static scripts \
       server.py requirements.txt VERSION Dockerfile \
       docker-compose.yml docker-compose.appliance.yml .env.example \
       %{buildroot}/usr/lib/cloud-learn/
+
+install -m 0755 packaging/common/phone-home.sh \
+        %{buildroot}/usr/share/vyomi/packaging/common/phone-home.sh
+install -m 0644 VERSION \
+        %{buildroot}/usr/share/vyomi/packaging/common/VERSION
 
 cat > %{buildroot}/usr/bin/cloud-learn <<'EOF'
 #!/usr/bin/env bash
@@ -62,6 +71,7 @@ install -m 644 README.md LICENSE CHANGELOG.md %{buildroot}/usr/share/doc/cloud-l
 %files
 /usr/lib/cloud-learn
 /usr/bin/cloud-learn
+/usr/share/vyomi
 %doc /usr/share/doc/cloud-learn
 
 %post
@@ -71,6 +81,12 @@ if ! command -v multipass >/dev/null 2>&1; then
   echo "==> Note: Multipass not detected. Install: sudo snap install multipass"
 fi
 
+# Install-funnel phone-home (anonymous; opt-out via VYOMI_NO_TELEMETRY=1).
+# Backgrounded so a slow network never extends the rpm transaction.
+if [ -x /usr/share/vyomi/packaging/common/phone-home.sh ]; then
+  ( /bin/sh /usr/share/vyomi/packaging/common/phone-home.sh rpm >/dev/null 2>&1 & ) || :
+fi
+
 %preun
 # Stop the appliance VM cleanly on removal
 if [ "$1" = "0" ] && command -v cloud-learn >/dev/null 2>&1; then
@@ -78,7 +94,10 @@ if [ "$1" = "0" ] && command -v cloud-learn >/dev/null 2>&1; then
 fi
 
 %changelog
-* Sun Jun 01 2026 CloudLearn <support@cloudlearn.io> - 1.0.0-1
+* Thu Jun 19 2026 Vyomi <support@vyomi.cloud> - 2.0.6-1
+- Install-funnel phone-home + Docker Hub metadata rebrand to Vyomi.
+- See full changelog: /usr/share/doc/cloud-learn/CHANGELOG.md
+* Sun Jun 01 2026 Vyomi <support@vyomi.cloud> - 1.0.0-1
 - First GA release. 3 cloud providers, 8 real backends, 4-tier licensing,
   multi-tenant + cross-tenant RBAC + SSO, Terraform export/import, Helm chart.
 - See full changelog: /usr/share/doc/cloud-learn/CHANGELOG.md

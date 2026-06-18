@@ -1,12 +1,15 @@
-# Multi-stage Dockerfile for gansudkum/cloud-learn.
+# Multi-stage Dockerfile for vyomi/appliance.
 #   stage 1 (builder): install Python deps into /opt/venv  → cacheable
 #   stage 2 (runtime): copy /opt/venv + app, no build tools in final image
 #
 # Final image: python:3.14-slim base + virtualenv + Node.js runtime
 # (for Cloud Functions exec), ~150 MB compressed.
 #
-# Build:   docker build -t gansudkum/cloud-learn:1.0.0 .
-# Run:     docker run --rm -p 9000:9000 gansudkum/cloud-learn:1.0.0
+# Build:   docker build -t vyomi/appliance:2.0.6 .
+# Run:     docker run --rm -p 9000:9000 vyomi/appliance:2.0.6
+#
+# Published to Docker Hub: https://hub.docker.com/r/vyomi/appliance
+#       and to GHCR:       https://ghcr.io/vyomi-cloud/appliance
 
 # ───── builder ────────────────────────────────────────────────────────────
 FROM python:3.14-slim AS builder
@@ -81,14 +84,22 @@ RUN if [ "$STRIP_SOURCE" = "true" ]; then \
     echo "=== Code protection complete ==="; \
     fi
 
-# OCI image labels — surface in docker inspect + GH container registry UI
-LABEL org.opencontainers.image.title="CloudLearn Simulator" \
-      org.opencontainers.image.description="Local multi-cloud simulator (AWS/GCP/Azure) with real backends" \
-      org.opencontainers.image.url="https://github.com/cloudlearn/cloud-learn" \
-      org.opencontainers.image.source="https://github.com/cloudlearn/cloud-learn" \
-      org.opencontainers.image.documentation="https://github.com/cloudlearn/cloud-learn/blob/main/README.md" \
-      org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.version="1.0.0"
+# OCI image labels — surface in `docker inspect`, the Docker Hub UI,
+# the GitHub Container Registry UI, and any image scanner. The values
+# below appear verbatim under "Image labels" on the Hub repo's
+# Overview page and in the right-side metadata column.
+#
+# Image-version + revision + created come dynamically from
+# docker-publish.yml's `labels:` block at push time; everything else
+# is static and brand-aligned with vyomi.cloud.
+LABEL org.opencontainers.image.title="Vyomi Appliance" \
+      org.opencontainers.image.description="Local multi-cloud simulator (AWS/GCP/Azure) with real backends — full SDK + CLI parity for boto3, aws-sdk-java, google-cloud-*, azure-sdk-for-*, Terraform" \
+      org.opencontainers.image.vendor="Vyomi" \
+      org.opencontainers.image.authors="Vyomi <support@vyomi.cloud>" \
+      org.opencontainers.image.url="https://vyomi.cloud" \
+      org.opencontainers.image.source="https://github.com/vyomi-cloud/appliance" \
+      org.opencontainers.image.documentation="https://vyomi.cloud/docs" \
+      org.opencontainers.image.licenses="BUSL-1.1"
 
 VOLUME ["/data"]
 EXPOSE 9000

@@ -63,12 +63,17 @@
       display: inline-flex;
     }
     .tb-activated .tb-pill {
+      /* v2.0.6 (#426): match .tb-btn rounded-square geometry (was a
+         fully-rounded pill, border-radius 999px). Same padding +
+         border-radius + height as the other top-bar buttons so the
+         row reads as a uniform action strip. Color states stay tier-
+         indicative; the dropdown caret is enlarged below for clarity. */
       display: inline-flex; align-items: center; gap: 8px;
-      padding: 9px 14px 9px 12px;
-      border-radius: 999px;
+      padding: 9px 14px;
+      border-radius: 8px;
       background: #ecfdf5; color: #047857;
       border: 1px solid #a7f3d0;
-      font-size: 13px; font-weight: 600; line-height: 1;
+      font-size: 13.5px; font-weight: 600; line-height: 1;
       cursor: pointer; font-family: inherit;
       transition: background 0.15s, border-color 0.15s;
     }
@@ -101,8 +106,21 @@
     .tb-activated.warn   .tb-pill .tb-countdown,
     .tb-activated.danger .tb-pill .tb-countdown { opacity: 1; font-weight: 700; }
     .tb-activated .tb-pill .tb-caret {
-      font-size: 9px; opacity: 0.7; margin-left: 2px;
+      /* v2.0.6 (#426): inline SVG chevron, 14px square, stroke-width 2.5
+         so it reads boldly at the pill's text size. Unicode ▾/▼ glyphs
+         render inconsistently across fonts — SVG guarantees the same
+         shape on every OS + browser. The container is the affordance;
+         the SVG inside it inherits stroke=currentColor so the chevron
+         picks up the tier's color (green / yellow / red) automatically. */
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px;
+      margin-left: 4px; margin-right: -2px;
+      transition: transform 0.15s;
     }
+    .tb-activated .tb-pill .tb-caret svg {
+      width: 14px; height: 14px; display: block;
+    }
+    .tb-activated.open .tb-pill .tb-caret { transform: rotate(180deg); }
     .tb-activated .tb-menu {
       position: absolute; top: calc(100% + 6px); right: 0; min-width: 220px;
       background: #ffffff; border: 1px solid #f8f9fa; border-radius: 10px;
@@ -1011,6 +1029,46 @@
       <img src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi">
     </a>
     <div class="tb-actions">
+      <!-- v2.0.6 (#426): GitHub community CTA — same dropdown pattern as
+           the subscription pill below (.tb-activated). Click toggles
+           .open which reveals the absolutely-positioned menu beneath
+           the button. Star (primary) + Watch + Discussions secondary,
+           with live star count and click tracking via
+           /api/runtime/community-click. -->
+      <div class="tb-community" id="tb-community">
+        <button class="tb-btn tb-btn-secondary" type="button" onclick="toggleCommunityMenu(event)" style="display:inline-flex;align-items:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span>GitHub community</span>
+          <span class="tb-caret" aria-hidden="true" style="display:inline-flex;align-items:center;width:16px;height:16px;margin-left:2px;margin-right:-2px;transition:transform .15s;"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><polyline points="5 8 10 13 15 8"></polyline></svg></span>
+        </button>
+        <div class="tb-community-menu" role="menu">
+          <div class="tbc-title">Join the Vyomi community</div>
+          <div class="tbc-sub">Star us · Watch releases · Join Discussions</div>
+          <a class="tbc-row tbc-row-primary" href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('star')">
+            <span class="tbc-row-ic">⭐</span>
+            <span class="tbc-row-lbl"><strong>Star on GitHub</strong></span>
+            <span class="tbc-row-meta" id="tbc-star-count">
+              <span class="tbc-spin"></span>loading
+            </span>
+          </a>
+          <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/subscription" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('watch')">
+            <span class="tbc-row-ic">👀</span>
+            <span class="tbc-row-lbl">Watch releases</span>
+            <span class="tbc-row-meta tbc-row-arrow">↗</span>
+          </a>
+          <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/discussions" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('discussions')">
+            <span class="tbc-row-ic">💬</span>
+            <span class="tbc-row-lbl">Discussions</span>
+            <span class="tbc-row-meta tbc-row-arrow">↗</span>
+          </a>
+          <div class="tbc-sep"></div>
+          <div class="tbc-foot">
+            <a href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('source')">Source ↗</a>
+            <a href="https://github.com/vyomi-cloud/appliance/issues" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('issues')">Issues ↗</a>
+            <a href="https://github.com/vyomi-cloud/appliance/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('contributing')">Contributing ↗</a>
+          </div>
+        </div>
+      </div>
       <!-- Slot rendered by renderTopBar() based on STATE.activeTier:
            - tier === 'free' → [Activate appliance] button (opens modal)
            - tier !== 'free' → green pill + dropdown (manage / re-bind / sign out)
@@ -1026,6 +1084,51 @@
       </button>
     </div>
   </nav>
+
+  <!-- ── v2.0.6 (#426) Community dropdown styles ─────────────────────
+       Mirrors the .tb-activated / .tb-menu pattern used by the
+       subscription pill below, so the two top-bar dropdowns feel
+       like siblings rather than two different components. -->
+  <style>
+    .tb-community { position: relative; display: inline-flex; }
+    .tb-community.open .tb-btn .tb-caret { transform: rotate(180deg); }
+    .tb-community-menu {
+      position: absolute; top: calc(100% + 6px); right: 0;
+      width: 320px; max-width: 92vw;
+      background: #ffffff; border: 1px solid #f8f9fa; border-radius: 10px;
+      box-shadow: 0 12px 32px rgba(15, 27, 45, 0.12);
+      padding: 12px 10px 8px; display: none; z-index: 200;
+      font-family: inherit;
+    }
+    .tb-community.open .tb-community-menu { display: block; }
+    .tbc-title { font-size: 14px; font-weight: 700; color: #1f2937; padding: 2px 8px; }
+    .tbc-sub   { font-size: 12px; color: #6b7280; padding: 0 8px 8px; }
+    .tbc-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 10px; border-radius: 7px; text-decoration: none;
+      color: #1f2937; font-size: 13.5px; transition: background .12s;
+    }
+    .tbc-row:hover { background: #f3f4f6; }
+    .tbc-row .tbc-row-ic  { font-size: 16px; line-height: 1; width: 18px; text-align: center; }
+    .tbc-row .tbc-row-lbl { flex: 1; line-height: 1.2; }
+    .tbc-row .tbc-row-meta { font-size: 11.5px; color: #6b7280; font-weight: 500; }
+    .tbc-row .tbc-row-arrow { color: #9ca3af; font-size: 13px; }
+    .tbc-row-primary {
+      background: #1f2937; color: #ffffff; margin-bottom: 4px;
+    }
+    .tbc-row-primary:hover { background: #0f172a; }
+    .tbc-row-primary .tbc-row-meta { color: rgba(255,255,255,.78); background: rgba(255,255,255,.12); padding: 3px 9px; border-radius: 99px; }
+    .tbc-row-primary .tbc-spin {
+      display:inline-block; width:8px; height:8px; margin-right:6px;
+      border:2px solid rgba(255,255,255,.4); border-top-color:#fff;
+      border-radius:50%; animation: rspin .8s linear infinite;
+    }
+    .tbc-sep  { height: 1px; background: #f1f5f9; margin: 6px 4px 4px; }
+    .tbc-foot { display: flex; gap: 12px; padding: 4px 10px 2px; }
+    .tbc-foot a { color: #9ca3af; text-decoration: none; font-size: 11.5px; }
+    .tbc-foot a:hover { color: #1f2937; }
+    @keyframes rspin { to { transform: rotate(360deg); } }
+  </style>
 
   <div class="container">
     <header>
@@ -1582,7 +1685,7 @@
             '<span class="tb-check">✓</span>' +
             '<span class="tb-tier">' + tierLabel + '</span>' +
             countdownHtml +
-            '<span class="tb-caret">▾</span>' +
+            '<span class="tb-caret" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"></polyline></svg></span>' +
           '</button>' +
           '<div class="tb-menu" role="menu">' +
             emailRow +
@@ -2170,6 +2273,93 @@
       t.textContent = msg;
       t.className = 'toast show' + (isError ? ' error' : '');
       setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // -------- v2.0.6 (#426): community dropdown -------------------------
+    // Same toggle pattern as the subscription pill below — click the
+    // button toggles `.open` on the wrapper, outside-click closes,
+    // ESC closes. Lazy-loads the live star count on first open (not
+    // on page load) to keep first paint snappy and avoid hitting the
+    // GitHub anonymous 60req/hr cap from every /pricing visit.
+
+    function toggleCommunityMenu(evt) {
+      if (evt) evt.stopPropagation();
+      const w = document.getElementById('tb-community');
+      const wasOpen = w.classList.contains('open');
+      // Close the subscription dropdown if it was open — only one
+      // dropdown should be visible at a time.
+      const sub = document.getElementById('tb-activated');
+      if (sub) sub.classList.remove('open');
+      w.classList.toggle('open');
+      if (!wasOpen) {
+        _loadStarCount();
+        trackCommunityClick('modal_open');
+      }
+    }
+    function closeCommunityMenu() {
+      const w = document.getElementById('tb-community');
+      if (w) w.classList.remove('open');
+    }
+    // Outside-click + ESC handlers (attached once)
+    let _communityClickHandlersAttached = false;
+    function _ensureCommunityHandlers() {
+      if (_communityClickHandlersAttached) return;
+      document.addEventListener('click', (e) => {
+        const w = document.getElementById('tb-community');
+        if (w && w.classList.contains('open') && !w.contains(e.target)) {
+          closeCommunityMenu();
+        }
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeCommunityMenu();
+      });
+      _communityClickHandlersAttached = true;
+    }
+    _ensureCommunityHandlers();
+
+    async function _loadStarCount() {
+      const tag = document.getElementById('tbc-star-count');
+      if (!tag) return;
+      // sessionStorage cache (10 min) — keeps the modal snappy on
+      // repeated opens within a tab.
+      try {
+        const cached = JSON.parse(sessionStorage.getItem('vyomi.community.stars') || 'null');
+        if (cached && (Date.now() - cached.at) < 10 * 60 * 1000 && typeof cached.count === 'number') {
+          _renderStarCount(cached.count);
+          return;
+        }
+      } catch (e) {}
+      try {
+        const r = await fetch('https://api.github.com/repos/vyomi-cloud/appliance', {
+          headers: {'Accept': 'application/vnd.github+json'}
+        });
+        if (!r.ok) throw new Error('http ' + r.status);
+        const j = await r.json();
+        const count = j.stargazers_count || 0;
+        try { sessionStorage.setItem('vyomi.community.stars', JSON.stringify({count, at: Date.now()})); } catch (e) {}
+        _renderStarCount(count);
+      } catch (e) {
+        // Network blocked or rate-limited — just show the icon, no count.
+        tag.innerHTML = '↗';
+      }
+    }
+    function _renderStarCount(n) {
+      const tag = document.getElementById('tbc-star-count');
+      if (!tag) return;
+      const fmt = n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n);
+      tag.innerHTML = '⭐ ' + fmt;
+    }
+
+    async function trackCommunityClick(action) {
+      try {
+        // Fire-and-forget — never block the user's click
+        fetch('/api/runtime/community-click', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({action: action, where: 'pricing'}),
+          keepalive: true,
+        }).catch(() => {});
+      } catch (e) {}
     }
 
     // -------- go --------------------------------------------------------

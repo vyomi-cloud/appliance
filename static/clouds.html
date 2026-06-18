@@ -653,6 +653,39 @@
 </style>
 </head>
 <body>
+  <!-- v2.0.7 (#425): "Appliance is getting ready" banner. Visible while
+       backend containers are still pulling/booting on first launch.
+       Polls /api/runtime/readiness every 3s, shows X/Y backends ready
+       + a weighted progress bar (weight by image MB, so the 1.5GB
+       google-cloud-sdk emulator moves the bar slowly while the 40MB
+       nats fills in instantly). Hides itself when ready === true. -->
+  <div id="readiness-banner" style="display:none; background:linear-gradient(90deg,#0ea5e9 0%,#0284c7 100%); color:#fff; padding:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; box-shadow:inset 0 -1px 0 rgba(0,0,0,.12);">
+    <div style="max-width:1180px; margin:0 auto; padding:10px 18px; display:flex; align-items:center; gap:14px; font-size:13.5px;">
+      <span style="display:inline-flex; width:16px; height:16px; border:2px solid rgba(255,255,255,.45); border-top-color:#fff; border-radius:50%; animation:rspin .8s linear infinite;"></span>
+      <span style="font-weight:600">Appliance is getting ready</span>
+      <span id="readiness-summary" style="opacity:.85;">— starting backends…</span>
+      <div style="flex:1; height:6px; background:rgba(255,255,255,.18); border-radius:3px; overflow:hidden; min-width:140px;">
+        <div id="readiness-bar" style="height:100%; width:0%; background:#fff; transition:width .3s ease-out;"></div>
+      </div>
+      <span id="readiness-pct" style="font-variant-numeric:tabular-nums; font-weight:600; min-width:40px; text-align:right;">0%</span>
+      <button id="readiness-details" onclick="document.getElementById('readiness-detail-panel').style.display = document.getElementById('readiness-detail-panel').style.display === 'block' ? 'none' : 'block';" style="background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.3); color:#fff; padding:3px 10px; border-radius:4px; cursor:pointer; font-size:12px;">Details ▾</button>
+    </div>
+    <div id="readiness-detail-panel" style="display:none; background:rgba(0,0,0,.18); padding:12px 18px;">
+      <div style="max-width:1180px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:8px 16px; font-size:12.5px;" id="readiness-service-list"></div>
+    </div>
+  </div>
+  <style>@keyframes rspin{to{transform:rotate(360deg)}}</style>
+
+  <!-- v2.0.6 (#420): in-app update banner. Hidden until the JS at the
+       bottom of this file polls /api/runtime/update-check and detects
+       a newer release tag on GitHub. -->
+  <div id="update-banner" style="display:none; background:#1f2937; color:#fff; padding:10px 16px; text-align:center; font-size:13.5px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+    <span style="font-weight:600">Vyomi <span id="update-banner-latest">2.0.x</span> is available.</span>
+    <span style="opacity:.85; margin-left:8px;">You're on <span id="update-banner-current">2.0.x</span>.</span>
+    <a id="update-banner-notes" href="#" target="_blank" rel="noopener noreferrer" style="color:#a5b4fc; text-decoration:underline; margin-left:14px;">What's new ↗</a>
+    <a href="#" onclick="alert('Run \\`vyomi upgrade\\` in your terminal to pull the latest image.'); return false;" style="color:#fff; background:#374151; padding:4px 10px; border-radius:4px; margin-left:14px; text-decoration:none;">How to update</a>
+    <button onclick="document.getElementById('update-banner').style.display='none'; sessionStorage.setItem('vyomi.update-banner-dismissed','1');" style="background:none; border:none; color:#9ca3af; margin-left:14px; cursor:pointer; font-size:14px;" aria-label="Dismiss">✕</button>
+  </div>
   <nav class="top-bar">
     <a class="tb-brand" href="/" aria-label="vyomi"><img src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi"></a>
     <div class="tb-actions">
@@ -1564,7 +1597,82 @@
         refreshHostStats();
         refreshProviderPies();
       }, 10000);
+      checkForUpdates();
+      pollReadiness();
     });
+
+    // v2.0.7 (#425): poll /api/runtime/readiness every 3s while backends
+    // are still loading. When ready === true, hide the banner and stop
+    // polling. The banner uses a weighted progress bar so the user sees
+    // proportional progress to bytes downloaded (the big emulator
+    // images take ~10× longer than small ones).
+    let _readinessTimer = null;
+    async function pollReadiness() {
+      try {
+        const r = await fetch('/api/runtime/readiness');
+        if (!r.ok) { _scheduleReadinessRetry(); return; }
+        const j = await r.json();
+        const banner = document.getElementById('readiness-banner');
+        if (j.ready) {
+          // All backends green — fade out and stop polling. We keep the
+          // banner element in the DOM (display:none) so a regression
+          // doesn't have to re-mount it.
+          banner.style.display = 'none';
+          if (_readinessTimer) { clearTimeout(_readinessTimer); _readinessTimer = null; }
+          return;
+        }
+        banner.style.display = 'block';
+        document.getElementById('readiness-summary').textContent =
+          `— ${j.ready_count}/${j.total_count} backends ready`;
+        document.getElementById('readiness-bar').style.width = (j.overall_pct || 0) + '%';
+        document.getElementById('readiness-pct').textContent = (j.overall_pct || 0) + '%';
+        // Build the per-service details list. Each row shows status dot + label.
+        const list = document.getElementById('readiness-service-list');
+        list.innerHTML = '';
+        (j.services || []).forEach(s => {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex; align-items:center; gap:8px;';
+          const dot = document.createElement('span');
+          dot.style.cssText = `width:8px; height:8px; border-radius:50%; background:${s.status === 'ready' ? '#34d399' : 'rgba(255,255,255,.35)'};`;
+          row.appendChild(dot);
+          row.appendChild(document.createTextNode(s.label));
+          const tag = document.createElement('span');
+          tag.style.cssText = 'margin-left:auto; opacity:.65; font-size:11px; text-transform:uppercase; letter-spacing:.4px;';
+          tag.textContent = s.status === 'ready' ? 'ready' : 'loading…';
+          row.appendChild(tag);
+          list.appendChild(row);
+        });
+        _scheduleReadinessRetry();
+      } catch (e) {
+        _scheduleReadinessRetry();
+      }
+    }
+    function _scheduleReadinessRetry() {
+      if (_readinessTimer) clearTimeout(_readinessTimer);
+      _readinessTimer = setTimeout(pollReadiness, 3000);
+    }
+
+    // v2.0.6 (#420): poll /api/runtime/update-check + show banner if a
+    // newer release is on GitHub. Cached server-side for 15 min and
+    // dismissed-per-session-tab via sessionStorage so users who click
+    // ✕ don't see it again until they reopen the tab.
+    async function checkForUpdates() {
+      if (sessionStorage.getItem('vyomi.update-banner-dismissed') === '1') return;
+      try {
+        const r = await fetch('/api/runtime/update-check');
+        if (!r.ok) return;
+        const j = await r.json();
+        if (!j.update_available) return;
+        document.getElementById('update-banner-latest').textContent  = j.latest || '';
+        document.getElementById('update-banner-current').textContent = j.current || '';
+        const notes = document.getElementById('update-banner-notes');
+        if (notes && j.release_notes_url) notes.href = j.release_notes_url;
+        document.getElementById('update-banner').style.display = 'block';
+      } catch (e) {
+        // No-op: banner stays hidden, /api/runtime/update-check might
+        // be opted-out via CLOUDLEARN_UPDATE_CHECK_DISABLED=1.
+      }
+    }
   </script>
 </body>
 </html>

@@ -18,7 +18,18 @@
   "post_install": [
     "Write-Host ''",
     "Write-Host '==> Vyomi installed. Run `vyomi up` to start the simulator.' -ForegroundColor Green",
-    "Write-Host '==> Docs: https://vyomi.cloud/install' -ForegroundColor Cyan"
+    "Write-Host '==> Docs: https://vyomi.cloud/install' -ForegroundColor Cyan",
+    "# Install-funnel phone-home (anonymous; opt-out: $env:VYOMI_NO_TELEMETRY=1).",
+    "# Backgrounded via Start-Job so a slow network never extends scoop install.",
+    "$phoneHome = Join-Path $dir 'packaging\\common\\phone-home.ps1'",
+    "if (Test-Path $phoneHome) {",
+    "  try {",
+    "    Start-Job -ScriptBlock {",
+    "      param($script, $ver)",
+    "      & powershell -NoProfile -ExecutionPolicy Bypass -File $script -Channel scoop -Version $ver",
+    "    } -ArgumentList $phoneHome, '$version' | Out-Null",
+    "  } catch { }",
+    "}"
   ],
   "uninstaller": {
     "script": [

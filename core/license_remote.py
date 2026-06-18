@@ -479,13 +479,42 @@ def _exp_iso(claims: dict) -> str:
 # ── Install ID generator (stable, per-machine) ──────────────────────────────
 
 def get_or_create_install_id(state: dict) -> str:
-    """Hardware-bound install identifier. Deterministic per container+volume."""
+    """Hardware-bound install identifier. Deterministic per container+volume.
+
+    Resolution order (highest priority first):
+      1. STATE['install_id']           — already set, return as-is.
+      2. $VYOMI_INSTALL_ID env         — the package-manager phone-home
+                                         script (packaging/common/phone-home.{sh,ps1})
+                                         wrote a random 16-char hex id at
+                                         ~/.vyomi/install_id when the user
+                                         brew/deb/rpm/scoop-installed the CLI.
+                                         The `vyomi up` launcher forwards
+                                         that id into the VM via this env.
+                                         Adopting it keeps DOWNLOADED →
+                                         INSTALLED a single row in the
+                                         portal funnel — otherwise we'd
+                                         lose attribution to the channel.
+      3. SHA-256(hostname|vol-inode|MAC) — fallback for users who skipped
+                                         the package manager (docker
+                                         compose direct, tarball, source
+                                         clone). Hardware-bound and stable
+                                         across container restarts.
+    """
+    import os
     existing = state.get("install_id")
     if existing:
         return str(existing)
 
-    import hashlib, socket, os
-    # Collect hardware-bound inputs
+    # 2 — adopt the package-manager-issued id when the CLI forwards it.
+    # Validation matches the portal's RegisterReq schema: 8-64 chars,
+    # alphanumeric + dashes. Anything malformed falls through to (3).
+    env_id = (os.environ.get("VYOMI_INSTALL_ID") or "").strip()
+    if 8 <= len(env_id) <= 64 and all(c.isalnum() or c == '-' for c in env_id):
+        state["install_id"] = env_id
+        return env_id
+
+    # 3 — hardware-derived fallback (unchanged from earlier behavior).
+    import hashlib, socket
     components = []
     # 1. Container hostname (unique per container instance)
     components.append(socket.gethostname())

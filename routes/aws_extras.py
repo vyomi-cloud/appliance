@@ -202,7 +202,13 @@ def register(app: FastAPI) -> None:
                     "schema": {"category": schema.get("category"), "columns": schema.get("columns")}}
         _aws_extras_seed_if_needed(stub_path)
         slot = _aws_extras_state(stub_path)
-        return {"items": list(slot["items"].values()), "derived": False,
+        # v2.0.6: sort newest-first so the row a user just created shows
+        # at the top of the table instead of being pushed onto page 2.
+        # Falls back to insertion order when items don't have `created`.
+        items = list(slot["items"].values())
+        if items and any(isinstance(it, dict) and it.get("created") for it in items):
+            items.sort(key=lambda it: (it.get("created") if isinstance(it, dict) else "") or "", reverse=True)
+        return {"items": items, "derived": False,
                 "schema": {"category": schema.get("category"), "columns": schema.get("columns")}}
 
     @app.post("/api/aws/extras/{stub_path:path}", include_in_schema=False)
@@ -223,9 +229,37 @@ def register(app: FastAPI) -> None:
             name = f"{prefix}-{_sec.token_hex(4)}"
         payload["name"] = name
         payload.setdefault("created", _now())
+        # v2.0.6: populate the visible-column values from the user's
+        # form input BEFORE filling em-dash defaults. Two heuristics:
+        #
+        # 1. If a form field's `label` matches a column path (case-
+        #    insensitive), copy the field's value into that column.
+        #    Fixes KMS: field "name" with label "Alias" + column "alias"
+        #    \u2192 row showed `alias: \u2014` instead of the user's input.
+        #
+        # 2. Synthesise plausible identifiers for any column whose path
+        #    ends in `_id` or is named `key_id`/`resource_id`/etc. \u2014
+        #    avoids the em-dash placeholder for the primary-identifier
+        #    column users expect to see populated.
+        column_paths = {c[0]: (c[1] if len(c) > 1 else "") for c in (schema.get("columns") or [])}
+        # The schema's form fields live under `create_fields` (defined in
+        # core/aws_rail_extras.py::crud()), NOT `fields`. The latter is
+        # only used by `config`-category stubs.
+        for f in (schema.get("create_fields") or []):
+            field_name = f.get("name", "")
+            field_label = str(f.get("label") or "").lower()
+            if field_name and field_name in payload and payload[field_name] not in (None, "", "\u2014"):
+                for col_path in column_paths:
+                    if col_path.lower() == field_label and (payload.get(col_path) in (None, "", "\u2014")):
+                        payload[col_path] = payload[field_name]
         for col_path, _ in (schema.get("columns") or []):
-            if "." not in col_path and col_path not in payload:
-                payload[col_path] = payload.get(col_path, "\u2014")
+            if "." in col_path or col_path in payload:
+                continue
+            # Auto-generate identifier columns instead of em-dashing them.
+            if col_path in ("key_id", "id") or col_path.endswith("_id"):
+                payload[col_path] = (col_path.replace("_id", "") or "id")[:3] + "-" + _sec.token_hex(4)
+            else:
+                payload[col_path] = "\u2014"
         slot = _aws_extras_state(stub_path)
         slot["items"][name] = payload
         slot["seeded"] = True

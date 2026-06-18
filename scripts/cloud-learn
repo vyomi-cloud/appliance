@@ -139,6 +139,84 @@ esac
 export CLOUDLEARN_DISTRIBUTION_MODE="$DISTRIBUTION_MODE"
 export CLOUDLEARN_RUNTIME_CONTEXT="$RUNTIME_CONTEXT"
 
+# ── Forward the package-manager-issued install_id into the appliance ─────
+# The brew/.deb/.rpm/scoop postinst hooks generate a random 16-char hex
+# install_id at $HOME/.vyomi/install_id (or %LOCALAPPDATA%\Vyomi\install_id
+# on Windows) AND fire a DOWNLOADED phone-home with it. Forwarding the
+# same id here means the simulator's own boot-hook will adopt it (see
+# core/license_remote.get_or_create_install_id) so the same row in the
+# portal's funnel transitions DOWNLOADED → INSTALLED. Without this,
+# simulator-generated and package-manager-generated ids would diverge
+# and the funnel would double-count + lose channel attribution.
+#
+# Skipped entirely when VYOMI_INSTALL_ID is already set (e.g. user
+# scripted a deployment with a fixed id) or the marker file doesn't
+# exist (docker-compose-direct path — simulator generates its own).
+if [ -z "${VYOMI_INSTALL_ID:-}" ]; then
+  for _id_path in "${HOME:-/tmp}/.vyomi/install_id" "/var/lib/vyomi/install_id"; do
+    if [ -r "$_id_path" ]; then
+      _read_id="$(tr -d '[:space:]' < "$_id_path" 2>/dev/null | head -c 64)"
+      if [ -n "$_read_id" ] && [ "${#_read_id}" -ge 8 ]; then
+        export VYOMI_INSTALL_ID="$_read_id"
+        break
+      fi
+    fi
+  done
+  unset _id_path _read_id
+fi
+
+# ── Upgrade-continuity backfill ───────────────────────────────────────────
+# After a successful `vyomi up`, ensure $HOME/.vyomi/install_id holds the
+# value the simulator is actually using in STATE. This closes the gap for
+# customers upgrading from v2.0.5 (no marker file) → v2.0.6, where the
+# package-manager phone-home may have minted a random id but the
+# simulator already has a stable hardware-derived id. Without backfilling,
+# the next `brew upgrade` phone-home would split the funnel row.
+#
+# We only WRITE when the file is missing or holds a different value than
+# the appliance reports — we never overwrite an existing matching id.
+# Fail-soft: any curl/mkdir/write failure is silently swallowed.
+_backfill_install_id() {
+  local url="${1:-}"
+  # Honour the opt-out — if the user disabled telemetry, don't touch
+  # the marker file either; they explicitly opted out of the funnel.
+  case "${VYOMI_NO_TELEMETRY:-}" in
+    1|true|TRUE|yes|YES) return 0 ;;
+  esac
+  command -v curl >/dev/null 2>&1 || return 0
+  [ -n "$url" ] || return 0
+
+  # Resolve the host file location — same rules as the postinst script.
+  local vyomi_dir
+  if [ "$(id -u 2>/dev/null || echo 99)" = "0" ]; then
+    vyomi_dir="/var/lib/vyomi"
+  else
+    vyomi_dir="${HOME:-/tmp}/.vyomi"
+  fi
+  local id_file="$vyomi_dir/install_id"
+
+  # Probe the appliance — 2 s ceiling each. /api/runtime/install-id was
+  # added in v2.0.6; older appliances return 404 and we silently skip.
+  local probe_url="${url%/}/api/runtime/install-id"
+  local probe_id
+  probe_id="$(curl -sS --max-time 2 "$probe_url" 2>/dev/null \
+              | sed -n 's/.*"install_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+              | tr -d '[:space:]' | head -c 64)"
+  [ -n "$probe_id" ] || return 0
+  [ "${#probe_id}" -ge 8 ] || return 0
+
+  # No-op when the file already matches.
+  local existing=""
+  if [ -r "$id_file" ]; then
+    existing="$(tr -d '[:space:]' < "$id_file" 2>/dev/null | head -c 64)"
+  fi
+  [ "$existing" = "$probe_id" ] && return 0
+
+  mkdir -p "$vyomi_dir" 2>/dev/null || return 0
+  printf '%s' "$probe_id" > "$id_file" 2>/dev/null || return 0
+  chmod 0644 "$id_file" 2>/dev/null || true
+}
+
 usage() {
   cat <<'EOF'
 Vyomi simulator launcher (cloud-learn CLI) — local multi-cloud appliance
@@ -152,6 +230,7 @@ Usage:
   cloud-learn restart
   cloud-learn status
   cloud-learn doctor
+  cloud-learn upgrade
   cloud-learn help
 
 Flags:
@@ -586,6 +665,41 @@ progress() {
   _emit "$(_ts_prefix) $*"
 }
 
+# v2.0.7: brand banner printed on every CLI entry point. Shows up on
+# `vyomi up`, `vyomi down`, `vyomi status`, `vyomi upgrade`, etc. so the
+# user always sees the brand mark before the first phase line.
+# Idempotent: only prints once per shell process (guards against
+# subcmd-chains like `vyomi up -y` calling sub-functions that re-enter).
+# Suppress via VYOMI_NO_BANNER=1 (CI, scripted automation).
+_VYOMI_BANNER_PRINTED="${_VYOMI_BANNER_PRINTED:-0}"
+print_brand_banner() {
+  if [ "${_VYOMI_BANNER_PRINTED}" = "1" ]; then return 0; fi
+  if [ "${VYOMI_NO_BANNER:-0}" = "1" ] || [ "${CLOUDLEARN_NO_BANNER:-0}" = "1" ]; then
+    _VYOMI_BANNER_PRINTED=1
+    return 0
+  fi
+  # Print to stderr so it doesn't pollute `vyomi status | jq` or similar
+  # tooling pipelines. _emit() already routes to stderr by default.
+  local C_CYAN="${_C_CYAN:-}"
+  local C_DIM="${_C_DIM:-}"
+  local C_RESET="${_C_RESET:-}"
+  local _v
+  if [ -f "${ROOT_DIR}/VERSION" ]; then
+    _v="$(cat "${ROOT_DIR}/VERSION" 2>/dev/null | tr -d '\n')"
+  else
+    _v="dev"
+  fi
+  _emit "${C_CYAN}██╗   ██╗██╗   ██╗ ██████╗ ███╗   ███╗██╗${C_RESET}"
+  _emit "${C_CYAN}██║   ██║╚██╗ ██╔╝██╔═══██╗████╗ ████║██║${C_RESET}"
+  _emit "${C_CYAN}██║   ██║ ╚████╔╝ ██║   ██║██╔████╔██║██║${C_RESET}"
+  _emit "${C_CYAN}╚██╗ ██╔╝  ╚██╔╝  ██║   ██║██║╚██╔╝██║██║${C_RESET}"
+  _emit "${C_CYAN} ╚████╔╝    ██║   ╚██████╔╝██║ ╚═╝ ██║██║${C_RESET}"
+  _emit "${C_CYAN}  ╚═══╝     ╚═╝    ╚═════╝ ╚═╝     ╚═╝╚═╝${C_RESET}"
+  _emit "${C_DIM}       Local multi-cloud simulator · v${_v} · vyomi.cloud${C_RESET}"
+  _emit ""
+  _VYOMI_BANNER_PRINTED=1
+}
+
 verbose() {
   [ "$VERBOSE" = "0" ] && return 0
   _emit "$(_ts_prefix)   ${_C_DIM}·${_C_RESET} $*"
@@ -664,6 +778,15 @@ launch_success_banner() {
   _emit "${_C_GREEN}${bar}${_C_RESET}"
   _emit "${_C_BOLD}${_C_GREEN}✓ APPLIANCE READY${_C_RESET} in ${m}m$(printf '%02d' "$s")s"
   _emit "${_C_GREEN}${bar}${_C_RESET}"
+
+  # ── Upgrade backfill: seed ~/.vyomi/install_id from the now-running
+  # appliance if the host file doesn't exist yet (or holds a value the
+  # appliance has overridden in STATE). Closes the gap for customers
+  # who upgrade from v2.0.5 → v2.0.6 WITHOUT a fresh `brew install`
+  # (e.g. tarball installs, source clones, or any path where the
+  # package-manager phone-home never wrote the file). Fail-soft.
+  _backfill_install_id "$url" || true
+
   _emit ""
   _emit "  Open in browser:  ${_C_BOLD}${_C_CYAN}${url}${_C_RESET}"
   if [ -n "$fallback_url" ]; then
@@ -2172,6 +2295,9 @@ outer_run() {
   if [ "$#" -gt 0 ]; then
     shift
   fi
+  # v2.0.7: brand banner before every subcommand. Idempotent +
+  # suppressed by VYOMI_NO_BANNER=1.
+  print_brand_banner
   # Parse global flags (positional after subcmd). Right now just -v.
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -2284,6 +2410,69 @@ outer_run() {
       ;;
     doctor)
       doctor
+      ;;
+    upgrade)
+      # v2.0.6 (#420): pull the latest image + recreate the simulator
+      # container in-place. Volumes (incl. /data with license-backup.jwt)
+      # are preserved by docker compose's default behaviour, so the
+      # activated tier survives across upgrades.
+      #
+      # Flow:
+      #   1. Hit /api/runtime/update-check to figure out current+latest
+      #   2. If a newer version is available, pull the image tag
+      #   3. `docker compose up -d --force-recreate simulator` inside the VM
+      #   4. Wait for /healthz + show "now on vX.Y.Z" banner
+      #
+      # The bind-mounted vyomi-data named volume holds the SQLite state
+      # AND the v2.0.6 license-backup.{json,jwt} sidecars, so tier
+      # state survives the recreate. New container's startup hook
+      # `_restore_license_at_boot` re-applies the sidecar if the
+      # in-memory tier dropped back to Free.
+      ensure_prereqs
+      if ! command -v multipass >/dev/null 2>&1; then
+        printf 'multipass not found — vyomi upgrade needs the appliance VM.\n' >&2
+        exit 1
+      fi
+      progress "==> Checking for updates against vyomi-cloud/appliance..."
+      local _api="http://${APPLIANCE_NAME}.local:9000/api/runtime/update-check"
+      local _check
+      _check=$(curl -fsS "${_api}" 2>/dev/null || echo '{"error":"endpoint unreachable"}')
+      local _cur _lat _avail
+      _cur=$(printf '%s' "${_check}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("current",""))' 2>/dev/null || echo "")
+      _lat=$(printf '%s' "${_check}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("latest",""))' 2>/dev/null || echo "")
+      _avail=$(printf '%s' "${_check}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("update_available",False))' 2>/dev/null || echo "False")
+      progress "    current: ${_cur:-unknown}    latest: ${_lat:-unknown}"
+      if [ "${_avail}" != "True" ]; then
+        progress "==> No update available. You're on the latest version."
+        exit 0
+      fi
+      progress "==> Update available: ${_cur} → ${_lat}"
+      progress "==> Pulling vyomi/appliance:${_lat} inside ${APPLIANCE_NAME}..."
+      if ! multipass exec "${APPLIANCE_NAME}" -- sudo docker pull "vyomi/appliance:${_lat}" 2>&1 | tail -3; then
+        printf 'docker pull failed — staying on %s\n' "${_cur}" >&2
+        exit 2
+      fi
+      progress "==> Recreating simulator container with the new image..."
+      multipass exec "${APPLIANCE_NAME}" -- sudo bash -c "
+        cd ${APPLIANCE_WORKSPACE} || exit 1
+        CLOUDLEARN_SIMULATOR_IMAGE=vyomi/appliance:${_lat} \\
+          docker compose -f docker-compose.appliance.yml up -d --force-recreate simulator 2>&1 | tail -3
+      "
+      progress "==> Waiting for /healthz..."
+      local _deadline=$(( $(date +%s) + 180 ))
+      while [ "$(date +%s)" -lt "${_deadline}" ]; do
+        if curl -fsS --max-time 3 "http://${APPLIANCE_NAME}.local:9000/healthz" >/dev/null 2>&1; then
+          break
+        fi
+        sleep 3
+      done
+      if curl -fsS --max-time 5 "http://${APPLIANCE_NAME}.local:9000/healthz" >/dev/null 2>&1; then
+        progress "==> ✓ Vyomi appliance is now on v${_lat}"
+        progress "==> Open http://${APPLIANCE_NAME}.local:9000/clouds"
+      else
+        printf 'Healthcheck failed after upgrade. Run `cloud-learn doctor` to diagnose.\n' >&2
+        exit 3
+      fi
       ;;
     # ── RC dev-cycle subcommands (Vyomi built on Vyomi) ──────────────────
     # These delegate to focused helper scripts in the same dir so the

@@ -28,12 +28,23 @@ trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$STAGE/usr/lib/cloud-learn"
 mkdir -p "$STAGE/usr/bin"
 mkdir -p "$STAGE/usr/share/doc/cloud-learn"
+# /usr/share/vyomi/packaging/common/ houses the install-funnel phone-home
+# script invoked from postinst.sh. Kept under /usr/share (not /usr/lib)
+# because it's a tiny standalone shell script with no dependency on the
+# bundled python tree.
+mkdir -p "$STAGE/usr/share/vyomi/packaging/common"
 
 # Bundle the source the appliance VM syncs to /workspace/cloud-learn
 cp -r core providers packs static scripts \
       server.py requirements.txt VERSION Dockerfile \
       docker-compose.yml docker-compose.appliance.yml .env.example \
       "$STAGE/usr/lib/cloud-learn/"
+
+# Phone-home script + VERSION (so it can self-report the right version
+# without depending on /usr/lib/cloud-learn being readable).
+cp packaging/common/phone-home.sh "$STAGE/usr/share/vyomi/packaging/common/phone-home.sh"
+chmod 0755 "$STAGE/usr/share/vyomi/packaging/common/phone-home.sh"
+cp VERSION "$STAGE/usr/share/vyomi/packaging/common/VERSION"
 
 # Primary launcher: /usr/bin/vyomi
 cat > "$STAGE/usr/bin/vyomi" <<'EOF'

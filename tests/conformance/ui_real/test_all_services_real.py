@@ -81,22 +81,13 @@ def _overrides_for(provider: str, service_key: str, identifier: str,
 # Each entry documents WHY the service is skipped — is it a real SPA
 # bug or a test framework limitation. v2.0.5+ will close these gaps.
 SERVICE_SKIPS = {
-    # === v2.0.5: two REAL backend gaps tracked as v2.1 follow-ups ===
-    # Both were originally lumped with "framework gap" labels — re-test
-    # in v2.0.5 proved the test framework works; the simulator backend
-    # itself is missing the routes the wizard needs to succeed.
-    #
-    # KMS: POST /api/aws/extras/kms/keys returns 200 OK but the next
-    # GET returns an empty list — the create handler doesn't persist
-    # the key into the kms_keys state slice. Tracked as v2.1 backend
-    # fix (extras-store needs a write-through for kms).
-    ("aws", "kms"): "extras POST 200 but list empty — backend bug, v2.1",
-    # Firestore: catalog declares collection_path
-    # /api/gcp/firestore/v1/projects/{project}/databases but
-    # providers/gcp_routes.py only wires `/databases/{database}/*`
-    # document-level routes. The catalog's CRUD layer needs the
-    # `databases` collection POST/GET. Tracked as v2.1 backend fix.
-    ("gcp", "firestore"): "no /databases collection endpoint — backend, v2.1",
+    # === v2.0.6: empty dict — all 35 services validated end-to-end ===
+    # gcp.firestore: /databases collection routes wired in v2.0.6
+    # aws.kms:       extras POST + GET re-validated in v2.0.6 — the
+    #                v2.0.5 SKIP entry was a stale repro; backend works.
+    # Keeping this dict in the codebase (even when empty) so we have a
+    # canonical place to document any future framework gaps without
+    # re-introducing the lookup logic.
 }
 
 

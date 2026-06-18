@@ -64,8 +64,38 @@
   /* blade (right panel) */
   .scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40;display:none}
   .scrim.open{display:block}
-  .blade{position:fixed;top:0;right:0;height:100%;width:560px;max-width:96vw;background:#fff;box-shadow:-4px 0 24px rgba(0,0,0,.25);z-index:41;transform:translateX(100%);transition:transform .16s;display:flex;flex-direction:column}
+  /* v2.0.6 — default blade width bumped 560 → 880 to match real Azure
+     portal proportions. Was wrapping property values mid-character on
+     standard laptops; 880 gives ~640 px of content after the sub-nav,
+     so Resource IDs render on a single line.
+
+     Two modes:
+       Normal  → right-side slide-in panel (Azure portal default)
+       Wide    → centered modal dialog covering most of the screen,
+                 ideal for inspecting long Resource IDs / wide tables /
+                 JSON property bags. The modal sits over the scrim so
+                 clicking the scrim still dismisses it.
+     `transition` covers both transform (slide-in) AND the
+     top/left/right/width/border-radius changes between the two modes
+     so the morph is smooth, not jarring. */
+  .blade{position:fixed;top:0;right:0;height:100%;width:880px;max-width:96vw;
+    background:#fff;box-shadow:-4px 0 24px rgba(0,0,0,.25);z-index:41;
+    transform:translateX(100%);
+    transition:transform .16s, top .22s, right .22s, left .22s, width .22s,
+               height .22s, border-radius .22s, box-shadow .22s;
+    display:flex;flex-direction:column}
   .blade.open{transform:translateX(0)}
+  /* Modal dialog mode — overrides position so the panel becomes a
+     centered overlay. Translate is forced to 0 because the slide-in
+     `transform: translateX(100%)` would push it off-screen. */
+  .blade.is-modal{top:4vh;right:4vw;left:4vw;bottom:4vh;
+    width:auto;height:auto;max-width:none;
+    border-radius:8px;
+    box-shadow:0 22px 56px rgba(0,0,0,.30), 0 0 0 1px rgba(0,0,0,.06);
+    transform:translateX(0) !important}
+  /* Make the scrim darker in modal mode so the dialog reads as
+     foreground instead of an inset panel. */
+  .scrim.is-modal{background:rgba(0,0,0,.55)}
   .bladehd{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--line)}
   .bladehd h2{font-size:17px;margin:0;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .bladehd .x{cursor:pointer;color:var(--sub);background:none;border:none}
@@ -108,14 +138,52 @@
   table th.sortable{cursor:pointer;user-select:none}.sortable:hover{background:#f1f3f4}
   th .sort-arrow{font-size:10px;color:#888;margin-left:4px}
   /* Connect modal + notifications drawer */
-  #connectModal{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;display:none;align-items:center;justify-content:center}
+  #connectModal{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;display:none;align-items:center;justify-content:center;padding:24px}
   #connectModal.open{display:flex}
-  #connectModal .box{background:#fff;width:560px;max-width:92vw;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.3);overflow:hidden}
-  #connectModal .h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);font-weight:600}
+  /* v2.0.6 — modal widened 560 → 760 so VM detail values (vmSize, OS
+     image string, Resource ID) don't get crushed into per-character
+     vertical columns. `min-height:0` lets the body scroll if content
+     exceeds viewport. */
+  #connectModal .box{background:#fff;width:760px;max-width:96vw;max-height:92vh;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.3);overflow:hidden;display:flex;flex-direction:column}
+  #connectModal .h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);font-weight:600;flex:0 0 auto}
   #connectModal .h .x{margin-left:auto;cursor:pointer;color:var(--sub);background:none;border:none}
-  #connectModal .body{padding:18px}
-  #connectModal pre{background:#1e1e1e;color:#d4d4d4;padding:11px 12px;border-radius:4px;font-size:12.5px;font-family:Consolas,Menlo,monospace;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0 14px}
-  #connectModal pre button{background:#374151;color:#fff;border:none;padding:3px 9px;border-radius:3px;cursor:pointer;font-size:11px;font-family:inherit}
+  /* Force the modal body into an explicit vertical flex column so its
+     section blocks stack predictably regardless of what inline display
+     properties any future child sets. `min-width:0` on direct children
+     guards against the classic `1fr blowout` (grid track refusing to
+     shrink below the content's intrinsic width). */
+  #connectModal .body{padding:18px;overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:14px}
+  #connectModal .body > *{min-width:0}
+  /* Status banner — full width, single row of icon + text. */
+  .cnx-banner{background:#fff4ce;border-left:3px solid #f7b500;padding:10px 14px;border-radius:3px;
+    font-size:12.5px;color:#3b3a39;display:flex;gap:10px;align-items:flex-start}
+  .cnx-banner .ic{flex:0 0 auto;color:#7a4f01}
+  .cnx-banner .txt{min-width:0;line-height:1.5}
+  .cnx-banner .txt b{display:block;margin-bottom:2px}
+  /* Facts as horizontal wrapping chips — every chip is a [k: v] pair
+     on a SINGLE line. Long values truncate with ellipsis; the user can
+     still copy them via the Resource ID/Computer name elsewhere in
+     the blade. */
+  .cnx-card{border:1px solid var(--line);border-radius:3px;background:#faf9f8;padding:12px 14px}
+  .cnx-card .h{font-size:11.5px;color:var(--sub);font-weight:600;letter-spacing:.3px;text-transform:uppercase;margin-bottom:10px}
+  .cnx-chips{display:flex;flex-wrap:wrap;gap:8px 14px}
+  .cnx-chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;max-width:100%}
+  .cnx-chip .k{color:var(--sub);white-space:nowrap}
+  .cnx-chip .v{color:var(--ink);font-weight:600;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;max-width:340px}
+  /* Action section — SSH command row + helper note. */
+  .cnx-action .h{font-size:11.5px;color:var(--sub);font-weight:600;letter-spacing:.3px;text-transform:uppercase;margin-bottom:6px}
+  .cnx-action .hint{font-size:11.5px;color:var(--sub);margin-top:4px}
+  /* Upgrade-path tip — compact one-line callout. */
+  .cnx-tip{background:#eef6fc;border:1px solid #c8e6f5;border-radius:3px;padding:10px 14px;
+    font-size:12.5px;color:#3b3a39;display:flex;gap:10px;align-items:flex-start}
+  .cnx-tip .ic{flex:0 0 auto;color:#005a9e}
+  .cnx-tip .txt{min-width:0;line-height:1.55}
+  .cnx-tip code{background:#fff;padding:1px 5px;border-radius:3px;font-size:11.5px;border:1px solid #d0e8f7}
+  .cnx-tip a{color:#005a9e;font-weight:600}
+  #connectModal pre{background:#1e1e1e;color:#d4d4d4;padding:11px 12px;border-radius:4px;font-size:12.5px;font-family:Consolas,Menlo,monospace;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0 14px;overflow-wrap:anywhere;min-width:0}
+  #connectModal pre span{flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-all}
+  #connectModal pre button{background:#374151;color:#fff;border:none;padding:3px 9px;border-radius:3px;cursor:pointer;font-size:11px;font-family:inherit;flex:0 0 auto}
   #connectModal pre button:hover{background:#4b5563}
   #notifDrawer{position:fixed;top:48px;right:0;width:360px;max-width:96vw;height:calc(100vh - 48px);background:#fff;box-shadow:-4px 0 16px rgba(0,0,0,.18);transform:translateX(100%);transition:transform .14s;z-index:42;display:flex;flex-direction:column}
   #notifDrawer.open{transform:translateX(0)}
@@ -184,8 +252,30 @@
   .sub-nav-item .ic{font-size:17px;color:#605e5c;width:18px}
   .sub-nav-item.active .ic{color:var(--azblue)}
   .sub-nav-item .lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .sub-content{flex:1;overflow-y:auto;padding:18px 22px;background:#fff;min-width:0}
-  .sub-h{font-size:18px;font-weight:600;color:var(--ink);margin:0 0 14px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+  .sub-content{flex:1;overflow:auto;padding:18px 22px;background:#fff;min-width:0}
+  /* v2.0.6 — collapse toggle for the left sub-nav.
+     On narrow viewports the right pane was wrapping long property names
+     into 4-5 lines of broken text. Clicking the toggle hides the left
+     sub-nav so the right pane spans the full blade width; clicking
+     again restores it. Preference is sticky per browser via localStorage
+     so a user who prefers "wide" once gets it everywhere.
+     Styled as a clearly-clickable pill (azure-blue accent + label) so
+     users notice it on first sight — the previous 30x30 icon-only
+     button was getting missed. */
+  .sub-collapse-toggle{position:absolute;top:8px;right:10px;height:30px;
+    padding:0 12px 0 8px;gap:5px;
+    border:1px solid var(--azblue);border-radius:4px;
+    background:#eef6fc;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;
+    color:var(--azblue);font-size:12.5px;font-weight:600;line-height:1;
+    z-index:5;font-family:inherit;
+    box-shadow:0 1px 2px rgba(0,0,0,0.04)}
+  .sub-collapse-toggle:hover{background:#deecf9;border-color:#005a9e;color:#005a9e}
+  .sub-collapse-toggle .material-symbols-outlined{font-size:16px;font-weight:bold}
+  .sub-collapse-toggle .lbl{display:inline-block}
+  .sub-layout{position:relative}                       /* anchor for the absolute toggle */
+  .sub-layout.is-nav-collapsed .sub-nav{display:none}  /* full width to the right pane   */
+  .sub-h{font-size:18px;font-weight:600;color:var(--ink);margin:0 0 14px;padding-bottom:9px;border-bottom:1px solid var(--line);padding-right:46px}
   .sub-pane{display:flex;flex-direction:column;gap:0}
   .sub-info{font-size:12.5px;color:var(--sub);margin-bottom:14px;line-height:1.5}
   .sub-stub{padding:36px 20px;text-align:center;color:var(--sub);font-size:13px;display:flex;flex-direction:column;align-items:center;gap:6px;background:#fafafa;border:1px dashed #d2d0ce;border-radius:3px}
@@ -193,9 +283,14 @@
   .sub-empty{padding:30px 20px;text-align:center;color:var(--sub);font-size:13px;background:#fafafa;border:1px dashed #edebe9;border-radius:3px;display:flex;flex-direction:column;align-items:center;gap:6px}
   .essentials{border:1px solid var(--line);border-radius:3px;background:#fff;margin-bottom:14px}
   .essentials .h{font-size:13px;font-weight:600;color:var(--ink);padding:10px 14px;background:#faf9f8;border-bottom:1px solid var(--line)}
-  .essentials-grid{display:grid;grid-template-columns:200px 1fr;font-size:12.5px;gap:6px 14px;padding:11px 14px}
-  .essentials-grid .k{color:var(--sub)}
-  .essentials-grid .v{color:var(--ink);word-break:break-all}
+  .essentials-grid{display:grid;grid-template-columns:140px minmax(0,1fr);font-size:12.5px;gap:6px 14px;padding:11px 14px}
+  .essentials-grid .k{color:var(--sub);white-space:nowrap}
+  /* v2.0.6 — `word-break:break-all` was tearing values like
+     "cloud-learn-rg" into 1-character columns when the pane was narrow.
+     `overflow-wrap:anywhere` breaks ONLY when a single token can't fit
+     on its own line, otherwise wraps at word boundaries — much nicer
+     for resource IDs and connection strings. */
+  .essentials-grid .v{color:var(--ink);overflow-wrap:anywhere;word-break:normal;min-width:0}
   .sub-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:8px}
   .sub-table th{text-align:left;padding:8px 12px;background:#faf9f8;border-bottom:1px solid var(--line);font-weight:600;color:var(--ink)}
   .sub-table td{padding:8px 12px;border-bottom:1px solid #f3f2f1;color:var(--ink);vertical-align:top}
@@ -209,9 +304,12 @@
   .metric-card .label{font-size:12px;color:var(--sub);margin-bottom:4px}
   .metric-card .chart{height:60px}
   .metric-card .value{font-size:15px;color:var(--ink);font-weight:600;margin-top:4px}
-  .prop-kv{display:grid;grid-template-columns:280px 1fr;font-size:12px;gap:4px 12px;border:1px solid var(--line);border-radius:3px;padding:10px 14px;background:#fff;max-height:520px;overflow-y:auto}
-  .prop-kv .k{color:var(--sub);font-family:Consolas,Menlo,monospace}
-  .prop-kv .v{color:var(--ink);word-break:break-all}
+  .prop-kv{display:grid;grid-template-columns:200px minmax(0,1fr);font-size:12px;gap:4px 12px;border:1px solid var(--line);border-radius:3px;padding:10px 14px;background:#fff;max-height:520px;overflow:auto}
+  .prop-kv .k{color:var(--sub);font-family:Consolas,Menlo,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prop-kv .v{color:var(--ink);overflow-wrap:anywhere;word-break:normal;min-width:0}
+  /* v2.0.6 — give wide sub-tables horizontal scroll instead of word-break
+     mangling, so long resource ids / connection strings stay readable. */
+  .sub-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .keyblock{margin-bottom:16px;padding:12px;border:1px solid var(--line);border-radius:3px;background:#fafafa}
   .keyblock .k{font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px}
   .keyblock .keyval{background:#1e1e1e;color:#d4d4d4;padding:8px 10px;border-radius:3px;font-size:12px;font-family:Consolas,Menlo,monospace;margin:4px 0;white-space:pre-wrap;word-break:break-all}
@@ -508,8 +606,73 @@ function openConnectModal(rec){
   body.innerHTML = "";
   const rt = (rec.properties || {}).runtime || {};
   if (!rt.containerName) {
-    body.append(el("div",{style:"color:#a4262c;font-size:13px"},
-      "This VM has no runtime container backing (metadata-only). To get an SSH/shell target, run the simulator with LXD or multipass on the host and the runtime bridge active."));
+    // v2.0.6 — compact metadata-only modal. Three vertical sections
+    // (banner → details card with chips → action card with SSH +
+    // upgrade tip). Each "fact" is a single-line chip in a flex-wrap
+    // row so the layout scales from 320 px to 760 px without breaking.
+    const props = rec.properties || {};
+    const hw   = props.hardwareProfile  || {};
+    const os   = props.osProfile        || {};
+    const sp   = props.storageProfile   || {};
+    const img  = sp.imageReference      || {};
+    const power = String(props.powerState || "PowerState/running").replace("PowerState/","");
+    const note  = rt.note || "Simulator is running without a real container backend; the VM responds to API and SDK calls but has no shell target.";
+    const user  = os.adminUsername || "azureuser";
+
+    // 1. Status banner
+    const banner = el("div",{class:"cnx-banner"});
+    banner.append(el("span",{class:"material-symbols-outlined ic"}, "info"));
+    banner.append(el("div",{class:"txt"},
+      el("b",{}, "Simulated VM — no host runtime"),
+      note));
+    body.append(banner);
+
+    // 2. VM details — flex-wrapping chips. Each chip is one [k: v]
+    // pair that never breaks mid-token; values truncate with ellipsis
+    // if too long, full text on hover via title attribute.
+    const facts = [
+      ["Status",    power],
+      ["Size",      hw.vmSize || "—"],
+      ["OS",        [img.publisher, img.offer, img.sku].filter(Boolean).join(" ") || "—"],
+      ["Admin",     user],
+      ["Hostname",  os.computerName || rec.name || "—"],
+      ["Location",  rec.location || "—"],
+    ];
+    const card = el("div",{class:"cnx-card"});
+    card.append(el("div",{class:"h"}, "VM details"));
+    const chips = el("div",{class:"cnx-chips"});
+    facts.forEach(([k,v]) => {
+      const c = el("div",{class:"cnx-chip",title:String(v)});
+      c.append(el("span",{class:"k"}, k+":"));
+      c.append(el("span",{class:"v"}, String(v)));
+      chips.append(c);
+    });
+    card.append(chips);
+    body.append(card);
+
+    // 3. SSH command + upgrade-path tip in one card
+    const action = el("div",{class:"cnx-card cnx-action"});
+    action.append(el("div",{class:"h"}, "SSH (preview)"));
+    action.append(makeCmdRow(`ssh ${user}@${rec.name || "vm"} -p 22`));
+    action.append(el("div",{class:"hint"},
+      "Placeholder — the real IP is issued by the runtime bridge when a host backend is connected."));
+    body.append(action);
+
+    // 4. Upgrade-path one-liner
+    const tip = el("div",{class:"cnx-tip"});
+    tip.append(el("span",{class:"material-symbols-outlined ic"}, "rocket_launch"));
+    tip.append(el("div",{class:"txt"},
+      "Enable real shell access: install ",
+      el("strong",{}, "multipass"),
+      " (macOS/Windows) or ",
+      el("strong",{}, "LXD"),
+      " (Linux) on the host, then run ",
+      el("code",{}, "vyomi up"),
+      ". Existing VMs need a ",
+      el("code",{}, "restart"),
+      " to re-provision. ",
+      el("a",{href:"https://vyomi.cloud/docs/runtime-backends",target:"_blank"}, "Docs ↗")));
+    body.append(tip);
   } else {
     const cmd_lxd = "lxc exec " + rt.containerName + " -- bash";
     const cmd_mp  = "multipass shell " + rt.containerName;
@@ -808,7 +971,15 @@ function renderGrid(svc, items){
 // ---------- blade: detail ----------
 let BLADE_OPEN=false;
 function openBlade(){ BLADE_OPEN=true; document.getElementById("scrim").classList.add("open"); document.getElementById("blade").classList.add("open"); }
-function closeBlade(){ BLADE_OPEN=false; document.getElementById("scrim").classList.remove("open"); document.getElementById("blade").classList.remove("open"); }
+// On close, also clear the is-modal classes so the NEXT blade opens in
+// its remembered mode (driven by localStorage in openDetailWithSubNav)
+// rather than inheriting the previous blade's modal state.
+function closeBlade(){
+  BLADE_OPEN=false;
+  const sc=document.getElementById("scrim"), bl=document.getElementById("blade");
+  sc.classList.remove("open","is-modal");
+  bl.classList.remove("open","is-modal");
+}
 document.getElementById("scrim").addEventListener("click",closeBlade);
 document.getElementById("bladeClose").addEventListener("click",closeBlade);
 
@@ -859,11 +1030,56 @@ function buildVmToolbar(svc, full){
 }
 
 // ---------- Phase C: two-pane detail (sub-nav + content) ----------
+// localStorage key for the sub-nav collapse preference. Sticky across
+// blade opens so a user who once preferred "wide" gets it on every
+// subsequent detail blade — matches the Azure portal's behavior.
+const _AZ_NAV_PREF_KEY = "vyomi.azure.subnav.collapsed";
+function _readNavPref(){
+  try { return localStorage.getItem(_AZ_NAV_PREF_KEY) === "1"; }
+  catch(_){ return false; }
+}
+function _writeNavPref(v){
+  try { localStorage.setItem(_AZ_NAV_PREF_KEY, v ? "1" : "0"); }
+  catch(_){}
+}
+
 function openDetailWithSubNav(svc, full, body){
   const layout = el("div",{class:"sub-layout"});
   const sideWrap = el("aside",{class:"sub-nav"});
   const content  = el("section",{class:"sub-content"});
-  layout.append(sideWrap, content);
+
+  // Collapse toggle — sits in the top-right of the content pane.
+  // Icon + label so it's unambiguously a button (icon-only was getting
+  // missed). Icon flips (chevron_left ↔ chevron_right) and the label
+  // toggles between "Wide view" and "Show menu" so the action is
+  // explicit even before hover.
+  function applyNavPref(modal){
+    // Modal (expanded) view: blade becomes a centered dialog, sub-nav
+    // hidden — gives maximum reading width for Resource IDs / JSON.
+    // Normal (collapsed) view: blade slides back to the right edge as
+    // a 880 px panel; sub-nav restored.
+    layout.classList.toggle("is-nav-collapsed", !!modal);
+    const blade = document.getElementById("blade");
+    const scrim = document.getElementById("scrim");
+    if (blade) blade.classList.toggle("is-modal", !!modal);
+    if (scrim) scrim.classList.toggle("is-modal", !!modal);
+    toggle.title = modal ? "Return to side panel"  : "Open as modal dialog";
+    toggle.setAttribute("aria-label", toggle.title);
+    toggle.setAttribute("aria-expanded", modal ? "true" : "false");
+    toggleIcon.textContent = modal ? "close_fullscreen" : "open_in_full";
+    toggleLbl.textContent  = modal ? "Side panel"       : "Expand";
+  }
+  const toggleIcon = el("span",{class:"material-symbols-outlined"}, "open_in_full");
+  const toggleLbl  = el("span",{class:"lbl"}, "Expand");
+  const toggle = el("button",{class:"sub-collapse-toggle",
+    onclick:()=>{
+      const next = !layout.classList.contains("is-nav-collapsed");
+      _writeNavPref(next);
+      applyNavPref(next);
+    }}, toggleIcon, toggleLbl);
+  applyNavPref(_readNavPref());
+
+  layout.append(sideWrap, content, toggle);
   body.append(layout);
 
   // Search box at the top of the sub-nav (portal-style).
