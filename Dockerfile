@@ -47,8 +47,8 @@ WORKDIR /app
 
 RUN addgroup --system cloudlearn && \
     adduser --system --ingroup cloudlearn cloudlearn && \
-    mkdir -p /data && \
-    chown -R cloudlearn:cloudlearn /app /data
+    mkdir -p /data /var/lib/cloudlearn/deployments && \
+    chown -R cloudlearn:cloudlearn /app /data /var/lib/cloudlearn
 
 # App source — copied AFTER venv so dependency-only changes don't bust the cache
 COPY core   /app/core

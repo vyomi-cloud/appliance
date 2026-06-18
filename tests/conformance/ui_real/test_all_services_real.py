@@ -81,33 +81,22 @@ def _overrides_for(provider: str, service_key: str, identifier: str,
 # Each entry documents WHY the service is skipped — is it a real SPA
 # bug or a test framework limitation. v2.0.5+ will close these gaps.
 SERVICE_SKIPS = {
-    # === AWS ===
-    # S3 uses wire-PUT (`PUT /<bucket>`) not REST POST through the wizard.
-    # Covered by tests/conformance/ui/aws/test_s3.py at the API level.
-    ("aws", "s3"): "wire-PUT pattern; needs custom test (test framework)",
-    # KMS wizard tab-walk exceeds the 120s test timeout — multi-tab
-    # wizard with conditional fields hangs the helper. Real customer
-    # clicks through fine; framework can't walk it generatively.
-    ("aws", "kms"): "wizard tab-walk hangs framework; not a SPA bug",
-
-    # === GCP ===
-    # Firestore catalog path has un-resolvable {database} placeholder.
-    ("gcp", "firestore"): "{database} path placeholder (test framework)",
-
-    # === Azure ===
-    # Azure's blade-style wizard mounts tabs across the top with
-    # progressive disclosure — the generative helper's Next-click chain
-    # can't reach the final "Review + create" tab on these specific
-    # services. Real customers complete the wizard fine; framework gap.
-    # All 7 are tracked as v2.0.5 follow-up: write an Azure-specific
-    # walk_wizard_and_submit that knows the blade pattern.
-    ("azure", "vm"):          "Azure blade-wizard helper gap (framework)",
-    ("azure", "servicebus"):  "Azure blade-wizard helper gap (framework)",
-    ("azure", "functionapp"): "Azure blade-wizard helper gap (framework)",
-    ("azure", "apim"):        "Azure blade-wizard helper gap (framework)",
-    ("azure", "vnet"):        "Azure blade-wizard helper gap (framework)",
-    ("azure", "eventgrid"):   "Azure blade-wizard helper gap (framework)",
-    ("azure", "keyvault"):    "Azure blade-wizard helper gap (framework)",
+    # === v2.0.5: two REAL backend gaps tracked as v2.1 follow-ups ===
+    # Both were originally lumped with "framework gap" labels — re-test
+    # in v2.0.5 proved the test framework works; the simulator backend
+    # itself is missing the routes the wizard needs to succeed.
+    #
+    # KMS: POST /api/aws/extras/kms/keys returns 200 OK but the next
+    # GET returns an empty list — the create handler doesn't persist
+    # the key into the kms_keys state slice. Tracked as v2.1 backend
+    # fix (extras-store needs a write-through for kms).
+    ("aws", "kms"): "extras POST 200 but list empty — backend bug, v2.1",
+    # Firestore: catalog declares collection_path
+    # /api/gcp/firestore/v1/projects/{project}/databases but
+    # providers/gcp_routes.py only wires `/databases/{database}/*`
+    # document-level routes. The catalog's CRUD layer needs the
+    # `databases` collection POST/GET. Tracked as v2.1 backend fix.
+    ("gcp", "firestore"): "no /databases collection endpoint — backend, v2.1",
 }
 
 

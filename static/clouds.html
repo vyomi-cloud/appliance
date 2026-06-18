@@ -12,8 +12,12 @@
     body {
       margin: 0; padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #ffffff; color: #1a2330; min-height: 100vh;
+      /* v2.0.5: splash-style light-gray bg. */
+      background: #f8f9fa; color: #1f2937; min-height: 100vh;
     }
+
+    /* v2.0.5: electric-blue heading accent — applied via override at
+       the end of the style block. Body text stays dark. */
 
     /* ── Top bar (matches launch page) ───────────────────────────── */
     .top-bar {
@@ -33,15 +37,15 @@
       border: 1px solid transparent; cursor: pointer; text-decoration: none;
       transition: all 0.15s; font-family: inherit; line-height: 1;
     }
-    .tb-btn-secondary { background: #fff; color: #1a2330; border-color: #d8e0ea; }
-    .tb-btn-secondary:hover { border-color: #1a2330; }
+    .tb-btn-secondary { background: #fff; color: #1f2937; border-color: #d8e0ea; }
+    .tb-btn-secondary:hover { border-color: #1f2937; }
 
     .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 64px; }
 
     /* ── Section heading + sub ───────────────────────────────────── */
     .section-head { margin-bottom: 20px; }
     .section-head h2 {
-      font-size: 22px; font-weight: 700; color: #0f1b2d; margin: 0 0 4px;
+      font-size: 22px; font-weight: 700; color: #1f2937; margin: 0 0 4px;
       letter-spacing: -0.01em;
     }
     .section-head .sub { font-size: 13.5px; color: #5f6b7a; margin: 0; }
@@ -55,7 +59,7 @@
       background: #f7f8fa; margin-bottom: 14px;
     }
     header.hero h1 {
-      font-size: 38px; font-weight: 700; color: #0f1b2d;
+      font-size: 38px; font-weight: 700; color: #1f2937;
       margin: 0 0 10px; letter-spacing: -0.025em; line-height: 1.1;
     }
     header.hero p  { font-size: 16px; color: #5f6b7a; margin: 0; max-width: 580px; margin: 0 auto; }
@@ -94,7 +98,7 @@
     .space-provider.aws   { background: #ec7211; }
     .space-provider.gcp   { background: #1a73e8; }
     .space-provider.azure { background: #0078d4; }
-    .space-name { font-weight: 600; color: #0f1b2d; font-size: 14.5px; flex: 1; }
+    .space-name { font-weight: 600; color: #1f2937; font-size: 14.5px; flex: 1; }
     .space-active-pill {
       font-size: 10px; font-weight: 700; color: #047857;
       background: rgba(16,185,129,0.10); padding: 2px 8px; border-radius: 9999px;
@@ -136,7 +140,7 @@
     .cloud-icon.gcp   { background: linear-gradient(135deg, #5b8def 0%, #1a73e8 100%); }
     .cloud-icon.azure { background: linear-gradient(135deg, #0089d6 0%, #005a9e 100%); }
     .cloud-icon svg { width: 24px; height: 24px; }
-    .cloud-card h3 { font-size: 17px; font-weight: 700; color: #0f1b2d; margin: 0 0 14px; }
+    .cloud-card h3 { font-size: 17px; font-weight: 700; color: #1f2937; margin: 0 0 14px; }
 
     .svc-grid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 8px; }
     @media (max-width: 980px) { .svc-grid { grid-template-columns: repeat(4, 1fr); } }
@@ -145,7 +149,7 @@
       display: inline-flex; align-items: center; gap: 8px;
       padding: 8px 10px; border-radius: 8px;
       background: #f7f8fc; border: 1px solid #e7e7e9;
-      font-size: 12.5px; color: #1a2330; min-width: 0;
+      font-size: 12.5px; color: #1f2937; min-width: 0;
       transition: border-color 0.15s, background 0.15s;
     }
     .svc:hover { border-color: #c5cfd9; background: #ffffff; }
@@ -186,7 +190,7 @@
     .section-head.has-action > div { min-width: 0; }
     .btn-create-space {
       padding: 10px 18px; border-radius: 8px;
-      background: #0f1b2d; color: #fff; border: 1px solid #0f1b2d;
+      background: #1f2937; color: #fff; border: 1px solid #1f2937;
       font-size: 13.5px; font-weight: 600; cursor: pointer;
       text-decoration: none; font-family: inherit;
       transition: background 0.15s;
@@ -209,23 +213,23 @@
       padding: 26px 28px; box-shadow: 0 20px 50px rgba(0,0,0,0.25);
     }
     .modal h3 {
-      font-size: 20px; font-weight: 700; color: #0f1b2d;
+      font-size: 20px; font-weight: 700; color: #1f2937;
       margin: 0 0 4px; letter-spacing: -0.01em;
     }
     .modal .modal-sub { font-size: 13.5px; color: #5f6b7a; margin: 0 0 20px; }
     .modal .field { margin-bottom: 16px; }
     .modal .field label {
       display: block; font-size: 12.5px; font-weight: 600;
-      color: #1a2330; margin-bottom: 6px;
+      color: #1f2937; margin-bottom: 6px;
     }
     .modal .field input[type="text"] {
       width: 100%; padding: 9px 12px;
       border: 1.5px solid #cbd5e1; border-radius: 8px;
-      font-size: 14px; font-family: inherit; color: #0f1b2d;
+      font-size: 14px; font-family: inherit; color: #1f2937;
       transition: border-color 0.15s;
     }
     .modal .field input[type="text"]:focus {
-      outline: none; border-color: #0f1b2d;
+      outline: none; border-color: #1f2937;
     }
     .provider-picker {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
@@ -239,10 +243,10 @@
     .provider-picker label:hover { border-color: #94a3b8; }
     .provider-picker input { display: none; }
     .provider-picker input:checked + .provider-card {
-      border-color: #0f1b2d;
+      border-color: #1f2937;
     }
     .provider-picker label:has(input:checked) {
-      border-color: #0f1b2d; background: #f7f8fa;
+      border-color: #1f2937; background: #f7f8fa;
     }
     .provider-picker .provider-glyph { width: 26px; height: 26px; }
     .modal-actions {
@@ -251,18 +255,18 @@
     }
     .modal-actions .btn-secondary {
       padding: 9px 16px; border-radius: 8px; background: #fff;
-      color: #1a2330; border: 1.5px solid #cbd5e1; font-size: 13.5px;
+      color: #1f2937; border: 1.5px solid #cbd5e1; font-size: 13.5px;
       font-weight: 600; cursor: pointer; font-family: inherit;
     }
-    .modal-actions .btn-secondary:hover { border-color: #1a2330; }
+    .modal-actions .btn-secondary:hover { border-color: #1f2937; }
     .modal-actions .btn-primary {
-      padding: 9px 18px; border-radius: 8px; background: #0f1b2d;
-      color: #fff; border: 1.5px solid #0f1b2d; font-size: 13.5px;
+      padding: 9px 18px; border-radius: 8px; background: #1f2937;
+      color: #fff; border: 1.5px solid #1f2937; font-size: 13.5px;
       font-weight: 600; cursor: pointer; font-family: inherit;
     }
     .modal-actions .btn-primary:hover { background: #1a2c44; }
     .modal-actions .btn-primary:disabled {
-      opacity: 0.5; cursor: not-allowed; background: #0f1b2d;
+      opacity: 0.5; cursor: not-allowed; background: #1f2937;
     }
     .modal-error {
       color: #b91c1c; font-size: 13px; margin: 8px 0 0;
@@ -303,7 +307,7 @@
       50%      { opacity: 1;   transform: scale(1.15); }
     }
     .stat-card .stat-value {
-      font-size: 26px; font-weight: 700; color: #0f1b2d;
+      font-size: 26px; font-weight: 700; color: #1f2937;
       letter-spacing: -0.02em; line-height: 1.05;
     }
     .stat-card .stat-sub {
@@ -334,11 +338,11 @@
     .stat-card .stat-actions button {
       flex: 1; padding: 6px 10px; font-size: 11.5px; font-weight: 600;
       border-radius: 6px; cursor: pointer; font-family: inherit;
-      border: 1px solid #cbd5e1; background: #fff; color: #1a2330;
+      border: 1px solid #cbd5e1; background: #fff; color: #1f2937;
       transition: border-color 0.15s, background 0.15s;
     }
     .stat-card .stat-actions button:hover {
-      border-color: #1a2330; background: #f7f8fa;
+      border-color: #1f2937; background: #f7f8fa;
     }
     .stat-card.warn .stat-actions button,
     .stat-card.danger .stat-actions button {
@@ -363,20 +367,20 @@
       box-shadow: 0 20px 50px rgba(0,0,0,0.25);
     }
     .disk-modal .dm-head {
-      padding: 16px 20px; border-bottom: 1px solid #e5e7eb;
+      padding: 16px 20px; border-bottom: 1px solid #f8f9fa;
       display: flex; align-items: center; justify-content: space-between;
     }
     .disk-modal .dm-head h3 {
-      margin: 0; font-size: 17px; font-weight: 700; color: #0f1b2d;
+      margin: 0; font-size: 17px; font-weight: 700; color: #1f2937;
     }
     .disk-modal .dm-close {
       background: none; border: 0; font-size: 22px; cursor: pointer;
       color: #5f6b7a; line-height: 1; padding: 0 4px;
     }
-    .disk-modal .dm-body { padding: 18px 20px; overflow-y: auto; flex: 1; font-size: 13.5px; color: #1a2330; }
+    .disk-modal .dm-body { padding: 18px 20px; overflow-y: auto; flex: 1; font-size: 13.5px; color: #1f2937; }
     .disk-modal .dm-body .empty { color: #5f6b7a; font-size: 13px; padding: 16px; text-align: center; }
     .disk-modal .dm-foot {
-      padding: 12px 20px; border-top: 1px solid #e5e7eb;
+      padding: 12px 20px; border-top: 1px solid #f8f9fa;
       display: flex; gap: 10px; justify-content: flex-end;
     }
     .disk-modal .dm-row {
@@ -385,7 +389,7 @@
     }
     .disk-modal .dm-row:last-child { border-bottom: 0; }
     .disk-modal .dm-row label {
-      flex: 1; font-size: 13px; color: #1a2330;
+      flex: 1; font-size: 13px; color: #1f2937;
       display: flex; align-items: center; gap: 10px;
       cursor: pointer;
     }
@@ -396,18 +400,18 @@
     .disk-modal input[type="number"] {
       width: 100%; padding: 9px 12px; font-size: 14px;
       border: 1.5px solid #cbd5e1; border-radius: 8px;
-      font-family: inherit; color: #0f1b2d;
+      font-family: inherit; color: #1f2937;
     }
     .disk-modal .dm-foot button {
       padding: 9px 16px; border-radius: 8px; font-size: 13.5px;
       font-weight: 600; cursor: pointer; font-family: inherit;
     }
     .disk-modal .dm-foot .dm-cancel {
-      background: #fff; color: #1a2330; border: 1.5px solid #cbd5e1;
+      background: #fff; color: #1f2937; border: 1.5px solid #cbd5e1;
     }
-    .disk-modal .dm-foot .dm-cancel:hover { border-color: #1a2330; }
+    .disk-modal .dm-foot .dm-cancel:hover { border-color: #1f2937; }
     .disk-modal .dm-foot .dm-primary {
-      background: #0f1b2d; color: #fff; border: 1.5px solid #0f1b2d;
+      background: #1f2937; color: #fff; border: 1.5px solid #1f2937;
     }
     .disk-modal .dm-foot .dm-primary:hover { background: #1a2c44; }
     .disk-modal .dm-foot .dm-primary:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -461,7 +465,7 @@
       pointer-events: none;
     }
     .pie-card .pie-svg-wrap .pie-center .pc-val {
-      font-size: 17px; font-weight: 700; color: #0f1b2d;
+      font-size: 17px; font-weight: 700; color: #1f2937;
       line-height: 1; letter-spacing: -0.01em;
     }
     .pie-card .pie-svg-wrap .pie-center .pc-sub {
@@ -479,7 +483,7 @@
     }
     .pie-card .pie-legend-item .ll {
       display: inline-flex; align-items: center; gap: 6px;
-      color: #1a2330; font-weight: 500;
+      color: #1f2937; font-weight: 500;
     }
     .pie-card .pie-legend-item .swatch {
       width: 10px; height: 10px; border-radius: 2px;
@@ -521,7 +525,7 @@
     }
     .cl-modal h3 {
       margin: 0 0 6px; font-size: 19px; font-weight: 700;
-      color: #0f1b2d; letter-spacing: -0.01em;
+      color: #1f2937; letter-spacing: -0.01em;
     }
     .cl-modal .cl-sub {
       margin: 0 0 16px; font-size: 13.5px;
@@ -530,9 +534,9 @@
     .cl-modal .cl-context {
       margin: 0 0 20px; padding: 12px 14px;
       background: #f7f8fa; border-radius: 8px;
-      font-size: 12.5px; color: #1a2330; line-height: 1.5;
+      font-size: 12.5px; color: #1f2937; line-height: 1.5;
     }
-    .cl-modal .cl-context strong { color: #0f1b2d; }
+    .cl-modal .cl-context strong { color: #1f2937; }
     .cl-modal .cl-actions {
       display: flex; gap: 10px; justify-content: center;
     }
@@ -544,13 +548,13 @@
       text-decoration: none; line-height: 1;
     }
     .cl-modal .cl-cancel {
-      background: #fff; color: #1a2330;
+      background: #fff; color: #1f2937;
       border: 1.5px solid #cbd5e1;
     }
-    .cl-modal .cl-cancel:hover { border-color: #1a2330; }
+    .cl-modal .cl-cancel:hover { border-color: #1f2937; }
     .cl-modal .cl-upgrade {
-      background: #0f1b2d; color: #fff;
-      border: 1.5px solid #0f1b2d;
+      background: #1f2937; color: #fff;
+      border: 1.5px solid #1f2937;
     }
     .cl-modal .cl-upgrade:hover { background: #1a2c44; }
     /* Provider color tokens — match the rest of the SPA's brand chips */
@@ -574,7 +578,7 @@
       gap: 16px; margin-bottom: 18px; flex-wrap: wrap;
     }
     .surface-card > .sc-head > .sc-title h2 {
-      font-size: 18px; font-weight: 700; color: #0f1b2d;
+      font-size: 18px; font-weight: 700; color: #1f2937;
       margin: 0 0 2px; letter-spacing: -0.01em;
     }
     .surface-card > .sc-head > .sc-title p {
@@ -599,7 +603,7 @@
     .prov-filter button {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 7px 13px; border-radius: 999px;
-      background: #ffffff; color: #1a2330;
+      background: #ffffff; color: #1f2937;
       border: 1.5px solid #e7e7e9;
       font-size: 12.5px; font-weight: 600;
       cursor: pointer; font-family: inherit;
@@ -607,7 +611,7 @@
     }
     .prov-filter button:hover { border-color: #94a3b8; }
     .prov-filter button.active {
-      background: #0f1b2d; color: #fff; border-color: #0f1b2d;
+      background: #1f2937; color: #fff; border-color: #1f2937;
     }
     .prov-filter button.active.aws   { background: #ff9900; border-color: #ec7211; color: #16191f; }
     .prov-filter button.active.gcp   { background: #1a73e8; border-color: #1a73e8; color: #fff; }
@@ -633,7 +637,20 @@
       color: #5f6b7a; font-size: 13.5px;
       border: 1.5px dashed #cbd5e1; border-radius: 12px;
     }
-  </style>
+  
+    /* ── v2.0.5 — electric-blue heading accent ─────────────────────
+       Catches every heading the design uses. !important is here on
+       purpose: the per-tier rules above set heading colors at higher
+       specificity and we want this to win without rewriting them. */
+    h1, h2, h3, h4, h5, h6,
+    .tier-label, .tier-price .num, .tier-price .sym, .tier-price .per,
+    .hero-eyebrow, .crumb, .ao-header h1, .sc-title h2,
+    header h1, header.hero h1,
+    .stat-card .stat-label, .pie-card .pie-label,
+    .ao-list-head h2, .ao-form-card h2 {
+      color: #1f2937 !important;
+    }
+</style>
 </head>
 <body>
   <nav class="top-bar">
@@ -1374,7 +1391,10 @@
     // shape (because per-VM averages are uniform per provider), but
     // they ARE keyed off real data — non-zero as soon as you spin up
     // any VM, and the live-dot pulses so users know they're not stale.
-    const PROV_PALETTE = { aws: '#ff9900', gcp: '#4285f4', azure: '#0078d4' };
+    // v2.0.5: gray-scale palette across the donut wheels. AWS = darkest,
+    // GCP = mid, Azure = lightest — clear contrast steps along the
+    // black→gray ramp. Replaces brand colors that competed visually.
+    const PROV_PALETTE = { aws: '#1f2937', gcp: '#6b7280', azure: '#f8f9fa' };
     const PROV_LABEL   = { aws: 'AWS',     gcp: 'GCP',     azure: 'Azure' };
     // Per-VM rough averages — a real EC2/GCE/Az VM in our LXD-backed
     // setup averages a small instance type. Will be replaced with

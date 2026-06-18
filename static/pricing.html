@@ -13,9 +13,14 @@
     body {
       margin: 0; padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: #ffffff;
-      color: #1a2330; min-height: 100vh;
+      /* v2.0.5: splash-style light-gray as the page background. */
+      background: #f8f9fa;
+      color: #1f2937; min-height: 100vh;
     }
+
+    /* v2.0.5: electric-blue heading accent — applied via override at
+       the end of the style block so it wins regardless of how earlier
+       per-tier rules set heading color. Body text stays dark. */
 
     /* ── Sticky top action bar — Activate + Continue console buttons
           always visible at the top of the launch view. ─────────────────── */
@@ -38,11 +43,11 @@
       transition: all 0.15s; font-family: inherit; line-height: 1;
     }
     .top-bar .tb-btn-secondary {
-      background: #ffffff; color: #1a2330; border-color: #d8e0ea;
+      background: #ffffff; color: #1f2937; border-color: #d8e0ea;
     }
-    .top-bar .tb-btn-secondary:hover { border-color: #1a2330; }
+    .top-bar .tb-btn-secondary:hover { border-color: #1f2937; }
     .top-bar .tb-btn-primary {
-      background: #0f1b2d; color: #ffffff; border-color: #0f1b2d;
+      background: #1f2937; color: #ffffff; border-color: #1f2937;
     }
     .top-bar .tb-btn-primary:hover { background: #1a2c44; }
 
@@ -100,7 +105,7 @@
     }
     .tb-activated .tb-menu {
       position: absolute; top: calc(100% + 6px); right: 0; min-width: 220px;
-      background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px;
+      background: #ffffff; border: 1px solid #f8f9fa; border-radius: 10px;
       box-shadow: 0 12px 32px rgba(15, 27, 45, 0.10);
       padding: 6px; display: none; z-index: 200;
     }
@@ -109,14 +114,14 @@
     .tb-activated .tb-menu a {
       display: flex; align-items: center; gap: 10px;
       width: 100%; padding: 9px 12px; border-radius: 7px;
-      background: transparent; border: 0; color: #1a2330;
+      background: transparent; border: 0; color: #1f2937;
       font-size: 13px; font-family: inherit; line-height: 1.2;
       text-align: left; cursor: pointer; text-decoration: none;
     }
     .tb-activated .tb-menu button:hover,
     .tb-activated .tb-menu a:hover { background: #f3f4f6; }
     .tb-activated .tb-menu .tb-menu-sep {
-      height: 1px; background: #e5e7eb; margin: 4px 2px;
+      height: 1px; background: #f8f9fa; margin: 4px 2px;
     }
     .tb-activated .tb-menu .tb-menu-danger { color: #b91c1c; }
     .tb-activated .tb-menu .tb-menu-meta {
@@ -131,7 +136,7 @@
        ═══════════════════════════════════════════════════════════════════ */
     .features-strip { width: 100%; margin: 36px 0 8px; }
     .features-strip h2 {
-      font-size: 24px; font-weight: 700; color: #0f1b2d;
+      font-size: 24px; font-weight: 700; color: #1f2937;
       text-align: center; margin: 0 0 6px; letter-spacing: -0.01em;
     }
     .features-strip .sub {
@@ -169,7 +174,7 @@
     .cloud-icon.azure { background: linear-gradient(135deg, #0089d6 0%, #005a9e 100%); }
     .cloud-icon svg { width: 24px; height: 24px; }
     .cloud-card h3 {
-      font-size: 17px; font-weight: 700; color: #0f1b2d; margin: 0 0 14px;
+      font-size: 17px; font-weight: 700; color: #1f2937; margin: 0 0 14px;
     }
 
     /* Service-chip grid — full width inside the card, icon + name per chip. */
@@ -184,7 +189,7 @@
       padding: 8px 10px; border-radius: 8px;
       background: #f7f8fc;
       border: 1px solid #e7e7e9;
-      font-size: 12.5px; color: #1a2330;
+      font-size: 12.5px; color: #1f2937;
       min-width: 0;
       transition: border-color 0.15s, background 0.15s;
     }
@@ -238,7 +243,7 @@
       margin-bottom: 14px;
     }
     .sdk-head h2 {
-      font-size: 24px; font-weight: 700; color: #0f1b2d;
+      font-size: 24px; font-weight: 700; color: #1f2937;
       margin: 0 0 6px; letter-spacing: -0.01em;
     }
     .sdk-head h2 .grad {
@@ -260,7 +265,7 @@
       text-align: center;
     }
     .sdk-stat .v {
-      font-size: 26px; font-weight: 700; color: #0f1b2d;
+      font-size: 26px; font-weight: 700; color: #1f2937;
       line-height: 1; margin-bottom: 4px; letter-spacing: -0.02em;
     }
     .sdk-stat .l {
@@ -296,7 +301,7 @@
     .swatch.azure { background: linear-gradient(135deg, #00a4ef, #0078d4); }
     .swatch.tool  { background: linear-gradient(135deg, #a855f7, #ec4899); }
     .sdk-group-head .title {
-      font-size: 14.5px; font-weight: 700; color: #0f1b2d;
+      font-size: 14.5px; font-weight: 700; color: #1f2937;
     }
     .sdk-group-head .count {
       margin-left: auto; font-size: 11px; font-weight: 600;
@@ -309,7 +314,7 @@
       display: inline-flex; align-items: center; gap: 7px;
       background: #f7f8fc; border: 1px solid #e7e7e9;
       border-radius: 7px; padding: 6px 10px;
-      font-size: 12.5px; color: #1a2330; font-weight: 500;
+      font-size: 12.5px; color: #1f2937; font-weight: 500;
     }
     .sdk-chip .ck { color: #10b981; font-weight: 700; }
 
@@ -364,11 +369,11 @@
       text-transform: uppercase; margin-bottom: 14px;
     }
     .tier-label.free       { color: #5f6b7a; }
-    .tier-label.pro        { color: #2563eb; }
+    .tier-label.pro        { color: #1f2937; }
     .tier-label.max        { color: #059669; }
     .tier-label.enterprise { color: #7e22ce; }
 
-    .tier-price { display: flex; align-items: baseline; gap: 4px; margin-bottom: 6px; color: #0f1b2d; }
+    .tier-price { display: flex; align-items: baseline; gap: 4px; margin-bottom: 6px; color: #1f2937; }
     .tier-price .sym { font-size: 20px; color: #5f6b7a; font-weight: 500; }
     .tier-price .num { font-size: 38px; font-weight: 600; line-height: 1; letter-spacing: -0.02em; }
     .tier-price .per { font-size: 13.5px; color: #5f6b7a; margin-left: 4px; }
@@ -383,13 +388,13 @@
       font-family: inherit;
     }
     .tier-cta.outline {
-      background: #ffffff; color: #1a2330; border-color: #d8e0ea;
+      background: #ffffff; color: #1f2937; border-color: #d8e0ea;
     }
-    .tier-cta.outline:hover { border-color: #1a2330; }
+    .tier-cta.outline:hover { border-color: #1f2937; }
     .tier-cta.primary {
-      background: #1a2330; color: #ffffff; border-color: #1a2330;
+      background: #1f2937; color: #ffffff; border-color: #1f2937;
     }
-    .tier-cta.primary:hover { background: #0f1b2d; }
+    .tier-cta.primary:hover { background: #1f2937; }
     .tier-cta.accent {
       background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
       color: #ffffff; border-color: transparent;
@@ -408,7 +413,7 @@
                       font-size: 13.5px; }
     .tier-features li {
       display: flex; align-items: flex-start; gap: 8px; padding: 6px 0;
-      color: #1a2330;
+      color: #1f2937;
     }
     .tier-features .check {
       width: 14px; height: 14px; flex-shrink: 0; color: #10b981; margin-top: 2px;
@@ -428,7 +433,7 @@
        ═══════════════════════════════════════════════════════════════════ */
     .compare { width: 100%; margin: 56px 0 0; }
     .compare-head { text-align: center; margin-bottom: 32px; }
-    .compare-head h2 { font-size: 24px; font-weight: 700; color: #0f1b2d; margin: 0 0 8px; }
+    .compare-head h2 { font-size: 24px; font-weight: 700; color: #1f2937; margin: 0 0 8px; }
     .compare-head p  { font-size: 14px; color: #5f6b7a; margin: 0; }
     .compare-table-wrap { overflow-x: auto; border: 1px solid #e7e7e9; border-radius: 12px; }
     .compare-table { width: 100%; border-collapse: collapse; }
@@ -436,11 +441,11 @@
       padding: 11px 14px; text-align: left; border-bottom: 1px solid #e7e7e9;
       font-size: 13.5px;
     }
-    .compare-table thead th { background: #f7f8fc; font-weight: 700; color: #0f1b2d;
+    .compare-table thead th { background: #f7f8fc; font-weight: 700; color: #1f2937;
                               font-size: 12.5px; letter-spacing: 0.02em; }
     .compare-table th.col { text-align: center; min-width: 130px; }
-    .compare-table td.col { text-align: center; color: #1a2330; }
-    .compare-table td.feature-name { color: #0f1b2d; font-weight: 500; }
+    .compare-table td.col { text-align: center; color: #1f2937; }
+    .compare-table td.feature-name { color: #1f2937; font-weight: 500; }
     .compare-table tr.category td {
       background: #f3f4f6; font-weight: 700; font-size: 11.5px;
       text-transform: uppercase; letter-spacing: 0.06em; color: #5f6b7a;
@@ -478,14 +483,14 @@
       display: flex; align-items: flex-start; justify-content: space-between;
       gap: 12px; border-bottom: 1px solid #e7e7e9;
     }
-    .am-head h3 { margin: 0; font-size: 18px; color: #0f1b2d; font-weight: 700; }
+    .am-head h3 { margin: 0; font-size: 18px; color: #1f2937; font-weight: 700; }
     .am-head .am-sub { margin-top: 4px; font-size: 13px; color: #5f6b7a; line-height: 1.5; }
     .am-close {
       background: transparent; border: 0; cursor: pointer;
       font-size: 22px; line-height: 1; color: #5f6b7a; padding: 2px 6px;
       border-radius: 6px;
     }
-    .am-close:hover { background: #f2f3f3; color: #0f1b2d; }
+    .am-close:hover { background: #f2f3f3; color: #1f2937; }
     .am-body { padding: 18px 24px 22px; }
     .am-body .am-label {
       font-size: 11px; font-weight: 700; text-transform: uppercase;
@@ -493,7 +498,7 @@
     }
     .am-body .am-primary-btn {
       width: 100%; padding: 12px; border-radius: 8px;
-      background: #0f1b2d; color: #ffffff; border: 0; cursor: pointer;
+      background: #1f2937; color: #ffffff; border: 0; cursor: pointer;
       font-weight: 600; font-size: 14px; font-family: inherit;
       transition: background 0.15s;
     }
@@ -505,7 +510,7 @@
     }
     .am-body .am-secondary-btn {
       margin-top: 8px; padding: 10px 14px; border-radius: 8px;
-      background: #ffffff; color: #1a2330; border: 1px solid #d8e0ea;
+      background: #ffffff; color: #1f2937; border: 1px solid #d8e0ea;
       cursor: pointer; font-size: 13px; font-weight: 600;
       font-family: inherit;
     }
@@ -543,7 +548,7 @@
       height: 40px; width: auto; display: block;
     }
     header h1 {
-      font-size: 38px; font-weight: 700; margin: 0 0 10px; color: #0f1b2d;
+      font-size: 38px; font-weight: 700; margin: 0 0 10px; color: #1f2937;
       letter-spacing: -0.025em; line-height: 1.1;
     }
     header .sub {
@@ -562,7 +567,7 @@
       font: inherit; color: #687078; cursor: pointer; border-radius: 999px;
       transition: background 0.15s, color 0.15s;
     }
-    .toggle button.active { background: #0f1b2d; color: #fff; font-weight: 600; }
+    .toggle button.active { background: #1f2937; color: #fff; font-weight: 600; }
     .toggle .save {
       color: #0a7d36; font-size: 12px; font-weight: 600; margin-left: 6px;
     }
@@ -577,16 +582,16 @@
       background: #ffffff;
       border: 1px solid #d8e0ea;
       border-radius: 0 0 12px 12px;
-      font-size: 13px; color: #1a2330; line-height: 1.55;
+      font-size: 13px; color: #1f2937; line-height: 1.55;
     }
     .compat-banner .title {
-      font-weight: 600; color: #0f1b2d; text-align: center;
+      font-weight: 600; color: #1f2937; text-align: center;
       margin-bottom: 12px; font-size: 14px;
       display: flex; align-items: center; justify-content: center; gap: 10px;
       flex-wrap: wrap;
     }
     .compat-banner .cap-pill {
-      background: #0f1b2d; color: #fff; font-size: 10px; font-weight: 700;
+      background: #1f2937; color: #fff; font-size: 10px; font-weight: 700;
       letter-spacing: 0.8px; text-transform: uppercase;
       padding: 3px 9px; border-radius: 999px;
     }
@@ -595,7 +600,7 @@
       padding: 4px 0;
     }
     .compat-banner .row .lbl {
-      flex: 0 0 84px; font-weight: 700; color: #0f1b2d;
+      flex: 0 0 84px; font-weight: 700; color: #1f2937;
       font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px;
     }
     .compat-banner code {
@@ -612,7 +617,7 @@
       background: #fff; border: 1px solid #d8e0ea; border-radius: 12px;
       margin: 24px 0 16px; padding: 24px 28px;
     }
-    .activate-header h3 { margin: 0 0 6px; font-size: 20px; color: #0f1b2d; }
+    .activate-header h3 { margin: 0 0 6px; font-size: 20px; color: #1f2937; }
     .activate-sub { font-size: 13px; color: #5f6368; margin-bottom: 18px; }
     .activate-grid {
       display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
@@ -647,7 +652,7 @@
     }
     .dp-code {
       font-family: 'SF Mono', Menlo, monospace; font-size: 22px; font-weight: 700;
-      letter-spacing: 6px; color: #0f1b2d; background: #fff7e0;
+      letter-spacing: 6px; color: #1f2937; background: #fff7e0;
       padding: 8px 12px; border-radius: 6px; text-align: center; margin-bottom: 10px;
     }
     .dp-status { font-size: 13px; color: #4b6488; }
@@ -705,8 +710,8 @@
     .price {
       display: flex; align-items: baseline; gap: 4px; margin-bottom: 6px;
     }
-    .price .amount { font-size: 32px; font-weight: 700; color: #0f1b2d; line-height: 1; }
-    .price .currency { font-size: 18px; color: #0f1b2d; font-weight: 600; }
+    .price .amount { font-size: 32px; font-weight: 700; color: #1f2937; line-height: 1; }
+    .price .currency { font-size: 18px; color: #1f2937; font-weight: 600; }
     .price .period { font-size: 13px; color: #687078; }
     .price-sub { font-size: 12px; color: #607080; margin-bottom: 18px; min-height: 16px; }
     .price-sub.highlight { color: #0a7d36; font-weight: 600; }
@@ -716,10 +721,10 @@
       font: inherit; font-weight: 600; cursor: pointer;
       transition: background 0.15s, transform 0.05s; margin-bottom: 18px;
     }
-    .cta.primary { background: #0f1b2d; color: #fff; }
+    .cta.primary { background: #1f2937; color: #fff; }
     .cta.primary:hover:not(:disabled) { background: #1e2d44; }
     .cta.primary:active:not(:disabled) { transform: translateY(1px); }
-    .cta.recommended { background: #2563eb; color: #fff; }
+    .cta.recommended { background: #1f2937; color: #fff; }
     .cta.recommended:hover:not(:disabled) { background: #1d4ed8; }
     .cta.active-current {
       background: #e8f5ed; color: #0a7d36; cursor: default; font-weight: 600;
@@ -740,7 +745,7 @@
     }
     .features li.locked .icon { color: #c0c6ce; }
     .features li.locked { color: #97a0aa; }
-    .features li strong { color: #1a2330; font-weight: 600; }
+    .features li strong { color: #1f2937; font-weight: 600; }
     /* Section headers within the feature list (e.g. "Developer Experience"). */
     .features li.section {
       font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
@@ -757,7 +762,7 @@
     }
     footer .continue {
       display: inline-flex; align-items: center; gap: 10px;
-      background: #0f1b2d; color: #fff;
+      background: #1f2937; color: #fff;
       padding: 14px 32px; border-radius: 8px;
       font-size: 15px; font-weight: 600; text-decoration: none;
       border: 0; cursor: pointer; font-family: inherit;
@@ -768,7 +773,7 @@
     footer .note {
       margin-top: 14px; font-size: 13px; color: #687078;
     }
-    footer .note a { color: #2563eb; text-decoration: none; }
+    footer .note a { color: #1f2937; text-decoration: none; }
     footer .note a:hover { text-decoration: underline; }
 
     /* ---- modal -------------------------------------------------------- */
@@ -781,9 +786,9 @@
       background: #fff; border-radius: 12px; padding: 28px;
       max-width: 420px; width: 90%;
     }
-    .modal h2 { margin: 0 0 14px; font-size: 20px; color: #0f1b2d; }
+    .modal h2 { margin: 0 0 14px; font-size: 20px; color: #1f2937; }
     .modal p { color: #4a5566; font-size: 14px; line-height: 1.5; margin: 0 0 18px; }
-    .modal label { display: block; font-size: 13px; font-weight: 600; color: #1a2330; margin-bottom: 6px; }
+    .modal label { display: block; font-size: 13px; font-weight: 600; color: #1f2937; margin-bottom: 6px; }
     .modal input, .modal select {
       width: 100%; padding: 9px 12px; border: 1px solid #d8e0ea;
       border-radius: 6px; font: inherit; margin-bottom: 16px;
@@ -791,7 +796,7 @@
     .modal .cta-row { display: flex; gap: 10px; }
     .modal .cta-row button { flex: 1; padding: 10px; border: 0; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; }
     .modal .cta-row .cancel { background: #f0f3f7; color: #4a5566; }
-    .modal .cta-row .confirm { background: #0f1b2d; color: #fff; }
+    .modal .cta-row .confirm { background: #1f2937; color: #fff; }
 
     .toast {
       position: fixed; bottom: 24px; right: 24px;
@@ -813,8 +818,7 @@
       position: fixed; inset: 0; z-index: 10000;
       display: flex; align-items: center; justify-content: center;
       flex-direction: column; gap: 24px;
-      background: radial-gradient(ellipse at center,
-                  #ffffff 0%, #f4f6fb 60%, #e9edf6 100%);
+      background: #f8f9fa;
       opacity: 0; animation: vyomi-splash-fade 5000ms ease-in-out forwards;
     }
     .vyomi-splash .vyomi-splash-logo {
@@ -855,7 +859,7 @@
     }
     @keyframes vyomi-splash-pulse {
       0%, 100% { background: #cbd5e1; transform: scale(1); }
-      50%      { background: #0f1b2d; transform: scale(1.3); }
+      50%      { background: #1f2937; transform: scale(1.3); }
     }
     @media (prefers-reduced-motion: reduce) {
       .vyomi-splash { animation: none; opacity: 1; }
@@ -871,7 +875,7 @@
     .local-fidelity { margin-top: 56px; }
     .local-fidelity > .lf-head { text-align: center; margin-bottom: 28px; }
     .local-fidelity > .lf-head h2 {
-      font-size: 28px; font-weight: 700; color: #0f1b2d;
+      font-size: 28px; font-weight: 700; color: #1f2937;
       margin: 0 0 8px; letter-spacing: -0.02em;
     }
     .local-fidelity > .lf-head p {
@@ -908,7 +912,7 @@
     .lf-icon.azure { background: linear-gradient(135deg, #0089d6 0%, #005a9e 100%); }
     .lf-icon svg { width: 22px; height: 22px; }
     .lf-card h3 {
-      font-size: 16px; font-weight: 700; color: #0f1b2d;
+      font-size: 16px; font-weight: 700; color: #1f2937;
       margin: 0 0 14px; letter-spacing: -0.005em;
     }
     .lf-svc-grid {
@@ -920,7 +924,7 @@
       display: inline-flex; align-items: center; gap: 7px;
       padding: 7px 9px; border-radius: 7px;
       background: #f7f8fc; border: 1px solid #e7e7e9;
-      font-size: 11.5px; color: #1a2330; min-width: 0;
+      font-size: 11.5px; color: #1f2937; min-width: 0;
       transition: border-color 0.15s, background 0.15s;
     }
     .lf-svc:hover { border-color: #c5cfd9; background: #ffffff; }
@@ -951,7 +955,20 @@
       border-top: 1px solid #e7e7e9;
       font-size: 12px; color: #5f6b7a; line-height: 1.5;
     }
-  </style>
+  
+    /* ── v2.0.5 — electric-blue heading accent ─────────────────────
+       Catches every heading the design uses. !important is here on
+       purpose: the per-tier rules above set heading colors at higher
+       specificity and we want this to win without rewriting them. */
+    h1, h2, h3, h4, h5, h6,
+    .tier-label, .tier-price .num, .tier-price .sym, .tier-price .per,
+    .hero-eyebrow, .crumb, .ao-header h1, .sc-title h2,
+    header h1, header.hero h1,
+    .stat-card .stat-label, .pie-card .pie-label,
+    .ao-list-head h2, .ao-form-card h2 {
+      color: #1f2937 !important;
+    }
+</style>
 </head>
 <body>
   <!-- ── Splash overlay — Vyomi-branded first-paint, 5s, cookie-suppressed.
@@ -1320,7 +1337,7 @@
         <div style="margin-top:18px;font-size:12px;color:#5f6b7a;line-height:1.5">
           Don't have a subscription yet?
           <a href="https://vyomi.cloud/dashboard" target="_blank" rel="noopener"
-             style="color:#2563eb;text-decoration:none">Subscribe on the portal →</a>
+             style="color:#1f2937;text-decoration:none">Subscribe on the portal →</a>
         </div>
       </div>
     </div>

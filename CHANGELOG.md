@@ -6,6 +6,31 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.5] — 2026-06-18
+
+**Real-SPA conformance lands at 33/35 + cloud CLIs bundled into every spinned compute.** v2.0.5 closes the v2.0.4 framework gaps in the Playwright real-SPA harness (45.7% → 94.3% pass rate, 0 failures) and ships a quality-of-life feature for anyone who SSHes into a Vyomi-spawned EC2 / GCE / Azure VM: the 3 cloud-vendor CLIs are now pre-installed and pre-configured to point at the local simulator endpoints with dummy credentials, so `aws s3 ls`, `gcloud compute instances list`, and `az vm list` all work the moment you `ssh ubuntu@<vm>`. Also includes the cosmetic palette refresh and a Dockerfile fix for the `/var/lib/cloudlearn` permissions footgun.
+
+### Added
+
+- **`aws` / `gcloud` / `az` bundled into every spinned compute** — `_lxd_clouds_clis_bootstrap_async` in server.py runs alongside the existing docker bootstrap on first VM start. Installs AWS CLI v2 (curl + unzip), gcloud (apt repo), and azure-cli (apt repo). Writes `/etc/profile.d/vyomi-cloud-endpoints.sh` system-wide with `AWS_ENDPOINT_URL`, `CLOUDSDK_API_ENDPOINT_OVERRIDES_*`, dummy AKID/secret/project, and `CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true`. Same code-path covers all three providers (EC2 / GCE / Azure VM) because they all flow through `_start_lxd_instance`. Instance dict surfaces `clouds_clis_bootstrap_state` (`"installing"` / `"ready: <versions>"` / `"failed: <err>"`) so the SPA can show progress. Opt-out via `VYOMI_LXD_NO_CLI_BOOTSTRAP=1`. Verified end-to-end on a real LXD spawn: aws-cli/2.35.7, Google Cloud SDK 573.0.0, azure-cli 2.87.0. Bootstrap takes ~4 minutes on a t3.small first-boot.
+- **Hardened bootstrap script** — waits for `dpkg lock-frontend` + `dpkg lock` + `apt lists/lock` (not just dpkg) so cloud-init / unattended-upgrades races don't silently drop packages. Sets `DPkg::Lock::Timeout=300` so apt itself retries on contention. Fail-fast verification step (`for bin in curl unzip gpg; do command -v $bin || exit 90`) surfaces specific missing packages instead of reporting an opaque `aws=MISSING` 5 minutes later. ubuntu:24.04-safe package list (dropped python3-pip which was removed from the default repos and used to roll back the whole apt transaction).
+- **`VYOMI_RUNTIME_BRIDGE_DISABLED` env kill-switch** — `core/vyomi_platform.py::bridge_enabled()` honors the new env so `_lxd_available()` falls through to the local `lxc` CLI when the bridge service isn't reachable. Used by the Vyomi-on-Vyomi dev-loop where `host.docker.internal:9171` resolves to the wrong gateway. Legacy `CLOUDLEARN_RUNTIME_BRIDGE_DISABLED` also honored.
+
+### Fixed
+
+- **Real-SPA conformance harness goes from 16/35 to 33/35 (94.3%) and 0 failures** — 5 framework fixes in `tests/conformance/ui_real/_spa_helpers.py`:
+  - GCP service-list nav: original `wait_for_selector(".count")` matched a `<span class=count>` that GCP renders empty + hidden, causing all 9 GCP services to skip with a "not visible" timeout. Now waits for `.page-head h1` / `h1.page-h` / `.actions-bar button.primary` instead.
+  - Azure wizard field fill: the helper only looked inside `.field` containers, but Azure uses `.wiz-field`. Adding `.wiz-field:has(label:has-text("X")) input` to the candidate list made the 7 Azure services that previously fell through with default values (e.g. VM name stayed "vm-demo") fill correctly.
+  - Azure stepper-based wizard nav: replaced the Next-click chain (which raced the wizard's rerender DOM swap) with direct stepper-button clicks. `gotoTab()` still validates every tab, so submit gating still respects required-field rules.
+  - Required `__*` synthetic fields now get filled instead of skipped — fixes the GCP API Gateway `__serviceAccount__` validation block.
+  - `make_value()` now returns a sensible text default for `type=None` and recognises email/serviceAccount-shaped names so GCP service-account fields pass their format checks.
+- **EC2 spawn permission denied on `/var/lib/cloudlearn/deployments/<id>`** — `Dockerfile` now creates `/var/lib/cloudlearn/deployments` and chowns it to the `cloudlearn` user (uid 100) alongside `/data` and `/app`. Without this, the simulator (running as non-root) couldn't create the per-instance workspace dir and EC2 creates returned 500.
+- **2 v2.1-tracked backend gaps explicitly skipped** — `aws.kms` (extras POST returns 200 but the keys list stays empty — needs write-through fix in the extras store) and `gcp.firestore` (catalog declares `/databases` collection endpoint but providers/gcp_routes.py only wires `/databases/{database}/*` document routes). Tracked as v2.1 follow-ups via the `SERVICE_SKIPS` dict.
+
+### Changed
+
+- **Splash + workspaces + pricing palette refresh** — `static/clouds.html` and `static/pricing.html` move to a calmer `#f8f9fa` page background, consolidate the prior `#0f1b2d` / `#1a2330` / `#2563eb` accents to `#1f2937` (gray-800), and update the splash overlay from the gradient to flat `#f8f9fa`. Provider donut palette swaps to a black→gray ramp (AWS `#1f2937`, GCP `#6b7280`, Azure `#d1d5db`) for a more print-friendly look.
+
 ## [2.0.4.1] — 2026-06-18
 
 **Hot-fix patch on top of v2.0.4.** Two UX bugs surfaced within hours of cutting v2.0.4; this 4-segment patch ships them without bumping the minor version (since the underlying behaviour is unchanged).

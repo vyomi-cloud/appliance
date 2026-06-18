@@ -6962,6 +6962,23 @@ def _start_lxd_instance(instance: dict) -> dict:
             _lxd_docker_bootstrap_async(container_ref, instance)
         except Exception as e:
             instance["docker_bootstrap_state"] = f"failed: {e}"
+    # v2.0.5: bundle the 3 cloud-vendor CLIs (aws/gcloud/az) alongside
+    # docker. Same opt-out pattern + same async backgrounding so the
+    # container is "running" immediately and the CLIs settle ~3-5 min
+    # later. The instance dict tracks `clouds_clis_bootstrap_state`
+    # so the SPA can show a "Installing CLIs…" badge in the detail
+    # view if the user opens it during the first few minutes after
+    # launch. Opt-out via VYOMI_LXD_NO_CLI_BOOTSTRAP=1 (or legacy
+    # CLOUDLEARN_LXD_NO_CLI_BOOTSTRAP).
+    if (not os.environ.get("VYOMI_LXD_NO_CLI_BOOTSTRAP")
+            and not os.environ.get("CLOUDLEARN_LXD_NO_CLI_BOOTSTRAP")
+            and str(instance.get("runtime_backend_requested") or "").lower() != "python"
+            and not instance.get("clouds_clis_bootstrap_state")):
+        instance["clouds_clis_bootstrap_state"] = "installing"
+        try:
+            _lxd_clouds_clis_bootstrap_async(container_ref, instance)
+        except Exception as e:
+            instance["clouds_clis_bootstrap_state"] = f"failed: {e}"
     return instance
 
 
@@ -6988,6 +7005,150 @@ def _lxd_docker_bootstrap_async(container_ref: str, instance: dict) -> None:
             instance["docker_bootstrap_state"] = "ready: " + tail[:80]
         except Exception as e:
             instance["docker_bootstrap_state"] = f"failed: {e}"
+    threading.Thread(target=_run, daemon=True).start()
+
+
+# v2.0.5: bundle the 3 cloud-vendor CLIs (aws / gcloud / az) into every
+# spinned compute container so `aws s3 ls` / `gcloud compute instances
+# list` / `az vm list` work the moment a user SSHes in. AWS-EC2,
+# GCP-Compute, and Azure-VM all flow through `_start_lxd_instance`, so
+# a single bootstrap covers all three providers.
+#
+# Endpoint wiring: writes /etc/profile.d/vyomi-cloud-endpoints.sh that
+# sets AWS_ENDPOINT_URL + CLOUDSDK_API_ENDPOINT_OVERRIDES_* + dummy
+# creds. Users override with `unset AWS_ENDPOINT_URL` for real-cloud.
+#
+# Opt-out: VYOMI_LXD_NO_CLI_BOOTSTRAP=1 (or legacy CLOUDLEARN_*).
+# State on the instance dict: clouds_clis_bootstrap_state =
+# "installing" | "ready: <tail>" | "failed: <err>".
+def _lxd_clouds_clis_bootstrap_async(container_ref: str, instance: dict) -> None:
+    """Install aws / gcloud / az into the LXD container in a background
+    thread + write a system-wide env file pointing the CLIs at the
+    Vyomi simulator with dummy creds. Idempotent.
+    """
+    import threading
+
+    def _run():
+        try:
+            install = (
+                # Resolve the host gateway from inside the container so
+                # the env file uses the right IP for THIS LXD bridge.
+                "GW=$(ip route show default 2>/dev/null | awk '{print $3; exit}'); "
+                "[ -z \"$GW\" ] && GW=host.docker.internal; "
+                "SIM=http://$GW:9000; "
+                "echo \"Vyomi simulator endpoint resolved to $SIM\"; "
+                # v2.0.5: wait for cloud-init / unattended-upgrades to
+                # release the dpkg lock before we run any apt commands.
+                # Without this, our first apt-get install fires while
+                # the container is mid-first-boot and packages get
+                # silently dropped (we hit this on aarch64 + ubuntu:24.04
+                # where unzip wasn't installed and the entire AWS CLI
+                # install chain unzip→/tmp/aws/install failed quietly).
+                # Wait for cloud-init / unattended-upgrades to release
+                # BOTH the dpkg frontend lock AND the apt lists lock.
+                # Discovered on aarch64 ubuntu:24.04: only checking
+                # dpkg-frontend let apt-get update fail with
+                # "E: Unable to lock directory /var/lib/apt/lists/".
+                "echo 'Waiting for apt + dpkg locks to free…'; "
+                "for i in $(seq 1 60); do "
+                "  if ! fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 "
+                "      && ! fuser /var/lib/dpkg/lock >/dev/null 2>&1 "
+                "      && ! fuser /var/lib/apt/lists/lock >/dev/null 2>&1; then "
+                "    break; "
+                "  fi; "
+                "  sleep 5; "
+                "done; "
+                # Use DPkg::Lock::Timeout so apt itself waits on the lock
+                # if cloud-init re-grabs it mid-install.
+                "apt-get -o DPkg::Lock::Timeout=300 update -q 2>&1 | tail -3; "
+                # Only the packages we actually need. python3-pip was
+                # dropped from ubuntu:24.04 repos in favour of pipx and
+                # we don't need pip for any of aws/gcloud/az anyway.
+                # If ANY package in this list isn't in the repo, apt
+                # rolls back the WHOLE transaction — keep the list
+                # minimal + ubuntu:24.04-safe.
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+                "  -o DPkg::Lock::Timeout=300 "
+                "  curl unzip ca-certificates "
+                "  apt-transport-https lsb-release gnupg 2>&1 | tail -5; "
+                # v2.0.5: verify the critical bins arrived. If not, fail
+                # fast with a useful state so triage shows WHICH pkg was
+                # dropped, instead of silently continuing into curl→unzip
+                # and reporting `aws=MISSING` 5 minutes later.
+                "for bin in curl unzip gpg; do "
+                "  if ! command -v $bin >/dev/null 2>&1; then "
+                "    echo \"FATAL: $bin missing after apt-get install\"; "
+                "    exit 90; "
+                "  fi; "
+                "done; "
+                "mkdir -p /etc/apt/keyrings; "
+                # AWS CLI v2
+                "if ! command -v aws >/dev/null 2>&1; then "
+                "  curl -sS https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip "
+                "    -o /tmp/aws.zip && unzip -q -o /tmp/aws.zip -d /tmp && "
+                "    /tmp/aws/install --update 2>&1 | tail -3; "
+                "fi; "
+                # gcloud CLI (apt)
+                "if ! command -v gcloud >/dev/null 2>&1; then "
+                "  curl -sS https://packages.cloud.google.com/apt/doc/apt-key.gpg | "
+                "    gpg --dearmor -o /etc/apt/keyrings/cloud.google.gpg 2>/dev/null; "
+                "  echo 'deb [signed-by=/etc/apt/keyrings/cloud.google.gpg] "
+                "    https://packages.cloud.google.com/apt cloud-sdk main' > "
+                "    /etc/apt/sources.list.d/google-cloud-sdk.list; "
+                "  apt-get update -q 2>&1 | tail -1; "
+                "  DEBIAN_FRONTEND=noninteractive apt-get install -y -q "
+                "    google-cloud-cli 2>&1 | tail -3; "
+                "fi; "
+                # Azure CLI
+                "if ! command -v az >/dev/null 2>&1; then "
+                "  curl -sS https://packages.microsoft.com/keys/microsoft.asc | "
+                "    gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg 2>/dev/null; "
+                "  AZ_REPO=$(lsb_release -cs); "
+                "  echo \"deb [arch=$(dpkg --print-architecture) "
+                "    signed-by=/etc/apt/keyrings/microsoft.gpg] "
+                "    https://packages.microsoft.com/repos/azure-cli/ "
+                "    $AZ_REPO main\" > /etc/apt/sources.list.d/azure-cli.list; "
+                "  apt-get update -q 2>&1 | tail -1; "
+                "  DEBIAN_FRONTEND=noninteractive apt-get install -y -q "
+                "    azure-cli 2>&1 | tail -3; "
+                "fi; "
+                # Endpoint config — system-wide via /etc/profile.d so any
+                # interactive shell sources it. `unset` overrides for
+                # real-cloud testing.
+                "cat > /etc/profile.d/vyomi-cloud-endpoints.sh <<EOF\n"
+                "# Auto-generated by Vyomi at container provision time.\n"
+                "# Points the 3 CLIs at the local Vyomi simulator with\n"
+                "# dummy credentials. \\`unset AWS_ENDPOINT_URL\\` etc. to\n"
+                "# point at real cloud.\n"
+                "export AWS_ENDPOINT_URL=$SIM\n"
+                "export AWS_ACCESS_KEY_ID=AKIAVYOMITEST00000000\n"
+                "export AWS_SECRET_ACCESS_KEY=vyomi-test-secret-key-do-not-use-in-prod\n"
+                "export AWS_DEFAULT_REGION=us-east-1\n"
+                "export CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE=$SIM/api/gcp/compute/v1/\n"
+                "export CLOUDSDK_API_ENDPOINT_OVERRIDES_STORAGE=$SIM/api/gcp/storage/v1/\n"
+                "export CLOUDSDK_API_ENDPOINT_OVERRIDES_PUBSUB=$SIM/api/gcp/pubsub/v1/\n"
+                "export CLOUDSDK_API_ENDPOINT_OVERRIDES_FIRESTORE=$SIM/api/gcp/firestore/v1/\n"
+                "export CLOUDSDK_CORE_PROJECT=123456789012\n"
+                "export CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true\n"
+                "export AZURE_HTTP_USER_AGENT=vyomi-simulator/2.0.5\n"
+                "EOF\n"
+                "chmod 0644 /etc/profile.d/vyomi-cloud-endpoints.sh; "
+                # Versions check (fail-soft — install is best-effort)
+                "echo '--- versions ---'; "
+                "(aws --version 2>&1 || echo aws=MISSING) | head -1; "
+                "(gcloud --version 2>&1 || echo gcloud=MISSING) | head -1; "
+                "(az --version 2>&1 || echo az=MISSING) | head -1"
+            )
+            result = _lxd_run_checked(
+                ["exec", container_ref, "--", "bash", "-lc", install],
+                timeout=600,  # 10 min — three downloads + apt
+            )
+            lines = [l for l in (result.stdout or "").strip().split("\n") if l]
+            tail = " | ".join(lines[-3:])[:240]
+            instance["clouds_clis_bootstrap_state"] = "ready: " + tail
+        except Exception as e:
+            instance["clouds_clis_bootstrap_state"] = f"failed: {e}"
+
     threading.Thread(target=_run, daemon=True).start()
 
 

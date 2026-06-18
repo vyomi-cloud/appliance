@@ -26,26 +26,62 @@ HEADLESS = os.environ.get("PWDEBUG", "") != "1"
 SLOW_MO_MS = int(os.environ.get("VYOMI_UI_SLOWMO_MS", "0"))
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _disk_cleanup_after_session():
-    """Nuke every LXD container the test session created + docker prune
-    on session exit. v2.0.4: without this, each 35-service run leaks
-    10-15 GB into LXD container disks. By session end the appliance VM's
-    29 GB disk is at 99%, which itself causes timeouts in the LAST few
-    tests. Per-test cleanup would be cleaner but requires custom delete
-    logic per service; session-level bulk nuke is the pragmatic fix.
+@pytest.fixture(autouse=True)
+def _per_test_resource_cleanup(request):
+    """v2.0.5: release LXD-backed resources after EVERY test, not just
+    session end. Without this, by the time we hit the last few services
+    in a 35-service run, disk and LXD container limits are exhausted
+    and tests time out — that was the root of the GCP-failing pattern
+    Sudhir reported.
 
-    Runs BEFORE the next session-scope fixture so disk is reclaimed
-    before pytest reports its summary.
+    Strategy: after each test, nuke every LXD container EXCEPT the
+    inception container that hosts INNER Vyomi (we MUST preserve it
+    because the tests are running against INNER itself). The
+    appliance's own service state (EC2 records, GCE records, etc.)
+    is left untouched — only the underlying LXD containers go.
     """
     yield
     try:
         subprocess.run(
             ["multipass", "exec", "cloudlearn-appliance", "--",
              "sudo", "bash", "-lc",
+             "INCEPTION=cloudlearn-i-e67bdb7b4f9d; "
              "for c in $(sudo lxc list --format csv -c n); do "
-             "sudo lxc stop \"$c\" --force 2>/dev/null; "
-             "sudo lxc delete \"$c\" --force 2>/dev/null; done; "
+             "  if [ \"$c\" != \"$INCEPTION\" ]; then "
+             "    sudo lxc stop \"$c\" --force 2>/dev/null; "
+             "    sudo lxc delete \"$c\" --force 2>/dev/null; "
+             "  fi; "
+             "done"
+            ],
+            capture_output=True, text=True, timeout=60, check=False,
+        )
+    except Exception:
+        pass  # never fail the test on cleanup
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _disk_cleanup_after_session():
+    """Final disk reclamation at session end. v2.0.5: now PRESERVES the
+    inception LXD container that hosts the INNER Vyomi appliance + portal
+    we're testing against. Without this guard, running the suite once
+    deletes the very thing we run the suite against — discovered the
+    hard way at the start of the conformance push.
+
+    Container name to preserve: `cloudlearn-i-e67bdb7b4f9d`. Update if
+    you re-cycle the inception EC2.
+    """
+    yield
+    try:
+        subprocess.run(
+            ["multipass", "exec", "cloudlearn-appliance", "--",
+             "sudo", "bash", "-lc",
+             "INCEPTION=cloudlearn-i-e67bdb7b4f9d; "
+             "for c in $(sudo lxc list --format csv -c n); do "
+             "  if [ \"$c\" != \"$INCEPTION\" ]; then "
+             "    sudo lxc stop \"$c\" --force 2>/dev/null; "
+             "    sudo lxc delete \"$c\" --force 2>/dev/null; "
+             "  fi; "
+             "done; "
              "docker builder prune -af >/dev/null 2>&1; "
              "docker volume prune -f >/dev/null 2>&1; "
              "df -h / | tail -1"

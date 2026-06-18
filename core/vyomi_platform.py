@@ -1445,6 +1445,18 @@ class RuntimeManager:
         return str(os.environ.get("CLOUDLEARN_RUNTIME_BRIDGE_TOKEN") or "").strip()
 
     def bridge_enabled(self) -> bool:
+        # v2.0.5: explicit kill-switch for the runtime bridge. Default
+        # bridge URL points at `host.docker.internal:9171` (the host's
+        # cloudlearn-bridge service), but inside the INNER Vyomi the
+        # docker-host gateway resolves to the OUTER multipass VM where
+        # the wrong bridge listens. INNER should call its local lxc
+        # CLI instead. Setting CLOUDLEARN_RUNTIME_BRIDGE_DISABLED=1
+        # (or VYOMI_RUNTIME_BRIDGE_DISABLED=1) forces the direct-CLI
+        # fall-through path in `available()` / lxd_cli().
+        if str(os.environ.get("VYOMI_RUNTIME_BRIDGE_DISABLED", "")).strip().lower() in ("1", "true", "yes"):
+            return False
+        if str(os.environ.get("CLOUDLEARN_RUNTIME_BRIDGE_DISABLED", "")).strip().lower() in ("1", "true", "yes"):
+            return False
         return bool(self.bridge_base_url())
 
     def _bridge_request(self, method: str, path: str, payload: dict | None = None, timeout: int = 60) -> dict:

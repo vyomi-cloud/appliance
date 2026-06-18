@@ -153,8 +153,20 @@ def navigate_to_service(page: Page, provider: str, service_key: str) -> None:
             "navigate({view:'list', service: svc, item: null}); }",
             service_key,
         )
+        # Each console's list view has a different header marker:
+        #   AWS: <h1 class="page-h">       (matches h1.page-h)
+        #   GCP: <h1> inside .page-head    (no class on h1 → use container)
+        # Plus .actions-bar exists in both consoles' list views, contains
+        # the Create button, and is always visible — covers any service
+        # without one of the above headers.
+        # The original selector `.count` matched a span that GCP renders
+        # empty + hidden, causing all 9 GCP services to skip with a
+        # "not visible" timeout.
         page.wait_for_selector(
-            f".count, h1.page-h, [data-service='{service_key}']",
+            f"h1.page-h, "
+            f".page-head h1, "
+            f".actions-bar button.primary, "
+            f"[data-service='{service_key}']",
             timeout=_NAV_TIMEOUT_MS,
         )
 
@@ -175,15 +187,33 @@ def fill_wizard_field(page: Page, field: dict, value: Any) -> bool:
     label = field.get("label") or name
     ftype = field.get("type") or "text"
 
-    if not name or name.startswith("__") or ftype in ("info", "divider"):
+    if not name or ftype in ("info", "divider", "help"):
+        return False
+    # Synthetic `__*` fields are normally synth_map-driven (no real input),
+    # but some are rendered as real inputs whose required-validation must
+    # pass before submit (e.g. GCP API Gateway's __serviceAccount__).
+    # Skip only the ones that have NO label OR are info-only — those are
+    # never rendered as fillable inputs.
+    if name.startswith("__") and not field.get("required"):
         return False
 
     # Strategy: find the input via its label, fall back to the field name
     # attribute, fall back to the placeholder.
+    #
+    # Each provider's wizard uses a different container class:
+    #   AWS / GCP: <div class="field">    <label>X</label> <input/></div>
+    #   Azure:     <div class="wiz-field"><label>X</label> <input/></div>
+    # The Azure block was missing from the original candidates — that's
+    # why all 7 Azure tests submitted with default values (e.g. VM name
+    # stayed "vm-demo" instead of the test's "realtest-vm-XYZ"), then
+    # the post-submit list assertion failed to find the test identifier.
     candidates = [
         f".field:has(label:has-text(\"{label}\")) input",
         f".field:has(label:has-text(\"{label}\")) select",
         f".field:has(label:has-text(\"{label}\")) textarea",
+        f".wiz-field:has(label:has-text(\"{label}\")) input",
+        f".wiz-field:has(label:has-text(\"{label}\")) select",
+        f".wiz-field:has(label:has-text(\"{label}\")) textarea",
         f"input[name=\"{name}\"]",
         f"select[name=\"{name}\"]",
         f"textarea[name=\"{name}\"]",
@@ -232,6 +262,12 @@ def make_value(field: dict, identifier: str) -> Any:
         return identifier
     if "default" in field and field["default"] not in (None, ""):
         return field["default"]
+    # Identifier-shaped synthetic fields (e.g. GCP API Gateway's
+    # __serviceAccount__) have type=None — treat as a plausible email,
+    # because GCP rejects bare strings on service-account fields.
+    nl = name.lower()
+    if "email" in nl or "serviceaccount" in nl or "service_account" in nl:
+        return "tester@cloudlearn.local.gserviceaccount.com"
     if ftype in ("number", "integer"):
         return 1
     if ftype in ("password", "secret"):
@@ -248,7 +284,10 @@ def make_value(field: dict, identifier: str) -> Any:
         return False
     if ftype == "tagsEditor":
         return {"env": "ui-real-test"}
-    return ""
+    # Untyped fields (catalog ftype=None) are most commonly free-text
+    # inputs — fall through to a text-shaped value rather than empty
+    # string, which would fail any "required" validation downstream.
+    return f"uirealtest-{uuid.uuid4().hex[:6]}"
 
 
 def fill_all_wizard_fields(page: Page, fields: list[dict], identifier: str,
@@ -324,6 +363,53 @@ def walk_wizard_and_submit(page: Page, tabs: list[list[dict]],
     overrides = overrides or {}
     all_set: dict[str, Any] = {}
     n = len(tabs)
+
+    # Azure wizard has a STEPPER with directly-clickable steps — bypassing
+    # the Next-click chain avoids the rerender-timing race that lost field
+    # writes on the previous run. Detect Azure by the `.wiz-stepper`
+    # presence at start; if found, use stepper navigation instead of
+    # Next chaining. AWS/GCP wizards don't have `.wiz-stepper` so they
+    # fall through to the original Next-button path.
+    is_azure_blade = page.locator(".wiz-stepper").count() > 0
+
+    if is_azure_blade:
+        # Walk each catalog tab by clicking its stepper button directly.
+        # The Azure wizard's `gotoTab(i)` runs validateTab() on ALL tabs,
+        # so submit gating still respects required-field rules.
+        steps = page.locator(".wiz-stepper .wiz-step")
+        for i, tab_fields in enumerate(tabs):
+            if i > 0:
+                # Click the i'th stepper button (catalog idx == stepper idx
+                # because the synthesized Review tab is at the END).
+                steps.nth(i).click()
+                page.wait_for_timeout(200)  # let tab DOM swap
+            set_on_tab = fill_all_wizard_fields(
+                page, tab_fields, identifier, overrides=overrides,
+            )
+            all_set.update(set_on_tab)
+        # Now jump to the synthesized Review tab (last stepper button)
+        # and click Create. The synth review tab is steps[n] (0-indexed
+        # past the n catalog tabs).
+        total_steps = steps.count()
+        if total_steps > n:
+            steps.nth(total_steps - 1).click()
+            page.wait_for_timeout(300)
+        # Click Create on the Review tab.
+        create_btn = page.locator(
+            ".wiz-actions button.btn-primary:has-text('Create')"
+        ).first
+        if create_btn.count() > 0:
+            create_btn.scroll_into_view_if_needed()
+            create_btn.click()
+            # Give the SPA the round-trip + closeBlade() + selectService()
+            # chain time to finish before the caller asserts on the list.
+            page.wait_for_timeout(800)
+            return all_set
+        raise RuntimeError(
+            "Azure wizard: no Create button found on synth Review tab"
+        )
+
+    # === AWS / GCP path (original Next-chain) ===
     for i, tab_fields in enumerate(tabs):
         # Fill this tab's fields
         page.wait_for_timeout(150)  # let the tab DOM settle
@@ -350,14 +436,13 @@ def walk_wizard_and_submit(page: Page, tabs: list[list[dict]],
     #           "Create resource" — has explicit wizard-summary class)
     #   GCP:    <aside> > .cta > button.btn.primary   (bare aside, no
     #           wizard-summary class; sidebar has a .cta wrapper)
-    #   Azure:  button.btn-primary                    (single button
-    #           at bottom of the blade — uses .btn-primary not .primary)
+
     candidates = [
         "aside.wizard-summary button.primary",   # AWS sidebar
         ".wizard-summary button.primary",
         ".cta button.primary",                   # GCP sidebar CTA
         "aside button.primary",                  # GCP fallback (bare aside)
-        ".btn-primary:has-text('Create')",       # Azure
+        ".btn-primary:has-text('Create')",       # Azure body fallback
         "button.btn-primary",
     ]
     for sel in candidates:
