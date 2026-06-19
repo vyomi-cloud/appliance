@@ -1023,7 +1023,9 @@ appliance_launch_vm() {
   fi
   appliance_sync_workspace_into_vm
   appliance_sync_host_sizing_into_vm
-  appliance_wait_for_cloud_init
+  # `|| true` — same reason as in appliance_launch_and_track: transient
+  # `multipass exec` polls during boot must never abort the phase via set -e.
+  appliance_wait_for_cloud_init || true
 }
 
 appliance_wait_for_cloud_init() {
@@ -1042,6 +1044,17 @@ appliance_wait_for_cloud_init() {
   local compose
   compose="$(appliance_multipass_cmd)"
   progress "==> Appliance: waiting for cloud-init (LXD snap install is the slow step)"
+  # This loop is best-effort progress reporting ONLY. During early boot the VM
+  # exists but isn't yet exec-able, so the first `multipass exec` poll returns
+  # non-zero — and because the script runs under `set -eE` with an inherited
+  # ERR trap (set -E, line ~15), that transient failure otherwise fires on_err
+  # and aborts the launch with a bogus "command exited 2" (the v2.0.7 false
+  # APPLIANCE LAUNCH FAILED — the VM was actually coming up fine). Suspend
+  # errexit + the ERR trap for the poll loop; restore them on the way out so a
+  # flaky poll can never kill the launch.
+  local _ci_had_e=0; case $- in *e*) _ci_had_e=1;; esac
+  trap - ERR
+  set +e
   local launch_pid="${1:-}" started_at last_status last_step elapsed heartbeat_at
   started_at=$(date +%s)
   last_step=""
@@ -1105,6 +1118,10 @@ appliance_wait_for_cloud_init() {
     fi
     sleep 6
   done
+  # Restore the errexit + ERR-trap regime the rest of the launcher relies on.
+  trap 'on_err' ERR
+  [ "$_ci_had_e" = "1" ] && set -e
+  return 0
 }
 
 appliance_launch_and_track() {
@@ -1119,16 +1136,35 @@ appliance_launch_and_track() {
     --timeout 900 --cloud-init "$APPLIANCE_DIR/cloud-init.yaml" >"$launch_log" 2>&1 &
   local launch_pid=$!
   # Stream real progress while the background launch + cloud-init run.
-  appliance_wait_for_cloud_init "$launch_pid"
-  if ! wait "$launch_pid"; then
-    progress "    multipass launch output:"
-    while IFS= read -r line; do _emit "      $line"; done < "$launch_log"
-    rm -f "$launch_log"
-    _die "multipass launch failed for ${APPLIANCE_NAME}" \
+  # Stream live cloud-init progress while the background launch runs.
+  # appliance_wait_for_cloud_init suspends errexit + the inherited ERR trap
+  # internally — THAT is the real fix for the v2.0.7 false "APPLIANCE LAUNCH
+  # FAILED" at ~26s (a transient early-boot `multipass exec` poll otherwise
+  # fired on_err and aborted a launch that was actually fine). The `|| true`
+  # here is just extra belt-and-suspenders.
+  appliance_wait_for_cloud_init "$launch_pid" || true
+  local launch_rc=0
+  wait "$launch_pid" || launch_rc=$?
+  # Source of truth is the VM's REAL state, not the launch process exit code:
+  # `multipass launch` can report non-zero (or return before cloud-init's
+  # `final` stage finishes) while the instance actually came up — seen on
+  # macOS right after a fresh multipass install. If the VM exists and is
+  # running/booting, the caller's appliance_wait_for_cloud_init() (with no
+  # pid) blocks until it's fully ready, so it's safe to proceed.
+  if appliance_instance_exists; then
+    case "$(appliance_instance_state)" in
+      running|Running|starting|Starting|restarting|Restarting)
+        rm -f "$launch_log"
+        return 0
+        ;;
+    esac
+  fi
+  progress "    multipass launch output:"
+  while IFS= read -r line; do _emit "      $line"; done < "$launch_log"
+  rm -f "$launch_log"
+  _die "multipass launch failed for ${APPLIANCE_NAME} (exit ${launch_rc})" \
 "Inspect:        multipass info ${APPLIANCE_NAME}
 Restart fresh:  multipass delete ${APPLIANCE_NAME} && multipass purge"
-  fi
-  rm -f "$launch_log"
 }
 
 appliance_confirm_images() {
