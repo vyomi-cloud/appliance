@@ -34,9 +34,16 @@ mkdir -p "$STAGE/usr/share/doc/cloud-learn"
 # bundled python tree.
 mkdir -p "$STAGE/usr/share/vyomi/packaging/common"
 
-# Bundle the source the appliance VM syncs to /workspace/cloud-learn
-cp -r core providers packs static scripts \
-      server.py requirements.txt VERSION Dockerfile \
+# Bundle the source the appliance VM syncs to /workspace/cloud-learn.
+# Keep this set in sync with the launcher's required+optional bundle list
+# (appliance_sync_source_into_vm in scripts/cloud-learn) and release.yml.
+# routes/setup_cython.py/packaging/cloudsim-backbone were omitted —
+# packaging/{firestore,vault,elasticmq} are *bind-mounted* by the compose file,
+# so omitting them makes Docker stub the mount sources as empty directories →
+# those containers crash-loop (exit 126) → the simulator never starts.
+# Verified by scripts/verify-bundle.sh.
+cp -r core providers packs routes static scripts packaging cloudsim-backbone \
+      server.py setup_cython.py requirements.txt VERSION Dockerfile \
       docker-compose.yml docker-compose.appliance.yml .env.example \
       "$STAGE/usr/lib/cloud-learn/"
 

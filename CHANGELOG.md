@@ -6,6 +6,80 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.7] — Unreleased
+
+**Bug-fix release dominated by a release-blocking fresh-install regression, plus a stack of fixes surfaced by actually running the appliance from a clean machine.** The headline: **every multipass-based install (brew/deb/rpm/scoop) has failed to launch since v2.0.3** because the source bundle omitted `packaging/` (whose init scripts the compose file bind-mounts) — Docker stubbed them as directories, the backing containers crash-looped, and the simulator never started. Docker-Compose installs and pre-2.0.3 upgrades were unaffected, which is why dogfood appliances never caught it. This release fixes that (and hardens the bundle check against the whole class), plus: the disk-cleanup 422, idempotent default-space self-heal, live launcher cold-start progress, Azure VM create UX, Azure VM SSH connect, LXD stop→start recovery, and a swallowed-error fix. Most of these predate v2.0.6 (verified by `git diff`); none was caused by the v2.0.6 upgrade itself.
+
+### Fixed
+
+- **Disk cleanup on the `/clouds` workspaces page returned HTTP 422** — the "Free up selected" action posted `{ ids: [...] }` to `POST /api/runtime/disk-cleanup/run`, but the backend `_DiskCleanupRequest` required a field named `categories`, so every cleanup request failed Pydantic validation with a 422. Worse, the SPA derived each checkbox's value from `it.id || it.path || label` — but suggestion items are keyed by `key` (`terminated_workspaces`, `tmp_and_apt`, `lxd_orphans`, `journald`, `lxd_image_cache`), so even a renamed field would have sent human-readable labels that match no category. Fixed on both sides: `static/clouds.html` now reads `it.key` for the checkbox value and posts `{ categories: ids }`; `_DiskCleanupRequest` now accepts `categories` (canonical) **and** a legacy `ids` alias, both defaulting to `[]`, so a missing/renamed field is an empty no-op instead of a 422. The handler merges `req.categories or req.ids`.
+
+- **Fresh installs broken since v2.0.3 — the appliance never finished launching (release-blocking).** Every multipass-based install path (brew, deb, rpm, scoop) failed on first `vyomi up`: the launcher's source bundle (`scripts/cloud-learn` `required` list) omitted `packaging/`, but `docker-compose.appliance.yml` bind-mounts `packaging/{firestore,vault,elasticmq}/*` init files at runtime. Docker therefore created the missing mount sources as empty **directories** → firestore/vault/elasticmq crash-looped (`exit 126: Is a directory`) → the simulator `depends_on` them and never started → the health check timed out → "APPLIANCE LAUNCH FAILED." Fixed by adding `packaging` to the launcher bundle, to the **deb/rpm build scripts** (`build-deb.sh`, `cloud-learn.spec` — which also still omitted `routes`/`setup_cython.py`/`cloudsim-backbone`), and by extending **`scripts/verify-bundle.sh`** to assert every compose bind-mount source is bundled (not just Dockerfile `COPY`s), so this class fails CI instead of a user's first boot. Same recurring bug class as the `routes`/`setup_cython.py` omissions in v1.0.0–v1.1.9.
+- **Launcher showed multipass's blank "Waiting for initialization" spinner during cold start.** `multipass launch` ran in the foreground, so its detail-free spinner sat for the 3–5 min LXD-snap-install cloud-init while the launcher's own progress poller only ran *afterward*. New `appliance_launch_and_track` runs the launch in the background and streams live cloud-init progress (`[48s] Installing LXD container runtime…`) with a 30 s liveness heartbeat, and reaps a failed launch with its output instead of marching to the 10-min bail-out.
+- **Azure VM "Review + create" went silent and the new instance needed a hard refresh.** In `static/azure-console.html` the Create button was silently `disabled` on any validation error (no feedback) and `submitWizard` had no `try/catch`. Now Create is always clickable and jumps to the first errored step with a toast; submit shows "Creating…", closes the blade immediately, re-fetches the list (no hard refresh needed), and toasts on any error instead of leaving a dead pane.
+- **Azure VM SSH connect was half-wired — "no SSH command", couldn't connect.** `core/vm_connect.connect_info()` does the lazy SSH provisioning (key injection + lxc proxy) given a flat instance dict, but Azure VMs are ARM records that keep `container_name`/`state` under `properties.runtime`, so the connect path 409'd before provisioning anything (AWS/GCP pass a flat dict and worked). `_connect_info_response` now flattens the Azure record so it reaches the same path, and the Connect modal renders a real, copyable `ssh -i ~/.ssh/vyomi_ed25519 -p <port> ubuntu@<host>` command — parity with AWS/GCP. (The LXD instance was always attached; only the SSH wiring + modal were incomplete.)
+- **LXD instance `stop` → `start` failed with "Missing source path … for disk workspace".** LXD validates disk-device sources at start time, and an instance's workspace deployment dir could be removed while it was stopped (terminated-workspace reaper / disk-cleanup / a simulator restart), so `lxc start` 503'd. `_start_lxd_instance` now recreates the workspace host dir (`_ensure_lxd_workspace_host_dir`) before starting, making stop→start always recoverable for EC2/GCE/Azure VMs.
+- **Azure VM provisioning errors were silently swallowed.** `core/azure_dataplane.py` wrapped the LXD provisioning in `except Exception: pass`. It now records `status: provision_error` + the message on the VM record, so a real provisioning failure surfaces instead of looking like a silent metadata-only VM.
+- **RDS databases weren't isolated per space on the shared engine — cross-space data clobber.** AWS RDS provisioning (`_rds_real_provision`/`_rds_real_deprovision`) named the physical database from the raw `db_instance_identifier` and the login role from the verbatim `master_username`, with **no space namespacing** — unlike Cloud SQL + Azure DB, which already namespace via `gcp_sql_engine.physical_name(space_id, …)`. Because all three clouds back onto the *same* `cloudlearn-sql-postgres` container, two spaces (or two users following the same tutorial) creating an RDS named `mydb` with master user `admin` collided: `CREATE DATABASE` was skipped (already exists) so the second space silently connected to the **first space's database**, and `ALTER ROLE "admin" WITH PASSWORD` ran unconditionally, **resetting the shared role's password**. RDS now namespaces the physical db + role per space exactly like Cloud SQL — verified live (same `db_instance_identifier`/`master_username` in two spaces → two isolated physical DBs `cl_sharedname_cdad9b3d` vs `cl_sharedname_f7c78009`). The boto3-visible `MasterUsername`/`DBInstanceIdentifier` stay verbatim (SDK conformance preserved); the *connectable* physical creds are surfaced in the RDS view's new `connection` block — parity with Cloud SQL's `connectionInfo`. The data-plane conformance tests (`tests/conformance/ui/aws/test_rds_{postgres,mysql}.py`) now connect with that `connection` block instead of the verbatim master username. Found while validating real app+DB deploys across AWS/GCP/Azure (the portal-as-real-app smoke test).
+- **Paste-a-key license activation never worked in appliance mode — every real portal JWT was rejected.** `POST /api/license/activate` had two handlers for the same path: the correct RS256 one in `server.py` (`req.license_key` → `_apply_license_jwt()`), and a legacy HMAC one in `routes/licensing.py` (`payload["token"]` → `_verify_license()`). The licensing-route module registers before `server.py`'s `@app.post`, so the **legacy handler won** — and it (a) read the wrong field name (`token`, while the pricing.html "Activate" modal posts `license_key`), (b) verified with the local HMAC scheme instead of RS256, and (c) gated the call behind `require_admin_key`, which the end-user UI never sends. A pasted portal JWT therefore failed with `401 Invalid license token: not enough values to unpack (expected 2, got 1)` (empty `token` → one-part split). Rewrote the live `routes/licensing.py` handler to: accept `license_key` (and `token` for back-compat); route on segment count (a portal JWT has two dots → `_apply_license_jwt()` RS256 verify + apply, returning `active_tier`/`issued_to`/`jti` as the SPA expects; a one-dot legacy HMAC token → the old path, still `require_admin_key`-gated since those are locally forgeable); and drop the admin-key requirement for the JWT path — the RS256 signature + `install_id` binding is the auth boundary, identical to the ungated device-flow path (`/api/auth/poll-activation`). Malformed input now returns a clean `400 license_key_required` / `401 license_invalid` (with `detail.reason`) instead of a 500, so the modal shows a real error.
+
+### Added
+
+- **Idempotent default-space self-heal** — `core/app_context.py` previously seeded the `aws-default` / `gcp-default` / `azure-default` spaces only inside the `if not spaces_state["spaces"]:` fresh-install guard, so any install created before the v1.2.5 multi-default seeding (which only ever had the legacy AWS space) never gained the GCP/Azure defaults — not even across upgrades. The GCP/Azure ensure now runs on every init, guarded by **provider presence** (skips if a space for that provider already exists), so pre-v1.2.5 single-space installs get all three consoles after upgrading without duplicating any space the user (or an API re-seed) already created.
+- **Standard host-reachability for every VM.** New `_ensure_lxd_host_proxy`, called from `_start_lxd_instance` (so EC2/GCE/Azure all inherit it), creates an LXD proxy device forwarding the instance's allocated host port → the VM's app port — making every new VM reachable from the host (and the user's machine) at `http://<host>:<host_port>`, not just SSH. App port defaults to `80`, overridable per instance via `instance['app_port']` or env `CLOUDLEARN_LXD_VM_APP_PORT`; the reachable port is surfaced as `instance['host_app_port']`. Recreated on every start (survives container recreation). Also added `_ensure_lxd_workspace_host_dir` (called before `lxc start`) so a stopped instance whose deployment dir was reaped can always restart.
+
+### Notes
+
+- **Neither issue was caused by upgrading to v2.0.6.** The disk-cleanup code is byte-identical between v2.0.4.1 and v2.0.6 (the inner-validation appliance on 2.0.4.1 reproduces the same 422 live), and the default-space seeding logic is unchanged since v1.2.5. The differences observed between an inner (fresh-built) and outer (long-lived) appliance were a pre-existing bug exposed by exercising it, and an old-state artifact — not a release regression.
+- Existing appliances missing the GCP/Azure defaults are self-healed on the next restart once running ≥2.0.7; before that, they can be re-seeded via the `+ Create Space` button (or `POST /api/spaces`).
+- **Validated end-to-end with a real app + DB on all three clouds.** Using the portal itself as the test application (it needs a VM + Postgres), we provisioned managed Postgres (RDS / Cloud SQL / Azure SQL) + a compute VM (EC2 / GCE / Azure VM) on each cloud, deployed the portal onto the VM pointed at the managed DB, and confirmed it created its full schema over the wire — proving the Azure VM now attaches a real LXD container (the gap this release fixes) and that the host-reachability proxy works on every provider. This smoke test is what surfaced the RDS cross-space isolation bug above.
+
+### Design & exploration (docs + spike only — no runtime impact)
+
+This release also lands the design work from a long architecture session. **None of
+the below changes appliance behaviour** — they are documents under `docs/browser-lite/`
+and a throwaway proof under `spikes/`. Captured here so the decisions survive.
+
+- **LXD → Docker compute, de-risked by a passing spike** — `spikes/docker-instance/`
+  (`backend.py` = a `ComputeBackend` seam + `DockerComputeBackend`; `run_spike.sh`;
+  `Dockerfile.instance`; `README.md`). Ran end-to-end on the OUTER appliance VM
+  (aarch64, Docker 29.1.3): create → boot (inner dockerd 16s) → shell → **docker-in-
+  instance (DinD)** → persistence across stop/start → status/IP → terminate, all green.
+  Finding: VM semantics are tractable on Docker (no systemd needed — `tini`+sshd+dockerd);
+  the one real cost is `--privileged` for DinD. Direction: replace the ~45 `_lxd_*` /
+  `_multipass_*` functions + `core/runtime_bridge.py` with a Docker `ComputeBackend`.
+- **Vyomi Lite — full browser architecture** — `docs/browser-lite/ARCHITECTURE.md`
+  (master) plus `VYOMI-LITE-DESIGN.md`, `VYOMI-LITE-MASTER-SPEC.md`, `IN-MEMORY-PLAN.md`.
+  A browser-native edition where `server.py` runs in **Pyodide**, every backing
+  container is replaced by an in-memory/WASM engine (PGlite · moto · cedar-wasm ·
+  WebCrypto · BlobEngine+OPFS · in-proc pub/sub/queue/event), the SPA is served via a
+  **service-worker fetch⇄ASGI shim**, and state persists to OPFS/IndexedDB.
+- **Networking as a fractal** — tab = host, browser = Availability Zone (same-origin
+  tabs share a SharedWorker hub enforcing VPC security groups over **tcpip.js** real
+  TCP), federated browsers = VPC/region (WebRTC/overlay, e.g. Tailscale-wasm),
+  devices = multi-region. Two tabs of WASM emulators form a real, SG-enforced VPC.
+- **Compute backends** — `ProviderFacade → InstanceManager (budget/quota) →
+  RuntimeBackend`: Simulated · Pyodide(Py) · WebContainers/BrowserPod(Node) ·
+  CheerpJ(Java) · Container2Wasm(any image) · RemoteDocker(real host). Per-language
+  WASM matrix documented (§4a). **Decision: integrate runtimes, do not build a
+  Docker-in-WASM kernel** — moat stays in conformance + airgapped, not the runtime.
+- **CloudSim in the browser** — keep the real engine via **CheerpJ** (`CloudSimBackend`
+  with `CheerpJBackend`; gated on CheerpJ Java-17 support, since CloudSim Plus 8.5.7
+  needs Java 17), or default to the existing Python `local-fallback`.
+- **Product & licensing model** — **Vyomi Lite (B2C, browser, single-tenant)** vs
+  **Vyomi Enterprise (B2B, real compute, airgapped)** as two backends of one codebase
+  (`VYOMI_BACKEND` flag). **One emulator = one appliance = one browser profile = one
+  tenant = one license seat**, bound by a **WebCrypto non-extractable keypair**
+  (extends `core/license_remote.py`); seat enforcement is server-side. Free tier =
+  anonymous simulation-only, with a **sign-in 30-day real-compute trial → simulation-
+  only** (account-anchored, server-enforced). Multi-tenant = multiple peered appliances
+  (browser-as-tenant).
+- **MVP scope** — AWS-only, single-tenant: **S3 (OPFS) · DynamoDB (moto) · IAM
+  (cedar-wasm)** core; SQS · RDS (PGlite) · minimal EC2 compute as stretch; the other 8
+  AWS services + GCP/Azure + SDN + multi-AZ deferred. ~16 weeks / 2–3 engineers, with a
+  week-2 GO/NO-GO gate on the Pyodide + fetch⇄ASGI shell spike. Conformance measured by
+  running the existing 35/35 harness against the Lite build.
+
 ## [2.0.6] — 2026-06-19
 
 **Real-SPA conformance 35/35, install-funnel phone-home from every install path, Docker Hub metadata rebranded to Vyomi, Azure detail blade gets a wide-view modal, and a 7.5× longer launch timeout that finally lets cold-host LXD spawns complete.** v2.0.6 is the polish-and-instrumentation release before we open the gates on the Founding 1000 promo: we can now actually see who installs, from which channel, in which country, and watch them traverse `DOWNLOADED → INSTALLED → ACTIVATED` on a globe. Plus a stack of UX fixes (S3 Upload button, Azure Connect modal, blade-expand toggle) and a buried 120-second timeout that was silently demoting every cold-host VM to metadata-only.

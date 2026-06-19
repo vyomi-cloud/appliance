@@ -157,13 +157,22 @@ def test_aws_rds_postgres_create_via_spa_contract(
     # ④ Data plane — only meaningful if the real provisioner ran.
     if backend == "real-pg":
         time.sleep(0.5)  # let the just-created role settle
-        db_name = DB_ID.replace("-", "_")
+        # v2.0.7 (#430): the physical db + role are namespaced per space, so
+        # connect with the physical creds surfaced in the `connection` block
+        # (parity with Cloud SQL), NOT the verbatim master_username — which
+        # remains the boto3/DescribeDBInstances field.
+        conn_info = db.get("connection") or {}
+        assert conn_info.get("user") and conn_info.get("database"), (
+            f"RDS view is missing the physical `connection` block: {db}"
+        )
+        db_name = conn_info["database"]
+        conn_user = conn_info["user"]
         try:
             conn = psycopg.connect(
                 host=appliance_vm_ip,
-                port=5432,
-                user=MASTER_USER,
-                password=MASTER_PASS,
+                port=conn_info.get("port", 5432),
+                user=conn_user,
+                password=conn_info.get("password", MASTER_PASS),
                 dbname=db_name,
                 connect_timeout=5,
             )
@@ -178,15 +187,15 @@ def test_aws_rds_postgres_create_via_spa_contract(
                 assert row[0] == db_name, (
                     f"Connected to wrong DB: expected {db_name}, got {row[0]}"
                 )
-                assert row[1] == MASTER_USER, (
-                    f"Wrong role: expected {MASTER_USER}, got {row[1]}"
+                assert row[1] == conn_user, (
+                    f"Wrong role: expected {conn_user}, got {row[1]}"
                 )
                 assert row[2] is True, "Not a Postgres engine"
             finally:
                 conn.close()
         except psycopg.OperationalError as e:
             pytest.fail(
-                f"Data-plane assertion failed: psql {MASTER_USER}"
+                f"Data-plane assertion failed: psql {conn_user}"
                 f"@{appliance_vm_ip}:5432/{db_name} — {e}"
             )
 

@@ -505,15 +505,55 @@ def register(app: FastAPI) -> None:
 
     @app.post("/api/license/activate")
     def api_license_activate(payload: dict[str, Any], request: Request):
+        """Paste-a-key activation.
+
+        Preferred path: a real RS256 portal JWT (field ``license_key``, sent
+        by the pricing.html "Activate" modal). Verified against the portal's
+        JWKS and applied via ``server._apply_license_jwt()`` — the same code
+        path as the device flow — so the response carries ``active_tier`` /
+        ``issued_to`` exactly as the SPA expects.
+
+        Legacy path: a one-dot HMAC token (field ``token``) minted by the old
+        ``server._sign_license()`` local-dev scheme. Kept for back-compat.
+
+        NOTE: this route is registered before the ``@app.post`` of the same
+        path in server.py, so it is the live handler — historically it only
+        had the legacy branch, which silently rejected every real portal JWT
+        with ``not enough values to unpack``. See the appliance changelog.
+        """
+        import server
+        key = (payload.get("license_key") or payload.get("token") or "").strip()
+        if not key:
+            raise HTTPException(status_code=400, detail={
+                "ok": False, "code": "license_key_required",
+                "reason": "license_key required",
+            })
+        # A portal JWT is header.payload.signature → two dots. The legacy HMAC
+        # token is data.signature → one dot. Route on segment count.
+        if key.count(".") == 2:
+            # No admin key needed: the RS256 signature + install_id binding in
+            # the JWT is the auth boundary, exactly like the device-flow path
+            # (/api/auth/poll-activation), which also applies via
+            # _apply_license_jwt() without an admin key. This is what lets the
+            # end-user pricing.html "Activate" modal work in appliance mode.
+            claims = server._apply_license_jwt(key)  # RS256 verify + apply; raises HTTPException on failure
+            return {
+                "ok": True,
+                "active_tier": claims["tier"],
+                "expires_at": server._exp_iso_for_response(claims),
+                "jti": claims.get("jti"),
+                "issued_to": claims.get("sub"),
+            }
+        # Legacy HMAC fallback (local-dev licenses minted by _sign_license).
+        # These are locally forgeable, so keep the admin-key gate here.
         from core.admin_auth import require_admin_key
         require_admin_key(request)
-        import server
-        token = payload.get("token", "")
-        license_data = server._verify_license(token)
-        license_data["token"] = token
+        license_data = server._verify_license(key)
+        license_data["token"] = key
         ctx.STATE["license"] = license_data
         ctx._persist_state()
-        return {"message": "License activated", "license": license_data}
+        return {"ok": True, "message": "License activated", "license": license_data,
+                "active_tier": (license_data or {}).get("tier", "free")}
 
     # ── Budget toggles ────────────────────────────────────────────────────
 

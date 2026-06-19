@@ -593,8 +593,23 @@ function openNotifDrawer(){
   renderNotifs();
 }
 function closeNotifDrawer(){ document.getElementById("notifDrawer").classList.remove("open"); }
-document.getElementById("notifBtn").addEventListener("click", openNotifDrawer);
+// Bell TOGGLES the drawer (was open-only, so clicking it again never closed it).
+document.getElementById("notifBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const d = document.getElementById("notifDrawer");
+  if (d.classList.contains("open")) closeNotifDrawer(); else openNotifDrawer();
+});
 document.getElementById("notifClose").addEventListener("click", closeNotifDrawer);
+// Click anywhere outside the drawer (and not on the bell) closes it — standard
+// drawer UX, and a second escape hatch beyond the × button.
+document.addEventListener("click", (e) => {
+  const d = document.getElementById("notifDrawer");
+  if (!d.classList.contains("open")) return;
+  const btn = document.getElementById("notifBtn");
+  if (d.contains(e.target) || (btn && btn.contains(e.target))) return;
+  closeNotifDrawer();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeNotifDrawer(); });
 
 // Wrap toast() so every toast also logs to notifications.
 const _origToast = toast;
@@ -652,10 +667,13 @@ function openConnectModal(rec){
 
     // 3. SSH command + upgrade-path tip in one card
     const action = el("div",{class:"cnx-card cnx-action"});
-    action.append(el("div",{class:"h"}, "SSH (preview)"));
-    action.append(makeCmdRow(`ssh ${user}@${rec.name || "vm"} -p 22`));
+    action.append(el("div",{class:"h"}, "SSH command"));
+    const _np = props.networkProfile || {};
+    const _host = _np.publicIpAddress || _np.publicIp || props.publicIp || os.computerName || rec.name || "vm";
+    action.append(makeCmdRow(`ssh ${user}@${_host}`));
     action.append(el("div",{class:"hint"},
-      "Placeholder — the real IP is issued by the runtime bridge when a host backend is connected."));
+      "This VM is simulated (no host runtime), so the address is a placeholder until a backend is connected. "
+      + "Install multipass/LXD on the host and run `vyomi restart` for a real shell."));
     body.append(action);
 
     // 4. Upgrade-path one-liner
@@ -693,6 +711,26 @@ function openConnectModal(rec){
       body.append(el("div",{style:"font-size:12px;color:var(--sub);margin-bottom:4px;font-weight:600;letter-spacing:.3px"},"WORKSPACE ON HOST"));
       body.append(makeCmdRow("cd " + rt.workspace));
     }
+    // Real SSH command runnable from the user's own terminal — parity with
+    // AWS/GCP. Async because /connect-info lazily provisions the SSH key +
+    // lxc proxy device on first open and returns cached info thereafter.
+    body.append(el("div",{style:"font-size:12px;color:var(--sub);margin:12px 0 4px;font-weight:600;letter-spacing:.3px"},"SSH FROM YOUR TERMINAL"));
+    const _sshSlot = el("div",{}, el("div",{style:"font-size:12.5px;color:var(--sub)"}, "Provisioning SSH access on the running container…"));
+    body.append(_sshSlot);
+    fetch(ORIGIN + "/api/azure/vm/" + encodeURIComponent(rec.name || "") + "/connect-info")
+      .then(r => r.json().then(d => ({ok:r.ok, info:d})))
+      .then(({ok, info}) => {
+        _sshSlot.innerHTML = "";
+        const cmd = (info.ssh || {}).command || "";
+        if (!ok || !cmd) {
+          const reason = (info.detail && (info.detail.error || info.detail.reason)) || info.reason || "unavailable";
+          _sshSlot.append(el("div",{style:"font-size:12px;color:var(--sub)"}, "SSH not ready: " + reason));
+          return;
+        }
+        _sshSlot.append(makeCmdRow(cmd));
+        _sshSlot.append(el("div",{class:"hint"}, "Uses your ~/.ssh/vyomi_ed25519 — paste and go."));
+      })
+      .catch(() => { _sshSlot.innerHTML = ""; _sshSlot.append(el("div",{style:"font-size:12px;color:var(--sub)"}, "SSH lookup failed.")); });
   }
   document.getElementById("connectModal").classList.add("open");
 }
@@ -3261,10 +3299,19 @@ function openWizard(svc, body){
     if (state.tab > 0) actions.append(el("button",{class:"btn-sec",onclick:prev},"Previous"));
     const last = state.tab === tabs.length-1;
     if (last) {
-      // Disable Create if validation banner is in error state.
-      const anyErrs = Array.from(state.tabErrors).length > 0;
-      const btn = el("button",{class:"btn-primary",onclick:()=>submitWizard(svc, state, synth)}, "Create");
-      if (anyErrs) btn.setAttribute("disabled","");
+      // Keep Create clickable: a silently-disabled button reads as "nothing
+      // happens". If validation fails, jump to the first errored step and say
+      // exactly what to fix; otherwise submit.
+      const btn = el("button",{class:"btn-primary",onclick:()=>{
+        const errTabs = Array.from(state.tabErrors).sort((a,b)=>a-b);
+        if (errTabs.length) {
+          const first = errTabs[0];
+          toast("Fix required fields on \""+(tabs[first].label||("step "+(first+1)))+"\" before creating","err");
+          gotoTab(first);
+          return;
+        }
+        submitWizard(svc, state, synth);
+      }}, "Create");
       actions.append(btn);
     } else if (state.tab === tabs.length-2 || tabs[state.tab+1].auto) {
       actions.append(el("button",{class:"btn-primary",onclick:()=>{validateTab(state.tab); gotoTab(state.tab+1);}}, "Review + create"));
@@ -3374,14 +3421,27 @@ async function submitWizard(svc, state, synth){
     setPath(bodyObj, k, v);
   });
 
-  const res = await arm("PUT", resPath(svc,name), bodyObj, svc.apiVersion);
-  if (res.ok) {
-    toast(name+" created"); recordNotif("ok","Created "+name+" ("+svc.label+")");
-    closeBlade(); selectService(svc.key); refreshBudgetChip();
-  } else {
-    const msg = (res.json && (res.json.detail || (res.json.error && res.json.error.message))) || "";
-    toast("Create failed ("+res.status+"): "+msg, "err");
-    recordNotif("err","Create failed ("+res.status+")", msg);
+  // Snappy UX: tell the user it's underway and close the blade immediately,
+  // then reconcile + auto-refresh the list when the create returns. Wrapped in
+  // try/catch so a thrown fetch surfaces as a toast instead of a silent, dead
+  // side pane (the bug users hit: "Review + create → nothing happens").
+  toast("Creating "+name+"…");
+  recordNotif("ok","Creating "+name+" ("+svc.label+")");
+  closeBlade();
+  try {
+    const res = await arm("PUT", resPath(svc,name), bodyObj, svc.apiVersion);
+    if (res.ok) {
+      toast(name+" created"); recordNotif("ok","Created "+name+" ("+svc.label+")");
+      selectService(svc.key); refreshBudgetChip();   // re-fetches the list — no hard refresh needed
+    } else {
+      const msg = (res.json && (res.json.detail || (res.json.error && res.json.error.message))) || "";
+      toast("Create failed ("+res.status+"): "+msg, "err");
+      recordNotif("err","Create failed ("+res.status+")", msg);
+    }
+  } catch (e) {
+    const msg = (e && e.message) ? e.message : String(e);
+    toast("Create failed: "+msg, "err");
+    recordNotif("err","Create failed (network/exception)", msg);
   }
 }
 

@@ -206,8 +206,17 @@ def on_create(full_type: str, rec: dict, base: str) -> None:
             # MVP P0-2: push the Azure VM into CloudSim Plus so the per-space
             # cloudsim summary reflects Azure compute (parity with EC2 + GCE).
             _srv._cloudsim_sync_azure_vm_resource(rec, "upsert")
-        except Exception:
-            pass
+        except Exception as exc:
+            # Never break the ARM control plane — but DON'T hide the failure
+            # either. Surface it on the record so a VM that fails to attach LXD
+            # shows *why*, instead of looking like a silent metadata-only VM.
+            try:
+                _rt = rec.setdefault("properties", {}).setdefault("runtime", {})
+                if isinstance(_rt, dict) and not _rt.get("containerName"):
+                    _rt.setdefault("status", "provision_error")
+                    _rt.setdefault("error", str(exc)[:200])
+            except Exception:
+                pass
         # After VM provisioning, reconcile NSG rules so new VMs pick up any
         # existing security rules (parity with GCP VPC reconcile-on-create).
         try:

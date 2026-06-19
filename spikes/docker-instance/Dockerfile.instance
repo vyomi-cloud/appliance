@@ -1,0 +1,33 @@
+# SPIKE reference — NOT built/run by run_spike.sh (which uses docker:dind for speed).
+# This is the shape a *production* Vyomi compute instance image would take:
+# a VM-like Docker image with SSH + an init that supervises sshd + dockerd, so
+# the EC2/GCE/Azure-VM UX (ssh in, run services, docker-in-it) is preserved
+# WITHOUT full systemd. Build per "instance type"/AMI; cgroup limits at run time.
+FROM ubuntu:24.04
+
+# VM-like base: ssh server, docker engine (for docker-in-instance), and the
+# cloud CLIs the current _lxd_clouds_clis_bootstrap_async installs at runtime
+# (baked as layers here instead -> faster, deterministic, no first-boot apt).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        openssh-server sudo ca-certificates curl iproute2 \
+        docker.io docker-compose-v2 tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /run/sshd \
+    && useradd -m -s /bin/bash ubuntu && adduser ubuntu sudo \
+    && echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu
+
+# Public key injected at create() time (port from _multipass_ssh_identity).
+# COPY authorized_keys /home/ubuntu/.ssh/authorized_keys
+
+# tini as PID1 supervises the two long-running services. A heavier option is
+# real systemd (needs --privileged + cgroup/tmpfs mounts); tini+entrypoint is
+# the simpler path and covers the actual instance UX.
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["/usr/bin/tini","--","/usr/local/bin/entrypoint.sh"]
+
+# entrypoint.sh (sketch):
+#   dockerd >/var/log/dockerd.log 2>&1 &
+#   exec /usr/sbin/sshd -D -e
+#
+# Run with:  docker run -d --privileged --cpus N --memory Mm \
+#              -v <id>-root:/var/lib/docker  vyomi/instance:ubuntu-24.04

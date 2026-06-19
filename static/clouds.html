@@ -1297,7 +1297,7 @@
           const bytes = it.bytes || it.size_bytes || 0;
           const label = it.label || it.name || it.id || it.path || ('item ' + (i+1));
           const desc  = it.description || it.detail || '';
-          const id    = it.id || it.path || label;
+          const id    = it.key || it.id || it.path || label;
           return `
             <div class="dm-row">
               <label>
@@ -1324,7 +1324,7 @@
             const rr = await fetch('/api/runtime/disk-cleanup/run', {
               method: 'POST',
               headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({ ids: ids })
+              body: JSON.stringify({ categories: ids })
             });
             if (!rr.ok) throw new Error('HTTP ' + rr.status);
             const dd = await rr.json();

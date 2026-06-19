@@ -6816,6 +6816,53 @@ def _ensure_lxd_workspace_directory(instance: dict) -> None:
         pass
 
 
+def _ensure_lxd_workspace_host_dir(instance: dict) -> None:
+    """Ensure the workspace disk-device SOURCE dir exists on the LXD host
+    BEFORE `lxc start`. LXD validates disk-device sources at start time, so if
+    the deployment dir (/var/lib/cloudlearn/deployments/<id>) was removed while
+    the instance was stopped (terminated-workspace reaper, disk-cleanup, or a
+    simulator restart), `lxc start` 503s with "Missing source path … for disk
+    workspace". Recreating it lets a stopped instance always restart."""
+    ws = instance.get("workspace") or instance.get("deployment_path")
+    if not ws:
+        return
+    try:
+        Path(str(ws)).mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+
+def _ensure_lxd_host_proxy(instance: dict) -> None:
+    """Standard host reachability for EVERY VM: forward the instance's allocated
+    host port to the VM's app port via an LXD proxy device, so any new VM is
+    reachable from the host (and the user's machine) at
+    `http://<host>:<host_port>` — not just SSH. Idempotent and recreated on each
+    start so it survives container recreation. App port defaults to 80 and is
+    overridable per instance via `instance['app_port']` or the env
+    `CLOUDLEARN_LXD_VM_APP_PORT`. EC2/GCE/Azure all start through
+    `_start_lxd_instance`, so this applies to every provider."""
+    ref = instance.get("container_id") or instance.get("container_name")
+    host_port = instance.get("host_port")
+    if not ref or not host_port:
+        return
+    try:
+        app_port = int(instance.get("app_port")
+                       or os.environ.get("CLOUDLEARN_LXD_VM_APP_PORT", "80"))
+    except Exception:
+        app_port = 80
+    try:
+        _lxd_run(["config", "device", "remove", ref, "hostapp"], timeout=30)
+        _lxd_run_checked([
+            "config", "device", "add", ref, "hostapp", "proxy",
+            f"listen=tcp:0.0.0.0:{host_port}",
+            f"connect=tcp:127.0.0.1:{app_port}",
+        ], timeout=30)
+        instance["host_app_port"] = host_port
+        instance["host_app_target"] = app_port
+    except Exception as exc:
+        instance["host_app_error"] = str(exc)[:120]
+
+
 def _ensure_container(instance: dict) -> str:
     if not _lxd_available():
         raise HTTPException(503, detail="LXDUnavailable")
@@ -6936,10 +6983,15 @@ def _sync_lxd_instance(instance: dict) -> None:
 def _start_lxd_instance(instance: dict) -> dict:
     _ensure_container(instance)
     container_ref = instance.get("container_id") or instance["container_name"]
+    # Recreate the workspace host dir before start — LXD validates disk-device
+    # sources at start time and 503s if the deployment dir was reaped while the
+    # instance was stopped. This makes stop→start always recoverable.
+    _ensure_lxd_workspace_host_dir(instance)
     status = _lxd_status(container_ref)
     if status != "running":
         _lxd_run_checked(["start", container_ref], timeout=120)
     _ensure_lxd_workspace_directory(instance)
+    _ensure_lxd_host_proxy(instance)   # standard host reachability for every VM
     instance["state"] = "running"
     instance["container_status"] = "running"
     instance["console_backend"] = "lxd-exec"
@@ -17685,6 +17737,10 @@ def _rds_db_view(db: dict) -> dict[str, Any]:
         "endpoint_address": db.get("endpoint_address", ""),
         "endpoint_port": db.get("endpoint_port", 0),
         "endpoint_url": f"{db.get('endpoint_address', '')}:{db.get('endpoint_port', 0)}" if db.get("endpoint_address") else "",
+        # Physical connectable creds (db/user are namespaced per space). Apps
+        # + the data-plane conformance test must connect with THESE, not the
+        # verbatim master_username — parity with Cloud SQL's connectionInfo.
+        "connection": db.get("_backend_connection") or None,
         "runtime_backend": db.get("runtime_backend", "lxd"),
         "runtime_image": db.get("runtime_image", ""),
         "container_name": db.get("container_name", ""),
@@ -17741,12 +17797,19 @@ def _rds_parse_tags(params: dict[str, Any]) -> list[dict[str, str]]:
 # Terraform + psql all see a real, connectable Postgres backed by the
 # shipped engine — no LXD-image-catalog brittleness.
 #
-# Difference from gcp_sql_engine.provision(): we honor the AWS-contract
-# master_username verbatim instead of the slugified physical_name, so
-# `psql -U <master_username>` works exactly as it would on real AWS.
+# v2.0.7 (#430): like gcp_sql_engine.provision(), the physical database +
+# login role are namespaced per space via physical_name(space_id, "rds",
+# db_id) so two spaces creating an RDS with the same identifier/username
+# can't collide on the shared engine. (The previous build used the raw
+# identifier/master_username, which silently shared one space's database
+# with another and reset the shared role's password.) The boto3-visible
+# master_username stays verbatim in the DescribeDBInstances view; the
+# connectable physical creds ride in the RDS view's `connection` block
+# (parity with Cloud SQL's connectionInfo / Azure's connectionInfo).
 
 def _rds_real_provision(db_id: str, engine: str, version: str,
-                        master_username: str, master_user_password: str) -> dict | None:
+                        master_username: str, master_user_password: str,
+                        space_id: str = "") -> dict | None:
     """Provision a real database + role on the shared shipped engine.
     Returns {host, port, database, user, password} on success.
     Returns None if the engine isn't reachable — caller degrades to
@@ -17759,10 +17822,10 @@ def _rds_real_provision(db_id: str, engine: str, version: str,
         cfg = gcp_sql_engine._engine_config(eng)
         if not gcp_sql_engine.available(eng):
             return None
-        # AWS RDS db identifiers are globally unique already — use db_id as
-        # the physical database name (lowercase, alphanum + hyphen sanitized).
-        db_name = re.sub(r"[^a-z0-9_]", "_", db_id.lower()).strip("_") or "rds"
-        role = re.sub(r"[^a-zA-Z0-9_]", "_", (master_username or "dbadmin")).strip("_") or "dbadmin"
+        # Per-space physical name (collision-free across spaces) — same helper
+        # Cloud SQL + Azure use. role == db, unique per (space, "rds", db_id).
+        db_name = gcp_sql_engine.physical_name(space_id, "rds", db_id)
+        role = db_name
         pwd = master_user_password or "Password123!"
         if eng == "postgres":
             conn = gcp_sql_engine._pg_connect(cfg)
@@ -17802,7 +17865,8 @@ def _rds_real_provision(db_id: str, engine: str, version: str,
         return None
 
 
-def _rds_real_deprovision(db_id: str, engine: str, master_username: str) -> bool:
+def _rds_real_deprovision(db_id: str, engine: str, master_username: str,
+                          space_id: str = "") -> bool:
     """Drop the real database + role. Best-effort; True if it ran."""
     eng = (engine or "postgres").lower()
     if eng not in ("postgres", "mysql"):
@@ -17812,8 +17876,9 @@ def _rds_real_deprovision(db_id: str, engine: str, master_username: str) -> bool
         if not gcp_sql_engine.available(eng):
             return False
         cfg = gcp_sql_engine._engine_config(eng)
-        db_name = re.sub(r"[^a-z0-9_]", "_", db_id.lower()).strip("_") or "rds"
-        role = re.sub(r"[^a-zA-Z0-9_]", "_", (master_username or "dbadmin")).strip("_") or "dbadmin"
+        # Must match the per-space physical name used at provision time.
+        db_name = gcp_sql_engine.physical_name(space_id, "rds", db_id)
+        role = db_name
         if eng == "postgres":
             conn = gcp_sql_engine._pg_connect(cfg)
             try:
@@ -17879,12 +17944,14 @@ def _rds_prepare_db_instance(payload: RDSDatabaseRequest, source_snapshot: dict 
     # "simulated" record when the engine isn't reachable (still SDK-
     # conformant for lifecycle calls). The old LXD-image path was
     # broken because "postgres:16" parses as remote='postgres' to lxc.
+    _rds_space_id = _spaces_state().get("active_space_id", "")
     real_endpoint = _rds_real_provision(
         db_id=db_id,
         engine=payload.engine,
         version=resolved_engine_version,
         master_username=payload.master_username,
         master_user_password=payload.master_user_password,
+        space_id=_rds_space_id,
     )
     if real_endpoint:
         runtime_backend = "real-pg" if (payload.engine or "").lower() == "postgres" else "real-mysql"
@@ -17934,6 +18001,18 @@ def _rds_prepare_db_instance(payload: RDSDatabaseRequest, source_snapshot: dict 
         "container_port": engine_profile["port"],
     }
     db["subnet_ids"] = list(subnet_group.get("subnet_ids", []))
+    # Remember the space we provisioned under (so DeleteDBInstance drops the
+    # right per-space physical db/role) and the connectable physical creds
+    # (surfaced in the RDS view's `connection` block — parity with Cloud SQL).
+    db["_space_id"] = _rds_space_id
+    if real_endpoint:
+        db["_backend_connection"] = {
+            "host": real_endpoint["host"],
+            "port": real_endpoint["port"],
+            "database": real_endpoint["database"],
+            "user": real_endpoint["user"],
+            "password": real_endpoint["password"],
+        }
     # When the real shared-engine provisioner succeeded, the database is
     # immediately available + connectable. The container_status field is
     # retained for backward compat with consumers expecting the LXD shape;
@@ -17993,7 +18072,8 @@ def _rds_delete_db_instance(db_id: str, skip_final_snapshot: bool = True, final_
         _rds_create_snapshot_from_db(db, final_snapshot_identifier)
     # Best-effort cleanup based on which backend actually ran the instance.
     if db.get("runtime_backend") in ("real-pg", "real-mysql"):
-        _rds_real_deprovision(db_id, db.get("engine", "postgres"), db.get("master_username", ""))
+        _rds_real_deprovision(db_id, db.get("engine", "postgres"), db.get("master_username", ""),
+                              space_id=db.get("_space_id", ""))
     else:
         _rds_runtime_delete(db)  # legacy LXD path / no-op for simulated
     del rds_state["db_instances"][db_id.lower()]
@@ -21614,12 +21694,16 @@ def api_runtime_disk_cleanup_suggestions():
 
 
 class _DiskCleanupRequest(BaseModel):
-    categories: list[str]
+    # v2.0.7 (#426): `categories` is canonical. Also accept the SPA's legacy
+    # `ids` field as an alias, and default both to [] so a missing/renamed
+    # field returns an empty no-op instead of a 422. Handler merges them.
+    categories: list[str] = []
+    ids: list[str] = []
 
 
 @app.post("/api/runtime/disk-cleanup/run")
 def api_runtime_disk_cleanup_run(req: _DiskCleanupRequest):
-    result = _disk_health.run_cleanup(STATE, req.categories or [])
+    result = _disk_health.run_cleanup(STATE, req.categories or req.ids or [])
     # Re-sample disk immediately so the UI sees the result without
     # waiting for the next 60s monitor tick.
     STATE.setdefault("runtime", {})["disk_health"] = _disk_health.evaluate_health(STATE)
@@ -21870,6 +21954,23 @@ def _connect_info_response(provider: str, instance_id: str) -> dict:
     inst, _ = _find_instance_across_spaces(provider, instance_id)
     if not inst:
         raise HTTPException(404, f"instance {instance_id!r} not found")
+    # Azure VMs are stored as ARM resource records — their runtime/SSH fields
+    # live under properties.runtime, not at the top level the way connect_info()
+    # and the running-state check expect (EC2/GCE pass a flat instance dict).
+    # Flatten so Azure reaches the same lazy SSH-provisioning path (key inject +
+    # lxc proxy) as AWS/GCP instead of 409/503-ing with no SSH command.
+    if provider == "azure":
+        _rt = (inst.get("properties") or {}).get("runtime") or {}
+        _cn = str(_rt.get("containerName") or "")
+        _iid = _cn[len("cloudlearn-"):] if _cn.startswith("cloudlearn-") else (inst.get("name") or instance_id)
+        inst = {
+            **inst,
+            "instance_id": _iid,
+            "container_name": _cn,
+            "container_id": _rt.get("containerId") or _cn,
+            "ami": "",
+            "state": _rt.get("state") or _rt.get("containerStatus") or "",
+        }
     state_running = inst.get("state") or inst.get("powerState") or ""
     if isinstance(state_running, dict):
         state_running = state_running.get("Name") or ""

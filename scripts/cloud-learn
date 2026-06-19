@@ -461,7 +461,14 @@ appliance_sync_workspace_into_vm() {
     routes
     scripts
     static
+    packaging
   )
+  # NOTE: `packaging` is required because docker-compose.appliance.yml *bind-mounts*
+  # packaging/firestore/firestore-start.sh and packaging/vault/vault-init.sh at
+  # runtime. If it's missing from the bundle, Docker creates the mount sources as
+  # empty DIRECTORIES → firestore/vault crash-loop (exit 126 "Is a directory") →
+  # the simulator never starts (depends_on health) → health check times out.
+  # This is a separate source-of-truth from Dockerfile COPY paths — keep it here.
   local optional=(docker-compose.yml cloudsim-backbone)
   # Validate required files first → clear error if anything is missing.
   local missing=()
@@ -994,7 +1001,7 @@ appliance_launch_vm() {
         progress "==> Appliance: launching fresh Multipass VM ${APPLIANCE_NAME}"
         progress "    (first launch needs to: download Ubuntu image ~600MB, install"
         progress "     LXD snap ~150MB, run cloud-init — total cold start 5-8 min)"
-        "$compose" launch "$APPLIANCE_IMAGE" --name "$APPLIANCE_NAME" --cpus "$APPLIANCE_CPUS" --memory "$APPLIANCE_MEMORY" --disk "$APPLIANCE_DISK" --cloud-init "$APPLIANCE_DIR/cloud-init.yaml"
+        appliance_launch_and_track
         ;;
       *)
         # Other states we don't know how to recover from automatically
@@ -1012,7 +1019,7 @@ appliance_launch_vm() {
     progress "==> Appliance: launching Multipass VM ${APPLIANCE_NAME}"
     progress "    (first launch needs to: download Ubuntu image ~600MB, install"
     progress "     LXD snap ~150MB, run cloud-init — total cold start 5-8 min)"
-    "$compose" launch "$APPLIANCE_IMAGE" --name "$APPLIANCE_NAME" --cpus "$APPLIANCE_CPUS" --memory "$APPLIANCE_MEMORY" --disk "$APPLIANCE_DISK" --cloud-init "$APPLIANCE_DIR/cloud-init.yaml"
+    appliance_launch_and_track
   fi
   appliance_sync_workspace_into_vm
   appliance_sync_host_sizing_into_vm
@@ -1035,7 +1042,7 @@ appliance_wait_for_cloud_init() {
   local compose
   compose="$(appliance_multipass_cmd)"
   progress "==> Appliance: waiting for cloud-init (LXD snap install is the slow step)"
-  local started_at last_status last_step elapsed heartbeat_at
+  local launch_pid="${1:-}" started_at last_status last_step elapsed heartbeat_at
   started_at=$(date +%s)
   last_step=""
   heartbeat_at=$started_at
@@ -1048,6 +1055,13 @@ appliance_wait_for_cloud_init() {
     elapsed=$(( $(date +%s) - started_at ))
     if [ "$last_status" = "done" ] || [ "$last_status" = "disabled" ]; then
       progress "    ✓ cloud-init finished (${elapsed}s)"
+      break
+    fi
+    # If a background `multipass launch` is being tracked and it exited before
+    # cloud-init reported done, stop polling so the caller can reap the (likely
+    # failed) launch instead of looping to the 10-min bail-out.
+    if [ -n "$launch_pid" ] && ! kill -0 "$launch_pid" 2>/dev/null; then
+      verbose "tracked launch pid ${launch_pid} exited before cloud-init done"
       break
     fi
     # Identify the slowest currently-running runcmd entry — that's the
@@ -1063,10 +1077,15 @@ appliance_wait_for_cloud_init() {
         last_step="$current_desc"
       fi
     fi
-    # Heartbeat every 30s so the user knows we're still alive even when
-    # the runcmd identity hasn't changed (e.g. snap install lxd phase).
-    if [ $(( $(date +%s) - heartbeat_at )) -ge 30 ] && [ -n "$last_step" ]; then
-      progress "    [${elapsed}s] still ${last_step}…"
+    # Heartbeat every 30s so the user always sees liveness — including the
+    # early boot/image-download window before the VM is exec-able (no step
+    # identified yet) and the long snap-install phase (step unchanged).
+    if [ $(( $(date +%s) - heartbeat_at )) -ge 30 ]; then
+      if [ -n "$last_step" ]; then
+        progress "    [${elapsed}s] still ${last_step}…"
+      else
+        progress "    [${elapsed}s] booting VM + cloud-init (status: ${last_status})…"
+      fi
       heartbeat_at=$(date +%s)
     fi
     # Verbose mode: tail recent cloud-init log lines so the user sees
@@ -1086,6 +1105,30 @@ appliance_wait_for_cloud_init() {
     fi
     sleep 6
   done
+}
+
+appliance_launch_and_track() {
+  # Launch the VM in the BACKGROUND so we can stream live cloud-init progress
+  # (image download → apt → LXD snap install) instead of multipass's bare,
+  # detail-free "Waiting for initialization to complete" spinner. The generous
+  # --timeout keeps multipass from giving up while we poll + report ourselves.
+  local compose; compose="$(appliance_multipass_cmd)"
+  local launch_log; launch_log="$(mktemp -t vyomi-launch-XXXXXX.log)"
+  "$compose" launch "$APPLIANCE_IMAGE" --name "$APPLIANCE_NAME" \
+    --cpus "$APPLIANCE_CPUS" --memory "$APPLIANCE_MEMORY" --disk "$APPLIANCE_DISK" \
+    --timeout 900 --cloud-init "$APPLIANCE_DIR/cloud-init.yaml" >"$launch_log" 2>&1 &
+  local launch_pid=$!
+  # Stream real progress while the background launch + cloud-init run.
+  appliance_wait_for_cloud_init "$launch_pid"
+  if ! wait "$launch_pid"; then
+    progress "    multipass launch output:"
+    while IFS= read -r line; do _emit "      $line"; done < "$launch_log"
+    rm -f "$launch_log"
+    _die "multipass launch failed for ${APPLIANCE_NAME}" \
+"Inspect:        multipass info ${APPLIANCE_NAME}
+Restart fresh:  multipass delete ${APPLIANCE_NAME} && multipass purge"
+  fi
+  rm -f "$launch_log"
 }
 
 appliance_confirm_images() {

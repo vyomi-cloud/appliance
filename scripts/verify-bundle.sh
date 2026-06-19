@@ -41,6 +41,7 @@ REQUIRED=(
   routes
   scripts
   static
+  packaging
 )
 OPTIONAL=(docker-compose.yml cloudsim-backbone)
 
@@ -131,6 +132,38 @@ if [ "${#missing_copies[@]}" -gt 0 ]; then
   exit 1
 fi
 echo "  $(green "✓") every Dockerfile COPY source is in the tarball"
+
+# 4. Every docker-compose.appliance.yml bind-mount with a relative (./) source
+# must resolve in the tarball. This is a SEPARATE source of truth from
+# Dockerfile COPYs: if a mounted file is missing, Docker creates the mount
+# source as an empty DIRECTORY at runtime → the container crashes with
+# "Is a directory" (exit 126) and any service that depends_on it (the
+# simulator) never starts. Past regression: packaging/{firestore,vault,
+# elasticmq} init files missing from the deb/rpm bundle.
+compose_file="${ROOT_DIR}/docker-compose.appliance.yml"
+mounts_file="$(mktemp -t verify-mounts-XXXXXX.txt)"
+grep -E '^[[:space:]]*-[[:space:]]*\./' "$compose_file" 2>/dev/null \
+  | sed -E 's|^[[:space:]]*-[[:space:]]*(\./[^:]+):.*|\1|; s|^\./||' \
+  | sort -u > "$mounts_file"
+echo "  $(yellow "·") compose bind-mounts $(wc -l < "$mounts_file" | tr -d ' ') relative (./) sources"
+
+mount_entries="$(mktemp -t verify-mount-entries-XXXXXX.txt)"
+sed 's|^\./||' "$listing" > "$mount_entries"
+missing_mounts=()
+while IFS= read -r src; do
+  [ -z "$src" ] && continue
+  if ! grep -qE "^${src}(\$|/)" "$mount_entries"; then
+    missing_mounts+=("$src")
+  fi
+done < "$mounts_file"
+rm -f "$mounts_file" "$mount_entries"
+
+if [ "${#missing_mounts[@]}" -gt 0 ]; then
+  echo "  $(red "✗") compose bind-mount sources NOT in the bundle (Docker will stub them as empty dirs → crash):"
+  for m in "${missing_mounts[@]}"; do echo "      $m"; done
+  exit 1
+fi
+echo "  $(green "✓") every compose bind-mount source is in the tarball"
 
 # 4. cloudsim-backbone Dockerfile sanity — only if the directory exists
 if [ -d "${ROOT_DIR}/cloudsim-backbone" ]; then

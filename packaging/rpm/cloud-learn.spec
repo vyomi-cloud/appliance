@@ -48,8 +48,13 @@ mkdir -p %{buildroot}/usr/share/doc/cloud-learn
 # /usr/lib/cloud-learn (which a hardened sysadmin may chmod 0700).
 mkdir -p %{buildroot}/usr/share/vyomi/packaging/common
 
-cp -r core providers packs static scripts \
-      server.py requirements.txt VERSION Dockerfile \
+# Keep in sync with scripts/cloud-learn (appliance_sync_source_into_vm) +
+# release.yml. routes/setup_cython.py/packaging/cloudsim-backbone were omitted;
+# packaging/{firestore,vault,elasticmq} are bind-mounted by the compose file, so
+# omitting them makes Docker stub the mount sources as dirs → containers crash
+# (exit 126) → simulator never starts. Verified by scripts/verify-bundle.sh.
+cp -r core providers packs routes static scripts packaging cloudsim-backbone \
+      server.py setup_cython.py requirements.txt VERSION Dockerfile \
       docker-compose.yml docker-compose.appliance.yml .env.example \
       %{buildroot}/usr/lib/cloud-learn/
 

@@ -51,13 +51,20 @@ def test_aws_rds_mysql_create_via_spa_contract(appliance_page, appliance_vm_ip):
             import pymysql
         except ImportError:
             pytest.skip("pymysql not installed; data-plane assert deferred")
-        db_name = DB_ID.replace("-", "_")
+        # v2.0.7 (#430): db + user are namespaced per space — connect with the
+        # physical creds from the `connection` block, not the master_username.
+        conn_info = inst.get("connection") or {}
+        assert conn_info.get("user") and conn_info.get("database"), (
+            f"RDS view is missing the physical `connection` block: {inst}"
+        )
+        db_name = conn_info["database"]
+        conn_user = conn_info["user"]
         try:
             conn = pymysql.connect(
                 host=appliance_vm_ip,
-                port=3306,
-                user=MASTER_USER,
-                password=MASTER_PASS,
+                port=conn_info.get("port", 3306),
+                user=conn_user,
+                password=conn_info.get("password", MASTER_PASS),
                 database=db_name,
                 connect_timeout=5,
             )
@@ -66,7 +73,7 @@ def test_aws_rds_mysql_create_via_spa_contract(appliance_page, appliance_vm_ip):
                     cur.execute("SELECT DATABASE(), CURRENT_USER()")
                     row = cur.fetchone()
                     assert row[0] == db_name
-                    assert MASTER_USER in str(row[1])
+                    assert conn_user in str(row[1])
             finally:
                 conn.close()
         except Exception as e:

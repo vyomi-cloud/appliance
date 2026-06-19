@@ -569,13 +569,21 @@ def _migrate_state(state: dict) -> dict:
             "tags": {},
         }
         spaces_state["active_space_id"] = legacy_space_id
-        # Auto-create default GCP and Azure spaces so all 3 consoles work
-        # out of the box without requiring the user to manually create them.
-        for _prov, _sid, _label, _region in [
-            ("gcp", "space-gcp-default", "gcp-default", "us-central1"),
-            ("azure", "space-azure-default", "azure-default", "eastus"),
-        ]:
-            spaces_state["spaces"][_sid] = {
+    # v2.0.7 (#427): idempotently ensure each of GCP + Azure has a default
+    # space so pre-v1.2.5 single-space installs gain all 3 consoles on
+    # upgrade — not only on fresh installs. Guarded by provider presence so it
+    # never duplicates a space the user (or an API re-seed) already created.
+    _existing_providers = {
+        (_s.get("provider") or "").lower()
+        for _s in spaces_state["spaces"].values()
+    }
+    for _prov, _sid, _label, _region in [
+        ("gcp", "space-gcp-default", "gcp-default", "us-central1"),
+        ("azure", "space-azure-default", "azure-default", "eastus"),
+    ]:
+        if _prov in _existing_providers:
+            continue
+        spaces_state["spaces"][_sid] = {
                 "space_id": _sid,
                 "name": _label,
                 "provider": _prov,
