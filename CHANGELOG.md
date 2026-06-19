@@ -6,7 +6,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [2.0.7] — Unreleased
+## [2.0.7] — 2026-06-20
 
 **Bug-fix release dominated by a release-blocking fresh-install regression, plus a stack of fixes surfaced by actually running the appliance from a clean machine.** The headline: **every multipass-based install (brew/deb/rpm/scoop) has failed to launch since v2.0.3** because the source bundle omitted `packaging/` (whose init scripts the compose file bind-mounts) — Docker stubbed them as directories, the backing containers crash-looped, and the simulator never started. Docker-Compose installs and pre-2.0.3 upgrades were unaffected, which is why dogfood appliances never caught it. This release fixes that (and hardens the bundle check against the whole class), plus: the disk-cleanup 422, idempotent default-space self-heal, live launcher cold-start progress, Azure VM create UX, Azure VM SSH connect, LXD stop→start recovery, and a swallowed-error fix. Most of these predate v2.0.6 (verified by `git diff`); none was caused by the v2.0.6 upgrade itself.
 
