@@ -1248,13 +1248,19 @@ appliance_exec_launcher() {
   appliance_confirm_images
   local compose
   compose="$(appliance_multipass_cmd)"
-  progress "==> Appliance: starting inner CloudLearn stack (direct compose)"
-  progress "    (first run rebuilds the simulator image ~2-3 min; subsequent runs are cached)"
-  # IMPORTANT: do NOT redirect inner output to /dev/null. The docker
-  # build prints the layer-by-layer status that takes the longest;
-  # showing it gives the user concrete feedback rather than a silent
-  # 3-minute wait. In quiet (non-verbose) mode we still let the
-  # progress lines flow because they're a real-time TTY for the user.
+  progress "==> Appliance: starting console (Wave 1 — simulator + proxy, fast)"
+  progress "    (heavy backends stream in the background; the console is usable as soon as Wave 1 is up)"
+  # v2.0.8 PROGRESSIVE STARTUP — two waves:
+  #   Wave 1 (foreground, fast): pull the prebuilt console image + the HTTPS
+  #     proxy and start ONLY those two. The simulator serves the console +
+  #     license + read-only browsing with just SQLite, so the user can reach
+  #     https://localhost:9443/ in ~30-60s instead of waiting on a ~3.5GB pull.
+  #   Wave 2 (detached, background): bring up the rest (the 10 backend
+  #     containers + cloudsim). Progress is surfaced by /api/runtime/readiness
+  #     and the in-console "Appliance is getting ready" banner; service-launch
+  #     is gated server-side until ready.
+  # IMPORTANT: do NOT redirect inner output to /dev/null — the pull/up status
+  # is the user's real-time feedback.
   "$compose" exec "$APPLIANCE_NAME" -- /bin/bash -lc "
     set -e
     # Bind-mounted into the simulator container at the same path; the
@@ -1276,12 +1282,30 @@ appliance_exec_launcher() {
       echo 'docker daemon never became ready inside appliance VM' >&2
       exit 1
     fi
-    # Build + start; -d (detach) so we return immediately; rebuilds changed only.
-    echo '    [inner] docker compose up -d --build (output below):'
-    docker compose -f docker-compose.appliance.yml up -d --build --remove-orphans 2>&1 \
-      | sed 's/^/      /'
-    echo '    [inner] container summary:'
-    docker compose -f docker-compose.appliance.yml ps 2>&1 | sed 's/^/      /'
+    # ── Wave 1: pull the prebuilt console image (fast) + proxy, start only them.
+    # `pull ... || true` so a dev checkout without a published image still works
+    # (the subsequent `up` then builds the simulator from build: . as fallback).
+    echo '    [inner] Wave 1: docker compose pull simulator caddy'
+    docker compose -f docker-compose.appliance.yml pull simulator caddy 2>&1 | sed 's/^/      /' || true
+    echo '    [inner] Wave 1: docker compose up -d simulator caddy'
+    docker compose -f docker-compose.appliance.yml up -d simulator caddy 2>&1 | sed 's/^/      /'
+    # ── Wave 2: stream the heavy backends + cloudsim in the BACKGROUND. Use a
+    # transient systemd unit so it survives this exec shell exiting; fall back
+    # to nohup if systemd-run is unavailable.
+    echo '    [inner] Wave 2: backends + cloudsim streaming in background…'
+    if command -v systemd-run >/dev/null 2>&1; then
+      sudo systemd-run --unit=vyomi-wave2 --collect \
+        --working-directory=${APPLIANCE_WORKSPACE} \
+        docker compose -f docker-compose.appliance.yml up -d --remove-orphans \
+        >/dev/null 2>&1 || \
+      ( nohup docker compose -f docker-compose.appliance.yml up -d --remove-orphans \
+          </dev/null >/tmp/vyomi-wave2.log 2>&1 & )
+    else
+      ( nohup docker compose -f docker-compose.appliance.yml up -d --remove-orphans \
+          </dev/null >/tmp/vyomi-wave2.log 2>&1 & )
+    fi
+    echo '    [inner] Wave 1 containers (console ready when simulator is healthy):'
+    docker compose -f docker-compose.appliance.yml ps simulator caddy 2>&1 | sed 's/^/      /'
   "
 }
 
@@ -1325,8 +1349,13 @@ Or try again:
     curl -fsS -o /dev/null -m 2 "http://${vm_ip}:9171/health"  2>/dev/null && bridge_ok=1   || true
     curl -fsS -o /dev/null -m 2 "http://${vm_ip}:9000/healthz" 2>/dev/null && sim_ok=1      || true
     curl -fsS -o /dev/null -m 2 "http://${vm_ip}:9010/health"  2>/dev/null && cloudsim_ok=1 || true
-    if [ "$bridge_ok" = "1" ] && [ "$sim_ok" = "1" ] && [ "$cloudsim_ok" = "1" ]; then
-      progress "    ✓ runtime bridge, simulator, and CloudSim all healthy"
+    # v2.0.8: the console is READY once the runtime bridge + simulator are up.
+    # CloudSim + the backend containers are Wave 2 (background) — they're tracked
+    # by /api/runtime/readiness, not by this launch gate, so the user reaches the
+    # console in ~30-60s instead of waiting on the full stack.
+    if [ "$bridge_ok" = "1" ] && [ "$sim_ok" = "1" ]; then
+      progress "    ✓ console ready (runtime bridge + simulator healthy)"
+      progress "      backends + CloudSim stream in the background — watch the in-console progress bar"
       return 0
     fi
     # Status line every 6s so user sees what's pending.
@@ -1334,7 +1363,7 @@ Or try again:
       local status=""
       [ "$bridge_ok"   = "1" ] && status+=" bridge=✓" || status+=" bridge=…"
       [ "$sim_ok"      = "1" ] && status+="  sim=✓" || status+="  sim=…"
-      [ "$cloudsim_ok" = "1" ] && status+="  cloudsim=✓" || status+="  cloudsim=…"
+      [ "$cloudsim_ok" = "1" ] && status+="  cloudsim=✓(wave2)" || status+="  cloudsim=…(wave2,bg)"
       progress "    [${waited}s/${max_wait}s] ${status}"
     fi
     last_bridge_ok=$bridge_ok
@@ -1347,7 +1376,8 @@ Or try again:
   local what_failed=""
   [ "$last_bridge_ok"   != "1" ] && what_failed+=$'\n    - runtime bridge (port 9171) — check: multipass exec '${APPLIANCE_NAME}' -- sudo journalctl -u cloudlearn-runtime-bridge.service --no-pager -n 50'
   [ "$last_sim_ok"      != "1" ] && what_failed+=$'\n    - simulator (port 9000) — check: multipass exec '${APPLIANCE_NAME}' -- docker logs cloud-learn-simulator-1 --tail 80'
-  [ "$last_cloudsim_ok" != "1" ] && what_failed+=$'\n    - CloudSim (port 9010) — check: multipass exec '${APPLIANCE_NAME}' -- docker logs cloud-learn-cloudsim-1 --tail 80'
+  # CloudSim is Wave 2 (background) and intentionally NOT required for READY —
+  # don't report it as a launch failure.
   _die "health check timed out after ${max_wait}s — components not responding:${what_failed}" \
 "The VM and its docker stack appear to be running but at least one
 service isn't answering on the bridged network. You can still open

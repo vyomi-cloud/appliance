@@ -144,3 +144,32 @@ def probe_all() -> dict[str, Any]:
         "services":     services,
         "checked_at":   time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
+
+
+# ── Cached gate (v2.0.8 progressive startup) ────────────────────────────────
+# The service-launch gate runs on every create; re-probing 12 sockets per
+# request would add latency, so cache the result for a few seconds. The SPA
+# readiness poll (every ~3s) and the gate share this.
+_READY_CACHE: dict[str, Any] = {"at": 0.0, "payload": None}
+
+
+def probe_all_cached(ttl: float = 5.0) -> dict[str, Any]:
+    """probe_all() with a short in-memory TTL — used by the gate + can back the
+    /api/runtime/readiness endpoint."""
+    now = time.time()
+    payload = _READY_CACHE.get("payload")
+    if payload is not None and (now - float(_READY_CACHE.get("at") or 0)) < ttl:
+        return payload  # type: ignore[return-value]
+    payload = probe_all()
+    _READY_CACHE["at"] = now
+    _READY_CACHE["payload"] = payload
+    return payload
+
+
+def is_ready(ttl: float = 5.0) -> bool:
+    """Cheap boolean: is the whole appliance ready? Fail-OPEN (returns True) on
+    any probe error, so a probing bug can never permanently block launches."""
+    try:
+        return bool(probe_all_cached(ttl).get("ready"))
+    except Exception:
+        return True

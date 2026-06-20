@@ -18178,6 +18178,7 @@ def api_rds_list_databases():
 
 
 def api_rds_create_database(req: RDSDatabaseRequest):
+    _require_appliance_ready("Creating an RDS database")  # v2.0.8 progressive-startup gate
     db = _rds_prepare_db_instance(req)
     db["runtime_bundle_id"] = _cloudsim_runtime_bundle("rds").get("id", "")
     db["runtime_bundle_name"] = _cloudsim_runtime_bundle("rds").get("name", "")
@@ -21675,6 +21676,43 @@ def _disk_preflight(storage_gb_hint: Optional[float] = None) -> None:
         _disk_health.preflight_launch_check(STATE, required_gb=required)
     except _disk_health.InsufficientDiskError as e:
         raise HTTPException(507, detail=e.payload)
+
+
+def _require_appliance_ready(action: str = "Launching this service") -> None:
+    """v2.0.8 progressive startup gate. While the appliance is still streaming
+    its backend containers in the background (Wave 2), block real service
+    *launches* — the console, license activation, and read-only browsing are
+    never gated. Mirrors the `_disk_preflight` pattern.
+
+    Bypass: CLOUDLEARN_READINESS_GATE=disabled (conformance harness + dev).
+    Auto-bypassed outside appliance distribution mode. Fail-OPEN on any probe
+    error so a probing bug can never permanently block launches."""
+    if os.environ.get("CLOUDLEARN_READINESS_GATE", "").strip().lower() in ("disabled", "off", "0", "false"):
+        return
+    try:
+        from core.app_context import appliance_mode_enabled
+        if not appliance_mode_enabled():
+            return  # dev / docker-compose-direct: no gate
+    except Exception:
+        pass
+    try:
+        from core import appliance_readiness as _ar
+        snap = _ar.probe_all_cached()
+    except Exception:
+        return  # fail-open
+    if snap.get("ready"):
+        return
+    pending = [s.get("name") for s in (snap.get("services") or []) if s.get("status") != "ready"]
+    raise HTTPException(503, detail={
+        "ok": False,
+        "code": "appliance_not_ready",
+        "reason": (f"{action} isn't available yet — the appliance is still getting ready "
+                   f"({snap.get('overall_pct', 0)}%). The backend services are still downloading "
+                   f"in the background; this will work as soon as they're up."),
+        "ready_pct": snap.get("overall_pct", 0),
+        "pending": pending,
+        "retry_after_seconds": 10,
+    })
 
 
 @app.get("/api/runtime/disk-health")

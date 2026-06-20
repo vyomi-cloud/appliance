@@ -172,22 +172,21 @@ services:
     restart: unless-stopped
 
   simulator:
+    # v2.0.8 progressive startup — Wave 1 (instant): simulator + caddy are the
+    # only services a plain `docker compose up -d` brings up. Pull the prebuilt
+    # published image by default (the launcher runs `compose pull` first) for a
+    # fast install; `build: .` stays as a local-dev fallback when the image
+    # isn't available.
+    image: ${VYOMI_SIMULATOR_IMAGE:-${CLOUDLEARN_SIMULATOR_IMAGE:-vyomi/appliance:latest}}
     build: .
     ports:
       - "9000:9000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      - cloudlearn-sql-postgres
-      - vyomi-sql-mysql
-      - vyomi-gcs
-      - cloudlearn-pubsub
-      - cloudlearn-firestore
-      - cloudlearn-vault
-      - vyomi-nats
-      - vyomi-minio
-      - vyomi-dynamodb
-      - cloudlearn-elasticmq
+    # No depends_on the backend containers: the simulator serves the console +
+    # license + read-only browsing with just its SQLite state, connecting to
+    # backends lazily. The heavy backends live under the `backends` profile and
+    # stream in as Wave 2 (background) — see core/appliance_readiness + launcher.
     environment:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
       CLOUDLEARN_LICENSE_SECRET: cloudlearn-dev-secret
