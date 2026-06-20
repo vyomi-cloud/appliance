@@ -33,6 +33,25 @@ green run is strong evidence of compatibility.
 - `GET /probe/{cloud}` → run the lifecycle for `aws|gcp|azure`; returns a JSON
   report (`ok`, `elapsed_ms`, per-step `ok`/`detail`). HTTP 200 if all steps
   pass, 502 if any failed (the report pinpoints which SDK call broke).
+- `GET /object/{cloud}?bucket=&key=[&account=]` → read one **object** back via
+  the native object-store SDK (verifies a console upload is SDK-readable).
+- `PUT /item/{cloud}?table=&id=[&database=]` → write a small **NoSQL** item
+  `{id, msg:"hello-vyomi", n:1}` via the native SDK, then read it back.
+- `GET /item/{cloud}?table=&id=[&database=]` → read a NoSQL item via the native
+  SDK. `table` = DynamoDB table (AWS) / Firestore collection (GCP) / Cosmos
+  container (Azure); `database` = Cosmos database (ignored by AWS/GCP).
+
+#### NoSQL native-SDK status (the `/item` endpoint)
+| Cloud | Backend | Transport | From the host (over the multipass bridge) |
+|-------|---------|-----------|-------------------------------------------|
+| AWS   | DynamoDB | HTTP JSON on `:9000` | ✅ works |
+| GCP   | Firestore | gRPC on `:8080` | ⚠️ `NoRouteToHost` over the bridge — run cloud-probe **co-located** in the appliance network (the `Dockerfile`) so it reaches `firestore:8080` directly |
+| Azure | Cosmos | TLS gateway | ⚠️ the SDK requires HTTPS — point `CLOUDPROBE_COSMOS_ENDPOINT` at the caddy terminator (`https://vyomi.local:9443/azure-data/cosmos/{account}`), add the mkcert CA to the JDK truststore (`-Djavax.net.ssl.trustStore`), and map `vyomi.local` → the VM IP so the cert SAN matches |
+
+`CLOUDPROBE_TRUST_ALL_TLS=true` (default) installs a permissive JVM-default
+trust manager; the Cosmos SDK's Netty client still needs the CA in the JDK
+truststore (above). All three are **code-complete** — the caveats are network /
+cert setup, not SDK wiring (DynamoDB proves the wiring end-to-end).
 
 ### The endpoint it targets
 The SDKs point at the appliance via `CLOUDPROBE_ENDPOINT` (default

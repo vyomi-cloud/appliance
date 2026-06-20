@@ -3,6 +3,7 @@ package cloud.vyomi.probe;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -63,5 +64,43 @@ public class ProbeController {
         Map<String, Object> res = p.getObject(bucket, key, account);
         boolean ok = Boolean.TRUE.equals(res.get("ok"));
         return ok ? ResponseEntity.ok(res) : ResponseEntity.status(502).body(res);
+    }
+
+    /** Read a NoSQL item written from the console (or via PUT below) through the
+     *  native NoSQL SDK. table = DynamoDB table | Firestore collection | Cosmos
+     *  container; database = Cosmos database (ignored by AWS/GCP).
+     *  e.g. GET /item/aws?table=my-table&id=item-1
+     *       GET /item/azure?database=probe_db&table=people&id=item-1 */
+    @GetMapping("/item/{cloud}")
+    public ResponseEntity<Map<String, Object>> getItem(@PathVariable("cloud") String cloud,
+            @RequestParam("table") String table, @RequestParam("id") String id,
+            @RequestParam(value = "database", required = false) String database) {
+        CloudProbe p = probes.get(cloud.toLowerCase());
+        if (p == null) return unknownCloud(cloud);
+        Map<String, Object> res = p.getItem(table, id, database);
+        boolean ok = Boolean.TRUE.equals(res.get("ok"));
+        return ok ? ResponseEntity.ok(res) : ResponseEntity.status(502).body(res);
+    }
+
+    /** Write a small test item {id, msg:"hello-vyomi", n:1} via the native SDK,
+     *  then read it back — so the GET endpoint can be validated end-to-end
+     *  without depending on a console write. */
+    @PutMapping("/item/{cloud}")
+    public ResponseEntity<Map<String, Object>> putItem(@PathVariable("cloud") String cloud,
+            @RequestParam("table") String table, @RequestParam("id") String id,
+            @RequestParam(value = "database", required = false) String database) {
+        CloudProbe p = probes.get(cloud.toLowerCase());
+        if (p == null) return unknownCloud(cloud);
+        Map<String, Object> res = p.putItem(table, id, database);
+        boolean ok = Boolean.TRUE.equals(res.get("ok"));
+        return ok ? ResponseEntity.ok(res) : ResponseEntity.status(502).body(res);
+    }
+
+    private ResponseEntity<Map<String, Object>> unknownCloud(String cloud) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("ok", false);
+        m.put("error", "unknown or unwired cloud: " + cloud);
+        m.put("available", probes.keySet());
+        return ResponseEntity.badRequest().body(m);
     }
 }

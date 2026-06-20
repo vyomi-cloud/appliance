@@ -70,6 +70,60 @@ public class AwsProbe implements CloudProbe {
         }
     }
 
+    // ── DynamoDB (NoSQL) read/write via native SDK ──────────────────────────
+    @Override
+    public Map<String, Object> getItem(String table, String id, String namespace) {
+        try (DynamoDbClient ddb = ddb()) {
+            GetItemResponse got = ddb.getItem(GetItemRequest.builder().tableName(table)
+                    .key(Map.of("id", AttributeValue.fromS(id))).consistentRead(true).build());
+            if (!got.hasItem() || got.item().isEmpty())
+                return NoSqlResult.error("aws", table, id, new RuntimeException("item not found"));
+            return NoSqlResult.of("aws", table, id, flattenItem(got.item()));
+        } catch (Exception e) {
+            return NoSqlResult.error("aws", table, id, e);
+        }
+    }
+
+    @Override
+    public Map<String, Object> putItem(String table, String id, String namespace) {
+        try (DynamoDbClient ddb = ddb()) {
+            ensureTable(ddb, table);
+            ddb.putItem(PutItemRequest.builder().tableName(table).item(Map.of(
+                    "id",  AttributeValue.fromS(id),
+                    "msg", AttributeValue.fromS("hello-vyomi"),
+                    "n",   AttributeValue.fromN("1"))).build());
+            return getItem(table, id, namespace);
+        } catch (Exception e) {
+            return NoSqlResult.error("aws", table, id, e);
+        }
+    }
+
+    private void ensureTable(DynamoDbClient ddb, String table) {
+        try {
+            ddb.describeTable(DescribeTableRequest.builder().tableName(table).build());
+        } catch (ResourceNotFoundException nf) {
+            ddb.createTable(CreateTableRequest.builder().tableName(table)
+                    .billingMode(BillingMode.PAY_PER_REQUEST)
+                    .attributeDefinitions(AttributeDefinition.builder()
+                            .attributeName("id").attributeType(ScalarAttributeType.S).build())
+                    .keySchema(KeySchemaElement.builder()
+                            .attributeName("id").keyType(KeyType.HASH).build())
+                    .build());
+            ddb.waiter().waitUntilTableExists(DescribeTableRequest.builder().tableName(table).build());
+        }
+    }
+
+    private static Map<String, Object> flattenItem(Map<String, AttributeValue> item) {
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        item.forEach((k, v) -> {
+            if (v.s() != null) out.put(k, v.s());
+            else if (v.n() != null) out.put(k, v.n());
+            else if (v.bool() != null) out.put(k, v.bool());
+            else out.put(k, v.toString());
+        });
+        return out;
+    }
+
     // ── S3 (object store) ───────────────────────────────────────────────────
     private void s3Lifecycle(Report r) {
         String bucket = "cloud-probe-" + UUID.randomUUID().toString().substring(0, 12);

@@ -71,7 +71,14 @@ public final class ProbeEnv {
     public static String azureCosmosAccount() {
         return firstNonBlank(System.getenv("AZURE_COSMOS_ACCOUNT"), "cloudlearn");
     }
+    /** Cosmos endpoint. The Cosmos SDK always speaks TLS, so this should be an
+     *  HTTPS URL (the appliance's caddy terminator, e.g.
+     *  https://vyomi.local:9443/azure-data/cosmos/{account}); override via
+     *  CLOUDPROBE_COSMOS_ENDPOINT. Falls back to the HTTP sim endpoint (which
+     *  the SDK will reject with an SSL error — set the HTTPS override). */
     public static String azureCosmosEndpoint() {
+        String o = System.getenv("CLOUDPROBE_COSMOS_ENDPOINT");
+        if (o != null && !o.isBlank()) return o.trim();
         return endpoint("azure") + "/azure-data/cosmos/" + azureCosmosAccount();
     }
     public static String azureCosmosKey() {

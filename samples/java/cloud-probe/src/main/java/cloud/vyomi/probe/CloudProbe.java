@@ -22,4 +22,22 @@ public interface CloudProbe {
     default Map<String, Object> getObject(String bucket, String key, String account) {
         return getObject(bucket, key);
     }
+
+    // ── NoSQL ────────────────────────────────────────────────────────────────
+    // The object-store analog for NoSQL: write a small item with PUT, read it
+    // back with GET via the cloud's NATIVE NoSQL SDK. `table` is the
+    // DynamoDB table (AWS) / Firestore collection (GCP) / Cosmos container
+    // (Azure); `namespace` is the Cosmos database (ignored by AWS/GCP).
+
+    /** Read one item/document by id. Never throws — failures are in the map. */
+    default Map<String, Object> getItem(String table, String id, String namespace) {
+        return NoSqlResult.error(cloud(), table, id,
+                new UnsupportedOperationException("getItem not implemented for " + cloud()));
+    }
+
+    /** Write a small test item {id, msg, n} so a GET can read it back. */
+    default Map<String, Object> putItem(String table, String id, String namespace) {
+        return NoSqlResult.error(cloud(), table, id,
+                new UnsupportedOperationException("putItem not implemented for " + cloud()));
+    }
 }

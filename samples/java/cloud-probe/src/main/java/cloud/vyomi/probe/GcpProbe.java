@@ -79,6 +79,41 @@ public class GcpProbe implements CloudProbe {
         }
     }
 
+    // ── Firestore (NoSQL) read/write via native SDK ─────────────────────────
+    @Override
+    public Map<String, Object> getItem(String collection, String id, String namespace) {
+        Firestore db = null;
+        try {
+            db = firestore();
+            DocumentSnapshot snap = db.collection(collection).document(id).get().get();
+            if (!snap.exists())
+                return NoSqlResult.error("gcp", collection, id, new RuntimeException("document not found"));
+            return NoSqlResult.of("gcp", collection, id, new LinkedHashMap<>(snap.getData()));
+        } catch (Exception e) {
+            return NoSqlResult.error("gcp", collection, id, e);
+        } finally {
+            if (db != null) try { db.close(); } catch (Exception ignore) {}
+        }
+    }
+
+    @Override
+    public Map<String, Object> putItem(String collection, String id, String namespace) {
+        Firestore db = null;
+        try {
+            db = firestore();
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("msg", "hello-vyomi");
+            data.put("n", 1);
+            db.collection(collection).document(id).set(data).get();
+            DocumentSnapshot snap = db.collection(collection).document(id).get().get();
+            return NoSqlResult.of("gcp", collection, id, new LinkedHashMap<>(snap.getData()));
+        } catch (Exception e) {
+            return NoSqlResult.error("gcp", collection, id, e);
+        } finally {
+            if (db != null) try { db.close(); } catch (Exception ignore) {}
+        }
+    }
+
     // ── GCS (object store) ──────────────────────────────────────────────────
     private void gcsLifecycle(Report r) {
         String bucket = "cloud-probe-" + UUID.randomUUID().toString().substring(0, 12);

@@ -80,6 +80,59 @@ public class AzureProbe implements CloudProbe {
         }
     }
 
+    // ── Cosmos (NoSQL) read/write via native SDK ────────────────────────────
+    // NOTE: the Cosmos Java SDK always uses TLS for the gateway connection, so
+    // the endpoint must be HTTPS (the appliance's caddy terminator on :9443) and
+    // the cert must be trusted. Configure via CLOUDPROBE_COSMOS_ENDPOINT.
+    private CosmosClient cosmosClient() {
+        return new CosmosClientBuilder()
+                .endpoint(cosmosEndpoint)
+                .key(cosmosKey)
+                .gatewayMode()
+                .buildClient();
+    }
+
+    private String cosmosDb(String database) {
+        return (database == null || database.isBlank()) ? "probe_db" : database.trim();
+    }
+
+    @Override
+    public Map<String, Object> getItem(String container, String id, String database) {
+        CosmosClient client = null;
+        try {
+            client = cosmosClient();
+            CosmosContainer c = client.getDatabase(cosmosDb(database)).getContainer(container);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> item = c.readItem(id, new PartitionKey(id), Map.class).getItem();
+            return NoSqlResult.of("azure", container, id, new java.util.LinkedHashMap<>(item));
+        } catch (Exception e) {
+            return NoSqlResult.error("azure", container, id, e);
+        } finally {
+            if (client != null) try { client.close(); } catch (Exception ignore) {}
+        }
+    }
+
+    @Override
+    public Map<String, Object> putItem(String container, String id, String database) {
+        String db = cosmosDb(database);
+        CosmosClient client = null;
+        try {
+            client = cosmosClient();
+            client.createDatabaseIfNotExists(db);
+            client.getDatabase(db).createContainerIfNotExists(container, "/id");
+            java.util.Map<String, Object> doc = new java.util.LinkedHashMap<>();
+            doc.put("id", id);
+            doc.put("msg", "hello-vyomi");
+            doc.put("n", 1);
+            client.getDatabase(db).getContainer(container).createItem(doc);
+            return getItem(container, id, db);
+        } catch (Exception e) {
+            return NoSqlResult.error("azure", container, id, e);
+        } finally {
+            if (client != null) try { client.close(); } catch (Exception ignore) {}
+        }
+    }
+
     // ── Blob (object store) ─────────────────────────────────────────────────
     private void blobLifecycle(Report r) {
         String container = "cloud-probe-" + UUID.randomUUID().toString().substring(0, 12);
