@@ -6,7 +6,7 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [2.0.8] — Unreleased
+## [2.0.8] — 2026-06-21
 
 **Lightweight, progressive startup — the console is usable in ~30–60 s instead of 5–10 min.** A fresh `vyomi up` previously built the simulator image and pulled the entire ~3.5 GB, 13-container backend stack before the user could reach anything (the two GCP-cloud-CLI emulators alone are ~1.4 GB). Now the launcher brings up only the **console + HTTPS proxy** first (Wave 1), then **streams the heavy backends in the background** (Wave 2) behind the existing "Appliance is getting ready" progress bar. License activation + read-only browsing work immediately; real service launches are gated until the backends are ready.
 
