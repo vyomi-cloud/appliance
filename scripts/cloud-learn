@@ -199,9 +199,15 @@ _backfill_install_id() {
   # added in v2.0.6; older appliances return 404 and we silently skip.
   local probe_url="${url%/}/api/runtime/install-id"
   local probe_id
-  probe_id="$(curl -sS --max-time 2 "$probe_url" 2>/dev/null \
+  # -k: this is the appliance's own mkcert/self-signed HTTPS endpoint
+  # (https://localhost:9443). curl can't chain-verify it on hosts where the
+  # mkcert CA isn't in curl's bundle (LibreSSL / Homebrew curl), failing with
+  # exit 60 — every OTHER 9443 probe in this launcher already uses -k. The
+  # trailing `|| true` keeps a probe failure (60, 404, …) from tripping the ERR
+  # trap and flipping an already-successful launch to FAILED.
+  probe_id="$(curl -sSk --max-time 2 "$probe_url" 2>/dev/null \
               | sed -n 's/.*"install_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-              | tr -d '[:space:]' | head -c 64)"
+              | tr -d '[:space:]' | head -c 64 || true)"
   [ -n "$probe_id" ] || return 0
   [ "${#probe_id}" -ge 8 ] || return 0
 
@@ -2487,8 +2493,11 @@ outer_run() {
       # (default since v1.2.3). On legacy VMs launched before v1.2.3, this
       # installs avahi-daemon + sets the hostname + fixes nsswitch.conf so
       # the mDNS URL works immediately, no `cloud-learn restart` needed.
-      ensure_vyomi_mdns_active
-      print_url_banner
+      # Best-effort finalize — the appliance is already confirmed healthy above,
+      # so never let a cosmetic step (mDNS publish, URL banner, telemetry probe)
+      # trip the ERR trap and report a false FAILED.
+      ensure_vyomi_mdns_active || true
+      print_url_banner || true
       ;;
     down|stop)
       ensure_prereqs
@@ -2522,11 +2531,12 @@ outer_run() {
       push_tls_into_vm
       appliance_exec_launcher
       appliance_health_check
-      ensure_vyomi_mdns_active
+      # Best-effort finalize (see up) — cosmetic steps must not fail the launch.
+      ensure_vyomi_mdns_active || true
       # v2.0.1: restart now ends with the same URL banner as up so the
       # user always sees where to go (and the browser auto-opens). Also
       # restarts the localhost socat bridge against the new VM IP.
-      print_url_banner
+      print_url_banner || true
       ;;
     status|ps)
       ensure_prereqs
