@@ -1282,6 +1282,19 @@ appliance_exec_launcher() {
       echo 'docker daemon never became ready inside appliance VM' >&2
       exit 1
     fi
+    # v2.0.8: Caddy comes up in Wave 1 and bind-mounts /etc/vyomi/Caddyfile as a
+    # FILE. It MUST exist as a file before the stack starts, otherwise docker
+    # auto-creates it as a DIRECTORY and caddy dies with 'not a directory'. Seed
+    # it from the synced source now (handles a prior failed run that left it as a
+    # directory); push_tls_into_vm later overwrites it with the canonical copy +
+    # the TLS cert. (/etc/vyomi/tls is a real directory, so its mount is fine.)
+    sudo mkdir -p /etc/vyomi/tls
+    if [ ! -f /etc/vyomi/Caddyfile ]; then
+      [ -e /etc/vyomi/Caddyfile ] && sudo rm -rf /etc/vyomi/Caddyfile
+      sudo cp ${APPLIANCE_WORKSPACE}/packaging/caddy/Caddyfile /etc/vyomi/Caddyfile 2>/dev/null \
+        || sudo touch /etc/vyomi/Caddyfile
+      echo '    [inner] seeded /etc/vyomi/Caddyfile before Caddy start'
+    fi
     # ── Wave 1: pull the prebuilt console image (fast) + proxy, start only them.
     # `pull ... || true` so a dev checkout without a published image still works
     # (the subsequent `up` then builds the simulator from build: . as fallback).
@@ -2447,6 +2460,15 @@ outer_run() {
       phase "Installing runtime bridge (systemd unit on appliance VM)"
       appliance_start_runtime_bridge
       phase_done
+      # v2.0.8: provision the mkcert TLS cert on the host + push it (with the
+      # Caddyfile) into the VM BEFORE the stack starts. Caddy comes up in Wave 1
+      # and bind-mounts /etc/vyomi/Caddyfile + reads /etc/vyomi/tls/cert.pem at
+      # start, so BOTH must exist first — otherwise caddy dies ('not a directory'
+      # on the Caddyfile mount, or a cert-load failure). VYOMI_NO_TLS=1 skips it.
+      phase "Provisioning TLS cert + Caddyfile (before the stack)"
+      ensure_vyomi_tls_cert
+      push_tls_into_vm
+      phase_done
       phase "Building + starting CloudLearn stack inside appliance (2-3 min on first run)"
       appliance_exec_launcher
       phase_done
@@ -2458,12 +2480,6 @@ outer_run() {
       phase "Installing LXD↔docker iptables coexistence helper"
       appliance_install_lxd_docker_bridge_fix
       phase_done
-      # Phase 12 (v2.0.0): provision a mkcert-signed TLS cert on the host
-      # at ~/.vyomi/tls/ and push it into the appliance VM so the bundled
-      # Caddy sidecar serves https://vyomi.local:9443 with a green padlock.
-      # Honors VYOMI_NO_TLS=1 to skip (HTTP on :9000 still works).
-      ensure_vyomi_tls_cert
-      push_tls_into_vm
       phase "Waiting for simulator, CloudSim, and runtime bridge to become healthy"
       appliance_health_check
       phase_done
@@ -2500,10 +2516,11 @@ outer_run() {
         multipass restart "$APPLIANCE_NAME" >/dev/null 2>&1 || true
       fi
       appliance_start_runtime_bridge
-      appliance_exec_launcher
-      # Push TLS cert + Caddyfile back in (VM bind mounts persist, but
-      # this is cheap and idempotent — covers cert rotation since last up).
+      # v2.0.8: push TLS (cert + Caddyfile) BEFORE the stack — Caddy comes up in
+      # Wave 1 and bind-mounts the Caddyfile + reads the cert at start. Cheap +
+      # idempotent (also covers cert rotation since last up).
       push_tls_into_vm
+      appliance_exec_launcher
       appliance_health_check
       ensure_vyomi_mdns_active
       # v2.0.1: restart now ends with the same URL banner as up so the
