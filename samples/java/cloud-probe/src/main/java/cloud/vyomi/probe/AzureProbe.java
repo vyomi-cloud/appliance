@@ -11,7 +11,6 @@ import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
-import com.azure.storage.common.StorageSharedKeyCredential;
 import com.azure.core.util.BinaryData;
 import org.springframework.stereotype.Component;
 
@@ -31,11 +30,19 @@ public class AzureProbe implements CloudProbe {
 
     private final String blobEndpoint = ProbeEnv.azureBlobEndpoint();
     private final String account = ProbeEnv.azureAccount();
-    private final String key = ProbeEnv.azureKey();
     private final String cosmosEndpoint = ProbeEnv.azureCosmosEndpoint();
     private final String cosmosKey = ProbeEnv.azureCosmosKey();
 
     @Override public String cloud() { return "azure"; }
+
+    /** Blob service client built from an Azurite-style connection string whose
+     *  explicit BlobEndpoint keeps every request on the appliance's Azure blob
+     *  handler (never the S3 handler). */
+    private BlobServiceClient blobService(String acct) {
+        return new BlobServiceClientBuilder()
+                .connectionString(ProbeEnv.azureConnectionString(acct))
+                .buildClient();
+    }
 
     /** POJO Cosmos item (the SDK serializes via Jackson; needs an `id`). */
     public static class ProbeDoc {
@@ -58,12 +65,14 @@ public class AzureProbe implements CloudProbe {
 
     @Override
     public Map<String, Object> getObject(String container, String blobName) {
+        return getObject(container, blobName, account);
+    }
+
+    @Override
+    public Map<String, Object> getObject(String container, String blobName, String acct) {
+        String useAcct = (acct == null || acct.isBlank()) ? account : acct.trim();
         try {
-            BlobServiceClient svc = new BlobServiceClientBuilder()
-                    .endpoint(blobEndpoint)
-                    .credential(new StorageSharedKeyCredential(account, key))
-                    .buildClient();
-            BlobClient bc = svc.getBlobContainerClient(container).getBlobClient(blobName);
+            BlobClient bc = blobService(useAcct).getBlobContainerClient(container).getBlobClient(blobName);
             byte[] bytes = bc.downloadContent().toBytes();
             return ObjectResult.of("azure", container, blobName, bytes, bc.getProperties().getContentType());
         } catch (Exception e) {
@@ -80,10 +89,7 @@ public class AzureProbe implements CloudProbe {
         BlobClient bc = null;
         boolean createdContainer = false, put = false;
         try {
-            BlobServiceClient svc = new BlobServiceClientBuilder()
-                    .endpoint(blobEndpoint)
-                    .credential(new StorageSharedKeyCredential(account, key))
-                    .buildClient();
+            BlobServiceClient svc = blobService(account);
             cc = svc.getBlobContainerClient(container);
             cc.create();
             createdContainer = true;

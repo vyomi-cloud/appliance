@@ -889,6 +889,7 @@ async function renderDetail(main){
     content.append(el("h2",{class:"sub-h"}, item.label));
     const t = (item.type||"").toLowerCase();
     if (t === "overview") return renderOverviewTab(content, svc, STATE.item);
+    if (t === "objects")  return renderObjectsTab(content, svc, STATE.item);
     if (t === "tags")     return renderLabelsTab(content, svc, STATE.item);
     if (t === "json")     return content.append(el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto"}, JSON.stringify(STATE.item, null, 2)));
     if (t === "properties")return renderOverviewTab(content, svc, STATE.item);
@@ -903,6 +904,79 @@ async function renderDetail(main){
         "Wiring lands in GCP-C (rich sub-blade renderers). Schema is loaded; rendering is the next step.")));
   }
   paintNav(); paintContent();
+}
+
+// Cloud Storage — Objects browser (upload / list / delete), parity with the
+// S3 + Azure Blob consoles. Upload streams the real file to the byte store so
+// the native google-cloud-storage SDK reads it back.
+async function renderObjectsTab(host, svc, item){
+  const bucket = String(getPath(item, svc.name_field) || item.name || "");
+  const ap = svc.api_paths || {};
+  host.innerHTML = "";
+
+  const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap"});
+  const fileIn = el("input",{type:"file",style:"display:none",multiple:true,
+    onchange:e=>uploadFiles(e.target.files)});
+  const upBtn = el("button",{class:"btn primary",onclick:()=>{
+    if (!ap.uploadObject) { toast("Upload path not configured","err"); return; } fileIn.click();
+  }}, icon("upload"), "Upload");
+  const refBtn = el("button",{class:"btn",onclick:()=>renderObjectsTab(host, svc, item)},
+    icon("refresh"), "Refresh");
+  const status = el("span",{style:"font-size:12.5px;color:var(--sub);margin-left:auto"}, "");
+  bar.append(upBtn, refBtn, fileIn, status);
+  host.append(bar);
+  const listHost = el("div",{}); host.append(listHost);
+
+  async function uploadFiles(files){
+    if (!files || !files.length) return;
+    const list = Array.from(files); let done = 0;
+    for (const f of list){
+      status.textContent = `Uploading ${f.name} (${done+1}/${list.length})…`;
+      const fd = new FormData(); fd.append("file", f, f.name);
+      try {
+        const r = await fetch(ORIGIN + fillCommon(ap.uploadObject.path, {name:bucket}),
+          {method:"POST", body:fd});
+        if (!r.ok) toast("Upload failed: "+f.name, "err"); else done++;
+      } catch(e){ toast("Upload failed: "+f.name, "err"); }
+    }
+    status.textContent = `Uploaded ${done} of ${list.length}`;
+    if (done > 0) toast(`Uploaded ${done} object${done===1?"":"s"}`);
+    renderObjectsTab(host, svc, item);
+  }
+
+  async function deleteObject(name){
+    if (!ap.deleteObject) { toast("Delete path not configured","err"); return; }
+    if (!confirm("Delete object '"+name+"'? This cannot be undone.")) return;
+    const path = fillCommon(ap.deleteObject.path,
+      {name:bucket, object:name.split("/").map(encodeURIComponent).join("/")});
+    const r = await api(ap.deleteObject.method, path);
+    if (r.ok || [200,202,204].includes(r.status)) { toast("Deleted "+name); renderObjectsTab(host, svc, item); }
+    else toast("Delete failed ("+r.status+")", "err");
+  }
+
+  listHost.innerHTML = '<div class="empty">Loading…</div>';
+  const r = await api((ap.objects||{}).method || "GET", fillCommon((ap.objects||{}).path, {name:bucket}));
+  listHost.innerHTML = "";
+  const objs = ((r.json||{}).items) || [];
+  if (!objs.length){
+    listHost.append(el("div",{class:"empty"},
+      el("span",{class:"ic material-symbols-outlined"}, "inbox"),
+      el("div",{}, "This bucket is empty."),
+      el("div",{style:"font-size:11.5px;color:var(--hint);margin-top:6px"},
+        "Click Upload to add your first object.")));
+    return;
+  }
+  const t = el("table",{class:"gc"});
+  t.append(el("tr",{}, el("th",{},"Name"),el("th",{},"Type"),
+                  el("th",{},"Size"),el("th",{},"Updated"),el("th",{},"")));
+  objs.forEach(o => t.append(el("tr",{},
+    el("td",{}, o.name||"—"),
+    el("td",{}, o.contentType||"application/octet-stream"),
+    el("td",{}, String(o.size!=null?o.size:0)+" B"),
+    el("td",{class:"small"}, o.updated || o.timeCreated || "—"),
+    el("td",{style:"text-align:right"},
+      el("button",{class:"btn danger",onclick:()=>deleteObject(o.name)}, icon("delete"), "Delete")))));
+  listHost.append(t);
 }
 
 function renderOverviewTab(host, svc, item){

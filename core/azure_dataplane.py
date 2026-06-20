@@ -72,20 +72,23 @@ def _xml_escape(s: str) -> str:
 
 
 async def _blob_handle(account: str, rest: str, request: Request) -> Response:
+    # Storage goes through the backend-aware helpers below (put_blob_bytes /
+    # get_blob_rec / list_blobs / ...), which use Azurite when configured and
+    # the in-process store otherwise. This handler only shapes the Azure Blob
+    # REST request/response — it never touches the backing store directly.
     method = request.method.upper()
     qp = request.query_params
-    acct = _account(_sid(), account)
     rest = rest or ""
 
     # ----- account level: GET ?comp=list -> list containers -----
     if rest == "":
         if method == "GET" and qp.get("comp") == "list":
             items = "".join(
-                f"<Container><Name>{_xml_escape(name)}</Name><Properties>"
-                f"<Last-Modified>{_http_date()}</Last-Modified><Etag>{_etag()}</Etag>"
+                f"<Container><Name>{_xml_escape(c['name'])}</Name><Properties>"
+                f"<Last-Modified>{c.get('created') or _http_date()}</Last-Modified><Etag>{_etag()}</Etag>"
                 f"<LeaseStatus>unlocked</LeaseStatus><LeaseState>available</LeaseState>"
                 f"</Properties></Container>"
-                for name in acct["containers"])
+                for c in list_containers(account))
             xml = ('<?xml version="1.0" encoding="utf-8"?>'
                    f'<EnumerationResults><Containers>{items}</Containers><NextMarker /></EnumerationResults>')
             return Response(content=xml, media_type="application/xml", headers=_blob_headers())
@@ -100,13 +103,11 @@ async def _blob_handle(account: str, rest: str, request: Request) -> Response:
         if method == "GET" and qp.get("comp") == "list":  # list blobs (restype=container present)
             prefix = qp.get("prefix", "")
             rows = ""
-            for (c, b), rec in acct["blobs"].items():
-                if c != container or not b.startswith(prefix):
-                    continue
-                rows += (f"<Blob><Name>{_xml_escape(b)}</Name><Properties>"
-                         f"<Last-Modified>{rec['mtime']}</Last-Modified><Etag>{rec['etag']}</Etag>"
-                         f"<Content-Length>{len(rec['data'])}</Content-Length>"
-                         f"<Content-Type>{_xml_escape(rec['ct'])}</Content-Type>"
+            for o in list_blobs(account, container, prefix):
+                rows += (f"<Blob><Name>{_xml_escape(o['name'])}</Name><Properties>"
+                         f"<Last-Modified>{o['lastModified']}</Last-Modified><Etag>{o['etag']}</Etag>"
+                         f"<Content-Length>{o['size']}</Content-Length>"
+                         f"<Content-Type>{_xml_escape(o['contentType'])}</Content-Type>"
                          f"<BlobType>BlockBlob</BlobType>"
                          f"<LeaseStatus>unlocked</LeaseStatus><LeaseState>available</LeaseState>"
                          f"</Properties></Blob>")
@@ -116,19 +117,17 @@ async def _blob_handle(account: str, rest: str, request: Request) -> Response:
             return Response(content=xml, media_type="application/xml", headers=_blob_headers())
         if qp.get("restype") == "container":
             if method == "PUT":
-                if container in acct["containers"]:
+                if container_exists(account, container):
                     return Response(status_code=409, content="", headers=_blob_headers(
                         {"x-ms-error-code": "ContainerAlreadyExists"}))
-                acct["containers"][container] = {"created": _http_date()}
+                create_container(account, container)
                 return Response(status_code=201, content="", headers=_blob_headers(
                     {"ETag": _etag(), "Last-Modified": _http_date()}))
             if method == "DELETE":
-                acct["containers"].pop(container, None)
-                for k in [k for k in acct["blobs"] if k[0] == container]:
-                    acct["blobs"].pop(k, None)
+                delete_container(account, container)
                 return Response(status_code=202, content="", headers=_blob_headers())
             if method in ("GET", "HEAD"):  # get container properties
-                if container not in acct["containers"]:
+                if not container_exists(account, container):
                     return Response(status_code=404, content="", headers=_blob_headers(
                         {"x-ms-error-code": "ContainerNotFound"}))
                 return Response(status_code=200, content="", headers=_blob_headers(
@@ -136,36 +135,43 @@ async def _blob_handle(account: str, rest: str, request: Request) -> Response:
         return Response(status_code=400, content="", headers=_blob_headers())
 
     # ----- blob level -----
-    key = (container, blob)
     if method == "PUT":
         body = await request.body()
-        acct["containers"].setdefault(container, {"created": _http_date()})
         ct = request.headers.get("content-type") or request.headers.get("x-ms-blob-content-type") or "application/octet-stream"
         meta = {k[len("x-ms-meta-"):]: v for k, v in request.headers.items() if k.lower().startswith("x-ms-meta-")}
-        etag = _etag()
-        acct["blobs"][key] = {"data": body, "ct": ct, "etag": etag, "mtime": _http_date(), "meta": meta}
+        rec = put_blob_bytes(account, container, blob, body, ct, meta)
         md5 = hashlib.md5(body).digest()
         import base64
         return Response(status_code=201, content="", headers=_blob_headers({
-            "ETag": etag, "Last-Modified": _http_date(),
+            "ETag": rec["etag"], "Last-Modified": rec["mtime"],
             "Content-MD5": base64.b64encode(md5).decode(),
             "x-ms-request-server-encrypted": "true"}))
-    rec = acct["blobs"].get(key)
     if method in ("GET", "HEAD"):
-        if not rec:
+        if method == "HEAD":
+            p = blob_props_rec(account, container, blob)
+            if not p:
+                return Response(status_code=404, content="", headers=_blob_headers(
+                    {"x-ms-error-code": "BlobNotFound"}))
+            hdrs = _blob_headers({
+                "ETag": p["etag"], "Last-Modified": p["mtime"],
+                "Content-Length": str(p["size"]), "Accept-Ranges": "bytes",
+                "x-ms-blob-type": "BlockBlob", "x-ms-creation-time": p["mtime"]})
+            for mk, mv in (p.get("meta") or {}).items():
+                hdrs["x-ms-meta-" + mk] = mv
+            return Response(status_code=200, content=b"", media_type=p["ct"], headers=hdrs)
+        g = get_blob_rec(account, container, blob)
+        if not g:
             return Response(status_code=404, content="", headers=_blob_headers(
                 {"x-ms-error-code": "BlobNotFound"}))
         hdrs = _blob_headers({
-            "ETag": rec["etag"], "Last-Modified": rec["mtime"],
-            "Content-Length": str(len(rec["data"])), "Accept-Ranges": "bytes",
-            "x-ms-blob-type": "BlockBlob", "x-ms-creation-time": rec["mtime"]})
-        for mk, mv in rec.get("meta", {}).items():
+            "ETag": g["etag"], "Last-Modified": g["mtime"],
+            "Content-Length": str(len(g["data"])), "Accept-Ranges": "bytes",
+            "x-ms-blob-type": "BlockBlob", "x-ms-creation-time": g["mtime"]})
+        for mk, mv in (g.get("meta") or {}).items():
             hdrs["x-ms-meta-" + mk] = mv
-        if method == "HEAD":
-            return Response(status_code=200, content=b"", media_type=rec["ct"], headers=hdrs)
-        return Response(content=rec["data"], media_type=rec["ct"], headers=hdrs)
+        return Response(content=g["data"], media_type=g["ct"], headers=hdrs)
     if method == "DELETE":
-        existed = acct["blobs"].pop(key, None) is not None
+        existed = delete_blob(account, container, blob)
         return Response(status_code=202 if existed else 404, content="", headers=_blob_headers())
     return Response(status_code=405, content="", headers=_blob_headers())
 
@@ -630,6 +636,132 @@ async def _apim_handle(service_name: str, rest: str, request: Request) -> Respon
 
 
 # ----------------------------------------------------------------------------
+# Blob backend — Azurite when configured, in-process fallback otherwise.
+#
+# These helpers are the single source of truth for blob storage: both the
+# console routes (/api/azure/storage/...) and the native Blob REST handler
+# (_blob_handle) go through them, so a file uploaded from the console is
+# immediately readable by azure-storage-blob — and lives in Azurite (durable,
+# real open-source emulator), exactly like S3→MinIO and GCS→fake-gcs.
+# ----------------------------------------------------------------------------
+def _store():
+    """Return the azure_blob_store module if Azurite is configured + reachable,
+    else None (caller uses the in-process _blob dict)."""
+    try:
+        from core import azure_blob_store as _abs
+        return _abs if _abs.available() else None
+    except Exception:
+        return None
+
+
+def put_blob_bytes(account: str, container: str, blob: str, data: bytes,
+                   content_type: str | None = None, meta: dict | None = None) -> dict:
+    st = _store()
+    if st:
+        try:
+            return st.put_blob(_sid(), account, container, blob, data, content_type, meta)
+        except Exception:
+            pass  # fall through to in-process on transient backend errors
+    acct = _account(_sid(), account)
+    acct["containers"].setdefault(container, {"created": _http_date()})
+    rec = {"data": data, "ct": content_type or "application/octet-stream",
+           "etag": _etag(), "mtime": _http_date(), "meta": meta or {}}
+    acct["blobs"][(container, blob)] = rec
+    return rec
+
+
+def get_blob_rec(account: str, container: str, blob: str) -> dict | None:
+    """Full record {data, ct, etag, mtime, meta} or None."""
+    st = _store()
+    if st:
+        return st.get_blob(_sid(), account, container, blob)
+    return _account(_sid(), account)["blobs"].get((container, blob))
+
+
+def blob_props_rec(account: str, container: str, blob: str) -> dict | None:
+    """Metadata only {size, ct, etag, mtime, meta} or None (for HEAD)."""
+    st = _store()
+    if st:
+        return st.blob_props(_sid(), account, container, blob)
+    rec = _account(_sid(), account)["blobs"].get((container, blob))
+    if not rec:
+        return None
+    return {"size": len(rec["data"]), "ct": rec["ct"], "etag": rec["etag"],
+            "mtime": rec["mtime"], "meta": rec.get("meta", {})}
+
+
+def list_blobs(account: str, container: str, prefix: str = "") -> list[dict]:
+    st = _store()
+    if st:
+        return st.list_blobs(_sid(), account, container, prefix)
+    acct = _account(_sid(), account)
+    out = []
+    for (c, b), rec in acct["blobs"].items():
+        if c != container or not b.startswith(prefix):
+            continue
+        out.append({"name": b, "size": len(rec["data"]), "contentType": rec["ct"],
+                    "etag": rec["etag"], "lastModified": rec["mtime"]})
+    return sorted(out, key=lambda o: o["name"])
+
+
+def list_containers(account: str) -> list[dict]:
+    st = _store()
+    if st:
+        out = []
+        for name in st.list_containers(_sid(), account):
+            out.append({"name": name, "created": _http_date(),
+                        "blobCount": len(st.list_blobs(_sid(), account, name))})
+        return out
+    acct = _account(_sid(), account)
+    # union of explicitly-created containers and any implied by a stored blob
+    names = set(acct["containers"].keys()) | {c for (c, _b) in acct["blobs"]}
+    out = []
+    for name in names:
+        meta = acct["containers"].get(name) or {}
+        blobs = sum(1 for (c, _b) in acct["blobs"] if c == name)
+        out.append({"name": name, "created": meta.get("created", _http_date()),
+                    "blobCount": blobs})
+    return sorted(out, key=lambda o: o["name"])
+
+
+def container_exists(account: str, container: str) -> bool:
+    st = _store()
+    if st:
+        return container in set(st.list_containers(_sid(), account))
+    return container in _account(_sid(), account)["containers"]
+
+
+def create_container(account: str, container: str) -> dict:
+    st = _store()
+    if st:
+        st.create_container(_sid(), account, container)
+        return {"name": container, "created": _http_date()}
+    acct = _account(_sid(), account)
+    rec = acct["containers"].setdefault(container, {"created": _http_date()})
+    return {"name": container, "created": rec["created"]}
+
+
+def delete_blob(account: str, container: str, blob: str) -> bool:
+    st = _store()
+    if st:
+        return st.delete_blob(_sid(), account, container, blob)
+    acct = _account(_sid(), account)
+    return acct["blobs"].pop((container, blob), None) is not None
+
+
+def delete_container(account: str, container: str) -> int:
+    st = _store()
+    if st:
+        return st.delete_container(_sid(), account, container)
+    acct = _account(_sid(), account)
+    acct["containers"].pop(container, None)
+    keys = [k for k in acct["blobs"] if k[0] == container]
+    for k in keys:
+        acct["blobs"].pop(k, None)
+    return len(keys)
+
+
+# ----------------------------------------------------------------------------
 # routes
 # ----------------------------------------------------------------------------
 def register(app) -> None:
@@ -639,6 +771,68 @@ def register(app) -> None:
     @app.api_route("/azure-data/blob/{account}/{rest:path}", methods=BLOB, include_in_schema=False)
     async def blob_dispatch(account: str, request: Request, rest: str = ""):
         return await _blob_handle(account, rest, request)
+
+    # Console-friendly container + blob list + multipart upload (parity with
+    # S3's "Upload object" button). These hit the SAME _blob store as the
+    # native Blob SDK, so a console upload is immediately readable by
+    # azure-storage-blob. Dedicated Azure routes — they NEVER fall through to
+    # the S3 handler, so responses/errors stay Azure-shaped.
+    @app.get("/api/azure/storage/{account}/containers", include_in_schema=False)
+    def azure_container_console_list(account: str):
+        return {"value": list_containers(account)}
+
+    @app.delete("/api/azure/storage/{account}/containers/{container}/blobs/{blob:path}",
+                include_in_schema=False)
+    def azure_blob_console_delete(account: str, container: str, blob: str):
+        deleted = delete_blob(account, container, blob)
+        if not deleted:
+            return JSONResponse(status_code=404,
+                                content={"ok": False, "error": "blob not found",
+                                         "account": account, "container": container, "blob": blob})
+        return {"ok": True, "deleted": True, "account": account,
+                "container": container, "blob": blob}
+
+    @app.delete("/api/azure/storage/{account}/containers/{container}",
+                include_in_schema=False)
+    def azure_container_console_delete(account: str, container: str):
+        n = delete_container(account, container)
+        return {"ok": True, "deleted": True, "account": account,
+                "container": container, "blobsDeleted": n}
+
+    @app.post("/api/azure/storage/{account}/containers", include_in_schema=False)
+    async def azure_container_console_create(account: str, request: Request):
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        name = (body.get("name") or request.query_params.get("name") or "").strip()
+        if not name:
+            return JSONResponse(status_code=400,
+                                content={"ok": False, "error": "missing container 'name'"})
+        rec = create_container(account, name)
+        return {"ok": True, "account": account, **rec}
+
+    @app.get("/api/azure/storage/{account}/containers/{container}/blobs",
+             include_in_schema=False)
+    def azure_blob_console_list(account: str, container: str, prefix: str = ""):
+        return {"value": list_blobs(account, container, prefix)}
+
+    @app.post("/api/azure/storage/{account}/containers/{container}/blobs",
+              include_in_schema=False)
+    async def azure_blob_console_upload(account: str, container: str, request: Request):
+        form = await request.form()
+        upload = form.get("file")
+        if upload is None or not hasattr(upload, "read"):
+            return JSONResponse(status_code=400,
+                                content={"ok": False, "error": "missing 'file' field"})
+        blob = (getattr(upload, "filename", None)
+                or request.query_params.get("name") or "object").strip()
+        data = await upload.read()
+        ct = getattr(upload, "content_type", None) or "application/octet-stream"
+        rec = put_blob_bytes(account, container, blob, data, ct)
+        return {"ok": True, "account": account, "container": container, "blob": blob,
+                "size": len(data), "contentType": ct, "etag": rec["etag"]}
 
     @app.api_route("/azure-data/servicebus/{namespace}/{rest:path}",
                    methods=["GET", "POST", "DELETE"], include_in_schema=False)

@@ -70,7 +70,7 @@ _COMPUTE_SUB = [
 _STORAGE_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Data", "items": [
-        {"key": "objects",     "label": "Objects",          "icon": "folder",     "type": "stub"},
+        {"key": "objects",     "label": "Objects",          "icon": "folder",     "type": "objects"},
         {"key": "lifecycle",   "label": "Lifecycle",        "icon": "history_toggle_off","type":"stub"},
     ]},
     {"group": "Settings", "items": [

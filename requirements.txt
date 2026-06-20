@@ -9,6 +9,7 @@ google-cloud-firestore>=2.16.0
 hvac>=2.1.0          # HashiCorp Vault client (transit KMS + KV secrets for all 3 providers)
 nats-py>=2.7.0       # NATS client (eventing broker for EventBridge + Eventarc + Event Grid)
 boto3>=1.34.0        # AWS SigV4 → MinIO/DynamoDB/ElasticMQ; also AWS conformance harness
+azure-storage-blob>=12.19.0  # Azure Blob → Azurite (real bytes for the Azure data plane)
 cedarpy>=4.8.0       # Cedar policy engine (real AWS IAM eval; reused for GCP IAM + Azure RBAC)
 docker>=7.0.0        # Lazy backend provisioner (core/backend_provisioner.py) — talks to
                      #   /var/run/docker.sock to pull + run sibling containers on demand.

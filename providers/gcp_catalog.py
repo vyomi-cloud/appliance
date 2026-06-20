@@ -69,10 +69,12 @@ RESOURCE_CATALOG_GCP = [
         "name_field":      "name",
         "create_method":   "POST",
         "api_paths": {
-            "list":    {"method": "GET",  "path": "/api/gcp/storage/v1/b"},
-            "objects": {"method": "GET",  "path": "/api/gcp/storage/v1/b/{name}/o"},
-            "iam":     {"method": "GET",  "path": "/api/gcp/storage/v1/b/{name}/iam"},
-            "delete":  {"method": "DELETE","path": "/api/gcp/storage/v1/b/{name}"},
+            "list":         {"method": "GET",   "path": "/api/gcp/storage/v1/b"},
+            "objects":      {"method": "GET",   "path": "/api/gcp/storage/v1/b/{name}/o"},
+            "uploadObject": {"method": "POST",  "path": "/api/gcp/storage/v1/b/{name}/upload"},
+            "deleteObject": {"method": "DELETE","path": "/api/gcp/storage/v1/b/{name}/o/{object}"},
+            "iam":          {"method": "GET",   "path": "/api/gcp/storage/v1/b/{name}/iam"},
+            "delete":       {"method": "DELETE","path": "/api/gcp/storage/v1/b/{name}"},
         },
         "children": [{"type": "objects", "label": "Objects", "icon": "folder"}],
         "columns": [

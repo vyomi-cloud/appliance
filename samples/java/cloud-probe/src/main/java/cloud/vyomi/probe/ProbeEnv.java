@@ -45,7 +45,24 @@ public final class ProbeEnv {
         return firstNonBlank(System.getenv("AZURE_STORAGE_ACCOUNT"), "devstoreaccount1");
     }
     public static String azureBlobEndpoint() {
-        return endpoint("azure") + "/azure-data/blob/" + azureAccount();
+        return azureBlobEndpointFor(azureAccount());
+    }
+    /** Per-account blob service endpoint, Azurite-style: http://host:9000/{account}.
+     *  The account is the FIRST path segment — the only shape the azure-storage
+     *  SDK preserves when it builds container/blob URLs. The appliance routes it
+     *  to the Azure blob handler by the x-ms-version header (see
+     *  azure_blob_dispatch_middleware), so it never collides with S3 on :9000. */
+    public static String azureBlobEndpointFor(String account) {
+        return endpoint("azure") + "/" + account;
+    }
+    /** Azurite-style connection string. The explicit {@code BlobEndpoint} keeps
+     *  the SDK addressing path-style ({@code /{account}/{container}/{blob}}); the
+     *  appliance bridges that onto its Azure blob handler via the x-ms-version
+     *  signature, so requests never fall through to the S3 handler. */
+    public static String azureConnectionString(String account) {
+        return "DefaultEndpointsProtocol=http;AccountName=" + account
+             + ";AccountKey=" + azureKey()
+             + ";BlobEndpoint=" + azureBlobEndpointFor(account) + ";";
     }
     public static String azureKey() {
         return firstNonBlank(System.getenv("AZURE_STORAGE_KEY"),

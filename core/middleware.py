@@ -343,6 +343,39 @@ class _DecompressRequestMiddleware:
 # HTTP middleware functions
 # ---------------------------------------------------------------------------
 
+async def azure_blob_dispatch_middleware(request, call_next):
+    """Route native Azure Blob SDK requests to the Azure handler.
+
+    The azure-storage-blob SDK addresses blobs path-style as
+    ``/{account}/{container}/{blob}`` — identical in shape to S3's
+    ``/{bucket}/{key}`` — so without disambiguation the request falls through
+    to the S3 catch-all and comes back as a ``NoSuchBucket`` XML error (an S3
+    error leaking onto an Azure client). Every Azure Storage request carries an
+    ``x-ms-version`` header that S3 never sends; we use it as the cloud
+    signature and rewrite the path onto the existing ``/azure-data/blob/...``
+    handler. This keeps each cloud on its own handler end-to-end — Azure
+    responses and errors are always Azure-shaped, never S3's.
+
+    Only blob is bridged here (the only Azure storage plane served path-style);
+    queue/table would also carry ``x-ms-version`` but are not implemented on
+    this surface.
+    """
+    try:
+        path = request.scope.get("path", "") or ""
+        if (request.headers.get("x-ms-version")
+                and not path.startswith("/azure-data")
+                and not path.startswith("/api/")
+                and not path.startswith("/assets")
+                and not path.startswith("/static")
+                and path not in ("/", "/healthz", "/favicon.ico")):
+            new_path = "/azure-data/blob" + path
+            request.scope["path"] = new_path
+            request.scope["raw_path"] = new_path.encode("utf-8")
+    except Exception:
+        pass
+    return await call_next(request)
+
+
 async def provider_api_alias_middleware(request, call_next):
     path = request.scope.get("path", "")
     _gcp_capture_public_base(request)
@@ -711,3 +744,9 @@ def register_middleware(app) -> None:
 
     # 7. _tier_enforcement_middleware
     app.middleware("http")(_tier_enforcement_middleware)
+
+    # 8. azure_blob_dispatch — registered LAST so it is the OUTERMOST layer and
+    # runs FIRST: it rewrites native Azure Blob SDK paths onto /azure-data/blob
+    # before tier-enforcement classifies the provider or the S3 catch-all can
+    # claim them. (Starlette runs http middleware in reverse registration order.)
+    app.middleware("http")(azure_blob_dispatch_middleware)

@@ -152,6 +152,41 @@ async def api_gcp_storage_create_object(bucket: str, request: Request):
     return s._gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj)
 
 
+async def api_gcp_storage_upload_object(bucket: str, request: Request):
+    """Console multipart 'Upload object' (parity with S3 + Azure Blob).
+
+    Streams the REAL file bytes into the fake-gcs byte store (the same store the
+    native google-cloud-storage SDK reads via ``?alt=media``), then records the
+    object metadata so it shows up in the console list view. Unlike the JSON
+    ``create_object`` path, this handles arbitrary binary files from a browser
+    FormData upload and always sends a proper ``uploadType=media`` to fake-gcs.
+    """
+    s = _server()
+    bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
+    if not bucket_rec:
+        raise HTTPException(404, detail="Bucket not found")
+    form = await request.form()
+    upload = form.get("file")
+    if upload is None or not hasattr(upload, "read"):
+        raise HTTPException(400, detail="missing 'file' field")
+    name = str(getattr(upload, "filename", None)
+               or request.query_params.get("name") or "object").strip()
+    data = await upload.read()
+    ct = getattr(upload, "content_type", None) or "application/octet-stream"
+    try:
+        from core import gcp_gcs_store as gcs
+        from core.app_context import tenant_scoped_bucket
+        import urllib.parse as _ul
+        if gcs.available():
+            query = "uploadType=media&name=" + _ul.quote(name, safe="")
+            gcs.upload(tenant_scoped_bucket(bucket), query, data, ct)
+    except Exception as exc:
+        raise HTTPException(502, detail=f"Object upload failed: {str(exc)[:160]}")
+    obj = s._gcp_storage_object_record(bucket, name, {"contentType": ct, "size": str(len(data))})
+    gcp_storage_state.setdefault("objects", {}).setdefault(bucket, {})[name] = obj
+    return s._gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj)
+
+
 def api_gcp_storage_get_object(bucket: str, object_name: str):
     s = _server()
     bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
@@ -165,6 +200,15 @@ def api_gcp_storage_delete_object(bucket: str, object_name: str):
     s = _server()
     if bucket not in gcp_storage_state.get("objects", {}) or object_name not in gcp_storage_state["objects"][bucket]:
         raise HTTPException(404, detail="Object not found")
+    # Remove the real bytes from the fake-gcs byte store too, so a deleted
+    # object is gone for the native SDK as well as the console list.
+    try:
+        from core import gcp_gcs_store as gcs
+        from core.app_context import tenant_scoped_bucket
+        if gcs.available():
+            gcs.delete(tenant_scoped_bucket(bucket), object_name)
+    except Exception:
+        pass
     del gcp_storage_state["objects"][bucket][object_name]
     return {"kind": "storage#empty", "deleted": True, "bucket": bucket, "object": object_name}
 

@@ -44,11 +44,14 @@ public class ProbeController {
         return ok ? ResponseEntity.ok(result) : ResponseEntity.status(502).body(result);
     }
 
-    /** Read an object written from the console (UI). Azure: bucket = container.
-     *  e.g. GET /object/aws?bucket=my-bucket&key=path/to/file.txt */
+    /** Read an object written from the console (UI). Azure: bucket = container,
+     *  optional account = storage account (defaults to devstoreaccount1).
+     *  e.g. GET /object/aws?bucket=my-bucket&key=path/to/file.txt
+     *       GET /object/azure?account=stcloudlearn&bucket=app-data&key=hello.txt */
     @GetMapping("/object/{cloud}")
     public ResponseEntity<Map<String, Object>> getObject(@PathVariable("cloud") String cloud,
-            @RequestParam("bucket") String bucket, @RequestParam("key") String key) {
+            @RequestParam("bucket") String bucket, @RequestParam("key") String key,
+            @RequestParam(value = "account", required = false) String account) {
         CloudProbe p = probes.get(cloud.toLowerCase());
         if (p == null) {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -57,7 +60,7 @@ public class ProbeController {
             m.put("available", probes.keySet());
             return ResponseEntity.badRequest().body(m);
         }
-        Map<String, Object> res = p.getObject(bucket, key);
+        Map<String, Object> res = p.getObject(bucket, key, account);
         boolean ok = Boolean.TRUE.equals(res.get("ok"));
         return ok ? ResponseEntity.ok(res) : ResponseEntity.status(502).body(res);
     }

@@ -43,6 +43,21 @@ services:
       - vyomi-gcs:/data
     restart: unless-stopped
 
+  # Real Azure Blob data plane — object bytes live in Azurite, the official
+  # open-source Azure Storage emulator (parity with MinIO for S3 and
+  # fake-gcs-server for GCS). --loose relaxes some request validations so the
+  # well-known devstoreaccount1 SharedKey path is forgiving; bytes persist on
+  # the vyomi-azurite volume so they survive simulator restarts.
+  vyomi-azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    command: ["azurite-blob", "--blobHost", "0.0.0.0", "--blobPort", "10000",
+              "--location", "/data", "--loose", "--skipApiVersionCheck"]
+    ports:
+      - "10000:10000"
+    volumes:
+      - vyomi-azurite:/data
+    restart: unless-stopped
+
   # P1: official Google emulators — let real gRPC client libraries (Pub/Sub,
   # Firestore) work by pointing PUBSUB_EMULATOR_HOST / FIRESTORE_EMULATOR_HOST
   # at these; the simulator delegates its console/REST handlers to them too.
@@ -223,6 +238,10 @@ services:
       CLOUDLEARN_SQL_MYSQL_ADMIN_PASSWORD: cloudlearn
       # Real Cloud Storage data plane (P1b): object bytes live in fake-gcs-server.
       CLOUDLEARN_GCS_URL: http://vyomi-gcs:4443
+      # Real Azure Blob data plane: object bytes live in Azurite (well-known
+      # devstoreaccount1). core/azure_blob_store.py proxies to it; falls back to
+      # the in-process store when unset/unreachable.
+      CLOUDLEARN_AZURITE_URL: http://vyomi-azurite:10000
       # P1: official Pub/Sub + Firestore emulators back the gRPC data planes.
       PUBSUB_EMULATOR_HOST: cloudlearn-pubsub:8085
       FIRESTORE_EMULATOR_HOST: cloudlearn-firestore:8080
@@ -291,6 +310,7 @@ volumes:
   vyomi-sql-pg:
   vyomi-sql-mysql:
   vyomi-gcs:
+  vyomi-azurite:
   vyomi-nats:
   vyomi-minio:
   vyomi-dynamodb:

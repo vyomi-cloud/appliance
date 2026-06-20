@@ -1487,16 +1487,128 @@ SUB_RENDERERS.autoshutdown = function(svc, full, host){
 };
 
 // ---- Storage-specific renderers (PC5) --------------------------------------
+// Real blob browser: list containers, drill into one, list its blobs, and
+// Upload objects (parity with the S3 "Upload" button). Reads/writes the SAME
+// in-proc blob store the native azure-storage-blob SDK uses, so an uploaded
+// blob is immediately readable by the SDK. Talks ONLY to the dedicated Azure
+// console routes (/api/azure/storage/...) — never the S3 handler.
 SUB_RENDERERS.containers = function(svc, full, host){
-  host.append(el("div",{class:"sub-info"},"Blob containers in this storage account. Click + Container to add (simulated)."));
-  const t = el("table",{class:"sub-table"});
-  t.append(el("tr",{},el("th",{},"Name"),el("th",{},"Last modified"),el("th",{},"Public access"),el("th",{},"Lease state")));
-  const containers = getPath(full,"properties.containers") || ["$logs","$root","app-data"];
-  containers.forEach(c => t.append(el("tr",{},
-    el("td",{}, typeof c === "string" ? c : c.name),
-    el("td",{class:"mono small"}, new Date().toISOString().slice(0,19)+"Z"),
-    el("td",{}, "Private"), el("td",{}, "Available"))));
-  host.append(t);
+  const account = full.name;
+  const base = ORIGIN + "/api/azure/storage/" + encodeURIComponent(account);
+  let current = null;             // selected container name
+  const wrap = el("div",{}); host.append(wrap);
+
+  const UPLOAD_STYLE = "background:var(--azblue);color:#fff;border-color:var(--azblue)";
+
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"},
+      "Blob containers in storage account ", el("strong",{}, account),
+      ". Select a container to browse blobs and upload objects."));
+
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center;flex-wrap:wrap"});
+    const sel = el("select",{class:"sub-select",style:"min-width:220px",
+      onchange:e=>{ current = e.target.value||null; renderBlobs(); }});
+    sel.append(el("option",{value:""},"— select container —"));
+    const newBtn = el("button",{class:"btn",onclick:newContainer}, icon("add"), "New container");
+    const fileIn = el("input",{type:"file",style:"display:none",multiple:true,
+      onchange:e=>uploadFiles(e.target.files)});
+    const upBtn = el("button",{class:"btn",style:UPLOAD_STYLE,onclick:()=>{
+      if(!current){ toast("Select a container first","err"); return; } fileIn.click();
+    }}, icon("file_upload"), "Upload");
+    const delcBtn = el("button",{class:"btn del",onclick:()=>{
+      if(!current){ toast("Select a container first","err"); return; } deleteContainer();
+    }}, icon("delete"), "Delete container");
+    const refBtn = el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh");
+    const status = el("span",{style:"font-size:12.5px;color:var(--sub);margin-left:auto"}, "");
+    bar.append(sel, newBtn, upBtn, delcBtn, refBtn, fileIn, status);
+    wrap.append(bar);
+
+    const blobHost = el("div",{}); wrap.append(blobHost);
+
+    fetch(base + "/containers").then(r=>r.json()).then(j=>{
+      (j.value||[]).forEach(c => {
+        const o = el("option",{value:c.name}, c.name + " ("+(c.blobCount||0)+")");
+        if (c.name === current) o.selected = true;
+        sel.append(o);
+      });
+      if (current) renderBlobs();
+    }).catch(()=>blobHost.append(emptyState("Could not load containers.")));
+
+    function renderBlobs(){
+      blobHost.innerHTML = "";
+      if (!current) return;
+      blobHost.append(el("div",{class:"sub-info",style:"margin-top:4px"},
+        "Blobs in ", el("strong",{}, current)));
+      fetch(base + "/containers/" + encodeURIComponent(current) + "/blobs")
+        .then(r=>r.json()).then(j=>{
+          const blobs = j.value||[];
+          if (!blobs.length){
+            blobHost.append(emptyState("This container is empty — click Upload to add a blob."));
+            return;
+          }
+          const t = el("table",{class:"sub-table"});
+          t.append(el("tr",{},el("th",{},"Name"),el("th",{},"Type"),
+                          el("th",{},"Last modified"),el("th",{},"Size"),el("th",{},"")));
+          blobs.forEach(b => t.append(el("tr",{},
+            el("td",{}, b.name),
+            el("td",{}, b.contentType||"application/octet-stream"),
+            el("td",{class:"mono small"}, b.lastModified||"—"),
+            el("td",{}, (b.size||0)+" B"),
+            el("td",{style:"text-align:right"},
+              el("button",{class:"btn del",title:"Delete blob",
+                onclick:()=>deleteBlob(b.name)}, icon("delete"), "Delete")))));
+          blobHost.append(t);
+        }).catch(()=>blobHost.append(emptyState("Could not load blobs.")));
+    }
+
+    async function uploadFiles(list){
+      if (!list || !list.length || !current) return;
+      const files = Array.from(list); let done = 0;
+      for (const f of files){
+        status.textContent = `Uploading ${f.name} (${done+1}/${files.length})…`;
+        const fd = new FormData(); fd.append("file", f, f.name);
+        try {
+          const r = await fetch(base + "/containers/" + encodeURIComponent(current) + "/blobs",
+            {method:"POST", body:fd});
+          if (!r.ok) toast("Upload failed: "+f.name, "err"); else done++;
+        } catch(e){ toast("Upload failed: "+f.name, "err"); }
+      }
+      status.textContent = `Uploaded ${done} of ${files.length}`;
+      if (done > 0){ toast(`Uploaded ${done} blob${done===1?"":"s"}`, "ok");
+        recordNotif("ok","Blob uploaded", account+"/"+current); }
+      renderBlobs();
+    }
+
+    async function newContainer(){
+      const name = (prompt("New container name:")||"").trim();
+      if (!name) return;
+      const r = await fetch(base + "/containers", {method:"POST",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify({name})});
+      if (r.ok){ toast("Container created: "+name); current = name; render(); }
+      else { toast("Create failed","err"); }
+    }
+
+    async function deleteBlob(name){
+      if (!current || !name) return;
+      if (!confirm("Delete blob '"+name+"'? This cannot be undone.")) return;
+      const r = await fetch(base + "/containers/" + encodeURIComponent(current)
+        + "/blobs/" + name.split("/").map(encodeURIComponent).join("/"),
+        {method:"DELETE"});
+      if (r.ok){ toast("Deleted "+name); recordNotif("ok","Blob deleted", account+"/"+current+"/"+name); renderBlobs(); }
+      else { toast("Delete failed: "+name,"err"); }
+    }
+
+    async function deleteContainer(){
+      if (!current) return;
+      if (!confirm("Delete container '"+current+"' and all its blobs? This cannot be undone.")) return;
+      const r = await fetch(base + "/containers/" + encodeURIComponent(current), {method:"DELETE"});
+      if (r.ok){ toast("Deleted container "+current); recordNotif("ok","Container deleted", account+"/"+current);
+        current = null; render(); }
+      else { toast("Delete failed","err"); }
+    }
+  }
+  render();
 };
 
 SUB_RENDERERS.accesskeys = function(svc, full, host){

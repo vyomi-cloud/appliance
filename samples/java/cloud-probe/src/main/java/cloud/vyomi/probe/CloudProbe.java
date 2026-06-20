@@ -15,4 +15,11 @@ public interface CloudProbe {
      *  file written from the appliance console (UI) is readable by the SDK.
      *  For Azure, {@code bucket} is the container. Never throws. */
     Map<String, Object> getObject(String bucket, String key);
+
+    /** Same, but with an explicit object-store namespace. For Azure this is the
+     *  storage account (so a console upload to any account is readable); AWS/GCP
+     *  ignore it (the bucket is globally addressed). Blank → cloud default. */
+    default Map<String, Object> getObject(String bucket, String key, String account) {
+        return getObject(bucket, key);
+    }
 }
