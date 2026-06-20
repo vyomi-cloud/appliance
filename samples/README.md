@@ -45,7 +45,7 @@ green run is strong evidence of compatibility.
 | Cloud | Backend | Transport | From the host (over the multipass bridge) |
 |-------|---------|-----------|-------------------------------------------|
 | AWS   | DynamoDB | HTTP JSON on `:9000` | ✅ works |
-| GCP   | Firestore | gRPC on `:8080` | ⚠️ `NoRouteToHost` over the bridge — run cloud-probe **co-located** in the appliance network (the `Dockerfile`) so it reaches `firestore:8080` directly |
+| GCP   | Firestore | gRPC on `:8080` | ✅ **verified** (full lifecycle: set/get/update/query/delete round-trip the native SDK ↔ emulator) **co-located** in the appliance network. Two bugs were fixed: (1) **wrong host** — the host was derived from `CLOUDPROBE_ENDPOINT` (caddy/gateway, no :8080) → `NoRouteToHost`; now defaults to the service name `cloudlearn-firestore:8080`. (2) **endpoint not pinned** — `setEmulatorHost()` flips the channel to plaintext but leaves the endpoint at production `firestore.googleapis.com:443`, so it fired a plaintext h2c preface at a TLS port → `INTERNAL: http2 exception … 1503010002`; fixed by pinning the channel endpoint + `usePlaintext()` explicitly (`GcpProbe.firestore()`). For VM host-networking, set `FIRESTORE_EMULATOR_HOST=<vm-ip>:8080` (the published port). |
 | Azure | Cosmos | TLS gateway | ⚠️ the SDK requires HTTPS — point `CLOUDPROBE_COSMOS_ENDPOINT` at the caddy terminator (`https://vyomi.local:9443/azure-data/cosmos/{account}`), add the mkcert CA to the JDK truststore (`-Djavax.net.ssl.trustStore`), and map `vyomi.local` → the VM IP so the cert SAN matches |
 
 `CLOUDPROBE_TRUST_ALL_TLS=true` (default) installs a permissive JVM-default
@@ -86,10 +86,16 @@ docker run --rm -p 8080:8080 -e CLOUDPROBE_ENDPOINT=http://<appliance>:9000 clou
 The VM only needs docker (already bootstrapped). From inside the appliance VM:
 ```bash
 lxc exec <vm> -- docker run -d --name cloud-probe --network host \
-  -e CLOUDPROBE_ENDPOINT=http://<appliance-gateway>:9000 cloud-probe:local
+  -e CLOUDPROBE_ENDPOINT=http://<appliance-gateway>:9000 \
+  -e FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 cloud-probe:local
 # then, from the host:
 curl -s http://<vm>:8080/probe/aws | jq '.ok, .steps[] | {step,ok}'
 ```
+> Note the explicit `FIRESTORE_EMULATOR_HOST`: under `--network host` the
+> emulator's `cloudlearn-firestore` service name doesn't resolve, so point the
+> probe at the published port (`127.0.0.1:8080`, or `<vm-ip>:8080`). Co-located
+> on the appliance docker network you can omit it — the default service name
+> `cloudlearn-firestore:8080` resolves directly.
 A green `/probe/aws` proves a user can build a real app on S3 + DynamoDB through
 Vyomi — and (post-2.0.8) that real services still work after the progressive
 Wave-2 startup.

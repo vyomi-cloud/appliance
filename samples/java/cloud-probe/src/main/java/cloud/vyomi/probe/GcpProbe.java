@@ -1,5 +1,7 @@
 package cloud.vyomi.probe;
 
+import com.google.api.gax.core.NoCredentialsProvider;
+import com.google.api.gax.grpc.InstantiatingGrpcChannelProvider;
 import com.google.api.gax.paging.Page;
 import com.google.cloud.NoCredentials;
 import com.google.cloud.firestore.DocumentReference;
@@ -46,10 +48,23 @@ public class GcpProbe implements CloudProbe {
     }
 
     private Firestore firestore() {
+        // setEmulatorHost() alone flips the channel to plaintext but leaves the
+        // ENDPOINT pointed at production firestore.googleapis.com:443 (verified
+        // by packet capture: the SDK fired a plaintext h2c preface at :443 and
+        // got a TLS alert -> "First received frame was not SETTINGS 1503010002").
+        // Pin the endpoint AND plaintext explicitly via the channel provider so
+        // every RPC actually lands on the emulator.
+        InstantiatingGrpcChannelProvider channel = InstantiatingGrpcChannelProvider.newBuilder()
+                .setEndpoint(firestoreHost)
+                .setChannelConfigurator(b -> b.usePlaintext())
+                .build();
         return FirestoreOptions.newBuilder()
                 .setProjectId(project)
                 .setEmulatorHost(firestoreHost)
+                .setHost(firestoreHost)
+                .setChannelProvider(channel)
                 .setCredentials(NoCredentials.getInstance())
+                .setCredentialsProvider(NoCredentialsProvider.create())
                 .build()
                 .getService();
     }

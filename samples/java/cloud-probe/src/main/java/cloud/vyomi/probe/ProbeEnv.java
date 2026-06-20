@@ -21,16 +21,26 @@ public final class ProbeEnv {
     /** GCS rides the simulator (same base as endpoint()). */
     public static String gcsHost() { return endpoint("gcp"); }
 
-    /** Firestore is the native gRPC emulator — a different port (:8080, no
-     *  scheme). FIRESTORE_EMULATOR_HOST wins; otherwise derive host:8080 from
-     *  the endpoint. */
+    /** Firestore is the native gRPC emulator — a SEPARATE container
+     *  ({@code cloudlearn-firestore:8080}), NOT the simulator endpoint.
+     *
+     *  Deriving this host from CLOUDPROBE_ENDPOINT was the {@code NoRouteToHost}
+     *  bug: the simulator is reached via caddy / the VM gateway, but neither
+     *  exposes :8080 — only the emulator's own service name (or its published
+     *  port) does. So the derived {@code <sim-host>:8080} pointed at an
+     *  unroutable address while {@code curl cloudlearn-firestore:8080} (the
+     *  real target) worked, which looked like a gRPC failure but was a
+     *  wrong-host failure.
+     *
+     *  Resolution order: FIRESTORE_EMULATOR_HOST (also what the SDK itself
+     *  honors) > CLOUDPROBE_FIRESTORE_HOST > the co-located service-name
+     *  default. For VM host-networking, set FIRESTORE_EMULATOR_HOST to
+     *  {@code <vm-ip>:8080} (the published port). */
     public static String firestoreEmulatorHost() {
-        String h = System.getenv("FIRESTORE_EMULATOR_HOST");
-        if (h != null && !h.isBlank()) return h.trim();
-        try {
-            java.net.URI u = java.net.URI.create(endpoint("gcp"));
-            return (u.getHost() == null ? "127.0.0.1" : u.getHost()) + ":8080";
-        } catch (Exception e) { return "127.0.0.1:8080"; }
+        return firstNonBlank(
+            System.getenv("FIRESTORE_EMULATOR_HOST"),
+            System.getenv("CLOUDPROBE_FIRESTORE_HOST"),
+            "cloudlearn-firestore:8080").trim();
     }
 
     public static String gcpProject() {
