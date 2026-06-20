@@ -49,6 +49,17 @@ copy_item "docs"
 copy_item "static"
 copy_item "tools"
 copy_item "packaging"
+# Aligned with packaging/debian/build-deb.sh + packaging/rpm/cloud-learn.spec
+# (which already bundle these). The tarball previously omitted routes/providers/
+# packs/setup_cython.py/docker-compose.yml/.env.example — fine when the simulator
+# image is pulled, but the build-from-source fallback (Dockerfile COPY routes …)
+# and the launcher's source-sync need the complete set.
+copy_item "routes"
+copy_item "providers"
+copy_item "packs"
+copy_item "setup_cython.py"
+copy_item "docker-compose.yml"
+copy_item ".env.example"
 
 TARBALL="${DIST_DIR}/${RELEASE_NAME}-${VERSION}.tar.gz"
 tar -C "$STAGE_DIR" -czf "$TARBALL" "${RELEASE_NAME}-${VERSION}"
