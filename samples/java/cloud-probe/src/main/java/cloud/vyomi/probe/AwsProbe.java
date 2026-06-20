@@ -59,6 +59,17 @@ public class AwsProbe implements CloudProbe {
         return r.toMap();
     }
 
+    @Override
+    public Map<String, Object> getObject(String bucket, String key) {
+        try (S3Client s3 = s3()) {
+            ResponseBytes<GetObjectResponse> got = s3.getObjectAsBytes(
+                    GetObjectRequest.builder().bucket(bucket).key(key).build());
+            return ObjectResult.of("aws", bucket, key, got.asByteArray(), got.response().contentType());
+        } catch (Exception e) {
+            return ObjectResult.error("aws", bucket, key, e);
+        }
+    }
+
     // ── S3 (object store) ───────────────────────────────────────────────────
     private void s3Lifecycle(Report r) {
         String bucket = "cloud-probe-" + UUID.randomUUID().toString().substring(0, 12);

@@ -56,6 +56,21 @@ public class AzureProbe implements CloudProbe {
         return r.toMap();
     }
 
+    @Override
+    public Map<String, Object> getObject(String container, String blobName) {
+        try {
+            BlobServiceClient svc = new BlobServiceClientBuilder()
+                    .endpoint(blobEndpoint)
+                    .credential(new StorageSharedKeyCredential(account, key))
+                    .buildClient();
+            BlobClient bc = svc.getBlobContainerClient(container).getBlobClient(blobName);
+            byte[] bytes = bc.downloadContent().toBytes();
+            return ObjectResult.of("azure", container, blobName, bytes, bc.getProperties().getContentType());
+        } catch (Exception e) {
+            return ObjectResult.error("azure", container, blobName, e);
+        }
+    }
+
     // ── Blob (object store) ─────────────────────────────────────────────────
     private void blobLifecycle(Report r) {
         String container = "cloud-probe-" + UUID.randomUUID().toString().substring(0, 12);

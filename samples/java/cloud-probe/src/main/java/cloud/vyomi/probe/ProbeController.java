@@ -3,6 +3,7 @@ package cloud.vyomi.probe;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.LinkedHashMap;
@@ -41,5 +42,23 @@ public class ProbeController {
         Map<String, Object> result = p.probe(); // never throws; failures are in the report
         boolean ok = Boolean.TRUE.equals(result.get("ok"));
         return ok ? ResponseEntity.ok(result) : ResponseEntity.status(502).body(result);
+    }
+
+    /** Read an object written from the console (UI). Azure: bucket = container.
+     *  e.g. GET /object/aws?bucket=my-bucket&key=path/to/file.txt */
+    @GetMapping("/object/{cloud}")
+    public ResponseEntity<Map<String, Object>> getObject(@PathVariable("cloud") String cloud,
+            @RequestParam("bucket") String bucket, @RequestParam("key") String key) {
+        CloudProbe p = probes.get(cloud.toLowerCase());
+        if (p == null) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("ok", false);
+            m.put("error", "unknown or unwired cloud: " + cloud);
+            m.put("available", probes.keySet());
+            return ResponseEntity.badRequest().body(m);
+        }
+        Map<String, Object> res = p.getObject(bucket, key);
+        boolean ok = Boolean.TRUE.equals(res.get("ok"));
+        return ok ? ResponseEntity.ok(res) : ResponseEntity.status(502).body(res);
     }
 }

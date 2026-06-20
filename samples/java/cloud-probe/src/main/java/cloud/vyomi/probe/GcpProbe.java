@@ -64,6 +64,21 @@ public class GcpProbe implements CloudProbe {
         return r.toMap();
     }
 
+    @Override
+    public Map<String, Object> getObject(String bucket, String key) {
+        Storage storage = null;
+        try {
+            storage = storage();
+            Blob blob = storage.get(BlobId.of(bucket, key));
+            if (blob == null || !blob.exists()) throw new RuntimeException("object not found");
+            return ObjectResult.of("gcp", bucket, key, blob.getContent(), blob.getContentType());
+        } catch (Exception e) {
+            return ObjectResult.error("gcp", bucket, key, e);
+        } finally {
+            if (storage != null) try { storage.close(); } catch (Exception ignore) {}
+        }
+    }
+
     // ── GCS (object store) ──────────────────────────────────────────────────
     private void gcsLifecycle(Report r) {
         String bucket = "cloud-probe-" + UUID.randomUUID().toString().substring(0, 12);

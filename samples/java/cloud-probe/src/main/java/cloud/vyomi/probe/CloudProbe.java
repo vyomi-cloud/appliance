@@ -10,4 +10,9 @@ public interface CloudProbe {
 
     /** Run the lifecycle; never throws — failures are captured in the report. */
     Map<String, Object> probe();
+
+    /** Read one object back via the native object-store SDK — used to verify a
+     *  file written from the appliance console (UI) is readable by the SDK.
+     *  For Azure, {@code bucket} is the container. Never throws. */
+    Map<String, Object> getObject(String bucket, String key);
 }
