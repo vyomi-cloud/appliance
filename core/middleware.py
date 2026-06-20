@@ -362,12 +362,23 @@ async def azure_blob_dispatch_middleware(request, call_next):
     """
     try:
         path = request.scope.get("path", "") or ""
-        if (request.headers.get("x-ms-version")
-                and not path.startswith("/azure-data")
-                and not path.startswith("/api/")
-                and not path.startswith("/assets")
-                and not path.startswith("/static")
-                and path not in ("/", "/healthz", "/favicon.ico")):
+        auth = (request.headers.get("authorization") or "").lower()
+        # Cosmos SDK auth token is `type=master&...` (often URL-encoded as
+        # `type%3dmaster`). It addresses /, /dbs, /dbs/{db}/colls/... at the
+        # ROOT and ALSO carries x-ms-version — so detect it FIRST, before the
+        # blob rule below would steal it. The SDK drops the account from the
+        # path, so route under a fixed `_default` account (Cosmos is space-scoped).
+        is_cosmos = ("type%3dmaster" in auth or "type=master" in auth
+                     or "type%3dresource" in auth or "type=resource" in auth)
+        passthrough = (path.startswith("/azure-data") or path.startswith("/api/")
+                       or path.startswith("/assets") or path.startswith("/static")
+                       or path in ("/healthz", "/favicon.ico"))
+        if is_cosmos and not path.startswith("/azure-data"):
+            new_path = "/azure-data/cosmos/_default/" + path.lstrip("/")
+            request.scope["path"] = new_path
+            request.scope["raw_path"] = new_path.encode("utf-8")
+        elif (request.headers.get("x-ms-version") and not passthrough
+                and path not in ("/",)):
             new_path = "/azure-data/blob" + path
             request.scope["path"] = new_path
             request.scope["raw_path"] = new_path.encode("utf-8")

@@ -341,54 +341,113 @@ async def _cosmos_handle(account: str, rest: str, request: Request) -> Response:
     method = request.method.upper()
     segs = [s for s in (rest or "").split("/") if s]
     acct = _cos_acct(_sid(), account)
-    # dbs / dbs/{db} / dbs/{db}/colls / dbs/{db}/colls/{coll} / .../docs[/{id}]
     try:
-        if segs and segs[0] == "dbs":
+        import os
+        if os.environ.get("CLOUDLEARN_COSMOS_DEBUG"):
+            import sys
+            print(f"[cosmos] {method} /{rest}", file=sys.stderr, flush=True)
+    except Exception:
+        pass
+    try:
+        # ----- DatabaseAccount (gateway bootstrap): GET / -----
+        if not segs:
+            if method in ("GET", "HEAD"):
+                return JSONResponse(_cos_db_account(request))
+            return JSONResponse(status_code=400, content={"error": "unsupported root op"})
+
+        if segs[0] == "dbs":
+            # ----- /dbs : list + create database -----
             if len(segs) == 1:
                 if method == "GET":
-                    return JSONResponse({"Databases": [{"id": d} for d in acct], "_count": len(acct)})
+                    items = [dict({"id": d}, **_cos_meta(_rid_db(d), f"dbs/{d}/",
+                                  {"_colls": "colls/", "_users": "users/"})) for d in acct]
+                    return JSONResponse({"_rid": "", "Databases": items, "_count": len(items)})
                 if method == "POST":
                     body = await _json(request); did = body.get("id")
                     acct.setdefault(did, {})
-                    return JSONResponse(status_code=201, content={"id": did})
-            db = segs[1]
+                    return JSONResponse(status_code=201, content=dict({"id": did},
+                            **_cos_meta(_rid_db(did), f"dbs/{did}/", {"_colls": "colls/", "_users": "users/"})))
+            db = _resolve_db(acct, segs[1])
+            # ----- /dbs/{db} : read / replace / delete database -----
             if len(segs) == 2:
+                if method in ("GET", "HEAD"):
+                    return (JSONResponse(dict({"id": db}, **_cos_meta(_rid_db(db), f"dbs/{db}/",
+                            {"_colls": "colls/", "_users": "users/"}))) if db in acct else _cos_404())
                 if method == "PUT":
-                    acct.setdefault(db, {}); return JSONResponse(status_code=201, content={"id": db})
-                if method == "GET":
-                    return JSONResponse({"id": db}) if db in acct else _cos_404()
+                    acct.setdefault(db, {})
+                    return JSONResponse(status_code=201, content=dict({"id": db},
+                            **_cos_meta(_rid_db(db), f"dbs/{db}/")))
                 if method == "DELETE":
                     acct.pop(db, None); return Response(status_code=204, content="")
             if len(segs) >= 3 and segs[2] == "colls":
                 dbo = acct.setdefault(db, {})
+                # ----- /dbs/{db}/colls : list + create container -----
                 if len(segs) == 3:
                     if method == "GET":
-                        return JSONResponse({"DocumentCollections": [{"id": c} for c in dbo], "_count": len(dbo)})
+                        items = [dict({"id": c}, **_cos_meta(_rid_coll(db, c), f"dbs/{db}/colls/{c}/",
+                                      {"_docs": "docs/"})) for c in dbo]
+                        return JSONResponse({"_rid": "", "DocumentCollections": items, "_count": len(items)})
                     if method == "POST":
                         body = await _json(request); cid = body.get("id"); dbo.setdefault(cid, {})
-                        return JSONResponse(status_code=201, content={"id": cid})
-                coll = segs[3]
+                        pk = body.get("partitionKey") or {"paths": ["/id"], "kind": "Hash"}
+                        return JSONResponse(status_code=201, content=dict(
+                            {"id": cid, "partitionKey": pk,
+                             "indexingPolicy": {"indexingMode": "consistent", "automatic": True}},
+                            **_cos_meta(_rid_coll(db, cid), f"dbs/{db}/colls/{cid}/",
+                                        {"_docs": "docs/", "_sprocs": "sprocs/", "_triggers": "triggers/",
+                                         "_udfs": "udfs/", "_conflicts": "conflicts/"})))
+                coll = _resolve_coll(dbo, db, segs[3])
+                # ----- /dbs/{db}/colls/{coll} : read / replace / delete container -----
                 if len(segs) == 4:
+                    if method in ("GET", "HEAD"):
+                        return (JSONResponse(dict({"id": coll, "partitionKey": {"paths": ["/id"], "kind": "Hash"}},
+                                **_cos_meta(_rid_coll(db, coll), f"dbs/{db}/colls/{coll}/", {"_docs": "docs/"})))
+                                if coll in dbo else _cos_404())
                     if method == "PUT":
-                        dbo.setdefault(coll, {}); return JSONResponse(status_code=201, content={"id": coll})
+                        dbo.setdefault(coll, {})
+                        return JSONResponse(status_code=201, content=dict({"id": coll},
+                                **_cos_meta(_rid_coll(db, coll), f"dbs/{db}/colls/{coll}/")))
                     if method == "DELETE":
                         dbo.pop(coll, None); return Response(status_code=204, content="")
+                # ----- /dbs/{db}/colls/{coll}/pkranges : partition key ranges -----
+                # The SDK fetches these to build its collection routing map. A
+                # single-partition sim returns one range over the full hash space.
+                if len(segs) == 5 and segs[4] == "pkranges":
+                    if method in ("GET", "HEAD"):
+                        pkr = dict({"id": "0", "minInclusive": "",
+                                    "maxExclusive": "FF", "ridPrefix": 0,
+                                    "throughputFraction": 1.0, "status": "online", "parents": []},
+                                   **_cos_meta(_rid_pk(db, coll), f"dbs/{db}/colls/{coll}/pkranges/0/"))
+                        return JSONResponse({"_rid": _rid_coll(db, coll),
+                                             "PartitionKeyRanges": [pkr], "_count": 1})
                 if len(segs) >= 5 and segs[4] == "docs":
                     docs = dbo.setdefault(coll, {})
+                    # ----- /dbs/{db}/colls/{coll}/docs : create / list / query -----
                     if len(segs) == 5:
                         if method == "POST":
+                            is_query = (request.headers.get("x-ms-documentdb-isquery", "").lower() == "true"
+                                        or "query+json" in (request.headers.get("content-type", "").lower()))
                             body = await _json(request)
-                            did = body.get("id") or uuid.uuid4().hex
-                            body["id"] = did; body.setdefault("_rid", uuid.uuid4().hex); body["_ts"] = int(time.time())
+                            if is_query:
+                                results = _cos_query(docs, body)
+                                return JSONResponse({"_rid": "", "Documents": results, "_count": len(results)})
+                            did = str(body.get("id") or uuid.uuid4().hex)
+                            body["id"] = did
+                            body.update(_cos_meta(_rid_doc(db, coll, did),
+                                                  f"dbs/{db}/colls/{coll}/docs/{did}/"))
                             docs[did] = body
                             return JSONResponse(status_code=201, content=body)
                         if method == "GET":
-                            return JSONResponse({"Documents": list(docs.values()), "_count": len(docs)})
+                            return JSONResponse({"_rid": "", "Documents": list(docs.values()), "_count": len(docs)})
+                    # ----- /dbs/{db}/colls/{coll}/docs/{id} : read / replace / delete -----
                     did = segs[5]
-                    if method == "GET":
+                    if method in ("GET", "HEAD"):
                         return JSONResponse(docs[did]) if did in docs else _cos_404()
-                    if method in ("PUT",):
-                        body = await _json(request); body["id"] = did; docs[did] = body
+                    if method == "PUT":
+                        body = await _json(request); body["id"] = did
+                        body.update(_cos_meta(_rid_doc(db, coll, did),
+                                              f"dbs/{db}/colls/{coll}/docs/{did}/"))
+                        docs[did] = body
                         return JSONResponse(content=body)
                     if method == "DELETE":
                         docs.pop(did, None); return Response(status_code=204, content="")
@@ -407,6 +466,121 @@ async def _json(request: Request) -> dict:
         return b if isinstance(b, dict) else {}
     except Exception:
         return {}
+
+
+# --- Cosmos response envelopes (the SDK parses _rid/_self/_etag/_ts) ---------
+# Cosmos resource ids (_rid) are hierarchical, fixed-width, base64-encoded byte
+# strings: database=4 bytes, collection=8 (database's 4 + 4), document=16
+# (collection's 8 + 8). The SDK's ResourceId parser rejects anything else
+# ("INVALID resource id"). Derive them deterministically from the names so a
+# resource keeps the same _rid across create/read.
+def _cos_seed(seed: str, n: int) -> bytes:
+    import hashlib
+    return hashlib.sha256(seed.encode("utf-8")).digest()[:n]
+
+
+def _b64(b: bytes) -> str:
+    import base64
+    # Keep base64 padding — the Cosmos SDK's ResourceId parser decodes the _rid
+    # with a strict decoder and rejects unpadded strings ("INVALID resource id").
+    return base64.b64encode(b).decode()
+
+
+def _rid_db(db: str) -> str:
+    return _b64(_cos_seed("db:" + db, 4))
+
+
+def _rid_coll(db: str, coll: str) -> str:
+    return _b64(_cos_seed("db:" + db, 4) + _cos_seed("coll:%s/%s" % (db, coll), 4))
+
+
+def _rid_doc(db: str, coll: str, did: str) -> str:
+    return _b64(_cos_seed("db:" + db, 4) + _cos_seed("coll:%s/%s" % (db, coll), 4)
+                + _cos_seed("doc:%s/%s/%s" % (db, coll, did), 8))
+
+
+def _rid_pk(db: str, coll: str, pk: str = "0") -> str:
+    return _b64(_cos_seed("db:" + db, 4) + _cos_seed("coll:%s/%s" % (db, coll), 4)
+                + _cos_seed("pk:%s/%s/%s" % (db, coll, pk), 8))
+
+
+def _resolve_db(acct: dict, seg: str) -> str:
+    """A path segment may be a database NAME or its _rid — map back to the name.
+    The SDK switches to RID-based addressing after the first reads, and derives
+    those rids in ways that don't always round-trip our deterministic rids, so
+    fall back to the sole database when there's exactly one (the common case)."""
+    if seg in acct:
+        return seg
+    for d in acct:
+        if _rid_db(d) == seg:
+            return d
+    if len(acct) == 1:
+        return next(iter(acct))
+    return seg
+
+
+def _resolve_coll(dbo: dict, db: str, seg: str) -> str:
+    if seg in dbo:
+        return seg
+    for c in dbo:
+        if _rid_coll(db, c) == seg or _b64(_cos_seed("coll:%s/%s" % (db, c), 4)) == seg:
+            return c
+    if len(dbo) == 1:
+        return next(iter(dbo))
+    return seg
+
+
+def _cos_meta(rid: str, self_link: str, extra: dict | None = None) -> dict:
+    m = {"_rid": rid, "_self": self_link,
+         "_etag": '"%s"' % uuid.uuid4().hex, "_ts": int(time.time()),
+         "_attachments": "attachments/"}
+    if extra:
+        m.update(extra)
+    return m
+
+
+def _cos_db_account(request: Request) -> dict:
+    """The gateway bootstrap (DatabaseAccount) the SDK fetches on first use.
+
+    The SDK re-dials writableLocations[].databaseAccountEndpoint for every
+    subsequent request, so it MUST carry the external scheme + host + port. The
+    TLS terminator (caddy) strips the port from the Host header, so fall back to
+    X-Forwarded-Host / X-Forwarded-Port and the well-known appliance HTTPS port.
+    """
+    import os
+    host = (request.headers.get("x-forwarded-host")
+            or request.headers.get("host") or "localhost")
+    if ":" not in host:
+        port = (request.headers.get("x-forwarded-port")
+                or os.environ.get("CLOUDLEARN_HTTPS_PORT") or "9443")
+        host = host + ":" + str(port)
+    scheme = request.headers.get("x-forwarded-proto") or "https"
+    base = "%s://%s/" % (scheme, host)
+    loc = [{"name": "Local", "databaseAccountEndpoint": base}]
+    return {
+        "_self": "", "id": host.split(":")[0], "_rid": host,
+        "media": "//media/", "addresses": "//addresses/", "_dbs": "//dbs/",
+        "writableLocations": loc, "readableLocations": loc,
+        "enableMultipleWriteLocations": False, "enableNToManyReplicas": False,
+        "userReplicationPolicy": {"asyncReplication": False, "minReplicaSetSize": 1,
+                                  "maxReplicasetSize": 4},
+        "userConsistencyPolicy": {"defaultConsistencyLevel": "Session"},
+        "systemReplicationPolicy": {"minReplicaSetSize": 1, "maxReplicasetSize": 4},
+        "readPolicy": {"primaryReadCoefficient": 1, "secondaryReadCoefficient": 1},
+        "queryEngineConfiguration": "{}",
+    }
+
+
+def _cos_query(docs: dict, body: dict) -> list:
+    """Minimal SQL: support `SELECT * FROM c [WHERE c.field = 'value']`."""
+    import re
+    q = str(body.get("query") or "")
+    out = list(docs.values())
+    m = re.search(r"WHERE\s+c\.(\w+)\s*=\s*'([^']*)'", q, re.I)
+    if m:
+        f, v = m.group(1), m.group(2)
+        out = [d for d in out if str(d.get(f)) == v]
+    return out
 
 
 # ----------------------------------------------------------------------------
@@ -839,9 +1013,12 @@ def register(app) -> None:
     async def sb_dispatch(namespace: str, rest: str, request: Request):
         return await _sb_handle(namespace, rest, request)
 
-    @app.api_route("/azure-data/cosmos/{account}/{rest:path}",
-                   methods=["GET", "PUT", "POST", "DELETE"], include_in_schema=False)
-    async def cosmos_dispatch(account: str, rest: str, request: Request):
+    COSMOS_METHODS = ["GET", "PUT", "POST", "DELETE", "HEAD", "OPTIONS"]
+
+    @app.api_route("/azure-data/cosmos/{account}", methods=COSMOS_METHODS, include_in_schema=False)
+    @app.api_route("/azure-data/cosmos/{account}/{rest:path}", methods=COSMOS_METHODS,
+                   include_in_schema=False)
+    async def cosmos_dispatch(account: str, request: Request, rest: str = ""):
         return await _cosmos_handle(account, rest, request)
 
     @app.post("/azure-data/functions/{app_name}/{function_name}", include_in_schema=False)
