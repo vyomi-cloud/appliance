@@ -6,6 +6,23 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.8] — Unreleased
+
+**Lightweight, progressive startup — the console is usable in ~30–60 s instead of 5–10 min.** A fresh `vyomi up` previously built the simulator image and pulled the entire ~3.5 GB, 13-container backend stack before the user could reach anything (the two GCP-cloud-CLI emulators alone are ~1.4 GB). Now the launcher brings up only the **console + HTTPS proxy** first (Wave 1), then **streams the heavy backends in the background** (Wave 2) behind the existing "Appliance is getting ready" progress bar. License activation + read-only browsing work immediately; real service launches are gated until the backends are ready.
+
+### Added
+
+- **Progressive (lazy) two-wave startup.** `docker-compose.appliance.yml`: the `simulator` now **pulls the prebuilt published image** (`vyomi/appliance:<tag>`, with `build: .` kept as a dev fallback) instead of building from source on every install, and **no longer `depends_on` the 10 backend containers** — it serves the console with just its SQLite state and connects to backends lazily. The launcher (`scripts/cloud-learn` `appliance_exec_launcher`) brings up **Wave 1 = `simulator` + `caddy`** (fast), then kicks off **Wave 2 = the 10 backends + cloudsim** detached via `systemd-run`; the launch health-check now fires READY on the runtime bridge + simulator only (CloudSim moved to Wave 2). Reuses the existing `core/appliance_readiness` probe + `GET /api/runtime/readiness` + the `static/clouds.html` "getting ready" progress banner.
+- **Service-launch readiness gate.** New `_require_appliance_ready()` (`server.py`, mirrors `_disk_preflight`) returns `503 appliance_not_ready` with `ready_pct` + `pending` while backends are still downloading; bypass via `CLOUDLEARN_READINESS_GATE=disabled`, auto-off outside appliance distribution mode, fail-open on any probe error. Backed by `core/appliance_readiness.probe_all_cached()`. *(In progress: wired into RDS create so far; remaining create endpoints + the frontend Create-button disable + making the readiness banner global across all console views are still to come.)*
+
+### Fixed
+
+- **Caddy crashed on first launch with "not a directory" — caught in pre-release testing.** Wave 1 starts `caddy` immediately, but the launcher provisioned the `Caddyfile` + mkcert cert in a *later* phase, so docker auto-created `/etc/vyomi/Caddyfile` as a **directory** and the file bind-mount failed (the old flow only worked by accident because caddy's `depends_on simulator → backends` chain delayed it until after TLS provisioning). Fixed by moving `ensure_vyomi_tls_cert` + `push_tls_into_vm` **before** the stack in both the `up` and `restart` paths, and seeding `/etc/vyomi/Caddyfile` as a file (repairing a prior failed run that left it as a directory) before the Wave-1 `docker compose up`.
+
+### Build
+
+- **`scripts/build-release.sh` aligned with the deb/rpm file lists.** The `.tar.gz` release artifact previously omitted `routes`/`providers`/`packs`/`setup_cython.py`/`docker-compose.yml`/`.env.example`, while `packaging/debian/build-deb.sh` + `packaging/rpm/cloud-learn.spec` already bundle them (fixed in v2.0.7). Harmless when the simulator image is pulled, but the build-from-source fallback (`Dockerfile COPY routes …`) + the launcher source-sync need the complete set. Now every artifact (deb · rpm · snap · scoop · tarball) bundles a consistent file set.
+
 ## [2.0.7] — 2026-06-20
 
 **Bug-fix release dominated by a release-blocking fresh-install regression, plus a stack of fixes surfaced by actually running the appliance from a clean machine.** The headline: **every multipass-based install (brew/deb/rpm/scoop) has failed to launch since v2.0.3** because the source bundle omitted `packaging/` (whose init scripts the compose file bind-mounts) — Docker stubbed them as directories, the backing containers crash-looped, and the simulator never started. Docker-Compose installs and pre-2.0.3 upgrades were unaffected, which is why dogfood appliances never caught it. This release fixes that (and hardens the bundle check against the whole class), plus: the disk-cleanup 422, idempotent default-space self-heal, live launcher cold-start progress, Azure VM create UX, Azure VM SSH connect, LXD stop→start recovery, and a swallowed-error fix. Most of these predate v2.0.6 (verified by `git diff`); none was caused by the v2.0.6 upgrade itself.
