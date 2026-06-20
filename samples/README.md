@@ -76,7 +76,13 @@ Vyomi — and (post-2.0.8) that real services still work after the progressive
 Wave-2 startup.
 
 ## Status
-- **aws** — S3 + DynamoDB, implemented + build/run verified. ✅
-- **gcp** — GCS (`:9000`) + Firestore (`:8080` emulator), implemented + build/run verified. ✅
-- **azure** — Blob + Cosmos — next.
-- **go/cloud-probe** — Go port after the Java service is complete.
+- **aws** — S3 + DynamoDB (AWS SDK for Java v2), build/run verified. ✅
+- **gcp** — GCS (`:9000`) + Firestore (`:8080` emulator), build/run verified. ✅
+- **azure** — Blob (`/azure-data/blob`, Azurite-style) + Cosmos (`/azure-data/cosmos`, gateway mode), build/run verified. ✅
+- **go/cloud-probe** — Go port — next.
+
+> All three compile + start and the native SDKs genuinely execute (proven against
+> a dead endpoint: every probe returns a per-step report rather than crashing).
+> The full green run — every SDK call succeeding — is the **integration test**,
+> run against a live appliance with the Wave-2 backends up:
+> `for c in aws gcp azure; do curl -s $SVC/probe/$c | jq '{cloud,ok}'; done`

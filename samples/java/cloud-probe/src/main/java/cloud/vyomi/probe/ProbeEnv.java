@@ -37,6 +37,31 @@ public final class ProbeEnv {
         return firstNonBlank(System.getenv("GCP_PROJECT"), "cloudlearn");
     }
 
+    // ── Azure ───────────────────────────────────────────────────────────────
+    // Data planes live under /azure-data/{blob,cosmos}/{account}. The sim
+    // ignores the SharedKey/master-key signature, so the well-known
+    // Azurite / Cosmos-emulator keys are fine.
+    public static String azureAccount() {
+        return firstNonBlank(System.getenv("AZURE_STORAGE_ACCOUNT"), "devstoreaccount1");
+    }
+    public static String azureBlobEndpoint() {
+        return endpoint("azure") + "/azure-data/blob/" + azureAccount();
+    }
+    public static String azureKey() {
+        return firstNonBlank(System.getenv("AZURE_STORAGE_KEY"),
+            "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==");
+    }
+    public static String azureCosmosAccount() {
+        return firstNonBlank(System.getenv("AZURE_COSMOS_ACCOUNT"), "cloudlearn");
+    }
+    public static String azureCosmosEndpoint() {
+        return endpoint("azure") + "/azure-data/cosmos/" + azureCosmosAccount();
+    }
+    public static String azureCosmosKey() {
+        return firstNonBlank(System.getenv("AZURE_COSMOS_KEY"),
+            "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==");
+    }
+
     private static String firstNonBlank(String... vals) {
         for (String v : vals) if (v != null && !v.isBlank()) return v;
         return "";

@@ -54,6 +54,14 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
+      <!-- Azure SDK BOM — aligns azure-storage-blob, azure-cosmos, azure-core -->
+      <dependency>
+        <groupId>com.azure</groupId>
+        <artifactId>azure-sdk-bom</artifactId>
+        <version>1.2.28</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -83,7 +91,15 @@
       <artifactId>google-cloud-firestore</artifactId>
     </dependency>
 
-    <!-- Azure native SDKs are added alongside their Probe impl. -->
+    <!-- ── Azure native SDKs (object store + NoSQL) ─────────────────────── -->
+    <dependency>
+      <groupId>com.azure</groupId>
+      <artifactId>azure-storage-blob</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.azure</groupId>
+      <artifactId>azure-cosmos</artifactId>
+    </dependency>
   </dependencies>
 
   <build>
