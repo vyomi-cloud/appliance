@@ -146,7 +146,9 @@ def api_gcp_storage_list_buckets(request: Request):
             continue
         buckets.append(s._gcp_storage_bucket_view(project, bucket))
     buckets.sort(key=lambda item: item.get("name", ""))
-    return {"kind": "storage#buckets", "items": buckets, "prefixes": [], "nextPageToken": ""}
+    # Omit nextPageToken when complete (see api_gcp_storage_list_objects) — an
+    # empty-string token makes the GCS SDKs paginate forever.
+    return {"kind": "storage#buckets", "items": buckets, "prefixes": []}
 
 
 async def api_gcp_storage_create_bucket(request: Request):
@@ -221,7 +223,11 @@ def api_gcp_storage_list_objects(bucket: str, request: Request):
             continue
         objects.append(s._gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj))
     objects.sort(key=lambda item: item.get("name", ""))
-    return {"kind": "storage#objects", "items": objects, "prefixes": [], "nextPageToken": ""}
+    # Real GCS OMITS nextPageToken when the listing is complete. Emitting an
+    # empty string makes the google-cloud-storage SDKs treat it as "another
+    # page exists" and re-request forever (observed: the Java SDK loops the
+    # same empty-token request until the sim rate-limits it with 429).
+    return {"kind": "storage#objects", "items": objects, "prefixes": []}
 
 
 async def api_gcp_storage_create_object(bucket: str, request: Request):

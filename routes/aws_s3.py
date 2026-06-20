@@ -108,6 +108,43 @@ def _etag(data: bytes) -> str:
     return f'"{hashlib.md5(data).hexdigest()}"'
 
 
+def _decode_aws_chunked(body: bytes, headers) -> bytes:
+    """Strip AWS SDK v2 ``aws-chunked`` framing from a request body.
+
+    Modern AWS SDKs (Java v2, etc.) stream PutObject/UploadPart with
+    ``Content-Encoding: aws-chunked`` and ``x-amz-content-sha256:
+    STREAMING-...``: the body is wrapped in ``<hex-size>;chunk-signature=...``
+    chunk headers with optional trailing checksum lines, NOT the raw object
+    bytes. Starlette's ``request.body()`` returns this framed payload as-is, so
+    storing it corrupts the object — GET then returns the framed bytes and the
+    SDK's flexible-checksum validation fails ("Data read has a different
+    checksum than expected"). Decode it back to the real bytes; non-chunked
+    bodies pass through untouched."""
+    ce = (headers.get("content-encoding") or "").lower()
+    sha = headers.get("x-amz-content-sha256", "") or ""
+    if "aws-chunked" not in ce and not sha.startswith("STREAMING"):
+        return body
+    out = bytearray()
+    i, n = 0, len(body)
+    while i < n:
+        j = body.find(b"\r\n", i)
+        if j == -1:
+            break
+        size_field = body[i:j].split(b";", 1)[0].strip()
+        i = j + 2
+        try:
+            size = int(size_field, 16)
+        except ValueError:
+            break
+        if size == 0:          # last chunk; trailers (if any) follow
+            break
+        out += body[i:i + size]
+        i += size
+        if body[i:i + 2] == b"\r\n":   # CRLF separating chunk data
+            i += 2
+    return bytes(out)
+
+
 def _fmt_size(n: int) -> str:
     orig = n
     for unit in ["B", "KB", "MB", "GB"]:
@@ -1500,7 +1537,7 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             part_number = int(params["partNumber"])
             if upload_id not in multiparts:
                 return _error_xml("NoSuchUpload", "The specified upload does not exist.", f"/{bucket}/{key}", 404)
-            data = await request.body()
+            data = _decode_aws_chunked(await request.body(), request.headers)
             etag_val = _etag(data)
             multiparts[upload_id]["parts"][part_number] = {"data": data, "etag": etag_val, "size": len(data)}
             return _empty_response(200, {"ETag": etag_val})
@@ -1565,7 +1602,7 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return _xml_response(xml)
 
         # PutObject
-        data = await request.body()
+        data = _decode_aws_chunked(await request.body(), request.headers)
         content_type = request.headers.get("content-type", "application/octet-stream")
         storage_class = request.headers.get("x-amz-storage-class", "STANDARD")
 

@@ -1232,8 +1232,15 @@ def enforce_size_cap(resource_kind: str, provider: str, instance_type: str) -> N
 
 def enforce_quantity_cap(resource_type: str) -> None:
     """Raise HTTPException(403) if creating one more ``resource_type`` would
-    exceed the active tier's per-space cap."""
+    exceed the active tier's per-space cap.
+
+    Honors CLOUDLEARN_TIER_ENFORCE=0 — the same escape hatch the service-lock
+    middleware uses (core/middleware.py). Previously only service locks were
+    bypassed, so quantity caps still fired with enforcement "disabled", which
+    was surprising for dev/test/probe runs."""
     from fastapi import HTTPException
+    if os.environ.get("CLOUDLEARN_TIER_ENFORCE", "1").strip() in ("0", "false", ""):
+        return
     tier = active_tier()
     current = count_active_space_resources(resource_type)
     from core import tier_policy as _tp
