@@ -2804,6 +2804,22 @@ SUB_RENDERERS.bucketobjects = function(svc, full, host){
     SUB_RENDERERS.bucketobjects(svc, full, host);
   }
 
+  // Delete one object. Build the URL with per-segment encoding (not fillPath,
+  // which would %2F-escape the slashes the {key:path} route needs).
+  async function deleteObject(key){
+    if (!key || !confirm(`Delete object "${key}"? This can't be undone.`)) return;
+    const url = ORIGIN + "/api/s3/buckets/" + encodeURIComponent(full.name)
+              + "/objects/" + key.split("/").map(encodeURIComponent).join("/");
+    try {
+      const r = await fetch(url, {method: (svc.api_paths.deleteObject||{}).method || "DELETE"});
+      if (r.ok || [200,202,204].includes(r.status)) {
+        toast(`Deleted ${key}`, "ok");
+        host.innerHTML = "";
+        SUB_RENDERERS.bucketobjects(svc, full, host);
+      } else { toast(`Delete failed: ${key}`, "err"); }
+    } catch (e) { toast(`Delete failed: ${key} — ${e.message}`, "err"); }
+  }
+
   fetch(ORIGIN+fillPath(svc.api_paths.objects.path, {name: full.name})).then(r=>r.json()).then(j=>{
     const objs = j.objects || j.value || [];
     if (!objs.length) {
@@ -2817,13 +2833,16 @@ SUB_RENDERERS.bucketobjects = function(svc, full, host){
     }
     const tbl = el("table",{class:"aws"});
     tbl.append(el("tr",{}, el("th",{}, "Name"), el("th",{}, "Type"),
-      el("th",{}, "Last modified"), el("th",{}, "Size"), el("th",{}, "Storage class")));
-    objs.forEach(o => tbl.append(el("tr",{},
-      el("td",{}, el("a",{class:"id"}, o.key||o.name||"—")),
-      el("td",{}, /\.(png|jpg|jpeg)$/i.test(o.key||"") ? "Image" : "Object"),
+      el("th",{}, "Last modified"), el("th",{}, "Size"), el("th",{}, "Storage class"), el("th",{}, "")));
+    objs.forEach(o => { const key = o.key||o.name||""; tbl.append(el("tr",{},
+      el("td",{}, el("a",{class:"id"}, key||"—")),
+      el("td",{}, /\.(png|jpg|jpeg)$/i.test(key) ? "Image" : "Object"),
       el("td",{class:"small"}, o.last_modified||"—"),
       el("td",{}, String(o.size||o.content_length||0)+" B"),
-      el("td",{}, o.storage_class||"Standard"))));
+      el("td",{}, o.storage_class||"Standard"),
+      el("td",{style:"text-align:right"},
+        el("button",{class:"btn danger",title:"Delete object",onclick:()=>deleteObject(key)},
+          icon("delete"), "Delete")))); });
     host.append(tbl);
   });
 };

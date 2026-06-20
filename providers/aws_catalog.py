@@ -118,6 +118,7 @@ RESOURCE_CATALOG_AWS = [
             "notifications":  {"method": "PUT", "path": "/api/s3/buckets/{name}/notification"},
             "objects":        {"method": "GET", "path": "/api/s3/buckets/{name}/objects"},
             "uploadObject":   {"method": "POST","path": "/api/s3/buckets/{name}/objects"},
+            "deleteObject":   {"method": "DELETE","path": "/api/s3/buckets/{name}/objects/{key}"},
         },
         "children": [
             {"type": "objects", "label": "Objects", "icon": "folder"},
