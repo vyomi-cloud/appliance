@@ -46,6 +46,14 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
+      <!-- GCP libraries-bom — aligns google-cloud-* (Storage, Firestore, gRPC) -->
+      <dependency>
+        <groupId>com.google.cloud</groupId>
+        <artifactId>libraries-bom</artifactId>
+        <version>26.43.0</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -65,7 +73,17 @@
       <artifactId>dynamodb</artifactId>
     </dependency>
 
-    <!-- GCP + Azure native SDKs are added alongside their Probe impls. -->
+    <!-- ── GCP native SDKs (object store + NoSQL) ───────────────────────── -->
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-storage</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-firestore</artifactId>
+    </dependency>
+
+    <!-- Azure native SDKs are added alongside their Probe impl. -->
   </dependencies>
 
   <build>

@@ -76,6 +76,7 @@ Vyomi — and (post-2.0.8) that real services still work after the progressive
 Wave-2 startup.
 
 ## Status
-- **aws** — implemented + build/run verified. ✅
-- **gcp**, **azure** — next.
+- **aws** — S3 + DynamoDB, implemented + build/run verified. ✅
+- **gcp** — GCS (`:9000`) + Firestore (`:8080` emulator), implemented + build/run verified. ✅
+- **azure** — Blob + Cosmos — next.
 - **go/cloud-probe** — Go port after the Java service is complete.
