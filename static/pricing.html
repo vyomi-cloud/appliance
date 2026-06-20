@@ -998,6 +998,13 @@
     <div class="vyomi-splash-tag">Local multi-cloud, in seconds.</div>
     <div class="vyomi-splash-dots"><span></span><span></span><span></span></div>
   </div>
+
+  <!-- v2.0.8: persistent appliance readiness / diagnostics strip — shows
+       backend-stack status at all times (green "Appliance is Ready" once up,
+       with a Details panel). Shared self-mounting module, also on the
+       workspaces page. See static/readiness-strip.js. -->
+  <div id="vyomi-readiness-mount"></div>
+
   <script>
     // Splash gate — run BEFORE any heavy SPA logic so the user sees brand
     // immediately. Cookie `vyomi_splash_seen=v1` valid 24h suppresses on
@@ -2365,5 +2372,8 @@
     // -------- go --------------------------------------------------------
     load();
   </script>
+  <!-- Persistent appliance readiness / diagnostics strip (renders into
+       #vyomi-readiness-mount above). Shared with the workspaces page. -->
+  <script src="/assets/readiness-strip.js" defer></script>
 </body>
 </html>
