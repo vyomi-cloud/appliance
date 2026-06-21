@@ -26,7 +26,7 @@ LocalStack mocks AWS; Moto, [Azurite](https://github.com/Azure/Azurite), and the
 | **Standard SDKs work natively** — boto3, aws-sdk-java/go, google-cloud-*, azure-sdk-for-* | ✅ |
 | **Standard CLIs work natively** — `aws`, `gcloud`, `gsutil`, `bq`, `az`, `terraform` | ✅ |
 | **3 native cloud consoles** — `/console/aws`, `/console/gcp`, `/console/azure` | ✅ |
-| **4-tier licensing** — Free (₹0) · Student (₹299/mo) · Developer (₹599/mo) · Enterprise (₹99/dev/mo, min 10) | ✅ |
+| **4-tier licensing** — Free (₹0) · Pro (₹299/mo) · Max (₹599/mo) · Enterprise (₹99/dev/mo, min 10) | ✅ |
 | **Multi-tenant + cross-tenant RBAC** — viewer/operator/admin roles, per-tenant isolation | ✅ |
 | **Terraform export + import** — round-trip your simulator state to real HCL | ✅ |
 | **3 reference apps** — Java Spring Boot (AWS), Go+chi (GCP), Go+chi (Azure) | ✅ |
@@ -148,12 +148,12 @@ Production deployment: [`docs/PRODUCTION_DEPLOYMENT.md`](docs/PRODUCTION_DEPLOYM
 `/pricing` shows the 4 tiers side-by-side; tier middleware enforces the gates server-side. Standard SDKs work natively on every tier (the "Standard capability" bar at the bottom of `/pricing`).
 
 Tier escalation:
-- **Free** — 10 service categories × 3 clouds (locks NoSQL + eventing). Up to 1 VM/DB, host-capped sizes. Community support.
-- **Student** — All services on 1 primary cloud. 10 VMs, 5 DBs, full Terraform export, Cloud Shell.
-- **Developer** — All 35 services × 3 clouds. Cedar IAM, per-resource cost simulation, CI integration, single-cloud Terraform deploy.
-- **Enterprise** — Multi-cloud deploy, SSO, Helm + air-gap, custom domain, branding, audit sinks, cross-tenant RBAC, dedicated Slack.
+- **Free** (₹0/mo) — 10 service categories × 3 clouds (locks NoSQL + eventing). Tight quantity caps (1 of each resource per space). Community support.
+- **Pro** (₹299/mo) — pick **one** primary cloud, all 12 services on it (other two visible but locked). 5 spaces, medium VM size, 10 GB storage, Cloud Shell, CloudSim Power model.
+- **Max** (₹599/mo) — all 35 services × all 3 clouds. 25 spaces, large VM size, 100 GB storage, Cedar IAM enforcement, full CloudSim + cost simulation, CI integration.
+- **Enterprise** (from ₹99/dev/mo, 10-dev min) — everything in Max plus multi-tenant, SSO, audit-log sinks, Helm + air-gapped install, custom domain, 24/7 support.
 
-Switch tiers any time via `POST /api/license/signup`.
+Switch tiers any time via `POST /api/license/signup`. *(Pro/Max were named Student/Developer before 2026-06-17; the old names still work as aliases.)*
 
 ## Conformance & testing
 
