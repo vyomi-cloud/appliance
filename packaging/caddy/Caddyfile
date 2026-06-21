@@ -40,7 +40,7 @@
     reverse_proxy simulator:9000 {
         # Pass through the original Host header so the simulator can
         # build proper vyomi.local-relative URLs for redirects, etc.
-        header_up Host {host}
+        header_up Host {http.request.hostport}
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
         header_up X-Forwarded-Proto https

@@ -47,16 +47,16 @@ from urllib.parse import urlparse
 _BACKENDS: list[tuple[str, str, str, int, str, int]] = [
     # name              label                  default_host                 port  category   weight_mb
     ("simulator",       "Vyomi simulator",     "127.0.0.1",                 9000, "core",     627),
-    ("postgres",        "PostgreSQL",          "cloudlearn-sql-postgres",   5432, "core",      80),
+    ("postgres",        "PostgreSQL",          "vyomi-sql-postgres",   5432, "core",      80),
     ("mysql",           "MySQL",               "vyomi-sql-mysql",           3306, "aws",      580),
-    ("vault",           "Vault (KMS / secrets)", "cloudlearn-vault",        8200, "aws",      150),
+    ("vault",           "Vault (KMS / secrets)", "vyomi-vault",        8200, "aws",      150),
     ("minio",           "MinIO (S3)",          "vyomi-minio",               9000, "aws",      228),
     ("dynamodb",        "DynamoDB",            "vyomi-dynamodb",            8000, "aws",      250),
     ("nats",            "NATS (EventBridge)",  "vyomi-nats",                4222, "aws",       40),
-    ("elasticmq",       "ElasticMQ (SQS)",     "cloudlearn-elasticmq",      9324, "aws",      130),
+    ("elasticmq",       "ElasticMQ (SQS)",     "vyomi-elasticmq",      9324, "aws",      130),
     ("fake-gcs",        "fake-gcs-server",     "vyomi-gcs",                 4443, "gcp",       80),
-    ("pubsub",          "Pub/Sub emulator",    "cloudlearn-pubsub",         8085, "gcp",      750),
-    ("firestore",       "Firestore emulator",  "cloudlearn-firestore",      8080, "gcp",      750),
+    ("pubsub",          "Pub/Sub emulator",    "vyomi-pubsub",         8085, "gcp",      750),
+    ("firestore",       "Firestore emulator",  "vyomi-firestore",      8080, "gcp",      750),
     ("cloudsim",        "CloudSim Plus",       "cloudsim",                  9010, "core",     250),
 ]
 
@@ -89,7 +89,7 @@ def probe_all() -> dict[str, Any]:
         },
         "services": [
           { "name": "postgres", "label": "PostgreSQL",
-            "host": "cloudlearn-sql-postgres", "port": 5432,
+            "host": "vyomi-sql-postgres", "port": 5432,
             "category": "core", "status": "ready" | "loading",
             "weight_mb": 80 }, ...
         ],

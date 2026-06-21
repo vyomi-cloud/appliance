@@ -300,15 +300,15 @@ RESOURCE_CATALOG_GCP = [
     {
         "key": "secretmanager", "label": "Secret Manager", "icon": "key",
         "namespace": "GCP/SecretManager", "service": "secretmanager",
-        "collection_path": "/api/gcp/extras/secretmanager/secrets",
-        "resource_path":   "/api/gcp/extras/secretmanager/secrets/{name}",
+        "collection_path": "/api/gcp/secrets",
+        "resource_path":   "/api/gcp/secrets/{name}",
         "name_field":      "name",
         "create_method":   "POST",
         "api_paths": {
-            "secrets":  {"method": "GET", "path": "/api/gcp/extras/secretmanager/secrets"},
+            "secrets":  {"method": "GET", "path": "/api/gcp/secrets"},
             "versions": {"method": "GET", "path": "/api/gcp/extras/secretmanager/versions"},
             "rotation": {"method": "GET", "path": "/api/gcp/extras/secretmanager/rotation"},
-            "delete":   {"method": "DELETE","path": "/api/gcp/extras/secretmanager/secrets/{name}"},
+            "delete":   {"method": "DELETE","path": "/api/gcp/secrets/{name}"},
         },
         "columns": [
             ["name",           "Name"],
@@ -326,17 +326,17 @@ RESOURCE_CATALOG_GCP = [
     {
         "key": "kms", "label": "Cloud KMS", "icon": "enhanced_encryption",
         "namespace": "GCP/KMS", "service": "kms",
-        "collection_path": "/api/gcp/extras/kms/keys",
-        "resource_path":   "/api/gcp/extras/kms/keys/{name}",
+        "collection_path": "/api/gcp/kms/keys",
+        "resource_path":   "/api/gcp/kms/keys/{name}",
         "name_field":      "name",
         "create_method":   "POST",
         "api_paths": {
-            "keys":           {"method": "GET", "path": "/api/gcp/extras/kms/keys"},
+            "keys":           {"method": "GET", "path": "/api/gcp/kms/keys"},
             "keyrings":       {"method": "GET", "path": "/api/gcp/extras/kms/keyrings"},
             "keyversions":    {"method": "GET", "path": "/api/gcp/extras/kms/keyversions"},
             "importJobs":     {"method": "GET", "path": "/api/gcp/extras/kms/importJobs"},
             "ekmConnections": {"method": "GET", "path": "/api/gcp/extras/kms/ekmConnections"},
-            "delete":         {"method": "DELETE","path": "/api/gcp/extras/kms/keys/{name}"},
+            "delete":         {"method": "DELETE","path": "/api/gcp/kms/keys/{name}"},
         },
         "columns": [
             ["name",       "Key name"],

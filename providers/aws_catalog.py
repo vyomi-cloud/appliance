@@ -519,15 +519,15 @@ RESOURCE_CATALOG_AWS = [
     {
         "key": "secretsmanager", "label": "Secrets Manager", "icon": "key",
         "namespace": "AWS/SecretsManager", "service": "secretsmanager",
-        "collection_path": "/api/aws/extras/secretsmanager/secrets",
-        "resource_path":   "/api/aws/extras/secretsmanager/secrets/{name}",
+        "collection_path": "/api/aws/secrets",
+        "resource_path":   "/api/aws/secrets/{name}",
         "name_field":      "name",
         "create_method":   "POST",
         "api_paths": {
-            "secrets":          {"method": "GET",  "path": "/api/aws/extras/secretsmanager/secrets"},
+            "secrets":          {"method": "GET",  "path": "/api/aws/secrets"},
             "rotation":         {"method": "GET",  "path": "/api/aws/extras/secretsmanager/rotation"},
             "replicas":         {"method": "GET",  "path": "/api/aws/extras/secretsmanager/replicas"},
-            "delete":           {"method": "DELETE","path": "/api/aws/extras/secretsmanager/secrets/{name}"},
+            "delete":           {"method": "DELETE","path": "/api/aws/secrets/{name}"},
         },
         "rail_items": [
             {"key": "secrets",          "label": "Secrets",          "icon": "key",           "type": "primary"},
@@ -548,7 +548,9 @@ RESOURCE_CATALOG_AWS = [
         ],
         "createFields": [
             {"name": "name", "label": "Secret name", "default": "my-secret"},
+            {"name": "value", "label": "Secret value", "default": "changeme"},
         ],
+        "editable": True,   # per-row Edit -> PUT resource_path {value} (Update)
         "endpoints": {},
     },
     # ========================================================================
@@ -557,16 +559,16 @@ RESOURCE_CATALOG_AWS = [
     {
         "key": "kms", "label": "KMS", "icon": "enhanced_encryption",
         "namespace": "AWS/KMS", "service": "kms",
-        "collection_path": "/api/aws/extras/kms/keys",
-        "resource_path":   "/api/aws/extras/kms/keys/{name}",
+        "collection_path": "/api/aws/kms/keys",
+        "resource_path":   "/api/aws/kms/keys/{name}",
         "name_field":      "key_id",
         "create_method":   "POST",
         "api_paths": {
-            "keys":              {"method": "GET",  "path": "/api/aws/extras/kms/keys"},
+            "keys":              {"method": "GET",  "path": "/api/aws/kms/keys"},
             "aws-managed-keys":  {"method": "GET",  "path": "/api/aws/extras/kms/aws-managed-keys"},
             "aliases":           {"method": "GET",  "path": "/api/aws/extras/kms/aliases"},
             "custom-key-stores": {"method": "GET",  "path": "/api/aws/extras/kms/custom-key-stores"},
-            "delete":            {"method": "DELETE","path": "/api/aws/extras/kms/keys/{name}"},
+            "delete":            {"method": "DELETE","path": "/api/aws/kms/keys/{name}"},
         },
         "rail_items": [
             {"group": "Keys"},
@@ -627,6 +629,8 @@ def catalog_for_console() -> list[dict]:
             "children":        c.get("children", []),
             # Per-service left rail — frontend prefers this over `children`.
             "rail_items":      c.get("rail_items", []),
+            # Per-row Edit (Update) — console PUTs {value} to resource_path.
+            "editable":        c.get("editable", False),
         }
         if c["key"] in WIZARDS:
             entry["wizard"] = WIZARDS[c["key"]]

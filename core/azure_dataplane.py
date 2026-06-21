@@ -936,6 +936,118 @@ def delete_container(account: str, container: str) -> int:
 
 
 # ----------------------------------------------------------------------------
+# Azure Storage Queue (native REST) — Azurite-backed; the AMQP→HTTP substitution
+# for Service Bus. Served under /azure-data/queue/{account} so it never collides
+# with the blob surface (both carry x-ms-version). Terminates the native Queue
+# protocol and re-issues via core.azure_queue_store (the azure-storage-queue
+# Python SDK → Azurite), so unmodified native clients round-trip.
+# ----------------------------------------------------------------------------
+def _queue_store():
+    try:
+        from core import azure_queue_store as _aqs
+        return _aqs if _aqs.available() else None
+    except Exception:
+        return None
+
+
+def _q_fmt(dt) -> str:
+    try:
+        return email.utils.format_datetime(dt, usegmt=True)
+    except Exception:
+        return email.utils.formatdate(usegmt=True)
+
+
+def _queue_messages_xml(msgs: list, include_text: bool) -> str:
+    from xml.sax.saxutils import escape
+    out = ['<?xml version="1.0" encoding="utf-8"?>', "<QueueMessagesList>"]
+    for m in msgs:
+        out.append("<QueueMessage>")
+        out.append(f"<MessageId>{escape(str(m.get('id', '')))}</MessageId>")
+        out.append(f"<InsertionTime>{_q_fmt(m.get('insertion_time'))}</InsertionTime>")
+        out.append(f"<ExpirationTime>{_q_fmt(m.get('expiration_time'))}</ExpirationTime>")
+        out.append(f"<PopReceipt>{escape(str(m.get('pop_receipt', '')))}</PopReceipt>")
+        out.append(f"<TimeNextVisible>{_q_fmt(m.get('time_next_visible'))}</TimeNextVisible>")
+        if include_text:
+            out.append(f"<DequeueCount>{int(m.get('dequeue_count', 1) or 1)}</DequeueCount>")
+            out.append(f"<MessageText>{escape(str(m.get('content', '')))}</MessageText>")
+        out.append("</QueueMessage>")
+    out.append("</QueueMessagesList>")
+    return "".join(out)
+
+
+def _xml_response(body: str, status: int = 200) -> Response:
+    return Response(content=body, status_code=status, media_type="application/xml")
+
+
+async def _queue_handle(account: str, rest: str, request: Request) -> Response:
+    import re
+    from xml.sax.saxutils import escape, unescape
+    method = request.method
+    qp = request.query_params
+    sid = _sid()
+    store = _queue_store()
+    rest = (rest or "").strip("/")
+    parts = rest.split("/") if rest else []
+
+    # list queues: GET /{account}?comp=list
+    if not parts:
+        if method == "GET" and qp.get("comp") == "list":
+            names = store.list_queues(sid, account) if store else []
+            items = "".join(f"<Queue><Name>{escape(n)}</Name></Queue>" for n in names)
+            return _xml_response('<?xml version="1.0" encoding="utf-8"?>'
+                                 f"<EnumerationResults><Queues>{items}</Queues>"
+                                 "<NextMarker /></EnumerationResults>")
+        return Response(status_code=400, content="")
+
+    queue = parts[0]
+
+    # /{account}/{queue}  → create / delete / metadata
+    if len(parts) == 1:
+        if method == "PUT":
+            if store:
+                store.create_queue(sid, account, queue)
+            return Response(status_code=201, content="")
+        if method == "DELETE":
+            if store:
+                store.delete_queue(sid, account, queue)
+            return Response(status_code=204, content="")
+        if method in ("GET", "HEAD"):
+            return Response(status_code=200, content="")
+        return Response(status_code=400, content="")
+
+    # /{account}/{queue}/messages[/{messageid}]
+    if len(parts) >= 2 and parts[1] == "messages":
+        # delete one message: DELETE /{queue}/messages/{messageid}?popreceipt=
+        if len(parts) == 3 and method == "DELETE":
+            if store:
+                store.delete_message(sid, account, queue, parts[2], qp.get("popreceipt", ""))
+            return Response(status_code=204, content="")
+        if len(parts) == 2 and method == "POST":   # enqueue
+            raw = (await request.body()).decode("utf-8", "replace")
+            mt = re.search(r"<MessageText>(.*?)</MessageText>", raw, re.S)
+            text = unescape(mt.group(1)) if mt else raw
+            if not store:
+                return Response(status_code=503, content="")
+            m = store.send_message(sid, account, queue, text)
+            return _xml_response(_queue_messages_xml([m], include_text=False), status=201)
+        if len(parts) == 2 and method == "GET":     # dequeue
+            try:
+                num = max(1, int(qp.get("numofmessages", "1") or "1"))
+            except Exception:
+                num = 1
+            try:
+                vis = int(qp.get("visibilitytimeout", "30") or "30")
+            except Exception:
+                vis = 30
+            msgs = store.receive_messages(sid, account, queue, num, vis) if store else []
+            return _xml_response(_queue_messages_xml(msgs, include_text=True))
+        if len(parts) == 2 and method == "DELETE":  # clear messages
+            return Response(status_code=204, content="")
+
+    return Response(status_code=400, content="")
+
+
+# ----------------------------------------------------------------------------
 # routes
 # ----------------------------------------------------------------------------
 def register(app) -> None:
@@ -945,6 +1057,17 @@ def register(app) -> None:
     @app.api_route("/azure-data/blob/{account}/{rest:path}", methods=BLOB, include_in_schema=False)
     async def blob_dispatch(account: str, request: Request, rest: str = ""):
         return await _blob_handle(account, rest, request)
+
+    # Native Azure Storage Queue surface (Azurite-backed) — the AMQP→HTTP
+    # substitution for Service Bus. The native azure-storage-queue SDK is pointed
+    # here via QueueEndpoint=.../azure-data/queue/{account}; the /azure-data
+    # prefix is a dispatch passthrough so it never collides with the blob handler.
+    QUEUE = ["GET", "PUT", "DELETE", "HEAD", "POST", "OPTIONS"]
+
+    @app.api_route("/azure-data/queue/{account}", methods=QUEUE, include_in_schema=False)
+    @app.api_route("/azure-data/queue/{account}/{rest:path}", methods=QUEUE, include_in_schema=False)
+    async def queue_dispatch(account: str, request: Request, rest: str = ""):
+        return await _queue_handle(account, rest, request)
 
     # Console-friendly container + blob list + multipart upload (parity with
     # S3's "Upload object" button). These hit the SAME _blob store as the
@@ -1007,6 +1130,39 @@ def register(app) -> None:
         rec = put_blob_bytes(account, container, blob, data, ct)
         return {"ok": True, "account": account, "container": container, "blob": blob,
                 "size": len(data), "contentType": ct, "etag": rec["etag"]}
+
+    # Storage Queue console CRUD — backed by the SAME Azurite-queue store the
+    # native azure-storage-queue SDK reads (core/azure_queue_store.py), so a
+    # console-created queue is immediately visible to the SDK and vice-versa.
+    # These NEVER touch the ARM Service Bus state (a different service) — they
+    # stay on the conformant data-plane backend.
+    @app.get("/api/azure/storage/{account}/queues", include_in_schema=False)
+    def azure_queue_console_list(account: str):
+        store = _queue_store()
+        return {"value": store.list_queues(_sid(), account) if store else []}
+
+    @app.post("/api/azure/storage/{account}/queues", include_in_schema=False)
+    async def azure_queue_console_create(account: str, request: Request):
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        name = (body.get("name") or request.query_params.get("name") or "").strip()
+        if not name:
+            return JSONResponse(status_code=400,
+                                content={"ok": False, "error": "missing queue 'name'"})
+        store = _queue_store()
+        if not store:
+            return JSONResponse(status_code=503,
+                                content={"ok": False, "error": "queue backend unavailable"})
+        store.create_queue(_sid(), account, name)
+        return {"ok": True, "account": account, "name": name}
+
+    @app.delete("/api/azure/storage/{account}/queues/{queue}", include_in_schema=False)
+    def azure_queue_console_delete(account: str, queue: str):
+        store = _queue_store()
+        deleted = store.delete_queue(_sid(), account, queue) if store else False
+        return {"ok": True, "deleted": bool(deleted), "account": account, "queue": queue}
 
     @app.api_route("/azure-data/servicebus/{namespace}/{rest:path}",
                    methods=["GET", "POST", "DELETE"], include_in_schema=False)

@@ -250,6 +250,7 @@ _EVENTARC_SUB = [
 _SECRETMANAGER_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Secret", "items": [
+        {"key": "value",       "label": "Secret value",     "icon": "key",        "type": "secretvalue"},
         {"key": "versions",    "label": "Versions",         "icon": "history",    "type": "stub"},
         {"key": "rotation",    "label": "Rotation",         "icon": "autorenew",  "type": "stub"},
         {"key": "replication", "label": "Replication",      "icon": "public",     "type": "stub"},
@@ -268,7 +269,7 @@ _KMS_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Key", "items": [
         {"key": "versions",    "label": "Versions",         "icon": "history",    "type": "stub"},
-        {"key": "rotation",    "label": "Rotation schedule","icon": "autorenew",  "type": "stub"},
+        {"key": "rotation",    "label": "Rotation & labels","icon": "autorenew",  "type": "kmsconfig"},
         {"key": "policy",      "label": "Key policy",       "icon": "policy",     "type": "iam"},
     ]},
     {"group": "Settings", "items": [

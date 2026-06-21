@@ -19112,16 +19112,13 @@ async def _sqs_json_dispatch(request: Request, action: str) -> Response:
     ElasticMQ proxy: try ElasticMQ first (it now handles JSON-RPC via the
     query-protocol translation layer in elasticmq_proxy), fall back to in-memory.
     """
-    # --- ElasticMQ proxy attempt (mirrors the query-path proxy in api_sqs_query) ---
-    try:
-        from core import elasticmq_proxy as _emq
-        if _emq.available():
-            status, body_bytes, ctype = await _emq.proxy(request)
-            if status != 502:
-                return Response(content=body_bytes, status_code=status, media_type=ctype)
-    except Exception:
-        pass
-
+    # NOTE: JSON-protocol clients (AWS SDK v2 + modern boto3, X-Amz-Target /
+    # AWS-JSON) require a JSON response. ElasticMQ only speaks the legacy query
+    # protocol (XML) and the proxy translates the *request* (JSON-RPC -> form) but
+    # NOT the *response*, so routing JSON clients through it returns XML and breaks
+    # unmarshalling ("Unexpected character '<'"). Serve JSON clients from the
+    # in-memory store below (it implements visibility-timeout + FIFO); the legacy
+    # query path (api_sqs_query) keeps using ElasticMQ for older clients.
     try:
         raw = await request.body()
         body = json.loads(raw.decode("utf-8") or "{}") if raw else {}

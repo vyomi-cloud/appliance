@@ -10,6 +10,7 @@ FastAPI's ``@app.middleware("http")`` and ``add_middleware()`` both execute in
 from __future__ import annotations
 
 import os
+import re
 import time
 import threading as _threading
 
@@ -362,7 +363,26 @@ async def azure_blob_dispatch_middleware(request, call_next):
     """
     try:
         path = request.scope.get("path", "") or ""
+        host = (request.headers.get("host", "") or "").split(":")[0].lower()
         auth = (request.headers.get("authorization") or "").lower()
+
+        # Host-based Azure data-plane routing (Key Vault + Storage Queue). Real
+        # Azure gives each vault/account its OWN hostname ({vault}.vault.azure.net,
+        # {acct}.queue.core.windows.net) and the SDKs rebuild request URLs from the
+        # HOST, dropping any path prefix — so a path-prefixed endpoint can't work
+        # (CryptographyClient hits /keys/... at the root → S3 catch-all). We serve
+        # them as *.vault.localtest.me / *.queue.localtest.me and rewrite onto the
+        # existing /azure-data/{keyvault,queue}/{name} handlers. Must run BEFORE the
+        # blob rule below, since queue requests also carry x-ms-version.
+        _m_kv = re.match(r"^([a-z0-9][a-z0-9-]*)\.vault\.", host)
+        _m_q = re.match(r"^([a-z0-9][a-z0-9-]*)\.queue\.", host)
+        if (_m_kv or _m_q) and not path.startswith("/azure-data"):
+            kind, name = ("keyvault", _m_kv.group(1)) if _m_kv else ("queue", _m_q.group(1))
+            tail = "" if path == "/" else path
+            new_path = f"/azure-data/{kind}/{name}{tail}"
+            request.scope["path"] = new_path
+            request.scope["raw_path"] = new_path.encode("utf-8")
+            return await call_next(request)
         # Cosmos SDK auth token is `type=master&...` (often URL-encoded as
         # `type%3dmaster`). It addresses /, /dbs, /dbs/{db}/colls/... at the
         # ROOT and ALSO carries x-ms-version — so detect it FIRST, before the

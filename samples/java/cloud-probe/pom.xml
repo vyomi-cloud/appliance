@@ -80,6 +80,19 @@
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>dynamodb</artifactId>
     </dependency>
+    <!-- Messaging + Secrets + KMS — all HTTP+SigV4 via endpointOverride. -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>sqs</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>secretsmanager</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>kms</artifactId>
+    </dependency>
 
     <!-- ── GCP native SDKs (object store + NoSQL) ───────────────────────── -->
     <dependency>
@@ -90,6 +103,21 @@
       <groupId>com.google.cloud</groupId>
       <artifactId>google-cloud-firestore</artifactId>
     </dependency>
+    <!-- Secret Manager + Cloud KMS have NO Google emulator and default to gRPC;
+         we drive them over the SDK's own REST (HttpJson) transport instead. -->
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-secretmanager</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-kms</artifactId>
+    </dependency>
+    <!-- Pub/Sub rides the official gRPC emulator (like Firestore). -->
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-pubsub</artifactId>
+    </dependency>
 
     <!-- ── Azure native SDKs (object store + NoSQL) ─────────────────────── -->
     <dependency>
@@ -99,6 +127,27 @@
     <dependency>
       <groupId>com.azure</groupId>
       <artifactId>azure-cosmos</artifactId>
+    </dependency>
+    <!-- Messaging (Storage Queue over HTTP — the AMQP→HTTP substitution for
+         Service Bus) + Key Vault Secrets/Keys (HTTPS REST). -->
+    <dependency>
+      <groupId>com.azure</groupId>
+      <artifactId>azure-storage-queue</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.azure</groupId>
+      <artifactId>azure-security-keyvault-secrets</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.azure</groupId>
+      <artifactId>azure-security-keyvault-keys</artifactId>
+    </dependency>
+    <!-- Align jackson-dataformat-xml with Spring Boot's jackson-core (2.17.2);
+         azure-core's XML mapper LinkageErrors ("jackson-dataformat-xml=unknown")
+         without it, breaking Key Vault response deserialization. -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-xml</artifactId>
     </dependency>
   </dependencies>
 

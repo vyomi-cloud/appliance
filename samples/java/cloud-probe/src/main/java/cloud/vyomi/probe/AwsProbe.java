@@ -10,6 +10,28 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
+import software.amazon.awssdk.core.SdkBytes;
+import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
+import software.amazon.awssdk.services.sqs.model.CreateQueueResponse;
+import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
+import software.amazon.awssdk.services.sqs.model.DeleteQueueRequest;
+import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
+import software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse;
+import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
+import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
+import software.amazon.awssdk.services.secretsmanager.model.CreateSecretRequest;
+import software.amazon.awssdk.services.secretsmanager.model.DeleteSecretRequest;
+import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
+import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueResponse;
+import software.amazon.awssdk.services.kms.KmsClient;
+import software.amazon.awssdk.services.kms.model.CreateKeyRequest;
+import software.amazon.awssdk.services.kms.model.CreateKeyResponse;
+import software.amazon.awssdk.services.kms.model.DecryptRequest;
+import software.amazon.awssdk.services.kms.model.DecryptResponse;
+import software.amazon.awssdk.services.kms.model.EncryptRequest;
+import software.amazon.awssdk.services.kms.model.EncryptResponse;
+import software.amazon.awssdk.services.kms.model.ScheduleKeyDeletionRequest;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -238,5 +260,128 @@ public class AwsProbe implements CloudProbe {
                 ddb.close();
             }
         }
+    }
+
+    // ── SQS / Secrets Manager / KMS clients (all HTTP+SigV4 via endpointOverride) ─
+    private SqsClient sqs() {
+        return SqsClient.builder().endpointOverride(URI.create(endpoint))
+                .region(region).credentialsProvider(creds).build();
+    }
+    private SecretsManagerClient secrets() {
+        return SecretsManagerClient.builder().endpointOverride(URI.create(endpoint))
+                .region(region).credentialsProvider(creds).build();
+    }
+    private KmsClient kms() {
+        return KmsClient.builder().endpointOverride(URI.create(endpoint))
+                .region(region).credentialsProvider(creds).build();
+    }
+
+    // ── SQS (messaging) ─────────────────────────────────────────────────────
+    @Override
+    public Map<String, Object> probeQueue() {
+        Report r = new Report("aws");
+        r.step("endpoint", true, endpoint);
+        String qname = "cloud-probe-" + UUID.randomUUID().toString().substring(0, 12);
+        SqsClient sqs = null;
+        String queueUrl = null;
+        try {
+            sqs = sqs();
+            CreateQueueResponse cq = sqs.createQueue(CreateQueueRequest.builder().queueName(qname).build());
+            queueUrl = cq.queueUrl();
+            r.step("sqs.createQueue", true, queueUrl);
+
+            String body = "hello-vyomi-" + UUID.randomUUID();
+            sqs.sendMessage(SendMessageRequest.builder().queueUrl(queueUrl).messageBody(body).build());
+            r.step("sqs.sendMessage", true, body);
+
+            ReceiveMessageResponse rcv = sqs.receiveMessage(ReceiveMessageRequest.builder()
+                    .queueUrl(queueUrl).maxNumberOfMessages(1).waitTimeSeconds(2).build());
+            boolean got = !rcv.messages().isEmpty() && body.equals(rcv.messages().get(0).body());
+            r.step("sqs.receiveMessage+verify", got, got ? "body matches" : "MISMATCH/empty");
+
+            if (got) {
+                sqs.deleteMessage(DeleteMessageRequest.builder().queueUrl(queueUrl)
+                        .receiptHandle(rcv.messages().get(0).receiptHandle()).build());
+                r.step("sqs.deleteMessage", true, "acked");
+            }
+        } catch (Exception e) {
+            r.step("sqs.lifecycle", false, e.getClass().getSimpleName() + ": " + e.getMessage());
+        } finally {
+            if (sqs != null) {
+                if (queueUrl != null) try { sqs.deleteQueue(DeleteQueueRequest.builder().queueUrl(queueUrl).build());
+                      r.step("sqs.deleteQueue", true, "cleaned up"); }
+                    catch (Exception e) { r.step("sqs.deleteQueue", false, e.getMessage()); }
+                sqs.close();
+            }
+        }
+        return r.toMap();
+    }
+
+    // ── Secrets Manager ─────────────────────────────────────────────────────
+    @Override
+    public Map<String, Object> probeSecret() {
+        Report r = new Report("aws");
+        r.step("endpoint", true, endpoint);
+        String name = "cloud-probe-" + UUID.randomUUID().toString().substring(0, 12);
+        SecretsManagerClient sm = null;
+        boolean created = false;
+        try {
+            sm = secrets();
+            sm.createSecret(CreateSecretRequest.builder().name(name).secretString("hello-vyomi").build());
+            created = true;
+            r.step("secretsmanager.createSecret", true, name);
+
+            GetSecretValueResponse got = sm.getSecretValue(
+                    GetSecretValueRequest.builder().secretId(name).build());
+            boolean match = "hello-vyomi".equals(got.secretString());
+            r.step("secretsmanager.getSecretValue+verify", match, match ? "value matches" : "MISMATCH");
+        } catch (Exception e) {
+            r.step("secretsmanager.lifecycle", false, e.getClass().getSimpleName() + ": " + e.getMessage());
+        } finally {
+            if (sm != null) {
+                if (created) try { sm.deleteSecret(DeleteSecretRequest.builder()
+                        .secretId(name).forceDeleteWithoutRecovery(true).build());
+                      r.step("secretsmanager.deleteSecret", true, "cleaned up"); }
+                    catch (Exception e) { r.step("secretsmanager.deleteSecret", false, e.getMessage()); }
+                sm.close();
+            }
+        }
+        return r.toMap();
+    }
+
+    // ── KMS ─────────────────────────────────────────────────────────────────
+    @Override
+    public Map<String, Object> probeKms() {
+        Report r = new Report("aws");
+        r.step("endpoint", true, endpoint);
+        KmsClient kms = null;
+        String keyId = null;
+        try {
+            kms = kms();
+            CreateKeyResponse ck = kms.createKey(CreateKeyRequest.builder().description("cloud-probe").build());
+            keyId = ck.keyMetadata().keyId();
+            r.step("kms.createKey", true, keyId);
+
+            SdkBytes plaintext = SdkBytes.fromUtf8String("hello-vyomi");
+            EncryptResponse enc = kms.encrypt(EncryptRequest.builder().keyId(keyId).plaintext(plaintext).build());
+            int ctLen = enc.ciphertextBlob() == null ? 0 : enc.ciphertextBlob().asByteArray().length;
+            r.step("kms.encrypt", ctLen > 0, "ciphertext=" + ctLen + "B");
+
+            DecryptResponse dec = kms.decrypt(DecryptRequest.builder()
+                    .keyId(keyId).ciphertextBlob(enc.ciphertextBlob()).build());
+            boolean match = "hello-vyomi".equals(dec.plaintext().asUtf8String());
+            r.step("kms.decrypt+verify", match, match ? "plaintext round-trips" : "MISMATCH");
+        } catch (Exception e) {
+            r.step("kms.lifecycle", false, e.getClass().getSimpleName() + ": " + e.getMessage());
+        } finally {
+            if (kms != null) {
+                if (keyId != null) try { kms.scheduleKeyDeletion(ScheduleKeyDeletionRequest.builder()
+                        .keyId(keyId).pendingWindowInDays(7).build());
+                      r.step("kms.scheduleKeyDeletion", true, "scheduled (7d)"); }
+                    catch (Exception e) { r.step("kms.scheduleKeyDeletion", false, e.getMessage()); }
+                kms.close();
+            }
+        }
+        return r.toMap();
     }
 }

@@ -793,7 +793,7 @@ _SECRETSMANAGER_WIZARD = {
                 {"name": "password", "label": "Password", "type": "password",
                  "ifEquals": {"secret_type": "RdsCredentials"},
                  "validate": {"regex": r"^.{8,1024}$", "message": "8-1024 chars"}},
-                {"name": "secret_string", "label": "Secret value (key=value, one per line)",
+                {"name": "secret_string", "label": "Secret value — JSON object, e.g. {\"username\":\"admin\",\"password\":\"s3cr3t\"}",
                  "type": "text",
                  "default": '{"key1":"value1","key2":"value2"}',
                  "ifEquals": {"secret_type": "Other"}},

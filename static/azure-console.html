@@ -1611,6 +1611,193 @@ SUB_RENDERERS.containers = function(svc, full, host){
   render();
 };
 
+// Storage Queues — conformant CRUD against /api/azure/storage/{account}/queues,
+// backed by the SAME Azurite store the native azure-storage-queue SDK reads
+// (the AMQP→HTTP substitution for Service Bus). NOT the ARM Service Bus state.
+SUB_RENDERERS.storagequeues = function(svc, full, host){
+  const account = full.name;
+  const base = ORIGIN + "/api/azure/storage/" + encodeURIComponent(account) + "/queues";
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"},
+      "Storage queues in account ", el("strong",{}, account),
+      ". Backed by Azurite — the native azure-storage-queue SDK reads the same queues."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center;flex-wrap:wrap"});
+    bar.append(
+      el("button",{class:"btn",onclick:newQueue}, icon("add"), "New queue"),
+      el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base).then(r=>r.json()).then(j=>{
+      const queues = j.value||[];
+      if (!queues.length){ listHost.append(emptyState("No queues — click New queue to add one.")); return; }
+      const t = el("table",{class:"sub-table"});
+      t.append(el("tr",{},el("th",{},"Name"),el("th",{},"")));
+      queues.forEach(name => t.append(el("tr",{},
+        el("td",{}, name),
+        el("td",{style:"text-align:right"},
+          el("button",{class:"btn del",title:"Delete queue",onclick:()=>delQueue(name)}, icon("delete"), "Delete")))));
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load queues.")));
+    async function newQueue(){
+      const name = (prompt("New queue name (lowercase, 3-63 chars):")||"").trim();
+      if (!name) return;
+      const r = await fetch(base, {method:"POST",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify({name})});
+      if (r.ok){ toast("Queue created: "+name); render(); } else toast("Create failed","err");
+    }
+    async function delQueue(name){
+      if (!confirm("Delete queue '"+name+"'?")) return;
+      const r = await fetch(base + "/" + encodeURIComponent(name), {method:"DELETE"});
+      if (r.ok){ toast("Deleted "+name); render(); } else toast("Delete failed","err");
+    }
+  }
+  render();
+};
+
+// Key Vault Secrets — conformant CRUD against the Vault-backed data plane
+// /azure-data/keyvault/{vault}/secrets (the same surface the native Key Vault
+// SDK uses), so console-created secrets are SDK-readable and vice-versa.
+SUB_RENDERERS.kvsecrets = function(svc, full, host){
+  const vault = full.name;
+  const base = ORIGIN + "/azure-data/keyvault/" + encodeURIComponent(vault) + "/secrets";
+  const nameFromId = id => { const m = String(id||"").split("/secrets/")[1]; return m ? m.split("/")[0] : (id||""); };
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"},
+      "Secrets in Key Vault ", el("strong",{}, vault),
+      ". Backed by Vault — the native Key Vault SDK reads the same secrets."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center;flex-wrap:wrap"});
+    bar.append(
+      el("button",{class:"btn",onclick:newSecret}, icon("add"), "New secret"),
+      el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base).then(r=>r.json()).then(j=>{
+      const items = (j.value||[]).map(s => nameFromId(s.id));
+      if (!items.length){ listHost.append(emptyState("No secrets — click New secret to add one.")); return; }
+      const t = el("table",{class:"sub-table"});
+      t.append(el("tr",{},el("th",{},"Name"),el("th",{},"")));
+      items.forEach(name => t.append(el("tr",{},
+        el("td",{}, name),
+        el("td",{style:"text-align:right"},
+          el("button",{class:"btn",style:"margin-right:6px",title:"View / edit value",onclick:()=>editSecret(name)}, icon("edit"), "Edit"),
+          el("button",{class:"btn del",title:"Delete secret",onclick:()=>delSecret(name)}, icon("delete"), "Delete")))));
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load secrets.")));
+    async function newSecret(){
+      const name = (prompt("Secret name:")||"").trim();
+      if (!name) return;
+      const value = (prompt("Secret value:")||"").trim();
+      if (!value) return;
+      const r = await fetch(base + "/" + encodeURIComponent(name), {method:"PUT",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify({value})});
+      if (r.ok){ toast("Secret created: "+name); render(); } else toast("Create failed","err");
+    }
+    async function delSecret(name){
+      if (!confirm("Delete secret '"+name+"'?")) return;
+      const r = await fetch(base + "/" + encodeURIComponent(name), {method:"DELETE"});
+      if (r.ok){ toast("Deleted "+name); render(); } else toast("Delete failed","err");
+    }
+    // Reveal + edit the value inline (Key/value table or Plaintext) -> PUT (setSecret).
+    async function editSecret(name){
+      let value = "";
+      try { const r = await fetch(base + "/" + encodeURIComponent(name)); if (r.ok){ const j = await r.json(); value = String(j.value ?? ""); } } catch(_){}
+      let plaintext = false;
+      const asPairs = s => { try { const o=JSON.parse(s); if(o&&typeof o==="object"&&!Array.isArray(o)) return Object.keys(o).map(k=>[k,String(o[k])]); } catch(_){} return null; };
+      wrap.innerHTML = "";
+      wrap.append(el("div",{class:"sub-info"}, "Editing secret ", el("strong",{}, name), " in Key Vault ", el("strong",{}, vault)));
+      const panel = el("div",{}); wrap.append(panel);
+      function renderEdit(){
+        panel.innerHTML = "";
+        const pairs = asPairs(value);
+        const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:12px;align-items:center"});
+        if (pairs){
+          bar.append(el("button",{class:"btn"+(plaintext?"":" active"),onclick:()=>{plaintext=false;renderEdit();}}, "Key/value"));
+          bar.append(el("button",{class:"btn"+(plaintext?" active":""),onclick:()=>{plaintext=true;renderEdit();}}, "Plaintext"));
+        } else plaintext = true;
+        panel.append(bar);
+        let getVal;
+        if (plaintext || !pairs){
+          const ta = el("textarea",{rows:7,style:"width:100%;box-sizing:border-box;font-family:monospace;font-size:13px;padding:8px"});
+          ta.value = value; panel.append(ta); getVal = ()=>ta.value;
+        } else {
+          const tbl = el("table",{class:"sub-table",style:"width:100%"});
+          tbl.append(el("tr",{},el("th",{},"Key"),el("th",{},"Value"),el("th",{style:"width:40px"},"")));
+          const inputs = [];
+          const addRow = (k,v)=>{ const ki=el("input",{value:k,style:"width:100%"}); const vi=el("input",{value:v,style:"width:100%"}); const pair={ki,vi}; inputs.push(pair); const tr=el("tr",{},el("td",{},ki),el("td",{},vi),el("td",{}, el("button",{class:"btn del",onclick:()=>{const i=inputs.indexOf(pair); if(i>=0) inputs.splice(i,1); tr.remove();}}, "✕"))); tbl.append(tr); };
+          pairs.forEach(p=>addRow(p[0],p[1])); panel.append(tbl);
+          panel.append(el("button",{class:"btn",style:"margin-top:8px",onclick:()=>addRow("","")}, icon("add"), "Add row"));
+          getVal = ()=>JSON.stringify(Object.fromEntries(inputs.map(p=>[p.ki.value.trim(),p.vi.value]).filter(e=>e[0])));
+        }
+        const sb = el("div",{style:"display:flex;gap:8px;margin-top:14px"});
+        sb.append(el("button",{class:"btn",onclick:async()=>{ const r=await fetch(base+"/"+encodeURIComponent(name),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:getVal()})}); if(r.ok){toast("Saved "+name); render();} else toast("Save failed","err"); }}, icon("save"), "Save"));
+        sb.append(el("button",{class:"btn",onclick:render}, "Cancel"));
+        panel.append(sb);
+      }
+      renderEdit();
+    }
+  }
+  render();
+};
+
+// Key Vault Keys — conformant CRUD against /azure-data/keyvault/{vault}/keys
+// (real RSA keys). Create issues the native Key Vault create-key call so the
+// native CryptographyClient can encrypt/decrypt against the same key.
+SUB_RENDERERS.kvkeys = function(svc, full, host){
+  const vault = full.name;
+  const base = ORIGIN + "/azure-data/keyvault/" + encodeURIComponent(vault) + "/keys";
+  const nameFromKid = kid => { const m = String(kid||"").split("/keys/")[1]; return m ? m.split("/")[0] : (kid||""); };
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"},
+      "Keys in Key Vault ", el("strong",{}, vault),
+      ". Real RSA keys — the native CryptographyClient encrypts/decrypts against them."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center;flex-wrap:wrap"});
+    bar.append(
+      el("button",{class:"btn",onclick:newKey}, icon("add"), "New key"),
+      el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base).then(r=>r.json()).then(j=>{
+      const items = (j.value||[]).map(k => ({name:nameFromKid(k.kid), enabled:!(k.attributes && k.attributes.enabled===false)}));
+      if (!items.length){ listHost.append(emptyState("No keys — click New key to add one.")); return; }
+      const t = el("table",{class:"sub-table"});
+      t.append(el("tr",{},el("th",{},"Name"),el("th",{},"Type"),el("th",{},"Status"),el("th",{},"")));
+      items.forEach(k => t.append(el("tr",{},
+        el("td",{}, k.name),
+        el("td",{}, "RSA"),
+        el("td",{}, el("span",{style:"color:"+(k.enabled?"#107c10":"#a4262c")+";font-weight:600"}, k.enabled?"Enabled":"Disabled")),
+        el("td",{style:"text-align:right;white-space:nowrap"},
+          el("button",{class:"btn",title:k.enabled?"Disable key":"Enable key",onclick:()=>setEnabled(k.name,!k.enabled)},
+            icon(k.enabled?"block":"check_circle"), k.enabled?"Disable":"Enable"),
+          el("button",{class:"btn del",title:"Delete key",style:"margin-left:6px",onclick:()=>delKey(k.name)}, icon("delete"), "Delete")))));
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load keys.")));
+    async function setEnabled(name, enabled){
+      const r = await fetch(base + "/" + encodeURIComponent(name), {method:"PATCH",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify({attributes:{enabled}})});
+      if (r.ok){ toast(enabled?"Key enabled":"Key disabled"); render(); } else toast("Update failed","err");
+    }
+    async function newKey(){
+      const name = (prompt("Key name:")||"").trim();
+      if (!name) return;
+      const r = await fetch(base + "/" + encodeURIComponent(name) + "/create", {method:"POST",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify({kty:"RSA","key_size":2048})});
+      if (r.ok){ toast("Key created: "+name); render(); } else toast("Create failed","err");
+    }
+    async function delKey(name){
+      if (!confirm("Delete key '"+name+"'?")) return;
+      const r = await fetch(base + "/" + encodeURIComponent(name), {method:"DELETE"});
+      if (r.ok){ toast("Deleted "+name); render(); } else toast("Delete failed","err");
+    }
+  }
+  render();
+};
+
 SUB_RENDERERS.accesskeys = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Use access keys to authenticate applications. Rotate periodically."));
   const k1 = "key1_" + (full.name||"").padEnd(24,"x").slice(0,24)+"_simulated_xxxxxxxxxxxxxxxxxxx==";

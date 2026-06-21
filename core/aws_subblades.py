@@ -303,7 +303,7 @@ _EVENTBRIDGE_SUB = [
 _SECRETSMANAGER_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Secret", "items": [
-        {"key": "value",         "label": "Secret value",           "icon": "key",           "type": "stub"},
+        {"key": "value",         "label": "Secret value",           "icon": "key",           "type": "secretvalue"},
         {"key": "versions",      "label": "Versions",               "icon": "history",       "type": "stub"},
         {"key": "rotation",      "label": "Rotation",               "icon": "autorenew",     "type": "stub"},
         {"key": "replication",   "label": "Replication",            "icon": "public",        "type": "stub"},
@@ -325,7 +325,7 @@ _SECRETSMANAGER_SUB = [
 _KMS_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Key", "items": [
-        {"key": "details",       "label": "General configuration",  "icon": "info",          "type": "overview"},
+        {"key": "details",       "label": "General configuration",  "icon": "info",          "type": "kmsconfig"},
         {"key": "policy",        "label": "Key policy",             "icon": "policy",        "type": "iam"},
         {"key": "aliases",       "label": "Aliases",                "icon": "label",         "type": "stub"},
         {"key": "rotation",      "label": "Key rotation",           "icon": "autorenew",     "type": "stub"},

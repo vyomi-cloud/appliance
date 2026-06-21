@@ -40,4 +40,33 @@ public interface CloudProbe {
         return NoSqlResult.error(cloud(), table, id,
                 new UnsupportedOperationException("putItem not implemented for " + cloud()));
     }
+
+    // ── Secrets / KMS ────────────────────────────────────────────────────────
+    // Full lifecycle round-trips via the cloud's NATIVE secrets/KMS SDK. Each
+    // returns a Report map (same shape as probe()); never throws — failures are
+    // captured as steps. Clouds that don't implement a surface report a single
+    // "not implemented" step rather than breaking, so a partially-wired build
+    // still answers honestly per service.
+
+    /** Secret lifecycle: create → add version → access + verify → delete. */
+    default Map<String, Object> probeSecret() {
+        Report r = new Report(cloud());
+        r.step(cloud() + ".secret", false, "not implemented for " + cloud());
+        return r.toMap();
+    }
+
+    /** KMS round-trip: ensure key → encrypt → decrypt → verify plaintext. */
+    default Map<String, Object> probeKms() {
+        Report r = new Report(cloud());
+        r.step(cloud() + ".kms", false, "not implemented for " + cloud());
+        return r.toMap();
+    }
+
+    /** Messaging lifecycle: create queue → send → receive + verify → delete, via
+     *  the cloud's NATIVE messaging SDK (SQS / Pub/Sub / Storage Queue). */
+    default Map<String, Object> probeQueue() {
+        Report r = new Report(cloud());
+        r.step(cloud() + ".queue", false, "not implemented for " + cloud());
+        return r.toMap();
+    }
 }

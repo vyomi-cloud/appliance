@@ -889,6 +889,8 @@ async function renderDetail(main){
     content.append(el("h2",{class:"sub-h"}, item.label));
     const t = (item.type||"").toLowerCase();
     if (t === "overview") return renderOverviewTab(content, svc, STATE.item);
+    if (t === "secretvalue") return renderSecretValueTab(content, svc, STATE.item);
+  if (t === "kmsconfig") return renderKmsConfigTab(content, svc, STATE.item);
     if (t === "objects")  return renderObjectsTab(content, svc, STATE.item);
     if (t === "tags")     return renderLabelsTab(content, svc, STATE.item);
     if (t === "json")     return content.append(el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto"}, JSON.stringify(STATE.item, null, 2)));
@@ -909,6 +911,121 @@ async function renderDetail(main){
 // Cloud Storage — Objects browser (upload / list / delete), parity with the
 // S3 + Azure Blob consoles. Upload streams the real file to the byte store so
 // the native google-cloud-storage SDK reads it back.
+// Secret Manager "Secret value" detail tab — mirrors the real console: hidden
+// until "Retrieve secret value", then Key/value table or Plaintext; Edit makes
+// it editable; Save PUTs the new value (= addSecretVersion / access).
+function renderSecretValueTab(host, svc, item){
+  const name = String((item && item.name) || getPath(item, svc.name_field) || "");
+  let value = "", revealed = false, editing = false, plaintext = false;
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  function asPairs(s){ try { const o=JSON.parse(s); if(o&&typeof o==="object"&&!Array.isArray(o)) return Object.keys(o).map(k=>[k,String(o[k])]); } catch(_){} return null; }
+  function saveBar(getVal){
+    const bar=el("div",{style:"display:flex;gap:8px;margin-top:14px"});
+    bar.append(el("button",{class:"btn primary",onclick:async()=>{
+      const r=await api("PUT", fillCommon(svc.resource_path,{name}), {value:getVal()});
+      if(r.ok||[200,204].includes(r.status)){ value=getVal(); editing=false; toast("Secret value saved"); render(); } else toast("Save failed","err");
+    }}, icon("save"), "Save"));
+    bar.append(el("button",{class:"btn",onclick:()=>{editing=false;render();}}, "Cancel"));
+    return bar;
+  }
+  function render(){
+    panel.innerHTML="";
+    panel.append(el("div",{class:"panel-h"}, icon("vpn_key"), "Secret value"));
+    const body=el("div",{style:"padding:14px"}); panel.append(body);
+    if(!revealed){
+      body.append(el("div",{style:"color:#5f6b7a;margin-bottom:12px;font-size:13px"}, "The secret value is hidden. Retrieve it to view or edit."));
+      body.append(el("button",{class:"btn",onclick:async()=>{
+        try{ const r=await api("GET", fillCommon(svc.resource_path,{name})); if(r.ok&&r.json) value=String(r.json.value ?? value); }catch(_){}
+        revealed=true; render();
+      }}, icon("visibility"), "Retrieve secret value"));
+      return;
+    }
+    const pairs=asPairs(value);
+    const bar=el("div",{style:"display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap"});
+    if(pairs){
+      bar.append(el("button",{class:"btn"+(plaintext?"":" primary"),onclick:()=>{plaintext=false;render();}},"Key/value"));
+      bar.append(el("button",{class:"btn"+(plaintext?" primary":""),onclick:()=>{plaintext=true;render();}},"Plaintext"));
+    } else { plaintext=true; }
+    bar.append(el("div",{style:"flex:1"}));
+    if(!editing) bar.append(el("button",{class:"btn",onclick:()=>{editing=true;render();}}, icon("edit"), "Edit"));
+    body.append(bar);
+    if(plaintext||!pairs){
+      const ta=el("textarea",{rows:7,style:"width:100%;box-sizing:border-box;font-family:monospace;font-size:13px;padding:8px;border:1px solid #aab7b8;border-radius:4px"});
+      ta.value=value; ta.readOnly=!editing; body.append(ta);
+      if(editing) body.append(saveBar(()=>ta.value));
+    } else {
+      const tbl=el("table",{class:"gc",style:"width:100%"});
+      const hr=el("tr",{},el("th",{},"Key"),el("th",{},"Value")); if(editing) hr.append(el("th",{style:"width:44px"},"")); tbl.append(hr);
+      const inputs=[];
+      function addRow(k,v){
+        const ki=el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+        const vi=el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+        ki.value=k; vi.value=v; ki.readOnly=!editing; vi.readOnly=!editing;
+        const pair={ki,vi}; inputs.push(pair);
+        const tr=el("tr",{},el("td",{},ki),el("td",{},vi));
+        if(editing) tr.append(el("td",{}, el("button",{class:"btn del",title:"Remove",onclick:()=>{const i=inputs.indexOf(pair); if(i>=0) inputs.splice(i,1); tr.remove();}}, "✕")));
+        tbl.append(tr);
+      }
+      pairs.forEach(p=>addRow(p[0],p[1])); body.append(tbl);
+      if(editing){
+        body.append(el("button",{class:"btn",style:"margin-top:10px",onclick:()=>addRow("","")}, icon("add"), "Add row"));
+        body.append(saveBar(()=>JSON.stringify(Object.fromEntries(inputs.map(p=>[p.ki.value.trim(),p.vi.value]).filter(e=>e[0])))));
+      }
+    }
+  }
+  render();
+}
+
+function renderKmsConfigTab(host, svc, item){
+  const name = String((item && item.name) || getPath(item, svc.name_field) || "");
+  let data = null, editing = false;
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  async function load(){
+    try{ const r=await api("GET", fillCommon(svc.resource_path,{name})); if(r.ok&&r.json) data=r.json; }catch(_){}
+    if(!data) data={labels:{},rotation_period:""};
+    render();
+  }
+  function render(){
+    panel.innerHTML="";
+    panel.append(el("div",{class:"panel-h"}, icon("autorenew"), "Rotation & labels"));
+    const body=el("div",{style:"padding:14px"}); panel.append(body);
+    // Rotation period
+    body.append(el("div",{style:"font-weight:600;margin-bottom:6px;font-size:13px"}, "Rotation period"));
+    body.append(el("div",{style:"color:#5f6b7a;margin-bottom:8px;font-size:12.5px"}, "Duration between automatic rotations, e.g. 7776000s (90 days)."));
+    const rot=el("input",{style:"width:280px;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:6px;font-family:monospace"});
+    rot.value=data.rotation_period||""; rot.readOnly=!editing; body.append(rot);
+    // Labels
+    body.append(el("div",{style:"font-weight:600;margin:18px 0 6px;font-size:13px"}, "Labels"));
+    const tbl=el("table",{class:"gc",style:"width:100%;max-width:540px"});
+    const hr=el("tr",{},el("th",{},"Key"),el("th",{},"Value")); if(editing) hr.append(el("th",{style:"width:44px"},"")); tbl.append(hr);
+    const inputs=[];
+    function addRow(k,v){
+      const ki=el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+      const vi=el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+      ki.value=k; vi.value=v; ki.readOnly=!editing; vi.readOnly=!editing;
+      const pair={ki,vi}; inputs.push(pair);
+      const tr=el("tr",{},el("td",{},ki),el("td",{},vi));
+      if(editing) tr.append(el("td",{}, el("button",{class:"btn del",title:"Remove",onclick:()=>{const i=inputs.indexOf(pair); if(i>=0) inputs.splice(i,1); tr.remove();}}, "✕")));
+      tbl.append(tr);
+    }
+    Object.keys(data.labels||{}).forEach(k=>addRow(k,String(data.labels[k]))); body.append(tbl);
+    if(editing) body.append(el("button",{class:"btn",style:"margin-top:10px",onclick:()=>addRow("","")}, icon("add"), "Add label"));
+    const bar=el("div",{style:"display:flex;gap:8px;margin-top:16px"});
+    if(!editing){
+      bar.append(el("button",{class:"btn",onclick:()=>{editing=true;render();}}, icon("edit"), "Edit"));
+    } else {
+      bar.append(el("button",{class:"btn primary",onclick:async()=>{
+        const labels=Object.fromEntries(inputs.map(p=>[p.ki.value.trim(),p.vi.value]).filter(e=>e[0]));
+        const r=await api("PUT", fillCommon(svc.resource_path,{name}), {labels, rotation_period:rot.value.trim()});
+        if(r.ok||[200,204].includes(r.status)){ data.labels=labels; data.rotation_period=rot.value.trim(); editing=false; toast("Saved"); render(); } else toast("Save failed","err");
+      }}, icon("save"), "Save"));
+      bar.append(el("button",{class:"btn",onclick:()=>{editing=false;render();}}, "Cancel"));
+    }
+    body.append(bar);
+  }
+  load();
+}
+
 async function renderObjectsTab(host, svc, item){
   const bucket = String(getPath(item, svc.name_field) || item.name || "");
   const ap = svc.api_paths || {};

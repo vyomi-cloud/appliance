@@ -2420,6 +2420,119 @@ function renderFlatCreate(svc, main){
 // =====================================================================
 const SUB_RENDERERS = {};
 
+// Secrets Manager "Secret value" detail tab — mirrors the real AWS console:
+// value hidden until "Retrieve secret value"; then Key/value table or Plaintext;
+// "Edit" makes it editable (add/remove rows) and "Save" PUTs (= PutSecretValue).
+SUB_RENDERERS.secretvalue = function(svc, full, host){
+  const name = String((full && full.name) || getPath(full, svc.name_field) || "");
+  let value = (full && full.value != null) ? String(full.value) : "";
+  let revealed = false, editing = false, plaintext = false;
+  const panel = el("div",{class:"panel"}); host.append(panel);
+
+  function asPairs(s){
+    try { const o = JSON.parse(s); if (o && typeof o === "object" && !Array.isArray(o))
+      return Object.keys(o).map(k => [k, String(o[k])]); } catch(_){}
+    return null;
+  }
+  function saveBar(getVal){
+    const bar = el("div",{style:"display:flex;gap:8px;margin-top:14px"});
+    bar.append(el("button",{class:"btn primary",onclick:async ()=>{
+      const r = await api("PUT", fillPath(svc.resource_path,{name}), {value: getVal()});
+      if (r.ok || [200,204].includes(r.status)){ value = getVal(); editing = false; toast("Secret value saved"); render(); }
+      else toast("Save failed","err");
+    }}, icon("save"), "Save"));
+    bar.append(el("button",{class:"btn",onclick:()=>{ editing = false; render(); }}, "Cancel"));
+    return bar;
+  }
+  function render(){
+    panel.innerHTML = "";
+    panel.append(el("div",{class:"panel-h"}, icon("key"), "Secret value"));
+    const body = el("div",{style:"padding:14px"}); panel.append(body);
+    if (!revealed){
+      body.append(el("div",{style:"color:#5f6b7a;margin-bottom:12px;font-size:13px"},
+        "The secret value is encrypted and hidden. Retrieve it to view or edit."));
+      body.append(el("button",{class:"btn",onclick:async ()=>{
+        try { const r = await api("GET", fillPath(svc.resource_path,{name})); if (r.ok && r.json) value = String(r.json.value ?? value); } catch(_){}
+        revealed = true; render();
+      }}, icon("visibility"), "Retrieve secret value"));
+      return;
+    }
+    const pairs = asPairs(value);
+    const bar = el("div",{style:"display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap"});
+    if (pairs){
+      bar.append(el("button",{class:"btn"+(plaintext?"":" primary"),onclick:()=>{plaintext=false;render();}}, "Key/value"));
+      bar.append(el("button",{class:"btn"+(plaintext?" primary":""),onclick:()=>{plaintext=true;render();}}, "Plaintext"));
+    } else { plaintext = true; }
+    bar.append(el("div",{style:"flex:1"}));
+    if (!editing) bar.append(el("button",{class:"btn",onclick:()=>{editing=true;render();}}, icon("edit"), "Edit"));
+    body.append(bar);
+    if (plaintext || !pairs){
+      const ta = el("textarea",{rows:7,style:"width:100%;box-sizing:border-box;font-family:monospace;font-size:13px;padding:8px;border:1px solid #aab7b8;border-radius:4px"});
+      ta.value = value; ta.readOnly = !editing;
+      body.append(ta);
+      if (editing) body.append(saveBar(()=> ta.value));
+    } else {
+      const tbl = el("table",{class:"aws",style:"width:100%"});
+      const hr = el("tr",{}, el("th",{},"Key"), el("th",{},"Value"));
+      if (editing) hr.append(el("th",{style:"width:44px"},""));
+      tbl.append(hr);
+      const inputs = [];
+      function addRow(k,v){
+        const ki = el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+        const vi = el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+        ki.value = k; vi.value = v; ki.readOnly = !editing; vi.readOnly = !editing;
+        const pair = {ki, vi};
+        inputs.push(pair);
+        const tr = el("tr",{}, el("td",{},ki), el("td",{},vi));
+        if (editing) tr.append(el("td",{}, el("button",{class:"btn del",title:"Remove",
+          onclick:()=>{ const idx=inputs.indexOf(pair); if(idx>=0) inputs.splice(idx,1); tr.remove(); }}, "✕")));
+        tbl.append(tr);
+      }
+      pairs.forEach(p => addRow(p[0], p[1]));
+      body.append(tbl);
+      if (editing){
+        body.append(el("button",{class:"btn",style:"margin-top:10px",onclick:()=>addRow("","")}, icon("add"), "Add row"));
+        body.append(saveBar(()=> JSON.stringify(Object.fromEntries(
+          inputs.map(p=>[p.ki.value.trim(), p.vi.value]).filter(e=>e[0])))));
+      }
+    }
+  }
+  render();
+};
+
+// KMS "General configuration" — mirrors the real console: key facts + editable
+// Description (Save) + Enable/Disable key (= UpdateKeyDescription/Enable/DisableKey).
+SUB_RENDERERS.kmsconfig = function(svc, full, host){
+  const id = String(full.key_id || full.KeyId || getPath(full, svc.name_field) || "");
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  function render(){
+    panel.innerHTML = "";
+    panel.append(el("div",{class:"panel-h"}, icon("info"), "General configuration"));
+    const body = el("div",{style:"padding:14px"}); panel.append(body);
+    const enabled = (full.state ? full.state === "Enabled" : !!full.enabled);
+    const facts = [["Key ID", full.key_id||id], ["ARN", full.arn], ["Status", enabled?"Enabled":(full.state||"Disabled")],
+                   ["Key spec", full.key_spec], ["Key usage", full.key_usage], ["Alias", full.alias||"—"]];
+    const grid = el("div",{style:"display:grid;grid-template-columns:150px 1fr;gap:7px 14px;margin-bottom:18px;font-size:13px"});
+    facts.forEach(f=>{ grid.append(el("div",{style:"color:#5f6b7a"}, f[0]), el("div",{class:"mono small"}, String(f[1]??"—"))); });
+    body.append(grid);
+    body.append(el("div",{style:"font-weight:600;margin-bottom:6px"}, "Description"));
+    const desc = el("input",{value: full.description||"", style:"width:100%;max-width:560px;box-sizing:border-box;border:1px solid #aab7b8;border-radius:4px;padding:7px"});
+    body.append(desc);
+    const bar = el("div",{style:"display:flex;gap:8px;margin-top:16px"});
+    bar.append(el("button",{class:"btn primary",onclick:async()=>{
+      const r = await api("PUT", fillPath(svc.resource_path,{name:id}), {description: desc.value});
+      if (r.ok){ full.description = desc.value; toast("Description saved"); } else toast("Save failed","err");
+    }}, icon("save"), "Save description"));
+    bar.append(el("button",{class:"btn"+(enabled?" del":""),onclick:async()=>{
+      const r = await api("PUT", fillPath(svc.resource_path,{name:id}), {enabled: !enabled});
+      if (r.ok){ full.enabled = !enabled; full.state = !enabled?"Enabled":"Disabled"; toast((!enabled?"Enabled":"Disabled")+" key"); render(); }
+      else toast("Failed","err");
+    }}, icon("power_settings_new"), enabled?"Disable key":"Enable key"));
+    body.append(bar);
+  }
+  render();
+};
+
 SUB_RENDERERS.overview = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Resource details"));

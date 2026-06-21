@@ -83,7 +83,7 @@ _STORAGE_SUB = [
     {"group": "Data storage", "items": [
         {"key": "containers",   "label": "Containers",        "icon": "folder",       "type": "containers"},
         {"key": "fileShares",   "label": "File shares",       "icon": "folder_shared","type": "stub"},
-        {"key": "queues",       "label": "Queues",            "icon": "queue",        "type": "stub"},
+        {"key": "queues",       "label": "Queues",            "icon": "queue",        "type": "storagequeues"},
         {"key": "tables",       "label": "Tables",            "icon": "table_chart",  "type": "stub"},
     ]},
     {"group": "Security + networking", "items": [
@@ -237,8 +237,8 @@ _VNET_SUB = [
 _KEYVAULT_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Objects", "items": [
-        {"key": "secrets",      "label": "Secrets",           "icon": "key",          "type": "secretsDrillDown"},
-        {"key": "keys",         "label": "Keys",              "icon": "lock",         "type": "keysList"},
+        {"key": "secrets",      "label": "Secrets",           "icon": "key",          "type": "kvsecrets"},
+        {"key": "keys",         "label": "Keys",              "icon": "lock",         "type": "kvkeys"},
         {"key": "certificates", "label": "Certificates",      "icon": "verified",     "type": "stub"},
     ]},
     {"group": "Settings", "items": [

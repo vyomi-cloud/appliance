@@ -96,6 +96,36 @@ public class ProbeController {
         return ok ? ResponseEntity.ok(res) : ResponseEntity.status(502).body(res);
     }
 
+    /** Messaging lifecycle (create queue → send → receive → delete) via the
+     *  cloud's native messaging SDK. e.g. GET /queue/aws */
+    @GetMapping("/queue/{cloud}")
+    public ResponseEntity<Map<String, Object>> probeQueue(@PathVariable("cloud") String cloud) {
+        CloudProbe p = probes.get(cloud.toLowerCase());
+        if (p == null) return unknownCloud(cloud);
+        Map<String, Object> res = p.probeQueue();
+        return Boolean.TRUE.equals(res.get("ok")) ? ResponseEntity.ok(res) : ResponseEntity.status(502).body(res);
+    }
+
+    /** Secret lifecycle (create → add version → access → delete) via the cloud's
+     *  native secrets SDK. e.g. GET /secret/gcp */
+    @GetMapping("/secret/{cloud}")
+    public ResponseEntity<Map<String, Object>> probeSecret(@PathVariable("cloud") String cloud) {
+        CloudProbe p = probes.get(cloud.toLowerCase());
+        if (p == null) return unknownCloud(cloud);
+        Map<String, Object> res = p.probeSecret();
+        return Boolean.TRUE.equals(res.get("ok")) ? ResponseEntity.ok(res) : ResponseEntity.status(502).body(res);
+    }
+
+    /** KMS encrypt/decrypt round-trip via the cloud's native KMS SDK.
+     *  e.g. GET /kms/gcp */
+    @GetMapping("/kms/{cloud}")
+    public ResponseEntity<Map<String, Object>> probeKms(@PathVariable("cloud") String cloud) {
+        CloudProbe p = probes.get(cloud.toLowerCase());
+        if (p == null) return unknownCloud(cloud);
+        Map<String, Object> res = p.probeKms();
+        return Boolean.TRUE.equals(res.get("ok")) ? ResponseEntity.ok(res) : ResponseEntity.status(502).body(res);
+    }
+
     private ResponseEntity<Map<String, Object>> unknownCloud(String cloud) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("ok", false);

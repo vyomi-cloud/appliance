@@ -12,6 +12,25 @@ import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.core.util.BinaryData;
+import com.azure.core.credential.AccessToken;
+import com.azure.core.credential.TokenCredential;
+import com.azure.storage.queue.QueueClient;
+import com.azure.storage.queue.QueueClientBuilder;
+import com.azure.storage.queue.models.QueueMessageItem;
+import com.azure.security.keyvault.secrets.SecretClient;
+import com.azure.security.keyvault.secrets.SecretClientBuilder;
+import com.azure.security.keyvault.secrets.models.KeyVaultSecret;
+import com.azure.security.keyvault.keys.KeyClient;
+import com.azure.security.keyvault.keys.KeyClientBuilder;
+import com.azure.security.keyvault.keys.models.KeyVaultKey;
+import com.azure.security.keyvault.keys.models.KeyType;
+import com.azure.security.keyvault.keys.cryptography.CryptographyClient;
+import com.azure.security.keyvault.keys.cryptography.CryptographyClientBuilder;
+import com.azure.security.keyvault.keys.cryptography.models.EncryptionAlgorithm;
+import com.azure.security.keyvault.keys.cryptography.models.EncryptResult;
+import com.azure.security.keyvault.keys.cryptography.models.DecryptResult;
+import reactor.core.publisher.Mono;
+import java.time.OffsetDateTime;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -218,5 +237,119 @@ public class AzureProbe implements CloudProbe {
                 catch (Exception e) { r.step("cosmos.deleteDatabase", false, e.getMessage()); }
             if (client != null) try { client.close(); } catch (Exception ignore) {}
         }
+    }
+
+    // ── Key Vault auth — the appliance ignores the token, but the SDK requires a
+    //    TokenCredential. A fake one (never calls AAD) keeps the native client
+    //    unmodified. If the appliance ever emits a real auth challenge, the
+    //    SDK's challenge-resource verification may need disabling (runtime check).
+    private TokenCredential fakeCredential() {
+        return ctx -> Mono.just(new AccessToken("vyomi-dev-token", OffsetDateTime.now().plusHours(1)));
+    }
+
+    // ── Storage Queue (messaging) — the AMQP→HTTP substitution for Service Bus ─
+    @Override
+    public Map<String, Object> probeQueue() {
+        Report r = new Report("azure");
+        String qname = "cloud-probe-" + UUID.randomUUID().toString().substring(0, 12);
+        r.step("queue.endpoint", true, ProbeEnv.azureQueueEndpointFor(account));
+        QueueClient qc = null;
+        boolean created = false;
+        try {
+            qc = new QueueClientBuilder()
+                    .connectionString(ProbeEnv.azureQueueConnectionString(account))
+                    .queueName(qname)
+                    .buildClient();
+            qc.create();
+            created = true;
+            r.step("queue.create", true, qname);
+
+            String body = "hello-vyomi-" + UUID.randomUUID();
+            qc.sendMessage(body);
+            r.step("queue.sendMessage", true, body);
+
+            QueueMessageItem msg = qc.receiveMessage();
+            boolean got = msg != null && body.equals(msg.getBody().toString());
+            r.step("queue.receiveMessage+verify", got, got ? "body matches" : "MISMATCH/empty");
+
+            if (got) {
+                qc.deleteMessage(msg.getMessageId(), msg.getPopReceipt());
+                r.step("queue.deleteMessage", true, "acked");
+            }
+        } catch (Exception e) {
+            r.step("queue.lifecycle", false, e.getClass().getSimpleName() + ": " + e.getMessage());
+        } finally {
+            if (created && qc != null) try { qc.delete(); r.step("queue.delete", true, "cleaned up"); }
+                catch (Exception e) { r.step("queue.delete", false, e.getMessage()); }
+        }
+        return r.toMap();
+    }
+
+    // ── Key Vault Secrets ────────────────────────────────────────────────────
+    @Override
+    public Map<String, Object> probeSecret() {
+        Report r = new Report("azure");
+        String vault = ProbeEnv.azureVaultName();
+        String name = "cloud-probe-" + UUID.randomUUID().toString().substring(0, 12);
+        r.step("keyvault.endpoint", true, ProbeEnv.azureKeyVaultEndpoint(vault));
+        SecretClient sc = null;
+        boolean created = false;
+        try {
+            sc = new SecretClientBuilder()
+                    .vaultUrl(ProbeEnv.azureKeyVaultEndpoint(vault))
+                    .credential(fakeCredential())
+                    .buildClient();
+            sc.setSecret(name, "hello-vyomi");
+            created = true;
+            r.step("keyvault.setSecret", true, name);
+
+            KeyVaultSecret got = sc.getSecret(name);
+            boolean match = "hello-vyomi".equals(got.getValue());
+            r.step("keyvault.getSecret+verify", match, match ? "value matches" : "MISMATCH");
+        } catch (Exception e) {
+            r.step("keyvault.secret.lifecycle", false, e.getClass().getSimpleName() + ": " + e.getMessage());
+        } finally {
+            if (created && sc != null) try { sc.beginDeleteSecret(name);
+                    r.step("keyvault.deleteSecret", true, "cleaned up"); }
+                catch (Exception e) { r.step("keyvault.deleteSecret", false, e.getMessage()); }
+        }
+        return r.toMap();
+    }
+
+    // ── Key Vault Keys (KMS) ─────────────────────────────────────────────────
+    // CryptographyClient may do RSA encrypt client-side once it has the public
+    // key, then call the service for decrypt — so the decrypt endpoint is the
+    // real conformance assertion. Algorithm/key-type must match the appliance's
+    // Vault-transit-backed Key Vault keys handler (runtime check).
+    @Override
+    public Map<String, Object> probeKms() {
+        Report r = new Report("azure");
+        String vault = ProbeEnv.azureVaultName();
+        String keyName = "cloud-probe-" + UUID.randomUUID().toString().substring(0, 12);
+        r.step("keyvault.endpoint", true, ProbeEnv.azureKeyVaultEndpoint(vault));
+        try {
+            KeyClient kc = new KeyClientBuilder()
+                    .vaultUrl(ProbeEnv.azureKeyVaultEndpoint(vault))
+                    .credential(fakeCredential())
+                    .buildClient();
+            KeyVaultKey key = kc.createKey(keyName, KeyType.RSA);
+            r.step("keyvault.createKey", true, keyName + " (" + key.getKeyType() + ")");
+
+            CryptographyClient crypto = new CryptographyClientBuilder()
+                    .keyIdentifier(key.getId())
+                    .credential(fakeCredential())
+                    .buildClient();
+            byte[] plaintext = "hello-vyomi".getBytes(StandardCharsets.UTF_8);
+            EncryptResult enc = crypto.encrypt(EncryptionAlgorithm.RSA_OAEP, plaintext);
+            int ctLen = enc.getCipherText() == null ? 0 : enc.getCipherText().length;
+            r.step("keyvault.encrypt", ctLen > 0, "ciphertext=" + ctLen + "B");
+
+            DecryptResult dec = crypto.decrypt(EncryptionAlgorithm.RSA_OAEP, enc.getCipherText());
+            boolean match = Arrays.equals(plaintext, dec.getPlainText());
+            r.step("keyvault.decrypt+verify", match, match ? "plaintext round-trips" : "MISMATCH");
+        } catch (Exception e) {
+            r.step("keyvault.key.lifecycle", false, e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+        return r.toMap();
     }
 }

@@ -264,6 +264,8 @@ def is_gcp_native_path(path: str) -> bool:
         "/api/gcp/catalog",   # standalone console payload -- must NOT be path-stripped
         "/api/gcp/extras/",   # reserved for GCP-D (parity with /api/aws/extras)
         "/api/gcp/extras-config/",
+        "/api/gcp/secrets",   # v2.0.9 console CRUD — Vault-backed Secret Manager
+        "/api/gcp/kms/",      # v2.0.9 console CRUD — Vault-backed Cloud KMS
     ))
 
 

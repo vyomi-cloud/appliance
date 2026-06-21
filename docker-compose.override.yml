@@ -1,32 +1,32 @@
 services:
-  cloudlearn-sql-postgres:
+  vyomi-sql-postgres:
     ports: !override
       - "35432:5432"
-  cloudlearn-sql-mysql:
+  vyomi-sql-mysql:
     ports: !override
       - "33306:3306"
-  cloudlearn-gcs:
+  vyomi-gcs:
     ports: !override
       - "34443:4443"
-  cloudlearn-vault:
+  vyomi-vault:
     ports: !override
       - "38200:8200"
-  cloudlearn-minio:
+  vyomi-minio:
     ports: !override
       - "39000:9000"
       - "39001:9001"
-  cloudlearn-nats:
+  vyomi-nats:
     ports: !override
       - "34222:4222"
-  cloudlearn-dynamodb:
+  vyomi-dynamodb:
     ports: !override
       - "38000:8000"
-  cloudlearn-elasticmq:
+  vyomi-elasticmq:
     ports: !override
       - "39324:9324"
   simulator:
     ports: !override
-      - "9200:9000"
+      - "${VYOMI_SIMULATOR_PORT:-9200}:9000"
     environment:
       CLOUDLEARN_DEV_MODE: "1"
       CLOUDLEARN_DISTRIBUTION_MODE: developer
@@ -36,3 +36,4 @@ services:
       - ./core:/app/core:ro
       - ./providers:/app/providers:ro
       - ./routes:/app/routes:ro
+      - ./static:/app/static:ro

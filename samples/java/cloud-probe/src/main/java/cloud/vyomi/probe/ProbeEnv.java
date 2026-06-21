@@ -47,6 +47,85 @@ public final class ProbeEnv {
         return firstNonBlank(System.getenv("GCP_PROJECT"), "cloudlearn");
     }
 
+    /** GCP Secret Manager + Cloud KMS have NO Google emulator (unlike
+     *  Pub/Sub/Firestore) and default to gRPC. Their Java SDKs support a REST
+     *  (HttpJson) transport, which gax builds as an HTTPS URL — so this must be
+     *  an https {@code host:port} (the appliance's caddy terminator, same target
+     *  as Cosmos), NOT the plaintext sim :9000. Format is host:port with NO
+     *  scheme/path — the SDK appends the {@code /v1/...} path from the proto
+     *  annotations. The caddy cert must be trusted by the JVM (same requirement
+     *  the Cosmos probe documents). Override via CLOUDPROBE_GCP_REST_ENDPOINT. */
+    public static String gcpRestEndpoint() {
+        return firstNonBlank(System.getenv("CLOUDPROBE_GCP_REST_ENDPOINT"),
+                "127.0.0.1:9443").trim();
+    }
+
+    /** GCP KMS location (key ring location). Cloud KMS uses "global" or a region
+     *  like "us-east1"; the appliance treats it as an opaque path segment. */
+    public static String gcpLocation() {
+        return firstNonBlank(System.getenv("GCP_LOCATION"), "global");
+    }
+
+    /** GCP Pub/Sub emulator host:port (gRPC) — like Firestore, a SEPARATE
+     *  container, not the sim. The SDK also honors PUBSUB_EMULATOR_HOST directly. */
+    public static String pubsubEmulatorHost() {
+        return firstNonBlank(System.getenv("PUBSUB_EMULATOR_HOST"),
+                System.getenv("CLOUDLEARN_PUBSUB_EMULATOR_HOST"),
+                "cloudlearn-pubsub:8085").trim();
+    }
+
+    // ── Messaging (Azure Storage Queue) ──────────────────────────────────────
+    /** Azure Storage Queue endpoint. Native azure-storage-queue rides the
+     *  appliance's Azurite-backed queue surface — the AMQP→HTTP substitution for
+     *  Service Bus — under the dedicated {@code /azure-data/queue/{account}}
+     *  prefix (a dispatch passthrough, so it never collides with the blob
+     *  handler, which shares the x-ms-version signature). */
+    public static String azureQueueEndpointFor(String account) {
+        // Host-based: real Azure addresses each account as
+        // {account}.queue.core.windows.net and the SDK rebuilds /{queue} from the
+        // HOST (dropping any path prefix). *.queue.localtest.me resolves to
+        // 127.0.0.1 (no DNS/hosts edits); the appliance host-routing middleware
+        // maps it onto /azure-data/queue/{account}.
+        String e = endpoint("azure");
+        String scheme = e.startsWith("https") ? "https" : "http";
+        return scheme + "://" + account + ".queue.localtest.me:"
+             + _portOf(e, scheme.equals("https") ? "443" : "80");
+    }
+    /** Azurite-style connection string with an explicit QueueEndpoint so the SDK
+     *  addresses path-style ({@code /{account}/{queue}}); the appliance bridges
+     *  it onto the Azure queue handler (never the S3 catch-all). */
+    public static String azureQueueConnectionString(String account) {
+        return "DefaultEndpointsProtocol=http;AccountName=" + account
+             + ";AccountKey=" + azureKey()
+             + ";QueueEndpoint=" + azureQueueEndpointFor(account) + ";";
+    }
+
+    // ── Key Vault (Secrets + Keys) ───────────────────────────────────────────
+    /** The appliance's HTTPS (caddy) host:port — shared by every native SDK that
+     *  insists on TLS: Cosmos, GCP HttpJson, and Azure Key Vault. */
+    public static String caddyHost() {
+        return firstNonBlank(System.getenv("CLOUDPROBE_CADDY_HOST"),
+                System.getenv("CLOUDPROBE_GCP_REST_ENDPOINT"), "127.0.0.1:9443").trim();
+    }
+
+    /** Azure Key Vault data-plane base, e.g.
+     *  https://host:9443/azure-data/keyvault/{vault}. The Key Vault SDKs enforce
+     *  HTTPS and append {@code /secrets}|{@code /keys} themselves, so this is the
+     *  caddy endpoint (same TLS/cert requirement the Cosmos probe documents).
+     *  Override the whole base via CLOUDPROBE_KEYVAULT_ENDPOINT. */
+    public static String azureKeyVaultEndpoint(String vault) {
+        String base = System.getenv("CLOUDPROBE_KEYVAULT_ENDPOINT");
+        if (base != null && !base.isBlank()) return base.trim();
+        // Host-based ({vault}.vault.localtest.me → 127.0.0.1); the appliance's
+        // host-routing middleware maps it onto /azure-data/keyvault/{vault}. HTTPS
+        // via caddy — the CryptographyClient rebuilds /keys/... from the host, so a
+        // path prefix can't survive.
+        return "https://" + vault + ".vault.localtest.me:" + _portOf(caddyHost(), "9443");
+    }
+    public static String azureVaultName() {
+        return firstNonBlank(System.getenv("AZURE_KEYVAULT_NAME"), "cloudlearn");
+    }
+
     // ── Azure ───────────────────────────────────────────────────────────────
     // Data planes live under /azure-data/{blob,cosmos}/{account}. The sim
     // ignores the SharedKey/master-key signature, so the well-known
@@ -94,6 +173,13 @@ public final class ProbeEnv {
     public static String azureCosmosKey() {
         return firstNonBlank(System.getenv("AZURE_COSMOS_KEY"),
             "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==");
+    }
+
+    /** Port from a "host:port" or "scheme://host:port/path" string (else dflt). */
+    private static String _portOf(String s, String dflt) {
+        String hp = s.replaceFirst("^[a-zA-Z]+://", "").replaceFirst("/.*$", "");
+        int i = hp.lastIndexOf(':');
+        return i >= 0 ? hp.substring(i + 1) : dflt;
     }
 
     private static String firstNonBlank(String... vals) {

@@ -16,7 +16,7 @@ services:
       - cloudsim-data:/data
     restart: unless-stopped
 
-  cloudlearn-sql-postgres:
+  vyomi-sql-postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
@@ -57,12 +57,12 @@ services:
   # They're declared here too so power users can opt for eager start via:
   #   docker compose --profile full up -d
 
-  cloudlearn-vault:
+  vyomi-vault:
     profiles: ["full"]
     image: hashicorp/vault:1.15
-    command: ["server", "-dev", "-dev-root-token-id=cloudlearn-dev-token", "-dev-listen-address=0.0.0.0:8200"]
+    command: ["server", "-dev", "-dev-root-token-id=vyomi-dev-token", "-dev-listen-address=0.0.0.0:8200"]
     environment:
-      VAULT_DEV_ROOT_TOKEN_ID: cloudlearn-dev-token
+      VAULT_DEV_ROOT_TOKEN_ID: vyomi-dev-token
       VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
     cap_add:
       - IPC_LOCK
@@ -107,12 +107,48 @@ services:
       - vyomi-dynamodb:/data
     restart: unless-stopped
 
-  cloudlearn-elasticmq:
+  vyomi-elasticmq:
     profiles: ["full"]
     image: softwaremill/elasticmq-native:latest
     ports:
       - "9324:9324"
       - "9325:9325"
+    restart: unless-stopped
+
+  # ── v2.0.9 new-service backends (Azure Storage + GCP emulators) ──────────
+  # Added so the dev stack can exercise the v2.0.9 messaging/secrets/KMS work:
+  # Azurite serves Azure Blob (:10000) AND Queue (:10001 — the AMQP→HTTP
+  # substitution for Service Bus); the Google emulators back native Pub/Sub +
+  # Firestore gRPC. Profile-gated "full" like the other backends.
+  vyomi-azurite:
+    profiles: ["full"]
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    command: ["azurite", "--blobHost", "0.0.0.0", "--blobPort", "10000",
+              "--queueHost", "0.0.0.0", "--queuePort", "10001",
+              "--location", "/data", "--loose", "--skipApiVersionCheck"]
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+    volumes:
+      - vyomi-azurite:/data
+    restart: unless-stopped
+
+  vyomi-pubsub:
+    profiles: ["full"]
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: ["gcloud","beta","emulators","pubsub","start","--host-port=0.0.0.0:8085","--project=cloudlearn"]
+    ports:
+      - "8085:8085"
+    restart: unless-stopped
+
+  vyomi-firestore:
+    profiles: ["full"]
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: ["gcloud","beta","emulators","firestore","start","--host-port=0.0.0.0:8080"]
+    # Host port 18080 (the probe's Spring Boot app uses 8080). The simulator
+    # still reaches it internally at vyomi-firestore:8080.
+    ports:
+      - "18080:8080"
     restart: unless-stopped
 
   simulator:
@@ -135,7 +171,7 @@ services:
       # Default install only requires the 2 small backends. The rest
       # (vault, nats, minio, dynamodb, elasticmq, mysql) are lazy-provisioned
       # via /api/runtime/backends/{name}/provision when first used.
-      - cloudlearn-sql-postgres
+      - vyomi-sql-postgres
       - vyomi-gcs
     environment:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
@@ -145,7 +181,7 @@ services:
       # inside the container. Override per environment:
       #   - Production:    https://portal.cloudlearn.io
       #   - Local Mac:     http://host.docker.internal:8001
-      #   - Compose net:   http://cloudlearn-portal:8000  (if portal in same compose)
+      #   - Compose net:   http://vyomi-portal:8000  (if portal in same compose)
       CLOUDLEARN_LICENSE_BACKEND_URL: ${VYOMI_LICENSE_BACKEND_URL:-${CLOUDLEARN_LICENSE_BACKEND_URL:-https://vyomi.cloud}}
       # Refresh interval (seconds) — appliance validates with portal to pick
       # up subscription changes. Default 24h — matches JWT TTL and the
@@ -160,7 +196,7 @@ services:
       CLOUDLEARN_PARENT_OS: ${VYOMI_PARENT_OS:-${CLOUDLEARN_PARENT_OS:-linux}}
       CLOUDLEARN_DISTRIBUTION_MODE: ${VYOMI_DISTRIBUTION_MODE:-${CLOUDLEARN_DISTRIBUTION_MODE:-developer}}
       CLOUDLEARN_RUNTIME_BRIDGE_URL: ${VYOMI_RUNTIME_BRIDGE_URL:-${CLOUDLEARN_RUNTIME_BRIDGE_URL:-http://host.docker.internal:9171}}
-      CLOUDLEARN_SQL_PG_HOST: cloudlearn-sql-postgres
+      CLOUDLEARN_SQL_PG_HOST: vyomi-sql-postgres
       CLOUDLEARN_SQL_PG_PORT: "5432"
       CLOUDLEARN_SQL_PG_ADMIN_USER: postgres
       CLOUDLEARN_SQL_PG_ADMIN_PASSWORD: cloudlearn
@@ -170,14 +206,21 @@ services:
       CLOUDLEARN_SQL_MYSQL_ADMIN_PASSWORD: cloudlearn
       CLOUDLEARN_GCS_URL: http://vyomi-gcs:4443
       # MVP P0 backends.
-      CLOUDLEARN_VAULT_URL: http://cloudlearn-vault:8200
-      CLOUDLEARN_VAULT_TOKEN: cloudlearn-dev-token
+      CLOUDLEARN_VAULT_URL: http://vyomi-vault:8200
+      CLOUDLEARN_VAULT_TOKEN: vyomi-dev-token
       CLOUDLEARN_NATS_URL: nats://vyomi-nats:4222
       CLOUDLEARN_MINIO_URL: http://vyomi-minio:9000
       CLOUDLEARN_MINIO_ACCESS_KEY: cloudlearn
       CLOUDLEARN_MINIO_SECRET_KEY: cloudlearn-dev-secret-key
       CLOUDLEARN_DYNAMODB_URL: http://vyomi-dynamodb:8000
-      CLOUDLEARN_ELASTICMQ_URL: http://cloudlearn-elasticmq:9324
+      CLOUDLEARN_ELASTICMQ_URL: http://vyomi-elasticmq:9324
+      # v2.0.9 new-service backends — Azure Storage (blob + queue) + GCP emulators.
+      CLOUDLEARN_AZURITE_URL: http://vyomi-azurite:10000
+      CLOUDLEARN_AZURITE_QUEUE_URL: http://vyomi-azurite:10001
+      PUBSUB_EMULATOR_HOST: vyomi-pubsub:8085
+      CLOUDLEARN_PUBSUB_EMULATOR_HOST: vyomi-pubsub:8085
+      FIRESTORE_EMULATOR_HOST: vyomi-firestore:8080
+      CLOUDLEARN_FIRESTORE_EMULATOR_HOST: vyomi-firestore:8080
     volumes:
       - vyomi-data:/data
       - /var/lib/cloudlearn/deployments:/var/lib/cloudlearn/deployments
@@ -213,7 +256,7 @@ services:
   # (Render/Fly/Railway) and point CLOUDLEARN_LICENSE_BACKEND_URL at it.
   #   cd ../cloud-learn-portal && docker compose up   ← prod-style standalone
   #   docker compose --profile portal up -d           ← bundled dev
-  cloudlearn-portal:
+  vyomi-portal:
     profiles: ["portal"]
     image: python:3.12-slim
     working_dir: /app
@@ -229,7 +272,7 @@ services:
     environment:
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token-CHANGE}
       SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-CHANGE}
-      LICENSE_ISSUER: ${LICENSE_ISSUER:-http://cloudlearn-portal:8000}
+      LICENSE_ISSUER: ${LICENSE_ISSUER:-http://vyomi-portal:8000}
       # `demo` → safe out-of-box checkout flow; switch to razorpay|stripe in prod
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-demo}
     restart: unless-stopped
@@ -267,6 +310,7 @@ volumes:
   vyomi-nats:
   vyomi-minio:
   vyomi-dynamodb:
+  vyomi-azurite:
   vyomi-portal-keys:
   vyomi-portal-data:
   caddy-data:
