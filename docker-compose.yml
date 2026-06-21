@@ -1,5 +1,9 @@
 services:
   cloudsim:
+    # Pull the published image (docker-compose-only / pull-only installs); falls
+    # back to building from ./cloudsim-backbone when the source tree is present
+    # (dev clone) or the image isn't available. Mirrors the simulator service.
+    image: ${VYOMI_CLOUDSIM_IMAGE:-${CLOUDLEARN_CLOUDSIM_IMAGE:-vyomi/cloudsim:latest}}
     build:
       context: ./cloudsim-backbone
     ports:

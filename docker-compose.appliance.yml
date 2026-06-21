@@ -1,5 +1,9 @@
 services:
   cloudsim:
+    # Pull the published image (docker-compose-only / pull-only installs); falls
+    # back to building from ./cloudsim-backbone when the source tree is present
+    # (dev clone) or the image isn't available. Mirrors the simulator service.
+    image: ${VYOMI_CLOUDSIM_IMAGE:-${CLOUDLEARN_CLOUDSIM_IMAGE:-vyomi/cloudsim:latest}}
     build:
       context: ./cloudsim-backbone
     ports:
@@ -50,10 +54,12 @@ services:
   # the vyomi-azurite volume so they survive simulator restarts.
   vyomi-azurite:
     image: mcr.microsoft.com/azure-storage/azurite:latest
-    command: ["azurite-blob", "--blobHost", "0.0.0.0", "--blobPort", "10000",
+    command: ["azurite", "--blobHost", "0.0.0.0", "--blobPort", "10000",
+              "--queueHost", "0.0.0.0", "--queuePort", "10001",
               "--location", "/data", "--loose", "--skipApiVersionCheck"]
     ports:
       - "10000:10000"
+      - "10001:10001"
     volumes:
       - vyomi-azurite:/data
     restart: unless-stopped
@@ -242,6 +248,9 @@ services:
       # devstoreaccount1). core/azure_blob_store.py proxies to it; falls back to
       # the in-process store when unset/unreachable.
       CLOUDLEARN_AZURITE_URL: http://vyomi-azurite:10000
+      # Real Azure Queue data plane (AMQP→HTTP substitution for Service Bus):
+      # messages live in Azurite's queue service; core/azure_queue_store.py proxies.
+      CLOUDLEARN_AZURITE_QUEUE_URL: http://vyomi-azurite:10001
       # P1: official Pub/Sub + Firestore emulators back the gRPC data planes.
       PUBSUB_EMULATOR_HOST: cloudlearn-pubsub:8085
       FIRESTORE_EMULATOR_HOST: cloudlearn-firestore:8080

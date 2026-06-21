@@ -81,8 +81,16 @@ jobs:
             TAGS="${DH}:edge,${DH}:sha-${SHORT},${GH}:edge,${GH}:sha-${SHORT}"
             PRERELEASE="n/a"
           fi
-          echo "version=${VER}"         >> "$GITHUB_OUTPUT"
-          echo "tags=${TAGS}"           >> "$GITHUB_OUTPUT"
+          # cloudsim images mirror the appliance tag set (vyomi/appliance →
+          # vyomi/cloudsim, and the GHCR equivalent). Built from
+          # ./cloudsim-backbone so the docker-compose-only (pull-only) install
+          # can PULL cloudsim instead of needing the source to build it at
+          # startup. The substitution is safe: no version/latest/edge/sha
+          # suffix contains the literal "appliance".
+          CTAGS="${TAGS//appliance/cloudsim}"
+          echo "version=${VER}"           >> "$GITHUB_OUTPUT"
+          echo "tags=${TAGS}"             >> "$GITHUB_OUTPUT"
+          echo "cloudsim_tags=${CTAGS}"   >> "$GITHUB_OUTPUT"
           echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
           {
             echo "## Will publish"
@@ -130,6 +138,24 @@ jobs:
             org.opencontainers.image.version=${{ steps.meta.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Build + push cloudsim (multi-arch)
+        # The CloudSim-Plus backbone. Published so docker-compose pull-only
+        # installs work without the cloudsim-backbone source present (matches
+        # the simulator, which is also pulled). Compose keeps a build: fallback.
+        uses: docker/build-push-action@v6
+        with:
+          context: ./cloudsim-backbone
+          file: ./cloudsim-backbone/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.cloudsim_tags }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          cache-from: type=gha,scope=cloudsim
+          cache-to: type=gha,mode=max,scope=cloudsim
 
       - name: Update Docker Hub description (stable tag only)
         # Pre-release tags don't update the Hub README — the README should
