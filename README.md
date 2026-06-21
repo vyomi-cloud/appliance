@@ -1,15 +1,19 @@
-# Vyomi
+# Vyomi — local multi-cloud simulator for AWS, GCP & Azure
 
 [![CI](https://github.com/vyomi-cloud/appliance/actions/workflows/ci.yml/badge.svg)](https://github.com/vyomi-cloud/appliance/actions/workflows/ci.yml)
 [![License: BSL 1.1](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.0.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.0.8-green.svg)](CHANGELOG.md)
 [![Docker](https://img.shields.io/badge/docker-vyomi%2Fappliance-blue.svg)](https://hub.docker.com/r/vyomi/appliance)
 
-**Local-first multi-cloud simulator. Real SDKs, real CLIs, real backends — no network required. Now with HTTPS by default.**
+**The open multi-cloud LocalStack alternative — run AWS, GCP, and Azure on your laptop.** Real SDKs, real CLIs, real backends; no cloud account, no cloud bill, no network required.
 
-> **v2.0.0 is the vyomi-branded release.** The CLI is `vyomi` (with a `cloud-learn` deprecation shim through v2.x), the Docker image is `vyomi/appliance`, the brew tap is `vyomi-cloud/tap`, and the GitHub org is `vyomi-cloud`. Existing installs upgrade transparently via runtime aliases for headers, env vars, paths, volumes, and modules. **Upgrading from v1.x?** Read [`docs/MIGRATION-v2.md`](docs/MIGRATION-v2.md) first.
+Vyomi is a local-first **multi-cloud simulator**: a LocalStack alternative that covers **AWS, GCP, *and* Azure** in one appliance — not just AWS. It serves cloud-faithful APIs that work with the standard `boto3`, `aws-sdk-java`, `google-cloud-*`, `azure-sdk-for-*` SDKs plus the `aws` / `gcloud` / `gsutil` / `az` / `terraform` CLIs. Point your endpoint at `http://localhost:9000`, and your existing code runs unchanged — then one-click **Terraform export** migrates the same stack to production cloud.
 
-Vyomi gives you AWS, GCP, and Azure-like experiences on your laptop, with cloud-faithful APIs that work with the standard `boto3`, `aws-sdk-java`, `google-cloud-*`, `azure-sdk-for-*`, plus the `aws` / `gcloud` / `gsutil` / `az` / `terraform` CLIs. Override the endpoint, point at `http://localhost:9000`, and your existing code runs.
+### Why Vyomi vs LocalStack / Moto / Azurite?
+
+LocalStack focuses on AWS; Moto, [Azurite](https://github.com/Azure/Azurite), and the GCP emulators each cover a single cloud. **Vyomi simulates all three major clouds** in one binary with **real backends** (Postgres, MySQL, MinIO/S3, DynamoDB, Vault, NATS, Azurite, the Firestore emulator) and native **multi-cloud NoSQL** — DynamoDB, Firestore, and Cosmos DB — so you can build and test cross-cloud apps locally. Full head-to-head: **[vyomi.cloud/compare/localstack](https://vyomi.cloud/compare/localstack)**.
+
+> The CLI is `vyomi` (with a `cloud-learn` deprecation shim through v2.x), the Docker image is `vyomi/appliance`, and the brew tap is `vyomi-cloud/tap`. **Upgrading from v1.x?** Read [`docs/MIGRATION-v2.md`](docs/MIGRATION-v2.md) first.
 
 ## What's in v1.0
 
@@ -32,8 +36,8 @@ See [`docs/RELEASE_NOTES_v1.0.md`](docs/RELEASE_NOTES_v1.0.md) for the full feat
 
 ### Homebrew (macOS / Linux)
 ```bash
-brew install cloudlearn/tap/cloud-learn
-cloud-learn up
+brew install vyomi-cloud/tap/vyomi
+vyomi up
 ```
 
 ### Docker Compose (development)
