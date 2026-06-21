@@ -1,17 +1,19 @@
-# Vyomi — local multi-cloud simulator for AWS, GCP & Azure
+# Vyomi — the Multi-Cloud Digital Twin Runtime
 
 [![CI](https://github.com/vyomi-cloud/appliance/actions/workflows/ci.yml/badge.svg)](https://github.com/vyomi-cloud/appliance/actions/workflows/ci.yml)
 [![License: BSL 1.1](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-2.0.8-green.svg)](CHANGELOG.md)
 [![Docker](https://img.shields.io/badge/docker-vyomi%2Fappliance-blue.svg)](https://hub.docker.com/r/vyomi/appliance)
 
-**The open multi-cloud LocalStack alternative — run AWS, GCP, and Azure on your laptop.** Real SDKs, real CLIs, real backends; no cloud account, no cloud bill, no network required.
+**Build for the cloud, without the cloud.** Vyomi is a **multi-cloud digital twin runtime** — a faithful, *running* replica of your AWS, GCP, and Azure environment on your own machine. Real services, real SDKs, real backends; no cloud account, no cloud bill, no network required.
 
-Vyomi is a local-first **multi-cloud simulator**: a LocalStack alternative that covers **AWS, GCP, *and* Azure** in one appliance — not just AWS. It serves cloud-faithful APIs that work with the standard `boto3`, `aws-sdk-java`, `google-cloud-*`, `azure-sdk-for-*` SDKs plus the `aws` / `gcloud` / `gsutil` / `az` / `terraform` CLIs. Point your endpoint at `http://localhost:9000`, and your existing code runs unchanged — then one-click **Terraform export** migrates the same stack to production cloud.
+> Often searched for as a *local multi-cloud simulator* or a *LocalStack alternative* — Vyomi goes further: a real digital twin on real backends across all three clouds, not single-cloud mocks.
 
-### Why Vyomi vs LocalStack / Moto / Azurite?
+Point your existing SDKs/CLIs — `boto3`, `aws-sdk-java`, `google-cloud-*`, `azure-sdk-for-*`, plus `aws` / `gcloud` / `gsutil` / `az` / `terraform` — at `http://localhost:9000`, and your code runs unchanged. When you're ready, one-click **Terraform export** promotes the same stack to production cloud.
 
-LocalStack focuses on AWS; Moto, [Azurite](https://github.com/Azure/Azurite), and the GCP emulators each cover a single cloud. **Vyomi simulates all three major clouds** in one binary with **real backends** (Postgres, MySQL, MinIO/S3, DynamoDB, Vault, NATS, Azurite, the Firestore emulator) and native **multi-cloud NoSQL** — DynamoDB, Firestore, and Cosmos DB — so you can build and test cross-cloud apps locally. Full head-to-head: **[vyomi.cloud/compare/localstack](https://vyomi.cloud/compare/localstack)**.
+### Why a digital twin, not a mock? (vs LocalStack / Moto / Azurite)
+
+LocalStack mocks AWS; Moto, [Azurite](https://github.com/Azure/Azurite), and the GCP emulators each cover a single cloud. **Vyomi runs all three major clouds on real backends** (Postgres, MySQL, MinIO/S3, DynamoDB, Vault, NATS, Azurite, the Firestore emulator) with native **multi-cloud NoSQL** — DynamoDB, Firestore, and Cosmos DB — so the twin behaves like the real thing while you build and test cross-cloud apps locally. Full head-to-head: **[vyomi.cloud/compare/localstack](https://vyomi.cloud/compare/localstack)**.
 
 > The CLI is `vyomi` (with a `cloud-learn` deprecation shim through v2.x), the Docker image is `vyomi/appliance`, and the brew tap is `vyomi-cloud/tap`. **Upgrading from v1.x?** Read [`docs/MIGRATION-v2.md`](docs/MIGRATION-v2.md) first.
 
