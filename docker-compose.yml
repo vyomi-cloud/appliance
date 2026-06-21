@@ -284,9 +284,13 @@ services:
   # The simulator stays HTTP on :9000 — Caddy fully terminates TLS and
   # reverse-proxies. Cert files mount from ${VYOMI_TLS_DIR:-~/.vyomi/tls}.
   #
-  # If the cert files aren't present (user skipped mkcert, e.g. on a
-  # restricted machine), Caddy's healthcheck fails but the simulator
-  # remains reachable on :9000 HTTP. Graceful degradation.
+  # OPT-IN (profile "tls"): Caddy needs two host files the bare
+  # docker-compose quickstart doesn't lay down — packaging/caddy/Caddyfile
+  # and the TLS cert/key. Without them the bind-mounts fail and the
+  # container crash-loops, so Caddy is gated behind the "tls" profile and
+  # the `vyomi up` launcher (which provisions both). Plain installs use
+  # http://localhost:9000; opt into HTTPS with `--profile tls` once the
+  # Caddyfile + certs exist (set VYOMI_CADDYFILE / VYOMI_TLS_DIR).
   caddy:
     image: caddy:2-alpine
     ports:
@@ -299,7 +303,7 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     restart: unless-stopped
-    profiles: ["tls", "full"]
+    profiles: ["tls"]
 
 volumes:
   vyomi-data:

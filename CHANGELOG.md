@@ -6,6 +6,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.9.1] — 2026-06-22
+
+**Patch — fix the docker-compose-only install (caddy crash-looped for every fresh user).**
+
+### Fixed
+- **Caddy no longer breaks `docker compose up` / `--profile full`.** The caddy TLS sidecar was in `profiles: ["tls", "full"]`, so the documented `--profile full up -d` started it — but the bare docker-compose install never lays down `packaging/caddy/Caddyfile` or TLS certs (Step 2 only fetches `docker-compose.yml` + `.env`). Docker then auto-created the missing Caddyfile path as an empty **directory** and the bind-mount failed (`not a directory: are you trying to mount a directory onto a file`), crash-looping caddy. Caddy is now **`profiles: ["tls"]`** only — opt-in. Plain installs run on `http://localhost:9000` with zero extra files; HTTPS on `:9443` is opt-in via `docker compose --profile tls up -d` (once a Caddyfile + cert/key are provided) or the `vyomi up` launcher (which provisions both via mkcert). The launcher path is unaffected — it uses `docker-compose.appliance.yml` and starts caddy by name with seeded files.
+- **Documented install path now reaches "Appliance is Ready."** Because the readiness banner counts all backends, the previous `docker compose up -d` (4 services, rest lazy) capped at 26%. Portal install steps now use `docker compose --profile full up -d` so every backend starts eagerly → readiness 100%.
+
 ## [2.0.9] — 2026-06-22
 
 **Cross-cloud native-SDK conformance extended to Secrets + KMS — and a transport-conformance map that fixes how every Messaging / Secrets / KMS surface is reached, native-SDK-as-is, across AWS / GCP / Azure.** Following the principle that a green conformance test must give a developer full confidence to build a real app with the **unmodified** vendor SDK (the backing tech — ElasticMQ, Vault, Azurite, emulators — is our private pick, never something their code depends on), we mapped all nine surfaces by the transport the **native** SDK actually speaks and wired only the ones that pass that bar, flagging the rest honestly rather than faking a pass.
