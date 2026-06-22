@@ -382,21 +382,29 @@ function Invoke-ApplianceLauncher {
 
 # -- Health check (direct bridged IP) -------------------------------------
 function Test-ApplianceHealth {
-  param([int]$TimeoutSeconds = 180)
+  param([int]$TimeoutSeconds = 0)
+  if ($TimeoutSeconds -le 0) {
+    $TimeoutSeconds = [int](Get-EnvAny @('VYOMI_HEALTH_TIMEOUT','CLOUD_LEARN_HEALTH_TIMEOUT') '600')
+  }
   $vmIp = Get-ApplianceIp
   if ([string]::IsNullOrWhiteSpace($vmIp)) { throw 'Could not resolve the appliance VM IP for health checks.' }
-  Write-ProgressLine ("==> [6/6] Waiting for the simulator to become reachable at {0}" -f $vmIp)
+  Write-ProgressLine ("==> [6/6] Waiting for the simulator at {0} (first boot pulls ~3.5GB - can take 10-20 min on a slow VM)" -f $vmIp)
   $waited = 0
   while ($waited -lt $TimeoutSeconds) {
-    $bridgeOk = $false; $simOk = $false
-    try { Invoke-WebRequest -Uri ("http://{0}:9171/health" -f $vmIp) -TimeoutSec 3 -UseBasicParsing | Out-Null; $bridgeOk = $true } catch { }
-    try { Invoke-WebRequest -Uri ("http://{0}:9000/healthz" -f $vmIp) -TimeoutSec 3 -UseBasicParsing | Out-Null; $simOk = $true } catch { }
-    if ($bridgeOk -and $simOk) { return $vmIp }
-    Start-Sleep -Seconds 3
-    $waited += 3
-    if ($waited % 15 -eq 0) { Write-ProgressLine ("    ... still starting ({0}s) - first boot pulls ~3.5GB of images" -f $waited) }
+    # The simulator (port 9000) is what serves the console; the runtime
+    # bridge (9171) is optional, so don't block on it.
+    try { Invoke-WebRequest -Uri ("http://{0}:9000/healthz" -f $vmIp) -TimeoutSec 3 -UseBasicParsing | Out-Null; return $vmIp } catch { }
+    Start-Sleep -Seconds 5
+    $waited += 5
+    if ($waited % 30 -eq 0) { Write-ProgressLine ("    ... still starting ({0}s) - pulling/booting the stack inside the VM" -f $waited) }
   }
-  throw 'appliance health check failed: the simulator did not become reachable in time. Inspect: multipass exec ' + $ApplianceName + ' -- sudo docker ps'
+  # Don't fail hard: on a slow box the stack frequently comes up AFTER the
+  # wait expires. Warn, but keep going so the bridge + URL still get set up.
+  Write-ProgressLine ''
+  Write-ProgressLine '==> Simulator not reachable yet - it is still starting inside the VM (slow first boot / image pull).'
+  Write-ProgressLine ("    Check progress: multipass exec {0} -- sudo docker ps" -f $ApplianceName)
+  Write-ProgressLine '    The access URL below will start working once it finishes.'
+  return $vmIp
 }
 
 # -- localhost bridge (netsh portproxy) + browser -------------------------
