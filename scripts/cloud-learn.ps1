@@ -103,7 +103,7 @@ function Initialize-Log {
 }
 
 function Write-ProgressLine {
-  param([Parameter(Mandatory = $true)][string]$Message)
+  param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Message)
   Write-Output $Message
   if ($script:LogFile) {
     try { Add-Content -Path $script:LogFile -Value ("[{0}] {1}" -f ([DateTime]::Now.ToString('HH:mm:ss')), $Message) } catch { }
@@ -314,7 +314,8 @@ function Sync-WorkspaceIntoVm {
   $compose = Get-MultipassCommand
   Write-ProgressLine '==> Appliance: syncing workspace into VM (tar + transfer)'
   $items = @('Dockerfile','docker-compose.appliance.yml','docker-compose.yml','VERSION','requirements.txt',
-             'server.py','setup_cython.py','.env.example','core','providers','routes','static','packs','scripts','packaging') |
+             'server.py','setup_cython.py','.env.example','core','providers','routes','static','packs','scripts','packaging',
+             'cloudsim-backbone') |
            Where-Object { Test-Path (Join-Path $RootDir $_) }
   $tarball = Join-Path $env:TEMP ('vyomi-src-' + [Guid]::NewGuid().ToString('N') + '.tgz')
   $tarArgs = @('-czf', $tarball, '-C', $RootDir,
