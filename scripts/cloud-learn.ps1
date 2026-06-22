@@ -1,13 +1,13 @@
 #!/usr/bin/env pwsh
-# ─────────────────────────────────────────────────────────────────────────
-# vyomi — Windows launcher (PowerShell)
+# -------------------------------------------------------------------------
+# vyomi - Windows launcher (PowerShell)
 #
 # Ported to parity with the bash launcher (scripts/cloud-learn) for the
 # current appliance architecture: a generic Ubuntu 24.04 Multipass VM is
 # booted with cloud-init, the source tree is synced in via tar+transfer
-# (NOT `multipass mount` — that fails through install sandboxes), and the
+# (NOT `multipass mount` - that fails through install sandboxes), and the
 # docker-compose stack runs INSIDE the VM. The host bridges localhost
-# 9000/9443 → the VM IP via `netsh interface portproxy`.
+# 9000/9443 -> the VM IP via `netsh interface portproxy`.
 #
 # Parity-with-bash notes:
 #   - tar+transfer workspace sync (was: multipass mount)
@@ -20,8 +20,8 @@
 #
 # Deferred (HTTP works; HTTPS/extras land in a follow-up):
 #   - mkcert/TLS provisioning (no https://localhost:9443 green padlock yet)
-#   - LXD↔docker iptables one-shot, legacy-VM mDNS fixup
-# ─────────────────────────────────────────────────────────────────────────
+#   - LXD<->docker iptables one-shot, legacy-VM mDNS fixup
+# -------------------------------------------------------------------------
 param(
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$RemainingArgs
@@ -30,7 +30,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# ── Env mirroring (CLOUDLEARN_* ↔ VYOMI_*) ───────────────────────────────
+# -- Env mirroring (CLOUDLEARN_* <-> VYOMI_*) -------------------------------
 # Keep both prefixes in sync so legacy CLOUD_LEARN_* and new VYOMI_* both work.
 function Get-EnvAny {
   param([string[]]$Names, [string]$Default = '')
@@ -68,7 +68,7 @@ if ($RuntimeContext -eq 'inner' -and [string]::IsNullOrWhiteSpace((Get-EnvAny @(
   $ComposeFile = Join-Path $RootDir 'docker-compose.appliance.yml'
 }
 
-# ── Progress + logging ───────────────────────────────────────────────────
+# -- Progress + logging ---------------------------------------------------
 $script:LogFile = $null
 function Initialize-Log {
   try {
@@ -91,7 +91,7 @@ function Write-ProgressLine {
   }
 }
 
-# ── Multipass discovery + auto-install (winget) ──────────────────────────
+# -- Multipass discovery + auto-install (winget) --------------------------
 function Get-MultipassCommand {
   if (Get-Command multipass -ErrorAction SilentlyContinue) { return 'multipass' }
   throw 'Multipass is required for appliance mode. Run `vyomi up` again after installing it, or install manually: winget install Canonical.Multipass'
@@ -103,7 +103,7 @@ function Install-Multipass {
     Write-ProgressLine '==> Multipass not found and winget is unavailable. Install Multipass from https://multipass.run/install then re-run `vyomi up`.'
     return $false
   }
-  Write-ProgressLine '==> Multipass not found — installing via winget (a UAC prompt will appear)...'
+  Write-ProgressLine '==> Multipass not found - installing via winget (a UAC prompt will appear)...'
   try {
     & winget install --id Canonical.Multipass --accept-package-agreements --accept-source-agreements --disable-interactivity
   } catch {
@@ -147,7 +147,7 @@ function Test-MultipassReady {
   return $false
 }
 
-# ── Appliance manifest + host sizing ─────────────────────────────────────
+# -- Appliance manifest + host sizing -------------------------------------
 function Write-ApplianceManifest {
   if (-not (Test-Path $ApplianceDir)) { New-Item -ItemType Directory -Force -Path $ApplianceDir | Out-Null }
   $payload = [ordered]@{
@@ -221,7 +221,7 @@ function Write-ApplianceHostSizing {
   Set-Content -Path (Join-Path $ApplianceDir $HostSizingFileName) -Value (($payload | ConvertTo-Json -Depth 8) + [Environment]::NewLine) -Encoding utf8
 }
 
-# ── cloud-init (with mDNS, matching bash) ────────────────────────────────
+# -- cloud-init (with mDNS, matching bash) --------------------------------
 function Write-ApplianceCloudInit {
   if (-not (Test-Path $ApplianceDir)) { New-Item -ItemType Directory -Force -Path $ApplianceDir | Out-Null }
   $publicKey = Get-ApplianceSshPublicKey
@@ -255,7 +255,7 @@ runcmd:
 "@ | Set-Content -Path (Join-Path $ApplianceDir 'cloud-init.yaml') -Encoding utf8
 }
 
-# ── VM state helpers ─────────────────────────────────────────────────────
+# -- VM state helpers -----------------------------------------------------
 function Get-ApplianceRecord {
   try {
     $compose = Get-MultipassCommand
@@ -290,7 +290,7 @@ function Get-ApplianceIp {
   return ''
 }
 
-# ── Workspace sync (tar + transfer; NOT multipass mount) ─────────────────
+# -- Workspace sync (tar + transfer; NOT multipass mount) -----------------
 function Sync-WorkspaceIntoVm {
   $compose = Get-MultipassCommand
   Write-ProgressLine '==> Appliance: syncing workspace into VM (tar + transfer)'
@@ -320,7 +320,7 @@ function Sync-HostSizingIntoVm {
   & $compose exec $ApplianceName -- /bin/bash -lc "sudo mkdir -p /var/lib/cloudlearn && sudo install -m 644 /tmp/$HostSizingFileName /var/lib/cloudlearn/$HostSizingFileName && rm -f /tmp/$HostSizingFileName"
 }
 
-# ── Runtime bridge (transfer + systemd unit, matching bash) ──────────────
+# -- Runtime bridge (transfer + systemd unit, matching bash) --------------
 function Install-RuntimeBridge {
   $compose = Get-MultipassCommand
   $bridgeSrc = Join-Path $RootDir 'core/runtime_bridge.py'
@@ -345,7 +345,7 @@ WantedBy=multi-user.target
   & $compose exec $ApplianceName -- /bin/bash -lc $remote
 }
 
-# ── Launch / boot the VM ─────────────────────────────────────────────────
+# -- Launch / boot the VM -------------------------------------------------
 function Start-ApplianceVm {
   Write-ApplianceManifest
   Write-ApplianceHostSizing
@@ -380,7 +380,7 @@ function Invoke-ApplianceLauncher {
   & $compose exec $ApplianceName -- /bin/bash -lc "sudo mkdir -p /var/lib/cloudlearn/deployments && cd '$ApplianceWorkspace' && CLOUD_LEARN_HOME='$ApplianceWorkspace' CLOUD_LEARN_RUNTIME_CONTEXT=inner CLOUD_LEARN_DISTRIBUTION_MODE=appliance CLOUD_LEARN_COMPOSE_FILE='$ApplianceWorkspace/docker-compose.appliance.yml' bash ./scripts/cloud-learn up --detach"
 }
 
-# ── Health check (direct bridged IP) ─────────────────────────────────────
+# -- Health check (direct bridged IP) -------------------------------------
 function Test-ApplianceHealth {
   param([int]$TimeoutSeconds = 180)
   $vmIp = Get-ApplianceIp
@@ -394,12 +394,12 @@ function Test-ApplianceHealth {
     if ($bridgeOk -and $simOk) { return $vmIp }
     Start-Sleep -Seconds 3
     $waited += 3
-    if ($waited % 15 -eq 0) { Write-ProgressLine ("    ... still starting ({0}s) — first boot pulls ~3.5GB of images" -f $waited) }
+    if ($waited % 15 -eq 0) { Write-ProgressLine ("    ... still starting ({0}s) - first boot pulls ~3.5GB of images" -f $waited) }
   }
   throw 'appliance health check failed: the simulator did not become reachable in time. Inspect: multipass exec ' + $ApplianceName + ' -- sudo docker ps'
 }
 
-# ── localhost bridge (netsh portproxy) + browser ─────────────────────────
+# -- localhost bridge (netsh portproxy) + browser -------------------------
 function Start-LocalhostBridge {
   param([string]$VmIp)
   if ([string]::IsNullOrWhiteSpace($VmIp)) { return }
@@ -431,7 +431,7 @@ function Show-UrlBanner {
   }
 }
 
-# ── Upgrade ──────────────────────────────────────────────────────────────
+# -- Upgrade --------------------------------------------------------------
 function Invoke-Upgrade {
   $compose = Get-MultipassCommand
   if (-not (Test-ApplianceExists)) { throw "Appliance VM '$ApplianceName' does not exist. Run `vyomi up` first." }
@@ -456,7 +456,7 @@ function Invoke-Upgrade {
   Write-ProgressLine ("==> Vyomi appliance is now on v{0}" -f $latest)
 }
 
-# ── Inner-context compose helpers (unchanged behavior) ───────────────────
+# -- Inner-context compose helpers (unchanged behavior) -------------------
 function Get-ComposeBackend {
   if (Get-Command docker -ErrorAction SilentlyContinue) {
     try { & docker compose version | Out-Null; return @{ File = 'docker'; Args = @('compose') } } catch { }
@@ -527,7 +527,7 @@ Environment (VYOMI_* preferred; CLOUD_LEARN_* still honored):
 '@ | Write-Output
 }
 
-# ── Dispatch ─────────────────────────────────────────────────────────────
+# -- Dispatch -------------------------------------------------------------
 $cmd = if ($RemainingArgs.Count -gt 0) { $RemainingArgs[0] } else { 'help' }
 $cmdArgs = if ($RemainingArgs.Count -gt 1) { $RemainingArgs[1..($RemainingArgs.Count - 1)] } else { @() }
 
