@@ -1,0 +1,31 @@
+# Vyomi appliance — docker-compose as an *assisting tool* (NOT an installer).
+#
+# This file does not run any containers on your host. It declares a Compose
+# `provider` service that hands off to the `docker-vyomi` plugin, which runs
+# the host `vyomi up` launcher — booting the appliance inside Multipass (the
+# appliance boundary). So `docker compose up` is a familiar front door to the
+# same thing `vyomi up` does, with full EC2/LXD compute.
+#
+# Prereq: the `docker-vyomi` provider plugin must be installed (it ships with
+# every native vyomi package: brew / deb / rpm / scoop). Without it Compose
+# reports "provider vyomi not found" — install the launcher first.
+#
+# Usage:
+#   docker compose -p vyomi up      # → vyomi up   (boots the Multipass appliance)
+#   docker compose -p vyomi down    # → vyomi down
+name: vyomi
+services:
+  appliance:
+    provider:
+      type: vyomi
+      options:
+        profile: full
+  # Tiny companion: a provider-only project makes `docker compose up` error
+  # "no container to start". This one-shot just prints status and exits, so
+  # `up` completes cleanly. The real appliance runs in Multipass, not here.
+  status:
+    image: alpine:3
+    depends_on:
+      - appliance
+    command: ["sh","-c","echo 'Vyomi appliance is running inside Multipass. Check: vyomi status'"]
+    restart: "no"
