@@ -6,6 +6,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **`docker compose up` as a front door to the Multipass appliance (Compose provider).** docker-compose stays a first-class launch pad for developers, but as an *assisting tool*, not a host installer: the `vyomi` launcher now implements the Docker Compose **provider protocol** (`vyomi compose --project-name P up|down|stop` → emits `{"type":"info|error",...}` JSON, routes to `vyomi up/down/stop`). With the thin `packaging/compose-provider/docker-compose.yml` (a `provider` service, `type: vyomi`), `docker compose up` boots the appliance **inside Multipass** — same boundary, EC2/LXD compute works. Zero extra packaging: Compose resolves `type: vyomi` to the `vyomi` binary every native package already puts on PATH (no separate CLI plugin). Validated on Compose v5.1.3.
+
 ### Changed
 - **Multipass is the appliance boundary for every install method.** brew / deb / rpm / scoop / Docker Compose all now provision the appliance *inside* a Multipass VM via `vyomi up`. The standalone "run the stack on host Docker" path is retired from the portal install steps — running outside the boundary breaks HTTPS, instance workspaces, and EC2/VM compute, and produces host-specific inconsistencies the appliance can't control. No runtime change: the launcher already boots the same docker-compose stack inside the VM; this is a packaging/install-story decision (portal `install_catalog` routes the Docker Compose method to `vyomi up`). The repo's `docker-compose.yml` remains for advanced/CI use but is no longer a user-facing appliance install.
 

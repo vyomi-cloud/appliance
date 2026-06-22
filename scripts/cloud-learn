@@ -2418,10 +2418,64 @@ inner_run() {
   esac
 }
 
+# ── Docker Compose provider protocol ────────────────────────────────────────
+# Lets `docker compose up` act as a front door to `vyomi up` — the appliance
+# always boots inside Multipass (the boundary), so EC2/LXD compute works. No
+# separate plugin needed: Compose falls back to the `vyomi` binary on PATH for
+# `type: vyomi`, and every native package installs it. See
+# packaging/compose-provider/docker-compose.yml.
+#
+# Compose invokes (on the HOST): vyomi compose --project-name <P> up|down|stop [--opt=val ...] <svc>
+# Args reaching this function already exclude the "compose" subcommand.
+# Protocol: emit ONLY JSON lines {"type":"info|error","message":"..."} on
+# stdout (no banner), exit 0 on success; route to this launcher's up/down/stop.
+_vyomi_compose_provider() {
+  local action=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project-name)   shift 2 ;;
+      --project-name=*) shift ;;
+      up|down|stop)     action="$1"; shift ;;
+      *)                shift ;;
+    esac
+  done
+  _cp_msg() { printf '{"type":"%s","message":"%s"}\n' "$1" "$2"; }
+  # VYOMI_PROVIDER_DRYRUN=1 validates the Compose↔launcher wiring without booting.
+  _cp_dry() { [ "${VYOMI_PROVIDER_DRYRUN:-0}" = "1" ]; }
+  case "$action" in
+    up)
+      _cp_msg info "Vyomi runs inside Multipass — the appliance boundary."
+      _cp_msg info "Routing 'docker compose up' to 'vyomi up' (first run installs Multipass; ~3-5 min)."
+      _cp_dry && { _cp_msg info "[dry-run] would run: vyomi up"; return 0; }
+      VYOMI_NO_BANNER=1 outer_run up >&2
+      ;;
+    down)
+      _cp_msg info "Routing 'docker compose down' to 'vyomi down'."
+      _cp_dry && { _cp_msg info "[dry-run] would run: vyomi down"; return 0; }
+      VYOMI_NO_BANNER=1 outer_run down >&2
+      ;;
+    stop)
+      _cp_msg info "Routing 'docker compose stop' to 'vyomi stop'."
+      _cp_dry && { _cp_msg info "[dry-run] would run: vyomi stop"; return 0; }
+      VYOMI_NO_BANNER=1 outer_run stop >&2
+      ;;
+    *)
+      _cp_msg error "unknown compose action: ${action:-<none>}"
+      return 1
+      ;;
+  esac
+}
+
 outer_run() {
   local subcmd="${1:-help}"
   if [ "$#" -gt 0 ]; then
     shift
+  fi
+  # Docker Compose provider protocol — intercept BEFORE the banner so stdout
+  # carries only the JSON protocol lines Compose parses. See _vyomi_compose_provider.
+  if [ "$subcmd" = "compose" ]; then
+    _vyomi_compose_provider "$@"
+    return $?
   fi
   # v2.0.7: brand banner before every subcommand. Idempotent +
   # suppressed by VYOMI_NO_BANNER=1.

@@ -6,9 +6,11 @@
 # appliance boundary). So `docker compose up` is a familiar front door to the
 # same thing `vyomi up` does, with full EC2/LXD compute.
 #
-# Prereq: the `docker-vyomi` provider plugin must be installed (it ships with
-# every native vyomi package: brew / deb / rpm / scoop). Without it Compose
-# reports "provider vyomi not found" — install the launcher first.
+# Prereq: the `vyomi` launcher must be on PATH (installed by any native package:
+# brew / deb / rpm / scoop). Compose resolves `type: vyomi` to that binary,
+# which implements the provider protocol (`vyomi compose ... up|down`) and
+# routes to `vyomi up`. No separate plugin to install. Without `vyomi` on PATH,
+# Compose reports "provider vyomi not found" — install a native package first.
 #
 # Usage:
 #   docker compose -p vyomi up      # → vyomi up   (boots the Multipass appliance)
