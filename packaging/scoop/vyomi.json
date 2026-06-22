@@ -1,14 +1,11 @@
 {
   "version": "0.2.0",
-  "description": "Local multi-cloud simulator (AWS/GCP/Azure) with real backends \u2014 full SDK + CLI parity for boto3, aws-cli, google-cloud-*, azure-sdk-*, Terraform.",
+  "description": "Local multi-cloud simulator (AWS/GCP/Azure) with real backends — full SDK + CLI parity for boto3, aws-cli, google-cloud-*, azure-sdk-*, Terraform.",
   "homepage": "https://vyomi.cloud",
   "license": "Business Source License 1.1",
   "url": "https://github.com/vyomi-cloud/appliance/releases/download/v0.2.0/cloud-learn-0.2.0.tar.gz",
   "hash": "REPLACED_BY_RELEASE_WORKFLOW",
   "extract_dir": "cloud-learn-0.2.0",
-  "depends": [
-    "extras/multipass"
-  ],
   "bin": [
     [
       "scripts\\cloud-learn.ps1",
@@ -52,9 +49,9 @@
     }
   },
   "notes": [
-    "CloudLearn ships as an appliance \u2014 the launcher runs a single Multipass VM and starts the full simulator stack (FastAPI + 8 real backends + Java CloudSim) inside.",
+    "CloudLearn ships as an appliance — the launcher runs a single Multipass VM and starts the full simulator stack (FastAPI + 8 real backends + Java CloudSim) inside.",
     "",
-    "Prerequisites (Scoop's `depends` handles multipass; you also need):",
+    "Prerequisites (the launcher auto-installs Multipass on first `vyomi up`; you also need):",
     "  - Hyper-V enabled (Windows 10/11 Pro/Enterprise)  OR  VirtualBox",
     "  - ~32 GB free disk for VM image + container layers",
     "",
