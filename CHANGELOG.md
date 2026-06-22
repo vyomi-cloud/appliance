@@ -6,6 +6,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.9.2] — 2026-06-22
+
+**Docker Compose is back — as an assisting tool, not a host installer. Every install method now boots the appliance inside Multipass (the boundary).**
+
 ### Added
 - **`docker compose up` as a front door to the Multipass appliance (Compose provider).** docker-compose stays a first-class launch pad for developers, but as an *assisting tool*, not a host installer: the `vyomi` launcher now implements the Docker Compose **provider protocol** (`vyomi compose --project-name P up|down|stop` → emits `{"type":"info|error",...}` JSON, routes to `vyomi up/down/stop`). With the thin `packaging/compose-provider/docker-compose.yml` (a `provider` service, `type: vyomi`), `docker compose up` boots the appliance **inside Multipass** — same boundary, EC2/LXD compute works. Zero extra packaging: Compose resolves `type: vyomi` to the `vyomi` binary every native package already puts on PATH (no separate CLI plugin). Validated on Compose v5.1.3.
 
