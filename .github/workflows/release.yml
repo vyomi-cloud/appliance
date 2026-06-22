@@ -196,14 +196,79 @@ jobs:
           path: dist/
           retention-days: 30
 
+  # ── Windows MSI (WiX) ───────────────────────────────────────────────────
+  # Builds packaging/windows/cloudlearn.wxs into a per-machine MSI that
+  # bundles the launcher and puts `vyomi` on PATH. Uploaded as the `msi`
+  # artifact, which github-release attaches to the Release (so winget-releaser
+  # can consume it). Signing is OPT-IN: set repo variable
+  # ENABLE_MSI_SIGNING=true + the Azure Trusted Signing secrets/vars below.
+  windows-msi:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {name: release-artifacts, path: dist}
+
+      - name: Stage the bundle + vyomi.cmd shim
+        shell: pwsh
+        run: |
+          $ver = "${{ needs.build.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path stage, stage/bin | Out-Null
+          # Extract the exact same bundle the .tar.gz / .deb / .rpm ship.
+          tar -xzf "dist/cloud-learn-$ver.tar.gz" -C stage --strip-components=1
+          # `vyomi` shim → forwards to the PowerShell launcher one dir up.
+          $shim = "@echo off`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"%~dp0..\scripts\cloud-learn.ps1`" %*`r`n"
+          Set-Content -Path stage/bin/vyomi.cmd -Value $shim -Encoding ascii -NoNewline
+
+      - name: Install WiX toolset
+        run: dotnet tool install --global wix
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $ver = "${{ needs.build.outputs.version }}"
+          wix build packaging/windows/cloudlearn.wxs -arch x64 `
+            -d Version=$ver -d "StageDir=$((Resolve-Path stage).Path)" `
+            -o "dist/cloud-learn-$ver-x64.msi"
+
+      - name: Sign MSI (opt-in — Azure Trusted Signing)
+        if: ${{ vars.ENABLE_MSI_SIGNING == 'true' }}
+        uses: azure/trusted-signing-action@v0.5.1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\dist
+          files-folder-filter: msi
+
+      - name: Compute MSI SHA256
+        shell: pwsh
+        run: |
+          $ver = "${{ needs.build.outputs.version }}"
+          $msi = "dist/cloud-learn-$ver-x64.msi"
+          (Get-FileHash $msi -Algorithm SHA256).Hash.ToLower() |
+            Set-Content "$msi.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msi
+          path: dist/cloud-learn-*-x64.msi*
+          retention-days: 30
+
   # ── GitHub Release page ─────────────────────────────────────────────────
   github-release:
-    needs: build
+    needs: [build, windows-msi]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: {name: release-artifacts, path: dist}
+      - uses: actions/download-artifact@v4
+        with: {name: msi, path: dist}
 
       - name: Extract changelog for this version
         id: changelog
@@ -300,19 +365,19 @@ jobs:
           release: stable
 
   # ── Winget PR submission ────────────────────────────────────────────────
-  # NOTE: winget consumes .msi installers — we don't build one yet.
-  # This job stays gated behind WINGET_TOKEN AND the existence of an .msi
-  # in dist/ (the winget-releaser action looks for it). For MVP it stays
-  # skipped; revisit once we ship a real MSI installer.
+  # As of v2.1.0 the release ships a real MSI (see windows-msi + github-release),
+  # so winget-releaser can generate the manifest (it auto-computes the MSI
+  # sha256 + ProductCode from the attached release asset). Gated behind
+  # WINGET_TOKEN; runs only after the MSI is attached to the Release.
   winget-submit:
-    needs: [preflight, build]
+    needs: [preflight, build, github-release]
     if: needs.preflight.outputs.has_winget == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: vedantmgoyal2009/winget-releaser@v2
         with:
-          identifier: CloudLearn.CloudLearn
+          identifier: Vyomi.Vyomi
           version: ${{ needs.build.outputs.version }}
           installers-regex: '\.msi$'
           token: ${{ secrets.WINGET_TOKEN }}

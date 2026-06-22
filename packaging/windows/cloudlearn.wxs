@@ -1,59 +1,93 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Vyomi appliance — Windows MSI (WiX v4/v5).
+
+  Installs the full launcher bundle (the same file set as the release
+  tarball / .deb / .rpm) into "%ProgramFiles%\Vyomi", drops a `vyomi.cmd`
+  shim on the system PATH, and adds a Start-menu shortcut. `vyomi up` then
+  boots the appliance VM via the PowerShell launcher (scripts\cloud-learn.ps1).
+
+  Build (see .github/workflows/release.yml → windows-msi job):
+    wix build packaging\windows\cloudlearn.wxs `
+      -arch x64 `
+      -d Version=2.1.0 `
+      -d StageDir=<abs path to staged bundle> `
+      -o dist\cloud-learn-2.1.0-x64.msi
+
+  The StageDir must contain the extracted bundle PLUS a generated
+  bin\vyomi.cmd shim (the workflow creates both). UpgradeCode is stable
+  across versions so MajorUpgrade replaces older installs in place.
+-->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Vyomi"
-           Manufacturer="Vyomi"
-           Version="0.1.0"
+           Manufacturer="Vyomi Cloud"
+           Version="$(var.Version)"
            UpgradeCode="7b95b0f4-1e4d-4e0e-9c8d-29d2f1d93a11"
            Language="1033"
            InstallerVersion="500"
            Compressed="yes"
            Scope="perMachine">
-    <MajorUpgrade DowngradeErrorMessage="A newer version of Vyomi is already installed." />
-    <MediaTemplate />
 
+    <SummaryInformation Description="Vyomi — local multi-cloud simulator (AWS/GCP/Azure)" />
+    <!-- AllowSameVersionUpgrades=yes so re-installing the same version (e.g.
+         iterating on the preview MSI, all 2.1.0) cleanly replaces the prior
+         install instead of conflicting — no manual uninstall needed. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of Vyomi is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Install root: %ProgramFiles%\Vyomi with a bin\ for the PATH shim. -->
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Vyomi">
-        <Directory Id="BINFOLDER" Name="bin" />
-        <Directory Id="SCRIPTSDIR" Name="scripts" />
-        <Directory Id="DOCSDIR" Name="docs" />
-        <Directory Id="PACKAGINGDIR" Name="packaging" />
+        <Directory Id="BINDIR" Name="bin" />
       </Directory>
     </StandardDirectory>
-
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="AppProgramsFolder" Name="Vyomi" />
     </StandardDirectory>
 
     <Feature Id="MainFeature" Title="Vyomi" Level="1">
-      <ComponentGroupRef Id="CloudLearnFiles" />
-      <ComponentRef Id="AppShortcutComponent" />
+      <ComponentGroupRef Id="BundleFiles" />
+      <ComponentRef Id="VyomiShimComponent" />
+      <ComponentRef Id="StartMenuShortcut" />
     </Feature>
 
-    <ComponentGroup Id="CloudLearnFiles" Directory="INSTALLFOLDER">
-      <Component Id="LauncherComponent" Guid="4d49b6f6-4d36-4a84-871e-2f3c2ef3c6f2">
-        <File Source="$(var.SourceDir)\scripts\cloud-learn.ps1" KeyPath="yes" />
-      </Component>
-      <Component Id="LauncherScriptComponent" Guid="0cc4f7c1-5f47-47e8-9d65-2c9b4f2b6f8d">
-        <File Source="$(var.SourceDir)\scripts\cloud-learn" KeyPath="yes" />
-      </Component>
-      <Component Id="DocsComponent" Guid="dbf4f1f9-45e4-4fd8-8f41-2b8d6d9d1e5e">
-        <File Source="$(var.SourceDir)\docs\architecture\distribution_strategy.md" KeyPath="yes" />
-      </Component>
+    <!--
+      Harvest the whole staged bundle (core\, providers\, routes\, static\,
+      packs\, scripts\, packaging\, server.py, Dockerfile,
+      docker-compose.appliance.yml, VERSION, requirements.txt, ...) into
+      INSTALLFOLDER, preserving the directory tree. The bin\vyomi.cmd shim is
+      excluded here because it gets its own component (so we can attach the
+      PATH environment entry to it).
+    -->
+    <ComponentGroup Id="BundleFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.StageDir)\**">
+        <Exclude Files="$(var.StageDir)\bin\vyomi.cmd" />
+      </Files>
     </ComponentGroup>
 
-    <Component Id="AppShortcutComponent" Guid="6fa34b4d-7e0f-4f8e-a9d6-6434f62a2f54" Directory="AppProgramsFolder">
-      <Shortcut Id="CloudLearnShortcut"
-                Name="CloudLearn Appliance"
-                Description="Start CloudLearn appliance mode"
-                Target="[SystemFolder]WindowsPowerShell\v1.0\powershell.exe"
-                Arguments="-ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]scripts\cloud-learn.ps1&quot; appliance up"
+    <!-- `vyomi` command shim + system PATH entry. -->
+    <Component Id="VyomiShimComponent" Directory="BINDIR" Guid="*">
+      <File Id="vyomiCmd" Source="$(var.StageDir)\bin\vyomi.cmd" KeyPath="yes" />
+      <Environment Id="VyomiPath"
+                   Name="PATH"
+                   Value="[BINDIR]"
+                   Part="last"
+                   Action="set"
+                   System="yes"
+                   Permanent="no" />
+    </Component>
+
+    <!-- Start-menu shortcut → `vyomi up`. -->
+    <Component Id="StartMenuShortcut" Directory="AppProgramsFolder" Guid="*">
+      <Shortcut Id="VyomiStartShortcut"
+                Name="Vyomi appliance"
+                Description="Boot the Vyomi appliance and open the console"
+                Target="[System64Folder]WindowsPowerShell\v1.0\powershell.exe"
+                Arguments="-NoExit -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]scripts\cloud-learn.ps1&quot; up"
                 WorkingDirectory="INSTALLFOLDER" />
-      <RegistryValue Root="HKCU"
-                     Key="Software\CloudLearn"
-                     Name="installed"
-                     Type="integer"
-                     Value="1"
-                     KeyPath="yes" />
+      <RemoveFolder Id="RemoveAppProgramsFolder" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\Vyomi" Name="installed" Type="integer" Value="1" KeyPath="yes" />
     </Component>
   </Package>
 </Wix>

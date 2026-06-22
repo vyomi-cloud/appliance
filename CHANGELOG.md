@@ -6,6 +6,25 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Windows MSI installer + winget (v2.1.0).** Scoop reaches too few Windows users, so v2.1.0 ships a real `.msi`. The WiX package (`packaging/windows/cloudlearn.wxs`) bundles the full launcher into `%ProgramFiles%\Vyomi`, puts a `vyomi` shim on the system `PATH`, and adds a Start-menu shortcut; a new `windows-msi` CI job builds it (WiX via `dotnet tool`), attaches it to the GitHub Release, and un-gates the **winget** submission (`Vyomi.Vyomi`, auto-manifested by winget-releaser). Code signing is opt-in via Azure Trusted Signing (`ENABLE_MSI_SIGNING=true`); unsigned still installs (SmartScreen warning).
+
+### Changed
+- **Windows launcher modernized (`scripts/cloud-learn.ps1`).** Brought to parity with the bash launcher for the current appliance architecture: tar+transfer workspace sync (replacing `multipass mount`, which fails through install sandboxes), runtime-bridge installed as a systemd unit, cloud-init now provisions mDNS (`avahi-daemon` + `hostname=vyomi`), Multipass auto-install via winget, direct-IP health probe, `netsh portproxy` localhost bridge for `:9000/:9443`, browser auto-open, and an `upgrade` command. Deferred to a follow-up: mkcert/TLS (HTTPS green padlock), the LXD↔docker iptables one-shot, and legacy-VM mDNS fixup.
+
+### Planned — five distribution tiers (roadmap)
+A two-axis distribution strategy motivated by Windows install friction (Multipass → Hyper-V/VirtualBox → BIOS VT-x is a heavy, fail-prone first run): **three substrates** (Multipass-LXD → Docker → WASM) **× whether real compute is bundled** (the `+` suffix). One simulator codebase; tiers differ only behind two seams — **BackendProvider** (real container vs WASM/in-memory) and **ComputeBackend** (LXD / Docker / browser-runtime). The native-SDK **API/SDK conformance pack is constant across all five**; only its runtime form changes.
+
+| Tier | Substrate | Conformance pack | Compute (EC2) |
+|------|-----------|------------------|---------------|
+| **Vyomi-CloudMax** | Multipass VM | container (in-VM) | LXD — real VMs/containers |
+| **Vyomi-CloudLite+** | host Docker | container | Docker (`docker run` = an instance) |
+| **Vyomi-CloudLite** | host Docker | container | — none |
+| **Vyomi-CloudNano+** | WASM (browser) | WASM / in-memory | CheerpJ (Java) · Pyodide (Python) · TinyGo (Go), in-tab |
+| **Vyomi-CloudNano** | WASM (browser) | WASM / in-memory | — none |
+
+Funnel logic: **CloudNano** (a URL — zero install, zero virtualization, the only tier that sidesteps VT-x) pulls users in; **CloudLite** (`docker compose up`) converts developers; **CloudMax** serves teams needing real compute. Conformance stays honestly tiered — the same SDK tests run on every tier, and a backend with no implementation in a given substrate is marked *unsupported there* rather than reported as a false green. Naming: the in-browser tier (previously "Vyomi Lite") is now **CloudNano**; "Lite" now denotes the Docker tier. Status: CloudMax shipping (v2.1.0 Windows MSI in flight); CloudLite+/CloudLite closest (host `docker-compose.yml` exists + LXD→Docker compute spike passing); CloudNano/CloudNano+ are the larger, higher-reach build.
+
 ## [2.0.9.2] — 2026-06-22
 
 **Docker Compose is back — as an assisting tool, not a host installer. Every install method now boots the appliance inside Multipass (the boundary).**

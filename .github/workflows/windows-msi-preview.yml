@@ -1,0 +1,69 @@
+name: Windows MSI preview
+
+# Builds the Windows MSI on a Windows runner and publishes it to a
+# `windows-msi-preview` prerelease so it can be downloaded + test-installed.
+# This is a TEST harness for the v2.1.0 MSI work — not part of the real
+# release pipeline (that lives in release.yml). Unsigned.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/windows-msi-v2.1.0]
+    paths:
+      - packaging/windows/**
+      - scripts/cloud-learn.ps1
+      - .github/workflows/windows-msi-preview.yml
+
+permissions:
+  contents: write
+
+jobs:
+  msi:
+    runs-on: windows-latest
+    env:
+      MSI_VERSION: "2.1.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage the launcher bundle + vyomi.cmd shim
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path stage, stage\bin | Out-Null
+          $items = @(
+            'core','providers','routes','static','packs','scripts','packaging',
+            'cloudsim-backbone','server.py','setup_cython.py','requirements.txt',
+            'VERSION','Dockerfile','docker-compose.yml','docker-compose.appliance.yml',
+            '.env.example','install.sh','README.md','CHANGELOG.md','LICENSE'
+          )
+          foreach ($i in $items) {
+            if (Test-Path $i) { Copy-Item -Path $i -Destination stage\ -Recurse -Force }
+          }
+          $shim = "@echo off`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"%~dp0..\scripts\cloud-learn.ps1`" %*`r`n"
+          Set-Content -Path stage\bin\vyomi.cmd -Value $shim -Encoding ascii -NoNewline
+          Write-Host "Staged $((Get-ChildItem stage -Recurse -File | Measure-Object).Count) files."
+
+      - name: Install WiX toolset
+        run: dotnet tool install --global wix --version 5.0.2
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $wix = Join-Path $env:USERPROFILE ".dotnet\tools\wix.exe"
+          $stage = (Resolve-Path stage).Path
+          & $wix build packaging\windows\cloudlearn.wxs -arch x64 `
+            -d Version=$env:MSI_VERSION -d "StageDir=$stage" `
+            -o "cloud-learn-$($env:MSI_VERSION)-x64.msi"
+          Get-ChildItem *.msi | ForEach-Object { Write-Host "Built: $($_.Name) ($([Math]::Round($_.Length/1MB,1)) MB)" }
+
+      - name: Publish to windows-msi-preview prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $msi = "cloud-learn-$($env:MSI_VERSION)-x64.msi"
+          gh release delete windows-msi-preview --yes --cleanup-tag 2>$null
+          gh release create windows-msi-preview $msi `
+            --prerelease `
+            --title "Windows MSI preview ($($env:MSI_VERSION))" `
+            --notes "Unsigned preview MSI for test-installing the v2.1.0 Windows launcher. Built from branch feat/windows-msi-v2.1.0. SmartScreen will warn (unknown publisher) -> More info -> Run anyway. After install, open a NEW terminal and run: vyomi up"
+          Write-Host "Download: https://github.com/${{ github.repository }}/releases/download/windows-msi-preview/$msi"
