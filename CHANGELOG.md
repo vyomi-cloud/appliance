@@ -6,6 +6,17 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.1.0.1] — 2026-06-23
+
+Windows-install hotfix on top of v2.1.0, from end-to-end validation on a Windows 10 Home / 8 GB / VirtualBox laptop. The appliance ran fully (all containers up), but three rough edges blocked or confused first-run; none touched the EC2/GCP compute 500 (still under investigation).
+
+### Fixed
+- **Readiness gauge stuck at 52%** (`core/appliance_readiness.py`). A half-finished `cloudlearn-`→`vyomi-` rename left five backend services (`postgres`, `vault`, `elasticmq`, `pubsub`, `firestore`) named `cloudlearn-*` in `docker-compose.appliance.yml` while the readiness prober dialed `vyomi-*`. Those five weigh exactly enough to peg the weighted gauge at 52%, and — because the progressive-startup gate reads the same probe — falsely blocked gated launches (e.g. RDS create) with "appliance still getting ready." The prober now resolves each backend host from the simulator's own canonical env (`CLOUDLEARN_*_URL`/`_HOST`, parsed via `urlparse`), so it follows real service names and can never drift out of sync again; literal defaults were also corrected.
+- **Garbled access URL on VirtualBox-NAT hosts** (`Get-ApplianceIp`). When the VM exposed only in-VM bridge IPs (docker0 `172.17.0.1`, lxdbr0 `10.x.x.1`), the fallback returned a bridge gateway, producing a dead `netsh portproxy` and a banner like `http:///`. The fallback now skips bridge-gateway addresses and returns empty when only NAT/bridge IPs exist, so the banner falls back to `localhost`.
+
+### Added
+- **VirtualBox NAT port-forward for Windows Home** (`Set-VBoxNatPortForward` in `scripts/cloud-learn.ps1`). On VirtualBox-NAT hosts the VM has no host-routable IP and is owned by the LocalSystem Multipass service, so `localhost:9000` never reaches it. The launcher now best-effort adds a `127.0.0.1` NAT forward for `9000`/`9443`; when the VM is SYSTEM-owned (the common case, which needs VBoxManage run as SYSTEM) it prints the exact, proven `psexec -s … controlvm … natpf1` commands instead of leaving the user stranded. Non-fatal everywhere; Hyper-V hosts (no VBoxManage) skip it silently.
+
 ## [2.1.0] — 2026-06-23
 
 ### Added

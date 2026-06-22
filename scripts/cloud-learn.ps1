@@ -323,7 +323,18 @@ function Get-ApplianceIp {
       # Prefer a routable 192.168.x.x address (multipass host network).
       if ($ip -match '^\d+\.\d+\.\d+\.\d+$' -and $ip -notmatch '^(172\.1[7-9]\.|172\.2[0-9]\.|172\.3[0-1]\.|10\.)') { return $ip }
     }
-    foreach ($ip in @($rec.ipv4)) { if ($ip -match '^\d+\.\d+\.\d+\.\d+$') { return $ip } }
+    # Last resort: any IPv4 that is NOT an in-VM bridge gateway. docker0 is
+    # always 172.1[7-9..3x].x.1 and lxdbr0 is 10.x.x.1 - never the VM's own
+    # reachable address. Returning one gave a garbled banner ("http:///") and
+    # a dead netsh portproxy on VirtualBox-NAT hosts (v2.1.0 bug). If only
+    # bridge IPs exist (VirtualBox NAT), return '' so the caller falls back to
+    # localhost via the NAT port-forward.
+    foreach ($ip in @($rec.ipv4)) {
+      if ($ip -notmatch '^\d+\.\d+\.\d+\.\d+$') { continue }
+      if ($ip -match '^172\.(1[7-9]|2[0-9]|3[01])\.\d+\.1$') { continue }
+      if ($ip -match '^10\.\d+\.\d+\.1$') { continue }
+      return $ip
+    }
   }
   return ''
 }
@@ -478,6 +489,75 @@ function Show-UrlBanner {
   }
 }
 
+# -- VirtualBox NAT port-forward (Windows Home) ---------------------------
+# On Windows Home, Multipass runs on VirtualBox. The VM sits behind NAT with
+# no host-routable IP, AND it is owned by the LocalSystem multipass service,
+# so a user-context VBoxManage cannot see it. Best-effort: if localhost:9000
+# is not already answering, add a 127.0.0.1 NAT forward for 9000/9443; if the
+# VM is SYSTEM-owned (the common case) we cannot do it without running
+# VBoxManage as SYSTEM, so we print the exact, proven elevated commands.
+# Never fatal - a Hyper-V host (no VBoxManage) just skips this silently.
+function Set-VBoxNatPortForward {
+  param([string]$VmIp)
+  # Already reachable on localhost? Nothing to do (Hyper-V / netsh bridge worked).
+  try { Invoke-WebRequest -Uri 'http://127.0.0.1:9000/healthz' -TimeoutSec 2 -UseBasicParsing | Out-Null; return } catch { }
+
+  $vbox = $null
+  $candidates = @()
+  if ($env:ProgramFiles) { $candidates += (Join-Path $env:ProgramFiles 'Oracle\VirtualBox\VBoxManage.exe') }
+  if (${env:ProgramFiles(x86)}) { $candidates += (Join-Path ${env:ProgramFiles(x86)} 'Oracle\VirtualBox\VBoxManage.exe') }
+  foreach ($c in $candidates) { if ($c -and (Test-Path $c)) { $vbox = $c; break } }
+  if (-not $vbox) {
+    $cmd = Get-Command VBoxManage.exe -ErrorAction SilentlyContinue
+    if ($cmd) { $vbox = $cmd.Source }
+  }
+  if (-not $vbox) { return }  # not a VirtualBox host (e.g. Hyper-V) - nothing to do
+
+  # Try in the current user context first (works only if the VM is user-owned).
+  $vmName = $null
+  try {
+    $list = & $vbox list runningvms 2>$null
+    foreach ($line in @($list)) {
+      if ($line -match '"([^"]*)"') {
+        $candidate = $matches[1]
+        if ($candidate -match 'appliance|vyomi|cloudlearn') { $vmName = $candidate; break }
+      }
+    }
+  } catch { }
+
+  if ($vmName) {
+    foreach ($p in $BridgePorts) {
+      $rule = ('vyomi{0}' -f $p)
+      try {
+        & $vbox controlvm $vmName natpf1 delete $rule 2>$null | Out-Null
+        & $vbox controlvm $vmName natpf1 ("{0},tcp,127.0.0.1,{1},,{1}" -f $rule, $p) 2>$null | Out-Null
+      } catch { }
+    }
+    Start-Sleep -Seconds 1
+    try { Invoke-WebRequest -Uri 'http://127.0.0.1:9000/healthz' -TimeoutSec 3 -UseBasicParsing | Out-Null
+          Write-ProgressLine '==> VirtualBox NAT port-forward added (localhost:9000 -> VM).'; return } catch { }
+  }
+
+  # VM not visible in user context => owned by LocalSystem. Print the proven
+  # SYSTEM commands (this is exactly what unblocked browser access in testing).
+  Write-ProgressLine ''
+  Write-ProgressLine '  ------------------------------------------------------------'
+  Write-ProgressLine '   Windows + VirtualBox NAT: one manual step for browser access'
+  Write-ProgressLine '  ------------------------------------------------------------'
+  Write-ProgressLine '   The appliance is RUNNING, but VirtualBox keeps it behind NAT'
+  Write-ProgressLine '   and the VM is owned by the SYSTEM account. Add the forward as'
+  Write-ProgressLine '   SYSTEM. In an ADMINISTRATOR PowerShell, run:'
+  Write-ProgressLine ''
+  Write-ProgressLine '     winget install Microsoft.Sysinternals.PsExec   # if not installed'
+  Write-ProgressLine ('     $vb = "{0}"' -f $vbox)
+  Write-ProgressLine '     psexec -s -nobanner -accepteula $vb list runningvms      # note the "name"'
+  Write-ProgressLine '     psexec -s -nobanner -accepteula $vb controlvm "<name>" natpf1 "vyomi9000,tcp,127.0.0.1,9000,,9000"'
+  Write-ProgressLine '     psexec -s -nobanner -accepteula $vb controlvm "<name>" natpf1 "vyomi9443,tcp,127.0.0.1,9443,,9443"'
+  Write-ProgressLine ''
+  Write-ProgressLine '   Then open http://localhost:9000/'
+  Write-ProgressLine '  ------------------------------------------------------------'
+}
+
 # -- Upgrade --------------------------------------------------------------
 function Invoke-Upgrade {
   $compose = Get-MultipassCommand
@@ -601,6 +681,7 @@ if ($RuntimeContext -eq 'inner') {
       Invoke-ApplianceLauncher
       $vmIp = Test-ApplianceHealth
       Start-LocalhostBridge -VmIp $vmIp
+      Set-VBoxNatPortForward -VmIp $vmIp
       Show-UrlBanner -VmIp $vmIp
     }
     'down' { $compose = Get-MultipassCommand; & $compose stop $ApplianceName | Out-Null }
@@ -616,6 +697,7 @@ if ($RuntimeContext -eq 'inner') {
       Invoke-ApplianceLauncher
       $vmIp = Test-ApplianceHealth
       Start-LocalhostBridge -VmIp $vmIp
+      Set-VBoxNatPortForward -VmIp $vmIp
       Show-UrlBanner -VmIp $vmIp
     }
     'status' { $compose = Get-MultipassCommand; & $compose info $ApplianceName }

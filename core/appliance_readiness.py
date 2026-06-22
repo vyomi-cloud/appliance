@@ -47,18 +47,47 @@ from urllib.parse import urlparse
 _BACKENDS: list[tuple[str, str, str, int, str, int]] = [
     # name              label                  default_host                 port  category   weight_mb
     ("simulator",       "Vyomi simulator",     "127.0.0.1",                 9000, "core",     627),
-    ("postgres",        "PostgreSQL",          "vyomi-sql-postgres",   5432, "core",      80),
+    ("postgres",        "PostgreSQL",          "cloudlearn-sql-postgres",   5432, "core",      80),
     ("mysql",           "MySQL",               "vyomi-sql-mysql",           3306, "aws",      580),
-    ("vault",           "Vault (KMS / secrets)", "vyomi-vault",        8200, "aws",      150),
+    ("vault",           "Vault (KMS / secrets)", "cloudlearn-vault",        8200, "aws",      150),
     ("minio",           "MinIO (S3)",          "vyomi-minio",               9000, "aws",      228),
     ("dynamodb",        "DynamoDB",            "vyomi-dynamodb",            8000, "aws",      250),
     ("nats",            "NATS (EventBridge)",  "vyomi-nats",                4222, "aws",       40),
-    ("elasticmq",       "ElasticMQ (SQS)",     "vyomi-elasticmq",      9324, "aws",      130),
+    ("elasticmq",       "ElasticMQ (SQS)",     "cloudlearn-elasticmq",      9324, "aws",      130),
     ("fake-gcs",        "fake-gcs-server",     "vyomi-gcs",                 4443, "gcp",       80),
-    ("pubsub",          "Pub/Sub emulator",    "vyomi-pubsub",         8085, "gcp",      750),
-    ("firestore",       "Firestore emulator",  "vyomi-firestore",      8080, "gcp",      750),
+    ("pubsub",          "Pub/Sub emulator",    "cloudlearn-pubsub",         8085, "gcp",      750),
+    ("firestore",       "Firestore emulator",  "cloudlearn-firestore",      8080, "gcp",      750),
     ("cloudsim",        "CloudSim Plus",       "cloudsim",                  9010, "core",     250),
 ]
+
+# Canonical env vars the simulator already sets for each backend (URL,
+# host:port, or bare host). The prober prefers these so it always probes
+# the SAME host the simulator talks to — immune to compose service-name
+# drift like the half-finished cloudlearn-→vyomi- rename that stranded
+# the readiness gauge at 52% (postgres/vault/elasticmq/pubsub/firestore
+# were renamed in the prober but not in docker-compose.appliance.yml).
+_CANONICAL_ENV: dict[str, str] = {
+    "postgres":  "CLOUDLEARN_SQL_PG_HOST",
+    "mysql":     "CLOUDLEARN_SQL_MYSQL_HOST",
+    "vault":     "CLOUDLEARN_VAULT_URL",
+    "minio":     "CLOUDLEARN_MINIO_URL",
+    "dynamodb":  "CLOUDLEARN_DYNAMODB_URL",
+    "nats":      "CLOUDLEARN_NATS_URL",
+    "elasticmq": "CLOUDLEARN_ELASTICMQ_URL",
+    "fake-gcs":  "CLOUDLEARN_GCS_URL",
+    "pubsub":    "CLOUDLEARN_PUBSUB_EMULATOR_HOST",
+    "firestore": "CLOUDLEARN_FIRESTORE_EMULATOR_HOST",
+}
+
+
+def _host_from_env_value(val: str) -> str | None:
+    """Pull a hostname out of a bare host, host:port, or full URL."""
+    val = (val or "").strip()
+    if not val:
+        return None
+    if "://" in val:
+        return urlparse(val).hostname
+    return val.rsplit(":", 1)[0] if ":" in val else val
 
 
 def _probe_one(host: str, port: int, timeout: float = 0.25) -> bool:
@@ -106,7 +135,12 @@ def probe_all() -> dict[str, Any]:
         # backend (eg. a managed Postgres) without us caring whether
         # the docker container is up.
         env_key = "VYOMI_BACKEND_HOST_" + name.upper().replace("-", "_")
-        host = os.environ.get(env_key, default_host)
+        host = os.environ.get(env_key)
+        if not host:
+            canon = _CANONICAL_ENV.get(name)
+            if canon:
+                host = _host_from_env_value(os.environ.get(canon, ""))
+        host = host or default_host
         up = _probe_one(host, port)
         services.append({
             "name":      name,
