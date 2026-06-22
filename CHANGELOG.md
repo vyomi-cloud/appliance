@@ -6,6 +6,8 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-06-23
+
 ### Added
 - **Windows MSI installer + winget (v2.1.0).** Scoop reaches too few Windows users, so v2.1.0 ships a real `.msi`. The WiX package (`packaging/windows/cloudlearn.wxs`) bundles the full launcher into `%ProgramFiles%\Vyomi`, puts a `vyomi` shim on the system `PATH`, and adds a Start-menu shortcut; a new `windows-msi` CI job builds it (WiX via `dotnet tool`), attaches it to the GitHub Release, and un-gates the **winget** submission (`Vyomi.Vyomi`, auto-manifested by winget-releaser). Code signing is opt-in via Azure Trusted Signing (`ENABLE_MSI_SIGNING=true`); unsigned still installs (SmartScreen warning).
 
