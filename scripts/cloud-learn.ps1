@@ -254,7 +254,7 @@ $sshKeys
 write_files:
   # Pull Docker Hub images through Google's mirror (far more reliable than the
   # direct registry-1.docker.io path that flakes with TLS handshake timeouts),
-  # one blob at a time with built-in retries — so the ~couple-GB first-boot pull
+  # one blob at a time with built-in retries - so the ~couple-GB first-boot pull
   # survives slow/flaky links.
   - path: /etc/docker/daemon.json
     permissions: '0644'
