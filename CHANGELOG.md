@@ -6,6 +6,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Multipass is the appliance boundary for every install method.** brew / deb / rpm / scoop / Docker Compose all now provision the appliance *inside* a Multipass VM via `vyomi up`. The standalone "run the stack on host Docker" path is retired from the portal install steps — running outside the boundary breaks HTTPS, instance workspaces, and EC2/VM compute, and produces host-specific inconsistencies the appliance can't control. No runtime change: the launcher already boots the same docker-compose stack inside the VM; this is a packaging/install-story decision (portal `install_catalog` routes the Docker Compose method to `vyomi up`). The repo's `docker-compose.yml` remains for advanced/CI use but is no longer a user-facing appliance install.
+
 ## [2.0.9.1] — 2026-06-22
 
 **Patch — fix the docker-compose-only install (caddy crash-looped for every fresh user).**
