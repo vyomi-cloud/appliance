@@ -87,6 +87,16 @@ if ($RuntimeContext -eq 'inner' -and [string]::IsNullOrWhiteSpace((Get-EnvAny @(
   $ComposeFile = Join-Path $RootDir 'docker-compose.appliance.yml'
 }
 
+# Multipass lands on PATH only in shells opened AFTER its install, so the
+# current shell often can't see it even though it's installed. Add the default
+# install dir so `vyomi up` finds multipass without the user fixing PATH by hand.
+if ($RuntimeContext -eq 'outer') {
+  $mpDefault = Join-Path $env:ProgramFiles 'Multipass\bin'
+  if ((Test-Path $mpDefault) -and ($env:Path -notlike "*$mpDefault*")) {
+    $env:Path = "$mpDefault;$env:Path"
+  }
+}
+
 # -- Progress + logging ---------------------------------------------------
 $script:LogFile = $null
 function Initialize-Log {
