@@ -251,6 +251,15 @@ function Write-ApplianceCloudInit {
 package_update: true
 package_upgrade: true
 $sshKeys
+write_files:
+  # Pull Docker Hub images through Google's mirror (far more reliable than the
+  # direct registry-1.docker.io path that flakes with TLS handshake timeouts),
+  # one blob at a time with built-in retries — so the ~couple-GB first-boot pull
+  # survives slow/flaky links.
+  - path: /etc/docker/daemon.json
+    permissions: '0644'
+    content: |
+      {"registry-mirrors": ["https://mirror.gcr.io"], "max-concurrent-downloads": 1, "max-download-attempts": 5}
 packages:
   - python3
   - python3-pip
@@ -261,7 +270,7 @@ packages:
   - avahi-daemon
   - libnss-mdns
 runcmd:
-  - [ bash, -lc, "systemctl enable --now docker" ]
+  - [ bash, -lc, "systemctl enable docker && systemctl restart docker" ]
   - [ bash, -lc, "usermod -aG docker ubuntu || true" ]
   - [ bash, -lc, "snap install lxd || true" ]
   - [ bash, -lc, "usermod -aG lxd ubuntu || true" ]
