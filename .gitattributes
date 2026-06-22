@@ -1,0 +1,12 @@
+# Files that EXECUTE INSIDE the Linux appliance VM must stay LF.
+# CRLF makes bash fail with: syntax error near unexpected token `$'{\r''
+# Windows-based bundling (e.g. the MSI build checking out on a Windows
+# runner) would otherwise convert these to CRLF. `eol=lf` forces LF on
+# checkout regardless of core.autocrlf.
+scripts/cloud-learn  text eol=lf
+*.sh                 text eol=lf
+Dockerfile           text eol=lf
+docker-compose*.yml  text eol=lf
+
+# PowerShell launcher runs on Windows — PS handles either, leave native.
+*.ps1 text
