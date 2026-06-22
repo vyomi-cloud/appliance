@@ -41,6 +41,24 @@ function Get-EnvAny {
   return $Default
 }
 
+function Get-RecommendedSizing {
+  # Host-aware VM sizing that ALWAYS leaves the host enough RAM so a heavy
+  # first-boot image pull can't starve (and freeze) the machine. The old
+  # hardcoded 8G default froze 8GB laptops by handing the VM the whole box.
+  $cpu = [Environment]::ProcessorCount
+  $memGb = 8.0
+  try { $memGb = ((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory) / 1GB } catch { }
+  $freeGb = 30.0
+  try { $freeGb = ([System.IO.DriveInfo]::new($env:SystemDrive)).AvailableFreeSpace / 1GB } catch { }
+  # Reserve ~4GB for the host OS/hypervisor, then give the VM 85% of the rest.
+  $vmMem = [int][Math]::Floor(($memGb - 4) * 0.85)
+  if ($vmMem -lt 2)  { $vmMem = 2 }     # below-spec host: tiny VM, but never starve the host
+  if ($vmMem -gt 16) { $vmMem = 16 }    # the stack gains little past ~16GB
+  $vmCpus = [int][Math]::Max(2, [Math]::Min([Math]::Max($cpu - 1, 1), [Math]::Ceiling($vmMem / 2.0)))
+  $vmDisk = [int][Math]::Min(40, [Math]::Max(20, [Math]::Floor($freeGb * 0.5)))
+  return @{ MemGb = $vmMem; Cpus = $vmCpus; DiskGb = $vmDisk }
+}
+
 $ScriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RootDir = (Resolve-Path (Get-EnvAny @('VYOMI_HOME','CLOUD_LEARN_HOME') (Join-Path $ScriptPath '..'))).Path
 $ProjectName = Get-EnvAny @('VYOMI_PROJECT_NAME','CLOUD_LEARN_PROJECT_NAME') 'cloud-learn'
@@ -53,9 +71,10 @@ $ApplianceName = Get-EnvAny @('VYOMI_APPLIANCE_NAME','CLOUD_LEARN_APPLIANCE_NAME
 $VyomiHome = Join-Path $env:USERPROFILE '.vyomi'
 $ApplianceDir = Get-EnvAny @('VYOMI_APPLIANCE_DIR','CLOUD_LEARN_APPLIANCE_DIR') (Join-Path (Join-Path $VyomiHome 'appliance') $ApplianceName)
 $ApplianceImage = Get-EnvAny @('VYOMI_APPLIANCE_IMAGE','CLOUD_LEARN_APPLIANCE_IMAGE') '24.04'
-$ApplianceCpus = [int](Get-EnvAny @('VYOMI_APPLIANCE_CPUS','CLOUD_LEARN_APPLIANCE_CPUS') '4')
-$ApplianceMemory = Get-EnvAny @('VYOMI_APPLIANCE_MEMORY','CLOUD_LEARN_APPLIANCE_MEMORY') '8G'
-$ApplianceDisk = Get-EnvAny @('VYOMI_APPLIANCE_DISK','CLOUD_LEARN_APPLIANCE_DISK') '32G'
+$_recSizing = Get-RecommendedSizing
+$ApplianceCpus = [int](Get-EnvAny @('VYOMI_APPLIANCE_CPUS','CLOUD_LEARN_APPLIANCE_CPUS') ([string]$_recSizing.Cpus))
+$ApplianceMemory = Get-EnvAny @('VYOMI_APPLIANCE_MEMORY','CLOUD_LEARN_APPLIANCE_MEMORY') ("{0}G" -f $_recSizing.MemGb)
+$ApplianceDisk = Get-EnvAny @('VYOMI_APPLIANCE_DISK','CLOUD_LEARN_APPLIANCE_DISK') ("{0}G" -f $_recSizing.DiskGb)
 $ApplianceWorkspace = Get-EnvAny @('VYOMI_APPLIANCE_WORKSPACE','CLOUD_LEARN_APPLIANCE_WORKSPACE') '/workspace/cloud-learn'
 $HostSizingFileName = 'host-sizing-report.json'
 $BridgePorts = @(9000, 9443)
@@ -358,7 +377,7 @@ function Start-ApplianceVm {
   $exists = Test-ApplianceExists
   $state = Get-ApplianceState
   if (-not $exists) {
-    Write-ProgressLine ("==> [2/6] Launching Multipass VM {0} (cold start: 3-5 min)" -f $ApplianceName)
+    Write-ProgressLine ("==> [2/6] Launching VM {0}: {1} RAM / {2} CPU / {3} disk (cold start 3-5 min; host kept lean to avoid freezes)" -f $ApplianceName, $ApplianceMemory, $ApplianceCpus, $ApplianceDisk)
     & $compose launch $ApplianceImage --name $ApplianceName --cpus $ApplianceCpus --memory $ApplianceMemory --disk $ApplianceDisk --timeout 900 --cloud-init (Join-Path $ApplianceDir 'cloud-init.yaml')
   } elseif ($state -eq 'running') {
     Write-ProgressLine '==> [2/6] Existing VM detected (running)'
