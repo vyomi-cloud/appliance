@@ -107,6 +107,75 @@ runtime compute flag — never by forking.
 drift; breaks conformance integrity (the core value prop); guarantees funnel
 inconsistency. Not viable.
 
+## ADR-002: Packs as composable modules
+
+**Status:** Accepted — roadmap (Core Pack ships first) (2026-06-23)
+
+**Context.** Beyond the runtime tiers, Vyomi will offer vertical capability
+**Packs** — domain bundles of cloud service families plus an optional real
+backing engine:
+- **Core Pack** — the base cloud APIs (what ADR-001 calls "the conformance pack").
+- **AI Pack** — Bedrock / Vertex AI / Azure AI, backed privately by **Ollama** (and WebLLM in the browser).
+- **IoT Pack**, **Security / Identity / Compliance Pack**, **ML Pack**, …
+
+This adds a second product axis — **Pack × Tier** — which could explode into
+dozens of hand-built SKUs and tempt a fork per pack.
+
+**Decision.** Packs are **composable modules**, never pre-built bundles or
+forks. A pack = {service-family conformance handlers} + {an optional real
+backing engine}. Users pick a **tier** and **enable packs**; the
+build/runtime assembles the combination. **Compose, don't pre-build.**
+
+**Mechanism.**
+- A pack's **real engine** (Ollama for AI, a device sim for IoT, a policy
+  engine for Security) is just another **`BackendProvider`**. The
+  `+`/Max-vs-Lite split repeats inside every pack with the same meaning:
+  engine on (`+`/Max) vs API/SDK conformance only (Lite).
+- A pack's **handlers** (e.g. the Bedrock/Vertex/Azure-AI SDK surface) are
+  **service-family modules** registered onto the core, not hard-wired.
+- **Pack selection is a build/runtime flag** — the natural extension of
+  ADR-001's "compute = a runtime flag." One artifact per tier; packs toggle
+  in. No per-combination artifact.
+
+**WASM parallel.** Even AI has a zero-install tier: **AI-Pack-Nano+** runs
+in-browser inference via **WebLLM / transformers.js** (the AI analog of
+CheerpJ/Pyodide for compute); **AI-Pack-Nano** validates SDK shape only.
+
+**Invariants (extend ADR-001).**
+1. **Conformance per pack, per tier.** Each pack proves its native cloud SDKs
+   (Bedrock/Vertex/Azure-AI, …) as-is; the backing engine (Ollama/WebLLM) is
+   our private pick, never surfaced. A pack/tier combo with no engine
+   implementation is marked *unsupported*, never reported green.
+2. **Packs are additive, not invasive.** A pack registers handlers + an
+   optional `BackendProvider`; it must not modify the core or other packs.
+   CI gate: removing a pack leaves the rest building and passing.
+3. **WASM-clean still applies** to any pack targeting Nano — its handlers
+   must be Pyodide-portable; its engine (if any) is an in-browser WASM runtime.
+
+**System-requirements impact.** Requirements become **tier baseline + pack
+overhead.** Real engines are heavy — Ollama + a 7B model ≈ **+5–8 GB RAM and
+several GB disk** — so AI-Pack-Max realistically wants 24–32 GB while
+AI-Pack-Nano needs almost nothing. The requirements table gains a per-pack
+adder.
+
+**Rollout (roadmap).** Core Pack ships first (it is the current product).
+Then AI Pack (Ollama / WebLLM), then IoT / Security-Identity-Compliance / ML —
+order driven by demand and engine maturity.
+
+**Consequences.**
+- (+) New domains = new modules, not new repos or SKUs; the matrix scales by
+  composition.
+- (+) Conformance integrity extends cleanly to every pack.
+- (−) Requires a real pack-registration/module system + a per-pack conformance suite.
+- (−) Combinatorial test surface (pack × tier × cloud) — mitigated by
+  composition + per-pack CI, not exhaustive bundle builds.
+
+**Rejected alternatives.**
+- *Pre-built bundle per Pack×Tier combination* — dozens of artifacts to
+  build and maintain; drift. No.
+- *A fork/repo per pack* — same conformance-integrity and maintenance failure
+  as ADR-001's rejected forking. No.
+
 ---
 
 > The sections below describe the **CloudMax** tier specifically (its
