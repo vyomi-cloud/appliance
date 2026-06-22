@@ -222,13 +222,16 @@ jobs:
           Set-Content -Path stage/bin/vyomi.cmd -Value $shim -Encoding ascii -NoNewline
 
       - name: Install WiX toolset
-        run: dotnet tool install --global wix
+        # Pin to v5: WiX v7 requires accepting the Open Source Maintenance Fee
+        # (OSMF) EULA at runtime (error WIX7015) and fails in non-interactive CI.
+        run: dotnet tool install --global wix --version 5.0.2
 
       - name: Build MSI
         shell: pwsh
         run: |
           $ver = "${{ needs.build.outputs.version }}"
-          wix build packaging/windows/cloudlearn.wxs -arch x64 `
+          $wix = Join-Path $env:USERPROFILE ".dotnet\tools\wix.exe"
+          & $wix build packaging/windows/cloudlearn.wxs -arch x64 `
             -d Version=$ver -d "StageDir=$((Resolve-Path stage).Path)" `
             -o "dist/cloud-learn-$ver-x64.msi"
 
@@ -262,12 +265,16 @@ jobs:
   # ── GitHub Release page ─────────────────────────────────────────────────
   github-release:
     needs: [build, windows-msi]
+    # Ship the release as long as the core build succeeded — never let a
+    # Windows MSI hiccup skip the whole release. The MSI attaches if it built.
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: {name: release-artifacts, path: dist}
       - uses: actions/download-artifact@v4
+        continue-on-error: true
         with: {name: msi, path: dist}
 
       - name: Extract changelog for this version
