@@ -1,0 +1,19 @@
+# NOTE: This is a reference scaffold. The actual winget-pkgs manifest is
+# generated at release time by the `winget-submit` job (winget-releaser),
+# which auto-computes InstallerSha256 + ProductCode from the MSI attached
+# to the GitHub Release. Keep PackageVersion / InstallerUrl in sync with
+# the latest release for documentation purposes.
+PackageIdentifier: Vyomi.Vyomi
+PackageVersion: 2.1.0
+InstallerType: msi
+Scope: machine
+InstallModes:
+  - interactive
+  - silent
+UpgradeBehavior: install
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/vyomi-cloud/appliance/releases/download/v2.1.0/cloud-learn-2.1.0-x64.msi
+    InstallerSha256: REPLACED_BY_RELEASE_WORKFLOW
+ManifestType: installer
+ManifestVersion: 1.6.0
