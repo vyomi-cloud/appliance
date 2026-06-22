@@ -29,7 +29,11 @@
            Scope="perMachine">
 
     <SummaryInformation Description="Vyomi — local multi-cloud simulator (AWS/GCP/Azure)" />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of Vyomi is already installed." />
+    <!-- AllowSameVersionUpgrades=yes so re-installing the same version (e.g.
+         iterating on the preview MSI, all 2.1.0) cleanly replaces the prior
+         install instead of conflicting — no manual uninstall needed. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of Vyomi is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
     <!-- Install root: %ProgramFiles%\Vyomi with a bin\ for the PATH shim. -->
