@@ -71,7 +71,7 @@ jobs:
         env:
           BREW:   ${{ secrets.HOMEBREW_TAP_TOKEN }}
           SNAP:   ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-          WINGET: ${{ secrets.WINGET_TOKEN }}
+          WINGET: ${{ secrets.WINGET_TOKEN || secrets.SCOOP_BUCKET_TOKEN }}
           SCOOP:  ${{ secrets.SCOOP_BUCKET_TOKEN }}
         run: |
           mask() { [ -n "$1" ] && echo true || echo false; }
@@ -387,7 +387,7 @@ jobs:
           identifier: Vyomi.Vyomi
           version: ${{ needs.build.outputs.version }}
           installers-regex: '\.msi$'
-          token: ${{ secrets.WINGET_TOKEN }}
+          token: ${{ secrets.WINGET_TOKEN || secrets.SCOOP_BUCKET_TOKEN }}
 
   # ── Scoop bucket auto-bump ──────────────────────────────────────────────
   # Updates cloud-learn.json in the vyomi-cloud/scoop-bucket repo with
