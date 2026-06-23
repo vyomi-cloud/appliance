@@ -4,7 +4,7 @@
 # to the GitHub Release. Keep PackageVersion / InstallerUrl in sync with
 # the latest release for documentation purposes.
 PackageIdentifier: Vyomi.Vyomi
-PackageVersion: 2.1.0
+PackageVersion: 2.1.0.1
 InstallerType: msi
 Scope: machine
 InstallModes:
@@ -13,7 +13,7 @@ InstallModes:
 UpgradeBehavior: install
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/vyomi-cloud/appliance/releases/download/v2.1.0/cloud-learn-2.1.0-x64.msi
-    InstallerSha256: REPLACED_BY_RELEASE_WORKFLOW
+    InstallerUrl: https://github.com/vyomi-cloud/appliance/releases/download/v2.1.0.1/cloud-learn-2.1.0.1-x64.msi
+    InstallerSha256: 3EFA1FD3FCA039402DF17D8F7CC7AEB5ADEFFA911710E7C136371AFD20F27116
 ManifestType: installer
 ManifestVersion: 1.6.0
