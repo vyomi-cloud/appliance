@@ -32,6 +32,13 @@ services:
   simulator:
     image: ${VYOMI_SIMULATOR_IMAGE:-vyomi/appliance:latest}
     pull_policy: always
+    # The Pro/CloudLite+ compute backend drives the host Docker daemon via the
+    # mounted socket to launch sibling instance containers. The socket is
+    # root-owned and its group varies by host (root on Docker Desktop, `docker`
+    # on Linux), so the image's non-root user can't reach it. Running the
+    # simulator as root is the reliable zero-config choice for a LOCAL dev
+    # simulator (it already has docker.sock = host-root-equivalent anyway).
+    user: "0:0"
     ports:
       - "${VYOMI_SIMULATOR_PORT:-9000}:9000"
     networks: [vyomi-net]

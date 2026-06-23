@@ -283,7 +283,11 @@ def _default_packs() -> Dict[str, dict]:
 
 
 def _default_ec2_runtime_backends() -> list[str]:
-    return ["lxd"] if appliance_mode_enabled() else ["multipass", "lxd"]
+    # docker = the CloudLite+/Pro compute backend (sibling containers). Allowed
+    # alongside the VM backends so the default space policy serves every
+    # substrate; the active backend is still chosen by VYOMI_COMPUTE_BACKEND.
+    # Appliance (Max) mode stays LXD-only.
+    return ["lxd"] if appliance_mode_enabled() else ["multipass", "lxd", "docker"]
 
 
 def _default_cloudsim_space_policy() -> dict:

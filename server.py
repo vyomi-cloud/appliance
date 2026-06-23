@@ -2095,7 +2095,10 @@ def _default_cloudsim_space_policy() -> dict:
     return {
         "ec2": {
             "launch": True,
-            "allowed_runtime_backends": ["multipass", "lxd"],
+            # docker = the CloudLite+/Pro compute backend (sibling containers).
+            # Allowed alongside the VM backends so the same policy serves every
+            # substrate; the active backend is still chosen by VYOMI_COMPUTE_BACKEND.
+            "allowed_runtime_backends": ["multipass", "lxd", "docker"],
             "allowed_amis": [],  # empty list = no allowlist, any AMI accepted
         },
     }
@@ -2121,13 +2124,13 @@ def _cloudsim_space_policy(space: dict | None) -> dict:
     if isinstance(allowed_backends, str):
         allowed_backends = [allowed_backends]
     if not isinstance(allowed_backends, list):
-        allowed_backends = ["multipass", "lxd"]
+        allowed_backends = ["multipass", "lxd", "docker"]
     normalized_backends = []
     for backend in allowed_backends:
         backend_value = str(backend).strip().lower()
         if backend_value:
             normalized_backends.append(backend_value)
-    ec2_policy["allowed_runtime_backends"] = list(dict.fromkeys(normalized_backends or ["multipass", "lxd"]))
+    ec2_policy["allowed_runtime_backends"] = list(dict.fromkeys(normalized_backends or ["multipass", "lxd", "docker"]))
     allowed_amis = ec2_policy.get("allowed_amis")
     if isinstance(allowed_amis, str):
         allowed_amis = [allowed_amis]
