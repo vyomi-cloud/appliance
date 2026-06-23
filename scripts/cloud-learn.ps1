@@ -548,11 +548,50 @@ function Set-VBoxNatPortForward {
           Write-ProgressLine '==> VirtualBox NAT port-forward added (localhost:9000 -> VM).'; return } catch { }
   }
 
-  # VM not visible in user context => owned by LocalSystem. Print the proven
-  # SYSTEM commands (this is exactly what unblocked browser access in testing).
+  # VM not visible in user context => owned by the LocalSystem multipass service.
+  # Automate the SYSTEM port-forward via a one-shot scheduled task (no PsExec
+  # dependency). Creating a SYSTEM task needs admin, so self-elevate (one UAC
+  # prompt); the SYSTEM-side script lists the VM + adds the forwards itself,
+  # running under the same LocalSystem account that owns the VM.
+  try {
+    Write-ProgressLine '==> VirtualBox NAT: adding the localhost port-forward as SYSTEM (accept the UAC prompt)...'
+    $portList  = ($BridgePorts -join ',')
+    $sysScript = Join-Path $env:TEMP 'vyomi-pf-system.ps1'
+    $sysBody = @"
+`$ErrorActionPreference = 'SilentlyContinue'
+`$vb = '$vbox'
+`$vm = (& `$vb list runningvms) | ForEach-Object { if (`$_ -match '"([^"]*)"') { `$matches[1] } } | Where-Object { `$_ -match 'appliance|vyomi|cloudlearn' } | Select-Object -First 1
+if (`$vm) {
+  foreach (`$p in @($portList)) {
+    & `$vb controlvm `$vm natpf1 delete ('vyomi' + `$p) 2>`$null
+    & `$vb controlvm `$vm natpf1 ('vyomi' + `$p + ',tcp,127.0.0.1,' + `$p + ',,' + `$p)
+  }
+}
+"@
+    Set-Content -Path $sysScript -Value $sysBody -Encoding ascii
+    $elevScript = Join-Path $env:TEMP 'vyomi-pf-elevate.ps1'
+    $elevBody = @"
+`$ErrorActionPreference = 'SilentlyContinue'
+`$a = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$sysScript"'
+`$p = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+Register-ScheduledTask -TaskName 'VyomiPortForward' -Action `$a -Principal `$p -Force | Out-Null
+Start-ScheduledTask -TaskName 'VyomiPortForward'
+Start-Sleep -Seconds 5
+Unregister-ScheduledTask -TaskName 'VyomiPortForward' -Confirm:`$false
+"@
+    Set-Content -Path $elevScript -Value $elevBody -Encoding ascii
+    Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',$elevScript
+    Remove-Item $sysScript, $elevScript -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    try { Invoke-WebRequest -Uri 'http://127.0.0.1:9000/healthz' -TimeoutSec 3 -UseBasicParsing | Out-Null
+          Write-ProgressLine '==> VirtualBox NAT port-forward added as SYSTEM (localhost:9000 -> VM).'; return } catch { }
+  } catch { }
+
+  # Fallback: if the UAC prompt was declined or the auto step failed, print the
+  # proven manual SYSTEM commands as a last resort.
   Write-ProgressLine ''
   Write-ProgressLine '  ------------------------------------------------------------'
-  Write-ProgressLine '   Windows + VirtualBox NAT: one manual step for browser access'
+  Write-ProgressLine '   Windows + VirtualBox NAT: manual fallback for browser access'
   Write-ProgressLine '  ------------------------------------------------------------'
   Write-ProgressLine '   The appliance is RUNNING, but VirtualBox keeps it behind NAT'
   Write-ProgressLine '   and the VM is owned by the SYSTEM account. Add the forward as'
