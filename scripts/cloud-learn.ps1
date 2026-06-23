@@ -437,13 +437,22 @@ function Test-ApplianceHealth {
     $TimeoutSeconds = [int](Get-EnvAny @('VYOMI_HEALTH_TIMEOUT','CLOUD_LEARN_HEALTH_TIMEOUT') '600')
   }
   $vmIp = Get-ApplianceIp
-  if ([string]::IsNullOrWhiteSpace($vmIp)) { throw 'Could not resolve the appliance VM IP for health checks.' }
-  Write-ProgressLine ("==> [6/6] Waiting for the simulator at {0} (first boot pulls ~3.5GB - can take 10-20 min on a slow VM)" -f $vmIp)
+  $probeHost = $vmIp
+  if ([string]::IsNullOrWhiteSpace($vmIp)) {
+    # VirtualBox-NAT VM: no host-routable IP. Do NOT throw (the v2.1.0.1
+    # regression) - instead set up the localhost NAT port-forward now (or print
+    # the psexec commands when the VM is SYSTEM-owned) and health-check via
+    # 127.0.0.1. This is the exact Windows-Home case the forward exists for.
+    Write-ProgressLine '==> No routable VM IP (VirtualBox NAT) - bridging localhost:9000 to the appliance.'
+    Set-VBoxNatPortForward -VmIp ''
+    $probeHost = '127.0.0.1'
+  }
+  Write-ProgressLine ("==> [6/6] Waiting for the simulator at {0}:9000 (first boot can take 10-20 min on a slow VM)" -f $probeHost)
   $waited = 0
   while ($waited -lt $TimeoutSeconds) {
     # The simulator (port 9000) is what serves the console; the runtime
     # bridge (9171) is optional, so don't block on it.
-    try { Invoke-WebRequest -Uri ("http://{0}:9000/healthz" -f $vmIp) -TimeoutSec 3 -UseBasicParsing | Out-Null; return $vmIp } catch { }
+    try { Invoke-WebRequest -Uri ("http://{0}:9000/healthz" -f $probeHost) -TimeoutSec 3 -UseBasicParsing | Out-Null; return $vmIp } catch { }
     Start-Sleep -Seconds 5
     $waited += 5
     if ($waited % 30 -eq 0) { Write-ProgressLine ("    ... still starting ({0}s) - pulling/booting the stack inside the VM" -f $waited) }
@@ -474,14 +483,15 @@ function Start-LocalhostBridge {
 
 function Show-UrlBanner {
   param([string]$VmIp)
-  $url = "http://$VmIp:9000/"
-  # Prefer localhost if the portproxy bridge answers.
+  $hasIp = -not [string]::IsNullOrWhiteSpace($VmIp)
+  $url = if ($hasIp) { "http://$VmIp:9000/" } else { 'http://localhost:9000/' }
+  # Prefer localhost if the portproxy / NAT-forward bridge answers.
   try { Invoke-WebRequest -Uri 'http://127.0.0.1:9000/healthz' -TimeoutSec 2 -UseBasicParsing | Out-Null; $url = 'http://localhost:9000/' } catch { }
   Write-ProgressLine ''
   Write-ProgressLine '  ============================================================'
   Write-ProgressLine '   Vyomi appliance is READY'
   Write-ProgressLine ("   Console : {0}" -f $url)
-  Write-ProgressLine ("   Direct  : http://{0}:9000/   (VM IP, no bridge needed)" -f $VmIp)
+  if ($hasIp) { Write-ProgressLine ("   Direct  : http://{0}:9000/   (VM IP, no bridge needed)" -f $VmIp) }
   Write-ProgressLine '  ============================================================'
   Write-ProgressLine ''
   if ((Get-EnvAny @('VYOMI_NO_OPEN','CLOUD_LEARN_NO_OPEN')) -ne '1') {
