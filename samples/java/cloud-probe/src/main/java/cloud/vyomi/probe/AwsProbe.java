@@ -24,6 +24,12 @@ import software.amazon.awssdk.services.secretsmanager.model.CreateSecretRequest;
 import software.amazon.awssdk.services.secretsmanager.model.DeleteSecretRequest;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueResponse;
+import software.amazon.awssdk.services.ec2.Ec2Client;
+import software.amazon.awssdk.services.ec2.model.RunInstancesResponse;
+import software.amazon.awssdk.services.ec2.model.DescribeInstancesResponse;
+import software.amazon.awssdk.services.ec2.model.InstanceType;
+import software.amazon.awssdk.services.rds.RdsClient;
+import software.amazon.awssdk.services.rds.model.DescribeDbInstancesResponse;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.kms.model.CreateKeyRequest;
 import software.amazon.awssdk.services.kms.model.CreateKeyResponse;
@@ -70,6 +76,101 @@ public class AwsProbe implements CloudProbe {
                 .region(region)
                 .credentialsProvider(creds)
                 .build();
+    }
+
+    private Ec2Client ec2() {
+        return Ec2Client.builder()
+                .endpointOverride(URI.create(endpoint))
+                .region(region)
+                .credentialsProvider(creds)
+                .build();
+    }
+
+    private RdsClient rds() {
+        return RdsClient.builder()
+                .endpointOverride(URI.create(endpoint))
+                .region(region)
+                .credentialsProvider(creds)
+                .build();
+    }
+
+    // ── EC2 (compute) lifecycle via native SDK ──────────────────────────────
+    // RunInstances launches a real instance on the appliance's compute backend
+    // (Multipass/LXD on CloudMax, Docker on CloudLite+). We verify via
+    // DescribeInstances and always terminate. We do NOT wait for "running"
+    // (compute provisioning takes minutes) — the API round-trip + a live
+    // instance record is the conformance signal.
+    @Override
+    public Map<String, Object> probeCompute() {
+        Report r = new Report("aws");
+        r.step("endpoint", true, endpoint);
+        String amiId = System.getenv().getOrDefault("CLOUDPROBE_EC2_AMI", "ami-amzn2023-x86_64");
+        String instanceId = null;
+        try (Ec2Client ec2 = ec2()) {
+            ec2.describeInstances();
+            r.step("ec2.describeInstances", true, "");
+            RunInstancesResponse run = ec2.runInstances(b -> b
+                    .imageId(amiId).instanceType(InstanceType.T3_MICRO)
+                    .minCount(1).maxCount(1));
+            instanceId = run.instances().isEmpty() ? null : run.instances().get(0).instanceId();
+            r.step("ec2.runInstances", instanceId != null && !instanceId.isBlank(), String.valueOf(instanceId));
+            if (instanceId != null) {
+                final String iid = instanceId;
+                DescribeInstancesResponse d = ec2.describeInstances(b -> b.instanceIds(iid));
+                boolean found = d.reservations().stream().anyMatch(res -> !res.instances().isEmpty());
+                r.step("ec2.describeInstances.verify", found, instanceId);
+            }
+        } catch (Exception e) {
+            r.step("ec2.lifecycle", false, e.getClass().getSimpleName() + ": " + e.getMessage());
+        } finally {
+            if (instanceId != null) {
+                final String id = instanceId;
+                try (Ec2Client ec2 = ec2()) {
+                    ec2.terminateInstances(b -> b.instanceIds(id));
+                    r.step("ec2.terminateInstances", true, id);
+                } catch (Exception e) {
+                    r.step("ec2.terminateInstances", false, e.getMessage());
+                }
+            }
+        }
+        return r.toMap();
+    }
+
+    // ── RDS (managed DB) lifecycle via native SDK ───────────────────────────
+    // CreateDBInstance provisions a managed Postgres on the appliance; verify
+    // via DescribeDBInstances and always delete (skipFinalSnapshot). Like EC2,
+    // we don't block on "available" — create/describe/delete is the conformance.
+    @Override
+    public Map<String, Object> probeDatabase() {
+        Report r = new Report("aws");
+        r.step("endpoint", true, endpoint);
+        String dbId = "cloud-probe-" + UUID.randomUUID().toString().substring(0, 8);
+        boolean created = false;
+        try (RdsClient rds = rds()) {
+            rds.describeDBInstances();
+            r.step("rds.describeDBInstances", true, "");
+            rds.createDBInstance(b -> b
+                    .dbInstanceIdentifier(dbId).engine("postgres")
+                    .dbInstanceClass("db.t3.micro").allocatedStorage(20)
+                    .masterUsername("vyomi").masterUserPassword("Probe-passw0rd-1"));
+            created = true;
+            r.step("rds.createDBInstance", true, dbId);
+            DescribeDbInstancesResponse d = rds.describeDBInstances(b -> b.dbInstanceIdentifier(dbId));
+            r.step("rds.describeDBInstances.verify", !d.dbInstances().isEmpty(), dbId);
+        } catch (Exception e) {
+            r.step("rds.lifecycle", false, e.getClass().getSimpleName() + ": " + e.getMessage());
+        } finally {
+            if (created) {
+                try (RdsClient rds = rds()) {
+                    rds.deleteDBInstance(b -> b.dbInstanceIdentifier(dbId)
+                            .skipFinalSnapshot(true).deleteAutomatedBackups(true));
+                    r.step("rds.deleteDBInstance", true, dbId);
+                } catch (Exception e) {
+                    r.step("rds.deleteDBInstance", false, e.getMessage());
+                }
+            }
+        }
+        return r.toMap();
     }
 
     @Override

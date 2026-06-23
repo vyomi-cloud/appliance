@@ -69,4 +69,20 @@ public interface CloudProbe {
         r.step(cloud() + ".queue", false, "not implemented for " + cloud());
         return r.toMap();
     }
+
+    /** Compute lifecycle: launch → describe/verify → terminate, via the cloud's
+     *  NATIVE compute SDK (EC2 / Compute Engine / Azure VMs). */
+    default Map<String, Object> probeCompute() {
+        Report r = new Report(cloud());
+        r.step(cloud() + ".compute", false, "not implemented for " + cloud());
+        return r.toMap();
+    }
+
+    /** Managed-DB lifecycle: create → describe/verify → delete, via the cloud's
+     *  NATIVE managed-database SDK (RDS / Cloud SQL / Azure SQL). */
+    default Map<String, Object> probeDatabase() {
+        Report r = new Report(cloud());
+        r.step(cloud() + ".database", false, "not implemented for " + cloud());
+        return r.toMap();
+    }
 }

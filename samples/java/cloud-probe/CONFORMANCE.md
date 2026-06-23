@@ -11,8 +11,14 @@ by running the native cloud SDKs against a live appliance. Endpoints are kept
 | `GET /queue/{cloud}`  | messaging | SQS→ElasticMQ · Pub/Sub→emulator · Storage Queue→Azurite |
 | `GET /secret/{cloud}` | secrets | Secrets Manager / Secret Manager / Key Vault Secrets → Vault |
 | `GET /kms/{cloud}`    | KMS | KMS / Cloud KMS / Key Vault Keys → Vault transit (Azure = real RSA) |
+| `GET /compute/aws`    | compute (EC2) | EC2 RunInstances → DescribeInstances → TerminateInstances (the compute backend: Multipass/LXD on CloudMax, Docker on CloudLite+) |
+| `GET /rds/aws`        | managed DB (RDS) | RDS CreateDBInstance → DescribeDBInstances → DeleteDBInstance (managed Postgres) |
 
-`{cloud}` ∈ `aws | gcp | azure`.
+`{cloud}` ∈ `aws | gcp | azure`. **Compute/RDS are AWS-only for now** (GCE/CloudSQL +
+Azure VM/SQL equivalents aren't wired into the probe yet — the harness runs them via
+`AWS_ONLY_SERVICES`). EC2 + RDS are **not** tier-gated (they run on Free); **NoSQL
+(DynamoDB/Cosmos) requires Max tier**, so those two go red on a Free-tier appliance with
+`X-Vyomi-Tier-Denied: tier_service_locked` — that's the gate working, not a probe bug.
 
 ## 1. Bring up the appliance
 `vyomi up` (or the compose stack). Wait for the readiness banner — Wave 2 backends
@@ -49,3 +55,35 @@ Green = every endpoint returns `ok:true`. The script prints the exact failing
 Each console CRUD writes to the **same backend** its SDK reads, so a console-created
 queue/secret/key should be visible to the probe and vice-versa — spot-check by
 creating one in the console, then re-running the relevant endpoint.
+
+## Live-run setup (verified 2026-06-24 — 12/14 green vs a Multipass appliance)
+The HTTPS surfaces (Azure Key Vault/Cosmos, GCP HttpJson) need the appliance's
+**mkcert/Caddy cert trusted by the JVM** and a **cert-matched hostname**. Exact steps
+that took the run from 8/14 → 12/14 (the remaining 2 are the Max-tier NoSQL gate):
+
+1. **Trust the appliance cert in a JVM truststore** — the launcher's mkcert CA is trusted
+   by the OS but not the JVM:
+   ```sh
+   cp "$(/usr/libexec/java_home)/lib/security/cacerts" /tmp/probe-truststore.jks
+   keytool -importcert -noprompt -trustcacerts -alias mkcert-ca \
+     -file "$(mkcert -CAROOT)/rootCA.pem" -keystore /tmp/probe-truststore.jks -storepass changeit
+   java -Djavax.net.ssl.trustStore=/tmp/probe-truststore.jks \
+        -Djavax.net.ssl.trustStorePassword=changeit -jar target/cloud-probe.jar
+   ```
+2. **Reach the appliance via a name in the cert SAN.** The mkcert cert covers
+   `vyomi.local`, `localhost`, `127.0.0.1`, `*.vault.localtest.me` — **not** the VM's LAN
+   IP. If the probe host isn't the appliance host, bridge a cert-covered name to it
+   (e.g. `socat TCP-LISTEN:9443,fork,reuseaddr TCP:<vm-ip>:9443`) and point Cosmos at it:
+   `export CLOUDPROBE_COSMOS_ENDPOINT=https://localhost:9443/azure-data/cosmos/<account>`.
+   (Key Vault already rides `*.vault.localtest.me → 127.0.0.1`.)
+3. **Caddy must forward the port in `Host`** (the `kid`/Host risk above). The key-id is
+   built from the request `Host`; if Caddy uses `header_up Host {host}` it **strips the
+   port**, so the kid becomes `…vault.localtest.me/keys/…` (→ `:443`, refused). The source
+   Caddyfile is correct (`{http.request.hostport}`); ensure the **running** appliance
+   matches, then restart Caddy (admin API is off, so `caddy reload` won't work — restart
+   the container).
+
+**Tier note:** EC2 (`/compute/aws`) + RDS (`/rds/aws`) pass on **Free**. NoSQL
+(`/probe/aws` DynamoDB, `/probe/azure` Cosmos) returns `403 tier_service_locked` until a
+**Max-tier** license is active — transport/cert/endpoint are all proven, so those two flip
+green the moment the tier is unlocked.

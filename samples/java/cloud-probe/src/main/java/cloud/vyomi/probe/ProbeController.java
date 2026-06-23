@@ -126,6 +126,26 @@ public class ProbeController {
         return Boolean.TRUE.equals(res.get("ok")) ? ResponseEntity.ok(res) : ResponseEntity.status(502).body(res);
     }
 
+    /** Compute lifecycle (launch → describe/verify → terminate) via the cloud's
+     *  native compute SDK (EC2 / Compute Engine / Azure VMs). e.g. GET /compute/aws */
+    @GetMapping("/compute/{cloud}")
+    public ResponseEntity<Map<String, Object>> probeCompute(@PathVariable("cloud") String cloud) {
+        CloudProbe p = probes.get(cloud.toLowerCase());
+        if (p == null) return unknownCloud(cloud);
+        Map<String, Object> res = p.probeCompute();
+        return Boolean.TRUE.equals(res.get("ok")) ? ResponseEntity.ok(res) : ResponseEntity.status(502).body(res);
+    }
+
+    /** Managed-DB lifecycle (create → describe/verify → delete) via the cloud's
+     *  native managed-DB SDK (RDS / Cloud SQL / Azure SQL). e.g. GET /rds/aws */
+    @GetMapping("/rds/{cloud}")
+    public ResponseEntity<Map<String, Object>> probeDatabase(@PathVariable("cloud") String cloud) {
+        CloudProbe p = probes.get(cloud.toLowerCase());
+        if (p == null) return unknownCloud(cloud);
+        Map<String, Object> res = p.probeDatabase();
+        return Boolean.TRUE.equals(res.get("ok")) ? ResponseEntity.ok(res) : ResponseEntity.status(502).body(res);
+    }
+
     private ResponseEntity<Map<String, Object>> unknownCloud(String cloud) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("ok", false);

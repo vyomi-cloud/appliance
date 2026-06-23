@@ -27,6 +27,9 @@ set -uo pipefail
 BASE="${1:-${PROBE_BASE:-http://localhost:8080}}"
 CLOUDS=(aws gcp azure)
 SERVICES=(probe queue secret kms)
+# EC2 (compute) + RDS (managed DB) — AWS-only for now; the cross-cloud
+# equivalents (GCE/CloudSQL, Azure VM/SQL) aren't wired into the probe yet.
+AWS_ONLY_SERVICES=(compute rds)
 HAVE_JQ=0; command -v jq >/dev/null 2>&1 && HAVE_JQ=1
 
 pass=0; fail=0; FAILURES=()
@@ -63,6 +66,7 @@ echo
 for svc in "${SERVICES[@]}"; do
   for cloud in "${CLOUDS[@]}"; do hit "$svc" "$cloud"; done
 done
+for svc in "${AWS_ONLY_SERVICES[@]}"; do hit "$svc" aws; done
 echo
 echo "=== ${pass} passed, ${fail} failed ==="
 if [ "$fail" -gt 0 ]; then
