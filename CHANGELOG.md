@@ -6,8 +6,25 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.0] — in progress
+
+The **seven-tier ladder** + the **Pro (Docker) tier**. Renames the
+distribution tiers to a single-word subscription ladder — **Free · Nano ·
+Micro · Lite · Pro · Max · Enterprise** — and ships the Docker substrate so
+Free/Lite/Pro install with one `docker compose up` (no Multipass). One codebase
+throughout: the tier only *conditions* the shared infra-creation path via a
+flag (ADR-001), never a separate flow.
+
 ### Added
-- **CloudLite+ Docker compute backend — EC2/GCP/Azure instances as SSH-enabled Docker containers.** Wires the `core/compute` `ComputeBackend` seam (ADR-001/002) into the full server.py instance lifecycle: a new `_docker_*` family (create/start/stop/reboot/terminate/sync + a `docker exec` web console) dispatched from `_start/_stop/_reboot_runtime_process`, `api_ec2_terminate_instance`, and every per-backend sync site (EC2 + GCP). `_ec2_choose_runtime_backend` now prefers `docker` when `VYOMI_COMPUTE_BACKEND=docker`; Ubuntu/Linux AMIs gain `docker` in `supported_backends`; `_runtime_available("docker")` probes the daemon. Instances launch as sibling containers (`vyomi-i-<id>`) with cgroup-limited CPU/RAM, a persistent root volume (EBS-like), docker-in-instance, and **SSH enabled out of the box** — the user's public key is injected at launch (`VYOMI_SSH_PUBKEY` → `authorized_keys`), so `ssh ubuntu@<ip>` works immediately. The `vyomi/instance:ubuntu-24.04` "AMI" (sshd + DinD, tini-supervised) is published by `docker-publish.yml`; the simulator image now ships the `docker` CLI and the host `docker-compose.yml` mounts the docker socket + defaults `VYOMI_COMPUTE_BACKEND=docker`. Validated end-to-end on real Docker: create→running→SSH-key-injected→stop/start/reboot→terminate all pass (incl. keys surviving restart). Fixed a build blocker — ubuntu:24.04 ships a default `ubuntu` user, so the image creates it only if absent.
+- **Pro / CloudLite+ Docker compute backend — EC2/GCP/Azure instances as SSH-enabled Docker containers.** Wires the `core/compute` `ComputeBackend` seam (ADR-001/002) into the full server.py instance lifecycle: a new `_docker_*` family (create/start/stop/reboot/terminate/sync + a `docker exec` web console) dispatched from `_start/_stop/_reboot_runtime_process`, `api_ec2_terminate_instance`, and every per-backend sync site (EC2 + GCP). `_ec2_choose_runtime_backend` prefers `docker` when `VYOMI_COMPUTE_BACKEND=docker`; Ubuntu/Linux AMIs gain `docker` in `supported_backends`; `_runtime_available("docker")` probes the daemon. Instances launch as sibling containers (`vyomi-i-<id>`) with cgroup-limited CPU/RAM, a persistent root volume (EBS-like), docker-in-instance, and **SSH enabled out of the box** (`VYOMI_SSH_PUBKEY` → `authorized_keys`). The `vyomi/instance:ubuntu-24.04` AMI (sshd + DinD, tini) is published by `docker-publish.yml`; the simulator image ships the `docker` CLI. Validated end-to-end on real Docker (create→ssh→stop/start/reboot→terminate).
+- **`docker-compose.cloudlite.yml` — standalone pull-only quickstart** for the Free/Lite/Pro Docker substrate. One file, published images only (no `build:` context, no source tree): `docker compose up -d` → a working multi-cloud simulator with Docker-backed compute. Adds an explicit `vyomi-net` network + `VYOMI_INSTANCE_NETWORK` so launched instances join it and reach the simulator/backends by DNS (validated: instance resolves `simulator` on `vyomi-net` → HTTP 200).
+- **Portal: seven-tier matrix.** New `app/tiers.py` (canonical price + substrate + compute + conformance + CPU/RAM/disk/virtualization + install-method data) drives a new **`/system-requirements`** page showing all tiers side by side, plus a nav link. Pricing in ₹/month: Nano 199 · Micro 299 · Lite 399 · Pro 499 · Max 599; Free ₹0; Enterprise "Talk to sales".
+
+### Changed
+- **Distribution tiers renamed** in `docs/architecture/distribution_strategy.md`: CloudMax/CloudLite+/CloudLite/CloudNano+/CloudNano → **Max/Pro/Lite/Micro/Nano** (+ Free + Enterprise). Same ADR-001 single-codebase model; system-requirements + pricing tables updated.
+
+### Planned (final step of this release)
+- **`cloudlearn`/`cloud-learn` → `vyomi` rename.** Taken up LAST, staged with backward-compat (NOT a blind sed — a half-rename caused the v2.1.0.1 52% bug). Scope: 337 `CLOUDLEARN_*` env hits / 714 lowercase ids / container+volume+script names / license JWT fields. Order: env vars (add `VYOMI_*` primary + keep `CLOUDLEARN_*` fallback) → strings/docs → container/volume names → script/package names → license fields (dual-accept). Conformance (cloud-probe) must stay green after each stage.
 
 ## [2.1.0.2] — 2026-06-24
 

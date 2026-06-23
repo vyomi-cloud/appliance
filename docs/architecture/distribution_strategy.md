@@ -11,45 +11,56 @@ The platform should feel like a product, not a hand-wired stack of host processe
 
 ## Distribution Tiers
 
-Vyomi ships as **five tiers** along two axes: three runtime **substrates**
-(Multipass-LXD → Docker → WASM) × whether real **compute** is bundled (the
-`+` suffix). They form a funnel: CloudNano (a URL, zero install) pulls users
-in; CloudLite (`docker compose up`) converts developers; CloudMax serves
-teams needing real compute.
+Vyomi ships as a **seven-tier ladder** (renamed from the earlier
+CloudMax/CloudLite+/… scheme in v2.2.0) along two axes: three runtime
+**substrates** (WASM → Docker → Multipass-LXD) × whether real **compute** is
+bundled. The names double as subscription tiers. They form a funnel: **Nano**
+(a URL, zero install) pulls users in; **Free/Lite/Pro** (`docker compose up`)
+convert developers; **Max** serves teams needing real VMs; **Enterprise** adds
+packs + on-prem. Price tracks substrate weight (WASM → Docker → Multipass),
+with +compute as the premium within each.
 
-| Tier | Substrate | API/SDK conformance pack | Compute (EC2) |
-|------|-----------|--------------------------|---------------|
-| **Vyomi-CloudMax** | Multipass VM | container (in-VM) | LXD — real VMs/containers |
-| **Vyomi-CloudLite+** | host Docker | container | Docker (`docker run` = an instance) |
-| **Vyomi-CloudLite** | host Docker | container | — none |
-| **Vyomi-CloudNano+** | WASM (browser) | WASM / in-memory | CheerpJ (Java) · Pyodide (Python) · TinyGo (Go), in-tab |
-| **Vyomi-CloudNano** | WASM (browser) | WASM / in-memory | — none |
+| Tier | Price (₹/mo) | Substrate | Conformance | Compute |
+|------|------|-----------|-------------|---------|
+| **Free** | 0 | Docker | full API/SDK/Utility | capped (1 instance, no SSH) |
+| **Nano** | 199 | WASM (browser) | API/SDK/Utility only | — none |
+| **Micro** | 299 | WASM (browser) | full | Pyodide · CheerpJ · TinyGo (in-tab) |
+| **Lite** | 399 | Docker | API/SDK/Utility only | — none |
+| **Pro** | 499 | Docker | full | EC2-on-Docker + SSH |
+| **Max** | 599 | Multipass / LXD | full | real VMs |
+| **Enterprise** | Talk to sales | Max + custom | full + packs | real VMs + add-on packs |
 
-Naming note: the in-browser tier (previously "Vyomi Lite") is **CloudNano**;
-"Lite" now denotes the **Docker** tier.
+Substrate maps to **how it installs** (not a forked codebase — see ADR-001):
+Free/Lite/Pro share the **`docker compose up`** front door
+(`docker-compose.cloudlite.yml`); Max uses the **Multipass launcher** (deb/rpm/
+scoop/msi); Nano/Micro are **in-browser** (a URL). The conformance pack is
+**constant** across all tiers — only its runtime form (container vs WASM) and
+whether compute is bundled differ, conditioned by a flag, never a separate flow.
 
-### System requirements (proposed)
+### System requirements
 
-| Tier | RAM (rec / min) | CPU | Free disk | Virtualization? | Prereqs | First-run download |
-|------|-----------------|-----|-----------|-----------------|---------|--------------------|
-| **CloudMax** | **16 GB** / 8 GB ⚠️ | 4 / 2 | ~40 GB | **Required** — VT-x/AMD-V + Hyper-V (Win Pro) or VirtualBox | Multipass + a hypervisor | ~3–4 GB |
-| **CloudLite+** | 8 GB / 6 GB | 4 / 2 | ~20 GB | Win/Mac: yes (Docker Desktop→WSL2); **Linux: no** | Docker | ~2–3 GB |
-| **CloudLite** | 8 GB / 4 GB | 2 / 2 | ~15 GB | same as Lite+ | Docker | ~1.5–2 GB (lazy-pull cuts this) |
-| **CloudNano+** | 8 GB / 4 GB | 2 | <1 GB | **None** | A modern browser | ~150–300 MB (WASM runtimes) |
-| **CloudNano** | 4 GB / 2 GB | any | <500 MB | **None** | A modern browser | ~50–150 MB |
+| Tier | CPU | RAM | Disk | Virtualization | OS / install |
+|------|-----|-----|------|----------------|--------------|
+| **Free** | 2 cores | 4 GB (2 min) | ~8 GB | yes (Docker Desktop/WSL2 → VT-x) | mac/Linux/Win · `docker compose up` |
+| **Nano** | 2 cores | 4 GB | ~200 MB cache | **none** | any modern browser · a URL |
+| **Micro** | 4 cores | 8 GB | ~1 GB cache | **none** | Chromium/Firefox (SharedArrayBuffer) · a URL |
+| **Lite** | 2 cores | 4 GB | ~5 GB | yes (Docker/WSL2 → VT-x) | mac/Linux/Win · `docker compose up` |
+| **Pro** | 4 cores | 8 GB | ~12 GB | yes (Docker/WSL2 → VT-x) | mac/Linux/Win · compose / deb·rpm·scoop·msi |
+| **Max** | 4 cores | **16 GB (8 degraded)** | ~40 GB | yes (Hyper-V/VirtualBox → VT-x) | mac/Linux/Win · brew·deb·rpm·scoop·msi |
+| **Enterprise** | custom | custom | custom | yes (deployment-dependent) | + air-gapped / on-prem |
 
 Notes / confidence:
-- **CloudMax — 16 GB recommended, 8 GB is the degraded edge.** Validated
-  2026-06-22: an 8 GB Windows 10 Home laptop **froze** during the image pull
-  because the auto-sizer handed the VM 4 GB, starving the host. Two fixes
-  this exposed: (1) cap the VM share on ≤8 GB hosts; (2) Wave-1-fast + lazy
-  backend pulls to flatten the peak. Confidence: **high** (real failure data).
-- **CloudLite** drops the nested VM + LXD (same backend containers, one
-  virtualization layer not two) — which is why it fits an 8 GB box.
-  Confidence: **medium** (measure once packaged).
-- **CloudNano** is the only tier that runs with **no install, no admin, no
-  BIOS** — Chromebooks, 4 GB machines, locked-down corporate laptops.
-  Confidence: **estimated** (unbuilt; depends on final WASM runtime sizes).
+- **Max — 16 GB recommended, 8 GB is the degraded edge.** Validated 2026-06-22:
+  an 8 GB Windows 10 Home laptop **froze** during the image pull because the
+  auto-sizer handed the VM 4 GB, starving the host. Confidence: **high** (real
+  failure data).
+- **Nano/Micro are the only truly virtualization-free tiers** — they run
+  entirely in the browser (WASM). The Docker tiers (Free/Lite/Pro) still need
+  Docker Desktop, which runs on WSL2 (a VM) → VT-x on Windows. Confidence:
+  **medium** (Docker measured; WASM tiers estimated, unbuilt).
+- **Tier capability is enforced by the license** (`core/tier_policy.py`), not
+  the installer. Free already locks `nosql`/`eventing` and caps `vm:1`; that
+  cap IS the "Free = partial Pro" line. Pro unlocks full compute + SSH.
 
 ## ADR-001: Single codebase, tier-as-build-profile
 
