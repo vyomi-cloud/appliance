@@ -43,6 +43,22 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends nodejs curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Docker CLI (client only) — the CloudLite+ Docker compute backend
+# (core/compute/backend.py) shells out to `docker` against the bind-mounted host
+# socket (/var/run/docker.sock) to launch sibling instance containers. Static
+# client binary, no daemon; multi-arch aware via TARGETARCH.
+ARG DOCKER_CLI_VERSION=27.3.1
+ARG TARGETARCH
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) DARCH=x86_64 ;; \
+      arm64) DARCH=aarch64 ;; \
+      *)     DARCH=x86_64 ;; \
+    esac; \
+    curl -fsSL "https://download.docker.com/linux/static/stable/${DARCH}/docker-${DOCKER_CLI_VERSION}.tgz" \
+      | tar -xz -C /usr/local/bin --strip-components=1 docker/docker; \
+    docker --version
+
 # Copy the populated venv from builder
 COPY --from=builder /opt/venv /opt/venv
 

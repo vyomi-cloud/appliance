@@ -14,8 +14,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         openssh-server sudo ca-certificates curl iproute2 \
         docker.io docker-compose-v2 tini \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd -m -s /bin/bash ubuntu \
-    && adduser ubuntu sudo \
+    # ubuntu:24.04 already ships a default 'ubuntu' user (UID 1000), so create
+    # it only if absent (keeps the image buildable on older bases too).
+    && (id ubuntu >/dev/null 2>&1 || useradd -m -s /bin/bash ubuntu) \
+    && usermod -aG sudo ubuntu \
     && echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu \
     && chmod 0440 /etc/sudoers.d/ubuntu \
     && mkdir -p /run/sshd /etc/ssh/sshd_config.d \

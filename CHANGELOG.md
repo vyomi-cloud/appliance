@@ -6,6 +6,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **CloudLite+ Docker compute backend — EC2/GCP/Azure instances as SSH-enabled Docker containers.** Wires the `core/compute` `ComputeBackend` seam (ADR-001/002) into the full server.py instance lifecycle: a new `_docker_*` family (create/start/stop/reboot/terminate/sync + a `docker exec` web console) dispatched from `_start/_stop/_reboot_runtime_process`, `api_ec2_terminate_instance`, and every per-backend sync site (EC2 + GCP). `_ec2_choose_runtime_backend` now prefers `docker` when `VYOMI_COMPUTE_BACKEND=docker`; Ubuntu/Linux AMIs gain `docker` in `supported_backends`; `_runtime_available("docker")` probes the daemon. Instances launch as sibling containers (`vyomi-i-<id>`) with cgroup-limited CPU/RAM, a persistent root volume (EBS-like), docker-in-instance, and **SSH enabled out of the box** — the user's public key is injected at launch (`VYOMI_SSH_PUBKEY` → `authorized_keys`), so `ssh ubuntu@<ip>` works immediately. The `vyomi/instance:ubuntu-24.04` "AMI" (sshd + DinD, tini-supervised) is published by `docker-publish.yml`; the simulator image now ships the `docker` CLI and the host `docker-compose.yml` mounts the docker socket + defaults `VYOMI_COMPUTE_BACKEND=docker`. Validated end-to-end on real Docker: create→running→SSH-key-injected→stop/start/reboot→terminate all pass (incl. keys surviving restart). Fixed a build blocker — ubuntu:24.04 ships a default `ubuntu` user, so the image creates it only if absent.
+
 ## [2.1.0.2] — 2026-06-24
 
 Windows-install reliability + the first winget submission — turns the v2.1.0.1
