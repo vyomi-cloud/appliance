@@ -20,10 +20,15 @@ permissions:
 jobs:
   msi:
     runs-on: windows-latest
-    env:
-      MSI_VERSION: "2.1.0"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve version from VERSION file
+        shell: pwsh
+        run: |
+          $ver = (Get-Content VERSION -Raw).Trim()
+          "MSI_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "MSI_VERSION=$ver"
 
       - name: Stage the launcher bundle + vyomi.cmd shim
         shell: pwsh
