@@ -1304,10 +1304,10 @@ appliance_exec_launcher() {
     # ── Wave 1: pull the prebuilt console image (fast) + proxy, start only them.
     # `pull ... || true` so a dev checkout without a published image still works
     # (the subsequent `up` then builds the simulator from build: . as fallback).
-    echo '    [inner] Wave 1: docker compose pull simulator caddy'
-    docker compose -f docker-compose.appliance.yml pull simulator caddy 2>&1 | sed 's/^/      /' || true
-    echo '    [inner] Wave 1: docker compose up -d simulator caddy'
-    docker compose -f docker-compose.appliance.yml up -d simulator caddy 2>&1 | sed 's/^/      /'
+    echo '    [inner] Wave 1: docker compose pull simulator'
+    docker compose -f docker-compose.appliance.yml pull simulator 2>&1 | sed 's/^/      /' || true
+    echo '    [inner] Wave 1: docker compose up -d simulator'
+    docker compose -f docker-compose.appliance.yml up -d simulator 2>&1 | sed 's/^/      /'
     # ── Wave 2: stream the heavy backends + cloudsim in the BACKGROUND. Use a
     # transient systemd unit so it survives this exec shell exiting; fall back
     # to nohup if systemd-run is unavailable.
@@ -1324,7 +1324,7 @@ appliance_exec_launcher() {
           </dev/null >/tmp/vyomi-wave2.log 2>&1 & )
     fi
     echo '    [inner] Wave 1 containers (console ready when simulator is healthy):'
-    docker compose -f docker-compose.appliance.yml ps simulator caddy 2>&1 | sed 's/^/      /'
+    docker compose -f docker-compose.appliance.yml ps simulator 2>&1 | sed 's/^/      /'
   "
 }
 
@@ -1351,9 +1351,9 @@ Or try again:
   # We print BOTH the mDNS hostname (vyomi.local) and the raw IP. The
   # banner at the end will narrow it down to whichever one is reachable.
   _emit ""
-  _emit "    ${_C_BOLD}Appliance URL${_C_RESET}  ${_C_CYAN}https://localhost:9443/${_C_RESET}    ${_C_DIM}(preferred — green padlock, zero config)${_C_RESET}"
-  _emit "                   ${_C_CYAN}https://${_VYOMI_MDNS_HOST}:9443/${_C_RESET}  ${_C_DIM}(mDNS HTTPS)${_C_RESET}"
-  _emit "                   ${_C_CYAN}http://${vm_ip}:9000/${_C_RESET}      ${_C_DIM}(bridged IP, no TLS)${_C_RESET}"
+  _emit "    ${_C_BOLD}Appliance URL${_C_RESET}  ${_C_CYAN}http://localhost:9000/${_C_RESET}     ${_C_DIM}(via localhost bridge)${_C_RESET}"
+  _emit "                   ${_C_CYAN}http://${vm_ip}:9000/${_C_RESET}      ${_C_DIM}(bridged VM IP)${_C_RESET}"
+  _emit "                   ${_C_DIM}(HTTPS :9443 via Caddy is opt-in: docker compose --profile tls up -d)${_C_RESET}"
   _emit "    (the final banner picks whichever is reachable)"
   _emit ""
 

@@ -295,7 +295,15 @@ services:
   # Serves https://vyomi.local:9443 with the mkcert-signed cert pushed
   # into the appliance VM by the launcher (multipass transfer of cert.pem
   # + key.pem from ~/.vyomi/tls/ on the host → /etc/vyomi/tls/ in the VM).
+  #
+  # DISABLED BY DEFAULT (v2.1.0.2): gated behind the `tls` compose profile.
+  # The simulator serves the console directly on :9000 (HTTP), so Caddy is
+  # pure enterprise polish (green-padlock HTTPS on :9443) and a needless
+  # failure surface — it needs mkcert certs + a pre-seeded /etc/vyomi/Caddyfile,
+  # and a missing/dir Caddyfile crash-looped the whole launch. Re-enable for
+  # an enterprise demo with:  docker compose --profile tls up -d
   caddy:
+    profiles: ["tls"]
     image: caddy:2-alpine
     ports:
       - "9443:9443"

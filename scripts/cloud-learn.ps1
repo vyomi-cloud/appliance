@@ -77,7 +77,7 @@ $ApplianceMemory = Get-EnvAny @('VYOMI_APPLIANCE_MEMORY','CLOUD_LEARN_APPLIANCE_
 $ApplianceDisk = Get-EnvAny @('VYOMI_APPLIANCE_DISK','CLOUD_LEARN_APPLIANCE_DISK') ("{0}G" -f $_recSizing.DiskGb)
 $ApplianceWorkspace = Get-EnvAny @('VYOMI_APPLIANCE_WORKSPACE','CLOUD_LEARN_APPLIANCE_WORKSPACE') '/workspace/cloud-learn'
 $HostSizingFileName = 'host-sizing-report.json'
-$BridgePorts = @(9000, 9443)
+$BridgePorts = @(9000)  # 9443 (Caddy HTTPS) is opt-in via the `tls` compose profile
 
 $env:CLOUDLEARN_DISTRIBUTION_MODE = $DistributionMode
 $env:CLOUD_LEARN_RUNTIME_CONTEXT = $RuntimeContext

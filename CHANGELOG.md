@@ -6,6 +6,22 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.1.0.2] — 2026-06-23
+
+### Changed
+- **Caddy (HTTPS `:9443`) is now disabled by default** — gated behind the `tls`
+  compose profile. The simulator serves the console directly on `:9000` (HTTP),
+  so Caddy was pure enterprise polish (green-padlock TLS) but a real failure
+  surface: it requires mkcert-generated certs **and** a pre-seeded
+  `/etc/vyomi/Caddyfile`, and when that path was missing Docker auto-created it
+  as a **directory**, crash-looping Caddy and failing the entire `vyomi up`
+  (`error mounting "/etc/vyomi/Caddyfile" … not a directory`). Removing Caddy
+  from the default launch eliminates that whole class of first-run failure. The
+  launcher Wave 1 now starts only the simulator; the access banner points at
+  `http://localhost:9000/`. Re-enable HTTPS for an enterprise demo with
+  `docker compose --profile tls up -d` (still needs certs + Caddyfile). TLS will
+  be revisited as a first-class, robust feature ahead of enterprise rollout.
+
 ## [2.1.0.1] — 2026-06-23
 
 Windows-install hotfix on top of v2.1.0, from end-to-end validation on a Windows 10 Home / 8 GB / VirtualBox laptop. The appliance ran fully (all containers up), but three rough edges blocked or confused first-run; none touched the EC2/GCP compute 500 (still under investigation).
