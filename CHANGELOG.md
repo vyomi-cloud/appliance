@@ -6,9 +6,29 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [2.1.0.2] — 2026-06-23
+## [2.1.0.2] — 2026-06-24
+
+Windows-install reliability + the first winget submission — turns the v2.1.0.1
+hotfix into a genuinely smooth first run on Windows Home / VirtualBox.
+
+### Added
+- **VirtualBox NAT port-forward fully automated.** On Windows Home the appliance
+  VM is owned by the LocalSystem multipass service, so a user-context VBoxManage
+  can't see it — the launcher used to just print the manual `psexec` steps. It
+  now adds the `localhost:9000` forward itself via a one-shot **SYSTEM scheduled
+  task** (self-elevates once for UAC; no PsExec dependency), running under the
+  same LocalSystem account that owns the VM. Non-fatal: falls back to printing
+  the manual `psexec … natpf1` commands if the prompt is declined.
+- **Winget** — first `Vyomi.Vyomi` submission to microsoft/winget-pkgs;
+  subsequent releases auto-bump via the `winget-submit` job.
 
 ### Changed
+- **The appliance never compiles on the VM.** The simulator + cloudsim are pulled
+  as prebuilt images and every `docker compose up` uses `--no-build`, so a
+  thin/flaky VM can't fall into a doomed source build (pip `ResolutionImpossible`
+  / Maven `Temporary failure in name resolution`). Wave 1 pulls `simulator` +
+  `cloudsim`; a failed pull surfaces a fast "image not found" instead of a
+  20-minute build.
 - **Caddy (HTTPS `:9443`) is now disabled by default** — gated behind the `tls`
   compose profile. The simulator serves the console directly on `:9000` (HTTP),
   so Caddy was pure enterprise polish (green-padlock TLS) but a real failure
@@ -21,6 +41,13 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `http://localhost:9000/`. Re-enable HTTPS for an enterprise demo with
   `docker compose --profile tls up -d` (still needs certs + Caddyfile). TLS will
   be revisited as a first-class, robust feature ahead of enterprise rollout.
+
+### Fixed
+- **Launcher no longer throws on a NAT VM.** When the VM exposes only NAT/bridge
+  IPs (no host-routable address), `Test-ApplianceHealth` previously died with
+  "Could not resolve the appliance VM IP" *before* the NAT port-forward step ever
+  ran — the exact Windows-Home case the forward exists for. It now sets up the
+  forward and health-checks `localhost` instead.
 
 ## [2.1.0.1] — 2026-06-23
 
