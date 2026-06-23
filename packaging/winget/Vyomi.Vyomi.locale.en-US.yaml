@@ -1,5 +1,5 @@
 PackageIdentifier: Vyomi.Vyomi
-PackageVersion: 2.1.0.1
+PackageVersion: 2.1.0.2
 PackageLocale: en-US
 Publisher: Vyomi Cloud
 PublisherUrl: https://vyomi.cloud
@@ -31,6 +31,6 @@ Tags:
   - localstack-alternative
   - multi-cloud
   - testing
-ReleaseNotesUrl: https://github.com/vyomi-cloud/appliance/releases/tag/v2.1.0.1
+ReleaseNotesUrl: https://github.com/vyomi-cloud/appliance/releases/tag/v2.1.0.2
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
