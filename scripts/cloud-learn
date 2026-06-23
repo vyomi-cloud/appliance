@@ -1310,8 +1310,11 @@ appliance_exec_launcher() {
     # failure-prone on a thin VM. Pulling here keeps `up` on the image path.
     echo '    [inner] Wave 1: docker compose pull simulator cloudsim'
     docker compose -f docker-compose.appliance.yml pull simulator cloudsim 2>&1 | sed 's/^/      /' || true
-    echo '    [inner] Wave 1: docker compose up -d simulator'
-    docker compose -f docker-compose.appliance.yml up -d simulator 2>&1 | sed 's/^/      /'
+    echo '    [inner] Wave 1: docker compose up -d --no-build simulator'
+    # --no-build: the appliance ALWAYS runs prebuilt images (pulled above).
+    # Never compile from source on the VM - a thin/flaky VM has no working
+    # build-context DNS, so a pip/Maven build is doomed (and 20 min wasted).
+    docker compose -f docker-compose.appliance.yml up -d --no-build simulator 2>&1 | sed 's/^/      /'
     # ── Wave 2: stream the heavy backends + cloudsim in the BACKGROUND. Use a
     # transient systemd unit so it survives this exec shell exiting; fall back
     # to nohup if systemd-run is unavailable.
@@ -1319,12 +1322,12 @@ appliance_exec_launcher() {
     if command -v systemd-run >/dev/null 2>&1; then
       sudo systemd-run --unit=vyomi-wave2 --collect \
         --working-directory=${APPLIANCE_WORKSPACE} \
-        docker compose -f docker-compose.appliance.yml up -d --remove-orphans \
+        docker compose -f docker-compose.appliance.yml up -d --no-build --remove-orphans \
         >/dev/null 2>&1 || \
-      ( nohup docker compose -f docker-compose.appliance.yml up -d --remove-orphans \
+      ( nohup docker compose -f docker-compose.appliance.yml up -d --no-build --remove-orphans \
           </dev/null >/tmp/vyomi-wave2.log 2>&1 & )
     else
-      ( nohup docker compose -f docker-compose.appliance.yml up -d --remove-orphans \
+      ( nohup docker compose -f docker-compose.appliance.yml up -d --no-build --remove-orphans \
           </dev/null >/tmp/vyomi-wave2.log 2>&1 & )
     fi
     echo '    [inner] Wave 1 containers (console ready when simulator is healthy):'
@@ -2650,7 +2653,7 @@ outer_run() {
       multipass exec "${APPLIANCE_NAME}" -- sudo bash -c "
         cd ${APPLIANCE_WORKSPACE} || exit 1
         CLOUDLEARN_SIMULATOR_IMAGE=vyomi/appliance:${_lat} \\
-          docker compose -f docker-compose.appliance.yml up -d --force-recreate simulator 2>&1 | tail -3
+          docker compose -f docker-compose.appliance.yml up -d --no-build --force-recreate simulator 2>&1 | tail -3
       "
       progress "==> Waiting for /healthz..."
       local _deadline=$(( $(date +%s) + 180 ))
