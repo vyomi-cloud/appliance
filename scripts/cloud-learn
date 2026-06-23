@@ -1304,8 +1304,12 @@ appliance_exec_launcher() {
     # ── Wave 1: pull the prebuilt console image (fast) + proxy, start only them.
     # `pull ... || true` so a dev checkout without a published image still works
     # (the subsequent `up` then builds the simulator from build: . as fallback).
-    echo '    [inner] Wave 1: docker compose pull simulator'
-    docker compose -f docker-compose.appliance.yml pull simulator 2>&1 | sed 's/^/      /' || true
+    # Pull BOTH prebuilt images (simulator + cloudsim). Both services carry a
+    # build: fallback, so if their image isn't pulled, a later `up` compiles
+    # them from source (pip for simulator, Maven/Java for cloudsim) - slow and
+    # failure-prone on a thin VM. Pulling here keeps `up` on the image path.
+    echo '    [inner] Wave 1: docker compose pull simulator cloudsim'
+    docker compose -f docker-compose.appliance.yml pull simulator cloudsim 2>&1 | sed 's/^/      /' || true
     echo '    [inner] Wave 1: docker compose up -d simulator'
     docker compose -f docker-compose.appliance.yml up -d simulator 2>&1 | sed 's/^/      /'
     # ── Wave 2: stream the heavy backends + cloudsim in the BACKGROUND. Use a
