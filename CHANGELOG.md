@@ -6,6 +6,26 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.2] — 2026-06-24
+
+The **tier-aware launcher** — one `vyomi` package, two substrates. Replaces the
+separate `vyomi-docker` packages with a single launcher that picks the substrate
+at `vyomi up` time, so every package manager (brew/deb/rpm/scoop/msi/winget)
+serves every tier and does the right thing.
+
+### Added
+- **Tier-aware substrate resolution** in both launchers (`scripts/cloud-learn` + `scripts/cloud-learn.ps1`). `vyomi up` resolves a substrate and branches: **Docker** for Free/Lite/Pro (`docker compose` on the bundled `docker-compose.cloudlite.yml`, no Multipass) and **Multipass** for Max (real LXD VMs). Resolution order: `--docker`/`--multipass` flag or `VYOMI_SUBSTRATE` → cached license tier (`~/.vyomi/tier`) → persisted choice (`~/.vyomi/substrate`) → auto (existing appliance VM → Multipass, else Docker). Default: Docker. Validated on real Docker (bash); PowerShell static-validated.
+- **Persisted substrate choice.** An explicit `--docker`/`--multipass` is written to `~/.vyomi/substrate`, so a Max user runs `vyomi up --multipass` once and every later `vyomi up` remembers it — no license-tier cache required.
+
+### Changed
+- **Closes the Windows Docker gap.** Winget/MSI/Scoop now install the tier-aware launcher, which runs Docker for Free/Lite/Pro and Multipass for Max — no separate Windows package needed.
+- **cloud-learn `.deb` + `.rpm` now bundle `docker-compose.cloudlite.yml`** so the launcher's Docker path finds it; the source tarball ships it too.
+- **Default substrate is now Docker** (was Multipass). Existing Max users with a VM are auto-detected (→ Multipass); new Max users use `vyomi up --multipass` (persisted). The portal download center steers Max to `--multipass`.
+- **Download center collapsed to one tier-aware package set** (portal): the separate `vyomi-docker` methods are gone; every package manager serves all tiers, with `docker-compose` the only Free/Lite/Pro-exclusive method.
+
+### Note
+- The `~/.vyomi/tier` license cache (for fully-automatic Max→Multipass selection) is read but not yet written by the simulator — deferred to a follow-up. The persisted-choice + `--multipass` hint mitigate it with no behavior break.
+
 ## [2.2.1] — 2026-06-24
 
 The **`vyomi-docker` package family** — tier-appropriate installers, so a
