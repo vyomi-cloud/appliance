@@ -47,14 +47,18 @@ e2e.mjs                  headless Playwright proof of the whole in-browser loop
 ```
 
 ## Run it
+The `wasm/` folder is a SELF-CONTAINED web root — serve only it, so the repo
+source is never exposed (`/server.py` etc. 404). Entry is the splash at `/`.
 ```sh
 python3 wasm/build_fixtures.py            # dump the real catalog + routes (regen after catalog changes)
 python3 wasm/make_console.py              # inject the boot loader into the console
 python3 wasm/test_conformance.py          # validate the backend (no browser)
-python3 -m http.server 8000               # from the repo root
-# open http://localhost:8000/wasm/console.html   # the REAL aws-console, in-browser
+cd wasm && python3 -m http.server 8000    # serve wasm/ AS THE ROOT
+# open http://localhost:8000/             # splash → spaces → AWS console
 ```
-Headless proof: `PW=$(npm root -g)/playwright node wasm/e2e.mjs`.
+Flow: `index.html` (splash) → `spaces.html` (pick a space) → `console.html`
+(loader: establishes service-worker control) → `aws-console.html` (the real
+console). Headless proof of the whole flow: `PW=$(npm root -g)/playwright node wasm/e2e.mjs`.
 
 ## Milestones
 - **0 (done)**: provider-pluggable in-memory backend + Pyodide harness + SW shim.

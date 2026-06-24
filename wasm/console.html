@@ -24,11 +24,11 @@
   </div>
 <script>
 (async () => {
-  const CONSOLE = "/wasm/aws-console.html";
+  const CONSOLE = "/aws-console.html";
   const st = (t) => { document.getElementById("status").textContent = t; };
   if (!("serviceWorker" in navigator)) { st("This browser has no service-worker support."); return; }
   try {
-    await navigator.serviceWorker.register("/wasm/sw.js", { scope: "/wasm/" });
+    await navigator.serviceWorker.register("/sw.js", { scope: "/" });
     await navigator.serviceWorker.ready;
     // Reload THIS page (no API calls, so safe) until the SW is controlling it.
     if (!navigator.serviceWorker.controller) {

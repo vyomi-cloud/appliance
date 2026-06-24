@@ -16,7 +16,6 @@ const pwPath = process.env.PW || "playwright";
 const { chromium } = require(pwPath);
 
 const BASE = process.env.BASE || "http://localhost:8000";
-const URL = BASE + "/wasm/console.html";
 const log = [];
 const browser = await chromium.launch();
 const page = await (await browser.newContext()).newPage();
@@ -25,7 +24,14 @@ page.on("pageerror", (e) => log.push("[pageerror] " + e.message));
 const fail = (m) => { console.log("FAIL:", m); console.log(log.slice(-30).join("\n")); process.exit(1); };
 
 try {
-  await page.goto(URL, { waitUntil: "load" });
+  // Full flow: splash -> spaces -> console (the repo source is never served).
+  await page.goto(BASE + "/", { waitUntil: "load" });
+  if (!(await page.evaluate(() => document.body.innerText.includes("Multi-cloud")))) fail("splash didn't render");
+  await page.getByText("Launch console").click();
+  await page.waitForURL("**/spaces.html", { timeout: 10000 });
+  await page.getByText("Open console").first().click();   // -> /console.html loader
+  console.log("0. PASS — splash → spaces → open console (no codebase exposed)");
+
   await page.waitForFunction(() => {
     const b = document.getElementById("nano-banner");
     return b && /ready/i.test(b.textContent);

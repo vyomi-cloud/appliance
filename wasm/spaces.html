@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<!-- Vyomi Nano — spaces. Mirrors the appliance flow: choose a space (a
+     per-cloud sandbox) and open its provider console. In Nano each provider
+     has one in-browser space; opening it goes through console.html (the loader
+     that establishes service-worker control before the console boots). -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vyomi Nano — Spaces</title>
+  <style>
+    :root { --bg:#05071a; --panel:#0d1030; --panel2:#11163a; --border:#1c1f3b; --ink:#e4e4e7; --dim:#8b8ba7; --ok:#34d399; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:15px/1.6 ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif;
+      background:radial-gradient(1100px 520px at 50% -10%, #11163a 0%, var(--bg) 60%); color:var(--ink); min-height:100vh; }
+    header { display:flex; align-items:center; gap:12px; padding:18px 26px; border-bottom:1px solid var(--border); }
+    header .logo { font-weight:800; color:var(--dim); } header .logo b { color:var(--ink); }
+    header a { margin-left:auto; color:var(--dim); text-decoration:none; font-size:13px; }
+    .wrap { max-width:860px; margin:0 auto; padding:34px 26px; }
+    h1 { font-size:24px; margin:0 0 4px; } .lead { color:var(--dim); margin:0 0 26px; font-size:14px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px; }
+    .card { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:10px; }
+    .card.soon { opacity:.55; }
+    .row { display:flex; align-items:center; gap:11px; }
+    .pic { width:38px; height:38px; border-radius:9px; display:grid; place-items:center; font-weight:800; font-size:14px; color:#000; }
+    .aws { background:#ff9900; } .gcp { background:#4285f4; color:#fff; } .azure { background:#0078d4; color:#fff; }
+    .name { font-weight:700; } .meta { font-size:12px; color:var(--dim); }
+    .tag { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); color:var(--dim); }
+    .tag.live { color:var(--ok); border-color:rgba(52,211,153,.4); background:rgba(52,211,153,.08); }
+    .open { margin-top:auto; display:inline-flex; justify-content:center; align-items:center; gap:8px; text-decoration:none;
+      background:#3b82f6; color:#fff; font-weight:700; font-size:13.5px; padding:10px 14px; border-radius:9px; }
+    .open:hover { background:#2f73e0; } .open.disabled { background:#222748; color:#6b6b8a; pointer-events:none; }
+    .facts { display:flex; gap:14px; font-size:12px; color:var(--dim); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo"><b>vyomi</b> · nano</div>
+    <a href="/">← Home</a>
+  </header>
+  <div class="wrap">
+    <h1>Your spaces</h1>
+    <p class="lead">A space is an isolated per-cloud sandbox. Open one to launch its native console — all in this tab.</p>
+    <div class="grid">
+
+      <div class="card">
+        <div class="row">
+          <div class="pic aws">AWS</div>
+          <div><div class="name">Nano AWS</div><div class="meta">us-east-1 · 000000000000</div></div>
+          <span class="tag live" style="margin-left:auto">running</span>
+        </div>
+        <div class="facts"><span>9 services</span><span>in-browser</span></div>
+        <a class="open" href="/console.html">Open console →</a>
+      </div>
+
+      <div class="card soon">
+        <div class="row">
+          <div class="pic gcp">GCP</div>
+          <div><div class="name">Nano GCP</div><div class="meta">us-central1</div></div>
+          <span class="tag" style="margin-left:auto">milestone 2</span>
+        </div>
+        <div class="facts"><span>catalog pending</span></div>
+        <a class="open disabled">Coming soon</a>
+      </div>
+
+      <div class="card soon">
+        <div class="row">
+          <div class="pic azure">AZ</div>
+          <div><div class="name">Nano Azure</div><div class="meta">eastus</div></div>
+          <span class="tag" style="margin-left:auto">milestone 2</span>
+        </div>
+        <div class="facts"><span>catalog pending</span></div>
+        <a class="open disabled">Coming soon</a>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

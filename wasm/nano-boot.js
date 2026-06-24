@@ -13,7 +13,7 @@
  * The console's own boot() fires its fetches at parse; the SW holds them until
  * step 4, so there's no race — early calls just wait for the backend.
  */
-const BASE = "/wasm";
+const BASE = "";  // wasm/ is the web root (see sw.js)
 const MODULES = [
   "backends/store.py",
   "providers/registry.py", "providers/aws.py", "providers/gcp.py",

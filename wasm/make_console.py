@@ -13,7 +13,7 @@ ROOT = os.path.dirname(HERE)
 SRC = os.path.join(ROOT, "static", "aws-console.html")
 DST = os.path.join(HERE, "aws-console.html")
 
-INJECT = '  <script type="module" src="/wasm/nano-boot.js"></script>\n</head>'
+INJECT = '  <script type="module" src="/nano-boot.js"></script>\n</head>'
 
 
 def main():
@@ -21,7 +21,10 @@ def main():
         html = f.read()
     if "</head>" not in html:
         raise SystemExit("no </head> in source console — cannot inject loader")
-    if "/wasm/nano-boot.js" in html:
+    # Point the console's "back to spaces" navigation at the Nano spaces page
+    # (the appliance's /ui doesn't exist in the wasm-only web root).
+    html = html.replace('"/ui"', '"/spaces.html"')
+    if "/nano-boot.js" in html:
         out = html  # already injected
     else:
         out = html.replace("</head>", INJECT, 1)

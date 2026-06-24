@@ -17,8 +17,10 @@
  * The backend itself (Pyodide + wasm/) lives on the page; we postMessage the
  * (provider, service, op, params) tuple there and await the JSON.
  */
-const BASE = "/wasm";
-const FIX = BASE + "/fixtures";
+// Served with the wasm/ folder as the web root, so assets live at "/" (the
+// repo source is never exposed). Scope "/" lets the SW intercept /api/* too.
+const BASE = "";
+const FIX = "/fixtures";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));

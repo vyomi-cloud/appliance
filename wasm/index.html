@@ -1,123 +1,49 @@
 <!DOCTYPE html>
-<!-- Vyomi Nano — in-browser conformance harness (POC).
-     Boots Pyodide (CPython -> WASM), loads the SAME wasm/ Python backend that
-     passes wasm/test_conformance.py, and proves the cloud API runs entirely in
-     the browser tab — no server. Milestone 0 of "run the plain SPA with API
-     conformance". Serve it:  python3 -m http.server  (from the repo root), then
-     open  http://localhost:8000/wasm/  -->
+<!-- Vyomi Nano — splash / landing. Entry point of the in-browser app. The
+     wasm/ folder is the web root, so the repo source is never served. Flow:
+     splash (here) -> spaces -> provider console. -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Vyomi Nano — in-browser conformance (POC)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vyomi Nano — multi-cloud, in your browser</title>
   <style>
-    body { font: 14px/1.5 ui-monospace, Menlo, monospace; background:#05071a; color:#e4e4e7; max-width:820px; margin:40px auto; padding:0 20px; }
-    h1 { font-size:20px; } .ok{color:#34d399} .err{color:#f87171} .dim{color:#71717a}
-    pre { background:#14172e; border:1px solid #1c1f3b; border-radius:8px; padding:14px; overflow:auto; white-space:pre-wrap; }
-    button { background:#3b82f6; color:#fff; border:0; border-radius:6px; padding:8px 14px; cursor:pointer; font:inherit; }
-    select,input { background:#14172e; color:#e4e4e7; border:1px solid #1c1f3b; border-radius:6px; padding:6px 8px; font:inherit; }
+    :root { --bg:#05071a; --panel:#0d1030; --border:#1c1f3b; --ink:#e4e4e7; --dim:#8b8ba7; --accent:#3b82f6; --ok:#34d399; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:15px/1.6 ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif; background:
+      radial-gradient(1100px 520px at 50% -10%, #11163a 0%, var(--bg) 60%); color:var(--ink);
+      min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; }
+    .logo { font-weight:800; letter-spacing:.5px; font-size:15px; color:var(--dim); margin-bottom:26px; }
+    .logo b { color:var(--ink); }
+    h1 { font-size:38px; line-height:1.15; margin:0 0 14px; text-align:center; font-weight:800; letter-spacing:-.5px; }
+    h1 .g { background:linear-gradient(90deg,#60a5fa,#a78bfa); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    p.sub { font-size:16px; color:var(--dim); max-width:560px; text-align:center; margin:0 0 30px; }
+    .cta { display:inline-flex; align-items:center; gap:9px; background:var(--accent); color:#fff; text-decoration:none;
+      font-weight:700; font-size:15px; padding:13px 26px; border-radius:10px; box-shadow:0 8px 24px rgba(59,130,246,.35); }
+    .cta:hover { background:#2f73e0; }
+    .badge { display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ok); background:rgba(52,211,153,.1);
+      border:1px solid rgba(52,211,153,.3); padding:4px 11px; border-radius:999px; margin-bottom:22px; }
+    .dot { width:7px; height:7px; border-radius:50%; background:var(--ok); }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; max-width:680px; width:100%; margin-top:40px; }
+    .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; }
+    .card h3 { margin:0 0 5px; font-size:14px; } .card p { margin:0; font-size:12.5px; color:var(--dim); line-height:1.5; }
+    .foot { margin-top:34px; font-size:12px; color:#5a5a78; } .foot a { color:#7c7ca6; }
   </style>
 </head>
 <body>
-  <h1>Vyomi Nano — cloud API, <span class="ok">100% in the browser</span></h1>
-  <p class="dim">Pyodide runs the same <code>wasm/</code> Python backend that passes the conformance test.
-     No server, no network. Multi-cloud + provider-pluggable (a new cloud is one module).</p>
+  <div class="logo"><b>vyomi</b> · nano</div>
+  <div class="badge"><span class="dot"></span> Runs 100% in your browser — no server, no install</div>
+  <h1>Multi-cloud, <span class="g">in a browser tab</span></h1>
+  <p class="sub">The real AWS / GCP / Azure consoles, served entirely client-side by Pyodide + a
+     service-worker backend. Build against the cloud APIs with nothing to spin up.</p>
+  <a class="cta" href="/spaces.html">Launch console &nbsp;→</a>
 
-  <h3>1. Boot + conformance self-test</h3>
-  <pre id="boot">booting Pyodide…</pre>
-
-  <h3>2. Try a call (served in this tab)</h3>
-  <div>
-    <select id="cloud"><option>aws</option><option>gcp</option><option>azure</option><option>oci</option></select>
-    bucket <input id="bucket" value="demo" size="8">
-    key <input id="key" value="hello.txt" size="10">
-    body <input id="body" value="written in-browser" size="18">
-    <button id="put">Put</button> <button id="get">Get</button>
+  <div class="grid">
+    <div class="card"><h3>Native console</h3><p>The same console UI as Pro/Max, driven by the real service catalog.</p></div>
+    <div class="card"><h3>Provider-pluggable</h3><p>AWS today; GCP, Azure &amp; more join additively — one module each.</p></div>
+    <div class="card"><h3>Zero backend</h3><p>State lives in the tab. Nothing leaves your machine.</p></div>
   </div>
-  <pre id="out" class="dim">(make a call)</pre>
 
-<script type="module">
-import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs";
-const boot = document.getElementById("boot"), out = document.getElementById("out");
-let py, dispatch;
-
-// Fetch the wasm/ python modules into Pyodide's FS, preserving package layout.
-const MODULES = [
-  "backends/store.py",
-  "providers/registry.py", "providers/aws.py", "providers/gcp.py",
-  "providers/azure.py", "providers/oracle.py", "providers/__init__.py",
-];
-async function loadBackend() {
-  py = await loadPyodide();
-  py.FS.mkdir("/wasm"); py.FS.mkdir("/wasm/backends"); py.FS.mkdir("/wasm/providers");
-  py.FS.writeFile("/wasm/__init__.py", "");
-  py.FS.writeFile("/wasm/backends/__init__.py", "");
-  for (const m of MODULES) {
-    const src = await (await fetch(m)).text();
-    py.FS.writeFile("/wasm/" + m, src);
-  }
-  py.runPython(`
-import sys; sys.path.insert(0, "/")
-from wasm.backends.store import Backends
-from wasm import providers as P
-B = Backends()
-def _disp(provider, service, op, params):
-    import json
-    return json.dumps(P.dispatch(B, provider, service, op, params=dict(params)))
-import builtins; builtins._disp = _disp
-print("providers:", P.providers())
-`);
-  dispatch = (prov, svc, op, params) =>
-    JSON.parse(py.runPython(`_disp(${JSON.stringify(prov)}, ${JSON.stringify(svc)}, ${JSON.stringify(op)}, ${JSON.stringify(params)})`));
-}
-
-(async () => {
-  try {
-    await loadBackend();
-    // run the conformance self-test in-browser
-    const code = await (await fetch("test_conformance.py")).text();
-    py.FS.writeFile("/wasm/test_conformance.py", code);
-    let log = "";
-    py.setStdout({ batched: (s) => log += s + "\n" });
-    py.runPython("import runpy; runpy.run_path('/wasm/test_conformance.py', run_name='__main__')");
-    boot.innerHTML = '<span class="ok">PASS</span> — Pyodide booted, backend loaded, conformance green:\n\n' + log;
-  } catch (e) {
-    boot.innerHTML = '<span class="err">boot failed:</span> ' + e;
-  }
-})();
-
-// service-op map per cloud for the demo
-const OPS = {
-  aws:   { put:["s3","PutObject",(b,k,v)=>({bucket:b,key:k,body:v})],    get:["s3","GetObject",(b,k)=>({bucket:b,key:k})] },
-  gcp:   { put:["storage","insert",(b,k,v)=>({bucket:b,object:k,body:v})], get:["storage","get",(b,k)=>({bucket:b,object:k})] },
-  azure: { put:["blob","PutBlob",(b,k,v)=>({container:b,blob:k,body:v})],  get:["blob","GetBlob",(b,k)=>({container:b,blob:k})] },
-  oci:   { put:["objectstorage","PutObject",(b,k,v)=>({bucket:b,name:k,body:v})], get:["objectstorage","GetObject",(b,k)=>({bucket:b,name:k})] },
-};
-function call(kind) {
-  const c = document.getElementById("cloud").value, b = bucket.value, k = key.value, v = body.value;
-  const [svc, op, mk] = OPS[c][kind];
-  const res = dispatch(c, svc, op, kind === "put" ? mk(b,k,v) : mk(b,k));
-  out.className = ""; out.textContent = `${c} ${svc}.${op}\n` + JSON.stringify(res, null, 2);
-}
-document.getElementById("put").onclick = () => call("put");
-document.getElementById("get").onclick = () => call("get");
-
-// Page side of the SW round-trip: when the service worker intercepts a /api/*
-// request, it postMessages the (provider,service,op,params) tuple here; we run
-// it through the Pyodide backend and post the JSON result back. This is how the
-// SPA's fetch gets served fully in-browser.
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.addEventListener("message", (ev) => {
-    if (!ev.data || ev.data.type !== "vyomi-dispatch" || !dispatch) return;
-    const port = ev.ports[0];
-    try {
-      const [prov, svc, op, params] = ev.data.tuple;
-      port.postMessage(dispatch(prov, svc, op, params || {}));
-    } catch (e) {
-      port.postMessage({ ok: false, error: String(e) });
-    }
-  });
-  navigator.serviceWorker.register("sw.js").catch(() => {});
-}
-</script>
+  <div class="foot">Nano (conformance) &middot; <a href="/demo.html">backend self-test</a></div>
 </body>
 </html>
