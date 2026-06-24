@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# vyomi-docker — Docker-substrate launcher for the Free / Lite / Pro tiers.
+#
+# Runs the Vyomi simulator via `docker compose` using the pull-only
+# docker-compose.cloudlite.yml shipped in this package. It NEVER installs or
+# touches Multipass / LXD — that's the Max tier (the `cloud-learn`/`vyomi`
+# launcher package). Compute (Pro) runs as sibling Docker containers.
+#
+# Usage:  vyomi up | down | restart | status | logs | update
+set -euo pipefail
+
+COMPOSE_FILE="${VYOMI_COMPOSE_FILE:-/usr/share/vyomi-docker/docker-compose.cloudlite.yml}"
+PROJECT="${VYOMI_PROJECT:-vyomi}"
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "vyomi: Docker is required but was not found on PATH." >&2
+  echo "  Install Docker Desktop (macOS/Windows) or Docker Engine (Linux):" >&2
+  echo "    https://docs.docker.com/engine/install/" >&2
+  exit 1
+fi
+
+# Prefer the Compose v2 plugin (`docker compose`); fall back to v1 binary.
+if docker compose version >/dev/null 2>&1; then
+  DC=(docker compose)
+else
+  DC=(docker-compose)
+fi
+dc() { "${DC[@]}" -f "$COMPOSE_FILE" -p "$PROJECT" "$@"; }
+
+case "${1:-up}" in
+  up|start)
+    dc up -d
+    echo "==> Vyomi (Docker) is starting. Open http://localhost:9000 in ~30s."
+    echo "    Pro tier: launch an EC2 instance in the console, then ssh ubuntu@<ip>."
+    ;;
+  down|stop)       dc down ;;
+  restart)         dc down; dc up -d ;;
+  status|ps)       dc ps ;;
+  logs)            shift; dc logs "$@" ;;
+  update|upgrade)  dc pull && dc up -d ;;
+  -h|--help|help)
+    echo "vyomi (Docker substrate) — Free/Lite/Pro tiers"
+    echo "  vyomi up | down | restart | status | logs | update"
+    ;;
+  *)               dc "$@" ;;
+esac

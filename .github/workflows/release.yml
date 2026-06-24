@@ -181,6 +181,12 @@ jobs:
             --package "dist/cloud-learn-${{ steps.ver.outputs.version }}-1.noarch.rpm" \
             .
 
+      - name: Build vyomi-docker (.deb + .rpm — Docker substrate, Free/Lite/Pro)
+        # Thin Docker-substrate launcher: the `vyomi` wrapper + the pull-only
+        # docker-compose.cloudlite.yml, no Multipass/LXD. Conflicts with
+        # cloud-learn (both own /usr/bin/vyomi) — a host installs one or other.
+        run: bash packaging/docker/build-docker-packages.sh "${{ steps.ver.outputs.version }}"
+
       - name: Compute SHA256 of tarball (Homebrew formula bump needs it)
         id: shas
         run: |
