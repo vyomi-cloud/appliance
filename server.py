@@ -11383,7 +11383,8 @@ def api_license_signup(req: LicenseSignupRequest):
     # Per-tier credit allowance (used for soft API-call metering).
     # Legacy "student"/"developer" keys retained so JWTs minted before the
     # 2026-06-17 rename still get the right credit count.
-    credit_table = {"free": 100, "pro": 1000, "max": 10000, "enterprise": 50000,
+    credit_table = {"free": 100, "nano": 300, "micro": 500, "lite": 800,
+                    "pro": 1000, "max": 10000, "enterprise": 50000,
                     "student": 1000, "developer": 10000}
     payload = {
         "license_id":      _id("lic"),

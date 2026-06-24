@@ -89,6 +89,17 @@ FREE_UNLOCKED_CATEGORIES = {
 }
 FREE_LOCKED_CATEGORIES = {"nosql", "eventing"}
 
+# v2.2.0 — the conformance pack = every service category. The "API-only" tiers
+# (Nano, Lite) unlock the full pack but LOCK real-VM compute (EC2/VMs); the
+# compute axis is the differentiator vs Micro/Pro/Max. "compute" = EC2/VM only
+# (serverless/lambda stays unlocked — it's API conformance, not a VM).
+ALL_CATEGORIES = {
+    "compute", "serverless", "object_storage", "relational_db",
+    "api_gateway", "iam", "network", "secrets", "kms", "queue",
+    "nosql", "eventing",
+}
+CONFORMANCE_NO_COMPUTE = ALL_CATEGORIES - {"compute"}
+
 
 # ---------------------------------------------------------------------------
 # Tier policy table — single source of truth.
@@ -102,6 +113,9 @@ UNLIMITED = -1
 # the limit, while Enterprise gets effectively no ceiling.
 RATE_LIMITS_RPS: dict[str, int] = {
     "free":       10,
+    "nano":       20,
+    "micro":      30,
+    "lite":       40,
     "pro":        50,
     "max":        200,
     "enterprise": UNLIMITED,
@@ -147,6 +161,34 @@ def _pro_quantities() -> dict[str, int]:
         "kms_key":         10,
         "iam_user":        50,
     }
+
+
+# v2.2.0 new tiers (tunable defaults — quotas are a product call, structure is final).
+def _nano_quantities() -> dict[str, int]:
+    """Nano (WASM, API-only) — full conformance, NO real compute (vm:0),
+    modest quotas above Free."""
+    return {
+        "vm":              0,   # no real-VM compute (WASM tier)
+        "database":        2,
+        "api_gateway":     3,
+        "bucket":          3,
+        "queue":           3,
+        "lambda_function": 10,
+        "secret":          20,
+        "kms_key":         5,
+        "iam_user":        20,
+    }
+
+
+def _micro_quantities() -> dict[str, int]:
+    """Micro (WASM + in-browser compute) — full conformance + small in-tab
+    compute (CheerpJ/Pyodide/TinyGo)."""
+    return {**_nano_quantities(), "vm": 2}
+
+
+def _lite_quantities() -> dict[str, int]:
+    """Lite (Docker, API-only) = Pro quotas MINUS real compute (vm:0)."""
+    return {**_pro_quantities(), "vm": 0}
 
 
 def _max_quantities() -> dict[str, int]:
@@ -225,10 +267,156 @@ _TIER_POLICY: dict[str, dict[str, Any]] = {
         "support":        "community",
         "update_channel": "quarterly",
     },
+    # ── v2.2.0 conformance tiers (WASM substrate) ──────────────────────────
+    # Nano/Micro run in-browser (WASM); the substrate is set by the install, not
+    # here — this layer only gates capability. Nano = full conformance, no real
+    # compute. Micro = full conformance + small in-browser compute.
+    "nano": {
+        "label":                       "Nano",
+        "headline":                    "Full multi-cloud conformance in a browser tab",
+        "price_inr_monthly":           199,
+        "price_inr_annual":            1399,
+        "max_seats":                   1,
+        "min_seats":                   1,
+        "max_tenants":                 1,
+        "max_spaces":                  2,
+        "primary_cloud_required":      False,
+        "providers":                   ["aws", "gcp", "azure"],
+        "service_categories_unlocked": sorted(CONFORMANCE_NO_COMPUTE),
+        "service_categories_locked":   ["compute"],
+        "per_space_quantities":        _nano_quantities(),
+        "max_vm_size_tier":            "small",
+        "max_db_size_tier":            "small",
+        "storage_bytes_cap":           2 * 1024 ** 3,
+        "appliance_disk_gb":           10,
+        "auto_grow_disk":              False,
+        "activity_log_retention_hours": 48,
+        "features": {
+            "cloud_sdks":      "Native (override endpoint)",
+            "provider_clis":   "Native (override endpoint)",
+            "api_access":      "Full conformance × 3 clouds · no compute",
+            "workload_scale":  "API/SDK conformance · in-browser",
+            "cloud_consoles":  "3 consoles · compute read-only",
+            "tier_support":    "Community · GitHub",
+            "cloud_shell":                  False,
+            "cedar_enforcement":            False,
+            "cloudsim_power":               False,
+            "cloudsim_network_sla_migration": False,
+            "cost_simulation":              False,
+            "terraform_export":             "basic",
+            "terraform_deploy_to_real":     False,
+            "audit_export_sinks":           False,
+            "sso":                          False,
+            "cross_tenant_rbac":            False,
+            "helm":                         False,
+            "custom_domain":                False,
+            "branding":                     False,
+            "notifications":                False,
+            "ci_integration":               False,
+            "scaffolding_generator":        False,
+        },
+        "support":        "community",
+        "update_channel": "monthly",
+    },
+    "micro": {
+        "label":                       "Micro",
+        "headline":                    "Conformance + in-browser compute (Pyodide · CheerpJ · TinyGo)",
+        "price_inr_monthly":           299,
+        "price_inr_annual":            2099,
+        "max_seats":                   1,
+        "min_seats":                   1,
+        "max_tenants":                 1,
+        "max_spaces":                  3,
+        "primary_cloud_required":      False,
+        "providers":                   ["aws", "gcp", "azure"],
+        "service_categories_unlocked": "ALL",
+        "service_categories_locked":   [],
+        "per_space_quantities":        _micro_quantities(),
+        "max_vm_size_tier":            "small",
+        "max_db_size_tier":            "small",
+        "storage_bytes_cap":           3 * 1024 ** 3,
+        "appliance_disk_gb":           10,
+        "auto_grow_disk":              False,
+        "activity_log_retention_hours": 72,
+        "features": {
+            "cloud_sdks":      "Native (override endpoint)",
+            "provider_clis":   "Native (override endpoint)",
+            "api_access":      "Full conformance × 3 clouds",
+            "workload_scale":  "In-browser compute · Pyodide/CheerpJ/TinyGo",
+            "cloud_consoles":  "3 consoles unlocked",
+            "tier_support":    "Discord + GitHub",
+            "cloud_shell":                  True,
+            "cedar_enforcement":            False,
+            "cloudsim_power":               True,
+            "cloudsim_network_sla_migration": False,
+            "cost_simulation":              "totals",
+            "terraform_export":             "full",
+            "terraform_deploy_to_real":     False,
+            "audit_export_sinks":           False,
+            "sso":                          False,
+            "cross_tenant_rbac":            False,
+            "helm":                         False,
+            "custom_domain":                False,
+            "branding":                     False,
+            "notifications":                False,
+            "ci_integration":               False,
+            "scaffolding_generator":        False,
+        },
+        "support":        "community + monthly office hours",
+        "update_channel": "monthly",
+    },
+    # ── v2.2.0 Lite (Docker substrate, API-only) = Pro quotas minus compute ──
+    "lite": {
+        "label":                       "Lite",
+        "headline":                    "The full conformance pack on Docker — no compute overhead",
+        "price_inr_monthly":           399,
+        "price_inr_annual":            2799,
+        "max_seats":                   1,
+        "min_seats":                   1,
+        "max_tenants":                 1,
+        "max_spaces":                  5,
+        "primary_cloud_required":      False,
+        "providers":                   ["aws", "gcp", "azure"],
+        "service_categories_unlocked": sorted(CONFORMANCE_NO_COMPUTE),
+        "service_categories_locked":   ["compute"],
+        "per_space_quantities":        _lite_quantities(),
+        "max_vm_size_tier":            "small",
+        "max_db_size_tier":            "medium",
+        "storage_bytes_cap":           10 * 1024 ** 3,
+        "appliance_disk_gb":           30,
+        "auto_grow_disk":              True,
+        "activity_log_retention_hours": 7 * 24,
+        "features": {
+            "cloud_sdks":      "Native (override endpoint)",
+            "provider_clis":   "Native (override endpoint)",
+            "api_access":      "Full conformance × 3 clouds · no compute",
+            "workload_scale":  "Heavy API/SDK conformance on Docker",
+            "cloud_consoles":  "3 consoles · compute read-only",
+            "tier_support":    "Discord + GitHub",
+            "cloud_shell":                  True,
+            "cedar_enforcement":            False,
+            "cloudsim_power":               True,
+            "cloudsim_network_sla_migration": False,
+            "cost_simulation":              "totals",
+            "terraform_export":             "full",
+            "terraform_deploy_to_real":     False,
+            "audit_export_sinks":           False,
+            "sso":                          False,
+            "cross_tenant_rbac":            False,
+            "helm":                         False,
+            "custom_domain":                False,
+            "branding":                     False,
+            "notifications":                False,
+            "ci_integration":               False,
+            "scaffolding_generator":        False,
+        },
+        "support":        "community + monthly office hours",
+        "update_channel": "monthly",
+    },
     "pro": {
         "label":                       "Pro",
         "headline":                    "All services on one cloud, build many apps",
-        "price_inr_monthly":           299,
+        "price_inr_monthly":           499,
         "price_inr_annual":            2099,
         "max_seats":                   1,
         "min_seats":                   1,
@@ -394,7 +582,7 @@ _LEGACY_TIER_MAP = {
     "ent":       "enterprise",
 }
 
-KNOWN_TIERS = ("free", "pro", "max", "enterprise")
+KNOWN_TIERS = ("free", "nano", "micro", "lite", "pro", "max", "enterprise")
 
 
 def normalize_tier(tier: str | None) -> str:
