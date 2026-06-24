@@ -137,6 +137,7 @@ jobs:
             core providers packs routes static \
             server.py setup_cython.py requirements.txt VERSION \
             Dockerfile docker-compose.yml docker-compose.appliance.yml \
+            docker-compose.cloudlite.yml \
             cloudsim-backbone \
             .env.example packaging scripts docs install.sh \
             README.md CHANGELOG.md LICENSE
@@ -338,26 +339,34 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
 
-      - name: Bump formula
+      - name: Checkout main repo (vyomi-docker formula template)
+        uses: actions/checkout@v4
+        with:
+          path: src
+
+      - name: Bump formulae (cloud-learn / Max + vyomi-docker / Free·Lite·Pro)
         run: |
           VER="${{ needs.build.outputs.version }}"
           SHA="${{ needs.build.outputs.tarball_sha256 }}"
-          F=tap/Formula/vyomi.rb
-          # Point at the workflow-built RELEASE-ASSET tarball — that's the
-          # file whose SHA we compute in the build job (the GitHub
-          # auto-tarball at /archive/refs/tags/* has different bytes and
-          # a different SHA).
-          sed -i.bak \
-            -e "s|url \".*\"|url \"https://github.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}/releases/download/v${VER}/cloud-learn-${VER}.tar.gz\"|" \
-            -e "s|sha256 \".*\"|sha256 \"${SHA}\"|" \
-            -e "s|version \".*\"|version \"${VER}\"|" \
-            "$F"
-          rm -f "$F.bak"
+          URL="https://github.com/${{ env.GH_OWNER }}/${{ env.GH_REPO }}/releases/download/v${VER}/cloud-learn-${VER}.tar.gz"
+          bump() {  # $1 = formula path — both ship from the SAME release tarball
+            sed -i.bak \
+              -e "s|url \".*\"|url \"${URL}\"|" \
+              -e "s|sha256 \".*\"|sha256 \"${SHA}\"|" \
+              -e "s|version \".*\"|version \"${VER}\"|" \
+              "$1"
+            rm -f "$1.bak"
+          }
+          # Max (Multipass) formula — already in the tap.
+          bump tap/Formula/vyomi.rb
+          # Docker (Free/Lite/Pro) formula — copy the template from the main repo.
+          cp src/packaging/homebrew/Formula/vyomi-docker.rb tap/Formula/vyomi-docker.rb
+          bump tap/Formula/vyomi-docker.rb
           cd tap
           git config user.email "bot@vyomi.cloud"
           git config user.name  "Vyomi Release Bot"
-          git add Formula/vyomi.rb
-          git commit -m "vyomi ${VER}"
+          git add Formula/vyomi.rb Formula/vyomi-docker.rb
+          git commit -m "vyomi ${VER} (cloud-learn + vyomi-docker)"
           git push
 
   # ── Snap Store publish ──────────────────────────────────────────────────

@@ -9,7 +9,32 @@
 # Usage:  vyomi up | down | restart | status | logs | update
 set -euo pipefail
 
-COMPOSE_FILE="${VYOMI_COMPOSE_FILE:-/usr/share/vyomi-docker/docker-compose.cloudlite.yml}"
+# Help works without Docker or the bundled compose file (used by the brew test).
+case "${1:-up}" in
+  -h|--help|help)
+    echo "vyomi (Docker substrate) — Free/Lite/Pro tiers"
+    echo "  vyomi up | down | restart | status | logs | update"
+    echo "  Runs the simulator via 'docker compose up'; never touches Multipass."
+    exit 0
+    ;;
+esac
+
+# Find the bundled compose file. Works for both the .deb/.rpm layout
+# (/usr/bin/vyomi + /usr/share/vyomi-docker/) and the Homebrew layout
+# (PREFIX/bin/vyomi + PREFIX/share/vyomi-docker/), via a path relative to
+# this script. Override with VYOMI_COMPOSE_FILE.
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+COMPOSE_FILE="${VYOMI_COMPOSE_FILE:-}"
+if [ -z "$COMPOSE_FILE" ]; then
+  for _c in "/usr/share/vyomi-docker/docker-compose.cloudlite.yml" \
+            "$SELF_DIR/../share/vyomi-docker/docker-compose.cloudlite.yml"; do
+    if [ -f "$_c" ]; then COMPOSE_FILE="$_c"; break; fi
+  done
+fi
+if [ -z "$COMPOSE_FILE" ] || [ ! -f "$COMPOSE_FILE" ]; then
+  echo "vyomi: bundled docker-compose.cloudlite.yml not found (set VYOMI_COMPOSE_FILE)." >&2
+  exit 1
+fi
 PROJECT="${VYOMI_PROJECT:-vyomi}"
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -38,9 +63,5 @@ case "${1:-up}" in
   status|ps)       dc ps ;;
   logs)            shift; dc logs "$@" ;;
   update|upgrade)  dc pull && dc up -d ;;
-  -h|--help|help)
-    echo "vyomi (Docker substrate) — Free/Lite/Pro tiers"
-    echo "  vyomi up | down | restart | status | logs | update"
-    ;;
   *)               dc "$@" ;;
 esac
