@@ -44,7 +44,7 @@ mkdir -p "$STAGE/usr/share/vyomi/packaging/common"
 # Verified by scripts/verify-bundle.sh.
 cp -r core providers packs routes static scripts packaging cloudsim-backbone \
       server.py setup_cython.py requirements.txt VERSION Dockerfile \
-      docker-compose.yml docker-compose.appliance.yml .env.example \
+      docker-compose.yml docker-compose.appliance.yml docker-compose.cloudlite.yml .env.example \
       "$STAGE/usr/lib/cloud-learn/"
 
 # Phone-home script + VERSION (so it can self-report the right version

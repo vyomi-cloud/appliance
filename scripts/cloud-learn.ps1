@@ -703,6 +703,49 @@ Environment (VYOMI_* preferred; CLOUD_LEARN_* still honored):
 '@ | Write-Output
 }
 
+# -- Tier-aware substrate (v2.2.2) ----------------------------------------
+# One launcher, two substrates: Docker (Free/Lite/Pro) and Multipass (Max).
+# Mirrors the bash launcher's resolution order.
+function Resolve-Substrate {
+  $s = Get-EnvAny @('VYOMI_SUBSTRATE') ''
+  $h = $env:USERPROFILE
+  if (-not $s -and (Test-Path "$h\.vyomi\tier")) {
+    $tier = ((Get-Content "$h\.vyomi\tier" -Raw -ErrorAction SilentlyContinue) + '').Trim().ToLower()
+    if ($tier -eq 'max' -or $tier -eq 'enterprise') { $s = 'multipass' }
+    elseif ($tier -eq 'free' -or $tier -eq 'lite' -or $tier -eq 'pro' -or $tier -eq 'nano' -or $tier -eq 'micro') { $s = 'docker' }
+  }
+  if (-not $s -and (Test-Path "$h\.vyomi\substrate")) {
+    $s = ((Get-Content "$h\.vyomi\substrate" -Raw -ErrorAction SilentlyContinue) + '').Trim().ToLower()
+  }
+  if (-not $s) {
+    if ((Get-Command multipass -ErrorAction SilentlyContinue) -and (Get-ApplianceRecord)) { $s = 'multipass' } else { $s = 'docker' }
+  }
+  if ($s -eq 'multipass') { 'multipass' } else { 'docker' }
+}
+
+function Invoke-DockerSubstrate {
+  param([string]$Action, [string[]]$DcArgs = @())
+  $cf = Get-EnvAny @('VYOMI_COMPOSE_FILE') ''
+  if (-not $cf) {
+    foreach ($c in @((Join-Path $RootDir 'docker-compose.cloudlite.yml'), (Join-Path $ScriptPath '..\docker-compose.cloudlite.yml'))) {
+      if (Test-Path $c) { $cf = (Resolve-Path $c).Path; break }
+    }
+  }
+  if (-not $cf -or -not (Test-Path $cf)) { Write-Error 'vyomi: docker-compose.cloudlite.yml not found (set VYOMI_COMPOSE_FILE).'; exit 1 }
+  if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    Write-Error 'vyomi: Docker is required for the Free/Lite/Pro tiers. Install Docker Desktop: https://docs.docker.com/desktop/'; exit 1
+  }
+  switch ($Action) {
+    { $_ -in 'up', 'start' }   { & docker compose -f $cf -p vyomi up -d; Write-ProgressLine '==> Vyomi (Docker) starting - open http://localhost:9000 in ~30s' }
+    { $_ -in 'down', 'stop' }  { & docker compose -f $cf -p vyomi down }
+    'restart'                  { & docker compose -f $cf -p vyomi down; & docker compose -f $cf -p vyomi up -d }
+    { $_ -in 'status', 'ps' }  { & docker compose -f $cf -p vyomi ps }
+    'logs'                     { & docker compose -f $cf -p vyomi logs @DcArgs }
+    'update'                   { & docker compose -f $cf -p vyomi pull; & docker compose -f $cf -p vyomi up -d }
+    default                    { & docker compose -f $cf -p vyomi $Action @DcArgs }
+  }
+}
+
 # -- Dispatch -------------------------------------------------------------
 $cmd = if ($RemainingArgs.Count -gt 0) { $RemainingArgs[0] } else { 'help' }
 $cmdArgs = if ($RemainingArgs.Count -gt 1) { $RemainingArgs[1..($RemainingArgs.Count - 1)] } else { @() }
@@ -718,6 +761,22 @@ if ($RuntimeContext -eq 'inner') {
     default { Write-Error "Unknown inner command: $cmd"; Show-Usage; exit 2 }
   }
 } else {
+  # v2.2.2 - tier-aware substrate. Parse --docker/--multipass, then for the
+  # Docker tiers (Free/Lite/Pro) route lifecycle commands to docker compose;
+  # Max falls through to the Multipass switch below.
+  if ($cmd -eq '--docker' -or $cmd -eq '--multipass') {
+    $env:VYOMI_SUBSTRATE = $cmd.TrimStart('-')
+    $cmd = if ($cmdArgs.Count -gt 0) { $cmdArgs[0] } else { 'help' }
+    $cmdArgs = if ($cmdArgs.Count -gt 1) { $cmdArgs[1..($cmdArgs.Count - 1)] } else { @() }
+  }
+  if ($cmdArgs.Count -gt 0 -and ($cmdArgs[0] -eq '--docker' -or $cmdArgs[0] -eq '--multipass')) {
+    $env:VYOMI_SUBSTRATE = $cmdArgs[0].TrimStart('-')
+    $cmdArgs = if ($cmdArgs.Count -gt 1) { $cmdArgs[1..($cmdArgs.Count - 1)] } else { @() }
+  }
+  $lifecycle = @('up', 'down', 'stop', 'restart', 'status', 'ps', 'logs', 'update')
+  if (($lifecycle -contains $cmd) -and ((Resolve-Substrate) -eq 'docker')) {
+    Invoke-DockerSubstrate -Action $cmd -DcArgs $cmdArgs
+  } else {
   switch ($cmd) {
     'up' {
       Initialize-Log
@@ -754,5 +813,6 @@ if ($RuntimeContext -eq 'inner') {
     'doctor' { Write-Doctor }
     'help' { Show-Usage }
     default { Write-Error "Unknown command: $cmd"; Show-Usage; exit 2 }
+  }
   }
 }

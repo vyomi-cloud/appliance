@@ -151,7 +151,8 @@ jobs:
           mkdir -p "$STAGE/usr/lib/cloud-learn" "$STAGE/usr/bin" "$STAGE/usr/share/doc/cloud-learn"
           cp -r core providers packs static scripts \
                 server.py requirements.txt VERSION Dockerfile \
-                docker-compose.yml docker-compose.appliance.yml .env.example install.sh \
+                docker-compose.yml docker-compose.appliance.yml docker-compose.cloudlite.yml \
+                .env.example install.sh \
                 "$STAGE/usr/lib/cloud-learn/"
           # Primary launcher: /usr/bin/vyomi
           cat > "$STAGE/usr/bin/vyomi" <<'EOF'
