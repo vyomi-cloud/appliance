@@ -43,6 +43,9 @@ def _process(src_name, dst_name, inject):
         html = html.replace(a, b)
     # Nano has no appliance to boot — drop the "getting ready" readiness strip.
     html = html.replace('<script src="/assets/readiness-strip.js" defer></script>', "")
+    # "Back to launch" pointed at the appliance's legacy all-in-one console (/),
+    # which isn't part of Nano — Workspaces IS the home. Remove the dead button.
+    html = html.replace('<a class="tb-btn tb-btn-secondary" href="/">← Back to launch</a>', "")
     if "/nano-boot.js" not in html and "/nano-sw.js" not in html:
         html = html.replace("</head>", inject, 1)
     dst = os.path.join(HERE, dst_name)
