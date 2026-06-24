@@ -1,0 +1,58 @@
+# Vyomi Nano — in-browser substrate (WASM tier)
+
+The **Nano** tiers run the simulator entirely in a browser tab — no server, no
+Docker, no Multipass. This directory is the WASM substrate; it reuses the
+existing SPA and (eventually) the existing `server.py` handlers, swapping real
+backends for in-memory/WASM ones behind the `BackendProvider` seam (ADR-001).
+
+Two Nano variants (flags, not forks):
+- **Nano — conformance only**: the cloud API surface, in-memory. No compute.
+- **Nano — with compute** (a.k.a. Micro): + in-tab runtimes (Pyodide / CheerpJ /
+  TinyGo) so user app code runs in the browser.
+
+## Architecture (the loop)
+```
+SPA fetch('/api/...')  ->  service worker (sw.js)  ->  Pyodide + wasm/ backend  ->  JSON
+        (unchanged)         the fetch-ASGI shim         in-memory stores
+```
+A browser has no sockets, so the **service worker is the transport** (the P0).
+
+## Provider-pluggable (more clouds joining)
+Adding a cloud is **additive** — one module that maps its API to the shared
+generic primitives, then `register()`. See `providers/oracle.py` as the proof /
+template for the next cloud (IBM, Alibaba, DigitalOcean, …).
+
+```
+backends/store.py        generic in-memory primitives (object-store, nosql, queue, …)
+providers/registry.py    the plugin registry + dispatch()
+providers/{aws,gcp,azure,oracle}.py   per-cloud mappings (oracle = the new-cloud proof)
+test_conformance.py      pure-Python conformance test (runs here AND in Pyodide)
+index.html               Pyodide harness — loads the backend, runs the self-test, demo
+sw.js                    service worker — intercepts /api/* and routes to the backend
+```
+
+## Run it
+```sh
+python3 wasm/test_conformance.py          # validate the backend (no browser)
+python3 -m http.server                    # from the repo root
+# open http://localhost:8000/wasm/        # boots Pyodide, runs the self-test, demo
+```
+
+## Milestones
+- **0 (done)**: provider-pluggable in-memory backend + Pyodide harness + SW shim
+  skeleton. Conformance green in pure Python; 4 clouds incl. additive Oracle.
+- **1**: complete the `sw.js` path↔handler translation — or better, run the REAL
+  `server.py` handlers in Pyodide so there's ONE handler set + true conformance.
+- **2**: serve the actual SPA; run the cross-cloud conformance harness green
+  in-browser (same tests as Pro/Max).
+- **3 (Nano-with-compute / Micro)**: Pyodide (Python) + CheerpJ (Java) + TinyGo
+  (Go) in-tab compute.
+
+## Honest limits
+- The hard part is the fetch⇄ASGI SW shim + making `server.py` import under
+  Pyodide (deps, no uvicorn) — not the backends.
+- Real OS-level compute can't run in a browser (known); Nano-with-compute runs
+  *language runtimes* in-tab, not containers.
+- External SDK/CLI access (aws-cli/Terraform → the sim) isn't possible — an
+  in-browser app isn't a reachable endpoint. Nano = API/IAM/data-semantics
+  conformance, a lower-fidelity SKU.
