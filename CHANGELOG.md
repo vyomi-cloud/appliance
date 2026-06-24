@@ -6,6 +6,18 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.1] — 2026-06-24
+
+The **`vyomi-docker` package family** — tier-appropriate installers, so a
+Free/Lite/Pro host installs only what it needs (Docker + a compose file) and
+**never** pulls in Multipass/LXD.
+
+### Added
+- **`vyomi-docker` .deb / .rpm / brew** — a minimal (~32 KB) Docker-substrate package: the `vyomi` wrapper (`vyomi up` = `docker compose up`) + the pull-only `docker-compose.cloudlite.yml`, nothing else. Built by `packaging/docker/build-docker-packages.sh` (fpm) + a `vyomi-docker.rb` brew formula published by the brew-bump job. **Conflicts** with `cloud-learn` (both own `/usr/bin/vyomi`) — a host installs one or the other: `vyomi-docker` for Free/Lite/Pro, `cloud-learn` for Max. Docker is a soft dep (deb `Recommends: docker.io`); the wrapper validates it at runtime, prefers Compose v2, resolves the bundled compose file relative to itself so the deb (`/usr/share`) and brew (`PREFIX/share`) layouts both work.
+
+### Changed
+- **Download center is now tier-specific.** The tier toggle *filters* (not just recommends) — Free/Lite/Pro show the Docker installers (`docker-compose`, `vyomi-docker` deb/rpm/brew) and Max shows the Multipass launcher packages (brew/deb/rpm/scoop/msi/winget). OS-tab counts update per tier. The source tarball now also ships `docker-compose.cloudlite.yml`.
+
 ## [2.2.0] — 2026-06-24
 
 The **Pro (Docker) compute tier** + the **subscription-tier ladder**. Adds the
