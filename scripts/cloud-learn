@@ -2473,6 +2473,67 @@ _vyomi_compose_provider() {
   esac
 }
 
+# ── Tier-aware substrate selection (v2.2.2) ───────────────────────────────────
+# ONE launcher, two substrates: Docker (Free/Lite/Pro — `docker compose up`,
+# no Multipass) and Multipass (Max — real LXD VMs). Resolution, highest first:
+#   1. --docker / --multipass flag, or VYOMI_SUBSTRATE env
+#   2. cached license tier (~/.vyomi/tier, written by the simulator after a
+#      license is validated): max/enterprise -> multipass, else -> docker
+#   3. persisted choice (~/.vyomi/substrate)
+#   4. auto: an existing Multipass appliance VM -> multipass; else docker
+# Default: docker (the light, common case).
+_resolve_substrate() {
+  local s="${VYOMI_SUBSTRATE:-}"
+  local home="${HOME:-/root}"
+  if [ -z "$s" ] && [ -f "$home/.vyomi/tier" ]; then
+    case "$(tr -d '[:space:]' < "$home/.vyomi/tier" 2>/dev/null)" in
+      max|enterprise) s=multipass ;;
+      free|lite|pro|nano|micro) s=docker ;;
+    esac
+  fi
+  if [ -z "$s" ] && [ -f "$home/.vyomi/substrate" ]; then
+    s="$(tr -d '[:space:]' < "$home/.vyomi/substrate" 2>/dev/null)"
+  fi
+  if [ -z "$s" ]; then
+    if command -v multipass >/dev/null 2>&1 && multipass info "${APPLIANCE_NAME:-cloudlearn-appliance}" >/dev/null 2>&1; then
+      s=multipass            # an appliance VM already exists — keep using it
+    else
+      s=docker
+    fi
+  fi
+  case "$s" in multipass) printf 'multipass' ;; *) printf 'docker' ;; esac
+}
+
+# Docker-substrate lifecycle: drive docker compose on the bundled cloudlite file.
+_docker_substrate_run() {
+  local action="${1:-up}"; shift 2>/dev/null || true
+  local cf="${VYOMI_COMPOSE_FILE:-}"
+  if [ -z "$cf" ]; then
+    for c in "${CLOUD_LEARN_HOME:-}/docker-compose.cloudlite.yml" \
+             "$(cd "$(dirname "$0")" && pwd)/../docker-compose.cloudlite.yml" \
+             "$(cd "$(dirname "$0")" && pwd)/docker-compose.cloudlite.yml"; do
+      [ -f "$c" ] && cf="$c" && break
+    done
+  fi
+  if [ -z "$cf" ] || [ ! -f "$cf" ]; then
+    printf 'vyomi: docker-compose.cloudlite.yml not found (set VYOMI_COMPOSE_FILE).\n' >&2; return 1
+  fi
+  if ! command -v docker >/dev/null 2>&1; then
+    printf 'vyomi: Docker is required for the Free/Lite/Pro tiers.\n  Install Docker: https://docs.docker.com/engine/install/\n' >&2; return 1
+  fi
+  local dc; if docker compose version >/dev/null 2>&1; then dc="docker compose"; else dc="docker-compose"; fi
+  _dc() { $dc -f "$cf" -p "${VYOMI_PROJECT:-vyomi}" "$@"; }
+  case "$action" in
+    up|start)      _dc up -d; printf '==> Vyomi (Docker) starting — open http://localhost:9000 in ~30s\n' ;;
+    down|stop)     _dc down ;;
+    restart)       _dc down; _dc up -d ;;
+    status|ps)     _dc ps ;;
+    logs)          _dc logs "$@" ;;
+    update|upgrade) _dc pull && _dc up -d ;;
+    *)             _dc "$action" "$@" ;;
+  esac
+}
+
 outer_run() {
   local subcmd="${1:-help}"
   if [ "$#" -gt 0 ]; then
@@ -2484,6 +2545,26 @@ outer_run() {
     _vyomi_compose_provider "$@"
     return $?
   fi
+  # v2.2.2 — tier-aware substrate. For the Docker tiers (Free/Lite/Pro) the
+  # lifecycle commands go straight to docker compose; Multipass (Max) falls
+  # through to the appliance flow below. `--substrate`/`--docker`/`--multipass`
+  # and VYOMI_SUBSTRATE override.
+  case "$subcmd" in
+    --docker|--multipass) VYOMI_SUBSTRATE="${subcmd#--}"; subcmd="${1:-help}"; [ "$#" -gt 0 ] && shift ;;
+  esac
+  case "${1:-}" in
+    --docker|--multipass) VYOMI_SUBSTRATE="${1#--}"; shift ;;
+    --substrate=*) VYOMI_SUBSTRATE="${1#--substrate=}"; shift ;;
+  esac
+  case "$subcmd" in
+    up|down|stop|restart|status|ps|logs|update)
+      if [ "$(_resolve_substrate)" = "docker" ]; then
+        print_brand_banner
+        _docker_substrate_run "$subcmd" "$@"
+        return $?
+      fi
+      ;;
+  esac
   # v2.0.7: brand banner before every subcommand. Idempotent +
   # suppressed by VYOMI_NO_BANNER=1.
   print_brand_banner
