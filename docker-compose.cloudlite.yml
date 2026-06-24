@@ -1,0 +1,205 @@
+# Vyomi — CloudLite+ / Pro quickstart (Docker substrate, no Multipass)
+#
+#   curl -fsSL https://raw.githubusercontent.com/vyomi-cloud/appliance/main/docker-compose.cloudlite.yml -o docker-compose.yml
+#   docker compose up -d
+#   open http://localhost:9000
+#
+# This is the PULL-ONLY front door for the Free / Lite / Pro tiers — it runs
+# the whole simulator from published images (no source tree, no `build:`),
+# so a user with only Docker Desktop gets a working multi-cloud simulator in
+# one command. Compute instances (EC2/GCP/Azure) launch as sibling Docker
+# containers via the Docker compute backend (VYOMI_COMPUTE_BACKEND=docker) with
+# SSH enabled out of the box — `ssh ubuntu@<instance-ip>` after a launch.
+#
+# Tier differences are enforced by the LICENSE (activated in-console), NOT by
+# this file: Free = API/SDK conformance + capped compute; Pro = full compute +
+# SSH, higher quotas. Max (real VMs via Multipass/LXD) uses the installed
+# `vyomi` launcher instead of this compose file.
+#
+# Heavy backends (MySQL, Vault, NATS, MinIO, DynamoDB, ElasticMQ, Azurite,
+# Pub/Sub, Firestore) are lazy-provisioned on first use by the simulator;
+# start them all eagerly with:  docker compose --profile full up -d
+name: vyomi
+
+networks:
+  # Explicit, stable network name so launched instances can join it and reach
+  # the simulator at `simulator:9000` (the Docker compute backend attaches each
+  # instance container to VYOMI_INSTANCE_NETWORK below).
+  vyomi-net:
+    name: vyomi-net
+
+services:
+  simulator:
+    image: ${VYOMI_SIMULATOR_IMAGE:-vyomi/appliance:latest}
+    pull_policy: always
+    # The Pro/CloudLite+ compute backend drives the host Docker daemon via the
+    # mounted socket to launch sibling instance containers. The socket is
+    # root-owned and its group varies by host (root on Docker Desktop, `docker`
+    # on Linux), so the image's non-root user can't reach it. Running the
+    # simulator as root is the reliable zero-config choice for a LOCAL dev
+    # simulator (it already has docker.sock = host-root-equivalent anyway).
+    user: "0:0"
+    ports:
+      - "${VYOMI_SIMULATOR_PORT:-9000}:9000"
+    networks: [vyomi-net]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - vyomi-sql-postgres
+      - vyomi-gcs
+    environment:
+      CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
+      CLOUDLEARN_LICENSE_SECRET: ${VYOMI_LICENSE_SECRET:-cloudlearn-dev-secret}
+      CLOUDLEARN_LICENSE_BACKEND_URL: ${VYOMI_LICENSE_BACKEND_URL:-https://vyomi.cloud}
+      # Docker compute backend — EC2/GCP/Azure instances run as sibling Docker
+      # containers (no LXD/Multipass). The socket mount below lets the simulator
+      # drive the host daemon; instances join vyomi-net so they reach the APIs.
+      VYOMI_COMPUTE_BACKEND: ${VYOMI_COMPUTE_BACKEND:-docker}
+      VYOMI_INSTANCE_IMAGE: ${VYOMI_INSTANCE_IMAGE:-vyomi/instance:ubuntu-24.04}
+      VYOMI_INSTANCE_NETWORK: vyomi-net
+      # No special distribution "mode" — the tier conditions ONLY the compute
+      # backend flag above (docker vs lxd); nothing forks a separate code path
+      # (ADR-001: one flow, conditioned by a flag). Defaults to 'developer'.
+      CLOUDLEARN_DISTRIBUTION_MODE: ${VYOMI_DISTRIBUTION_MODE:-developer}
+      CLOUDLEARN_CLOUDSIM_URL: http://cloudsim:9010
+      CLOUDLEARN_SQL_PG_HOST: vyomi-sql-postgres
+      CLOUDLEARN_SQL_PG_PORT: "5432"
+      CLOUDLEARN_SQL_PG_ADMIN_USER: postgres
+      CLOUDLEARN_SQL_PG_ADMIN_PASSWORD: cloudlearn
+      CLOUDLEARN_SQL_MYSQL_HOST: vyomi-sql-mysql
+      CLOUDLEARN_GCS_URL: http://vyomi-gcs:4443
+      CLOUDLEARN_VAULT_URL: http://vyomi-vault:8200
+      CLOUDLEARN_VAULT_TOKEN: vyomi-dev-token
+      CLOUDLEARN_NATS_URL: nats://vyomi-nats:4222
+      CLOUDLEARN_MINIO_URL: http://vyomi-minio:9000
+      CLOUDLEARN_MINIO_ACCESS_KEY: cloudlearn
+      CLOUDLEARN_MINIO_SECRET_KEY: cloudlearn-dev-secret-key
+      CLOUDLEARN_DYNAMODB_URL: http://vyomi-dynamodb:8000
+      CLOUDLEARN_ELASTICMQ_URL: http://vyomi-elasticmq:9324
+      CLOUDLEARN_AZURITE_URL: http://vyomi-azurite:10000
+      CLOUDLEARN_AZURITE_QUEUE_URL: http://vyomi-azurite:10001
+      PUBSUB_EMULATOR_HOST: vyomi-pubsub:8085
+      CLOUDLEARN_PUBSUB_EMULATOR_HOST: vyomi-pubsub:8085
+      FIRESTORE_EMULATOR_HOST: vyomi-firestore:8080
+      CLOUDLEARN_FIRESTORE_EMULATOR_HOST: vyomi-firestore:8080
+    volumes:
+      - vyomi-data:/data
+      # Docker compute backend + lazy backend provisioner drive the host daemon.
+      - /var/run/docker.sock:/var/run/docker.sock
+    tmpfs:
+      - /tmp:size=100M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/healthz')"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+
+  cloudsim:
+    image: ${VYOMI_CLOUDSIM_IMAGE:-vyomi/cloudsim:latest}
+    pull_policy: always
+    networks: [vyomi-net]
+    environment:
+      CLOUDLEARN_CLOUDSIM_HOST: 0.0.0.0
+      CLOUDLEARN_CLOUDSIM_PORT: 9010
+      CLOUDLEARN_CLOUDSIM_STATE_FILE: /data/cloudsim_state.json
+    volumes:
+      - cloudsim-data:/data
+    restart: unless-stopped
+
+  vyomi-sql-postgres:
+    image: postgres:16-alpine
+    networks: [vyomi-net]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: cloudlearn
+    volumes:
+      - vyomi-sql-pg:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  vyomi-gcs:
+    image: fsouza/fake-gcs-server:latest
+    networks: [vyomi-net]
+    command: ["-scheme", "http", "-port", "4443", "-backend", "filesystem", "-data", "/data"]
+    volumes:
+      - vyomi-gcs:/data
+    restart: unless-stopped
+
+  # ── Lazy backends (started on first use, or eagerly via --profile full) ──
+  vyomi-sql-mysql:
+    profiles: ["full"]
+    image: mysql:8.0
+    networks: [vyomi-net]
+    environment:
+      MYSQL_ROOT_PASSWORD: cloudlearn
+      MYSQL_ROOT_HOST: "%"
+    volumes:
+      - vyomi-sql-mysql:/var/lib/mysql
+    restart: unless-stopped
+
+  vyomi-vault:
+    profiles: ["full"]
+    image: hashicorp/vault:1.15
+    networks: [vyomi-net]
+    command: ["server", "-dev", "-dev-root-token-id=vyomi-dev-token", "-dev-listen-address=0.0.0.0:8200"]
+    cap_add: [IPC_LOCK]
+    restart: unless-stopped
+
+  vyomi-nats:
+    profiles: ["full"]
+    image: nats:2-alpine
+    networks: [vyomi-net]
+    restart: unless-stopped
+
+  vyomi-minio:
+    profiles: ["full"]
+    image: minio/minio:latest
+    networks: [vyomi-net]
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: cloudlearn
+      MINIO_ROOT_PASSWORD: cloudlearn-dev-secret-key
+    volumes:
+      - vyomi-minio:/data
+    restart: unless-stopped
+
+  vyomi-dynamodb:
+    profiles: ["full"]
+    image: amazon/dynamodb-local:latest
+    networks: [vyomi-net]
+    restart: unless-stopped
+
+  vyomi-elasticmq:
+    profiles: ["full"]
+    image: softwaremill/elasticmq-native:latest
+    networks: [vyomi-net]
+    restart: unless-stopped
+
+  vyomi-azurite:
+    profiles: ["full"]
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    networks: [vyomi-net]
+    command: ["azurite", "--blobHost", "0.0.0.0", "--queueHost", "0.0.0.0"]
+    restart: unless-stopped
+
+  vyomi-pubsub:
+    profiles: ["full"]
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    networks: [vyomi-net]
+    command: ["gcloud", "beta", "emulators", "pubsub", "start", "--host-port=0.0.0.0:8085"]
+    restart: unless-stopped
+
+  vyomi-firestore:
+    profiles: ["full"]
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    networks: [vyomi-net]
+    command: ["gcloud", "beta", "emulators", "firestore", "start", "--host-port=0.0.0.0:8080"]
+    restart: unless-stopped
+
+volumes:
+  vyomi-data:
+  cloudsim-data:
+  vyomi-sql-pg:
+  vyomi-gcs:
+  vyomi-sql-mysql:
+  vyomi-minio:

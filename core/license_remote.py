@@ -154,7 +154,8 @@ def verify_license_jwt(
     # Developer) so JWTs minted before the 2026-06-17 rename still validate.
     # The tier_policy.normalize_tier() at the consumption boundary maps
     # the legacy names to canonical ones — see core/tier_policy.py.
-    if claims.get("tier") not in ("free", "pro", "max", "enterprise",
+    if claims.get("tier") not in ("free", "nano", "micro", "lite",
+                                  "pro", "max", "enterprise",
                                   "student", "developer"):
         raise ValueError(f"invalid_tier_claim ({claims.get('tier')!r})")
 

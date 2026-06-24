@@ -2095,7 +2095,10 @@ def _default_cloudsim_space_policy() -> dict:
     return {
         "ec2": {
             "launch": True,
-            "allowed_runtime_backends": ["multipass", "lxd"],
+            # docker = the CloudLite+/Pro compute backend (sibling containers).
+            # Allowed alongside the VM backends so the same policy serves every
+            # substrate; the active backend is still chosen by VYOMI_COMPUTE_BACKEND.
+            "allowed_runtime_backends": ["multipass", "lxd", "docker"],
             "allowed_amis": [],  # empty list = no allowlist, any AMI accepted
         },
     }
@@ -2121,13 +2124,13 @@ def _cloudsim_space_policy(space: dict | None) -> dict:
     if isinstance(allowed_backends, str):
         allowed_backends = [allowed_backends]
     if not isinstance(allowed_backends, list):
-        allowed_backends = ["multipass", "lxd"]
+        allowed_backends = ["multipass", "lxd", "docker"]
     normalized_backends = []
     for backend in allowed_backends:
         backend_value = str(backend).strip().lower()
         if backend_value:
             normalized_backends.append(backend_value)
-    ec2_policy["allowed_runtime_backends"] = list(dict.fromkeys(normalized_backends or ["multipass", "lxd"]))
+    ec2_policy["allowed_runtime_backends"] = list(dict.fromkeys(normalized_backends or ["multipass", "lxd", "docker"]))
     allowed_amis = ec2_policy.get("allowed_amis")
     if isinstance(allowed_amis, str):
         allowed_amis = [allowed_amis]
@@ -4450,15 +4453,16 @@ def _decorate_ami_catalog() -> None:
     for item in AMI_CATALOG:
         family = str(item.get("os_family") or "").lower()
         if family == "ubuntu":
-            item.setdefault("supported_backends", ["multipass", "lxd"])
+            item.setdefault("supported_backends", ["docker", "multipass", "lxd"])
             item.setdefault("supported_host_os", ["linux", "darwin", "windows"])
             item.setdefault("default_runtime_backend", "multipass" if host_os in {"windows", "darwin"} else "lxd")
         elif family == "windows":
+            # Linux containers can't host a Windows guest -> no docker backend.
             item.setdefault("supported_backends", [])
             item.setdefault("supported_host_os", ["windows"])
             item.setdefault("default_runtime_backend", "multipass")
         else:
-            item.setdefault("supported_backends", ["lxd"])
+            item.setdefault("supported_backends", ["docker", "lxd"])
             item.setdefault("supported_host_os", ["linux"])
             item.setdefault("default_runtime_backend", "lxd")
 
@@ -4557,7 +4561,13 @@ def _reconcile_runtime_instances(instances: dict[str, dict]) -> None:
         for key in tuple(f"{legacy_prefix}_app_{suffix}" for suffix in ("id", "name", "status", "command", "port", "kill_pattern", "error")):
             instance.pop(key, None)
         backend = str(instance.get("runtime_backend") or "").strip().lower()
-        if backend == "multipass":
+        if backend == "docker":
+            _ensure_instance_workspace(instance)
+            if _docker_available():
+                _sync_docker_instance(instance)
+            else:
+                instance.setdefault("container_status", "docker-unavailable")
+        elif backend == "multipass":
             _ensure_instance_workspace(instance)
             if _runtime_available("multipass"):
                 _sync_multipass_instance(instance)
@@ -4569,7 +4579,7 @@ def _reconcile_runtime_instances(instances: dict[str, dict]) -> None:
                 _sync_lxd_instance(instance)
             else:
                 instance.setdefault("container_status", "lxd-unavailable")
-        if instance.get("state") == "pending" and backend in {"multipass", "lxd"}:
+        if instance.get("state") == "pending" and backend in {"docker", "multipass", "lxd"}:
             _queue_runtime_start_for_store(instances, instance_id)
 
 
@@ -6419,7 +6429,32 @@ def _runtime_cli(backend: str) -> str | None:
     return PLATFORM.runtime.cli_for(backend)
 
 
+_DOCKER_AVAILABLE_CACHE = {"value": False}
+
+
+def _docker_runtime_available() -> bool:
+    """True when the `docker` CLI is present AND the daemon is reachable. In
+    CloudLite+ the simulator container has /var/run/docker.sock bind-mounted, so
+    it drives the host daemon to launch sibling instance containers. Caches the
+    positive result (docker availability is stable for a server's lifetime)."""
+    if _DOCKER_AVAILABLE_CACHE.get("value"):
+        return True
+    try:
+        import shutil
+        if not shutil.which("docker"):
+            return False
+        cp = subprocess.run(["docker", "info"], capture_output=True, timeout=10)
+        ok = cp.returncode == 0
+    except Exception:
+        ok = False
+    if ok:
+        _DOCKER_AVAILABLE_CACHE["value"] = True
+    return ok
+
+
 def _runtime_available(backend: str) -> bool:
+    if (backend or "").strip().lower() == "docker":
+        return _docker_runtime_available()
     return PLATFORM.runtime.available(backend)
 
 
@@ -7260,6 +7295,156 @@ def _terminate_lxd_instance(instance: dict) -> dict:
     # Reclaim the per-instance workspace dir + drop any vm-connect port
     # claim. Without this, /var/lib/cloudlearn/deployments grows
     # forever — a real cause of the disk-full incident earlier today.
+    _post_terminate_cleanup(instance)
+    return instance
+
+
+# ── Docker compute backend (CloudLite+) ──────────────────────────────────────
+# Instances run as sibling Docker containers via core.compute.DockerComputeBackend
+# (the ComputeBackend seam, ADR-001/002). The simulator container has
+# /var/run/docker.sock bind-mounted, so it drives the host daemon to launch
+# sibling instance containers. SSH is enabled out of the box: the vyomi/instance
+# image runs sshd and the launcher injects the user's public key
+# (VYOMI_SSH_PUBKEY) at create() -> ~/.ssh/authorized_keys.
+_DOCKER_COMPUTE = {"backend": None}
+
+
+def _docker_compute():
+    if _DOCKER_COMPUTE["backend"] is None:
+        from core.compute import DockerComputeBackend
+        _DOCKER_COMPUTE["backend"] = DockerComputeBackend()
+    return _DOCKER_COMPUTE["backend"]
+
+
+def _docker_available() -> bool:
+    return _runtime_available("docker")
+
+
+def _docker_instance_obj(instance: dict):
+    """Build a core.compute.Instance from the server instance dict."""
+    from core.compute import Instance, ensure_instance_ssh_key
+    try:
+        pubkey, _ = ensure_instance_ssh_key()
+    except Exception:
+        pubkey = None
+    image = (
+        str(instance.get("docker_image") or "").strip()
+        or os.environ.get("VYOMI_INSTANCE_IMAGE")
+        or "vyomi/instance:ubuntu-24.04"
+    )
+    try:
+        cpus = float(instance.get("vcpus") or instance.get("cpus") or 1) or 1.0
+    except (TypeError, ValueError):
+        cpus = 1.0
+    try:
+        mem = int(instance.get("memory_mb") or instance.get("memory") or 1024) or 1024
+    except (TypeError, ValueError):
+        mem = 1024
+    return Instance(
+        instance_id=str(instance["instance_id"]),
+        image=image,
+        cpus=cpus,
+        memory_mb=mem,
+        ssh_pubkey=pubkey,
+        network=(os.environ.get("VYOMI_INSTANCE_NETWORK") or None),
+    )
+
+
+def _sync_docker_instance(instance: dict) -> None:
+    inst = _docker_instance_obj(instance)
+    try:
+        status = _docker_compute().status(inst)   # running|stopped|pending|absent
+    except Exception:
+        return
+    if status == "absent":
+        instance["container_status"] = "missing"
+        if str(instance.get("state") or "").strip().lower() not in {"terminated", "stopped"}:
+            instance["state"] = "stopped"
+        if str(instance.get("launch_status") or "").strip().lower() in {"queued", "starting", "error", "pending"}:
+            instance["launch_status"] = "ready"
+            instance["launch_error"] = ""
+        return
+    instance["container_status"] = status
+    if status == "running":
+        instance["state"] = "running"
+        ip = _docker_compute().ipv4(inst)
+        if ip:
+            instance["private_ip"] = ip
+            instance["runtime_internal_ip"] = ip
+        if str(instance.get("launch_status") or "").strip().lower() in {"queued", "starting", "error", "pending"}:
+            instance["launch_status"] = "ready"
+            instance["launch_error"] = ""
+    elif status in {"stopped", "pending"}:
+        if str(instance.get("state") or "").strip().lower() != "stopped":
+            instance["state"] = "stopped"
+
+
+def _start_docker_instance(instance: dict) -> dict:
+    if not _docker_available():
+        raise HTTPException(status_code=503, detail="DockerUnavailable")
+    inst = _docker_instance_obj(instance)
+    # create() is idempotent: reuses an existing container/volume, else
+    # `docker run`s it (and (re)starts a stopped one).
+    try:
+        _docker_compute().create(inst)
+    except Exception as exc:
+        raise HTTPException(503, detail=f"DockerCommandFailed: {exc}")
+    instance["container_name"] = inst.container_name
+    instance["container_id"] = inst.container_name
+    instance["state"] = "running"
+    instance["container_status"] = "running"
+    instance["console_backend"] = "docker-exec"
+    instance["started_at"] = _now()
+    instance["stopped_at"] = ""
+    instance["pid"] = None
+    ip = _docker_compute().ipv4(inst)
+    if ip:
+        instance["private_ip"] = ip
+        instance["runtime_internal_ip"] = ip
+    return instance
+
+
+def _stop_docker_instance(instance: dict) -> dict:
+    if not _docker_available():
+        raise HTTPException(status_code=503, detail="DockerUnavailable")
+    try:
+        _docker_compute().stop(_docker_instance_obj(instance))
+    except Exception as exc:
+        raise HTTPException(503, detail=f"DockerCommandFailed: {exc}")
+    instance["state"] = "stopped"
+    instance["stopped_at"] = _now()
+    instance["container_status"] = "exited"
+    instance["pid"] = None
+    return instance
+
+
+def _reboot_docker_instance(instance: dict) -> dict:
+    if not _docker_available():
+        raise HTTPException(status_code=503, detail="DockerUnavailable")
+    inst = _docker_instance_obj(instance)
+    if _docker_compute().status(inst) != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    instance["state"] = "rebooting"
+    try:
+        _docker_compute().reboot(inst)
+    except Exception as exc:
+        raise HTTPException(503, detail=f"DockerCommandFailed: {exc}")
+    instance["state"] = "running"
+    instance["container_status"] = "running"
+    instance["console_backend"] = "docker-exec"
+    instance["rebooted_at"] = _now()
+    return instance
+
+
+def _terminate_docker_instance(instance: dict) -> dict:
+    try:
+        _docker_compute().terminate(_docker_instance_obj(instance))
+    except Exception:
+        pass
+    instance["state"] = "terminated"
+    instance["terminated_at"] = _now()
+    instance["container_status"] = "removed"
+    instance["pid"] = None
     _post_terminate_cleanup(instance)
     return instance
 
@@ -8119,7 +8304,17 @@ def _ec2_choose_runtime_backend(
         supported_label = ", ".join(supported) if supported else "no runtime backends"
         raise HTTPException(400, detail=f"AMI '{profile.get('name', 'unknown')}' only supports {supported_label}.")
 
-    preferred = "lxd" if appliance_mode else ("multipass" if host_os in {"windows", "darwin"} else "lxd")
+    compute_backend_env = (
+        os.environ.get("VYOMI_COMPUTE_BACKEND")
+        or os.environ.get("CLOUDLEARN_COMPUTE_BACKEND")
+        or ""
+    ).strip().lower()
+    if appliance_mode:
+        preferred = "lxd"
+    elif compute_backend_env == "docker":
+        preferred = "docker"   # CloudLite+: instances are sibling Docker containers
+    else:
+        preferred = "multipass" if host_os in {"windows", "darwin"} else "lxd"
     ordered: list[str] = []
     if requested:
         ordered.append(requested)
@@ -8127,7 +8322,7 @@ def _ec2_choose_runtime_backend(
     default_backend = str(profile.get("default_runtime_backend") or "").strip().lower()
     if default_backend:
         ordered.append(default_backend)
-    ordered.extend([backend for backend in ("multipass", "lxd") if backend != preferred])
+    ordered.extend([backend for backend in ("docker", "multipass", "lxd") if backend != preferred])
 
     for backend in ordered:
         if backend not in supported:
@@ -8423,6 +8618,37 @@ def _console_execute(instance: dict, command: str) -> dict:
 
     if not command.strip():
         return {"cwd": workdir, "command": command, "exit_code": 0, "output": ""}
+
+    if instance.get("runtime_backend") == "docker":
+        # Browser terminal for Docker-backed instances: run the command inside
+        # the container via `docker exec` and track cwd across commands (via a
+        # sentinel + pwd) for prompt continuity. SSH (ssh ubuntu@<ip>) is the
+        # primary access path; this is the in-console convenience terminal.
+        cwd = state.get("cwd") or "/root"
+        stripped = command.strip()
+        if stripped == "pwd":
+            instance.setdefault("console_log", []).append({"command": command, "cwd": cwd, "exit_code": 0, "output": cwd + "\n", "at": _now()})
+            return {"cwd": cwd, "command": command, "exit_code": 0, "output": cwd + "\n"}
+        if stripped in {"clear", "cls"}:
+            instance.setdefault("console_log", []).append({"command": command, "cwd": cwd, "exit_code": 0, "output": "\f", "at": _now()})
+            return {"cwd": cwd, "command": command, "exit_code": 0, "output": "\f"}
+        run_cmd = f"cd {shlex.quote(cwd)} 2>/dev/null; {command}\nprintf '\\n__VYOMI_CWD__'; pwd"
+        try:
+            cp = _docker_compute().exec(_docker_instance_obj(instance), ["bash", "-lc", run_cmd])
+        except Exception as exc:
+            output = f"error: {exc}\n"
+            instance.setdefault("console_log", []).append({"command": command, "cwd": cwd, "exit_code": 1, "output": output, "at": _now()})
+            return {"cwd": cwd, "command": command, "exit_code": 1, "output": output}
+        raw = (cp.stdout or b"").decode(errors="replace") + (cp.stderr or b"").decode(errors="replace")
+        new_cwd = cwd
+        if "__VYOMI_CWD__" in raw:
+            output, _, tail = raw.rpartition("__VYOMI_CWD__")
+            new_cwd = tail.strip() or cwd
+        else:
+            output = raw
+        state["cwd"] = new_cwd
+        instance.setdefault("console_log", []).append({"command": command, "cwd": new_cwd, "exit_code": cp.returncode, "output": output, "at": _now()})
+        return {"cwd": new_cwd, "command": command, "exit_code": cp.returncode, "output": output}
 
     if instance.get("runtime_backend") == "multipass":
         stripped = command.strip()
@@ -11157,7 +11383,8 @@ def api_license_signup(req: LicenseSignupRequest):
     # Per-tier credit allowance (used for soft API-call metering).
     # Legacy "student"/"developer" keys retained so JWTs minted before the
     # 2026-06-17 rename still get the right credit count.
-    credit_table = {"free": 100, "pro": 1000, "max": 10000, "enterprise": 50000,
+    credit_table = {"free": 100, "nano": 300, "micro": 500, "lite": 800,
+                    "pro": 1000, "max": 10000, "enterprise": 50000,
                     "student": 1000, "developer": 10000}
     payload = {
         "license_id":      _id("lic"),
@@ -11455,7 +11682,9 @@ def api_ec2_list_instances():
         instance = ec2_state["instances"].get(instance_id)
         if isinstance(instance, dict):
             backend = str(instance.get("runtime_backend") or "").strip().lower()
-            if backend == "multipass":
+            if backend == "docker":
+                _sync_docker_instance(instance)
+            elif backend == "multipass":
                 _sync_multipass_instance(instance)
             elif backend == "lxd":
                 _sync_lxd_instance(instance)
@@ -11552,6 +11781,8 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
         "console_backend": (
             "multipass-ssh"
             if runtime_backend == "multipass"
+            else "docker-exec"
+            if runtime_backend == "docker"
             else "lxd-exec"
         ),
         "console_prompt": _cmd_prompt({"runtime_backend": runtime_backend, "container_name": f"cloudlearn-{instance_id}", "container_id": ""}),
@@ -11571,6 +11802,9 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
 
 def _start_runtime_process(instance: dict) -> None:
     backend = str(instance.get("runtime_backend") or "lxd").strip().lower()
+    if backend == "docker":
+        _start_docker_instance(instance)
+        return
     if backend == "multipass":
         _start_multipass_instance(instance)
         return
@@ -11628,6 +11862,9 @@ def _queue_runtime_start(instance_id: str) -> None:
 
 def _stop_runtime_process(instance: dict) -> None:
     backend = str(instance.get("runtime_backend") or "lxd").strip().lower()
+    if backend == "docker":
+        _stop_docker_instance(instance)
+        return
     if backend == "multipass":
         _stop_multipass_instance(instance)
         return
@@ -11639,6 +11876,9 @@ def _stop_runtime_process(instance: dict) -> None:
 
 def _reboot_runtime_process(instance: dict) -> None:
     backend = str(instance.get("runtime_backend") or "lxd").strip().lower()
+    if backend == "docker":
+        _reboot_docker_instance(instance)
+        return
     if backend == "multipass":
         _reboot_multipass_instance(instance)
         return
@@ -11703,6 +11943,8 @@ def api_ec2_terminate_instance(instance_id: str):
         _terminate_simulated_instance(instance)
     elif no_backing_container:
         _terminate_simulated_instance(instance)
+    elif backend == "docker":
+        _terminate_docker_instance(instance)
     elif backend == "multipass":
         _terminate_multipass_instance(instance)
     elif backend == "lxd":
@@ -11719,11 +11961,13 @@ def api_ec2_console(instance_id: str):
     if not instance:
         raise HTTPException(404, detail="NoSuchInstance")
     backend = str(instance.get("runtime_backend") or "").strip().lower()
-    if backend == "multipass":
+    if backend == "docker":
+        _sync_docker_instance(instance)
+    elif backend == "multipass":
         _sync_multipass_instance(instance)
     elif backend == "lxd":
         _sync_lxd_instance(instance)
-    if backend in {"multipass", "lxd"}:
+    if backend in {"multipass", "lxd", "docker"}:
         with CONSOLE_LOCK:
             session = CONSOLE_SESSIONS.get(instance_id)
         if session:
@@ -11751,7 +11995,9 @@ def api_ec2_console_input(instance_id: str, req: EC2ConsoleInputRequest):
     if not instance:
         raise HTTPException(404, detail="NoSuchInstance")
     backend = str(instance.get("runtime_backend") or "").strip().lower()
-    if backend == "multipass":
+    if backend == "docker":
+        _sync_docker_instance(instance)
+    elif backend == "multipass":
         _sync_multipass_instance(instance)
     elif backend == "lxd":
         _sync_lxd_instance(instance)
@@ -11767,7 +12013,9 @@ def api_ec2_console_exec(instance_id: str, req: EC2ConsoleCommandRequest):
     if not instance:
         raise HTTPException(404, detail="NoSuchInstance")
     backend = str(instance.get("runtime_backend") or "").strip().lower()
-    if backend == "multipass":
+    if backend == "docker":
+        _sync_docker_instance(instance)
+    elif backend == "multipass":
         _sync_multipass_instance(instance)
     elif backend == "lxd":
         _sync_lxd_instance(instance)
@@ -12032,7 +12280,11 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
         trusted_host_os = _resolved_host_os()
         if trusted_host_os:
             req.runtime_backend = ""
-        instance = api_ec2_create_instance(req, auto_start=False)
+        # auto_start=True so the native SDK RunInstances actually BOOTS a
+        # backing instance (Docker container on Pro, LXD/Multipass VM on Max) —
+        # consistent with the GCP query path, which already queues the start.
+        # The start is async (non-blocking), so the SDK response isn't delayed.
+        instance = api_ec2_create_instance(req, auto_start=True)
         launched.append(instance)
 
     def build(root: ET.Element) -> None:
@@ -12162,7 +12414,10 @@ def _gcp_compute_sync_runtime_instances() -> None:
         if str(workspace) != workspace_before:
             changed = True
         backend = str(instance.get("runtime_backend") or "").strip().lower()
-        if backend == "multipass":
+        if backend == "docker":
+            _sync_docker_instance(instance)
+            changed = True
+        elif backend == "multipass":
             _sync_multipass_instance(instance)
             changed = True
         elif backend == "lxd":
@@ -12830,6 +13085,8 @@ async def api_ec2_query(request: Request):
                 backend = str(instance.get("runtime_backend") or "").strip().lower()
                 if instance.get("launch_status") == "error" and not str(instance.get("container_id") or "").strip():
                     _terminate_simulated_instance(instance)
+                elif backend == "docker":
+                    _terminate_docker_instance(instance)
                 elif backend == "multipass":
                     _terminate_multipass_instance(instance)
                 elif backend == "lxd":

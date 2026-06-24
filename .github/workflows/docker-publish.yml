@@ -88,9 +88,14 @@ jobs:
           # startup. The substitution is safe: no version/latest/edge/sha
           # suffix contains the literal "appliance".
           CTAGS="${TAGS//appliance/cloudsim}"
+          # The vyomi/instance "AMI" (CloudLite+ Docker-compute base) is tagged by
+          # base OS, NOT the app version — it's rebuilt only when the Ubuntu base
+          # changes, so it keeps a stable ubuntu-24.04 + latest tag set.
+          ITAGS="vyomi/instance:ubuntu-24.04,vyomi/instance:latest,ghcr.io/vyomi-cloud/instance:ubuntu-24.04,ghcr.io/vyomi-cloud/instance:latest"
           echo "version=${VER}"           >> "$GITHUB_OUTPUT"
           echo "tags=${TAGS}"             >> "$GITHUB_OUTPUT"
           echo "cloudsim_tags=${CTAGS}"   >> "$GITHUB_OUTPUT"
+          echo "instance_tags=${ITAGS}"   >> "$GITHUB_OUTPUT"
           echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
           {
             echo "## Will publish"
@@ -156,6 +161,24 @@ jobs:
             org.opencontainers.image.version=${{ steps.meta.outputs.version }}
           cache-from: type=gha,scope=cloudsim
           cache-to: type=gha,mode=max,scope=cloudsim
+
+      - name: Build + push instance image (CloudLite+ compute "AMI", multi-arch)
+        # The vyomi/instance Ubuntu base the Docker compute backend launches as
+        # EC2/GCP/Azure compute instances (sshd + docker-in-instance + SSH-key
+        # injection). Stable ubuntu-24.04 tag — it's the "AMI", independent of
+        # the app version, so users can `docker pull vyomi/instance:ubuntu-24.04`.
+        uses: docker/build-push-action@v6
+        with:
+          context: ./packaging/instance
+          file: ./packaging/instance/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.instance_tags }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+          cache-from: type=gha,scope=instance
+          cache-to: type=gha,mode=max,scope=instance
 
       - name: Update Docker Hub description (stable tag only)
         # Pre-release tags don't update the Hub README — the README should
