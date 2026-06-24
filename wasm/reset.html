@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<!-- Vyomi Nano — clean slate. Unregisters every service worker + clears caches
+     and storage for this origin, then returns to the app. Use this if the app
+     gets wedged on a stale service worker from an earlier build. -->
+<html lang="en">
+<head><meta charset="utf-8"><title>Vyomi Nano — reset</title>
+<style>
+  body { font: 14px/1.6 ui-monospace, Menlo, monospace; background:#05071a; color:#e4e4e7;
+         display:grid; place-items:center; min-height:100vh; margin:0; text-align:center; }
+  a { color:#60a5fa; } .ok{color:#34d399}
+</style></head>
+<body>
+  <div>
+    <div id="s">Resetting Vyomi Nano…</div>
+    <div style="margin-top:14px"><a href="/">← back to Nano</a></div>
+  </div>
+<script>
+(async () => {
+  const s = document.getElementById("s");
+  const out = [];
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+      out.push(`unregistered ${regs.length} service worker(s)`);
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+      out.push(`cleared ${keys.length} cache(s)`);
+    }
+    try { localStorage.clear(); sessionStorage.clear(); out.push("cleared storage"); } catch (_) {}
+    s.innerHTML = '<span class="ok">Reset complete</span> — ' + out.join(", ") +
+      '.<br>Opening a fresh Nano…';
+    setTimeout(() => location.replace("/"), 1400);
+  } catch (e) {
+    s.textContent = "Reset error: " + e;
+  }
+})();
+</script>
+</body>
+</html>

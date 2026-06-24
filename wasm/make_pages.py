@@ -27,7 +27,10 @@ LINKS = {
 }
 
 BOOT = '  <script type="module" src="/nano-boot.js"></script>\n</head>'  # consoles: Pyodide + SW
-SW = '  <script src="/nano-sw.js" defer></script>\n</head>'               # dashboard: SW only
+# Dashboard: SW only + hide the appliance host-health panel (CPU/RAM/Disk are
+# the host VM's stats — there is no VM in a browser tab, so it's N/A for Nano).
+SW = ('  <style>#stats-card{display:none!important}</style>\n'
+      '  <script src="/nano-sw.js" defer></script>\n</head>')
 
 
 def _process(src_name, dst_name, inject):

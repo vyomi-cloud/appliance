@@ -14,6 +14,9 @@
  * step 4, so there's no race — early calls just wait for the backend.
  */
 const BASE = "";  // wasm/ is the web root (see sw.js)
+// Capture control state SYNCHRONOUSLY (see nano-sw.js for why): the console's
+// inline boot() fetches /api/* at parse, before this module runs.
+const wasControlledAtStart = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
 const MODULES = [
   "backends/store.py",
   "providers/registry.py", "providers/aws.py", "providers/gcp.py",
@@ -81,12 +84,13 @@ import builtins; builtins._disp = _disp
 (async () => {
   if (!("serviceWorker" in navigator)) { banner("Nano needs a service-worker-capable browser.", true); return; }
   try {
-    await navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE + "/" });
+    const reg = await navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE + "/", updateViaCache: "none" });
+    try { await reg.update(); } catch (_) {}
     await navigator.serviceWorker.ready;
     // Arriving from the dashboard we're already CONTROLLED. If a console URL is
-    // opened cold/directly, reload once to gain control so /api/* is intercepted
-    // from the first call (else the console's boot() would 404 + redirect away).
-    if (!navigator.serviceWorker.controller) {
+    // opened cold/directly, it started uncontrolled (boot()'s /api reads went to
+    // the network) — reload once to a controlled load before booting Pyodide.
+    if (!wasControlledAtStart) {
       const n = Number(sessionStorage.getItem("nano-boot-reload") || "0");
       if (n < 4) { sessionStorage.setItem("nano-boot-reload", String(n + 1)); location.reload(); return; }
     }

@@ -27,13 +27,17 @@ try {
   // Full flow: REAL launch dashboard (clouds.html) -> AWS console, in-browser.
   // (the repo source is never served — verified below.)
   await page.goto(BASE + "/", { waitUntil: "load" });
-  // The dashboard establishes SW control via one reload; wait until it's
-  // controlled AND the real Workspaces UI has injected the console links.
+  // The dashboard reloads once to a controlled load; wait for the STABLE state —
+  // spaces actually loaded from the SW ("Nano AWS" card only appears once the
+  // /api/spaces read is intercepted) — so we don't interact mid-reload.
   await page.waitForFunction(
     () => navigator.serviceWorker.controller &&
           document.title.includes("Workspaces") &&
+          /Nano AWS/.test(document.body.innerText) &&
           !!document.querySelector('a[href="/aws-console.html"]'),
-    { timeout: 30000 }).catch(() => fail("real launch dashboard didn't render + expose the AWS console link"));
+    { timeout: 30000 }).catch(() => fail("real launch dashboard didn't load spaces from the SW"));
+  if (await page.evaluate(() => /Couldn't load spaces/i.test(document.body.innerText)))
+    fail("dashboard showed 'Couldn't load spaces' (SW didn't serve /api/spaces)");
   console.log("   dashboard:", await page.evaluate(() => document.title));
   // The "Open Console" button is hover-revealed; activate the real link directly.
   // The click navigates (destroying the eval context) — wait for the nav itself.

@@ -56,13 +56,15 @@ def _gcp_catalog():
 # A minimal-but-real shell context so the console's space gate passes and the
 # account/region chrome renders. Mirrors server.py's _space_payload defaults.
 def _space(provider):
+    region = {"gcp": "us-central1", "azure": "eastus"}.get(provider, "us-east-1")
+    account = {"gcp": "nano-project", "azure": "nano-sub"}.get(provider, "000000000000")
     return {
         "space_id": f"nano-{provider}",
         "name": f"Nano {provider.upper()}",
         "provider": provider,
         "status": "running",
-        "active_region": "us-east-1",
-        "active_account": "000000000000",
+        "active_region": region,
+        "active_account": account,
     }
 
 

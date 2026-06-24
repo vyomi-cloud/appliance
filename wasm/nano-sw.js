@@ -1,20 +1,27 @@
 /* Vyomi Nano — lightweight service-worker bootstrap for pages that need the
  * SW to serve their /api/* reads but DON'T need the Pyodide backend (the launch
- * dashboard: spaces/host/runtime are all served from fixtures). Registers the
- * SW and, on first load, reloads once so the SW controls the page (a SW doesn't
- * control the page that registered it until a reload). No Pyodide, so it's
- * instant — unlike nano-boot.js, which the consoles use.
+ * dashboard: spaces/host/runtime come from fixtures). No Pyodide, so instant.
+ *
+ * The page's inline scripts (e.g. clouds.html's loadSpaces) fetch /api/* at
+ * parse — BEFORE this deferred script runs. If the page wasn't controlled at
+ * that point, those fetches hit the network (404 HTML) and fail. So we capture
+ * control state SYNCHRONOUSLY at the top: if the page started uncontrolled, we
+ * reload once to a controlled load where the SW intercepts from the first call.
+ * (Just checking `controller` after registering is racy — clients.claim() can
+ * flip it to true mid-script, masking that the initial fetches already failed.)
  */
+const wasControlledAtStart = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+
 (async () => {
   if (!("serviceWorker" in navigator)) return;
   try {
-    await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" });
+    try { await reg.update(); } catch (_) {}
     await navigator.serviceWorker.ready;
-    if (!navigator.serviceWorker.controller) {
-      const n = Number(sessionStorage.getItem("nano-sw-reload") || "0");
-      if (n < 4) { sessionStorage.setItem("nano-sw-reload", String(n + 1)); location.reload(); return; }
-      return; // gave up — page still renders, just without served /api reads
-    }
-    sessionStorage.removeItem("nano-sw-reload");
-  } catch (_) { /* page still renders */ }
+    if (wasControlledAtStart) { sessionStorage.removeItem("nano-sw-reload"); return; }
+    // Started uncontrolled -> the page's initial /api reads failed -> reload to
+    // a controlled load (guarded against an infinite loop).
+    const n = Number(sessionStorage.getItem("nano-sw-reload") || "0");
+    if (n < 4) { sessionStorage.setItem("nano-sw-reload", String(n + 1)); location.reload(); }
+  } catch (_) { /* page still renders, just without served /api reads */ }
 })();
