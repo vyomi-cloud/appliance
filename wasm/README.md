@@ -36,29 +36,32 @@ sw.js                    service worker — intercepts /api/* and routes to the 
 backends/store.py        generic primitives (object-store/nosql/queue + ResourceStore)
 providers/registry.py    plugin registry + dispatch() (incl. generic _resource CRUD)
 providers/{aws,gcp,azure,oracle}.py   per-cloud mappings (oracle = new-cloud proof)
-build_fixtures.py        dumps the REAL catalog/spaces/tenants + routes.json to fixtures/
-make_console.py          injects nano-boot.js into static/aws-console.html -> aws-console.html
-console.html             entry loader (establishes SW control, then opens the console)
-nano-boot.js             page-side: boots Pyodide + the SW<->backend bridge + ready signal
-sw.js                    service worker: serves fixtures + catalog-driven CRUD routing
-aws-console.html         the REAL console, with the boot loader injected (generated)
+build_fixtures.py        dumps the REAL catalogs (aws+gcp) + spaces/tenants/host/runtime + routes.json
+make_pages.py            wraps the REAL Pro/Max pages verbatim (dashboard + 3 consoles)
+nano-boot.js             consoles: boots Pyodide + the SW<->backend bridge + ready signal
+nano-sw.js               dashboard: registers the SW only (its /api reads come from fixtures)
+sw.js                    service worker: serves fixtures + provider-aware space + CRUD routing
+index.html               the REAL launch dashboard (static/clouds.html), wired (generated)
+{aws,gcp,azure}-console.html   the REAL consoles, verbatim + boot loader (generated)
+assets/brand/            real brand logo + favicons (copied for the dashboard)
 test_conformance.py      pure-Python conformance (runs here AND in Pyodide)
-e2e.mjs                  headless Playwright proof of the whole in-browser loop
+e2e.mjs                  headless Playwright proof of the whole flow
 ```
 
 ## Run it
 The `wasm/` folder is a SELF-CONTAINED web root — serve only it, so the repo
-source is never exposed (`/server.py` etc. 404). Entry is the splash at `/`.
+source is never exposed (`/server.py` etc. 404). Entry is the real dashboard at `/`.
 ```sh
-python3 wasm/build_fixtures.py            # dump the real catalog + routes (regen after catalog changes)
-python3 wasm/make_console.py              # inject the boot loader into the console
+python3 wasm/build_fixtures.py            # dump the real catalogs + routes (regen after catalog changes)
+python3 wasm/make_pages.py                # wrap the real Pro/Max pages (dashboard + consoles)
 python3 wasm/test_conformance.py          # validate the backend (no browser)
 cd wasm && python3 -m http.server 8000    # serve wasm/ AS THE ROOT
-# open http://localhost:8000/             # splash → spaces → AWS console
+# open http://localhost:8000/             # real Workspaces dashboard → console
 ```
-Flow: `index.html` (splash) → `spaces.html` (pick a space) → `console.html`
-(loader: establishes service-worker control) → `aws-console.html` (the real
-console). Headless proof of the whole flow: `PW=$(npm root -g)/playwright node wasm/e2e.mjs`.
+Flow replicates Pro/Max as-is: `index.html` = the real **Workspaces** launch
+dashboard (`static/clouds.html`) → "Open Console" → the real **`{aws,gcp,azure}-console.html`**.
+Each console boots Pyodide via `nano-boot.js`; the dashboard only needs the SW
+(`nano-sw.js`). Headless proof of the whole flow: `PW=$(npm root -g)/playwright node wasm/e2e.mjs`.
 
 ## Milestones
 - **0 (done)**: provider-pluggable in-memory backend + Pyodide harness + SW shim.
@@ -69,10 +72,14 @@ console). Headless proof of the whole flow: `PW=$(npm root -g)/playwright node w
   in-browser ResourceStore (all 12 AWS services get CRUD, new services free).
   **Validated headlessly** (`e2e.mjs`): Pyodide boots → catalog renders →
   create→list→delete round-trips through the console's own fetch.
-- **2 (next)**: GCP + Azure consoles (dump their catalogs the same way) +
-  specialised data-plane (S3 object upload is multipart — currently the one
-  known 501; DynamoDB items). Then run the cross-cloud conformance harness
-  green in-browser.
+- **2 (in progress)**: the WHOLE Pro/Max front-end replicated as-is — the real
+  **Workspaces launch dashboard** (`clouds.html`) is the entry, and **all three
+  consoles** (aws/gcp/azure) open verbatim and render against real catalogs
+  (gcp catalog dumped; a provider-aware in-browser space lets each console pass
+  its gate). **AWS has full CRUD.** Still to do: provider-aware CRUD for
+  GCP/Azure (their route tables + dispatch — currently their data-plane is
+  AWS-namespaced/partial), the Azure catalog (ARM-based, no dump module yet),
+  and S3 multipart object upload (the one known 501).
 - **3 (Nano-with-compute / Micro)**: Pyodide (Python) + CheerpJ (Java) + TinyGo
   (Go) in-tab compute.
 

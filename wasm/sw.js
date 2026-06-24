@@ -54,20 +54,50 @@ function routes() {
 
 // Bootstrap reads served verbatim from fixtures.
 const FIXTURES = {
+  // consoles ( /api/spaces/active is dynamic — see nanoSpace below )
   "/api/aws/catalog": "aws-catalog.json",
-  "/api/spaces/active": "spaces-active.json",
-  "/api/spaces": "spaces.json",
+  "/api/gcp/catalog": "gcp-catalog.json",
   "/api/tenants": "tenants.json",
+  // launch dashboard (clouds.html)
+  "/api/spaces": "spaces.json",
+  "/api/runtime/tier": "runtime-tier.json",
+  "/api/host/cpu": "host-cpu.json",
+  "/api/host/mem": "host-mem.json",
+  "/api/host/sizing": "host-sizing.json",
+  "/api/runtime/disk-health": "runtime-disk-health.json",
+  "/api/runtime/host-distribution": "runtime-host-distribution.json",
+  "/api/runtime/update-check": "runtime-update-check.json",
 };
 // Benign empty stubs so polled chrome endpoints don't error the console.
 const STUBS = {
   "/api/cloudsim/events": { events: [] },
   "/api/spaces/active/facts": {},
+  "/api/runtime/disk-cleanup/suggestions": { items: [] },
+  // Nano is always "ready" — no appliance to boot, so the readiness strip hides.
+  "/api/runtime/readiness": { ready: true, status: "ready", percent: 100 },
 };
 
 function json(obj, status) {
   return new Response(JSON.stringify(obj),
     { status: status || 200, headers: { "content-type": "application/json" } });
+}
+
+// Each console gates on an active space whose provider matches it. We derive
+// the provider from the page making the request, so aws/gcp/azure consoles all
+// pass their gate from the same in-browser substrate.
+function nanoSpace(provider) {
+  const acct = provider === "gcp" ? "nano-project" : provider === "azure" ? "nano-sub" : "000000000000";
+  const region = provider === "gcp" ? "us-central1" : provider === "azure" ? "eastus" : "us-east-1";
+  return { space_id: "nano-" + provider, name: "Nano " + provider.toUpperCase(), provider,
+           status: "running", active_region: region, active_account: acct };
+}
+async function providerOf(clientId) {
+  try {
+    const c = clientId && await self.clients.get(clientId);
+    const m = c && c.url.match(/\/(aws|gcp|azure)-console\.html/);
+    if (m) return m[1];
+  } catch (_) {}
+  return "aws";
 }
 
 // Ask the page (where Pyodide lives) to run a dispatch tuple.
@@ -131,6 +161,11 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin || !url.pathname.startsWith("/api/")) return;
   event.respondWith((async () => {
     try {
+      // The active space is provider-specific (console gate) — derive it from
+      // the requesting page so every console opens against a matching space.
+      if (url.pathname === "/api/spaces/active" && event.request.method === "GET") {
+        return json({ space: nanoSpace(await providerOf(event.clientId)) });
+      }
       const method = event.request.method;
       let body = null;
       if (["PUT", "POST", "PATCH"].includes(method)) {

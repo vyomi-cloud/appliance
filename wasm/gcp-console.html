@@ -1,0 +1,1537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Google Cloud Console — Vyomi</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined">
+<style>
+  :root{
+    /* GCP-faithful tokens — verified in the audit (matches real console) */
+    --blue:#1a73e8; --blue-d:#1765cc; --blue-l:#e8f0fe; --blue-tint:#cfe2ff;
+    --blue-bg:#f8fbff;  /* lightest blue for hovers */
+    --ink:#202124; --sub:#5f6368; --hint:#80868b;
+    --line:#e8eaed; --line-d:#dadce0; --border-blue:#d2e3fc;
+    --bg:#f8f9fa;  --panel:#fff;
+    --ok:#1e8e3e; --warn:#f29900; --err:#d93025;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;font-family:'Roboto',Arial,sans-serif;color:var(--ink);background:var(--bg);font-size:13px;line-height:1.5}
+  a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
+  button{font-family:inherit}
+  input,select,textarea{font-family:inherit}
+  h1,h2,h3,h4{font-family:'Google Sans','Roboto',Arial,sans-serif;font-weight:700;margin:0}
+
+  /* ============================================================
+     TOP BAR — WHITE (NOT navy). This is the GCP-distinctive look.
+     ============================================================ */
+  /* Taller header (56px) to give the search bar visible top/bottom breathing
+     room (real GCP is 56-64px). Vertical centering via flex now actually
+     produces space above and below the 40px search pill. */
+  header.gc-top{display:flex;align-items:center;gap:12px;height:56px;background:#fff;color:var(--ink);padding:0 14px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:60}
+  header .hamb{background:none;border:none;cursor:pointer;color:var(--sub);width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
+  header .hamb:hover{background:#f1f3f4}
+  /* "Google Cloud" wordmark next to the cube logo */
+  header .brand{display:flex;align-items:center;gap:8px;color:var(--ink);font-family:'Google Sans',Arial,sans-serif;font-size:18px;font-weight:500;text-decoration:none}
+  header .brand .cube{width:24px;height:24px}
+  /* Project picker — bordered chip with caret. Click opens modal. */
+  /* "Go back to Spaces" — escape hatch from the GCP console back to the
+     cross-cloud Spaces SPA. Same pattern as AWS console's back-spaces button
+     but Material-styled (GCP-blue text on hover, 4px corners). */
+  header .back-spaces{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;background:#fff;color:var(--sub);font-size:13px;font-weight:500;border:1px solid var(--line-d);border-radius:4px;cursor:pointer;text-decoration:none;margin-left:4px;font-family:'Google Sans',sans-serif}
+  header .back-spaces:hover{background:var(--blue-l);color:var(--blue);border-color:var(--blue);text-decoration:none}
+  header .back-spaces .material-symbols-outlined{font-size:16px}
+  header .proj-btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px;background:#fff;color:var(--ink);font-size:13px;font-weight:500;border:1px solid var(--line-d);border-radius:4px;cursor:pointer;margin-left:6px}
+  header .proj-btn:hover{background:#f8f9fa;border-color:#bdc1c6}
+  header .proj-btn .icon{font-size:18px;color:var(--sub)}
+  header .proj-btn .label{color:var(--sub);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  header .proj-btn .name{color:var(--ink);font-weight:500}
+  header .proj-btn .caret{font-size:9px;color:var(--sub);margin-left:2px}
+  /* Center search (⌘K) */
+  /* Search bar — 40px tall inside the 56px header = 8px breathing room
+     top/bottom (via flex align-center). Horizontal margin 24px keeps it
+     from crowding the project picker + utility icons. */
+  header .search{flex:1;max-width:720px;display:flex;align-items:center;background:#f1f3f4;border-radius:8px;height:40px;padding:0 16px;color:var(--ink);margin:0 24px}
+  header .search:focus-within{background:#fff;box-shadow:0 1px 6px rgba(32,33,36,.28)}
+  header .search .ic{color:var(--sub);font-size:20px;margin-right:12px}
+  header .search input{flex:1;border:none;outline:none;font-size:14px;background:transparent;color:var(--ink);height:38px}
+  header .search .kbd{color:var(--sub);font-size:11px;padding:2px 7px;border:1px solid var(--line-d);border-radius:3px;font-family:'Roboto Mono',monospace}
+  /* Right utility icons */
+  header .right{display:flex;align-items:center;gap:4px}
+  header .right button,header .right a{background:none;border:none;color:var(--sub);cursor:pointer;width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+  header .right button:hover,header .right a:hover{background:#f1f3f4;color:var(--ink)}
+  header .right .avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#4285f4,#34a853);color:#fff;font-weight:500;font-size:14px;display:inline-flex;align-items:center;justify-content:center;margin-left:4px}
+  header .right .bell{position:relative}
+  header .right .bell .dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--err);border:2px solid #fff;display:none}
+  header .right .bell .dot.show{display:block}
+
+  /* ============================================================
+     PROJECT PICKER MODAL (opens from header project chip)
+     ============================================================ */
+  .proj-modal{position:fixed;inset:0;background:rgba(60,64,67,.4);z-index:80;display:none;align-items:flex-start;justify-content:center;padding-top:60px}
+  .proj-modal.open{display:flex}
+  .proj-modal .box{background:#fff;border-radius:8px;width:560px;max-width:92vw;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(60,64,67,.32)}
+  .proj-modal .hdr{padding:18px 22px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
+  .proj-modal .hdr h2{font-size:18px;font-family:'Google Sans',sans-serif;font-weight:500}
+  .proj-modal .tabs{display:flex;border-bottom:1px solid var(--line)}
+  .proj-modal .tabs button{flex:0 0 auto;padding:11px 22px;background:none;border:none;font-size:13px;color:var(--sub);font-weight:500;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit}
+  .proj-modal .tabs button:hover{color:var(--ink)}
+  .proj-modal .tabs button.active{color:var(--blue);border-bottom-color:var(--blue);font-weight:700}
+  .proj-modal .search-box{padding:12px 16px;border-bottom:1px solid var(--line)}
+  .proj-modal .search-box input{width:100%;height:36px;border:1px solid var(--line-d);border-radius:4px;padding:0 12px;font-size:13px;outline:none}
+  .proj-modal .search-box input:focus{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
+  .proj-modal .list{flex:1;overflow-y:auto;padding:8px 0}
+  .proj-modal .list .item{display:flex;align-items:center;gap:12px;padding:9px 22px;cursor:pointer;color:var(--ink);font-size:13px}
+  .proj-modal .list .item:hover{background:#f1f3f4}
+  .proj-modal .list .item.selected{background:var(--blue-l);color:var(--blue)}
+  .proj-modal .list .item .name{flex:1;font-weight:500}
+  .proj-modal .list .item .id{color:var(--sub);font-size:12px}
+  .proj-modal .list .item .star{cursor:pointer;color:#bdc1c6;font-size:18px}
+  .proj-modal .list .item .star.starred{color:#fbbc04}
+  .proj-modal .list .item .badge{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-right:8px}
+  .proj-modal .list .item .badge.prod{background:#fce8e6;color:#c5221f}
+  .proj-modal .list .item .badge.dev{background:#fef7e0;color:#b06000}
+  .proj-modal .list .item .badge.sim{background:var(--blue-l);color:var(--blue)}
+  .proj-modal .ftr{padding:12px 22px;border-top:1px solid var(--line);display:flex;justify-content:space-between}
+  .proj-modal .ftr button{background:none;border:none;color:var(--blue);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit}
+
+  /* ============================================================
+     PAGE LAYOUT — left rail (collapsible) + main content
+     ============================================================ */
+  .body{display:flex;min-height:calc(100vh - 56px)}  /* matches header height */
+  aside#rail{width:256px;background:#fff;border-right:1px solid var(--line);overflow-y:auto;transition:width .15s;flex-shrink:0}
+  aside#rail.collapsed{width:0;overflow:hidden;border-right:none}
+  aside#rail .rail-h{padding:14px 18px 8px;font-size:14px;font-weight:500;font-family:'Google Sans',sans-serif;color:var(--ink);border-bottom:1px solid var(--line)}
+  aside#rail .group{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--sub);padding:14px 18px 6px;font-weight:500}
+  aside#rail a.item{display:flex;align-items:center;gap:12px;padding:9px 18px;color:var(--ink);font-size:13px;cursor:pointer;text-decoration:none;border-left:3px solid transparent}
+  aside#rail a.item:hover{background:var(--blue-bg)}
+  aside#rail a.item.active{background:var(--blue-l);color:var(--blue);border-left-color:var(--blue);font-weight:500}
+  aside#rail a.item .ic{font-size:18px;color:var(--sub);width:18px}
+  aside#rail a.item.active .ic{color:var(--blue)}
+  aside#rail a.item .lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  main#main{flex:1;overflow-y:auto;background:var(--bg);min-width:0}
+
+  /* ============================================================
+     BREADCRUMB BAR (above content)
+     ============================================================ */
+  .crumbs-bar{background:#fff;border-bottom:1px solid var(--line);padding:10px 24px;font-size:12px;color:var(--sub);display:flex;align-items:center;gap:6px}
+  .crumbs-bar a{color:var(--blue);cursor:pointer}
+  .crumbs-bar .sep{color:var(--hint)}
+  .crumbs-bar .current{color:var(--ink);font-weight:500}
+
+  /* ============================================================
+     CONTENT (page headers, panels, tables)
+     ============================================================ */
+  .wrap{padding:20px 24px;max-width:1600px}
+  .page-head{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+  .page-head h1{font-size:24px;font-weight:400;font-family:'Google Sans',sans-serif;flex:1}
+  .page-head h1 .count{color:var(--sub);font-weight:400;margin-left:6px;font-size:18px}
+  .page-head .sub{font-size:13px;color:var(--sub)}
+
+  .actions-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center}
+  .actions-bar .spacer{flex:1}
+
+  /* Buttons — Material Design rounded rectangles (4px), uppercase labels */
+  .btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;font-size:13px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;border:1px solid var(--line-d);background:#fff;color:var(--sub);border-radius:4px;cursor:pointer;font-family:'Google Sans',sans-serif}
+  .btn:hover{background:#f1f6fe;color:var(--ink)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+  .btn.primary:hover{background:var(--blue-d);color:#fff}
+  .btn.danger{color:var(--err);border-color:#f5b8be}
+  .btn.danger:hover{background:#fef0ef;color:var(--err)}
+  .btn .material-symbols-outlined{font-size:17px}
+
+  /* Material text button (no background, blue text) */
+  .btn-text{background:none;border:none;color:var(--blue);font-size:13px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;padding:8px 12px;border-radius:4px;font-family:'Google Sans',sans-serif}
+  .btn-text:hover{background:var(--blue-l)}
+
+  /* Cards (panels) */
+  .card{background:#fff;border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
+  .card .h{padding:16px 20px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;font-family:'Google Sans',sans-serif;border-bottom:1px solid var(--line)}
+  .card .b{padding:16px 20px}
+
+  /* Tables */
+  .table-wrap{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .table-toolbar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .table-toolbar input.search{flex:1;max-width:380px;height:36px;border:1px solid var(--line-d);border-radius:4px;padding:0 12px;font-size:13px;outline:none}
+  .table-toolbar input.search:focus{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
+  .table-toolbar .stats{font-size:12px;color:var(--sub);margin-left:auto}
+  table.gc{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+  table.gc th{text-align:left;padding:11px 14px;font-weight:500;color:var(--sub);background:var(--blue-bg);font-size:12px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--line)}
+  table.gc th.sortable{cursor:pointer;user-select:none}
+  table.gc th.sortable:hover{background:#eaf2fb}
+  table.gc td{padding:11px 14px;border-bottom:1px solid var(--line);color:var(--ink);vertical-align:middle}
+  table.gc tr:hover td{background:var(--blue-bg)}
+  table.gc tr.selected td{background:var(--blue-tint)}
+  table.gc td.chk,table.gc th.chk{width:42px;padding-right:0}
+  table.gc td a.id{color:var(--blue);font-weight:500}
+  table.gc td a.id:hover{text-decoration:underline}
+  .empty{padding:60px 16px;text-align:center;color:var(--sub);font-size:13px}
+  .empty .ic{font-size:56px;color:#bdc1c6;display:block;margin:0 auto 12px}
+  .pager{display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--line);color:var(--sub);font-size:12px;justify-content:flex-end}
+
+  /* State chips */
+  .state{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500}
+  .state .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .state.run .dot{background:var(--ok)} .state.run{color:var(--ok)}
+  .state.stop .dot{background:var(--sub)} .state.stop{color:var(--sub)}
+  .state.warn .dot{background:var(--warn)} .state.warn{color:var(--warn)}
+  .state.err .dot{background:var(--err)} .state.err{color:var(--err)}
+
+  /* Detail page: top sub-tab strip then left sub-nav + right content */
+  .detail-top{background:#fff;padding:16px 24px;border-bottom:1px solid var(--line)}
+  .detail-top .id-row{display:flex;align-items:center;gap:14px}
+  .detail-top h1{font-size:22px;font-weight:400;font-family:'Google Sans',sans-serif;flex:1}
+  .detail-top .meta{font-size:12px;color:var(--sub);margin-top:4px}
+  .detail-actions{display:flex;gap:6px}
+
+  .sub-layout{display:flex;min-height:560px;background:#fff;border-top:1px solid var(--line)}
+  .sub-nav{width:240px;border-right:1px solid var(--line);background:#fff;padding:8px 0;overflow-y:auto}
+  .sub-nav .group{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--sub);padding:14px 18px 4px;font-weight:500}
+  .sub-nav a.nav-item{display:flex;align-items:center;gap:10px;padding:9px 20px;color:var(--ink);font-size:13px;cursor:pointer;text-decoration:none;border-left:3px solid transparent}
+  .sub-nav a.nav-item:hover{background:var(--blue-bg)}
+  .sub-nav a.nav-item.active{background:var(--blue-l);color:var(--blue);border-left-color:var(--blue);font-weight:500}
+  .sub-nav a.nav-item .ic{font-size:17px;color:var(--sub);width:17px}
+  .sub-nav a.nav-item.active .ic{color:var(--blue)}
+  .sub-content{flex:1;padding:20px 24px;overflow-y:auto;min-width:0}
+
+  .sub-h{font-size:18px;font-weight:500;font-family:'Google Sans',sans-serif;margin:0 0 12px;color:var(--ink)}
+
+  .kv-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px 20px;margin-bottom:14px}
+  .kv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 24px}
+  .kv-grid .k{font-size:11.5px;color:var(--sub);font-weight:500;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+  .kv-grid .v{font-size:13.5px;color:var(--ink);word-break:break-all}
+
+  /* Wizard — single-page collapsible sections + right summary card */
+  .wizard-page{padding:20px 24px;max-width:1500px}
+  .wizard-grid{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
+  .wizard-main{display:flex;flex-direction:column;gap:14px}
+  .col-card{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .col-card .col-h{padding:14px 18px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;font-family:'Google Sans',sans-serif;cursor:pointer;border-bottom:1px solid transparent}
+  .col-card.open .col-h{border-bottom-color:var(--line)}
+  .col-card .col-h .caret{margin-left:auto;color:var(--sub);transition:transform .15s}
+  .col-card.open .col-h .caret{transform:rotate(90deg)}
+  .col-card .col-b{padding:18px 20px;display:none}
+  .col-card.open .col-b{display:block}
+  /* Live summary card (right) — sticky w/ cost estimate + equiv code */
+  .summary-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px 20px;position:sticky;top:72px;max-height:calc(100vh - 108px);overflow-y:auto}  /* sticks below 56px header + 16px gap */
+  .summary-card h3{font-size:14px;font-weight:500;font-family:'Google Sans',sans-serif;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  .summary-card .row{display:flex;justify-content:space-between;padding:6px 0;font-size:12.5px}
+  .summary-card .row .k{color:var(--sub)}
+  .summary-card .row .v{color:var(--ink);font-weight:500;text-align:right;max-width:200px;word-break:break-all}
+  .summary-card .cost{margin-top:14px;padding:12px 14px;background:var(--blue-l);border-radius:6px;text-align:center}
+  .summary-card .cost .label{font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px}
+  .summary-card .cost .value{font-size:22px;font-weight:500;color:var(--ink);font-family:'Google Sans',sans-serif;margin-top:4px}
+  .summary-card .cost .period{font-size:11px;color:var(--sub)}
+  .summary-card .cta{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+  /* Equivalent code expander (GCP's signature feature — wired in GCP-B) */
+  .equiv-code{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+  .equiv-code .head{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--blue);font-weight:500;cursor:pointer;text-transform:uppercase;letter-spacing:.5px}
+
+  /* Form fields */
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:12.5px;color:var(--sub);margin-bottom:4px;font-weight:500}
+  .field label .req{color:var(--err);margin-left:2px}
+  .field input[type=text],.field input[type=password],.field input[type=number],.field select,.field textarea{
+    width:100%;max-width:540px;height:40px;border:1px solid var(--line-d);border-radius:4px;padding:0 12px;font-size:14px;font-family:inherit;outline:none;background:#fff;color:var(--ink)}
+  .field textarea{height:96px;padding:8px 12px}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
+  .field input.err,.field select.err{border-color:var(--err);box-shadow:0 0 0 1px var(--err)}
+  .field .help{font-size:11.5px;color:var(--sub);margin-top:4px;max-width:540px}
+  .field .err-msg{font-size:11.5px;color:var(--err);margin-top:4px}
+  .radio,.check{display:flex;align-items:flex-start;gap:10px;margin:7px 0;font-size:13px;color:var(--ink);cursor:pointer}
+  .info-pill{font-size:13px;color:var(--ink);padding:8px 12px;background:#f1f3f4;border-radius:4px;max-width:540px}
+  .help-banner{font-size:12px;color:var(--sub);background:var(--blue-l);border-left:4px solid var(--blue);padding:10px 14px;border-radius:0 4px 4px 0;max-width:680px;margin-bottom:10px}
+  .labels-rows{display:grid;grid-template-columns:1fr 1fr 32px;gap:8px;align-items:center;margin-bottom:6px}
+  .labels-rows input{height:36px;border:1px solid var(--line-d);border-radius:4px;padding:0 10px;font-size:13px}
+  .labels-rows .x{background:none;border:none;color:var(--err);cursor:pointer;font-size:18px}
+  .add-row{background:none;border:none;color:var(--blue);font-size:12.5px;font-weight:500;cursor:pointer;padding:6px 0;font-family:inherit}
+  .add-row:hover{text-decoration:underline}
+
+  /* Toast */
+  #toast{position:fixed;bottom:24px;left:24px;display:flex;flex-direction:column;gap:8px;z-index:100}
+  .toast{background:#323232;color:#fff;font-size:13px;padding:13px 18px;border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.25);min-width:280px}
+  .toast.err{background:var(--err)}
+  .toast.ok{background:#323232}
+
+  /* Notifications popover (bell) */
+  .notif-pop{position:fixed;top:62px;right:24px;width:400px;max-height:520px;background:#fff;border:1px solid var(--line-d);border-radius:8px;box-shadow:0 6px 24px rgba(60,64,67,.16);z-index:70;display:none;flex-direction:column;overflow:hidden}  /* anchored below 56px header */
+  .notif-pop.open{display:flex}
+  .notif-pop .h{padding:14px 18px;border-bottom:1px solid var(--line);font-weight:500;font-family:'Google Sans',sans-serif;font-size:14px;display:flex;align-items:center;gap:8px}
+  .notif-pop .body{flex:1;overflow-y:auto}
+  .notif-pop .item{padding:12px 18px;border-bottom:1px solid var(--line);font-size:13px}
+  .notif-pop .empty{padding:36px 18px;text-align:center;color:var(--sub);font-size:13px}
+
+/* ── Disk chip (v2.0.4) — small top-right pill; click to maximize ── */
+#disk-widget-slot {
+  position: fixed !important;
+  top: 56px !important;
+  right: 16px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: none !important;
+  z-index: 80 !important;
+  width: auto !important;
+}
+#disk-widget-slot .disk-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 6px 12px 6px 8px;
+  font-size: 12px; font-weight: 600; color: #1a2330;
+  cursor: pointer; font-family: inherit;
+  box-shadow: 0 2px 8px rgba(15,27,45,0.10);
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+#disk-widget-slot .disk-chip:hover {
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15,27,45,0.16);
+}
+#disk-widget-slot .disk-chip .disk-chip-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.18);
+}
+#disk-widget-slot .disk-chip.warn   .disk-chip-dot { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.20); }
+#disk-widget-slot .disk-chip.danger .disk-chip-dot { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.20); animation: chipPulse 1400ms ease-in-out infinite; }
+@keyframes chipPulse {
+  0%,100% { box-shadow: 0 0 0 3px rgba(239,68,68,0.20); }
+  50%     { box-shadow: 0 0 0 6px rgba(239,68,68,0.10); }
+}
+#disk-widget-slot .disk-chip .disk-chip-pct { font-variant-numeric: tabular-nums; }
+#disk-widget-slot .disk-chip .disk-chip-caret { font-size: 10px; color: #5f6b7a; }
+#disk-widget-slot .disk-popover {
+  display: none;
+  position: absolute; top: calc(100% + 6px); right: 0;
+  width: 320px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(15,27,45,0.18);
+  border: 1px solid #e7e7e9;
+  overflow: hidden;
+}
+#disk-widget-slot.open .disk-popover { display: block; }
+#disk-widget-slot .disk-popover .dp-close {
+  position: absolute; top: 8px; right: 10px;
+  background: none; border: 0; font-size: 22px; color: #5f6b7a;
+  cursor: pointer; line-height: 1; padding: 2px 6px;
+  z-index: 1;
+}
+#disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
+</style>
+  <script type="module" src="/nano-boot.js"></script>
+</head>
+<body>
+
+<!-- ==================== TOP BAR ==================== -->
+<header class="gc-top">
+  <button class="hamb" id="hambBtn" title="Main menu">
+    <span class="material-symbols-outlined" style="font-size:22px">menu</span>
+  </button>
+  <a class="brand" href="/gcp-console.html">
+    <svg class="cube" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#4285F4" d="M12.19 2.38a9.32 9.32 0 0 0-6.62 2.74l3.92 3.93a3.85 3.85 0 0 1 5.49.04l3.91-3.93a9.32 9.32 0 0 0-6.7-2.78z"/>
+      <path fill="#34A853" d="M9.5 21.4a9.32 9.32 0 0 0 6.7-2.78l-3.91-3.93a3.85 3.85 0 0 1-5.49.04l-3.92 3.93a9.32 9.32 0 0 0 6.62 2.74z"/>
+      <path fill="#EA4335" d="M2.83 5.13a9.32 9.32 0 0 0-.7 11.06l3.93-3.93a3.85 3.85 0 0 1-.04-5.49l-3.19-1.64z"/>
+      <path fill="#FBBC04" d="M21.55 5.13l-3.19 1.64a3.85 3.85 0 0 1-.04 5.49l3.93 3.93a9.32 9.32 0 0 0-.7-11.06z"/>
+    </svg>
+    Google Cloud
+  </a>
+  <a class="back-spaces" href="/" title="Return to the Simulation Spaces view (switch provider or pick a different project)">
+    <span class="material-symbols-outlined">arrow_back</span>
+    Go back to Spaces
+  </a>
+  <button class="proj-btn" id="projBtn" title="Select a project">
+    <span class="material-symbols-outlined icon">folder_open</span>
+    <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.1">
+      <span class="label">Project</span>
+      <span class="name" id="projName">…</span>
+    </span>
+    <span class="caret">▾</span>
+  </button>
+  <div class="search">
+    <span class="material-symbols-outlined ic">search</span>
+    <input placeholder='Search (/) for resources, docs, products, and more' id="topSearch">
+    <span class="kbd">/</span>
+  </div>
+  <div class="right">
+    <a href="/docs/gcp" target="_blank" title="REST API reference"><span class="material-symbols-outlined" style="font-size:20px">api</span></a>
+    <a href="/docs/gcp/usage" target="_blank" title="SDK and CLI usage"><span class="material-symbols-outlined" style="font-size:20px">code</span></a>
+    <button title="Cloud Shell" id="cloudShellBtn"><span class="material-symbols-outlined" style="font-size:20px">terminal</span></button>
+    <button class="bell" id="notifBtn" title="Notifications">
+      <span class="material-symbols-outlined" style="font-size:20px">notifications</span>
+      <span class="dot" id="notifDot"></span>
+    </button>
+    <button title="Support"><span class="material-symbols-outlined" style="font-size:20px">help</span></button>
+    <button title="Settings"><span class="material-symbols-outlined" style="font-size:20px">settings</span></button>
+    <button class="avatar" id="avatarBtn" title="Account">U</button>
+  </div>
+<div id="disk-widget-slot"></div>
+</header>
+
+<!-- ==================== PROJECT PICKER MODAL ==================== -->
+<div class="proj-modal" id="projModal">
+  <div class="box">
+    <div class="hdr">
+      <span class="material-symbols-outlined" style="color:var(--sub)">folder_open</span>
+      <h2>Select a project</h2>
+      <span style="flex:1"></span>
+      <button class="hamb" id="projModalClose"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="tabs">
+      <button class="active">Recent</button>
+      <button>All</button>
+    </div>
+    <div class="search-box"><input placeholder="Search projects and folders" id="projSearch"></div>
+    <div class="list" id="projList"></div>
+    <div class="ftr">
+      <button>+ NEW PROJECT</button>
+      <button>SETTINGS</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== NOTIFICATIONS POPOVER ==================== -->
+<div class="notif-pop" id="notifPop">
+  <div class="h"><span class="material-symbols-outlined">notifications</span>Notifications
+    <span style="flex:1"></span>
+    <button class="btn-text" id="notifClose">CLOSE</button></div>
+  <div class="body" id="notifBody"></div>
+</div>
+
+<!-- ==================== BREADCRUMB ==================== -->
+<div class="crumbs-bar" id="crumbs"></div>
+
+<!-- ==================== PAGE BODY ==================== -->
+<div class="body">
+  <aside id="rail"></aside>
+  <main id="main"><div class="empty">Loading…</div></main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const ORIGIN = window.location.origin;
+let CATALOG = null, PROJECT = "cloudlearn", REGION = "us-central1", ZONE = "us-central1-a";
+let INSTANCE_CATALOG = [];
+let STATE = {view: "home", service: null, item: null, detailTab: 0};
+const NOTIFS = [];
+
+// ========== DOM helpers (same pattern as Azure/AWS consoles) =================
+function el(tag, attrs={}, ...kids){
+  const e = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v;
+    else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on") && typeof v === "function") e.addEventListener(k.slice(2), v);
+    else if (v != null) e.setAttribute(k, v);
+  }
+  for (const kid of kids) { if (kid == null) continue; e.append(kid.nodeType ? kid : document.createTextNode(kid)); }
+  return e;
+}
+function icon(name){ return el("span",{class:"material-symbols-outlined"}, name); }
+function toast(msg, kind="ok"){
+  const t = el("div",{class:"toast "+kind}, msg);
+  document.getElementById("toast").append(t);
+  setTimeout(()=>{ t.style.opacity="0"; t.style.transition="opacity .4s"; setTimeout(()=>t.remove(), 400); }, 3200);
+}
+function getPath(obj, dotted){
+  let cur = obj;
+  for (const p of String(dotted).split(".")) {
+    if (cur == null) return undefined;
+    cur = (Array.isArray(cur) && /^\d+$/.test(p)) ? cur[+p] : cur[p];
+  }
+  return cur;
+}
+function setPath(obj, dotted, value){
+  const parts = String(dotted).split("."); let cur = obj;
+  parts.forEach((p, i) => {
+    const last = i === parts.length-1, nxt = parts[i+1];
+    if (last) { cur[p] = value; return; }
+    if (cur[p] == null || typeof cur[p] !== "object") cur[p] = /^\d+$/.test(nxt) ? [] : {};
+    cur = cur[p];
+  });
+}
+async function api(method, path, body){
+  const opt = {method, headers:{}};
+  if (body !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(ORIGIN+path, opt);
+  let json = null; try { json = await r.json(); } catch(e){}
+  return {status:r.status, ok:r.ok, json};
+}
+function fillPath(template, params){
+  // GCP paths have {project}, {region}, {zone}, {name} placeholders.
+  return template.replace(/\{(\w+)\}/g, (_, k) => encodeURIComponent(params[k] || ""));
+}
+function fillCommon(template, extras){
+  return fillPath(template, {project: PROJECT, region: REGION, zone: ZONE, ...(extras||{})});
+}
+function svcByKey(k){ return (CATALOG.services||[]).find(s => s.key === k); }
+function recordNotif(kind, msg){
+  NOTIFS.unshift({kind, msg, ts: new Date().toLocaleTimeString()});
+  if (NOTIFS.length > 50) NOTIFS.pop();
+  document.getElementById("notifDot").classList.add("show");
+}
+
+// ========== Space-context gate ==============================================
+async function requireGcpSpace(){
+  let active = null;
+  try { const r = await fetch(ORIGIN + "/api/spaces/active"); if (r.ok) active = await r.json(); } catch(_){}
+  const space = active && active.space ? active.space : null;
+  const provider = space ? String(space.provider || "").toLowerCase() : "";
+  if (!space || provider !== "gcp") {
+    // Auto-switch: find and activate a GCP space instead of showing an error
+    try {
+      const sr = await fetch(ORIGIN + "/api/spaces");
+      if (sr.ok) {
+        const data = await sr.json();
+        const spaces = data.spaces || [];
+        const gcpSpace = spaces.find(s => String(s.provider || "").toLowerCase() === "gcp" && s.status === "running");
+        if (gcpSpace) {
+          await fetch(ORIGIN + "/api/spaces/" + gcpSpace.space_id + "/switch", {method: "POST"});
+          window.location.reload();
+          return false;
+        }
+      }
+    } catch(_){}
+    // No GCP space exists at all — redirect to Spaces view
+    document.body.innerHTML =
+      '<div style="font-family:\'Google Sans\',Arial,sans-serif;padding:60px 24px;max-width:560px;margin:60px auto;text-align:center;color:#202124;background:#fff;border:1px solid #e8eaed;border-radius:8px">' +
+      '  <svg width="64" height="64" viewBox="0 0 24 24" style="margin-bottom:16px"><path fill="#4285F4" d="M12.19 2.38a9.32 9.32 0 0 0-6.62 2.74l3.92 3.93a3.85 3.85 0 0 1 5.49.04l3.91-3.93a9.32 9.32 0 0 0-6.7-2.78z"/><path fill="#34A853" d="M9.5 21.4a9.32 9.32 0 0 0 6.7-2.78l-3.91-3.93a3.85 3.85 0 0 1-5.49.04l-3.92 3.93a9.32 9.32 0 0 0 6.62 2.74z"/><path fill="#EA4335" d="M2.83 5.13a9.32 9.32 0 0 0-.7 11.06l3.93-3.93a3.85 3.85 0 0 1-.04-5.49l-3.19-1.64z"/><path fill="#FBBC04" d="M21.55 5.13l-3.19 1.64a3.85 3.85 0 0 1-.04 5.49l3.93 3.93a9.32 9.32 0 0 0-.7-11.06z"/></svg>' +
+      '  <h1 style="font-size:22px;font-weight:500;margin:0 0 8px">No GCP space found</h1>' +
+      '  <p style="font-size:14px;color:#5f6368;line-height:1.6">Create a GCP simulation space first.</p>' +
+      '  <a href="/" style="display:inline-block;margin-top:20px;background:#1a73e8;color:#fff;padding:10px 22px;border-radius:4px;font-size:13px;text-decoration:none;font-weight:500;text-transform:uppercase;letter-spacing:.5px">Go to Spaces</a>' +
+      '</div>';
+    return false;
+  }
+  return true;
+}
+
+// ========== Boot =============================================================
+async function boot(){
+  if (!(await requireGcpSpace())) return;
+  try {
+    const r = await fetch(ORIGIN + "/api/gcp/catalog"); CATALOG = await r.json();
+    PROJECT = CATALOG.project; REGION = CATALOG.region; ZONE = CATALOG.zone;
+    document.getElementById("projName").textContent = PROJECT;
+    try {
+      const ir = await fetch(ORIGIN + "/api/instances/catalog?provider=gcp");
+      const id = await ir.json();
+      INSTANCE_CATALOG = Array.isArray(id.instances) ? id.instances : [];
+    } catch(_) { INSTANCE_CATALOG = []; }
+    wireHeader();
+    render();
+  } catch (e) {
+    document.getElementById("main").innerHTML = '<div class="empty">Failed to load GCP catalog: '+e+'</div>';
+  }
+}
+
+function wireHeader(){
+  document.getElementById("hambBtn").addEventListener("click", () => {
+    document.getElementById("rail").classList.toggle("collapsed");
+  });
+  document.getElementById("cloudShellBtn").addEventListener("click", () =>
+    toast("Cloud Shell drawer is wired in GCP-E (planned). Use /api/gcp/compute/...:console endpoints for now.", "ok"));
+  document.getElementById("notifBtn").addEventListener("click", e => {
+    e.stopPropagation();
+    const p = document.getElementById("notifPop");
+    if (p.classList.contains("open")) p.classList.remove("open");
+    else { renderNotifPop(); p.classList.add("open"); document.getElementById("notifDot").classList.remove("show"); }
+  });
+  document.getElementById("notifClose").addEventListener("click", () => document.getElementById("notifPop").classList.remove("open"));
+  document.addEventListener("click", e => {
+    const p = document.getElementById("notifPop");
+    if (!p.contains(e.target) && e.target.id !== "notifBtn") p.classList.remove("open");
+    const m = document.getElementById("projModal");
+    if (e.target === m) m.classList.remove("open");
+  });
+  document.getElementById("projBtn").addEventListener("click", () => {
+    const m = document.getElementById("projModal");
+    renderProjectModal();
+    m.classList.add("open");
+  });
+  document.getElementById("projModalClose").addEventListener("click", () =>
+    document.getElementById("projModal").classList.remove("open"));
+  document.getElementById("avatarBtn").addEventListener("click", () =>
+    toast("Account is set by the active simulator space and tenant.", "ok"));
+}
+function renderNotifPop(){
+  const b = document.getElementById("notifBody");
+  b.innerHTML = "";
+  if (!NOTIFS.length) {
+    b.append(el("div",{class:"empty"}, icon("notifications_off"),
+      el("div",{style:"margin-top:8px"}, "No notifications"),
+      el("div",{style:"font-size:11.5px;margin-top:4px;color:var(--sub)"}, "Activity from your console actions appears here.")));
+    return;
+  }
+  NOTIFS.forEach(n => b.append(el("div",{class:"item"},
+    el("div",{}, n.msg),
+    el("div",{style:"font-size:11.5px;color:var(--sub);margin-top:4px"}, n.ts))));
+}
+function renderProjectModal(){
+  const list = document.getElementById("projList");
+  list.innerHTML = "";
+  // Fetch spaces and present each GCP-provider space as a "project"
+  fetch("/api/spaces").then(r=>r.json()).then(d => {
+    const gcpSpaces = (d.spaces || []).filter(s => (s.provider||"").toLowerCase() === "gcp");
+    if (!gcpSpaces.length) {
+      list.append(el("div",{class:"empty",style:"padding:24px"},
+        "No GCP projects found in this account.",
+        el("div",{style:"margin-top:12px"},
+          el("button",{class:"btn-text",onclick:()=>window.location.href="/"}, "Go to Spaces"))));
+      return;
+    }
+    gcpSpaces.forEach(s => {
+      const isCurrent = s.space_id === d.active_space_id;
+      const item = el("div",{class:"item"+(isCurrent?" selected":""),onclick:async()=>{
+        await fetch(`/api/spaces/${s.space_id}/switch`, {method:"POST"});
+        window.location.reload();
+      }},
+        icon("folder_open"),
+        el("span",{class:"name"}, s.name),
+        el("span",{class:"badge sim"}, "SIM"),
+        el("span",{class:"id"}, s.space_id),
+        el("span",{class:"star material-symbols-outlined"+(isCurrent?" starred":"")}, isCurrent?"star":"star_border"));
+      list.append(item);
+    });
+  });
+}
+
+// ========== Router ===========================================================
+function navigate(next){ STATE = {...STATE, ...next}; render(); }
+function render(){
+  renderCrumbs(); renderRail();
+  const main = document.getElementById("main"); main.innerHTML = "";
+  if (STATE.view === "home")   return renderHome(main);
+  if (STATE.view === "list")   return renderList(main);
+  if (STATE.view === "detail") return renderDetail(main);
+  if (STATE.view === "create") return renderCreate(main);
+  main.append(el("div",{class:"empty"}, "Unknown view: "+STATE.view));
+}
+
+function renderCrumbs(){
+  const c = document.getElementById("crumbs"); c.innerHTML = "";
+  c.append(el("a",{onclick:()=>navigate({view:"home", service:null, item:null})}, PROJECT));
+  if (!STATE.service) return;
+  const svc = svcByKey(STATE.service);
+  if (!svc) return;
+  c.append(el("span",{class:"sep"}, "›"),
+    el("a",{onclick:()=>navigate({view:"list", item:null})}, svc.label));
+  if (STATE.view === "detail" && STATE.item) {
+    const name = String(getPath(STATE.item, svc.name_field) || STATE.item.name || "");
+    c.append(el("span",{class:"sep"}, "›"), el("span",{class:"current"}, name));
+  } else if (STATE.view === "create") {
+    c.append(el("span",{class:"sep"}, "›"),
+      el("span",{class:"current"}, "Create " + svc.label.replace(/s$/,"").toLowerCase()));
+  }
+}
+
+// Left rail — GCP-faithful: hierarchical groups (COMPUTE / STORAGE / DATABASES / ...)
+function renderRail(){
+  const rail = document.getElementById("rail"); rail.innerHTML = "";
+  rail.append(el("div",{class:"rail-h"}, "All products"));
+  const groups = [
+    ["COMPUTE",       ["compute", "functions"]],
+    ["STORAGE",       ["storage"]],
+    ["DATABASES",     ["cloudsql", "firestore"]],
+    ["NETWORKING",    ["vpc"]],
+    ["INTEGRATION",   ["pubsub", "apigateway", "eventarc"]],
+    ["SECURITY",      ["secretmanager", "kms"]],
+    ["IAM & ADMIN",   ["iam"]],
+  ];
+  groups.forEach(([label, keys]) => {
+    rail.append(el("div",{class:"group"}, label));
+    keys.forEach(k => {
+      const s = svcByKey(k); if (!s) return;
+      const isActive = STATE.service === k;
+      rail.append(el("a",{class:"item"+(isActive?" active":""),
+        onclick:()=>navigate({view:"list", service:k, item:null})},
+        el("span",{class:"material-symbols-outlined ic"}, s.icon),
+        el("span",{class:"lbl"}, s.label)));
+    });
+  });
+}
+
+// ========== HOME — GCP-style project dashboard ==============================
+function renderHome(main){
+  main.innerHTML = "";  // self-clear (same pattern as list/detail/create)
+  const wrap = el("div",{class:"wrap"});
+  wrap.append(el("div",{class:"page-head"},
+    el("h1",{}, "Dashboard")));
+  wrap.append(el("div",{class:"sub",style:"margin-bottom:16px"},
+    `Project: ${PROJECT}  ·  Region: ${REGION}  ·  Zone: ${ZONE}`));
+  const grid = el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px"});
+  CATALOG.services.forEach(s => {
+    const card = el("div",{class:"card",style:"cursor:pointer",
+      onclick:()=>navigate({view:"list", service:s.key, item:null})});
+    card.append(el("div",{class:"h"}, icon(s.icon), s.label,
+      el("span",{style:"margin-left:auto;color:var(--blue);font-size:12px"}, "›")));
+    card.append(el("div",{class:"b",style:"font-size:12px;color:var(--sub)"},
+      s.namespace + "  ·  " + (s.api_paths ? Object.keys(s.api_paths).length : 0) + " actions"));
+    grid.append(card);
+  });
+  wrap.append(grid);
+  main.append(wrap);
+}
+
+// ========== LIST — service resource grid ====================================
+async function renderList(main){
+  // Self-clear so any caller (router OR the Refresh button OR a child reload)
+  // is safe — without this each call APPENDS another header+table on top of
+  // the existing one. Same pattern as the AWS console fix.
+  main.innerHTML = "";
+  const svc = svcByKey(STATE.service);
+  if (!svc) { main.append(el("div",{class:"empty"}, "Service not found")); return; }
+  const wrap = el("div",{class:"wrap"});
+  const head = el("div",{class:"page-head"});
+  head.append(el("h1",{}, svc.label, el("span",{class:"count",id:"countChip"}, "")));
+  wrap.append(head);
+
+  const ab = el("div",{class:"actions-bar"});
+  const primaryLabel = svc.key === "compute" ? "Create instance"
+                     : svc.key === "storage" ? "Create bucket"
+                     : svc.key === "cloudsql" ? "Create instance"
+                     : svc.key === "pubsub" ? "Create topic"
+                     : svc.key === "firestore" ? "Create database"
+                     : svc.key === "functions" ? "Create function"
+                     : svc.key === "vpc" ? "Create VPC network"
+                     : svc.key === "iam" ? "Create service account"
+                     : "Create";
+  ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
+    icon("add"), primaryLabel));
+  ab.append(el("button",{class:"btn",onclick:()=>renderList(main)}, icon("refresh"), "Refresh"));
+
+  // Lifecycle actions for VM-class services. Mirrors the AWS console's
+  // "Instance state" dropdown — without these, the user could see their
+  // GCP instances in the list but had no UI path to stop/start them
+  // (the backend routes /instances/{name}/{start,stop,reset} existed in
+  // the catalog's api_paths but no buttons referenced them).
+  // We keep them flat (not nested in a dropdown) for now — Compute is the
+  // only service that needs them.
+  if (svc.key === "compute" && (svc.api_paths || {}).stop) {
+    const lifecycleAction = async (action, confirmFirst) => {
+      const rows = Array.from(document.querySelectorAll('tr[data-row-name]'))
+        .filter(tr => tr.querySelector('input[type="checkbox"]:checked'));
+      if (!rows.length) { toast("Select at least one instance", "err"); return; }
+      if (confirmFirst && !confirm(`${action} ${rows.length} instance(s)?`)) return;
+      const ap = svc.api_paths[action];
+      if (!ap) { toast(`No ${action} path configured for ${svc.label}`, "err"); return; }
+      let ok = 0, fail = 0;
+      for (const tr of rows) {
+        const name = tr.getAttribute('data-row-name');
+        const path = fillCommon(ap.path, {name});
+        const r = await api(ap.method, path);
+        if (r && (r.ok || [200, 201, 202, 204].includes(r.status))) ok++; else fail++;
+      }
+      toast(`${action}: ${ok} ok${fail ? `, ${fail} failed` : ""}`, fail ? "err" : null);
+      renderList(main).catch(()=>{});
+    };
+    ab.append(el("button",{class:"btn",onclick:()=>lifecycleAction("stop", true)},
+      icon("stop"), "Stop"));
+    ab.append(el("button",{class:"btn",onclick:()=>lifecycleAction("start", false)},
+      icon("play_arrow"), "Start"));
+    ab.append(el("button",{class:"btn",onclick:()=>lifecycleAction("reset", true)},
+      icon("refresh"), "Reset"));
+    ab.append(el("button",{class:"btn danger",onclick:()=>lifecycleAction("delete", true)},
+      icon("delete"), "Delete"));
+  }
+  wrap.append(ab);
+
+  const tableWrap = el("div",{class:"table-wrap"});
+  const toolbar = el("div",{class:"table-toolbar"});
+  const fi = el("input",{class:"search",placeholder:"Filter "+svc.label.toLowerCase()+"…"});
+  const stats = el("span",{class:"stats"});
+  toolbar.append(fi, stats);
+  tableWrap.append(toolbar);
+  const tableHolder = el("div",{}); tableWrap.append(tableHolder);
+  wrap.append(tableWrap);
+  main.append(wrap);
+
+  tableHolder.innerHTML = '<div class="empty">Loading…</div>';
+  const fullPath = fillCommon(svc.collection_path);
+  const r = await api("GET", fullPath);
+  if (!r.ok) {
+    tableHolder.innerHTML = "";
+    tableHolder.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status,
+      el("div",{style:"font-size:11px;color:var(--hint);margin-top:6px"}, fullPath)));
+    return;
+  }
+  const data = r.json || {};
+  const items = data.items || data.instances || data.topics || data.subscriptions || data.databases
+              || data.functions || data.apis || data.networks || data.accounts
+              || data.serviceAccounts || data.value || data.results
+              || (Array.isArray(data) ? data : []);
+
+  const state = {filter:"", sortBy:null, sortDir:1};
+  function paint(){
+    tableHolder.innerHTML = "";
+    let filtered = items.slice();
+    const q = state.filter.trim().toLowerCase();
+    if (q) filtered = filtered.filter(it => svc.columns.some(c => {
+      const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
+    }));
+    if (state.sortBy != null) {
+      const path = svc.columns[state.sortBy][0];
+      filtered.sort((a,b) => String(getPath(a,path)||"").localeCompare(String(getPath(b,path)||"")) * state.sortDir);
+    }
+    document.getElementById("countChip").textContent = filtered.length ? `(${filtered.length})` : "";
+    stats.textContent = filtered.length === items.length
+      ? `${items.length} item${items.length===1?"":"s"}`
+      : `${filtered.length} of ${items.length} match`;
+    if (!items.length) {
+      tableHolder.append(el("div",{class:"empty"},
+        el("span",{class:"ic material-symbols-outlined"}, "inbox"),
+        el("div",{}, `No ${svc.label.toLowerCase()} in project ${PROJECT}.`),
+        el("div",{style:"margin-top:14px"},
+          el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
+            icon("add"), primaryLabel))));
+      return;
+    }
+    if (!filtered.length) { tableHolder.append(el("div",{class:"empty"}, "No matches.")); return; }
+    const t = el("table",{class:"gc"});
+    const hdr = el("tr",{});
+    hdr.append(el("th",{class:"chk"}, el("input",{type:"checkbox"})));
+    svc.columns.forEach((c, idx) => {
+      const arr = state.sortBy === idx ? (state.sortDir === 1 ? " ▲" : " ▼") : "";
+      hdr.append(el("th",{class:"sortable",onclick:()=>{
+        if (state.sortBy === idx) state.sortDir = -state.sortDir;
+        else { state.sortBy = idx; state.sortDir = 1; } paint();
+      }}, c[1] + arr));
+    });
+    t.append(hdr);
+    filtered.forEach(it => {
+      // data-row-name lets the new lifecycle-action buttons (Stop/Start/
+      // Reset/Delete in the actions bar) discover selected rows without
+      // re-walking the filtered array.
+      const rowName = String(getPath(it, svc.name_field) || it.name || "");
+      const tr = el("tr",{"data-row-name": rowName});
+      tr.append(el("td",{class:"chk"}, el("input",{type:"checkbox",onclick:e=>e.stopPropagation()})));
+      svc.columns.forEach((c,i) => {
+        const v = getPath(it, c[0]);
+        const td = el("td",{});
+        if (i === 0) td.append(el("a",{class:"id",onclick:()=>navigate({view:"detail", item:it, detailTab:0})},
+          String(v||"—")));
+        else if (c[0].endsWith("state") || c[0].endsWith("status")) td.append(stateBadge(v));
+        else td.append(document.createTextNode(String(v ?? "—")));
+        tr.append(td);
+      });
+      t.append(tr);
+    });
+    tableHolder.append(t);
+  }
+  fi.addEventListener("input", e => { state.filter = e.target.value; paint(); });
+  paint();
+}
+function stateBadge(v){
+  if (v == null || v === "") return document.createTextNode("—");
+  const s = String(v).toLowerCase();
+  const cls = (s.includes("run") || s === "ready" || s === "active" || s === "available") ? "run"
+            : (s.includes("stop") || s === "terminated" || s === "deleting") ? "stop"
+            : (s === "failed" || s === "error") ? "err"
+            : (s === "provisioning" || s === "creating" || s === "pending") ? "warn" : "stop";
+  return el("span",{class:"state "+cls}, el("span",{class:"dot"}), document.createTextNode(String(v)));
+}
+
+// ========== DETAIL — two-pane (left sub-nav + content) ======================
+async function renderDetail(main){
+  main.innerHTML = "";  // self-clear so any caller is safe
+  const svc = svcByKey(STATE.service);
+  const item = STATE.item || {};
+  const name = String(getPath(item, svc.name_field) || item.name || "");
+  const top = el("div",{class:"detail-top"});
+  top.append(el("div",{class:"id-row"},
+    el("div",{style:"flex:1"},
+      el("h1",{}, name),
+      el("div",{class:"meta"}, svc.namespace + "  ·  " + PROJECT + "  ·  " + REGION)),
+    el("div",{class:"detail-actions"},
+      el("button",{class:"btn",onclick:()=>navigate({view:"list", item:null})}, icon("arrow_back"), "Back"),
+      el("button",{class:"btn danger",onclick:async()=>{
+        if (!confirm("Delete "+name+"?")) return;
+        const dp = (svc.api_paths||{}).delete;
+        const path = dp ? fillCommon(dp.path, {name}) : fillCommon(svc.resource_path, {name});
+        const r = await api(dp ? dp.method : "DELETE", path);
+        if (r.ok || [200,202,204].includes(r.status)) { toast(name+" deleted"); navigate({view:"list", item:null}); }
+        else toast("Delete failed ("+r.status+")", "err");
+      }}, icon("delete"), "Delete"))));
+  main.append(top);
+
+  // Two-pane layout
+  const layout = el("div",{class:"sub-layout"});
+  const nav = el("aside",{class:"sub-nav"});
+  const content = el("section",{class:"sub-content"});
+  layout.append(nav, content);
+  main.append(layout);
+
+  // Build nav from subBlades
+  const flat = [];
+  (svc.subBlades || []).forEach(n => {
+    if (n.group) { flat.push({group: n.group}); (n.items||[]).forEach(it => flat.push(it)); }
+    else flat.push(n);
+  });
+  let activeKey = (flat.find(f => f.key) || {}).key;
+  function paintNav(){
+    nav.innerHTML = "";
+    flat.forEach(f => {
+      if (f.group) { nav.append(el("div",{class:"group"}, f.group)); return; }
+      nav.append(el("a",{class:"nav-item"+(f.key===activeKey?" active":""),
+        onclick:()=>{ activeKey = f.key; paintNav(); paintContent(); }},
+        el("span",{class:"material-symbols-outlined ic"}, f.icon||"chevron_right"),
+        el("span",{class:"lbl"}, f.label)));
+    });
+  }
+  function paintContent(){
+    content.innerHTML = "";
+    const item = flat.find(f => f.key === activeKey);
+    if (!item) return;
+    content.append(el("h2",{class:"sub-h"}, item.label));
+    const t = (item.type||"").toLowerCase();
+    if (t === "overview") return renderOverviewTab(content, svc, STATE.item);
+    if (t === "secretvalue") return renderSecretValueTab(content, svc, STATE.item);
+  if (t === "kmsconfig") return renderKmsConfigTab(content, svc, STATE.item);
+    if (t === "objects")  return renderObjectsTab(content, svc, STATE.item);
+    if (t === "tags")     return renderLabelsTab(content, svc, STATE.item);
+    if (t === "json")     return content.append(el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto"}, JSON.stringify(STATE.item, null, 2)));
+    if (t === "properties")return renderOverviewTab(content, svc, STATE.item);
+    if (t === "metrics")  return renderMetricsTab(content, svc);
+    if (t === "activitylog") return content.append(el("div",{class:"empty"}, "Activity log derived from /api/cloudsim/events — populated when actions taken on this resource."));
+    if (t === "iam")      return content.append(el("div",{class:"empty"}, "Permissions inherited from project-level IAM bindings."));
+    // Stub — wired in GCP-C
+    content.append(el("div",{class:"empty"},
+      el("span",{class:"ic material-symbols-outlined"}, "construction"),
+      el("div",{}, "This pane mirrors Google Cloud Console's "+item.label+" view."),
+      el("div",{style:"font-size:11.5px;margin-top:6px;color:var(--hint)"},
+        "Wiring lands in GCP-C (rich sub-blade renderers). Schema is loaded; rendering is the next step.")));
+  }
+  paintNav(); paintContent();
+}
+
+// Cloud Storage — Objects browser (upload / list / delete), parity with the
+// S3 + Azure Blob consoles. Upload streams the real file to the byte store so
+// the native google-cloud-storage SDK reads it back.
+// Secret Manager "Secret value" detail tab — mirrors the real console: hidden
+// until "Retrieve secret value", then Key/value table or Plaintext; Edit makes
+// it editable; Save PUTs the new value (= addSecretVersion / access).
+function renderSecretValueTab(host, svc, item){
+  const name = String((item && item.name) || getPath(item, svc.name_field) || "");
+  let value = "", revealed = false, editing = false, plaintext = false;
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  function asPairs(s){ try { const o=JSON.parse(s); if(o&&typeof o==="object"&&!Array.isArray(o)) return Object.keys(o).map(k=>[k,String(o[k])]); } catch(_){} return null; }
+  function saveBar(getVal){
+    const bar=el("div",{style:"display:flex;gap:8px;margin-top:14px"});
+    bar.append(el("button",{class:"btn primary",onclick:async()=>{
+      const r=await api("PUT", fillCommon(svc.resource_path,{name}), {value:getVal()});
+      if(r.ok||[200,204].includes(r.status)){ value=getVal(); editing=false; toast("Secret value saved"); render(); } else toast("Save failed","err");
+    }}, icon("save"), "Save"));
+    bar.append(el("button",{class:"btn",onclick:()=>{editing=false;render();}}, "Cancel"));
+    return bar;
+  }
+  function render(){
+    panel.innerHTML="";
+    panel.append(el("div",{class:"panel-h"}, icon("vpn_key"), "Secret value"));
+    const body=el("div",{style:"padding:14px"}); panel.append(body);
+    if(!revealed){
+      body.append(el("div",{style:"color:#5f6b7a;margin-bottom:12px;font-size:13px"}, "The secret value is hidden. Retrieve it to view or edit."));
+      body.append(el("button",{class:"btn",onclick:async()=>{
+        try{ const r=await api("GET", fillCommon(svc.resource_path,{name})); if(r.ok&&r.json) value=String(r.json.value ?? value); }catch(_){}
+        revealed=true; render();
+      }}, icon("visibility"), "Retrieve secret value"));
+      return;
+    }
+    const pairs=asPairs(value);
+    const bar=el("div",{style:"display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap"});
+    if(pairs){
+      bar.append(el("button",{class:"btn"+(plaintext?"":" primary"),onclick:()=>{plaintext=false;render();}},"Key/value"));
+      bar.append(el("button",{class:"btn"+(plaintext?" primary":""),onclick:()=>{plaintext=true;render();}},"Plaintext"));
+    } else { plaintext=true; }
+    bar.append(el("div",{style:"flex:1"}));
+    if(!editing) bar.append(el("button",{class:"btn",onclick:()=>{editing=true;render();}}, icon("edit"), "Edit"));
+    body.append(bar);
+    if(plaintext||!pairs){
+      const ta=el("textarea",{rows:7,style:"width:100%;box-sizing:border-box;font-family:monospace;font-size:13px;padding:8px;border:1px solid #aab7b8;border-radius:4px"});
+      ta.value=value; ta.readOnly=!editing; body.append(ta);
+      if(editing) body.append(saveBar(()=>ta.value));
+    } else {
+      const tbl=el("table",{class:"gc",style:"width:100%"});
+      const hr=el("tr",{},el("th",{},"Key"),el("th",{},"Value")); if(editing) hr.append(el("th",{style:"width:44px"},"")); tbl.append(hr);
+      const inputs=[];
+      function addRow(k,v){
+        const ki=el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+        const vi=el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+        ki.value=k; vi.value=v; ki.readOnly=!editing; vi.readOnly=!editing;
+        const pair={ki,vi}; inputs.push(pair);
+        const tr=el("tr",{},el("td",{},ki),el("td",{},vi));
+        if(editing) tr.append(el("td",{}, el("button",{class:"btn del",title:"Remove",onclick:()=>{const i=inputs.indexOf(pair); if(i>=0) inputs.splice(i,1); tr.remove();}}, "✕")));
+        tbl.append(tr);
+      }
+      pairs.forEach(p=>addRow(p[0],p[1])); body.append(tbl);
+      if(editing){
+        body.append(el("button",{class:"btn",style:"margin-top:10px",onclick:()=>addRow("","")}, icon("add"), "Add row"));
+        body.append(saveBar(()=>JSON.stringify(Object.fromEntries(inputs.map(p=>[p.ki.value.trim(),p.vi.value]).filter(e=>e[0])))));
+      }
+    }
+  }
+  render();
+}
+
+function renderKmsConfigTab(host, svc, item){
+  const name = String((item && item.name) || getPath(item, svc.name_field) || "");
+  let data = null, editing = false;
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  async function load(){
+    try{ const r=await api("GET", fillCommon(svc.resource_path,{name})); if(r.ok&&r.json) data=r.json; }catch(_){}
+    if(!data) data={labels:{},rotation_period:""};
+    render();
+  }
+  function render(){
+    panel.innerHTML="";
+    panel.append(el("div",{class:"panel-h"}, icon("autorenew"), "Rotation & labels"));
+    const body=el("div",{style:"padding:14px"}); panel.append(body);
+    // Rotation period
+    body.append(el("div",{style:"font-weight:600;margin-bottom:6px;font-size:13px"}, "Rotation period"));
+    body.append(el("div",{style:"color:#5f6b7a;margin-bottom:8px;font-size:12.5px"}, "Duration between automatic rotations, e.g. 7776000s (90 days)."));
+    const rot=el("input",{style:"width:280px;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:6px;font-family:monospace"});
+    rot.value=data.rotation_period||""; rot.readOnly=!editing; body.append(rot);
+    // Labels
+    body.append(el("div",{style:"font-weight:600;margin:18px 0 6px;font-size:13px"}, "Labels"));
+    const tbl=el("table",{class:"gc",style:"width:100%;max-width:540px"});
+    const hr=el("tr",{},el("th",{},"Key"),el("th",{},"Value")); if(editing) hr.append(el("th",{style:"width:44px"},"")); tbl.append(hr);
+    const inputs=[];
+    function addRow(k,v){
+      const ki=el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+      const vi=el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+      ki.value=k; vi.value=v; ki.readOnly=!editing; vi.readOnly=!editing;
+      const pair={ki,vi}; inputs.push(pair);
+      const tr=el("tr",{},el("td",{},ki),el("td",{},vi));
+      if(editing) tr.append(el("td",{}, el("button",{class:"btn del",title:"Remove",onclick:()=>{const i=inputs.indexOf(pair); if(i>=0) inputs.splice(i,1); tr.remove();}}, "✕")));
+      tbl.append(tr);
+    }
+    Object.keys(data.labels||{}).forEach(k=>addRow(k,String(data.labels[k]))); body.append(tbl);
+    if(editing) body.append(el("button",{class:"btn",style:"margin-top:10px",onclick:()=>addRow("","")}, icon("add"), "Add label"));
+    const bar=el("div",{style:"display:flex;gap:8px;margin-top:16px"});
+    if(!editing){
+      bar.append(el("button",{class:"btn",onclick:()=>{editing=true;render();}}, icon("edit"), "Edit"));
+    } else {
+      bar.append(el("button",{class:"btn primary",onclick:async()=>{
+        const labels=Object.fromEntries(inputs.map(p=>[p.ki.value.trim(),p.vi.value]).filter(e=>e[0]));
+        const r=await api("PUT", fillCommon(svc.resource_path,{name}), {labels, rotation_period:rot.value.trim()});
+        if(r.ok||[200,204].includes(r.status)){ data.labels=labels; data.rotation_period=rot.value.trim(); editing=false; toast("Saved"); render(); } else toast("Save failed","err");
+      }}, icon("save"), "Save"));
+      bar.append(el("button",{class:"btn",onclick:()=>{editing=false;render();}}, "Cancel"));
+    }
+    body.append(bar);
+  }
+  load();
+}
+
+async function renderObjectsTab(host, svc, item){
+  const bucket = String(getPath(item, svc.name_field) || item.name || "");
+  const ap = svc.api_paths || {};
+  host.innerHTML = "";
+
+  const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap"});
+  const fileIn = el("input",{type:"file",style:"display:none",multiple:true,
+    onchange:e=>uploadFiles(e.target.files)});
+  const upBtn = el("button",{class:"btn primary",onclick:()=>{
+    if (!ap.uploadObject) { toast("Upload path not configured","err"); return; } fileIn.click();
+  }}, icon("upload"), "Upload");
+  const refBtn = el("button",{class:"btn",onclick:()=>renderObjectsTab(host, svc, item)},
+    icon("refresh"), "Refresh");
+  const status = el("span",{style:"font-size:12.5px;color:var(--sub);margin-left:auto"}, "");
+  bar.append(upBtn, refBtn, fileIn, status);
+  host.append(bar);
+  const listHost = el("div",{}); host.append(listHost);
+
+  async function uploadFiles(files){
+    if (!files || !files.length) return;
+    const list = Array.from(files); let done = 0;
+    for (const f of list){
+      status.textContent = `Uploading ${f.name} (${done+1}/${list.length})…`;
+      const fd = new FormData(); fd.append("file", f, f.name);
+      try {
+        const r = await fetch(ORIGIN + fillCommon(ap.uploadObject.path, {name:bucket}),
+          {method:"POST", body:fd});
+        if (!r.ok) toast("Upload failed: "+f.name, "err"); else done++;
+      } catch(e){ toast("Upload failed: "+f.name, "err"); }
+    }
+    status.textContent = `Uploaded ${done} of ${list.length}`;
+    if (done > 0) toast(`Uploaded ${done} object${done===1?"":"s"}`);
+    renderObjectsTab(host, svc, item);
+  }
+
+  async function deleteObject(name){
+    if (!ap.deleteObject) { toast("Delete path not configured","err"); return; }
+    if (!confirm("Delete object '"+name+"'? This cannot be undone.")) return;
+    const path = fillCommon(ap.deleteObject.path,
+      {name:bucket, object:name.split("/").map(encodeURIComponent).join("/")});
+    const r = await api(ap.deleteObject.method, path);
+    if (r.ok || [200,202,204].includes(r.status)) { toast("Deleted "+name); renderObjectsTab(host, svc, item); }
+    else toast("Delete failed ("+r.status+")", "err");
+  }
+
+  listHost.innerHTML = '<div class="empty">Loading…</div>';
+  const r = await api((ap.objects||{}).method || "GET", fillCommon((ap.objects||{}).path, {name:bucket}));
+  listHost.innerHTML = "";
+  const objs = ((r.json||{}).items) || [];
+  if (!objs.length){
+    listHost.append(el("div",{class:"empty"},
+      el("span",{class:"ic material-symbols-outlined"}, "inbox"),
+      el("div",{}, "This bucket is empty."),
+      el("div",{style:"font-size:11.5px;color:var(--hint);margin-top:6px"},
+        "Click Upload to add your first object.")));
+    return;
+  }
+  const t = el("table",{class:"gc"});
+  t.append(el("tr",{}, el("th",{},"Name"),el("th",{},"Type"),
+                  el("th",{},"Size"),el("th",{},"Updated"),el("th",{},"")));
+  objs.forEach(o => t.append(el("tr",{},
+    el("td",{}, o.name||"—"),
+    el("td",{}, o.contentType||"application/octet-stream"),
+    el("td",{}, String(o.size!=null?o.size:0)+" B"),
+    el("td",{class:"small"}, o.updated || o.timeCreated || "—"),
+    el("td",{style:"text-align:right"},
+      el("button",{class:"btn danger",onclick:()=>deleteObject(o.name)}, icon("delete"), "Delete")))));
+  listHost.append(t);
+}
+
+function renderOverviewTab(host, svc, item){
+  const card = el("div",{class:"kv-card"});
+  const g = el("div",{class:"kv-grid"});
+  const rows = [["Project", PROJECT], ["Region", REGION]];
+  svc.columns.forEach(c => { const v = getPath(item, c[0]); if (v != null) rows.push([c[1], String(v)]); });
+  rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, v))));
+  card.append(g); host.append(card);
+}
+function renderLabelsTab(host, svc, item){
+  const labels = (item.labels && typeof item.labels === "object") ? item.labels : {};
+  if (!Object.keys(labels).length) {
+    host.append(el("div",{class:"empty"},
+      el("span",{class:"ic material-symbols-outlined"}, "sell"),
+      el("div",{}, "No labels attached."),
+      el("div",{style:"font-size:11.5px;color:var(--hint);margin-top:6px"},
+        "Labels are key-value pairs that help organize and filter resources.")));
+    return;
+  }
+  const card = el("div",{class:"kv-card"});
+  const g = el("div",{class:"kv-grid"});
+  Object.entries(labels).forEach(([k,v]) =>
+    g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, String(v)))));
+  card.append(g); host.append(card);
+}
+function renderMetricsTab(host, svc){
+  const series = svc.key === "compute"
+    ? [["CPU utilization (%)",10,85,"%"],["Network bytes/sec (RX)",1000,80000,""],["Disk read ops/s",10,200,""]]
+    : svc.key === "cloudsql"
+    ? [["CPU (%)",10,75,"%"],["Active connections",2,30,""],["Storage used (GB)",10,80,""]]
+    : [["Requests",10,500,""],["Latency p50 (ms)",10,200,""],["Errors",0,5,""]];
+  const grid = el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px"});
+  series.forEach(([label, lo, hi, suf]) => grid.append(buildSparkline(label, lo, hi, suf)));
+  host.append(grid);
+}
+function buildSparkline(label, lo, hi, suffix){
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"k",style:"color:var(--sub);font-size:11.5px;text-transform:uppercase"}, label));
+  let seed = 0; for (const c of label) seed = (seed*31 + c.charCodeAt(0)) & 0xffff;
+  const pts = []; for (let i=0;i<24;i++) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; pts.push(lo + (hi-lo) * ((seed % 1000)/1000)); }
+  const w=260, h=60, max=Math.max(...pts), min=Math.min(...pts);
+  const path = pts.map((p,i)=>`${i===0?"M":"L"}${(i*(w-4)/(pts.length-1)+2).toFixed(1)},${(h-2-((p-min)/(max-min||1))*(h-6)).toFixed(1)}`).join(" ");
+  card.append(el("div",{html:`<svg viewBox="0 0 ${w} ${h}" width="100%" preserveAspectRatio="none" style="margin-top:6px"><path d="${path}" fill="none" stroke="#1a73e8" stroke-width="1.6"/></svg>`}));
+  card.append(el("div",{style:"font-size:18px;font-weight:500;font-family:'Google Sans',sans-serif;margin-top:6px"},
+    pts[pts.length-1].toFixed(suffix==="%"?0:0) + (suffix||" units")));
+  return card;
+}
+
+// ========== CREATE — collapsible-sections form + right summary card =========
+function renderCreate(main){
+  main.innerHTML = "";  // self-clear so any caller is safe
+  const svc = svcByKey(STATE.service);
+  if (!svc) { main.append(el("div",{class:"empty"}, "Service not found")); return; }
+  const wrap = el("div",{class:"wizard-page"});
+  wrap.append(el("div",{class:"page-head"}, el("h1",{},
+    svc.key === "compute" ? "Create an instance" : "Create " + svc.label.replace(/s$/,"").toLowerCase())));
+  if (svc.wizard && Array.isArray(svc.wizard.tabs)) {
+    renderCollapsibleWizard(wrap, svc);
+  } else {
+    wrap.append(el("div",{class:"empty"}, "Wizard schema missing for "+svc.key));
+  }
+  main.append(wrap);
+}
+
+function renderCollapsibleWizard(host, svc){
+  const wiz = svc.wizard;
+  const tabs = (wiz.tabs || []).filter(t => !t.auto);  // skip auto Review tab
+  const grid = el("div",{class:"wizard-grid"});
+  const mainCol = el("div",{class:"wizard-main"});
+  const aside = el("aside",{class:"summary-card"});
+  grid.append(mainCol, aside);
+  host.append(grid);
+
+  const wState = {values: {}, errors: {}, open: new Set([0])};  // first card open
+  // Seed defaults
+  tabs.forEach(t => (t.sections||[]).forEach(sec => (sec.fields||[]).forEach(f => {
+    if (f.type === "help" || f.type === "info") return;
+    if (f.default !== undefined) wState.values[f.name] = f.default;
+  })));
+
+  function isVisible(f){
+    if (!f.ifEquals) return true;
+    return Object.entries(f.ifEquals).every(([k,v]) => wState.values[k] === v);
+  }
+  function validateField(f){
+    if (f.type === "help" || f.type === "info" || !isVisible(f)) return null;
+    const v = wState.values[f.name];
+    const empty = v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length);
+    if (f.required && empty) return "This field is required.";
+    if (empty) return null;
+    const val = f.validate || {};
+    if (val.regex && typeof v === "string" && !new RegExp(val.regex).test(v))
+      return val.message || "Invalid format.";
+    if (f.type === "number") {
+      const n = Number(v);
+      if (Number.isNaN(n)) return "Must be a number.";
+      if (val.min !== undefined && n < val.min) return "Minimum "+val.min+".";
+      if (val.max !== undefined && n > val.max) return "Maximum "+val.max+".";
+    }
+    return null;
+  }
+
+  function renderField(f){
+    if (f.type === "help") return el("div",{class:"help-banner"}, f.value || "");
+    if (f.type === "info") {
+      const dv = f.name === "__project__" ? PROJECT
+              : f.name === "__region__"  ? REGION
+              : f.name === "__zone__"    ? ZONE
+              : (wState.values[f.name] || "");
+      return el("div",{class:"field"}, el("label",{}, f.label),
+        el("div",{class:"info-pill"}, dv));
+    }
+    const wrap = el("div",{class:"field"});
+    const lbl = [document.createTextNode(f.label || f.name)];
+    if (f.required) lbl.push(el("span",{class:"req"}, "*"));
+    wrap.append(el("label",{}, ...lbl));
+    const err = wState.errors[f.name];
+    let inp;
+    if (f.type === "vmSize" && INSTANCE_CATALOG.length) {
+      inp = el("select",{onchange:e=>{wState.values[f.name]=e.target.value; rerender();}});
+      const byF = {};
+      INSTANCE_CATALOG.forEach(it => { (byF[it.family]=byF[it.family]||[]).push(it); });
+      Object.keys(byF).forEach(fam => {
+        const og = el("optgroup",{label:String(fam).toUpperCase()});
+        byF[fam].forEach(it => {
+          const ramG = (it.ram_mb/1024).toFixed(it.ram_mb<1024?1:0);
+          og.append(el("option",{value:it.name}, `${it.name} — ${it.vcpu} vCPU · ${ramG} GB`));
+        });
+        inp.append(og);
+      });
+      inp.value = wState.values[f.name] || (f.default||"");
+      wrap.append(inp);
+    } else if (f.type === "select") {
+      inp = el("select",{onchange:e=>{wState.values[f.name]=e.target.value; rerender();}});
+      (f.options||[]).forEach(o => inp.append(el("option",{value:o.value}, o.label||o.value)));
+      inp.value = wState.values[f.name] ?? (f.default||"");
+      wrap.append(inp);
+    } else if (f.type === "radio") {
+      (f.options||[]).forEach(o => {
+        const r = el("input",{type:"radio",name:f.name,value:String(o.value),
+          onchange:e=>{wState.values[f.name]= (typeof o.value === "boolean") ? (e.target.value==="true") : e.target.value; rerender();}});
+        if (String(wState.values[f.name] ?? f.default) === String(o.value)) r.checked = true;
+        wrap.append(el("label",{class:"radio"}, r, el("span",{}, o.label||String(o.value))));
+      });
+    } else if (f.type === "boolean") {
+      const cb = el("input",{type:"checkbox",onchange:e=>{wState.values[f.name]=e.target.checked; rerender();}});
+      if (wState.values[f.name]) cb.checked = true;
+      wrap.innerHTML = "";
+      wrap.append(el("label",{class:"check"}, cb, el("span",{}, f.label||f.name)));
+    } else if (f.type === "number") {
+      inp = el("input",{type:"number",value: wState.values[f.name] ?? f.default ?? "",
+        oninput:e=>{wState.values[f.name]= e.target.value === "" ? "" : Number(e.target.value); softRerender();}});
+      wrap.append(inp);
+    } else if (f.type === "password") {
+      inp = el("input",{type:"password",value: wState.values[f.name] || "",
+        oninput:e=>{wState.values[f.name]=e.target.value; softRerender();}});
+      wrap.append(inp);
+    } else if (f.type === "labelsEditor" || f.type === "tagsEditor") {
+      const t = wState.values[f.name] || {}; wState.values[f.name] = t;
+      const rows = el("div",{});
+      function paint(){
+        rows.innerHTML = "";
+        const entries = Object.entries(t);
+        if (!entries.length) entries.push(["",""]);
+        entries.forEach(([k,v]) => {
+          const g = el("div",{class:"labels-rows"});
+          const kInp = el("input",{placeholder:"Key",value:k,
+            oninput:e=>{delete t[k]; if (e.target.value) t[e.target.value]=v;}});
+          const vInp = el("input",{placeholder:"Value",value:v,oninput:e=>{t[k]=e.target.value;}});
+          const x = el("button",{class:"x material-symbols-outlined",
+            onclick:()=>{delete t[k]; paint(); softRerender();}}, "close");
+          g.append(kInp, vInp, x);
+          rows.append(g);
+        });
+      }
+      paint(); wrap.append(rows);
+      wrap.append(el("button",{class:"add-row",onclick:()=>{
+        t["label-"+(Object.keys(t).length+1)] = ""; paint(); softRerender();
+      }}, "+ ADD LABEL"));
+    } else {
+      inp = el("input",{type:"text",value: wState.values[f.name] ?? f.default ?? "",
+        oninput:e=>{wState.values[f.name]=e.target.value; softRerender();}});
+      wrap.append(inp);
+    }
+    if (inp && err) inp.classList.add("err");
+    if (f.help) wrap.append(el("div",{class:"help"}, f.help));
+    if (err) wrap.append(el("div",{class:"err-msg"}, err));
+    return wrap;
+  }
+
+  function renderSections(){
+    mainCol.innerHTML = "";
+    tabs.forEach((t, i) => {
+      const card = el("div",{class:"col-card"+(wState.open.has(i)?" open":"")});
+      const hdr = el("div",{class:"col-h",onclick:()=>{
+        if (wState.open.has(i)) wState.open.delete(i); else wState.open.add(i);
+        renderSections();
+      }},
+        document.createTextNode(t.label),
+        el("span",{class:"caret material-symbols-outlined"}, "chevron_right"));
+      card.append(hdr);
+      const body = el("div",{class:"col-b"});
+      (t.sections||[]).forEach(sec => {
+        if (sec.label && (t.sections.length > 1))
+          body.append(el("div",{style:"font-size:13px;font-weight:500;font-family:'Google Sans',sans-serif;color:var(--ink);margin-bottom:10px"}, sec.label));
+        (sec.fields||[]).forEach(f => { if (!isVisible(f)) return; body.append(renderField(f)); });
+      });
+      card.append(body);
+      mainCol.append(card);
+    });
+    mainCol.append(el("div",{style:"display:flex;gap:10px;margin-top:10px"},
+      el("button",{class:"btn",onclick:()=>navigate({view:"list", item:null})}, "Cancel"),
+      el("button",{class:"btn primary",onclick:submit}, icon("check"), "Create")));
+  }
+
+  function renderSummary(){
+    aside.innerHTML = "";
+    aside.append(el("h3",{}, "Summary"));
+    let n = 0;
+    Object.entries(wState.values).forEach(([k,v]) => {
+      if (k.startsWith("__") && k !== "__region__" && k !== "__zone__") return;
+      if (v === undefined || v === null || v === "" || n > 8) return;
+      const pretty = (() => {
+        for (const t of tabs) for (const sec of (t.sections||[])) for (const f of (sec.fields||[])) {
+          if (f.name === k) return f.label || k;
+        }
+        return k;
+      })();
+      const fmt = (v) => {
+        if (typeof v === "boolean") return v ? "Yes" : "No";
+        if (typeof v === "object" && v) {
+          const e = Object.entries(v).filter(([kk,_])=>kk);
+          return e.length ? e.map(([kk,vv])=>`${kk}=${vv}`).join(", ") : "(empty)";
+        }
+        return String(v).slice(0,60);
+      };
+      aside.append(el("div",{class:"row"}, el("span",{class:"k"}, pretty),
+        el("span",{class:"v"}, fmt(v))));
+      n++;
+    });
+    if (n === 0) aside.append(el("div",{style:"font-size:12.5px;color:var(--sub);padding:8px 0"}, "Fill in fields on the left — your choices appear here."));
+
+    // Cost estimate stub (GCP-B will wire real estimate)
+    aside.append(el("div",{class:"cost"},
+      el("div",{class:"label"}, "Monthly estimate"),
+      el("div",{class:"value"}, "$0.00 USD"),
+      el("div",{class:"period"}, "estimated cost for this resource")));
+    // Equivalent code expander placeholder (GCP-B)
+    aside.append(el("div",{class:"equiv-code"},
+      el("div",{class:"head"}, icon("code"), "EQUIVALENT CODE",
+        el("span",{style:"margin-left:auto;color:var(--sub);font-size:11px"}, "GCP-B"))));
+    aside.append(el("div",{class:"cta"},
+      el("button",{class:"btn primary",onclick:submit}, icon("check"), "Create"),
+      el("button",{class:"btn",onclick:()=>navigate({view:"list", item:null})}, "Cancel")));
+  }
+
+  function rerender(){ renderSections(); renderSummary(); }
+  function softRerender(){ renderSummary(); }
+
+  async function submit(){
+    // Validate all
+    let anyErr = false;
+    tabs.forEach(t => (t.sections||[]).forEach(sec => (sec.fields||[]).forEach(f => {
+      const m = validateField(f);
+      if (m) { wState.errors[f.name] = m; anyErr = true; }
+      else delete wState.errors[f.name];
+    })));
+    if (anyErr) { rerender(); toast("Fix errors before creating.", "err"); return; }
+
+    const name = String(wState.values["name"] || "").trim();
+    if (!name) { toast("Name is required.", "err"); return; }
+    const body = {labels: wState.values["labels"] || {}};
+    Object.entries(wState.values).forEach(([k,v]) => {
+      if (k === "labels") return;
+      if (v === undefined || v === null || v === "") return;
+      if (k.startsWith("__")) {
+        const m = (wiz.synthetic_map || {})[k];
+        if (!m) return;
+        const exp = m[v] || m["*"];
+        if (!exp) return;
+        Object.entries(exp).forEach(([path, val]) => setPath(body, path, val === "$value" ? v : val));
+        return;
+      }
+      setPath(body, k, v);
+    });
+    const path = fillCommon(svc.collection_path);
+    const r = await api(svc.create_method, path, body);
+    if (r.ok) { toast(name + " created"); recordNotif("ok", "Created " + name); navigate({view:"list", item:null}); }
+    else {
+      const m = (r.json && (r.json.detail || (r.json.error && r.json.error.message))) || "";
+      toast("Create failed (" + r.status + "): " + m, "err");
+    }
+  }
+
+  rerender();
+}
+
+boot();
+</script>
+<script>
+
+// ── Disk health widget (added in v2.0.4 — chip-by-default) ──
+let _diskWidgetState = null;
+
+function _diskStatusToClass(s) {
+  if (s === "warn") return "warn";
+  if (s === "freeze" || s === "danger") return "danger";
+  return "";
+}
+function _toggleDiskPopover() {
+  const el = document.getElementById("disk-widget-slot");
+  if (!el) return;
+  el.classList.toggle("open");
+}
+function _closeDiskPopover(ev) {
+  if (ev) { ev.stopPropagation(); }
+  const el = document.getElementById("disk-widget-slot");
+  if (el) el.classList.remove("open");
+}
+function _wrapWithChip(cardHtml, d) {
+  const disk = d.disk || {};
+  const pct = Math.round(disk.pct_used || 0);
+  const klass = _diskStatusToClass(d.status);
+  return (
+    '<button class="disk-chip ' + klass + '" type="button" onclick="_toggleDiskPopover()" title="Click to expand disk health">'+
+      '<span class="disk-chip-dot"></span>'+
+      '<span>Disk</span>'+
+      '<span class="disk-chip-pct">' + pct + '%</span>'+
+      '<span class="disk-chip-caret">▾</span>'+
+    '</button>'+
+    '<div class="disk-popover" onclick="event.stopPropagation()">'+
+      '<button class="dp-close" type="button" onclick="_closeDiskPopover(event)" title="Minimize">×</button>'+
+      cardHtml +
+    '</div>'
+  );
+}
+// Close popover when clicking outside the chip
+document.addEventListener("click", function(ev) {
+  const el = document.getElementById("disk-widget-slot");
+  if (!el || !el.classList.contains("open")) return;
+  if (!el.contains(ev.target)) el.classList.remove("open");
+});
+
+function renderDiskWidget(d) {
+  const slot = document.getElementById("disk-widget-slot");
+  if (!slot) return;
+  if (!d || !d.available) { slot.innerHTML = ""; return; }
+  _diskWidgetState = d;
+  const disk = d.disk || {};
+  const pct = Math.round(disk.pct_used || 0);
+  const tier = String(d.tier || "free").toUpperCase();
+  const status = d.status;
+  const accent = status === "green" ? "#10b981" : status === "warn" ? "#f59e0b" : "#ef4444";
+  const bg = status === "green" ? "#fff" : status === "warn" ? "#fffbeb" : "#fef2f2";
+  const statusLabel = status === "green" ? "Healthy"
+                    : status === "warn"  ? "Warning · " + pct + "% used"
+                    :                      "Critical · " + pct + "% used";
+  const canGrow = ["pro","max","enterprise","student","developer"].includes(String(d.tier||"").toLowerCase());
+  const cardHtml =
+    '<div style="background:'+bg+';padding:14px 16px 12px 16px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-right:24px">'+
+        '<div style="font-size:13.5px;font-weight:600;color:#1f2937">Appliance disk'+
+          '<span style="display:inline-block;margin-left:8px;padding:2px 8px;background:#ede9fe;color:#6d28d9;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.05em">'+tier+'</span>'+
+        '</div>'+
+      '</div>'+
+      '<div style="font-size:12px;font-weight:600;color:'+accent+';margin-bottom:8px">'+statusLabel+'</div>'+
+      '<div style="height:8px;background:#f3f4f6;border-radius:999px;overflow:hidden">'+
+        '<div style="height:100%;width:'+pct+'%;background:'+accent+';transition:width 0.3s"></div>'+
+      '</div>'+
+      '<div style="font-size:11px;color:#6b7280;margin-top:6px;margin-bottom:10px">'+disk.used_gb+' / '+disk.total_gb+' GB · '+disk.avail_gb+' GB free</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button onclick="openDiskCleanup()" style="font-size:12px;padding:6px 12px;background:#1a73e8;color:#fff;border:0;border-radius:6px;cursor:pointer">Free up space</button>'+
+        (canGrow ? '<button onclick="openDiskGrow()" style="font-size:12px;padding:6px 12px;background:#fff;color:#1a2330;border:1px solid #d8e0ea;border-radius:6px;cursor:pointer">Grow disk</button>' : '')+
+      '</div>'+
+    '</div>';
+  slot.innerHTML = _wrapWithChip(cardHtml, d);
+}
+async function fetchDiskHealth() {
+  try { renderDiskWidget(await (await fetch("/api/runtime/disk-health")).json()); } catch (e) {}
+}
+async function openDiskCleanup() {
+  const modal = document.createElement("div");
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,0.5);display:flex;align-items:center;justify-content:center;z-index:99999";
+  modal.innerHTML = '<div style="background:#fff;border-radius:10px;max-width:640px;width:90%;max-height:80vh;display:flex;flex-direction:column">'+
+    '<div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;font-size:16px">Free up appliance disk</h3><button onclick="this.closest(\'div[style*=position:fixed]\').remove()" style="background:none;border:0;font-size:24px;cursor:pointer">×</button></div>'+
+    '<div id="cleanup-body" style="padding:20px;overflow-y:auto;flex:1">Scanning…</div>'+
+    '<div id="cleanup-foot" style="padding:12px 20px;border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:flex-end"></div>'+
+  '</div>';
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+  const d = await (await fetch("/api/runtime/disk-cleanup/suggestions")).json();
+  const body = modal.querySelector("#cleanup-body");
+  const foot = modal.querySelector("#cleanup-foot");
+  body.innerHTML = '<div style="margin-bottom:12px;font-size:13px;color:#475569">Select what to clean. All options below are safe.</div>'+
+    (d.suggestions||[]).map(s =>
+      '<label style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><input type="checkbox" data-key="'+s.key+'"'+(s.safe?' checked':'')+' style="margin-top:3px"><div style="flex:1"><div style="font-size:13.5px;font-weight:500">'+s.label+(s.est_reclaim_gb?' <span style="color:#059669;font-weight:600;margin-left:6px">≈ '+s.est_reclaim_gb+' GB</span>':'')+'</div><div style="font-size:12px;color:#6b7280;margin-top:2px">'+s.detail+'</div></div></label>'
+    ).join("");
+  foot.innerHTML = '<button onclick="this.closest(\'div[style*=position:fixed]\').remove()" style="padding:8px 14px;background:#fff;border:1px solid #d8e0ea;color:#1a2330;border-radius:6px;cursor:pointer">Cancel</button><button id="cleanup-run" style="padding:8px 14px;background:#0f1b2d;color:#fff;border:0;border-radius:6px;cursor:pointer">Run cleanup</button>';
+  foot.querySelector("#cleanup-run").onclick = async () => {
+    const cats = [...body.querySelectorAll("input:checked")].map(i => i.dataset.key);
+    foot.querySelector("#cleanup-run").textContent = "Running…";
+    const out = await (await fetch("/api/runtime/disk-cleanup/run", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({categories:cats})})).json();
+    body.innerHTML = '<div style="background:#ecfdf5;color:#047857;padding:10px 14px;border-radius:6px;margin-bottom:12px">✓ Cleanup complete.</div><pre style="background:#0f172a;color:#e2e8f0;padding:10px;border-radius:6px;font-size:11px;overflow:auto;max-height:300px">'+JSON.stringify(out,null,2)+'</pre>';
+    foot.innerHTML = '<button onclick="this.closest(\'div[style*=position:fixed]\').remove(); fetchDiskHealth()" style="padding:8px 14px;background:#0f1b2d;color:#fff;border:0;border-radius:6px;cursor:pointer">Done</button>';
+  };
+}
+function openDiskGrow() {
+  const current = (_diskWidgetState && _diskWidgetState.disk && _diskWidgetState.disk.total_gb) || 30;
+  const modal = document.createElement("div");
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,0.5);display:flex;align-items:center;justify-content:center;z-index:99999";
+  const suggested = Math.ceil(current + 10);
+  modal.innerHTML = '<div style="background:#fff;border-radius:10px;width:420px;max-width:90%"><div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;font-size:16px">Grow appliance disk</h3><button onclick="this.closest(\'div[style*=position:fixed]\').remove()" style="background:none;border:0;font-size:24px;cursor:pointer">×</button></div><div style="padding:18px 20px"><div style="font-size:13px;color:#5f6b7a">Current</div><div style="font-size:18px;font-weight:700;margin-bottom:14px">'+current.toFixed(1)+' GB</div><label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:6px">Target size (GB)</label><input id="gd-target" type="number" value="'+suggested+'" min="'+Math.ceil(current+1)+'" max="500" style="width:100%;padding:9px 12px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px"><div style="font-size:12px;color:#5f6b7a;margin-top:10px;padding:10px 12px;background:#f7f8fa;border-radius:6px">Resizes the underlying multipass VM disk. Simulator briefly pauses (~5–10s).</div><div id="gd-err" style="margin-top:8px"></div></div><div style="padding:12px 20px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:8px"><button onclick="this.closest(\'div[style*=position:fixed]\').remove()" style="padding:8px 14px;background:#fff;border:1px solid #d8e0ea;border-radius:6px;cursor:pointer">Cancel</button><button id="gd-run" style="padding:8px 14px;background:#0f1b2d;color:#fff;border:0;border-radius:6px;cursor:pointer">Grow disk →</button></div></div>';
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+  modal.querySelector("#gd-run").onclick = async () => {
+    const target = parseInt(modal.querySelector("#gd-target").value, 10);
+    if (!target || target <= current) { modal.querySelector("#gd-err").innerHTML = '<div style="color:#b91c1c;font-size:13px">Target must be larger than current.</div>'; return; }
+    modal.querySelector("#gd-run").disabled = true;
+    modal.querySelector("#gd-run").textContent = "Resizing…";
+    try {
+      const r = await fetch("/api/runtime/disk-grow", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({target_gb:target})});
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      modal.querySelector("#gd-err").innerHTML = '<div style="color:#047857;font-size:13px;padding:8px 12px;background:#ecfdf5;border-radius:6px">✓ Disk grown to ' + target + ' GB</div>';
+      modal.querySelector("#gd-run").textContent = "Done";
+      modal.querySelector("#gd-run").onclick = () => { modal.remove(); fetchDiskHealth(); };
+    } catch (e) {
+      modal.querySelector("#gd-err").innerHTML = '<div style="color:#b91c1c;font-size:13px">' + (e.message||e) + '</div>';
+      modal.querySelector("#gd-run").disabled = false;
+      modal.querySelector("#gd-run").textContent = "Retry";
+    }
+  };
+}
+fetchDiskHealth();
+setInterval(fetchDiskHealth, 30000);
+</script>
+<script src="/assets/lazy_backends.js">
+</script>
+</body>
+</html>

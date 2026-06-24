@@ -83,11 +83,14 @@ import builtins; builtins._disp = _disp
   try {
     await navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE + "/" });
     await navigator.serviceWorker.ready;
-    // We expect to arrive here already CONTROLLED (the loader, console.html,
-    // establishes SW control before navigating here). If opened directly and
-    // uncontrolled, bounce through the loader so /api/* is intercepted from the
-    // first call (otherwise the console's boot() would 404 + redirect to /ui).
-    if (!navigator.serviceWorker.controller) { location.replace(BASE + "/console.html"); return; }
+    // Arriving from the dashboard we're already CONTROLLED. If a console URL is
+    // opened cold/directly, reload once to gain control so /api/* is intercepted
+    // from the first call (else the console's boot() would 404 + redirect away).
+    if (!navigator.serviceWorker.controller) {
+      const n = Number(sessionStorage.getItem("nano-boot-reload") || "0");
+      if (n < 4) { sessionStorage.setItem("nano-boot-reload", String(n + 1)); location.reload(); return; }
+    }
+    sessionStorage.removeItem("nano-boot-reload");
     await bootBackend();
   } catch (e) {
     banner("Nano boot failed: " + e, true);

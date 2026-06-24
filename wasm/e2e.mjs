@@ -24,13 +24,24 @@ page.on("pageerror", (e) => log.push("[pageerror] " + e.message));
 const fail = (m) => { console.log("FAIL:", m); console.log(log.slice(-30).join("\n")); process.exit(1); };
 
 try {
-  // Full flow: splash -> spaces -> console (the repo source is never served).
+  // Full flow: REAL launch dashboard (clouds.html) -> AWS console, in-browser.
+  // (the repo source is never served — verified below.)
   await page.goto(BASE + "/", { waitUntil: "load" });
-  if (!(await page.evaluate(() => document.body.innerText.includes("Multi-cloud")))) fail("splash didn't render");
-  await page.getByText("Launch console").click();
-  await page.waitForURL("**/spaces.html", { timeout: 10000 });
-  await page.getByText("Open console").first().click();   // -> /console.html loader
-  console.log("0. PASS — splash → spaces → open console (no codebase exposed)");
+  // The dashboard establishes SW control via one reload; wait until it's
+  // controlled AND the real Workspaces UI has injected the console links.
+  await page.waitForFunction(
+    () => navigator.serviceWorker.controller &&
+          document.title.includes("Workspaces") &&
+          !!document.querySelector('a[href="/aws-console.html"]'),
+    { timeout: 30000 }).catch(() => fail("real launch dashboard didn't render + expose the AWS console link"));
+  console.log("   dashboard:", await page.evaluate(() => document.title));
+  // The "Open Console" button is hover-revealed; activate the real link directly.
+  // The click navigates (destroying the eval context) — wait for the nav itself.
+  await Promise.all([
+    page.waitForURL("**/aws-console.html", { timeout: 15000 }),
+    page.evaluate(() => document.querySelector('a[href="/aws-console.html"]').click()).catch(() => {}),
+  ]);
+  console.log("0. PASS — REAL launch dashboard rendered → opened AWS console (codebase hidden)");
 
   await page.waitForFunction(() => {
     const b = document.getElementById("nano-banner");
