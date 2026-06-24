@@ -39,8 +39,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     CLOUDLEARN_VERSION="1.0.0"
 
 # Node.js for real Cloud Functions exec + curl for health-check container probes
+# openssh-client = `ssh-keygen`, used by the Docker compute backend to mint the
+# per-deploy instance keypair injected into launched instances (Pro tier SSH).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends nodejs curl \
+    && apt-get install -y --no-install-recommends nodejs curl openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Docker CLI (client only) — the CloudLite+ Docker compute backend

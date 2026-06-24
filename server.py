@@ -12279,7 +12279,11 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
         trusted_host_os = _resolved_host_os()
         if trusted_host_os:
             req.runtime_backend = ""
-        instance = api_ec2_create_instance(req, auto_start=False)
+        # auto_start=True so the native SDK RunInstances actually BOOTS a
+        # backing instance (Docker container on Pro, LXD/Multipass VM on Max) —
+        # consistent with the GCP query path, which already queues the start.
+        # The start is async (non-blocking), so the SDK response isn't delayed.
+        instance = api_ec2_create_instance(req, auto_start=True)
         launched.append(instance)
 
     def build(root: ET.Element) -> None:
@@ -13080,6 +13084,8 @@ async def api_ec2_query(request: Request):
                 backend = str(instance.get("runtime_backend") or "").strip().lower()
                 if instance.get("launch_status") == "error" and not str(instance.get("container_id") or "").strip():
                     _terminate_simulated_instance(instance)
+                elif backend == "docker":
+                    _terminate_docker_instance(instance)
                 elif backend == "multipass":
                     _terminate_multipass_instance(instance)
                 elif backend == "lxd":
