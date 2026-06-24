@@ -78,10 +78,63 @@ class QueueStore:
         return q.popleft() if q else None
 
 
+class ResourceStore:
+    """Generic named-resource collections — the backing store for the
+    console's catalog-driven CRUD. The console renders every service from its
+    `collection_path` (GET=list, POST=create) and `resource_path` (GET/PUT/
+    PATCH/DELETE on one named item), so ONE generic store serves all of them:
+    EC2 instances, S3 buckets, IAM users, RDS databases, SQS queues, …
+
+    Namespaced by (provider, account, service) so e.g. aws `ec2` and aws `rds`
+    are independent collections. Each item is a free-form dict keyed by a name
+    derived from common id fields (Name/name/id/key/bucket/…)."""
+    _NAME_FIELDS = ("name", "Name", "id", "Id", "key", "Key", "bucket",
+                    "Bucket", "table", "TableName", "queue", "QueueName",
+                    "user", "UserName", "function", "FunctionName")
+
+    def __init__(self) -> None:
+        self._c: dict[str, dict[str, dict[str, Any]]] = {}
+
+    @classmethod
+    def name_of(cls, item: dict, fallback: str = "") -> str:
+        for f in cls._NAME_FIELDS:
+            v = item.get(f)
+            if v:
+                return str(v)
+        return fallback
+
+    def list(self, provider: str, account: str, service: str) -> list[dict]:
+        return list(self._c.get(_ns(provider, account, service), {}).values())
+
+    def create(self, provider: str, account: str, service: str, item: dict) -> dict:
+        coll = self._c.setdefault(_ns(provider, account, service), {})
+        name = self.name_of(item, fallback=f"{service}-{len(coll) + 1}")
+        rec = dict(item)
+        rec.setdefault("name", name)
+        rec.setdefault("status", "available")
+        coll[name] = rec
+        return rec
+
+    def get(self, provider: str, account: str, service: str, name: str) -> dict | None:
+        return self._c.get(_ns(provider, account, service), {}).get(name)
+
+    def update(self, provider: str, account: str, service: str, name: str, patch: dict) -> dict | None:
+        coll = self._c.get(_ns(provider, account, service), {})
+        rec = coll.get(name)
+        if rec is None:
+            return None
+        rec.update(patch)
+        return rec
+
+    def delete(self, provider: str, account: str, service: str, name: str) -> bool:
+        return self._c.get(_ns(provider, account, service), {}).pop(name, None) is not None
+
+
 class Backends:
     """The bundle of primitives handed to every provider plugin."""
     def __init__(self) -> None:
         self.objects = ObjectStore()
         self.nosql = NoSqlStore()
         self.queues = QueueStore()
+        self.resources = ResourceStore()
         # SqlStore / KvStore / SecretStore / KmsEngine slot in here the same way.

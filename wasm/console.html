@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!-- Vyomi Nano — entry loader for the in-browser AWS console.
+     A service worker doesn't control the page that first registers it until a
+     reload; and the real console redirects away if its /api/* calls 404. So we
+     establish SW control HERE (this page has no API calls — safe to reload),
+     then navigate to the console via a fresh, reliably-controlled request. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vyomi Nano — starting…</title>
+  <style>
+    body { font: 14px/1.6 ui-monospace, Menlo, monospace; background:#05071a; color:#e4e4e7;
+           display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0; }
+    .box { text-align:center; } .ok{color:#34d399} .dim{color:#71717a}
+    .spin { width:22px;height:22px;border:3px solid #1c1f3b;border-top-color:#3b82f6;border-radius:50%;
+            margin:0 auto 14px; animation:s .8s linear infinite } @keyframes s{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="spin"></div>
+    <div>Starting <span class="ok">Vyomi Nano</span> — in-browser AWS console</div>
+    <div class="dim" id="status">registering service worker…</div>
+  </div>
+<script>
+(async () => {
+  const CONSOLE = "/wasm/aws-console.html";
+  const st = (t) => { document.getElementById("status").textContent = t; };
+  if (!("serviceWorker" in navigator)) { st("This browser has no service-worker support."); return; }
+  try {
+    await navigator.serviceWorker.register("/wasm/sw.js", { scope: "/wasm/" });
+    await navigator.serviceWorker.ready;
+    // Reload THIS page (no API calls, so safe) until the SW is controlling it.
+    if (!navigator.serviceWorker.controller) {
+      const tries = Number(sessionStorage.getItem("nano-ld") || "0");
+      if (tries < 6) { sessionStorage.setItem("nano-ld", String(tries + 1)); st("activating service worker…"); location.reload(); return; }
+      st("Service worker could not take control of the page."); return;
+    }
+    sessionStorage.removeItem("nano-ld");
+    st("service worker live — opening console…");
+    location.href = CONSOLE;
+  } catch (e) {
+    st("Loader failed: " + e);
+  }
+})();
+</script>
+</body>
+</html>

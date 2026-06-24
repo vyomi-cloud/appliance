@@ -13,11 +13,13 @@ class Aws(CloudProvider):
 
     def handlers(self):
         return {
-            ("s3", "PutObject"):   _s3_put,
-            ("s3", "GetObject"):   _s3_get,
-            ("s3", "ListObjects"): _s3_list,
+            ("s3", "PutObject"):    _s3_put,
+            ("s3", "GetObject"):    _s3_get,
+            ("s3", "ListObjects"):  _s3_list,
+            ("s3", "DeleteObject"): _s3_del,
             ("dynamodb", "PutItem"): _ddb_put,
             ("dynamodb", "GetItem"): _ddb_get,
+            ("dynamodb", "Scan"):    _ddb_scan,
         }
 
 
@@ -41,6 +43,10 @@ def _s3_list(b: Backends, acct: str, p: dict) -> dict:
     return {"Contents": b.objects.list("aws", acct, p["bucket"])}
 
 
+def _s3_del(b: Backends, acct: str, p: dict) -> dict:
+    return {"deleted": b.objects.delete("aws", acct, p["bucket"], p["key"])}
+
+
 def _ddb_put(b: Backends, acct: str, p: dict) -> dict:
     b.nosql.put_item("aws", acct, p["table"], p["key"], p.get("item", {}))
     return {}
@@ -49,6 +55,10 @@ def _ddb_put(b: Backends, acct: str, p: dict) -> dict:
 def _ddb_get(b: Backends, acct: str, p: dict) -> dict:
     item = b.nosql.get_item("aws", acct, p["table"], p["key"])
     return {"Item": item} if item else {"ok": False, "code": "ItemNotFound"}
+
+
+def _ddb_scan(b: Backends, acct: str, p: dict) -> dict:
+    return {"Items": b.nosql.query("aws", acct, p["table"])}
 
 
 register(Aws())

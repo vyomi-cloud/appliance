@@ -1,0 +1,3373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AWS Management Console — Vyomi</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amazon+Ember:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined">
+<style>
+  :root{
+    /* Updated to 2024+ AWS skin: darker navy header, AWS-blue row-selection tint. */
+    --navy:#0f1b2d; --navy-d:#000a16; --navy-l:#1a2737;
+    --orange:#ff9900; --orange-d:#ec7211; --orange-l:#fff4e5;
+    --bg:#fafafa; --panel:#fff; --line:#eaeded; --line-d:#d5d9d9;
+    --ink:#16191f; --sub:#545b64; --hint:#687078;
+    --link:#0073bb; --link-d:#005fa8; --link-l:#e9f3fb;
+    --ok:#1d8102; --warn:#9e6e07; --err:#d13212;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;font-family:'Amazon Ember',Arial,sans-serif;color:var(--ink);background:var(--bg);font-size:14px;line-height:1.45}
+  a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+  button{font-family:inherit}
+  input,select,textarea{font-family:inherit}
+
+  /* ---- Top bar ---- */
+  header.aws-top{display:flex;align-items:center;gap:14px;height:40px;background:var(--navy);color:#fff;padding:0 14px;position:sticky;top:0;z-index:50}
+  header .logo{display:flex;align-items:center;gap:8px;color:#fff;font-weight:700;text-decoration:none}
+  header .logo svg{width:30px;height:18px}
+  header .nav-link{font-size:13px;color:#fff;padding:0 10px;cursor:pointer}
+  header .nav-link:hover{color:var(--orange)}
+  /* "Go back to spaces" — escape hatch from the AWS console back to the cross-cloud Spaces SPA */
+  header .back-spaces{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;font-size:12.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:6px;cursor:pointer;text-decoration:none;margin-left:6px}
+  header .back-spaces:hover{background:rgba(255,255,255,.14);border-color:var(--orange);color:var(--orange);text-decoration:none}
+  header .back-spaces .material-symbols-outlined{font-size:16px}
+  header .search{flex:1;max-width:560px;background:#fff;border-radius:3px;display:flex;align-items:center;padding:0 8px;height:28px;color:#000}
+  header .search input{flex:1;border:none;outline:none;font-size:12.5px;height:24px;background:transparent}
+  header .right{display:flex;align-items:center;gap:14px;color:#fff;font-size:12.5px}
+  header .right button,header .right a{background:none;border:none;color:#fff;cursor:pointer;display:flex;align-items:center;gap:5px;padding:0;font-size:12.5px}
+  header .right .chip{padding:3px 9px;background:rgba(255,255,255,.08);border-radius:11px;font-size:11.5px}
+  header .right .bell{position:relative}
+  header .right .bell .dot{position:absolute;top:-2px;right:-2px;width:7px;height:7px;border-radius:50%;background:var(--err);display:none}
+  header .right .bell .dot.show{display:block}
+  /* AWS-style header dropdowns (region + account): button shape, not pill chip */
+  header .right .hdr-menu{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 11px;background:transparent;color:#fff;font-size:12.5px;border:1px solid rgba(255,255,255,.18);border-radius:6px;cursor:pointer}
+  header .right .hdr-menu:hover{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.32)}
+  header .right .hdr-menu .caret{font-size:9px;opacity:.8;margin-left:2px}
+  /* Notifications popover (opens from bell click) */
+  .notif-pop{position:fixed;top:46px;right:14px;width:380px;max-height:520px;background:#fff;border:1px solid var(--line-d);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:55;display:none;overflow:hidden}
+  .notif-pop.open{display:flex;flex-direction:column}
+  .notif-pop .h{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:700;display:flex;align-items:center;gap:8px}
+  .notif-pop .h .close{margin-left:auto;background:none;border:none;color:var(--sub);cursor:pointer;font-size:18px}
+  .notif-pop .body{flex:1;overflow-y:auto}
+  .notif-pop .item{padding:11px 16px;border-bottom:1px solid var(--line);font-size:13px;display:flex;gap:10px;align-items:flex-start}
+  .notif-pop .item .ic{width:20px;flex-shrink:0;color:var(--link)}
+  .notif-pop .item.err .ic{color:var(--err)}
+  .notif-pop .item.ok  .ic{color:var(--ok)}
+  .notif-pop .item .msg{flex:1;color:var(--ink)}
+  .notif-pop .item .ts{font-size:11px;color:var(--sub);margin-top:3px}
+  .notif-pop .empty{padding:36px 18px;text-align:center;color:var(--sub);font-size:13px}
+
+  /* ---- Breadcrumb bar ---- */
+  .crumbs-bar{background:#fff;border-bottom:1px solid var(--line);padding:8px 22px;font-size:12.5px;color:var(--sub);display:flex;align-items:center;gap:4px}
+  .crumbs-bar a{color:var(--link);cursor:pointer}
+  .crumbs-bar .sep{color:#aab7b8;margin:0 2px}
+  .crumbs-bar .current{color:var(--ink);font-weight:600}
+
+  /* ---- Page layout (rail + main) ---- */
+  .page{display:flex;min-height:calc(100vh - 40px - 36px)}
+  aside.service-rail{width:232px;background:#fff;border-right:1px solid var(--line);padding:14px 0;overflow-y:auto}
+  aside.service-rail h3{font-size:15px;font-weight:700;color:var(--ink);margin:0 14px 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  aside.service-rail .group{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--sub);padding:14px 14px 4px;font-weight:600}
+  aside.service-rail a.item{display:flex;align-items:center;gap:9px;padding:6px 14px;color:var(--ink);font-size:13px;line-height:1.3;cursor:pointer;text-decoration:none;border-left:3px solid transparent}
+  aside.service-rail a.item:hover{background:#f1f3f4}
+  aside.service-rail a.item.active{background:var(--orange-l);color:var(--orange-d);border-left-color:var(--orange);font-weight:600}
+  aside.service-rail a.item .ic{font-size:17px;color:var(--sub);width:18px}
+  aside.service-rail a.item.active .ic{color:var(--orange-d)}
+  aside.service-rail a.item .lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* Stub items are now real schema-driven pages — no special dim/tag needed */
+
+  main.aws-main{flex:1;overflow-y:auto;padding:20px 26px;max-width:1500px}
+
+  /* ---- Page headers ---- */
+  h1.page-h{font-size:24px;font-weight:700;color:var(--ink);margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  h1.page-h .count{color:var(--sub);font-weight:500;font-size:18px}
+  .page-sub{font-size:13px;color:var(--sub);margin-bottom:16px}
+
+  /* ---- Action bar (above tables) ---- */
+  .actions-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .actions-bar .spacer{flex:1}
+
+  /* ---- Buttons ---- */
+  /* AWS uses sharp rounded rectangles, NOT pills. Border-radius 6px matches Cloudscape. */
+  .btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 14px;font-size:13px;font-weight:600;border:1px solid #687078;background:#fff;color:var(--ink);border-radius:6px;cursor:pointer}
+  .btn:hover{background:#fafafa}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.primary{background:var(--orange);color:#000;border-color:var(--orange-d)}
+  .btn.primary:hover{background:var(--orange-d);color:#fff}
+  .btn.danger{color:var(--err);border-color:#d59494}
+  .btn.danger:hover{background:#fdf3f4}
+  .btn.dropdown::after{content:" ▼";font-size:9px;margin-left:4px;color:var(--sub)}
+  .btn.icon-only{padding:0 8px}
+  .btn .material-symbols-outlined{font-size:17px}
+
+  /* Dropdown menus */
+  .dd{position:relative;display:inline-block}
+  .dd-menu{position:absolute;top:34px;left:0;background:#fff;border:1px solid var(--line-d);border-radius:4px;box-shadow:0 6px 16px rgba(0,0,0,.12);min-width:200px;z-index:30;padding:4px 0;display:none}
+  .dd-menu.open{display:block}
+  .dd-menu a{display:block;padding:7px 14px;font-size:13px;color:var(--ink);cursor:pointer;text-decoration:none}
+  .dd-menu a:hover{background:var(--orange-l);color:var(--orange-d)}
+  .dd-menu .sep{height:1px;background:var(--line);margin:4px 0}
+  .dd-menu a.danger{color:var(--err)}
+  .dd-menu a.disabled{opacity:.5;cursor:not-allowed;pointer-events:none}
+
+  /* ---- Panels ---- */
+  .panel{background:#fff;border:1px solid var(--line);border-radius:8px;margin-bottom:16px;overflow:hidden}
+  .panel-h{padding:12px 18px;font-weight:700;font-size:16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;background:#fafafa}
+  .panel-h .right{margin-left:auto;display:flex;gap:6px}
+  .panel-b{padding:14px 18px}
+
+  /* ---- Tables (AWS style: dense, checkbox column, sticky header) ---- */
+  .table-wrap{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .table-toolbar{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);background:#fff}
+  .table-toolbar input.search{flex:1;max-width:380px;height:28px;border:1px solid #aab7b8;border-radius:3px;padding:0 9px;font-size:13px;outline:none}
+  .table-toolbar input.search:focus{border-color:var(--link)}
+  .table-toolbar .stats{font-size:12px;color:var(--sub)}
+  .table-toolbar .iconbtn{background:none;border:1px solid var(--line-d);height:28px;width:28px;border-radius:3px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:var(--sub)}
+  .table-toolbar .iconbtn:hover{background:#f1f3f4;color:var(--ink)}
+  table.aws{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+  table.aws th,table.aws td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+  table.aws th{font-weight:700;color:var(--ink);background:#fafafa;font-size:12.5px}
+  table.aws th.sortable{cursor:pointer;user-select:none}
+  table.aws th.sortable:hover{background:#f1f3f4}
+  table.aws td{color:var(--ink)}
+  table.aws tr:hover td{background:#fafafa}
+  table.aws tr.selected td{background:var(--link-l)}  /* AWS selected row = pale blue, not orange */
+  table.aws td.chk,table.aws th.chk{width:38px;padding-right:0}
+  table.aws td a.id{color:var(--link);font-weight:500}
+  table.aws td a.id:hover{color:var(--link-d);text-decoration:underline}
+  table.aws td .mono{font-family:Consolas,Menlo,monospace;font-size:12.5px}
+  table.aws td .small{font-size:11.5px;color:var(--sub)}
+  .empty{padding:50px 14px;text-align:center;color:var(--sub);font-size:13px}
+  .empty .ic{font-size:48px;color:#aab7b8;margin-bottom:8px;display:block}
+  .pager{display:flex;align-items:center;gap:6px;padding:9px 14px;border-top:1px solid var(--line);color:var(--sub);font-size:12.5px}
+  .pager .iconbtn{height:24px;width:24px;background:none;border:1px solid var(--line-d);border-radius:3px;cursor:pointer;color:var(--sub)}
+
+  /* State badges */
+  .state{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:11px;font-size:11.5px;font-weight:600}
+  .state .pip{width:7px;height:7px;border-radius:50%}
+  .state.run{background:#dff6dd;color:var(--ok)} .state.run .pip{background:var(--ok)}
+  .state.stop{background:#f1f3f4;color:var(--sub)} .state.stop .pip{background:var(--sub)}
+  .state.err{background:#fde7e9;color:var(--err)} .state.err .pip{background:var(--err)}
+  .state.warn{background:#fff4e5;color:var(--warn)} .state.warn .pip{background:var(--warn)}
+
+  /* ---- Detail page (replaces list, full-page) ---- */
+  .detail-top{display:flex;align-items:flex-start;gap:14px;margin-bottom:18px}
+  .detail-top .id{flex:1}
+  .detail-top h1{margin:0;font-size:22px;font-weight:700;display:flex;align-items:center;gap:10px}
+  .detail-top .meta{font-size:12.5px;color:var(--sub);margin-top:4px}
+  .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 22px;padding:14px 18px}
+  .summary-grid .k{font-size:11.5px;color:var(--sub);font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px}
+  .summary-grid .v{font-size:13.5px;color:var(--ink);word-break:break-all}
+  .summary-grid .v.mono{font-family:Consolas,Menlo,monospace;font-size:12.5px}
+
+  /* Top tabs (AWS detail page pattern) */
+  .top-tabs{display:flex;gap:0;border-bottom:1px solid var(--line);margin:18px 0 14px;overflow-x:auto}
+  .top-tabs button{flex-shrink:0;background:none;border:none;font-size:13.5px;color:var(--sub);cursor:pointer;padding:11px 16px;border-bottom:2px solid transparent;font-weight:500;font-family:inherit}
+  .top-tabs button:hover{color:var(--ink)}
+  .top-tabs button.active{color:var(--link);border-bottom-color:var(--link);font-weight:700}
+
+  /* ---- Wizard (full-page) ---- */
+  .wizard-page{padding:0}
+  .wizard-banner{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin-bottom:16px;color:var(--sub);font-size:13px}
+  .wizard-grid{display:grid;grid-template-columns:1fr 320px;gap:18px;align-items:start}
+  .wizard-main{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px 22px}
+  .wizard-summary{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px 18px;position:sticky;top:88px;max-height:calc(100vh - 110px);overflow-y:auto}
+  .wizard-summary h3{font-size:14px;font-weight:700;margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  .wizard-summary .row{display:flex;justify-content:space-between;padding:5px 0;font-size:12.5px}
+  .wizard-summary .row .k{color:var(--sub)}
+  .wizard-summary .row .v{color:var(--ink);font-weight:600;text-align:right;max-width:180px;word-break:break-all}
+  .wizard-summary .cta{margin-top:14px;display:flex;flex-direction:column;gap:6px}
+  .wizard-summary .cta button{height:34px}
+
+  .step-strip{display:flex;flex-wrap:wrap;gap:0;border-bottom:1px solid var(--line);margin-bottom:18px}
+  .step-strip button{flex:0 0 auto;background:none;border:none;font-size:13px;color:var(--sub);padding:9px 14px 11px;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit;display:flex;align-items:center;gap:7px}
+  .step-strip button:hover{color:var(--ink)}
+  .step-strip button.active{color:var(--link);border-bottom-color:var(--link);font-weight:700}
+  .step-strip button .num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#eaeded;color:var(--sub);font-size:11px;font-weight:700}
+  .step-strip button.active .num{background:var(--link);color:#fff}
+  .step-strip button.done .num{background:var(--ok);color:#fff}
+  .step-strip button.error{color:var(--err)}
+  .step-strip button.error .num{background:var(--err);color:#fff}
+
+  .form-section{margin-bottom:22px}
+  .form-section .h{font-size:15px;font-weight:700;color:var(--ink);padding-bottom:7px;border-bottom:1px solid #eaeded;margin-bottom:14px}
+  /* EC2-style collapsible section cards (real AWS Launch Instance pattern) */
+  .col-card{background:#fff;border:1px solid var(--line);border-radius:8px;margin-bottom:14px;overflow:hidden}
+  .col-card .col-h{display:flex;align-items:center;gap:10px;padding:14px 18px;cursor:pointer;border-bottom:1px solid transparent;font-weight:700;font-size:15px;color:var(--ink);background:#fff}
+  .col-card.open .col-h{border-bottom-color:var(--line)}
+  .col-card .col-h .caret{margin-left:auto;color:var(--sub);transition:transform .15s}
+  .col-card.open .col-h .caret{transform:rotate(90deg)}
+  .col-card .col-h .info{font-size:11.5px;color:var(--link);font-weight:500;cursor:pointer}
+  .col-card .col-h .info:hover{text-decoration:underline}
+  .col-card .col-b{padding:16px 18px;display:none}
+  .col-card.open .col-b{display:block}
+  .col-card .free-tier{display:inline-block;padding:2px 8px;background:#dff6dd;color:var(--ok);font-size:11px;font-weight:600;border-radius:11px;margin-left:6px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:13px;color:var(--ink);margin-bottom:4px;font-weight:700}
+  .field label .req{color:var(--err);margin-left:3px}
+  .field input[type=text],.field input[type=password],.field input[type=number],.field select,.field textarea{
+    width:100%;max-width:520px;height:32px;border:1px solid #aab7b8;border-radius:6px;padding:0 11px;font-size:13.5px;outline:none;background:#fff}
+  .field textarea{height:120px;padding:9px 11px;font-family:Consolas,Menlo,monospace;font-size:12.5px;line-height:1.5}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--link);box-shadow:0 0 0 1px var(--link)}
+  .field input.err,.field select.err{border-color:var(--err);box-shadow:0 0 0 1px var(--err)}
+  .field .help{font-size:11.5px;color:var(--sub);margin-top:4px;max-width:520px}
+  .field .err-msg{font-size:11.5px;color:var(--err);margin-top:4px;display:flex;align-items:center;gap:4px}
+  .radio,.check{display:flex;align-items:flex-start;gap:8px;margin:5px 0;font-size:13px;color:var(--ink);cursor:pointer}
+  .radio input,.check input{margin-top:3px}
+  .info-pill{font-size:13px;color:var(--ink);padding:7px 11px;background:#f1f3f4;border-radius:6px;max-width:520px}
+  .help-banner{font-size:12.5px;color:var(--sub);background:#fff4e5;border-left:4px solid var(--orange);padding:10px 14px;border-radius:0 6px 6px 0;max-width:680px;margin-bottom:14px}
+
+  .tags-rows{display:grid;grid-template-columns:1fr 1fr 32px;gap:6px;margin-bottom:6px;align-items:center}
+  .tags-rows input{height:30px;border:1px solid #aab7b8;border-radius:6px;padding:0 9px;font-size:13px}
+  .tags-rows .x{background:none;border:none;color:var(--err);cursor:pointer;font-size:18px}
+  .add-row{font-size:12.5px;color:var(--link);background:none;border:none;cursor:pointer;padding:4px 0}
+  .add-row:hover{text-decoration:underline}
+
+  .wizard-footer{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:14px 0 0;margin-top:18px;display:flex;align-items:center;gap:10px}
+  .wizard-footer .spacer{flex:1}
+
+  /* Review summary blocks in last step */
+  .rev-card{border:1px solid var(--line);border-radius:6px;margin-bottom:14px}
+  .rev-card .hdr{display:flex;align-items:center;padding:10px 14px;background:#fafafa;border-bottom:1px solid var(--line);font-weight:700;font-size:13.5px}
+  .rev-card .hdr .edit{margin-left:auto;background:none;border:none;color:var(--link);font-size:12.5px;cursor:pointer;font-family:inherit}
+  .rev-card .grid{display:grid;grid-template-columns:200px 1fr;font-size:12.5px;gap:6px 14px;padding:10px 14px}
+  .rev-card .grid .k{color:var(--sub)}
+  .rev-card .grid .v{color:var(--ink);word-break:break-all}
+  .rev-banner{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .rev-banner.ok{background:#dff6dd;color:var(--ok)}
+  .rev-banner.err{background:#fde7e9;color:var(--err)}
+
+  /* ---- Tab content blocks ---- */
+  .kv-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin-bottom:14px}
+  .kv-card .h{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .kv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 22px}
+  .kv-grid .k{font-size:11.5px;color:var(--sub);font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px}
+  .kv-grid .v{font-size:13.5px;color:var(--ink);word-break:break-all}
+  .kv-grid .v.mono{font-family:Consolas,Menlo,monospace;font-size:12.5px}
+
+  .metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+  .metric-card{border:1px solid var(--line);border-radius:8px;background:#fff;padding:12px 16px}
+  .metric-card .label{font-size:11.5px;color:var(--sub);font-weight:600;text-transform:uppercase;margin-bottom:6px}
+  .metric-card .chart{height:60px}
+  .metric-card .value{font-size:18px;color:var(--ink);font-weight:700;margin-top:6px}
+
+  pre.json{background:#16191f;color:#d8e1eb;padding:14px;border-radius:6px;font-size:12.5px;font-family:Consolas,Menlo,monospace;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin:0}
+  .keyblock{margin-bottom:16px;padding:14px 16px;border:1px solid var(--line);border-radius:6px;background:#fff}
+  .keyblock .k{font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:6px}
+  .keyblock .keyval{background:#16191f;color:#d8e1eb;padding:9px 11px;border-radius:4px;font-size:12px;font-family:Consolas,Menlo,monospace;margin:4px 0;white-space:pre-wrap;word-break:break-all}
+  .keyblock .row{display:flex;gap:6px;margin-top:6px}
+
+  .alert{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:14px;display:flex;gap:8px;align-items:flex-start}
+  .alert.info{background:#e9f3fb;color:#0c5689;border:1px solid #b3d8f0}
+  .alert.warn{background:#fff4e5;color:var(--warn);border:1px solid #f4d680}
+  .alert.err{background:#fde7e9;color:var(--err);border:1px solid #f5b8be}
+
+  /* AWS-style Console Home widgets */
+  .widget-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;margin-top:14px}
+  .widget{grid-column:span 6;background:#fff;border:1px solid var(--line);border-radius:8px;padding:0;overflow:hidden;display:flex;flex-direction:column}
+  .widget.col-4{grid-column:span 4}.widget.col-12{grid-column:span 12}
+  @media (max-width:1100px){.widget{grid-column:span 12}.widget.col-4{grid-column:span 12}}
+  .widget .wh{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px}
+  .widget .wh .info{margin-left:auto;font-size:11.5px;color:var(--link);font-weight:500;cursor:pointer}
+  .widget .wh .info:hover{text-decoration:underline}
+  .widget .wb{padding:14px 18px;flex:1}
+  .widget .wb .desc{font-size:13px;color:var(--sub);line-height:1.5}
+  .widget .wb .stats{display:flex;gap:24px;margin-top:12px}
+  .widget .wb .stats .stat{font-size:11.5px;color:var(--sub)}
+  .widget .wb .stats .stat strong{display:block;font-size:24px;color:var(--ink);font-weight:700;line-height:1}
+  .recent-list{display:flex;flex-direction:column;gap:0}
+  .recent-list a{display:flex;align-items:center;gap:10px;padding:9px 18px;color:var(--ink);border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;text-decoration:none}
+  .recent-list a:hover{background:#fafafa}
+  .recent-list a:last-child{border-bottom:none}
+  .recent-list .ic{font-size:18px;color:var(--link)}
+  .recent-list .when{margin-left:auto;font-size:11.5px;color:var(--sub)}
+  .cost-bar{height:120px;display:flex;align-items:flex-end;gap:4px;margin-top:6px}
+  .cost-bar div{flex:1;background:var(--orange);border-radius:2px 2px 0 0;opacity:.85}
+  .widget-add{margin-top:14px;display:flex;justify-content:center}
+  /* Toast */
+  #toast{position:fixed;bottom:18px;right:18px;display:flex;flex-direction:column;gap:6px;z-index:60}
+  .toast{background:#16191f;color:#fff;font-size:13px;padding:10px 14px;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.2);max-width:380px}
+  .toast.err{background:var(--err)}
+  .toast.ok{background:var(--ok)}
+
+/* ── Disk chip (v2.0.4) — small top-right pill; click to maximize ── */
+#disk-widget-slot {
+  position: fixed !important;
+  top: 56px !important;
+  right: 16px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: none !important;
+  z-index: 80 !important;
+  width: auto !important;
+}
+#disk-widget-slot .disk-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 6px 12px 6px 8px;
+  font-size: 12px; font-weight: 600; color: #1a2330;
+  cursor: pointer; font-family: inherit;
+  box-shadow: 0 2px 8px rgba(15,27,45,0.10);
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+#disk-widget-slot .disk-chip:hover {
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15,27,45,0.16);
+}
+#disk-widget-slot .disk-chip .disk-chip-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.18);
+}
+#disk-widget-slot .disk-chip.warn   .disk-chip-dot { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.20); }
+#disk-widget-slot .disk-chip.danger .disk-chip-dot { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.20); animation: chipPulse 1400ms ease-in-out infinite; }
+@keyframes chipPulse {
+  0%,100% { box-shadow: 0 0 0 3px rgba(239,68,68,0.20); }
+  50%     { box-shadow: 0 0 0 6px rgba(239,68,68,0.10); }
+}
+#disk-widget-slot .disk-chip .disk-chip-pct { font-variant-numeric: tabular-nums; }
+#disk-widget-slot .disk-chip .disk-chip-caret { font-size: 10px; color: #5f6b7a; }
+#disk-widget-slot .disk-popover {
+  display: none;
+  position: absolute; top: calc(100% + 6px); right: 0;
+  width: 320px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(15,27,45,0.18);
+  border: 1px solid #e7e7e9;
+  overflow: hidden;
+}
+#disk-widget-slot.open .disk-popover { display: block; }
+#disk-widget-slot .disk-popover .dp-close {
+  position: absolute; top: 8px; right: 10px;
+  background: none; border: 0; font-size: 22px; color: #5f6b7a;
+  cursor: pointer; line-height: 1; padding: 2px 6px;
+  z-index: 1;
+}
+#disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
+</style>
+  <script type="module" src="/wasm/nano-boot.js"></script>
+</head>
+<body>
+
+<!-- ==================== TOP BAR ==================== -->
+<header class="aws-top">
+  <a class="logo" href="/console/aws">
+    <svg width="30" height="18" viewBox="0 0 304 182"><path fill="#ff9900" d="M86.4 66.4c0 3.7.4 6.7 1.1 8.9.8 2.2 1.8 4.6 3.2 7.2.5.8.7 1.6.7 2.3 0 1-.6 2-1.9 3l-6.3 4.2c-.9.6-1.8.9-2.6.9-1 0-2-.5-3-1.4-1.4-1.5-2.6-3.1-3.6-4.7-1-1.7-2-3.6-3.1-5.9-7.8 9.2-17.6 13.8-29.4 13.8-8.4 0-15.1-2.4-20-7.2-4.9-4.8-7.4-11.2-7.4-19.2 0-8.5 3-15.4 9.1-20.6 6.1-5.2 14.2-7.8 24.5-7.8 3.4 0 6.9.3 10.6.8 3.7.5 7.5 1.3 11.5 2.2v-7.3c0-7.6-1.6-12.9-4.7-16-3.2-3.1-8.6-4.6-16.3-4.6-3.5 0-7.1.4-10.8 1.3-3.7.9-7.3 2-10.8 3.4-1.6.7-2.8 1.1-3.5 1.3-.7.2-1.2.3-1.6.3-1.4 0-2.1-1-2.1-3.1v-4.9c0-1.6.2-2.8.7-3.5.5-.7 1.4-1.4 2.8-2.1 3.5-1.8 7.7-3.3 12.6-4.5 4.9-1.3 10.1-1.9 15.6-1.9 11.9 0 20.6 2.7 26.2 8.1 5.5 5.4 8.3 13.6 8.3 24.6v32.4zM45.8 81.6c3.3 0 6.7-.6 10.3-1.8 3.6-1.2 6.8-3.4 9.5-6.4 1.6-1.9 2.8-4 3.4-6.4.6-2.4 1-5.3 1-8.7v-4.2c-2.9-.7-6-1.3-9.2-1.7-3.2-.4-6.3-.6-9.4-.6-6.7 0-11.6 1.3-14.9 4-3.3 2.7-4.9 6.5-4.9 11.5 0 4.7 1.2 8.2 3.7 10.6 2.4 2.5 5.9 3.7 10.5 3.7zm80.3 10.8c-1.8 0-3-.3-3.8-1-.8-.6-1.5-2-2.1-3.9L96.7 10.2c-.6-2-.9-3.3-.9-4 0-1.6.8-2.5 2.4-2.5h9.8c1.9 0 3.2.3 3.9 1 .8.6 1.4 2 2 3.9l16.8 66.2 15.6-66.2c.5-2 1.1-3.3 1.9-3.9.8-.6 2.2-1 4-1h8c1.9 0 3.2.3 4 1 .8.6 1.5 2 1.9 3.9l15.8 67 17.3-67c.6-2 1.3-3.3 2-3.9.8-.6 2.1-1 3.9-1h9.3c1.6 0 2.5.8 2.5 2.5 0 .5-.1 1-.2 1.6-.1.6-.3 1.4-.7 2.5l-24.1 77.3c-.6 2-1.3 3.3-2.1 3.9-.8.6-2.1 1-3.8 1h-8.6c-1.9 0-3.2-.3-4-1-.8-.7-1.5-2-1.9-4L156 23l-15.4 64.4c-.5 2-1.1 3.3-1.9 4-.8.7-2.2 1-4 1h-8.6zm128.5 2.7c-5.2 0-10.4-.6-15.4-1.8-5-1.2-8.9-2.5-11.5-4-1.6-.9-2.7-1.9-3.1-2.8-.4-.9-.6-1.9-.6-2.8v-5.1c0-2.1.8-3.1 2.3-3.1.6 0 1.2.1 1.8.3.6.2 1.5.6 2.5 1 3.4 1.5 7.1 2.7 11 3.5 4 .8 7.9 1.2 11.9 1.2 6.3 0 11.2-1.1 14.6-3.3 3.4-2.2 5.2-5.4 5.2-9.5 0-2.8-.9-5.1-2.7-7-1.8-1.9-5.2-3.6-10.1-5.2L246 52c-7.3-2.3-12.7-5.7-16-10.2-3.3-4.4-5-9.3-5-14.5 0-4.2.9-7.9 2.7-11.1 1.8-3.2 4.2-6 7.2-8.2 3-2.3 6.4-4 10.4-5.2 4-1.2 8.2-1.7 12.6-1.7 2.2 0 4.5.1 6.7.4 2.3.3 4.4.7 6.5 1.1 2 .5 3.9 1 5.7 1.6 1.8.6 3.2 1.2 4.2 1.8 1.4.8 2.4 1.6 3 2.5.6.8.9 1.9.9 3.3v4.7c0 2.1-.8 3.2-2.3 3.2-.8 0-2.1-.4-3.8-1.2-5.7-2.6-12.1-3.9-19.2-3.9-5.7 0-10.2.9-13.3 2.8-3.1 1.9-4.7 4.8-4.7 8.9 0 2.8 1 5.2 3 7.1 2 1.9 5.7 3.8 11 5.5l14.2 4.5c7.2 2.3 12.4 5.5 15.5 9.6 3.1 4.1 4.6 8.8 4.6 14 0 4.3-.9 8.2-2.6 11.6-1.8 3.4-4.2 6.4-7.3 8.8-3.1 2.5-6.8 4.3-11.1 5.6-4.5 1.4-9.2 2.1-14.3 2.1z"/></svg>
+    <span style="font-size:13px">aws</span>
+  </a>
+  <a class="back-spaces" href="/ui" title="Return to the Simulation Spaces view (switch provider or pick a different space)">
+    <span class="material-symbols-outlined">arrow_back</span>
+    Go back to spaces
+  </a>
+  <button class="nav-link" id="servicesBtn">Services ▾</button>
+  <div class="search">
+    <span class="material-symbols-outlined" style="font-size:18px;color:#545b64">search</span>
+    <input placeholder='Search [Option+S]' id="topSearch">
+  </div>
+  <div class="right">
+    <!-- Developer tools: AWS REST API (Swagger UI) + SDK/CLI usage examples.
+         Same pattern as the Azure console header. Open in new tab so the
+         console state isn't disturbed. -->
+    <a href="/docs/aws" target="_blank" title="AWS REST API reference (Swagger UI)">
+      <span class="material-symbols-outlined" style="font-size:18px">api</span>
+    </a>
+    <a href="/docs/aws/usage" target="_blank" title="SDK and CLI usage examples">
+      <span class="material-symbols-outlined" style="font-size:18px">code</span>
+    </a>
+    <button title="Cloud Shell" class="material-symbols-outlined" style="font-size:18px">terminal</button>
+    <button class="bell" id="notifBtn" title="Notifications">
+      <span class="material-symbols-outlined" style="font-size:18px">notifications</span>
+      <span class="dot" id="notifDot"></span>
+    </button>
+    <button title="Settings" class="material-symbols-outlined" style="font-size:18px">settings</button>
+    <!-- AWS header dropdowns: account "user @ id ▾" + region "N. Virginia ▾", proper buttons (not pills) -->
+    <button class="hdr-menu" id="acctBtn" title="Account">
+      <span id="acctText">user @ …</span><span class="caret">▾</span>
+    </button>
+    <button class="hdr-menu" id="regionBtn" title="Region">
+      <span id="regionText">…</span><span class="caret">▾</span>
+    </button>
+  </div>
+</header>
+
+<!-- Notifications popover (opens from bell click) -->
+<div class="notif-pop" id="notifPop">
+  <div class="h">
+    <span class="material-symbols-outlined" style="font-size:20px">notifications</span>
+    Notifications
+    <button class="close material-symbols-outlined" id="notifClose">close</button>
+  </div>
+  <div class="body" id="notifBody"></div>
+</div>
+
+<!-- ==================== BREADCRUMB BAR ==================== -->
+<div class="crumbs-bar" id="crumbs"></div>
+
+<!-- Disk-health widget — populated on load by initDiskWidget(). Persists
+     across every view inside the console so the user always sees disk
+     state without navigating back to a dashboard. -->
+<div id="disk-widget-slot" style="padding: 8px 16px 0; max-width: 100%;"></div>
+
+<!-- ==================== PAGE LAYOUT ==================== -->
+<div class="page">
+  <aside class="service-rail" id="rail"></aside>
+  <main class="aws-main" id="main"><div class="empty">Loading…</div></main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const ORIGIN = window.location.origin;
+let CATALOG = null, ACCOUNT = "", REGION = "us-east-1";
+let INSTANCE_CATALOG = [];
+let STATE = {view: "home", service: null, item: null, detailTab: 0};
+// In-memory notifications log (50 max)
+const NOTIFS = [];
+
+// =====================================================================
+// DOM helpers
+// =====================================================================
+function el(tag, attrs={}, ...kids){
+  const e = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v;
+    else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on") && typeof v === "function") e.addEventListener(k.slice(2), v);
+    else if (v != null) e.setAttribute(k, v);
+  }
+  for (const kid of kids) { if (kid == null) continue; e.append(kid.nodeType ? kid : document.createTextNode(kid)); }
+  return e;
+}
+function icon(name){ return el("span",{class:"material-symbols-outlined"}, name); }
+function uuid(){ return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16)); }
+function toast(msg, kind="ok"){
+  const t = el("div",{class:"toast "+kind}, msg);
+  document.getElementById("toast").append(t);
+  setTimeout(()=>{ t.style.opacity="0"; t.style.transition="opacity .4s"; setTimeout(()=>t.remove(), 400); }, 3200);
+}
+function getPath(obj, dotted){
+  let cur = obj;
+  for (const p of String(dotted).split(".")) {
+    if (cur == null) return undefined;
+    if (Array.isArray(cur) && /^\d+$/.test(p)) cur = cur[+p];
+    else cur = cur[p];
+  }
+  return cur;
+}
+function setPath(obj, dotted, value){
+  const parts = String(dotted).split("."); let cur = obj;
+  parts.forEach((p, i) => {
+    const last = i === parts.length-1, nxt = parts[i+1];
+    if (last) { if (Array.isArray(cur) && /^\d+$/.test(p)) cur[+p] = value; else cur[p] = value; return; }
+    if (/^\d+$/.test(p)) { if (cur[+p] == null) cur[+p] = /^\d+$/.test(nxt) ? [] : {}; cur = cur[+p]; }
+    else { if (cur[p] == null || typeof cur[p] !== "object") cur[p] = /^\d+$/.test(nxt) ? [] : {}; cur = cur[p]; }
+  });
+}
+async function api(method, path, body){
+  const opt = {method, headers:{}};
+  if (body !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  const r = await fetch(ORIGIN+path, opt);
+  let json = null; try { json = await r.json(); } catch(e){}
+  return {status:r.status, ok:r.ok, json};
+}
+function fillPath(template, params){
+  return template.replace(/\{(\w+)\}/g, (_, k) => encodeURIComponent(params[k] || ""));
+}
+function svcByKey(k){ return (CATALOG.services||[]).find(s => s.key === k); }
+function recordNotif(kind, msg){
+  NOTIFS.unshift({kind, msg, ts: new Date().toLocaleTimeString()});
+  if (NOTIFS.length > 50) NOTIFS.pop();
+  document.getElementById("notifDot").classList.add("show");
+  // Re-render popover if it's open so the new entry shows up immediately.
+  if (document.getElementById("notifPop").classList.contains("open")) renderNotifPop();
+}
+
+// AWS-style friendly region names (matches the real console region dropdown).
+const REGION_NAMES = {
+  "us-east-1":      "N. Virginia",
+  "us-east-2":      "Ohio",
+  "us-west-1":      "N. California",
+  "us-west-2":      "Oregon",
+  "eu-west-1":      "Ireland",
+  "eu-central-1":   "Frankfurt",
+  "eu-north-1":     "Stockholm",
+  "ap-northeast-1": "Tokyo",
+  "ap-southeast-1": "Singapore",
+  "ap-southeast-2": "Sydney",
+  "ap-south-1":     "Mumbai",
+  "sa-east-1":      "São Paulo",
+  "ca-central-1":   "Central Canada",
+};
+function friendlyRegion(code){ return REGION_NAMES[code] || code; }
+
+// Pull the username from the platform's active tenant/space context. Falls
+// back to a deterministic default if not derivable.
+async function deriveUsername(){
+  try {
+    const r = await fetch(ORIGIN + "/api/tenants");
+    if (r.ok) {
+      const d = await r.json();
+      const active = (d.tenants||[]).find(t => t.tenant_id === d.active_tenant_id);
+      if (active && active.name) return String(active.name).split(" ")[0].toLowerCase() || "user";
+    }
+  } catch(_) {}
+  return "user";
+}
+
+function renderNotifPop(){
+  const body = document.getElementById("notifBody");
+  body.innerHTML = "";
+  if (!NOTIFS.length) { body.append(el("div",{class:"empty"},
+    icon("notifications_off"), el("div",{style:"margin-top:6px"}, "No notifications"),
+    el("div",{style:"font-size:11.5px;margin-top:4px"}, "Activity from your console actions will appear here."))); return; }
+  NOTIFS.forEach(n => {
+    body.append(el("div",{class:"item "+(n.kind||"info")},
+      el("span",{class:"ic material-symbols-outlined",style:"font-size:18px"},
+        n.kind === "err" ? "error" : n.kind === "ok" ? "check_circle" : "info"),
+      el("div",{},
+        el("div",{class:"msg"}, n.msg),
+        el("div",{class:"ts"}, n.ts))));
+  });
+}
+function openNotifPop(){
+  renderNotifPop();
+  document.getElementById("notifPop").classList.add("open");
+  document.getElementById("notifDot").classList.remove("show");
+}
+function closeNotifPop(){ document.getElementById("notifPop").classList.remove("open"); }
+
+// =====================================================================
+// Space-context gate (mirrors Azure's requireAzureSpace)
+// =====================================================================
+async function requireAwsSpace(){
+  let active = null;
+  try { const r = await fetch(ORIGIN + "/api/spaces/active"); if (r.ok) active = await r.json(); } catch(_){}
+  const space = active && active.space ? active.space : null;
+  const provider = space ? String(space.provider || "").toLowerCase() : "";
+  if (!space || provider !== "aws") {
+    document.body.innerHTML =
+      '<div style="font-family:Amazon Ember,Arial,sans-serif;padding:60px 24px;max-width:560px;margin:60px auto;text-align:center;color:#16191f;background:#fff;border:1px solid #eaeded;border-radius:8px">' +
+      '  <div style="font-size:48px;line-height:1">☁️</div>' +
+      '  <h1 style="font-size:22px;font-weight:700;margin:16px 0 8px">Select an AWS space first</h1>' +
+      '  <p style="font-size:14px;color:#545b64;line-height:1.6">The AWS console only opens inside a selected simulation space. Redirecting to the Spaces view…</p>' +
+      '  <a href="/ui" style="display:inline-block;margin-top:20px;background:#ff9900;color:#000;padding:9px 20px;border-radius:6px;font-size:13px;text-decoration:none;font-weight:700">Go to Spaces</a>' +
+      '</div>';
+    setTimeout(()=>{ window.location.href = "/ui"; }, 1800);
+    return false;
+  }
+  return true;
+}
+
+// =====================================================================
+// Boot
+// =====================================================================
+async function boot(){
+  if (!(await requireAwsSpace())) return;
+  try {
+    const r = await fetch(ORIGIN + "/api/aws/catalog"); CATALOG = await r.json();
+    REGION = CATALOG.region; ACCOUNT = CATALOG.account;
+    const username = await deriveUsername();
+    document.getElementById("acctText").textContent = `${username} @ ${ACCOUNT}`;
+    document.getElementById("regionText").textContent = friendlyRegion(REGION);
+    // Wire notifications popover (bell click) and account/region menus (stub
+    // dropdowns toasting the AWS reality for now).
+    document.getElementById("notifBtn").addEventListener("click", e => {
+      e.stopPropagation();
+      const p = document.getElementById("notifPop");
+      if (p.classList.contains("open")) closeNotifPop(); else openNotifPop();
+    });
+    document.getElementById("notifClose").addEventListener("click", closeNotifPop);
+    document.addEventListener("click", e => {
+      const p = document.getElementById("notifPop");
+      if (!p.contains(e.target) && e.target.id !== "notifBtn") closeNotifPop();
+    });
+    document.getElementById("regionBtn").addEventListener("click", () =>
+      toast("Region switching is set by the active simulator space — change there.", "ok"));
+    document.getElementById("acctBtn").addEventListener("click", () =>
+      toast("Account is set by the active simulator space.", "ok"));
+    try {
+      const ir = await fetch(ORIGIN + "/api/instances/catalog?provider=aws");
+      const id = await ir.json();
+      INSTANCE_CATALOG = Array.isArray(id.instances) ? id.instances : [];
+    } catch(_) { INSTANCE_CATALOG = []; }
+    // Initial route — Home page (no service)
+    render();
+  } catch (e) {
+    document.getElementById("main").innerHTML = '<div class="empty">Failed to load AWS catalog: '+e+'</div>';
+  }
+}
+
+// =====================================================================
+// Router (state-based, no URL hash for now)
+// =====================================================================
+// Auto-refresh timer for grid/detail views. Cleared on every navigation
+// so we never run two intervals at once or against a stale view.
+let _AUTO_REFRESH_TIMER = null;
+function clearAutoRefresh(){
+  if (_AUTO_REFRESH_TIMER) { clearInterval(_AUTO_REFRESH_TIMER); _AUTO_REFRESH_TIMER = null; }
+}
+// Services with mutable state (instances transition pending→running→stopped,
+// DBs transition creating→available, lambdas have execution status, etc.).
+// We poll the list/detail view while the user is looking at these.
+// Static services (VPC, IAM users, S3 buckets) don't get polling — no
+// transitions to surface.
+//
+// Interval was 5s but that was too aggressive: it re-rendered the table
+// every 5s, wiping the user's row selections so any subsequent
+// multi-select action (Stop, Terminate, etc.) failed silently with
+// "Select at least one item". The AWS console itself polls every 30s
+// on its EC2 list — we match that. Also added _shouldSkipAutoRefresh()
+// which pauses the timer when the user has live selections OR is
+// hovering an action menu, so the click→act flow is never disrupted.
+const _AUTO_REFRESH_SERVICES = new Set(["ec2","rds","lambda"]);
+const _AUTO_REFRESH_MS = 30000;
+function _shouldSkipAutoRefresh(){
+  // Don't re-render if the user has anything selected (would wipe checkboxes).
+  // Also skip if a dropdown / modal is open (would close it under their cursor).
+  const selectedCount = document.querySelectorAll('input[type="checkbox"]:checked').length;
+  const hasOpenDropdown = !!document.querySelector('.dropdown.open, .modal.open');
+  return selectedCount > 0 || hasOpenDropdown;
+}
+
+function navigate(next){
+  // Track recently visited services (fed into Console Home widget)
+  if (next && next.service && next.service !== STATE.service) recordRecentVisit(next.service);
+  // Cancel any running poll — we'll start a new one for the new view
+  // in renderList/renderDetail if appropriate.
+  clearAutoRefresh();
+  STATE = {...STATE, ...next};
+  render();
+}
+function render(){
+  renderCrumbs();
+  renderRail();
+  const main = document.getElementById("main"); main.innerHTML = "";
+  if (STATE.view === "home")      return renderHome(main);
+  if (STATE.view === "list")      return renderList(main);
+  if (STATE.view === "childList") return renderChildList(main);
+  if (STATE.view === "stub")      return renderStub(main);
+  if (STATE.view === "detail")    return renderDetail(main);
+  if (STATE.view === "create")    return renderCreate(main);
+  main.append(el("div",{class:"empty"}, "Unknown view: "+STATE.view));
+}
+
+// =====================================================================
+// Breadcrumb
+// =====================================================================
+function renderCrumbs(){
+  const c = document.getElementById("crumbs"); c.innerHTML = "";
+  const link = (label, fn) => el("a",{onclick:fn}, label);
+  const sep = () => el("span",{class:"sep"}, "›");
+  c.append(link("Services", () => navigate({view:"home", service:null, item:null})));
+  if (!STATE.service) return;
+  const svc = svcByKey(STATE.service);
+  if (!svc) return;
+  c.append(sep(), link(svc.label, () => navigate({view:"list", service:STATE.service, item:null})));
+  if (STATE.view === "detail" && STATE.item) {
+    const name = String(getPath(STATE.item, svc.name_field) || STATE.item.name || "");
+    c.append(sep(), el("span",{class:"current"}, name));
+  } else if (STATE.view === "create") {
+    c.append(sep(), el("span",{class:"current"}, "Create "+svc.label.replace(/s$/,"")));
+  } else if (STATE.view === "childList") {
+    const spec = childSpec(svc, STATE.child);
+    c.append(sep(), el("span",{class:"current"}, spec ? spec.label : STATE.child));
+  } else if (STATE.view === "stub") {
+    c.append(sep(), el("span",{class:"current"}, STATE.stubLabel || STATE.stub));
+  } else {
+    c.append(sep(), el("span",{class:"current"}, svc.label));
+  }
+}
+
+// =====================================================================
+// Left rail — Home or service-specific
+// =====================================================================
+function renderRail(){
+  const rail = document.getElementById("rail"); rail.innerHTML = "";
+  if (!STATE.service) {
+    // Home rail: services grouped by category
+    rail.append(el("h3",{}, "Console Home"));
+    const groups = [
+      ["Compute", ["ec2", "lambda"]],
+      ["Storage", ["s3"]],
+      ["Databases", ["rds", "dynamodb"]],
+      ["Application Integration", ["sqs", "apigateway", "eventbridge"]],
+      ["Networking & Content Delivery", ["vpc"]],
+      ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
+    ];
+    groups.forEach(([label, keys]) => {
+      rail.append(el("div",{class:"group"}, label));
+      keys.forEach(k => {
+        const s = svcByKey(k); if (!s) return;
+        rail.append(el("a",{class:"item",onclick:()=>navigate({view:"list", service:s.key, item:null})},
+          el("span",{class:"material-symbols-outlined ic"}, s.icon),
+          el("span",{class:"lbl"}, s.label)));
+      });
+    });
+    return;
+  }
+  // Service-specific rail
+  const svc = svcByKey(STATE.service);
+  if (!svc) return;
+  rail.append(el("h3",{}, svc.label + " Dashboard"));
+
+  // Prefer the catalog's rail_items (schema-driven, AWS-faithful) when present;
+  // fall back to the legacy children list. Each rail item is one of:
+  //   {group}                                         → section header
+  //   {key,label,icon,type:"primary"}                 → svc's main list
+  //   {key,label,icon,type:"child",child_key}         → childList view (wired)
+  //   {key,label,icon,type:"link",link_service,link_child} → jumps to another svc's child
+  //   {key,label,icon,type:"stub"}                    → "Coming soon" placeholder
+  const railItems = (svc.rail_items && svc.rail_items.length) ? svc.rail_items
+    : (svc.children || []).map(c => ({key:c.type, label:c.label, icon:c.icon, type:"child", child_key:c.type}));
+
+  railItems.forEach(it => {
+    if (it.group) {
+      rail.append(el("div",{class:"group"}, it.group));
+      return;
+    }
+    let isActive = false, onClick = null, extraClass = "";
+    if (it.type === "primary") {
+      isActive = (STATE.view === "list" || STATE.view === "detail" || STATE.view === "create");
+      onClick = () => navigate({view:"list", child:null, item:null});
+    } else if (it.type === "child") {
+      isActive = (STATE.view === "childList" && STATE.child === it.child_key);
+      const spec = childSpec(svc, it.child_key);
+      onClick = () => {
+        if (!spec) { toast("This child collection isn't wired yet.","err"); return; }
+        if (spec.parent) {
+          toast(spec.msg, "ok");
+          if (STATE.view !== "list") navigate({view:"list", item:null});
+          return;
+        }
+        navigate({view:"childList", child:it.child_key, item:null});
+      };
+    } else if (it.type === "link") {
+      onClick = () => {
+        const target = svcByKey(it.link_service);
+        if (!target) { toast("Linked service "+it.link_service+" not in catalog","err"); return; }
+        navigate({view:"childList", service:it.link_service, child:it.link_child, item:null});
+      };
+    } else {  // stub
+      extraClass = " stub";
+      // Allow the catalog to override the rail-key → extras-key mapping via
+      // `stub_key` (e.g. EventBridge rail item "buses" → extras key
+      // "eventbridge/event-buses"). Falls back to the rail key.
+      const stubKey = it.stub_key
+        ? it.stub_key.replace(svc.key + "/", "")  // strip svc/ prefix if present
+        : it.key;
+      onClick = () => navigate({view:"stub", stub:stubKey, stubLabel:it.label});
+    }
+    rail.append(el("a",{class:"item"+(isActive?" active":"")+extraClass,onclick:onClick},
+      el("span",{class:"material-symbols-outlined ic"}, it.icon||"chevron_right"),
+      el("span",{class:"lbl"}, it.label),
+      // Stub items now open real (schema-driven) pages — no "soon" tag needed
+      null,
+      it.type === "link" ? el("span",{class:"material-symbols-outlined",style:"font-size:13px;color:var(--sub);margin-left:auto"}, "open_in_new") : null));
+  });
+  // Back to all services
+  rail.append(el("div",{class:"group"}, "Navigate"));
+  rail.append(el("a",{class:"item",onclick:()=>navigate({view:"home", service:null})},
+    el("span",{class:"material-symbols-outlined ic"}, "home"),
+    el("span",{class:"lbl"}, "Console Home")));
+}
+
+// =====================================================================
+// HOME page
+// =====================================================================
+function recentVisitsKey(){ return "cloudlearn.aws.recent.visits"; }
+function getRecentVisits(){
+  try { return JSON.parse(localStorage.getItem(recentVisitsKey())||"[]"); } catch(_) { return []; }
+}
+function recordRecentVisit(svcKey){
+  if (!svcKey) return;
+  const recent = getRecentVisits().filter(v => v.key !== svcKey);
+  recent.unshift({key:svcKey, at: new Date().toISOString()});
+  localStorage.setItem(recentVisitsKey(), JSON.stringify(recent.slice(0, 8)));
+}
+
+function renderHome(main){
+  // Self-clear so any caller is safe (matches list/detail/create pattern).
+  main.innerHTML = "";
+  // Page header — real AWS uses "Console Home" + "Info" link + an "Actions" menu.
+  const h = el("div",{class:"detail-top"});
+  const idCol = el("div",{class:"id"});
+  idCol.append(el("h1",{class:"page-h"}, "Console Home",
+    el("a",{class:"info",style:"font-size:12px;font-weight:500;color:var(--link);cursor:pointer;margin-left:8px",
+      onclick:()=>toast("Console Home shows widgets you can customize.","ok")}, "Info")));
+  idCol.append(el("div",{class:"meta"}, `Account: ${ACCOUNT}  ·  Region: ${REGION} (${friendlyRegion(REGION)})`));
+  const actCol = el("div",{style:"display:flex;gap:8px;flex-shrink:0"});
+  actCol.append(el("button",{class:"btn",onclick:()=>toast("Widget customization coming soon","ok")},
+    icon("add"), "Add widgets"));
+  actCol.append(el("button",{class:"btn",onclick:()=>toast("Reset to defaults","ok")}, icon("refresh"), "Reset to default layout"));
+  h.append(idCol, actCol);
+  main.append(h);
+
+  // Widget grid — 12-col responsive layout (real AWS pattern)
+  const grid = el("div",{class:"widget-grid"});
+
+  // 1) Welcome to AWS (col-6)
+  const welcome = el("div",{class:"widget"});
+  welcome.append(el("div",{class:"wh"}, icon("waving_hand"), "Welcome to AWS",
+    el("a",{class:"info",onclick:()=>toast("Welcome guide","ok")}, "Info")));
+  welcome.append(el("div",{class:"wb"},
+    el("div",{class:"desc"},
+      "AWS Management Console (simulated). Get started by selecting a service from the left rail or the Recently visited widget. ",
+      el("a",{onclick:()=>toast("Documentation","ok"),style:"color:var(--link);cursor:pointer"},"Get started with AWS"), "."),
+    el("div",{class:"stats"},
+      el("div",{class:"stat"}, el("strong",{}, String(CATALOG.services.length)), "Services"),
+      el("div",{class:"stat"}, el("strong",{}, REGION), "Region"),
+      el("div",{class:"stat"}, el("strong",{}, ACCOUNT.length>=4?ACCOUNT.slice(-4):"…"), "Account suffix"))));
+  grid.append(welcome);
+
+  // 2) Recently visited (col-6) — fed from localStorage
+  const recent = el("div",{class:"widget"});
+  recent.append(el("div",{class:"wh"}, icon("history"), "Recently visited",
+    el("a",{class:"info"}, "View all")));
+  const visits = getRecentVisits();
+  if (!visits.length) {
+    // Negative left/right/bottom margins negate the .wb padding (14px 18px)
+    // so list rows span edge-to-edge and dividers reach the card border.
+    // Same pattern as the "Build a solution" widget below.
+    recent.append(el("div",{class:"wb"},
+      el("div",{class:"desc"}, "Services you visit will show here. Click any service in the left rail to navigate."),
+      el("div",{class:"recent-list",style:"margin:14px -18px -14px"},
+        ...CATALOG.services.slice(0,5).map(s => el("a",{onclick:()=>{recordRecentVisit(s.key); navigate({view:"list", service:s.key, item:null});}},
+          el("span",{class:"material-symbols-outlined ic"}, s.icon),
+          el("span",{}, s.label),
+          el("span",{class:"when"}, "Suggested"))))));
+  } else {
+    // List appends directly to .widget (no padding), so NO negative margins
+    // needed — rows already span the full card width via the .recent-list a
+    // default styling.
+    const list = el("div",{class:"recent-list"});
+    visits.forEach(v => {
+      const s = svcByKey(v.key); if (!s) return;
+      const when = new Date(v.at);
+      const ago = Math.max(1, Math.floor((Date.now() - when.getTime())/60000));
+      list.append(el("a",{onclick:()=>{recordRecentVisit(s.key); navigate({view:"list", service:s.key, item:null});}},
+        el("span",{class:"material-symbols-outlined ic"}, s.icon),
+        el("span",{}, s.label),
+        el("span",{class:"when"}, ago < 60 ? ago+"m ago" : Math.floor(ago/60)+"h ago")));
+    });
+    recent.append(list);
+  }
+  grid.append(recent);
+
+  // 3) Cost and usage (col-6) — synthesized bar chart
+  const cost = el("div",{class:"widget"});
+  cost.append(el("div",{class:"wh"}, icon("attach_money"), "Cost and usage",
+    el("a",{class:"info"}, "Info")));
+  const costBody = el("div",{class:"wb"});
+  costBody.append(el("div",{class:"desc"},
+    "Estimated month-to-date spend in simulator (synthetic data — not real billing)."));
+  const bar = el("div",{class:"cost-bar"});
+  // Deterministic 12-month pseudo-data
+  for (let i=0;i<12;i++){ const h = 30 + ((i*23 + 7) % 70); bar.append(el("div",{style:`height:${h}%`})); }
+  costBody.append(bar);
+  costBody.append(el("div",{style:"display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--sub)"},
+    el("span",{}, "Jul"), el("span",{}, "Aug"), el("span",{}, "Sep"),
+    el("span",{}, "Oct"), el("span",{}, "Nov"), el("span",{}, "Dec"),
+    el("span",{}, "Jan"), el("span",{}, "Feb"), el("span",{}, "Mar"),
+    el("span",{}, "Apr"), el("span",{}, "May"), el("span",{}, "Jun")));
+  cost.append(costBody);
+  grid.append(cost);
+
+  // 4) Build a solution (col-6)
+  const build = el("div",{class:"widget"});
+  build.append(el("div",{class:"wh"}, icon("rocket_launch"), "Build a solution",
+    el("a",{class:"info"}, "Info")));
+  const bb = el("div",{class:"wb"});
+  bb.append(el("div",{class:"desc"}, "Get started with quick-build templates."));
+  const links = el("div",{class:"recent-list",style:"margin:14px -18px -14px"});
+  [
+    ["Launch a virtual machine with EC2",     "ec2",        "computer"],
+    ["Create a web app with Elastic Beanstalk", "lambda",   "rocket_launch"],
+    ["Build a website using S3",              "s3",         "storage"],
+    ["Set up a managed database with RDS",    "rds",        "database"],
+  ].forEach(([label, key, ic]) => {
+    links.append(el("a",{onclick:()=>{recordRecentVisit(key); navigate({view:"list", service:key, item:null});}},
+      el("span",{class:"material-symbols-outlined ic"}, ic), el("span",{}, label)));
+  });
+  bb.append(links);
+  build.append(bb);
+  grid.append(build);
+
+  main.append(grid);
+}
+
+// =====================================================================
+// LIST page (resource grid for a service)
+// =====================================================================
+async function renderList(main){
+  // Self-clear so any caller (router OR Refresh action OR multiAction
+  // post-redraw) is safe to invoke — without this each call APPENDS another
+  // header+table on top of the existing one.
+  main.innerHTML = "";
+  const svc = svcByKey(STATE.service);
+  if (!svc) { main.append(el("div",{class:"empty"}, "Service not found")); return; }
+  // Page header
+  const headerWrap = el("div",{class:"detail-top"});
+  const h = el("h1",{class:"page-h"}, svc.label, el("span",{class:"count",id:"countChip"}, ""));
+  headerWrap.append(el("div",{class:"id"}, h));
+  main.append(headerWrap);
+
+  // Action bar (AWS pattern: orange Create primary, secondaries, dropdowns)
+  const ab = el("div",{class:"actions-bar"});
+  // Per-service primary action label
+  const primaryLabel = (svc.key === "ec2") ? "Launch instances"
+                     : (svc.key === "s3") ? "Create bucket"
+                     : (svc.key === "rds") ? "Create database"
+                     : (svc.key === "lambda") ? "Create function"
+                     : (svc.key === "apigateway") ? "Create API"
+                     : (svc.key === "vpc") ? "Create VPC"
+                     : "Create";
+  ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
+    icon("add"), primaryLabel));
+  // EC2-specific dropdowns
+  if (svc.key === "ec2") {
+    ab.append(makeDropdown("Instance state", "stop", [
+      {label:"Start instance",  fn:()=>multiAction(svc, "start")},
+      {label:"Stop instance",   fn:()=>multiAction(svc, "stop")},
+      {label:"Reboot instance", fn:()=>multiAction(svc, "reboot")},
+      {sep:true},
+      {label:"Terminate instance", danger:true, fn:()=>multiAction(svc, "terminate")},
+    ]));
+    ab.append(el("button",{class:"btn",onclick:()=>{
+      const sel = selectedItems();
+      if (!sel.length) { toast("Select one instance first","err"); return; }
+      navigate({view:"detail", item:sel[0], detailTab:0});  // Connect tab will be available
+    }}, "Connect"));
+  }
+  if (svc.key === "rds") {
+    ab.append(makeDropdown("Actions", "tune", [
+      {label:"Start DB",   fn:()=>multiAction(svc, "start")},
+      {label:"Stop DB",    fn:()=>multiAction(svc, "stop")},
+      {label:"Reboot DB",  fn:()=>multiAction(svc, "reboot")},
+      {sep:true},
+      {label:"Delete DB",  danger:true, fn:()=>multiAction(svc, "delete")},
+    ]));
+  }
+  // Generic Actions dropdown for any service
+  ab.append(makeDropdown("Actions", "more_horiz", [
+    {label:"Refresh", fn:()=>renderList(main)},
+    {label:"Delete selected", danger:true, fn:()=>multiAction(svc, "delete")},
+  ]));
+  ab.append(el("div",{class:"spacer"}));
+  main.append(ab);
+
+  // Table panel
+  const tableWrap = el("div",{class:"table-wrap"});
+  const toolbar = el("div",{class:"table-toolbar"});
+  const filterInp = el("input",{class:"search",placeholder:"Filter "+svc.label.toLowerCase()+" by attribute…"});
+  const statsSpan = el("span",{class:"stats"});
+  toolbar.append(filterInp, statsSpan, el("div",{style:"flex:1"}),
+    el("button",{class:"iconbtn",title:"Settings",
+      onclick:()=>toast("Column settings not yet wired","ok")}, icon("settings")));
+  tableWrap.append(toolbar);
+  const tableHolder = el("div",{}); tableWrap.append(tableHolder);
+  const pager = el("div",{class:"pager"});
+  tableWrap.append(pager);
+  main.append(tableWrap);
+
+  // Kick off auto-refresh for mutable-state services so pending→running
+  // transitions show up without a hard reload. Cleared on navigation.
+  // We re-render the entire view to keep the code path consistent with
+  // the manual Refresh action — no risk of partial updates leaving the
+  // table in a weird state.
+  clearAutoRefresh();
+  if (_AUTO_REFRESH_SERVICES.has(svc.key)) {
+    _AUTO_REFRESH_TIMER = setInterval(() => {
+      // Only refresh if STILL on this list view (no race with nav)
+      // AND user isn't mid-action (selections / open dropdown).
+      if (STATE.view === "list" && STATE.service === svc.key) {
+        if (_shouldSkipAutoRefresh()) return;
+        renderList(main).catch(()=>{});
+      } else {
+        clearAutoRefresh();
+      }
+    }, _AUTO_REFRESH_MS);
+  }
+
+  // Load
+  tableHolder.innerHTML = '<div class="empty">Loading…</div>';
+  const r = await api("GET", svc.collection_path);
+  if (!r.ok) { tableHolder.innerHTML = ""; tableHolder.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status)); return; }
+  const data = r.json || {};
+  // Envelope shapes across services: native AWS endpoints use their service
+  // name as the key ({instances:[...], buckets:[...]}); the generic extras
+  // backend (EventBridge / Secrets Manager / KMS) uses {items:[...]}.
+  // Envelope shapes vary by service. Keep this list in sync with the
+  // backend response shapes. The RDS list returns `db_instances` (snake
+  // case — what the real AWS SDK normalises to) AND `DBInstances` (the
+  // PascalCase form some clients prefer). v2.0.4 added them after a user
+  // reported "create → list shows empty" — the data was there, the SPA
+  // was just looking for `instances` first.
+  const items = data.instances || data.buckets || data.users || data.databases
+              || data.db_instances || data.DBInstances
+              || data.tables || data.queues || data.functions || data.apis
+              || data.vpcs || data.items || data.value
+              || (Array.isArray(data)?data:[]);
+  const state = {filter:"", sortBy:null, sortDir:1, selected:new Set(), page:1, pageSize:10};
+
+  function renderTable(){
+    const q = state.filter.trim().toLowerCase();
+    let filtered = items.slice();
+    if (q) filtered = filtered.filter(it => svc.columns.some(c => {
+      const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
+    }));
+    if (state.sortBy != null) {
+      const path = svc.columns[state.sortBy][0];
+      filtered.sort((a,b)=>{
+        const av = String(getPath(a, path)||""); const bv = String(getPath(b, path)||"");
+        return av.localeCompare(bv) * state.sortDir;
+      });
+    }
+    document.getElementById("countChip").textContent = `(${filtered.length})`;
+    statsSpan.textContent = filtered.length === items.length
+      ? `${items.length} item${items.length===1?"":"s"}`
+      : `${filtered.length} of ${items.length} match`;
+    tableHolder.innerHTML = "";
+    if (!items.length) {
+      tableHolder.append(el("div",{class:"empty"},
+        el("span",{class:"ic material-symbols-outlined"}, "inbox"),
+        el("div",{}, "You have no "+svc.label.toLowerCase()+" in "+REGION+".")));
+      return;
+    }
+    if (!filtered.length) { tableHolder.append(el("div",{class:"empty"}, "No matches.")); return; }
+    // Pagination — slice filtered by current page / pageSize
+    const totalPages = Math.max(1, Math.ceil(filtered.length / state.pageSize));
+    if (state.page > totalPages) state.page = totalPages;
+    const start = (state.page - 1) * state.pageSize;
+    const pageItems = filtered.slice(start, start + state.pageSize);
+    const t = el("table",{class:"aws"});
+    const hdr = el("tr",{});
+    hdr.append(el("th",{class:"chk"},
+      el("input",{type:"checkbox",onchange:e=>{
+        if (e.target.checked) pageItems.forEach(it => state.selected.add(itemKey(svc, it)));
+        else state.selected.clear();
+        renderTable();
+      }})));
+    svc.columns.forEach((c, idx) => {
+      const arr = state.sortBy === idx ? (state.sortDir === 1 ? " ▲" : " ▼") : "";
+      hdr.append(el("th",{class:"sortable",onclick:()=>{
+        if (state.sortBy === idx) state.sortDir = -state.sortDir;
+        else { state.sortBy = idx; state.sortDir = 1; }
+        renderTable();
+      }}, c[1] + arr));
+    });
+    t.append(hdr);
+    pageItems.forEach(it => {
+      const k = itemKey(svc, it);
+      const sel = state.selected.has(k);
+      const tr = el("tr",{class: sel ? "selected" : ""});
+      tr.append(el("td",{class:"chk"},
+        (() => { const cb = el("input",{type:"checkbox",onclick:e=>e.stopPropagation(),
+          onchange:e=>{ if (e.target.checked) state.selected.add(k); else state.selected.delete(k); renderTable(); }});
+        if (sel) cb.checked = true; return cb; })()));
+      svc.columns.forEach((c, i) => {
+        const v = getPath(it, c[0]);
+        const td = el("td",{});
+        if (i === 0) td.append(el("a",{class:"id",onclick:()=>navigate({view:"detail", item:it, detailTab:0})}, String(v||"—")));
+        else if (c[0].endsWith("state") || c[0].endsWith("status")) td.append(stateBadge(v));
+        else td.append(document.createTextNode(String(v ?? "—")));
+        tr.append(td);
+      });
+      t.append(tr);
+    });
+    tableHolder.append(t);
+    renderPager(filtered.length, totalPages);
+  }
+
+  function renderPager(total, totalPages){
+    pager.innerHTML = "";
+    if (total <= state.pageSize) {
+      pager.append(document.createTextNode(`Showing ${total} item${total===1?"":"s"}`));
+      // Page-size selector still useful even with single page
+      const sel = el("select",{style:"margin-left:auto;height:24px;border:1px solid #aab7b8;border-radius:4px;font-size:12px;padding:0 4px",
+        onchange:e=>{state.pageSize=Number(e.target.value)||10; state.page=1; renderTable();}});
+      [10,25,50,100].forEach(n => sel.append(el("option",{value:n,...(n===state.pageSize?{selected:""}:{})}, "Show: "+n)));
+      pager.append(el("div",{style:"flex:1"}), sel);
+      return;
+    }
+    pager.append(document.createTextNode(
+      `Showing ${(state.page-1)*state.pageSize + 1}–${Math.min(state.page*state.pageSize, total)} of ${total}`));
+    pager.append(el("div",{style:"flex:1"}));
+    // ‹ prev arrow
+    const prev = el("button",{class:"iconbtn",onclick:()=>{ if (state.page>1) { state.page--; renderTable(); } }}, "‹");
+    if (state.page === 1) prev.setAttribute("disabled","");
+    pager.append(prev);
+    // numeric pages (cap at 5 visible)
+    const start = Math.max(1, state.page - 2);
+    const end = Math.min(totalPages, start + 4);
+    for (let p = start; p <= end; p++) {
+      const btn = el("button",{class:"iconbtn",style:p===state.page?"background:var(--link);color:#fff;border-color:var(--link)":"",
+        onclick:()=>{ state.page=p; renderTable(); }}, String(p));
+      pager.append(btn);
+    }
+    // › next arrow
+    const next = el("button",{class:"iconbtn",onclick:()=>{ if (state.page<totalPages) { state.page++; renderTable(); } }}, "›");
+    if (state.page === totalPages) next.setAttribute("disabled","");
+    pager.append(next);
+    // page-size dropdown
+    const sel = el("select",{style:"margin-left:10px;height:24px;border:1px solid #aab7b8;border-radius:4px;font-size:12px;padding:0 4px",
+      onchange:e=>{state.pageSize=Number(e.target.value)||10; state.page=1; renderTable();}});
+    [10,25,50,100].forEach(n => sel.append(el("option",{value:n,...(n===state.pageSize?{selected:""}:{})}, "Show: "+n)));
+    pager.append(sel);
+  }
+
+  filterInp.addEventListener("input", e => { state.filter = e.target.value; state.page = 1; renderTable(); });
+  renderTable();
+
+  // Helpers exposed via closure
+  function selectedItems(){ return items.filter(it => state.selected.has(itemKey(svc, it))); }
+  async function multiAction(svc, action){
+    const sel = selectedItems();
+    if (!sel.length) { toast("Select at least one item","err"); return; }
+    if (action === "delete" || action === "terminate") {
+      if (!confirm(`${action} ${sel.length} ${svc.label.toLowerCase()}?`)) return;
+    }
+    // Resolve the action to a concrete (method, path-template) once. Prefer
+    // an explicit api_paths mapping — EC2's terminate is POST
+    // /api/ec2/instances/{name}/terminate, not DELETE
+    // /api/ec2/instances/{name} (which the S3 catch-all swallows). The
+    // earlier code unconditionally fell into the DELETE branch for
+    // terminate, so multi-select Terminate silently did nothing on EC2.
+    const ap = (svc.api_paths || {})[action];
+    const explicitDelete = !ap && (action === "delete" || action === "terminate");
+    let okCount = 0, failCount = 0;
+    for (const it of sel) {
+      const name = itemKey(svc, it);
+      let r;
+      if (ap) {
+        const path = fillPath(ap.path, {name});
+        r = await api(ap.method, path);
+      } else if (explicitDelete) {
+        const path = fillPath(svc.resource_path, {name});
+        r = await api("DELETE", path);
+      } else {
+        continue;
+      }
+      if (r && (r.ok || [200,201,202,204].includes(r.status))) {
+        okCount += 1;
+        recordNotif("ok", `${action} ${name}`);
+      } else {
+        failCount += 1;
+        recordNotif("error", `${action} ${name} failed`);
+      }
+    }
+    if (failCount === 0) toast(`${action} on ${sel.length} item(s) completed`);
+    else toast(`${action}: ${okCount} ok, ${failCount} failed`, failCount ? "err" : null);
+    state.selected.clear();
+    renderList(main);
+  }
+  // make selectedItems available to action bar
+  window.__selectedItems = selectedItems;
+  window.__multiAction = multiAction;
+}
+function itemKey(svc, item){ return String(getPath(item, svc.name_field) || item.name || ""); }
+function stateBadge(v){
+  if (v == null || v === "") return document.createTextNode("—");
+  const s = String(v).toLowerCase();
+  const cls = (s.includes("run") || s === "available" || s === "active") ? "run"
+            : (s.includes("stop") || s.includes("term") || s === "deleting") ? "stop"
+            : (s === "failed" || s === "error") ? "err"
+            : s === "creating" || s === "modifying" || s === "pending" ? "warn" : "stop";
+  return el("span",{class:"state "+cls}, el("span",{class:"pip"}), document.createTextNode(String(v)));
+}
+function makeDropdown(label, ic, items){
+  const wrap = el("span",{class:"dd"});
+  const btn = el("button",{class:"btn dropdown",onclick:e=>{
+    e.stopPropagation();
+    document.querySelectorAll(".dd-menu.open").forEach(m=>m.classList.remove("open"));
+    menu.classList.toggle("open");
+  }}, icon(ic), label);
+  const menu = el("div",{class:"dd-menu"});
+  items.forEach(it => {
+    if (it.sep) { menu.append(el("div",{class:"sep"})); return; }
+    menu.append(el("a",{class: it.danger ? "danger" : "",
+      onclick:()=>{ menu.classList.remove("open"); it.fn && it.fn(); }}, it.label));
+  });
+  wrap.append(btn, menu);
+  return wrap;
+}
+document.addEventListener("click", ()=>document.querySelectorAll(".dd-menu.open").forEach(m=>m.classList.remove("open")));
+
+// =====================================================================
+// CHILD-LIST view (rail items under a service: VPC subnets, RDS snapshots, …)
+// =====================================================================
+// Per-service child-type → list spec. Two kinds:
+//   • {key, columns}      → has its own account-level endpoint in svc.api_paths;
+//                            click → flat list view via renderChildList()
+//   • {parent: true, msg} → only meaningful in parent context (S3 objects, APIGW
+//                            resources/stages); toast + send user to parent list
+function childSpec(svc, childType){
+  const map = {
+    vpc: {
+      "subnets":           {key:"subnets", label:"Subnets",
+        columns: [["id","Subnet ID"],["name","Name"],["cidr_block","IPv4 CIDR"],
+                  ["availability_zone","AZ"],["vpc_id","VPC"]]},
+      "security-groups":   {key:"securityGroups", label:"Security groups",
+        columns: [["id","Group ID"],["name","Name"],["description","Description"],["vpc_id","VPC"]]},
+      "route-tables":      {key:"routeTables", label:"Route tables",
+        columns: [["id","Route table ID"],["name","Name"],["vpc_id","VPC"]]},
+      "internet-gateways": {key:"internetGateways", label:"Internet gateways",
+        columns: [["id","IGW ID"],["name","Name"],["state","State"]]},
+    },
+    rds: {
+      "snapshots": {key:"snapshots", label:"Snapshots",
+        columns: [["snapshot_id","Snapshot ID"],["db_instance","DB instance"],
+                  ["type","Type"],["status","Status"],["created","Created"]]},
+    },
+    apigateway: {
+      "resources": {parent:true, msg:"Open an API from the list, then use the Resources tab to browse its tree."},
+      "stages":    {parent:true, msg:"Open an API from the list, then use the Stages tab to view its deployments."},
+    },
+    s3: {
+      "objects":   {parent:true, msg:"Open a bucket from the list to browse its objects."},
+    },
+    // EC2 AMIs and IAM Groups/Roles/Policies/Providers all have real backend
+    // endpoints — surface them as proper child lists instead of generic stubs.
+    ec2: {
+      "amis": {key:"amis", label:"AMIs", absolutePath:"/api/ec2/amis", arrayKey:"amis",
+        columns: [["image_id","AMI ID"],["name","Name"],["state","State"],
+                  ["architecture","Architecture"],["platform","Platform"]]},
+    },
+    iam: {
+      "iam-groups":    {label:"User groups",      absolutePath:"/api/iam/groups",    arrayKey:"groups",
+        columns: [["group_name","Group name"],["arn","ARN"],["created","Created"]]},
+      "iam-roles":     {label:"Roles",            absolutePath:"/api/iam/roles",     arrayKey:"roles",
+        columns: [["role_name","Role name"],["arn","ARN"],["created","Created"]]},
+      "iam-policies":  {label:"Policies",         absolutePath:"/api/iam/policies",  arrayKey:"policies",
+        columns: [["policy_name","Policy name"],["arn","ARN"],["attachable","Attachable"]]},
+      "iam-providers": {label:"Identity providers",absolutePath:"/api/iam/identity-providers", arrayKey:"identity_providers",
+        columns: [["name","Provider name"],["type","Type"],["url","URL"],["created","Created"]]},
+    },
+  };
+  return (map[svc.key] || {})[childType] || null;
+}
+
+async function renderChildList(main){
+  main.innerHTML = "";   // self-clear (same pattern as renderList)
+  const svc = svcByKey(STATE.service);
+  if (!svc) { main.append(el("div",{class:"empty"}, "Service not found")); return; }
+  const spec = childSpec(svc, STATE.child);
+  if (!spec || spec.parent) {
+    // Shouldn't happen — rail click guards against this — but be defensive.
+    main.append(el("div",{class:"empty"}, "Unknown child collection: "+STATE.child));
+    return;
+  }
+  // Two shapes for path resolution:
+  //   • spec.absolutePath → use as-is (for promoted child lists that hit
+  //     existing AWS endpoints like /api/ec2/amis, /api/iam/groups, etc.)
+  //   • spec.key         → look up via svc.api_paths (legacy VPC/RDS children)
+  const apiPath = spec.absolutePath
+    ? {method: "GET", path: spec.absolutePath}
+    : (svc.api_paths || {})[spec.key];
+  if (!apiPath) {
+    main.append(el("div",{class:"empty"}, "No API path registered for "+(spec.key||STATE.child)));
+    return;
+  }
+
+  // Header
+  const headerWrap = el("div",{class:"detail-top"});
+  headerWrap.append(el("div",{class:"id"},
+    el("h1",{class:"page-h"}, spec.label, el("span",{class:"count",id:"childCountChip"}, ""))));
+  headerWrap.append(el("div",{style:"display:flex;gap:8px;flex-shrink:0"},
+    el("button",{class:"btn",onclick:()=>renderChildList(main)}, icon("refresh"), "Refresh"),
+    el("button",{class:"btn",onclick:()=>navigate({view:"list", child:null, item:null})},
+      icon("arrow_back"), "Back to "+svc.label)));
+  main.append(headerWrap);
+
+  // Table
+  const tableWrap = el("div",{class:"table-wrap"});
+  const toolbar = el("div",{class:"table-toolbar"});
+  const filterInp = el("input",{class:"search",placeholder:"Filter "+spec.label.toLowerCase()+"…"});
+  const statsSpan = el("span",{class:"stats"});
+  toolbar.append(filterInp, statsSpan);
+  tableWrap.append(toolbar);
+  const tableHolder = el("div",{}); tableWrap.append(tableHolder);
+  main.append(tableWrap);
+
+  // Load
+  tableHolder.innerHTML = '<div class="empty">Loading…</div>';
+  const r = await api(apiPath.method, apiPath.path);
+  if (!r.ok) { tableHolder.innerHTML = ""; tableHolder.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status)); return; }
+  const data = r.json || {};
+  // Lists across AWS use slightly different envelope keys — prefer the
+  // explicit arrayKey from the spec, else try common shapes.
+  const items = (spec.arrayKey && data[spec.arrayKey])
+              || data[spec.key] || data.subnets || data.security_groups || data.route_tables
+              || data.internet_gateways || data.snapshots || data.amis || data.users
+              || data.groups || data.roles || data.policies || data.identity_providers
+              || data.value || (Array.isArray(data) ? data : []);
+
+  const state = {filter:""};
+  function renderTable(){
+    const q = state.filter.trim().toLowerCase();
+    let filtered = items.slice();
+    if (q) filtered = filtered.filter(it => spec.columns.some(c => {
+      const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
+    }));
+    document.getElementById("childCountChip").textContent = `(${filtered.length})`;
+    statsSpan.textContent = filtered.length === items.length
+      ? `${items.length} item${items.length===1?"":"s"}`
+      : `${filtered.length} of ${items.length} match`;
+    tableHolder.innerHTML = "";
+    if (!items.length) {
+      tableHolder.append(el("div",{class:"empty"},
+        el("span",{class:"ic material-symbols-outlined"}, "inbox"),
+        el("div",{}, "No "+spec.label.toLowerCase()+" in "+REGION+".")));
+      return;
+    }
+    if (!filtered.length) { tableHolder.append(el("div",{class:"empty"}, "No matches.")); return; }
+    const t = el("table",{class:"aws"});
+    const hdr = el("tr",{});
+    spec.columns.forEach(c => hdr.append(el("th",{}, c[1])));
+    t.append(hdr);
+    filtered.forEach(it => {
+      const tr = el("tr",{});
+      spec.columns.forEach((c,i) => {
+        const v = getPath(it, c[0]);
+        const td = el("td",{});
+        if (i === 0) td.append(el("a",{class:"id"}, String(v||"—")));
+        else if (c[0].endsWith("state") || c[0].endsWith("status")) td.append(stateBadge(v));
+        else td.append(document.createTextNode(String(v ?? "—")));
+        tr.append(td);
+      });
+      t.append(tr);
+    });
+    tableHolder.append(t);
+  }
+  filterInp.addEventListener("input", e => { state.filter = e.target.value; renderTable(); });
+  renderTable();
+}
+
+// =====================================================================
+// STUB view — schema-driven CRUD list / analytics / config dispatcher
+// (Schema lives in CATALOG.extras, keyed by "<service>/<stub-key>")
+// =====================================================================
+async function renderStub(main){
+  main.innerHTML = "";
+  const svc = svcByKey(STATE.service);
+  const fullKey = (STATE.service || "") + "/" + (STATE.stub || "");
+  const schema = (CATALOG.extras || {})[fullKey];
+  if (!schema) return renderStubPlaceholder(main, svc, STATE.stubLabel || STATE.stub);
+  if (schema.category === "crud")      return renderCrudStub(main, svc, fullKey, schema);
+  if (schema.category === "analytics") return renderAnalyticsStub(main, svc, fullKey, schema);
+  if (schema.category === "config")    return renderConfigStub(main, svc, fullKey, schema);
+  return renderStubPlaceholder(main, svc, schema.label);
+}
+
+function _stubHeader(main, svc, schema) {
+  const headerWrap = el("div",{class:"detail-top"});
+  const id = el("div",{class:"id"});
+  id.append(el("h1",{class:"page-h"}, schema.label, el("span",{class:"count",id:"stubCountChip"}, "")));
+  if (schema.description) id.append(el("div",{class:"meta"}, schema.description));
+  headerWrap.append(id);
+  return headerWrap;
+}
+function _backButton(svc) {
+  return el("button",{class:"btn",onclick:()=>navigate({view:"list", child:null, stub:null, stubLabel:null, item:null})},
+    icon("arrow_back"), "Back to "+(svc ? svc.label : "service"));
+}
+
+// ---- CRUD list (43 stubs) ------------------------------------------------
+async function renderCrudStub(main, svc, fullKey, schema){
+  const header = _stubHeader(main, svc, schema);
+  const actCol = el("div",{style:"display:flex;gap:8px;flex-shrink:0"});
+  const createBtn = el("button",{class:"btn primary",onclick:()=>openStubCreate(svc, fullKey, schema)},
+    icon("add"), "Create "+_singular(schema.label));
+  actCol.append(createBtn, _backButton(svc));
+  header.append(actCol);
+  main.append(header);
+
+  // Table panel
+  const tableWrap = el("div",{class:"table-wrap"});
+  const toolbar = el("div",{class:"table-toolbar"});
+  const filterInp = el("input",{class:"search",placeholder:"Filter "+schema.label.toLowerCase()+"…"});
+  const statsSpan = el("span",{class:"stats"});
+  toolbar.append(filterInp, statsSpan);
+  tableWrap.append(toolbar);
+  const tableHolder = el("div",{}); tableWrap.append(tableHolder);
+  main.append(tableWrap);
+
+  // Load
+  tableHolder.innerHTML = '<div class="empty">Loading…</div>';
+  const r = await api("GET", "/api/aws/extras/"+fullKey);
+  if (!r.ok) { tableHolder.innerHTML = ""; tableHolder.append(el("div",{class:"empty"},
+    "Failed to load: HTTP "+r.status)); return; }
+  const items = (r.json && r.json.items) || [];
+  const isDerived = !!(r.json && r.json.derived);
+  if (isDerived) createBtn.setAttribute("disabled","");  // can't create derived items
+
+  const fState = {filter: ""};
+  function paint(){
+    const q = fState.filter.trim().toLowerCase();
+    let f = items.slice();
+    if (q) f = f.filter(it => schema.columns.some(c => {
+      const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
+    }));
+    document.getElementById("stubCountChip").textContent = `(${f.length})`;
+    statsSpan.textContent = f.length === items.length
+      ? `${items.length} item${items.length===1?"":"s"}`
+      : `${f.length} of ${items.length} match`;
+    tableHolder.innerHTML = "";
+    if (!items.length) {
+      tableHolder.append(el("div",{class:"empty"},
+        el("span",{class:"ic material-symbols-outlined"}, "inbox"),
+        el("div",{}, `No ${schema.label.toLowerCase()} ${isDerived?"derived from current state.":"in "+REGION+"."}`),
+        isDerived ? el("div",{class:"small",style:"font-size:11.5px"}, "This list is computed from related resources.") : null));
+      return;
+    }
+    if (!f.length) { tableHolder.append(el("div",{class:"empty"}, "No matches.")); return; }
+    const t = el("table",{class:"aws"});
+    const hdr = el("tr",{});
+    schema.columns.forEach(c => hdr.append(el("th",{}, c[1])));
+    if (!isDerived) hdr.append(el("th",{style:"width:60px"}, ""));
+    t.append(hdr);
+    f.forEach(it => {
+      const tr = el("tr",{});
+      schema.columns.forEach((c,i) => {
+        const v = getPath(it, c[0]);
+        const td = el("td",{});
+        if (i === 0) td.append(el("a",{class:"id"}, String(v||"—")));
+        else if (c[0].endsWith("state") || c[0].endsWith("status")) td.append(stateBadge(v));
+        else td.append(document.createTextNode(String(v ?? "—")));
+        tr.append(td);
+      });
+      if (!isDerived) tr.append(el("td",{},
+        el("button",{class:"svc-action danger",onclick:async()=>{
+          const name = it.name || it.id;
+          if (!name) { toast("Cannot identify item","err"); return; }
+          if (!confirm("Delete "+name+"?")) return;
+          const dr = await api("DELETE", "/api/aws/extras/"+fullKey+"/"+encodeURIComponent(name));
+          if (dr.ok) { toast(name+" deleted"); renderCrudStub(main, svc, fullKey, schema); }
+          else toast("Delete failed","err");
+        }}, icon("delete"))));
+      t.append(tr);
+    });
+    tableHolder.append(t);
+  }
+  filterInp.addEventListener("input", e => { fState.filter = e.target.value; paint(); });
+  paint();
+}
+function _singular(label){ return String(label).replace(/s$/,"").replace(/ies$/,"y"); }
+
+function openStubCreate(svc, fullKey, schema){
+  // Modal overlay with the schema's create_fields
+  const overlay = el("div",{style:"position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:60;display:flex;align-items:center;justify-content:center"});
+  const modal = el("div",{style:"background:#fff;border-radius:8px;width:560px;max-width:92vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.25)"});
+  modal.append(el("div",{style:"padding:14px 18px;border-bottom:1px solid var(--line);font-weight:700;font-size:16px"},
+    "Create "+_singular(schema.label)));
+  const body = el("div",{style:"padding:18px"});
+  const values = {};
+  (schema.create_fields || []).forEach(f => {
+    if (f.default !== undefined) values[f.name] = f.default;
+    const w = el("div",{class:"field"});
+    const labelKids = [document.createTextNode(f.label || f.name)];
+    if (f.required) labelKids.push(el("span",{class:"req"}, "*"));
+    w.append(el("label",{}, ...labelKids));
+    let inp;
+    if (f.type === "select") {
+      inp = el("select",{onchange:e=>{values[f.name]=e.target.value;}});
+      (f.options||[]).forEach(o => inp.append(el("option",{value:o.value}, o.label||o.value)));
+      inp.value = values[f.name] ?? (f.default || "");
+    } else if (f.type === "number") {
+      inp = el("input",{type:"number",value: values[f.name] ?? f.default ?? "",
+        oninput:e=>{values[f.name]= e.target.value === "" ? "" : Number(e.target.value);}});
+    } else if (f.type === "boolean") {
+      inp = el("input",{type:"checkbox",onchange:e=>{values[f.name]=e.target.checked;}});
+      if (values[f.name]) inp.checked = true;
+    } else {
+      inp = el("input",{type:"text",value: values[f.name] ?? f.default ?? "",
+        oninput:e=>{values[f.name]=e.target.value;}});
+    }
+    w.append(inp);
+    if (f.help) w.append(el("div",{class:"help"}, f.help));
+    body.append(w);
+  });
+  modal.append(body);
+  modal.append(el("div",{style:"padding:14px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end"},
+    el("button",{class:"btn",onclick:()=>overlay.remove()}, "Cancel"),
+    el("button",{class:"btn primary",onclick:async()=>{
+      // Required-field check
+      for (const f of (schema.create_fields || [])) {
+        if (f.required && (values[f.name] === undefined || values[f.name] === "")) {
+          toast(f.label+" is required","err"); return;
+        }
+      }
+      const r = await api("POST", "/api/aws/extras/"+fullKey, values);
+      if (r.ok) { toast("Created"); overlay.remove(); renderStub(document.getElementById("main")); }
+      else toast("Create failed: "+(r.json && r.json.detail || r.status), "err");
+    }}, icon("add"), "Create")));
+  overlay.append(modal);
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  document.body.append(overlay);
+}
+
+// ---- Analytics (15 stubs) ------------------------------------------------
+async function renderAnalyticsStub(main, svc, fullKey, schema){
+  const header = _stubHeader(main, svc, schema);
+  header.append(el("div",{style:"display:flex;gap:8px;flex-shrink:0"}, _backButton(svc)));
+  main.append(header);
+
+  // Sparkline cards (if schema declares any)
+  if (schema.sparklines && schema.sparklines.length) {
+    const grid = el("div",{class:"metrics-grid"});
+    schema.sparklines.forEach(([label, lo, hi, suf]) => grid.append(buildSparkline(label, lo, hi, suf)));
+    main.append(grid);
+  }
+
+  // Table of items (derived or seeded)
+  if (schema.columns && schema.columns.length) {
+    const r = await api("GET", "/api/aws/extras/"+fullKey);
+    const items = (r.json && r.json.items) || [];
+    const tableWrap = el("div",{class:"table-wrap",style:"margin-top:14px"});
+    const tableHolder = el("div",{});
+    tableWrap.append(tableHolder);
+    main.append(tableWrap);
+    if (!items.length) {
+      tableHolder.append(el("div",{class:"empty"},
+        el("span",{class:"ic material-symbols-outlined"}, "inbox"),
+        el("div",{}, "No data in this view yet.")));
+      return;
+    }
+    const t = el("table",{class:"aws"});
+    const hdr = el("tr",{}); schema.columns.forEach(c => hdr.append(el("th",{}, c[1])));
+    t.append(hdr);
+    items.forEach(it => {
+      const tr = el("tr",{});
+      schema.columns.forEach((c,i) => {
+        const v = getPath(it, c[0]);
+        const td = el("td",{});
+        if (i === 0) td.append(el("a",{class:"id"}, String(v||"—")));
+        else if (c[0].endsWith("state") || c[0].endsWith("status") || c[0].endsWith("severity"))
+          td.append(stateBadge(v));
+        else td.append(document.createTextNode(String(v ?? "—")));
+        tr.append(td);
+      });
+      t.append(tr);
+    });
+    tableHolder.append(t);
+  }
+}
+
+// ---- Config (single editable record — 1 stub: S3 Block Public Access) ----
+async function renderConfigStub(main, svc, fullKey, schema){
+  const header = _stubHeader(main, svc, schema);
+  header.append(el("div",{style:"display:flex;gap:8px;flex-shrink:0"}, _backButton(svc)));
+  main.append(header);
+
+  const r = await api("GET", "/api/aws/extras-config/"+fullKey);
+  if (!r.ok) { main.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status)); return; }
+  const values = (r.json && r.json.values) || {};
+
+  const card = el("div",{style:"background:#fff;border:1px solid var(--line);border-radius:8px;padding:24px;max-width:760px"});
+  (schema.fields || []).forEach(f => {
+    const cur = values[f.name];
+    const w = el("div",{class:"field"});
+    if (f.type === "boolean") {
+      const cb = el("input",{type:"checkbox",onchange:e=>{values[f.name]=e.target.checked;}});
+      if (cur !== false) cb.checked = (cur === true);
+      w.append(el("label",{class:"check"}, cb, el("span",{class:"lbl"}, f.label||f.name)));
+    } else {
+      w.append(el("label",{}, f.label||f.name),
+        el("input",{type:"text",value: cur ?? f.default ?? "",
+          oninput:e=>{values[f.name]=e.target.value;}}));
+    }
+    if (f.help) w.append(el("div",{class:"help"}, f.help));
+    card.append(w);
+  });
+  card.append(el("div",{style:"margin-top:16px;display:flex;gap:8px"},
+    el("button",{class:"btn primary",onclick:async()=>{
+      const pr = await api("PUT", "/api/aws/extras-config/"+fullKey, values);
+      if (pr.ok) toast("Saved"); else toast("Save failed","err");
+    }}, icon("save"), "Save changes"),
+    el("button",{class:"btn",onclick:()=>renderStub(main)}, "Discard")));
+  main.append(card);
+}
+
+// ---- Placeholder fallback (for stubs without a schema, just in case) -----
+function renderStubPlaceholder(main, svc, label){
+  const headerWrap = el("div",{class:"detail-top"});
+  headerWrap.append(el("div",{class:"id"}, el("h1",{class:"page-h"}, label||"Feature")));
+  headerWrap.append(el("div",{style:"display:flex;gap:8px;flex-shrink:0"}, _backButton(svc)));
+  main.append(headerWrap);
+  const card = el("div",{style:"background:#fff;border:1px solid var(--line);border-radius:8px;padding:48px 32px;text-align:center;max-width:720px;margin:32px auto"});
+  card.append(el("div",{style:"display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:#fff4e5;color:var(--orange-d);margin-bottom:16px"},
+    el("span",{class:"material-symbols-outlined",style:"font-size:32px"}, "construction")));
+  card.append(el("h2",{style:"font-size:20px;font-weight:700;margin:0 0 8px"}, label||"Feature"));
+  card.append(el("div",{style:"font-size:13.5px;color:var(--sub)"}, "No schema registered for this rail item."));
+  main.append(card);
+}
+
+// =====================================================================
+// DETAIL page (full-page; top tabs replace list)
+// =====================================================================
+async function renderDetail(main){
+  // Self-clear so any caller (router OR top-tab click) is safe.
+  main.innerHTML = "";
+  const svc = svcByKey(STATE.service);
+  const itemStub = STATE.item || {};
+  const name = String(getPath(itemStub, svc.name_field) || itemStub.name || "");
+  // Auto-refresh: poll the detail view every 5s on mutable-state services
+  // so state transitions (pending→running, creating→available) show up
+  // without a hard reload. Cleared on navigation away.
+  clearAutoRefresh();
+  if (_AUTO_REFRESH_SERVICES.has(svc.key)) {
+    _AUTO_REFRESH_TIMER = setInterval(() => {
+      if (STATE.view === "detail" && STATE.service === svc.key) {
+        if (_shouldSkipAutoRefresh()) return;
+        renderDetail(main).catch(()=>{});
+      } else {
+        clearAutoRefresh();
+      }
+    }, _AUTO_REFRESH_MS);
+  }
+  // Refetch
+  const path = fillPath(svc.resource_path, {name});
+  const r = await api("GET", path);
+  const full = (r.ok && r.json) ? r.json : itemStub;
+
+  // Top: ID line + actions
+  const top = el("div",{class:"detail-top"});
+  const idCol = el("div",{class:"id"});
+  idCol.append(el("h1",{class:"page-h"}, name));
+  idCol.append(el("div",{class:"meta"}, svc.namespace + "  ·  " + REGION + "  ·  " + ACCOUNT));
+  const actCol = el("div",{style:"display:flex;gap:8px;flex-shrink:0"});
+  actCol.append(...detailActions(svc, full));
+  top.append(idCol, actCol);
+  main.append(top);
+
+  // Summary panel — high-level facts
+  const summary = el("div",{class:"panel"});
+  summary.append(el("div",{class:"panel-h"}, icon("info"), svc.label.replace(/s$/,"") + " summary"));
+  summary.append(buildSummaryGrid(svc, full));
+  main.append(summary);
+
+  // Top tabs (flatten subBlades to a single linear tab strip — AWS pattern)
+  const tabs = flattenTabs(svc.subBlades);
+  if (!tabs.length) {
+    main.append(el("pre",{class:"json"}, JSON.stringify(full, null, 2)));
+    return;
+  }
+  const tabsEl = el("div",{class:"top-tabs"});
+  tabs.forEach((t, i) => tabsEl.append(el("button",{class: i === STATE.detailTab ? "active" : "",
+    onclick:()=>{ STATE.detailTab = i; renderDetail(main); }}, t.label)));
+  main.append(tabsEl);
+
+  // Tab content
+  const content = el("div",{}); main.append(content);
+  const activeTab = tabs[STATE.detailTab] || tabs[0];
+  const renderer = SUB_RENDERERS[(activeTab.type || "").toLowerCase()];
+  if (renderer) {
+    try { renderer(svc, full, content, activeTab); }
+    catch (e) { content.append(el("div",{class:"alert err"}, "Renderer error: " + e.message)); }
+  } else {
+    content.append(el("div",{class:"empty"},
+      el("span",{class:"ic material-symbols-outlined"}, "construction"),
+      el("div",{}, "This pane mirrors the AWS console's "+activeTab.label+" experience."),
+      el("div",{class:"small",style:"font-size:11.5px;color:#a19f9d"}, "Not yet wired — placeholder for portal parity.")));
+  }
+}
+function flattenTabs(subBlades){
+  const out = [];
+  (subBlades || []).forEach(node => {
+    if (node.group) (node.items || []).forEach(it => out.push(it));
+    else out.push(node);
+  });
+  // AWS shows ~8 tabs max; if longer, the rest become an "Overflow" — for now, keep first 10.
+  return out.slice(0, 10);
+}
+function buildSummaryGrid(svc, full){
+  const grid = el("div",{class:"summary-grid"});
+  // Pick a few key facts from columns + obvious fields
+  const fields = [];
+  svc.columns.slice(0, 5).forEach(c => fields.push([c[1], getPath(full, c[0])]));
+  // Common extras
+  if (full.arn) fields.push(["ARN", full.arn]);
+  if (full.endpoint) fields.push(["Endpoint", full.endpoint]);
+  if (full.public_ip) fields.push(["Public IPv4 address", full.public_ip]);
+  if (full.private_ip) fields.push(["Private IPv4 addresses", full.private_ip]);
+  if (full.vpc_id) fields.push(["VPC ID", full.vpc_id]);
+  if (full.subnet_id) fields.push(["Subnet ID", full.subnet_id]);
+  const seen = new Set();
+  fields.forEach(([k,v]) => {
+    if (v == null || v === "") return;
+    if (seen.has(k)) return; seen.add(k);
+    const dv = el("div",{class: "v"+(/id|arn|endpoint/i.test(k) ? " mono" : "")}, String(v));
+    grid.append(el("div",{}, el("div",{class:"k"}, k), dv));
+  });
+  return grid;
+}
+function detailActions(svc, full){
+  const acts = [];
+  if (svc.key === "ec2") {
+    const st = String(full.state || "").toLowerCase();
+    const running = st === "running";
+    const stopped = ["stopped","stopping",""].includes(st);
+    const term = st === "terminated";
+    acts.push(makeDropdown("Instance state", "tune", [
+      {label:"Start instance",   fn:()=>singleAction(svc, full, "start"), disabled: !stopped || term},
+      {label:"Stop instance",    fn:()=>singleAction(svc, full, "stop"),  disabled: !running},
+      {label:"Reboot instance",  fn:()=>singleAction(svc, full, "reboot"),disabled: !running},
+      {sep:true},
+      {label:"Terminate instance", danger:true, fn:()=>singleAction(svc, full, "terminate")},
+    ]));
+    if (running) acts.push(el("button",{class:"btn primary",onclick:()=>{
+      STATE.detailTab = tabIndexByType(svc, "connect"); render();
+    }}, icon("terminal"), "Connect"));
+  }
+  if (svc.key === "rds") {
+    const st = String(full.status || "").toLowerCase();
+    const avail = st === "available";
+    acts.push(makeDropdown("Actions", "tune", [
+      {label:"Start DB",   fn:()=>singleAction(svc, full, "start"), disabled: avail},
+      {label:"Stop DB",    fn:()=>singleAction(svc, full, "stop"),  disabled: !avail},
+      {label:"Reboot DB",  fn:()=>singleAction(svc, full, "reboot"),disabled: !avail},
+      {sep:true},
+      {label:"Delete DB",  danger:true, fn:()=>singleAction(svc, full, "delete")},
+    ]));
+  }
+  if (svc.key === "lambda") {
+    acts.push(el("button",{class:"btn primary",onclick:()=>{
+      STATE.detailTab = tabIndexByType(svc, "lambdainvoke"); render();
+    }}, icon("play_arrow"), "Test"));
+  }
+  // Generic delete fallback
+  acts.push(el("button",{class:"btn danger",onclick:async()=>{
+    const name = itemKey(svc, full);
+    if (!confirm("Delete "+name+"?")) return;
+    const r = await api("DELETE", fillPath(svc.resource_path, {name}));
+    if (r.ok || [200,202,204].includes(r.status)) { toast(name+" deleted"); recordNotif("ok","Deleted "+name); navigate({view:"list", item:null}); }
+    else toast("Delete failed ("+r.status+")", "err");
+  }}, icon("delete"), "Delete"));
+  return acts;
+}
+function tabIndexByType(svc, type){
+  const tabs = flattenTabs(svc.subBlades);
+  const i = tabs.findIndex(t => (t.type||"").toLowerCase() === type);
+  return i >= 0 ? i : 0;
+}
+async function singleAction(svc, full, action){
+  const name = itemKey(svc, full);
+  if (action === "delete" || action === "terminate") {
+    if (!confirm(action+" "+name+"?")) return;
+  }
+  const ap = (svc.api_paths || {})[action];
+  if (!ap) {
+    if (action === "delete" || action === "terminate") {
+      const r = await api("DELETE", fillPath(svc.resource_path, {name}));
+      if (r.ok || [200,202,204].includes(r.status)) { toast(name+" "+action+"d"); recordNotif("ok", action+" "+name); navigate({view:"list", item:null}); }
+      else toast(action+" failed ("+r.status+")", "err");
+      return;
+    }
+    toast("No action mapping for "+action, "err"); return;
+  }
+  const path = fillPath(ap.path, {name});
+  const r = await api(ap.method, path);
+  if (r.ok || [200,201,202,204].includes(r.status)) {
+    toast(name+" "+action);
+    recordNotif("ok", action+" "+name);
+    // For destructive actions (terminate/delete), the resource is gone
+    // from the backend — but `render()` would re-render the current
+    // detail view from cache, so the user stays on a stale page showing
+    // 'stopped' instead of seeing the instance disappear. Navigate back
+    // to the list view, which refetches collection_path. For lifecycle
+    // actions (start/stop/reboot), the instance still exists; re-render
+    // the current view (which on list view re-fetches; on detail view
+    // shows stale data until the user refreshes — acceptable since the
+    // state transition is asynchronous anyway).
+    if (action === "delete" || action === "terminate") {
+      navigate({view:"list", item:null});
+    } else {
+      render();
+    }
+  }
+  else toast(action+" failed ("+r.status+")", "err");
+}
+
+// =====================================================================
+// CREATE page (EC2-style stepped wizard with summary sidebar)
+// =====================================================================
+function renderCreate(main){
+  main.innerHTML = "";  // self-clear so any caller is safe
+  const svc = svcByKey(STATE.service);
+  if (!svc) { main.append(el("div",{class:"empty"}, "Service not found")); return; }
+  main.append(el("h1",{class:"page-h"},
+    (svc.key === "ec2") ? "Launch an instance" : "Create " + svc.label.replace(/s$/,"")));
+  main.append(el("div",{class:"page-sub"},
+    (svc.key === "ec2")
+      ? "Amazon EC2 allows you to create virtual machines, or instances, that run on the AWS Cloud. Quickly get started by following the simple steps below."
+      : "Amazon " + svc.label + " — " + svc.namespace + ". Step through the form to configure your resource."));
+
+  // EC2 specifically uses a single-page collapsible-sections form in real AWS.
+  // Other services (RDS, DynamoDB, etc.) use stepped wizards — keep that.
+  if (svc.wizard && Array.isArray(svc.wizard.tabs)) {
+    if (svc.key === "ec2") return renderCollapsibleForm(svc, main);
+    return renderSteppedWizard(svc, main);
+  }
+  return renderFlatCreate(svc, main);
+}
+
+// =====================================================================
+// renderCollapsibleForm — AWS EC2 "Launch an instance" style
+// Single-page form, each wizard tab becomes a collapsible card.
+// Right sidebar shows live Summary card + sticky Launch CTA.
+// =====================================================================
+function renderCollapsibleForm(svc, main){
+  const wiz = svc.wizard;
+  const tabs = wiz.tabs;
+  const synth = wiz.synthetic_map || {};
+  const cState = {values:{}, errors:{}, open:new Set([0, 1, 2])};  // first 3 sections open by default
+  // Seed defaults from every field
+  tabs.forEach(t => (t.sections||[]).forEach(sec => (sec.fields||[]).forEach(f => {
+    if (f.type === "help" || f.type === "info") return;
+    let dv = f.default; if (dv === "__UUID__") dv = uuid();
+    if (dv !== undefined) cState.values[f.name] = dv;
+  })));
+
+  const grid = el("div",{class:"wizard-grid"});
+  const mainCol = el("div",{});  // not wizard-main background — cards have their own
+  const aside = el("aside",{class:"wizard-summary"});
+  grid.append(mainCol, aside);
+  main.append(grid);
+
+  function isFieldVisible(f){
+    if (!f.ifEquals) return true;
+    return Object.entries(f.ifEquals).every(([k,v]) => cState.values[k] === v);
+  }
+  function validateField(f){
+    if (f.type === "help" || f.type === "info") return null;
+    if (!isFieldVisible(f)) return null;
+    const v = cState.values[f.name];
+    const isEmpty = v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length);
+    if (f.required && isEmpty) return "This field is required.";
+    if (isEmpty) return null;
+    const val = f.validate || {};
+    if (val.regex && typeof v === "string" && !new RegExp(val.regex).test(v))
+      return val.message || "Invalid format.";
+    if (f.type === "number") {
+      const n = Number(v);
+      if (Number.isNaN(n)) return "Must be a number.";
+      if (val.min !== undefined && n < val.min) return "Minimum "+val.min+".";
+      if (val.max !== undefined && n > val.max) return "Maximum "+val.max+".";
+    }
+    return null;
+  }
+
+  function renderField(f){
+    if (f.type === "help") return el("div",{class:"help-banner"}, f.value || "");
+    if (f.type === "info") {
+      const dv = f.name === "__account__" ? ACCOUNT
+              : f.name === "__region__"  ? friendlyRegion(REGION) : (cState.values[f.name] || "");
+      return el("div",{class:"field"}, el("label",{}, f.label),
+        el("div",{class:"info-pill"}, dv));
+    }
+    const wrap = el("div",{class:"field"});
+    const labelKids = [document.createTextNode(f.label || f.name)];
+    if (f.required) labelKids.push(el("span",{class:"req"}, "*"));
+    wrap.append(el("label",{}, ...labelKids));
+    const err = cState.errors[f.name];
+    let inp;
+    if (f.type === "vmSize" && INSTANCE_CATALOG.length) {
+      inp = el("select",{onchange:e=>{cState.values[f.name]=e.target.value; rerender();}});
+      const byFamily = {};
+      INSTANCE_CATALOG.forEach(it => { (byFamily[it.family] = byFamily[it.family] || []).push(it); });
+      Object.keys(byFamily).forEach(fam => {
+        const og = el("optgroup",{label:String(fam).toUpperCase()});
+        byFamily[fam].forEach(it => {
+          const ramG = (it.ram_mb/1024).toFixed(it.ram_mb < 1024 ? 1 : 0);
+          og.append(el("option",{value:it.name}, `${it.name} — ${it.vcpu} vCPU · ${ramG} GB`));
+        });
+        inp.append(og);
+      });
+      inp.value = cState.values[f.name] || (f.default||"");
+      wrap.append(inp);
+    } else if (f.type === "select") {
+      inp = el("select",{onchange:e=>{cState.values[f.name]=e.target.value; rerender();}});
+      (f.options||[]).forEach(o => inp.append(el("option",{value:o.value}, o.label||o.value)));
+      inp.value = cState.values[f.name] ?? (f.default||"");
+      wrap.append(inp);
+    } else if (f.type === "radio") {
+      (f.options||[]).forEach(o => {
+        const r = el("input",{type:"radio",name:f.name,value:String(o.value),
+          onchange:e=>{cState.values[f.name]= (typeof o.value === "boolean") ? (e.target.value==="true") : e.target.value; rerender();}});
+        if (String(cState.values[f.name] ?? f.default) === String(o.value)) r.checked = true;
+        wrap.append(el("label",{class:"radio"}, r, el("span",{class:"lbl"}, o.label||String(o.value))));
+      });
+    } else if (f.type === "boolean") {
+      const cb = el("input",{type:"checkbox",onchange:e=>{cState.values[f.name]=e.target.checked; rerender();}});
+      if (cState.values[f.name]) cb.checked = true;
+      wrap.innerHTML = "";
+      wrap.append(el("label",{class:"check"}, cb, el("span",{class:"lbl"}, f.label||f.name)));
+    } else if (f.type === "number") {
+      inp = el("input",{type:"number",value: cState.values[f.name] ?? f.default ?? "",
+        oninput:e=>{cState.values[f.name]= e.target.value === "" ? "" : Number(e.target.value); softRerender();}});
+      wrap.append(inp);
+    } else if (f.type === "password") {
+      inp = el("input",{type:"password",value: cState.values[f.name] || "",
+        oninput:e=>{cState.values[f.name]=e.target.value; softRerender();}});
+      wrap.append(inp);
+    } else if (f.type === "tagsEditor") {
+      const t = cState.values[f.name] || {}; cState.values[f.name] = t;
+      const rows = el("div",{});
+      function paint(){
+        rows.innerHTML = "";
+        const entries = Object.entries(t);
+        if (!entries.length) entries.push(["",""]);
+        entries.forEach(([k,v]) => {
+          const g = el("div",{class:"tags-rows"});
+          const kInp = el("input",{placeholder:"Key",value:k,
+            oninput:e=>{ delete t[k]; if (e.target.value) t[e.target.value]=v; }});
+          const vInp = el("input",{placeholder:"Value",value:v,oninput:e=>{ t[k]=e.target.value; }});
+          const x = el("button",{class:"x material-symbols-outlined",
+            onclick:()=>{ delete t[k]; paint(); softRerender(); }}, "close");
+          g.append(kInp, vInp, x);
+          rows.append(g);
+        });
+      }
+      paint(); wrap.append(rows);
+      wrap.append(el("button",{class:"add-row",onclick:()=>{
+        t["new-tag-"+(Object.keys(t).length+1)]=""; paint(); softRerender();
+      }}, "+ Add tag"));
+    } else {
+      inp = el("input",{type:"text",value: cState.values[f.name] ?? f.default ?? "",
+        oninput:e=>{cState.values[f.name]=e.target.value; softRerender();}});
+      wrap.append(inp);
+    }
+    if (inp && err) inp.classList.add("err");
+    if (f.help) wrap.append(el("div",{class:"help"}, f.help));
+    if (err) wrap.append(el("div",{class:"err-msg"}, icon("error"), document.createTextNode(err)));
+    return wrap;
+  }
+
+  function renderSections(){
+    mainCol.innerHTML = "";
+    // Skip the "Review and create" auto tab — collapsible form doesn't need it.
+    tabs.filter(t => !t.auto).forEach((t, i) => {
+      const card = el("div",{class:"col-card"+(cState.open.has(i)?" open":"")});
+      const isFreeTier = (t.label||"").toLowerCase().includes("instance type") && (cState.values.instance_type||"").startsWith("t3.");
+      const header = el("div",{class:"col-h",onclick:()=>{
+        if (cState.open.has(i)) cState.open.delete(i); else cState.open.add(i);
+        renderSections();
+      }},
+        document.createTextNode(t.label),
+        isFreeTier ? el("span",{class:"free-tier"},"Free tier eligible") : null,
+        el("a",{class:"info",onclick:e=>{e.stopPropagation();}}, "Info"),
+        el("span",{class:"caret material-symbols-outlined"}, "chevron_right"));
+      card.append(header);
+      const body = el("div",{class:"col-b"});
+      (t.sections||[]).forEach(sec => {
+        const sd = el("div",{style:"margin-bottom:14px"});
+        if (sec.label && (t.sections.length > 1)) sd.append(el("div",{style:"font-size:13.5px;font-weight:700;color:var(--ink);margin-bottom:10px"}, sec.label));
+        (sec.fields||[]).forEach(f => { if (!isFieldVisible(f)) return; sd.append(renderField(f)); });
+        body.append(sd);
+      });
+      card.append(body);
+      mainCol.append(card);
+    });
+    // Bottom cancel/launch buttons (mirror sidebar but inline for keyboard users)
+    mainCol.append(el("div",{style:"display:flex;gap:10px;margin-top:14px"},
+      el("button",{class:"btn",onclick:()=>navigate({view:"list", item:null})}, "Cancel"),
+      el("button",{class:"btn primary",onclick:submit}, icon("rocket_launch"), "Launch instance")));
+  }
+
+  function renderSummary(){
+    aside.innerHTML = "";
+    aside.append(el("h3",{}, "Summary"));
+    // Number of instances (real AWS shows a number input)
+    const numWrap = el("div",{class:"row"},
+      el("span",{class:"k"}, "Number of instances"),
+      el("span",{class:"v"}, el("input",{type:"number",value:1,min:1,max:100,
+        style:"width:60px;height:24px;border:1px solid #aab7b8;border-radius:4px;padding:0 6px;font-size:12.5px",
+        oninput:e=>{ cState.values.__count__ = Number(e.target.value)||1; }})));
+    aside.append(numWrap);
+    // Key facts from current values
+    const facts = [
+      ["Software Image (AMI)", labelForValue("__os__")||cState.values.image_id||"Amazon Linux 2023"],
+      ["Virtual server type",  cState.values.instance_type || "t3.micro"],
+      ["Firewall (security group)", cState.values.__sgChoice__ === "select"
+        ? cState.values.__sgName__||"existing" : "New security group"],
+      ["Storage (volumes)",    `1x ${cState.values.__rootSize__||8} GiB (${cState.values.__rootType__||"gp3"})`],
+      ["Key pair",             cState.values.key_name || "(none — no SSH login)"],
+    ];
+    facts.forEach(([k,v]) =>
+      aside.append(el("div",{class:"row"}, el("span",{class:"k"}, k),
+        el("span",{class:"v",style:"text-align:right"}, String(v)))));
+
+    // Free-tier callout (matches AWS EC2 Launch sidebar)
+    aside.append(el("div",{style:"margin-top:14px;padding:10px 12px;background:#e9f3fb;border-radius:6px;font-size:12px;color:var(--ink)"},
+      el("div",{style:"display:flex;align-items:center;gap:6px;font-weight:700;color:#0c5689"},
+        el("span",{class:"material-symbols-outlined",style:"font-size:14px"}, "info"), "Free tier"),
+      el("div",{style:"margin-top:4px;line-height:1.4"},
+        "In your first year, get up to 750 hrs of t2.micro/t3.micro instances and 30 GiB of EBS storage.")));
+
+    aside.append(el("div",{class:"cta"},
+      el("button",{class:"btn primary",onclick:submit},
+        icon("rocket_launch"), "Launch instance"),
+      el("button",{class:"btn",onclick:()=>navigate({view:"list", item:null})}, "Cancel")));
+  }
+  function labelForValue(key){
+    // Find the field by name, return human label of currently-selected value
+    for (const t of tabs) for (const sec of (t.sections||[])) for (const f of (sec.fields||[])) {
+      if (f.name === key) {
+        const v = cState.values[f.name];
+        const opt = (f.options||[]).find(o => String(o.value) === String(v));
+        return opt ? (opt.label || opt.value) : v;
+      }
+    }
+    return null;
+  }
+  function rerender(){ renderSections(); renderSummary(); }
+  function softRerender(){ renderSummary(); }  // don't re-paint sections on every keystroke (steals focus)
+
+  async function submit(){
+    // Validate all fields across all sections
+    let anyErr = false;
+    tabs.filter(t => !t.auto).forEach(t => (t.sections||[]).forEach(sec => (sec.fields||[]).forEach(f => {
+      const m = validateField(f); if (m) { cState.errors[f.name] = m; anyErr = true; } else delete cState.errors[f.name];
+    })));
+    if (anyErr) { rerender(); toast("Fix the highlighted errors before launching.", "err"); return; }
+
+    const name = String(cState.values["name"] || "").trim();
+    if (!name) { toast("Name is required", "err"); return; }
+    const bodyObj = {tags: cState.values["tags"] || {}};
+    Object.entries(cState.values).forEach(([k,v]) => {
+      if (k === "tags" || k === "__count__") return;
+      if (v === undefined || v === null || v === "") return;
+      if (k.startsWith("__")) {
+        const m = synth[k];
+        if (!m) return;
+        const expansion = m[v] || m["*"];
+        if (!expansion) return;
+        Object.entries(expansion).forEach(([path, val]) => {
+          const final = val === "$value" ? v : val;
+          setPath(bodyObj, path, final);
+        });
+        return;
+      }
+      setPath(bodyObj, k, v);
+    });
+    // Honor svc.create_path override (S3 etc) — for services where
+    // the create endpoint differs from the list endpoint. Falls back
+    // to collection_path for everything else (backward-compatible).
+    const createTemplate = svc.create_path || svc.collection_path;
+    const createUrl = fillPath(createTemplate, {name: name});
+    const r = await api(svc.create_method, createUrl, bodyObj);
+    if (r.ok) { toast(name + " created", "ok"); recordNotif("ok", "Launched " + name);
+      navigate({view:"list", item:null}); }
+    else {
+      const m = (r.json && (r.json.detail || (r.json.error && r.json.error.message))) || "";
+      toast("Launch failed (" + r.status + "): " + m, "err");
+      recordNotif("err", "Launch failed (" + r.status + ")");
+    }
+  }
+
+  rerender();
+}
+
+function renderSteppedWizard(svc, main){
+  const wiz = svc.wizard;
+  const tabs = wiz.tabs;
+  const synth = wiz.synthetic_map || {};
+  const wState = {values:{}, errors:{}, tab:0, tabErrors:new Set()};
+  // Seed defaults
+  tabs.forEach(t => (t.sections||[]).forEach(sec => (sec.fields||[]).forEach(f => {
+    if (f.type === "help" || f.type === "info") return;
+    let dv = f.default;
+    if (dv === "__UUID__") dv = uuid();
+    if (dv !== undefined) wState.values[f.name] = dv;
+  })));
+
+  const grid = el("div",{class:"wizard-grid"});
+  const mainCol = el("div",{class:"wizard-main"});
+  const aside = el("aside",{class:"wizard-summary"});
+  grid.append(mainCol, aside);
+  main.append(grid);
+
+  // Step strip
+  const strip = el("div",{class:"step-strip"});
+  mainCol.append(strip);
+
+  // Step content
+  const content = el("div",{}); mainCol.append(content);
+
+  // Footer
+  const footer = el("div",{class:"wizard-footer"});
+  mainCol.append(footer);
+
+  function isFieldVisible(f){
+    if (!f.ifEquals) return true;
+    return Object.entries(f.ifEquals).every(([k,v]) => wState.values[k] === v);
+  }
+  function fieldsOfTab(i){
+    const out = []; (tabs[i].sections||[]).forEach(sec => (sec.fields||[]).forEach(f => out.push(f)));
+    return out;
+  }
+  function validateField(f){
+    if (f.type === "help" || f.type === "info") return null;
+    if (!isFieldVisible(f)) return null;
+    const v = wState.values[f.name];
+    const isEmpty = v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length);
+    if (f.required && isEmpty) return "This field is required.";
+    if (isEmpty) return null;
+    const val = f.validate || {};
+    if (val.regex && typeof v === "string" && !new RegExp(val.regex).test(v))
+      return val.message || "Invalid format.";
+    if (f.type === "number") {
+      const n = Number(v);
+      if (Number.isNaN(n)) return "Must be a number.";
+      if (val.min !== undefined && n < val.min) return "Minimum "+val.min+".";
+      if (val.max !== undefined && n > val.max) return "Maximum "+val.max+".";
+    }
+    return null;
+  }
+  function validateTab(i){
+    if (tabs[i].auto) return [];
+    const errs = {};
+    fieldsOfTab(i).forEach(f => { const m = validateField(f); if (m) errs[f.name] = m; });
+    Object.assign(wState.errors, errs);
+    if (Object.keys(errs).length) wState.tabErrors.add(i); else wState.tabErrors.delete(i);
+    return Object.keys(errs);
+  }
+  function renderStrip(){
+    strip.innerHTML = "";
+    tabs.forEach((t, i) => {
+      const klass = [];
+      if (i === wState.tab) klass.push("active");
+      else if (i < wState.tab) klass.push("done");
+      if (wState.tabErrors.has(i)) klass.push("error");
+      strip.append(el("button",{class:klass.join(" "),onclick:()=>gotoTab(i)},
+        el("span",{class:"num"}, String(i+1)), document.createTextNode(t.label)));
+    });
+  }
+
+  function renderField(f){
+    if (f.type === "help") return el("div",{class:"help-banner"}, f.value || "");
+    if (f.type === "info") {
+      const dv = f.name === "__account__" ? ACCOUNT
+              : f.name === "__region__"  ? REGION : (wState.values[f.name] || "");
+      return el("div",{class:"field"},
+        el("label",{}, f.label),
+        el("div",{class:"info-pill"}, dv),
+        f.help ? el("div",{class:"help"}, f.help) : null);
+    }
+    const wrap = el("div",{class:"field"});
+    const labelKids = [document.createTextNode(f.label || f.name)];
+    if (f.required) labelKids.push(el("span",{class:"req"}, "*"));
+    wrap.append(el("label",{}, ...labelKids));
+    const err = wState.errors[f.name];
+    let inp;
+    if (f.type === "vmSize" && INSTANCE_CATALOG.length) {
+      inp = el("select",{onchange:e=>{wState.values[f.name]=e.target.value; rerender();}});
+      const byFamily = {};
+      INSTANCE_CATALOG.forEach(it => { (byFamily[it.family] = byFamily[it.family] || []).push(it); });
+      Object.keys(byFamily).forEach(fam => {
+        const og = el("optgroup",{label:String(fam).toUpperCase()});
+        byFamily[fam].forEach(it => {
+          const ramG = (it.ram_mb/1024).toFixed(it.ram_mb < 1024 ? 1 : 0);
+          og.append(el("option",{value:it.name}, `${it.name} — ${it.vcpu} vCPU · ${ramG} GB`));
+        });
+        inp.append(og);
+      });
+      inp.value = wState.values[f.name] || (f.default||"");
+      wrap.append(inp);
+    } else if (f.type === "select") {
+      inp = el("select",{onchange:e=>{wState.values[f.name]=e.target.value; rerender();}});
+      (f.options||[]).forEach(o => inp.append(el("option",{value:o.value}, o.label||o.value)));
+      inp.value = wState.values[f.name] ?? (f.default||"");
+      wrap.append(inp);
+    } else if (f.type === "radio") {
+      (f.options||[]).forEach(o => {
+        const r = el("input",{type:"radio",name:f.name,value:String(o.value),
+          onchange:e=>{wState.values[f.name]= (typeof o.value === "boolean") ? (e.target.value==="true") : e.target.value; rerender();}});
+        if (String(wState.values[f.name] ?? f.default) === String(o.value)) r.checked = true;
+        wrap.append(el("label",{class:"radio"}, r, el("span",{class:"lbl"}, o.label||String(o.value))));
+      });
+    } else if (f.type === "boolean") {
+      const cb = el("input",{type:"checkbox",onchange:e=>{wState.values[f.name]=e.target.checked; rerender();}});
+      if (wState.values[f.name]) cb.checked = true;
+      wrap.innerHTML = "";
+      wrap.append(el("label",{class:"check"}, cb, el("span",{class:"lbl"}, f.label||f.name)));
+    } else if (f.type === "number") {
+      inp = el("input",{type:"number",value: wState.values[f.name] ?? f.default ?? "",
+        oninput:e=>{wState.values[f.name]= e.target.value === "" ? "" : Number(e.target.value); rerender(true);}});
+      if ((f.validate||{}).min !== undefined) inp.setAttribute("min", f.validate.min);
+      if ((f.validate||{}).max !== undefined) inp.setAttribute("max", f.validate.max);
+      wrap.append(inp);
+    } else if (f.type === "password") {
+      inp = el("input",{type:"password",value: wState.values[f.name] || "",
+        oninput:e=>{wState.values[f.name]=e.target.value; rerender(true);}});
+      wrap.append(inp);
+    } else if (f.type === "tagsEditor") {
+      const t = wState.values[f.name] || {}; wState.values[f.name] = t;
+      const rows = el("div",{});
+      function paint(){
+        rows.innerHTML = "";
+        const entries = Object.entries(t);
+        if (!entries.length) entries.push(["",""]);
+        entries.forEach(([k,v]) => {
+          const grid = el("div",{class:"tags-rows"});
+          const kInp = el("input",{placeholder:"Key",value:k,
+            oninput:e=>{ delete t[k]; if (e.target.value) t[e.target.value] = v; }});
+          const vInp = el("input",{placeholder:"Value",value:v,oninput:e=>{ t[k] = e.target.value; }});
+          const x = el("button",{class:"x material-symbols-outlined",
+            onclick:()=>{ delete t[k]; paint(); rerender(true); }}, "close");
+          grid.append(kInp, vInp, x);
+          rows.append(grid);
+        });
+      }
+      paint();
+      wrap.append(rows);
+      wrap.append(el("button",{class:"add-row",onclick:()=>{
+        t["new-tag-"+(Object.keys(t).length+1)] = ""; paint(); rerender(true);
+      }}, "+ Add tag"));
+    } else if (f.type === "cidr") {
+      inp = el("input",{type:"text",value: wState.values[f.name] ?? f.default ?? "10.0.0.0/16",
+        oninput:e=>{wState.values[f.name]=e.target.value; rerender(true);}});
+      wrap.append(inp);
+    } else {
+      inp = el("input",{type:"text",value: wState.values[f.name] ?? f.default ?? "",
+        oninput:e=>{wState.values[f.name]=e.target.value; rerender(true);}});
+      wrap.append(inp);
+    }
+    if (inp && err) inp.classList.add("err");
+    if (f.help) wrap.append(el("div",{class:"help"}, f.help));
+    if (err) wrap.append(el("div",{class:"err-msg"}, icon("error"), document.createTextNode(err)));
+    return wrap;
+  }
+  function renderTab(){
+    content.innerHTML = "";
+    const t = tabs[wState.tab];
+    if (t.auto) return renderReview();
+    (t.sections||[]).forEach(sec => {
+      const sd = el("div",{class:"form-section"});
+      if (sec.label) sd.append(el("div",{class:"h"}, sec.label));
+      (sec.fields||[]).forEach(f => { if (!isFieldVisible(f)) return; sd.append(renderField(f)); });
+      content.append(sd);
+    });
+  }
+  function renderReview(){
+    let allOk = true, badTabs = [];
+    tabs.forEach((t,i) => { if (t.auto) return; if (validateTab(i).length) { allOk = false; badTabs.push(t.label); } });
+    content.append(el("div",{class:"rev-banner "+(allOk?"ok":"err")},
+      icon(allOk ? "check_circle" : "error"),
+      document.createTextNode(allOk ? "All sections pass validation. Click Launch to create the resource."
+                                    : "Errors in: "+badTabs.join(", "))));
+    tabs.forEach((t,i) => {
+      if (t.auto) return;
+      const card = el("div",{class:"rev-card"});
+      card.append(el("div",{class:"hdr"}, document.createTextNode(t.label),
+        el("button",{class:"edit",onclick:()=>gotoTab(i)}, "Edit")));
+      const g = el("div",{class:"grid"});
+      (t.sections||[]).forEach(sec => (sec.fields||[]).forEach(f => {
+        if (f.type === "help") return;
+        if (!isFieldVisible(f)) return;
+        if (f.type === "info") {
+          const dv = f.name==="__account__" ? ACCOUNT : f.name==="__region__" ? REGION : "";
+          g.append(el("div",{class:"k"}, f.label), el("div",{class:"v"}, dv||"(none)"));
+          return;
+        }
+        let v = wState.values[f.name];
+        if (f.type === "password" && v) v = "•".repeat(Math.min(8, String(v).length));
+        if (f.type === "tagsEditor") v = Object.entries(v||{}).filter(([k,_])=>k).map(([k,vv])=>`${k}=${vv}`).join(", ") || "(none)";
+        if (Array.isArray(v)) v = JSON.stringify(v);
+        if (typeof v === "boolean") v = v ? "Yes" : "No";
+        g.append(el("div",{class:"k"}, f.label||f.name),
+                 el("div",{class:"v"}, v===undefined||v==="" ? "(empty)" : String(v)));
+      }));
+      card.append(g);
+      content.append(card);
+    });
+  }
+  function renderFooter(){
+    footer.innerHTML = "";
+    footer.append(el("button",{class:"btn",onclick:()=>navigate({view:"list", item:null})}, "Cancel"));
+    footer.append(el("div",{class:"spacer"}));
+    if (wState.tab > 0) footer.append(el("button",{class:"btn",onclick:()=>gotoTab(wState.tab-1)}, "Previous"));
+    const last = wState.tab === tabs.length - 1;
+    if (last) {
+      const anyErrs = wState.tabErrors.size > 0;
+      const btn = el("button",{class:"btn primary",onclick:submit}, icon("rocket_launch"),
+        (svc.key === "ec2" ? "Launch instance" : (svc.key === "s3" ? "Create bucket" : "Create")));
+      if (anyErrs) btn.setAttribute("disabled","");
+      footer.append(btn);
+    } else if (wState.tab === tabs.length-2 || (tabs[wState.tab+1] || {}).auto) {
+      footer.append(el("button",{class:"btn primary",onclick:()=>{validateTab(wState.tab); gotoTab(wState.tab+1);}}, "Review and create"));
+    } else {
+      const nextLabel = "Next: " + (tabs[wState.tab+1] || {}).label;
+      footer.append(el("button",{class:"btn primary",onclick:()=>{validateTab(wState.tab); gotoTab(wState.tab+1);}}, nextLabel));
+    }
+  }
+  function renderAside(){
+    aside.innerHTML = "";
+    aside.append(el("h3",{}, "Summary"));
+    const keep = (k,v)=>{ if (v == null || v === "" || k.startsWith("__")) return false; return true; };
+    const fmt = (v) => {
+      if (typeof v === "boolean") return v ? "Yes" : "No";
+      if (Array.isArray(v)) return v.length ? v.join(", ") : "(empty)";
+      if (typeof v === "object" && v) {
+        const e = Object.entries(v).filter(([k,_])=>k); return e.length ? e.map(([k,vv])=>`${k}=${vv}`).join(", ") : "(empty)";
+      }
+      return String(v).slice(0,60);
+    };
+    // Pull most informative fields from current state for the summary card
+    const pretty = (k) => {
+      // Map field name → label by searching wizard schema
+      for (const t of tabs) for (const sec of (t.sections||[])) for (const f of (sec.fields||[])) {
+        if (f.name === k) return f.label || k;
+      }
+      return k;
+    };
+    let n = 0;
+    Object.entries(wState.values).forEach(([k,v]) => {
+      if (!keep(k,v) || n > 10) return;
+      aside.append(el("div",{class:"row"}, el("span",{class:"k"}, pretty(k)), el("span",{class:"v"}, fmt(v))));
+      n++;
+    });
+    if (n === 0) aside.append(el("div",{style:"font-size:12.5px;color:var(--sub)"}, "Fill in fields on the left — your choices will show here."));
+    aside.append(el("div",{class:"cta"},
+      el("button",{class:"btn primary",onclick:submit},
+        icon("rocket_launch"),
+        (svc.key === "ec2" ? "Launch instance" : "Create resource")),
+      el("button",{class:"btn",onclick:()=>navigate({view:"list", item:null})}, "Cancel")));
+  }
+
+  function gotoTab(i){
+    if (i < 0 || i >= tabs.length) return;
+    wState.tab = i; wState.errors = {};
+    tabs.forEach((_,idx) => validateTab(idx));
+    rerender();
+  }
+  function rerender(softFieldOnly){
+    if (softFieldOnly) { renderStrip(); renderAside(); renderFooter(); return; }
+    renderStrip(); renderTab(); renderAside(); renderFooter();
+  }
+  async function submit(){
+    const name = String(wState.values["name"] || "").trim();
+    if (!name) { toast("Name is required", "err"); return; }
+    const bodyObj = {tags: wState.values["tags"] || {}};
+    Object.entries(wState.values).forEach(([k,v]) => {
+      if (k === "tags") return;
+      if (v === undefined || v === null || v === "") return;
+      if (k.startsWith("__")) {
+        const m = synth[k];
+        if (!m) return;
+        const expansion = m[v] || m["*"];
+        if (!expansion) return;
+        Object.entries(expansion).forEach(([path, val]) => {
+          const final = val === "$value" ? v : val;
+          setPath(bodyObj, path, final);
+        });
+        return;
+      }
+      setPath(bodyObj, k, v);
+    });
+    // Same create_path override pattern — applies to wizard path too.
+    const createTemplate = svc.create_path || svc.collection_path;
+    const createUrl = fillPath(createTemplate, {name: name});
+    const r = await api(svc.create_method, createUrl, bodyObj);
+    if (r.ok) {
+      toast(name + " created", "ok"); recordNotif("ok", "Created " + name);
+      navigate({view:"list", item:null});
+    } else {
+      const m = (r.json && (r.json.detail || (r.json.error && r.json.error.message))) || "";
+      toast("Create failed (" + r.status + "): " + m, "err");
+    }
+  }
+
+  rerender();
+}
+
+function renderFlatCreate(svc, main){
+  // Fallback for any catalog entry lacking a wizard schema.
+  const grid = el("div",{class:"wizard-grid"});
+  const mainCol = el("div",{class:"wizard-main"});
+  const aside = el("aside",{class:"wizard-summary"});
+  grid.append(mainCol, aside);
+  main.append(grid);
+  const inputs = {};
+  svc.createFields.forEach(f => {
+    let dv = f.default || "";
+    if (dv === "__UUID__") dv = uuid();
+    const inp = el("input",{value:dv});
+    inputs[f.name] = inp;
+    mainCol.append(el("div",{class:"field"}, el("label",{}, f.label), inp));
+  });
+  mainCol.append(el("div",{class:"wizard-footer"},
+    el("button",{class:"btn",onclick:()=>navigate({view:"list", item:null})}, "Cancel"),
+    el("div",{class:"spacer"}),
+    el("button",{class:"btn primary",onclick:async()=>{
+      const body = {};
+      svc.createFields.forEach(f => { const v = inputs[f.name].value; if (v !== "") body[f.name] = v; });
+      const name = String(body.name || "").trim();
+      if (!name) { toast("Name is required","err"); return; }
+      const r = await api(svc.create_method, svc.collection_path, body);
+      if (r.ok) { toast(name+" created"); navigate({view:"list", item:null}); }
+      else toast("Create failed", "err");
+    }}, "Create")));
+  aside.append(el("h3",{}, "Summary"), el("div",{style:"font-size:12.5px;color:var(--sub)"},
+    "Fill in fields on the left, then click Create."));
+}
+
+// =====================================================================
+// Tab-content renderers (universal + AWS-specific)
+// =====================================================================
+const SUB_RENDERERS = {};
+
+// Secrets Manager "Secret value" detail tab — mirrors the real AWS console:
+// value hidden until "Retrieve secret value"; then Key/value table or Plaintext;
+// "Edit" makes it editable (add/remove rows) and "Save" PUTs (= PutSecretValue).
+SUB_RENDERERS.secretvalue = function(svc, full, host){
+  const name = String((full && full.name) || getPath(full, svc.name_field) || "");
+  let value = (full && full.value != null) ? String(full.value) : "";
+  let revealed = false, editing = false, plaintext = false;
+  const panel = el("div",{class:"panel"}); host.append(panel);
+
+  function asPairs(s){
+    try { const o = JSON.parse(s); if (o && typeof o === "object" && !Array.isArray(o))
+      return Object.keys(o).map(k => [k, String(o[k])]); } catch(_){}
+    return null;
+  }
+  function saveBar(getVal){
+    const bar = el("div",{style:"display:flex;gap:8px;margin-top:14px"});
+    bar.append(el("button",{class:"btn primary",onclick:async ()=>{
+      const r = await api("PUT", fillPath(svc.resource_path,{name}), {value: getVal()});
+      if (r.ok || [200,204].includes(r.status)){ value = getVal(); editing = false; toast("Secret value saved"); render(); }
+      else toast("Save failed","err");
+    }}, icon("save"), "Save"));
+    bar.append(el("button",{class:"btn",onclick:()=>{ editing = false; render(); }}, "Cancel"));
+    return bar;
+  }
+  function render(){
+    panel.innerHTML = "";
+    panel.append(el("div",{class:"panel-h"}, icon("key"), "Secret value"));
+    const body = el("div",{style:"padding:14px"}); panel.append(body);
+    if (!revealed){
+      body.append(el("div",{style:"color:#5f6b7a;margin-bottom:12px;font-size:13px"},
+        "The secret value is encrypted and hidden. Retrieve it to view or edit."));
+      body.append(el("button",{class:"btn",onclick:async ()=>{
+        try { const r = await api("GET", fillPath(svc.resource_path,{name})); if (r.ok && r.json) value = String(r.json.value ?? value); } catch(_){}
+        revealed = true; render();
+      }}, icon("visibility"), "Retrieve secret value"));
+      return;
+    }
+    const pairs = asPairs(value);
+    const bar = el("div",{style:"display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap"});
+    if (pairs){
+      bar.append(el("button",{class:"btn"+(plaintext?"":" primary"),onclick:()=>{plaintext=false;render();}}, "Key/value"));
+      bar.append(el("button",{class:"btn"+(plaintext?" primary":""),onclick:()=>{plaintext=true;render();}}, "Plaintext"));
+    } else { plaintext = true; }
+    bar.append(el("div",{style:"flex:1"}));
+    if (!editing) bar.append(el("button",{class:"btn",onclick:()=>{editing=true;render();}}, icon("edit"), "Edit"));
+    body.append(bar);
+    if (plaintext || !pairs){
+      const ta = el("textarea",{rows:7,style:"width:100%;box-sizing:border-box;font-family:monospace;font-size:13px;padding:8px;border:1px solid #aab7b8;border-radius:4px"});
+      ta.value = value; ta.readOnly = !editing;
+      body.append(ta);
+      if (editing) body.append(saveBar(()=> ta.value));
+    } else {
+      const tbl = el("table",{class:"aws",style:"width:100%"});
+      const hr = el("tr",{}, el("th",{},"Key"), el("th",{},"Value"));
+      if (editing) hr.append(el("th",{style:"width:44px"},""));
+      tbl.append(hr);
+      const inputs = [];
+      function addRow(k,v){
+        const ki = el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+        const vi = el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+        ki.value = k; vi.value = v; ki.readOnly = !editing; vi.readOnly = !editing;
+        const pair = {ki, vi};
+        inputs.push(pair);
+        const tr = el("tr",{}, el("td",{},ki), el("td",{},vi));
+        if (editing) tr.append(el("td",{}, el("button",{class:"btn del",title:"Remove",
+          onclick:()=>{ const idx=inputs.indexOf(pair); if(idx>=0) inputs.splice(idx,1); tr.remove(); }}, "✕")));
+        tbl.append(tr);
+      }
+      pairs.forEach(p => addRow(p[0], p[1]));
+      body.append(tbl);
+      if (editing){
+        body.append(el("button",{class:"btn",style:"margin-top:10px",onclick:()=>addRow("","")}, icon("add"), "Add row"));
+        body.append(saveBar(()=> JSON.stringify(Object.fromEntries(
+          inputs.map(p=>[p.ki.value.trim(), p.vi.value]).filter(e=>e[0])))));
+      }
+    }
+  }
+  render();
+};
+
+// KMS "General configuration" — mirrors the real console: key facts + editable
+// Description (Save) + Enable/Disable key (= UpdateKeyDescription/Enable/DisableKey).
+SUB_RENDERERS.kmsconfig = function(svc, full, host){
+  const id = String(full.key_id || full.KeyId || getPath(full, svc.name_field) || "");
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  function render(){
+    panel.innerHTML = "";
+    panel.append(el("div",{class:"panel-h"}, icon("info"), "General configuration"));
+    const body = el("div",{style:"padding:14px"}); panel.append(body);
+    const enabled = (full.state ? full.state === "Enabled" : !!full.enabled);
+    const facts = [["Key ID", full.key_id||id], ["ARN", full.arn], ["Status", enabled?"Enabled":(full.state||"Disabled")],
+                   ["Key spec", full.key_spec], ["Key usage", full.key_usage], ["Alias", full.alias||"—"]];
+    const grid = el("div",{style:"display:grid;grid-template-columns:150px 1fr;gap:7px 14px;margin-bottom:18px;font-size:13px"});
+    facts.forEach(f=>{ grid.append(el("div",{style:"color:#5f6b7a"}, f[0]), el("div",{class:"mono small"}, String(f[1]??"—"))); });
+    body.append(grid);
+    body.append(el("div",{style:"font-weight:600;margin-bottom:6px"}, "Description"));
+    const desc = el("input",{value: full.description||"", style:"width:100%;max-width:560px;box-sizing:border-box;border:1px solid #aab7b8;border-radius:4px;padding:7px"});
+    body.append(desc);
+    const bar = el("div",{style:"display:flex;gap:8px;margin-top:16px"});
+    bar.append(el("button",{class:"btn primary",onclick:async()=>{
+      const r = await api("PUT", fillPath(svc.resource_path,{name:id}), {description: desc.value});
+      if (r.ok){ full.description = desc.value; toast("Description saved"); } else toast("Save failed","err");
+    }}, icon("save"), "Save description"));
+    bar.append(el("button",{class:"btn"+(enabled?" del":""),onclick:async()=>{
+      const r = await api("PUT", fillPath(svc.resource_path,{name:id}), {enabled: !enabled});
+      if (r.ok){ full.enabled = !enabled; full.state = !enabled?"Enabled":"Disabled"; toast((!enabled?"Enabled":"Disabled")+" key"); render(); }
+      else toast("Failed","err");
+    }}, icon("power_settings_new"), enabled?"Disable key":"Enable key"));
+    body.append(bar);
+  }
+  render();
+};
+
+SUB_RENDERERS.overview = function(svc, full, host){
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Resource details"));
+  const grid = el("div",{class:"kv-grid"});
+  const rows = [["Region", REGION], ["Account", ACCOUNT]];
+  svc.columns.forEach(c => { const v = getPath(full, c[0]); if (v != null) rows.push([c[1], String(v)]); });
+  if (full.arn) rows.push(["ARN", full.arn]);
+  rows.forEach(([k,v])=>{ grid.append(el("div",{}, el("div",{class:"k"}, k),
+    el("div",{class:"v"+(/id|arn/i.test(k)?" mono":"")}, v))); });
+  card.append(grid); host.append(card);
+};
+SUB_RENDERERS.activitylog = async function(svc, full, host){
+  host.append(el("div",{class:"alert info"}, icon("info"),
+    el("div",{}, "Operations recorded against this resource in the current simulator session.")));
+  const name = itemKey(svc, full);
+  try {
+    const r = await fetch(ORIGIN + "/api/cloudsim/events");
+    const j = await r.json();
+    const all = Array.isArray(j) ? j : (j.events || []);
+    const t = name.toLowerCase();
+    const filtered = all.filter(ev => {
+      const d = ev.detail || {};
+      if (d.resource_id && String(d.resource_id).toLowerCase().includes(t)) return true;
+      if (d.name && String(d.name).toLowerCase() === t) return true;
+      if (d.instance_id && String(d.instance_id).toLowerCase() === t) return true;
+      return false;
+    });
+    if (!filtered.length) { host.append(el("div",{class:"empty"}, "No activity yet for this resource.")); return; }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Event time"), el("th",{}, "Operation"),
+      el("th",{}, "Status"), el("th",{}, "Detail")));
+    filtered.slice(0, 50).forEach(ev => {
+      tbl.append(el("tr",{},
+        el("td",{class:"mono small"}, ev.at || ev.ts || "—"),
+        el("td",{}, String(ev.event||"")),
+        el("td",{}, stateBadge("Succeeded")),
+        el("td",{class:"small mono"}, Object.entries(ev.detail||{}).filter(([k,_])=>k!=="resource_id").map(([k,v])=>`${k}=${typeof v==="object"?JSON.stringify(v):v}`).join(", "))));
+    });
+    host.append(tbl);
+  } catch(e) { host.append(el("div",{class:"empty"}, "Unable to load events.")); }
+};
+SUB_RENDERERS.iam = function(svc, full, host){
+  host.append(el("div",{class:"alert info"}, icon("admin_panel_settings"),
+    el("div",{}, "IAM permissions and resource-based policies attached to this resource.")));
+  host.append(el("div",{class:"empty"}, "No policies attached."));
+};
+SUB_RENDERERS.tags = function(svc, full, host){
+  const tags = (full.tags && typeof full.tags === "object") ? full.tags : {};
+  const state = {tags: {...tags}};
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Tags ("+Object.keys(state.tags).length+")"));
+  const rows = el("div",{}); card.append(rows);
+  function paint(){
+    rows.innerHTML = "";
+    const entries = Object.entries(state.tags);
+    if (!entries.length) entries.push(["",""]);
+    entries.forEach(([k,v]) => {
+      const grid = el("div",{class:"tags-rows"});
+      const kInp = el("input",{placeholder:"Key",value:k,
+        oninput:e=>{ delete state.tags[k]; if (e.target.value) state.tags[e.target.value] = v; }});
+      const vInp = el("input",{placeholder:"Value",value:v,
+        oninput:e=>{ state.tags[k] = e.target.value; }});
+      const x = el("button",{class:"x material-symbols-outlined",
+        onclick:()=>{ delete state.tags[k]; paint(); }}, "close");
+      grid.append(kInp, vInp, x);
+      rows.append(grid);
+    });
+  }
+  paint();
+  card.append(el("div",{style:"margin-top:10px"},
+    el("button",{class:"add-row",onclick:()=>{state.tags["new-tag"]=""; paint();}}, "+ Add tag")));
+  card.append(el("div",{style:"margin-top:16px;display:flex;gap:8px"},
+    el("button",{class:"btn primary",onclick:async()=>{
+      const r = await api("PATCH", fillPath(svc.resource_path, {name:itemKey(svc,full)}), {tags: state.tags});
+      if (r.ok) { toast("Tags saved"); recordNotif("ok","Tags updated"); }
+      else toast("Save failed ("+r.status+")", "err");
+    }}, "Save changes"),
+    el("button",{class:"btn",onclick:()=>{state.tags={...tags}; paint();}}, "Cancel")));
+  host.append(card);
+};
+SUB_RENDERERS.json = function(svc, full, host){ host.append(el("pre",{class:"json"}, JSON.stringify(full, null, 2))); };
+SUB_RENDERERS.properties = function(svc, full, host){
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "All properties"));
+  const grid = el("div",{style:"display:grid;grid-template-columns:280px 1fr;gap:4px 12px;font-size:12.5px"});
+  function walk(o, prefix){
+    if (o == null) return;
+    if (typeof o !== "object" || Array.isArray(o)) {
+      grid.append(el("div",{style:"color:var(--sub);font-family:Consolas,Menlo,monospace"}, prefix||"(root)"),
+                  el("div",{}, Array.isArray(o) ? JSON.stringify(o) : String(o)));
+      return;
+    }
+    Object.entries(o).forEach(([k,v]) => {
+      const p = prefix ? prefix+"."+k : k;
+      if (v && typeof v === "object" && !Array.isArray(v)) walk(v, p);
+      else grid.append(el("div",{style:"color:var(--sub);font-family:Consolas,Menlo,monospace"}, p),
+                       el("div",{}, Array.isArray(v) ? JSON.stringify(v) : String(v)));
+    });
+  }
+  walk(full, ""); card.append(grid); host.append(card);
+};
+SUB_RENDERERS.metrics = function(svc, full, host){
+  host.append(el("div",{class:"alert info"}, icon("show_chart"),
+    el("div",{}, "Synthesized CloudWatch metrics. Real telemetry ingestion is future work.")));
+  const series = svc.key === "ec2"
+    ? [["CPU utilization (%)",10,80,"%"],["Network in (KB/s)",50,500,""],["Network out (KB/s)",30,400,""],["Status check failures",0,1,""]]
+    : svc.key === "rds"
+    ? [["CPU (%)",20,80,"%"],["DB connections",2,30,""],["Free storage (GiB)",10,80,""],["Read IOPS",10,200,""]]
+    : svc.key === "lambda"
+    ? [["Invocations",10,500,""],["Duration (ms)",50,300,""],["Errors",0,10,""],["Throttles",0,5,""]]
+    : [["Requests",100,1000,""],["Latency (ms)",10,200,""],["Errors",0,10,""]];
+  const grid = el("div",{class:"metrics-grid"});
+  series.forEach(([l,lo,hi,suf]) => grid.append(buildSparkline(l, lo, hi, suf)));
+  host.append(grid);
+};
+function buildSparkline(label, lo, hi, suffix){
+  const card = el("div",{class:"metric-card"});
+  card.append(el("div",{class:"label"}, label));
+  let seed = 0; for (const c of label) seed = (seed*31 + c.charCodeAt(0)) & 0xffff;
+  const pts = []; for (let i=0;i<24;i++) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; pts.push(lo + (hi-lo) * ((seed % 1000)/1000)); }
+  const w=240, h=60, max=Math.max(...pts), min=Math.min(...pts);
+  const path = pts.map((p,i)=>`${i===0?"M":"L"}${(i*(w-4)/(pts.length-1)+2).toFixed(1)},${(h-2-((p-min)/(max-min||1))*(h-6)).toFixed(1)}`).join(" ");
+  card.append(el("div",{class:"chart",html:`<svg viewBox="0 0 ${w} ${h}" width="100%" preserveAspectRatio="none"><path d="${path}" fill="none" stroke="#ff9900" stroke-width="1.6"/></svg>`}));
+  card.append(el("div",{class:"value"}, pts[pts.length-1].toFixed(suffix==="%"?0:0) + (suffix||" units")));
+  return card;
+}
+
+// EC2-specific tabs
+SUB_RENDERERS.connect = function(svc, full, host){
+  host.append(el("div",{class:"alert info"}, icon("terminal"),
+    el("div",{}, "Connect to your instance via SSH (real key + port forward) or via the LXD shell fallback.")));
+
+  // Container for the live values — populated by an async fetch to the
+  // /connect-info endpoint, which lazy-provisions the SSH key + lxc proxy
+  // device on first hit and returns cached info thereafter.
+  const wrap = el("div",{class:"vm-connect-pane"});
+  host.append(wrap);
+  wrap.append(el("div",{class:"alert"}, icon("clock"),
+    el("div",{}, "Provisioning SSH access on the running container…")));
+
+  const instanceId = full.instance_id || full.InstanceId || full.id || "";
+  if (!instanceId) {
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"alert warn"}, el("div",{}, "Missing instance_id — cannot generate connect command.")));
+    return;
+  }
+
+  fetch(`/api/aws/ec2/instances/${encodeURIComponent(instanceId)}/connect-info`)
+    .then(r => r.json().then(d => ({ok: r.ok, status: r.status, body: d})))
+    .then(({ok, status, body}) => {
+      wrap.innerHTML = "";
+      if (!ok) {
+        const reason = (body.detail && (body.detail.error || body.detail.reason)) || body.detail || "unknown";
+        const hint = (body.detail && body.detail.hint) || "";
+        wrap.append(el("div",{class:"alert warn"},
+          el("div",{}, `Connect provisioning failed (HTTP ${status}): ${reason}${hint ? " · " + hint : ""}`)));
+        return;
+      }
+      const ssh = body.ssh || {};
+      const lxcCmd = (body.lxc || {}).command || "";
+      const keyUrl = ssh.key_download_url || "";
+      const sharedKey = body.auth_mode === "shared_host_key";
+
+      // Shared host-key path (the headline path for installed appliances):
+      // no download, no chmod — the user's ~/.ssh/vyomi_ed25519 already
+      // matches the authorized_keys on every container. Just paste & go.
+      if (sharedKey) {
+        wrap.append(el("div",{class:"alert success",
+                              style:"background:#ecfdf5;border-color:#a7f3d0;color:#047857"},
+          el("div",{}, `✓ Shared SSH identity installed at `,
+            el("code",{}, ssh.host_identity_path || "~/.ssh/vyomi_ed25519"),
+            ` — no key download needed.`)));
+      } else {
+        // Dev fallback — per-instance keypair, download required.
+        wrap.append(el("div",{class:"keyblock"},
+          el("div",{class:"k"}, "Step 1 — Download SSH private key (one-time)"),
+          el("div",{class:"row"},
+            el("a",{class:"btn", href:keyUrl, download:`vyomi-${instanceId}.pem`},
+              icon("download"), `Download ${ssh.key_local_filename || "vyomi-" + instanceId + ".pem"}`),
+            el("span",{class:"muted", style:"font-size:12px;margin-left:8px"},
+              "Save to ~/Downloads. Run `chmod 600` on it before connecting."))));
+      }
+
+      // The SSH command itself — same UI for both modes
+      const sshCmd = ssh.command || "";
+      const stepLabel = sharedKey ? "Paste this into your terminal" : "Step 2 — SSH command";
+      wrap.append(el("div",{class:"keyblock"},
+        el("div",{class:"k"}, stepLabel),
+        el("pre",{class:"keyval"}, sshCmd),
+        el("div",{class:"row"},
+          el("button",{class:"btn",onclick:()=>{navigator.clipboard.writeText(sshCmd); toast("Copied");}},
+            icon("copy"), "Copy"),
+          el("span",{class:"muted", style:"font-size:12px;margin-left:8px"},
+            `Logs you in as ${ssh.user || "ubuntu"}@${ssh.host || ""} on port ${ssh.port || ""}.`))));
+
+      // 3. lxc shell fallback (no key needed, but only works on the
+      //    same machine running the appliance VM)
+      if (lxcCmd) {
+        wrap.append(el("div",{class:"keyblock"},
+          el("div",{class:"k"}, "Alternative — LXD shell (no key required)"),
+          el("pre",{class:"keyval"}, lxcCmd),
+          el("div",{class:"row"},
+            el("button",{class:"btn",onclick:()=>{navigator.clipboard.writeText(lxcCmd); toast("Copied");}},
+              icon("copy"), "Copy"),
+            el("span",{class:"muted", style:"font-size:12px;margin-left:8px"},
+              "Drops you straight into a root shell — works without SSH keys but only from the host running this appliance."))));
+      }
+    })
+    .catch(e => {
+      wrap.innerHTML = "";
+      wrap.append(el("div",{class:"alert warn"}, el("div",{}, `Connect endpoint error: ${e.message}`)));
+    });
+};
+SUB_RENDERERS.ec2networking = function(svc, full, host){
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Networking details"));
+  const g = el("div",{class:"kv-grid"});
+  const rows = [
+    ["Private IPv4 address", full.private_ip || "—"],
+    ["Public IPv4 address",  full.public_ip || "—"],
+    ["Public IPv4 DNS",      full.public_dns || "—"],
+    ["VPC ID",               full.vpc_id || "default"],
+    ["Subnet ID",            full.subnet_id || "—"],
+    ["Availability Zone",    full.availability_zone || REGION+"a"],
+    ["Security groups",      (full.security_groups || []).join(", ") || "—"],
+    ["Network interfaces",   String((full.network_interfaces||[]).length || 1)],
+  ];
+  rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k),
+    el("div",{class:"v"+(/id|address/i.test(k)?" mono":"")}, String(v)))));
+  card.append(g); host.append(card);
+};
+SUB_RENDERERS.ec2security = function(svc, full, host){
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Security details"));
+  const g = el("div",{class:"kv-grid"});
+  [
+    ["IAM role",       full.iam_instance_profile || "—"],
+    ["Owner",          ACCOUNT],
+    ["Launch time",    full.launch_time || "—"],
+    ["Key pair name",  full.key_name || "(no key pair)"],
+    ["State transition reason", full.state_reason || "—"],
+  ].forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, String(v)))));
+  card.append(g); host.append(card);
+};
+SUB_RENDERERS.ec2storage = function(svc, full, host){
+  const tbl = el("table",{class:"aws"});
+  tbl.append(el("tr",{}, el("th",{}, "Volume ID"), el("th",{}, "Type"),
+    el("th",{}, "Size (GiB)"), el("th",{}, "Encrypted"), el("th",{}, "Status")));
+  const vols = full.block_device_mappings || [{volume_id:"vol-root", volume_type:"gp3", size_gb:8, encrypted:true, status:"in-use"}];
+  vols.forEach(v => tbl.append(el("tr",{},
+    el("td",{}, el("a",{class:"id"}, v.volume_id || v.device_name || "—")),
+    el("td",{}, v.volume_type || "gp3"),
+    el("td",{}, String(v.size_gb || v.volume_size || 8)),
+    el("td",{}, String(v.encrypted ?? true)),
+    el("td",{}, stateBadge(v.status || "in-use")))));
+  host.append(tbl);
+};
+SUB_RENDERERS.sgrules = function(svc, full, host){
+  host.append(el("div",{class:"alert info"}, icon("shield"),
+    el("div",{}, "Security groups in this VPC and their inbound/outbound rules.")));
+  fetch(ORIGIN+"/api/vpc/security-groups").then(r=>r.json()).then(j=>{
+    const sgs = (j.security_groups || j.value || []).filter(sg => !full.vpc_id || sg.vpc_id === full.vpc_id || full.vpc_id === "default");
+    if (!sgs.length) { host.append(el("div",{class:"empty"}, "No security groups.")); return; }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Security group ID"), el("th",{}, "Name"),
+      el("th",{}, "Description"), el("th",{}, "Inbound rules")));
+    sgs.forEach(sg => tbl.append(el("tr",{},
+      el("td",{}, el("a",{class:"id"}, sg.id||sg.group_id||"—")),
+      el("td",{}, sg.name||"—"),
+      el("td",{}, sg.description||"—"),
+      el("td",{}, String((sg.ingress||sg.ip_permissions||[]).length)))));
+    host.append(tbl);
+  });
+};
+SUB_RENDERERS.subnets = function(svc, full, host){
+  fetch(ORIGIN+"/api/vpc/subnets").then(r=>r.json()).then(j=>{
+    const subs = (j.subnets || j.value || []).filter(s => !full.vpc_id || s.vpc_id === full.vpc_id);
+    if (!subs.length) { host.append(el("div",{class:"empty"}, "No subnets.")); return; }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Subnet ID"), el("th",{}, "Name"),
+      el("th",{}, "IPv4 CIDR"), el("th",{}, "Availability Zone")));
+    subs.forEach(s => tbl.append(el("tr",{},
+      el("td",{}, el("a",{class:"id"}, s.id||s.subnet_id||"—")),
+      el("td",{}, s.name||"—"),
+      el("td",{}, s.cidr_block||"—"),
+      el("td",{}, s.availability_zone||"—"))));
+    host.append(tbl);
+  });
+};
+SUB_RENDERERS.routetables = function(svc, full, host){
+  fetch(ORIGIN+"/api/vpc/route-tables").then(r=>r.json()).then(j=>{
+    const rts = (j.route_tables || j.value || []).filter(r => !full.vpc_id || r.vpc_id === full.vpc_id);
+    if (!rts.length) { host.append(el("div",{class:"empty"}, "No route tables.")); return; }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Route table ID"), el("th",{}, "Name"),
+      el("th",{}, "Routes"), el("th",{}, "Subnet associations")));
+    rts.forEach(r => tbl.append(el("tr",{},
+      el("td",{}, el("a",{class:"id"}, r.id||r.route_table_id||"—")),
+      el("td",{}, r.name||"—"),
+      el("td",{}, String((r.routes||[]).length)),
+      el("td",{}, String((r.associations||[]).length)))));
+    host.append(tbl);
+  });
+};
+SUB_RENDERERS.igws = function(svc, full, host){
+  fetch(ORIGIN+"/api/vpc/internet-gateways").then(r=>r.json()).then(j=>{
+    const igws = (j.internet_gateways || j.value || []).filter(i => !full.vpc_id || (i.attachments||[]).some(a => a.vpc_id === full.vpc_id));
+    if (!igws.length) { host.append(el("div",{class:"empty"}, "No internet gateways.")); return; }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Internet gateway ID"), el("th",{}, "Name"), el("th",{}, "State")));
+    igws.forEach(i => tbl.append(el("tr",{},
+      el("td",{}, el("a",{class:"id"}, i.id||i.internet_gateway_id||"—")),
+      el("td",{}, i.name||"—"),
+      el("td",{}, stateBadge("available")))));
+    host.append(tbl);
+  });
+};
+
+// IAM composite — each sub-tab fetches a different IAM collection
+SUB_RENDERERS.iamusers    = (svc, full, host) => loadIamList(svc, host, "users",
+  [["user_name","User name"],["arn","ARN"],["created","Created"]]);
+SUB_RENDERERS.iamgroups   = (svc, full, host) => loadIamList(svc, host, "groups",
+  [["group_name","Group name"],["arn","ARN"],["created","Created"]]);
+SUB_RENDERERS.iamroles    = (svc, full, host) => loadIamList(svc, host, "roles",
+  [["role_name","Role name"],["arn","ARN"],["created","Created"]]);
+SUB_RENDERERS.iampolicies = (svc, full, host) => loadIamList(svc, host, "policies",
+  [["policy_name","Policy name"],["arn","ARN"],["attachable","Attachable"]]);
+async function loadIamList(svc, host, kind, columns){
+  const ap = (svc.api_paths || {})[kind];
+  if (!ap) { host.append(el("div",{class:"empty"}, "Path not configured.")); return; }
+  const r = await api(ap.method, ap.path);
+  const items = (r.json || {})[kind] || (r.json || {}).value || [];
+  if (!items.length) { host.append(el("div",{class:"empty"}, "No "+kind+" yet.")); return; }
+  const tbl = el("table",{class:"aws"});
+  const hdr = el("tr",{}); columns.forEach(c => hdr.append(el("th",{}, c[1]))); tbl.append(hdr);
+  items.forEach(it => {
+    const tr = el("tr",{});
+    columns.forEach(c => tr.append(el("td",{class: c[0]==="arn"?"mono small":""},
+      String(getPath(it, c[0]) ?? "—"))));
+    tbl.append(tr);
+  });
+  host.append(tbl);
+}
+
+// S3 specific
+SUB_RENDERERS.bucketobjects = function(svc, full, host){
+  // v2.0.6 — add the Upload button that was missing from the Objects
+  // tab. POSTs multipart/form-data to /api/s3/buckets/{name}/objects
+  // (api_paths.uploadObject), reuses the same endpoint that boto3 +
+  // aws-cli `s3 cp` hit. Files larger than ~50 MB go via a background
+  // FormData upload so the UI stays responsive.
+  const action = el("div",{style:"display:flex;gap:8px;margin-bottom:14px;align-items:center"});
+  const fileIn = el("input",{type:"file",style:"display:none",multiple:true,
+    onchange: e => uploadFiles(e.target.files)});
+  const uploadBtn = el("button",{class:"btn primary",onclick:()=>fileIn.click()},
+    icon("file_upload"), "Upload");
+  const refreshBtn = el("button",{class:"btn",onclick:()=>{ host.innerHTML=""; SUB_RENDERERS.bucketobjects(svc, full, host); }},
+    icon("refresh"), "Refresh");
+  const status = el("span",{style:"font-size:12.5px;color:var(--sub);margin-left:auto"}, "");
+  action.append(uploadBtn, refreshBtn, fileIn, status);
+  host.append(action);
+
+  async function uploadFiles(fileList){
+    if (!fileList || !fileList.length) return;
+    const files = Array.from(fileList);
+    let done = 0;
+    for (const f of files){
+      status.textContent = `Uploading ${f.name} (${done+1}/${files.length})…`;
+      const fd = new FormData();
+      fd.append("file", f, f.name);
+      try {
+        const r = await fetch(ORIGIN+fillPath(svc.api_paths.uploadObject.path, {name: full.name}),
+          {method: "POST", body: fd});
+        if (!r.ok) { toast(`Upload failed: ${f.name}`, "err"); }
+        else { done++; }
+      } catch (e) { toast(`Upload failed: ${f.name} — ${e.message}`, "err"); }
+    }
+    status.textContent = `Uploaded ${done} of ${files.length}`;
+    if (done > 0) toast(`Uploaded ${done} object${done===1?"":"s"}`, "ok");
+    // Re-render the list so the new objects show up immediately.
+    host.innerHTML = "";
+    SUB_RENDERERS.bucketobjects(svc, full, host);
+  }
+
+  // Delete one object. Build the URL with per-segment encoding (not fillPath,
+  // which would %2F-escape the slashes the {key:path} route needs).
+  async function deleteObject(key){
+    if (!key || !confirm(`Delete object "${key}"? This can't be undone.`)) return;
+    const url = ORIGIN + "/api/s3/buckets/" + encodeURIComponent(full.name)
+              + "/objects/" + key.split("/").map(encodeURIComponent).join("/");
+    try {
+      const r = await fetch(url, {method: (svc.api_paths.deleteObject||{}).method || "DELETE"});
+      if (r.ok || [200,202,204].includes(r.status)) {
+        toast(`Deleted ${key}`, "ok");
+        host.innerHTML = "";
+        SUB_RENDERERS.bucketobjects(svc, full, host);
+      } else { toast(`Delete failed: ${key}`, "err"); }
+    } catch (e) { toast(`Delete failed: ${key} — ${e.message}`, "err"); }
+  }
+
+  fetch(ORIGIN+fillPath(svc.api_paths.objects.path, {name: full.name})).then(r=>r.json()).then(j=>{
+    const objs = j.objects || j.value || [];
+    if (!objs.length) {
+      const empty = el("div",{class:"empty",style:"padding:32px;text-align:center"},
+        icon("inbox"),
+        el("div",{}, "This bucket is empty."),
+        el("div",{style:"font-size:12px;color:var(--sub);margin-top:6px"},
+          "Click ", el("strong",{}, "Upload"), " above to add your first object."));
+      host.append(empty);
+      return;
+    }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Name"), el("th",{}, "Type"),
+      el("th",{}, "Last modified"), el("th",{}, "Size"), el("th",{}, "Storage class"), el("th",{}, "")));
+    objs.forEach(o => { const key = o.key||o.name||""; tbl.append(el("tr",{},
+      el("td",{}, el("a",{class:"id"}, key||"—")),
+      el("td",{}, /\.(png|jpg|jpeg)$/i.test(key) ? "Image" : "Object"),
+      el("td",{class:"small"}, o.last_modified||"—"),
+      el("td",{}, String(o.size||o.content_length||0)+" B"),
+      el("td",{}, o.storage_class||"Standard"),
+      el("td",{style:"text-align:right"},
+        el("button",{class:"btn danger",title:"Delete object",onclick:()=>deleteObject(key)},
+          icon("delete"), "Delete")))); });
+    host.append(tbl);
+  });
+};
+SUB_RENDERERS.bucketversioning = function(svc, full, host){
+  const enabled = !!full.versioning_enabled || full.versioning === "Enabled";
+  host.append(el("div",{class:"alert info"}, icon("history_edu"),
+    el("div",{}, "Versioning preserves an object's full history (including delete markers).")));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Bucket Versioning"));
+  card.append(el("div",{class:"kv-grid"},
+    el("div",{}, el("div",{class:"k"}, "Status"), el("div",{class:"v"}, enabled ? "Enabled" : "Suspended"))));
+  card.append(el("div",{style:"margin-top:14px"},
+    el("button",{class:"btn primary",onclick:async()=>{
+      const r = await api(svc.api_paths.versioning.method,
+        fillPath(svc.api_paths.versioning.path, {name: full.name}),
+        {status: enabled ? "Suspended" : "Enabled"});
+      if (r.ok) toast("Versioning "+(enabled?"suspended":"enabled")); else toast("Update failed","err");
+    }}, enabled ? "Suspend versioning" : "Enable versioning")));
+  host.append(card);
+};
+SUB_RENDERERS.bucketnotifications = function(svc, full, host){
+  host.append(el("div",{class:"alert info"}, icon("notifications"),
+    el("div",{}, "Notify EventBridge, SNS, SQS, or Lambda on object events.")));
+  host.append(el("div",{class:"empty"}, "No notifications configured."));
+};
+
+// Lambda specific
+SUB_RENDERERS.lambdacode = function(svc, full, host){
+  host.append(el("div",{class:"alert info"}, icon("code"),
+    el("div",{}, "Function source code. Save to deploy a new version (PATCH /api/lambda/functions/{name}/code).")));
+  const ta = el("textarea",{style:"width:100%;min-height:340px"});
+  ta.value = full.code || "def lambda_handler(event, context):\n    return {'statusCode': 200, 'body': 'Hello!'}";
+  host.append(el("div",{class:"field"}, ta));
+  host.append(el("div",{style:"margin-top:14px"},
+    el("button",{class:"btn primary",onclick:async()=>{
+      const r = await api(svc.api_paths.updateCode.method,
+        fillPath(svc.api_paths.updateCode.path, {name: full.function_name || full.name}),
+        {code: ta.value});
+      if (r.ok) toast("Code deployed"); else toast("Deploy failed", "err");
+    }}, icon("save"), "Deploy")));
+};
+SUB_RENDERERS.lambdainvoke = function(svc, full, host){
+  host.append(el("div",{class:"alert info"}, icon("play_arrow"),
+    el("div",{}, "Test your function with a sample event payload.")));
+  const ta = el("textarea",{style:"width:100%;min-height:160px"});
+  ta.value = '{\n  "key": "value"\n}';
+  host.append(el("div",{class:"field"}, ta));
+  const out = el("pre",{class:"json",style:"margin-top:12px"});
+  host.append(el("div",{style:"margin-top:14px"},
+    el("button",{class:"btn primary",onclick:async()=>{
+      let payload = {}; try { payload = JSON.parse(ta.value); }
+      catch(e) { toast("Invalid JSON","err"); return; }
+      const r = await api(svc.api_paths.invoke.method,
+        fillPath(svc.api_paths.invoke.path, {name: full.function_name || full.name}), payload);
+      out.textContent = JSON.stringify(r.json, null, 2);
+      if (r.ok) toast("Invocation succeeded"); else toast("Invocation failed", "err");
+    }}, icon("play_arrow"), "Test")));
+  host.append(out);
+};
+SUB_RENDERERS.lambdaperms = function(svc, full, host){
+  host.append(el("div",{class:"empty"}, "No resource-based policy statements."));
+};
+
+// SQS
+SUB_RENDERERS.sqsmessages = function(svc, full, host){
+  host.append(el("div",{class:"alert info"}, icon("send"),
+    el("div",{}, "Send a test message or poll for messages.")));
+  const ta = el("textarea",{style:"width:100%;min-height:80px"});
+  ta.value = '{"hello":"world"}';
+  host.append(el("div",{class:"field"}, ta));
+  const out = el("pre",{class:"json",style:"margin-top:12px"});
+  host.append(el("div",{style:"margin-top:14px;display:flex;gap:8px"},
+    el("button",{class:"btn primary",onclick:async()=>{
+      const r = await api(svc.api_paths.send.method,
+        fillPath(svc.api_paths.send.path, {name: full.name}), {body: ta.value});
+      if (r.ok) toast("Message sent"); else toast("Send failed", "err");
+    }}, icon("send"), "Send message"),
+    el("button",{class:"btn",onclick:async()=>{
+      const r = await api(svc.api_paths.receive.method,
+        fillPath(svc.api_paths.receive.path, {name: full.name}), {max_messages: 10});
+      out.textContent = JSON.stringify(r.json, null, 2);
+    }}, icon("download"), "Poll for messages")));
+  host.append(out);
+};
+SUB_RENDERERS.sqsdlq = function(svc, full, host){
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Dead-letter queue"));
+  card.append(el("div",{class:"kv-grid"},
+    el("div",{}, el("div",{class:"k"}, "Queue"), el("div",{class:"v"}, full.dlq_arn || "Not configured")),
+    el("div",{}, el("div",{class:"k"}, "Maximum receives"), el("div",{class:"v"}, String(full.max_receive_count||"—")))));
+  host.append(card);
+};
+
+// DynamoDB
+SUB_RENDERERS.dynamoitems = function(svc, full, host){
+  fetch(ORIGIN+fillPath(svc.api_paths.items.path, {name: full.name})).then(r=>r.json()).then(j=>{
+    const items = j.items || j.value || [];
+    if (!items.length) { host.append(el("div",{class:"empty"}, "This table is empty.")); return; }
+    const keys = Array.from(new Set(items.flatMap(i => Object.keys(i)))).slice(0, 6);
+    const tbl = el("table",{class:"aws"});
+    const hdr = el("tr",{}); keys.forEach(k => hdr.append(el("th",{}, k))); tbl.append(hdr);
+    items.forEach(i => {
+      const tr = el("tr",{});
+      keys.forEach(k => tr.append(el("td",{class:"mono small"}, JSON.stringify(i[k]||"—"))));
+      tbl.append(tr);
+    });
+    host.append(tbl);
+  });
+};
+SUB_RENDERERS.dynamoquery = function(svc, full, host){
+  host.append(el("div",{class:"alert info"}, icon("search"),
+    el("div",{}, "Run a Query or Scan operation against this table.")));
+  const ta = el("textarea",{style:"width:100%;min-height:140px"});
+  ta.value = '{\n  "expression_attribute_values": {":pk":"user123"},\n  "key_condition_expression":"pk = :pk"\n}';
+  host.append(el("div",{class:"field"}, ta));
+  const out = el("pre",{class:"json",style:"margin-top:12px"});
+  host.append(el("div",{style:"margin-top:14px;display:flex;gap:8px"},
+    el("button",{class:"btn primary",onclick:async()=>{
+      let p = {}; try { p = JSON.parse(ta.value); } catch(e) { toast("Invalid JSON","err"); return; }
+      const r = await api(svc.api_paths.query.method,
+        fillPath(svc.api_paths.query.path, {name: full.name}), p);
+      out.textContent = JSON.stringify(r.json, null, 2);
+    }}, icon("search"), "Query"),
+    el("button",{class:"btn",onclick:async()=>{
+      const r = await api(svc.api_paths.scan.method,
+        fillPath(svc.api_paths.scan.path, {name: full.name}), {});
+      out.textContent = JSON.stringify(r.json, null, 2);
+    }}, "Scan")));
+  host.append(out);
+};
+
+// RDS
+SUB_RENDERERS.rdsendpoints = function(svc, full, host){
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Endpoint & port"));
+  card.append(el("div",{class:"kv-grid"},
+    el("div",{}, el("div",{class:"k"}, "Endpoint"), el("div",{class:"v mono"}, full.endpoint || "—")),
+    el("div",{}, el("div",{class:"k"}, "Port"),     el("div",{class:"v"}, String(full.port || 5432))),
+    el("div",{}, el("div",{class:"k"}, "Status"),   el("div",{class:"v"}, full.status || "available")),
+    el("div",{}, el("div",{class:"k"}, "Master username"), el("div",{class:"v"}, full.master_username || "postgres"))));
+  host.append(card);
+};
+SUB_RENDERERS.rdssnapshots = function(svc, full, host){
+  fetch(ORIGIN+svc.api_paths.snapshots.path).then(r=>r.json()).then(j=>{
+    const snaps = (j.snapshots || j.value || []).filter(s => !s.db_instance || s.db_instance === full.db_instance_identifier);
+    if (!snaps.length) { host.append(el("div",{class:"empty"}, "No snapshots.")); return; }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Snapshot identifier"), el("th",{}, "Type"),
+      el("th",{}, "Status"), el("th",{}, "Created")));
+    snaps.forEach(s => tbl.append(el("tr",{},
+      el("td",{}, el("a",{class:"id"}, s.snapshot_id||s.name||"—")),
+      el("td",{}, s.type||"manual"),
+      el("td",{}, stateBadge(s.status||"available")),
+      el("td",{class:"small"}, s.created||"—"))));
+    host.append(tbl);
+  });
+};
+SUB_RENDERERS.rdsparametergroups = function(svc, full, host){
+  fetch(ORIGIN+svc.api_paths.paramGroups.path).then(r=>r.json()).then(j=>{
+    const groups = j.parameter_groups || j.value || [];
+    if (!groups.length) { host.append(el("div",{class:"empty"}, "No parameter groups.")); return; }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Name"), el("th",{}, "Family"), el("th",{}, "Description")));
+    groups.forEach(g => tbl.append(el("tr",{},
+      el("td",{}, el("a",{class:"id"}, g.name||"—")),
+      el("td",{}, g.family||"—"),
+      el("td",{}, g.description||""))));
+    host.append(tbl);
+  });
+};
+
+// API Gateway
+SUB_RENDERERS.apiresources = function(svc, full, host){
+  fetch(ORIGIN+fillPath(svc.api_paths.resources.path, {name: full.id || full.name})).then(r=>r.json()).then(j=>{
+    const items = j.resources || j.value || j.items || [];
+    if (!items.length) { host.append(el("div",{class:"empty"}, "No resources yet.")); return; }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Resource path"), el("th",{}, "Methods")));
+    items.forEach(r => tbl.append(el("tr",{},
+      el("td",{class:"mono"}, r.path||r.path_part||"—"),
+      el("td",{}, Object.keys(r.resource_methods||{}).join(", ") || "—"))));
+    host.append(tbl);
+  });
+};
+SUB_RENDERERS.apistages = function(svc, full, host){
+  fetch(ORIGIN+fillPath(svc.api_paths.stages.path, {name: full.id || full.name})).then(r=>r.json()).then(j=>{
+    const items = j.stages || j.value || j.items || [];
+    if (!items.length) { host.append(el("div",{class:"empty"}, "No stages.")); return; }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Stage name"), el("th",{}, "Description"), el("th",{}, "Invoke URL")));
+    items.forEach(s => tbl.append(el("tr",{},
+      el("td",{}, el("a",{class:"id"}, s.stage_name||"—")),
+      el("td",{}, s.description||""),
+      el("td",{class:"small mono"}, s.invoke_url||"—"))));
+    host.append(tbl);
+  });
+};
+
+// ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──
+// Renders into #disk-widget-slot above the breadcrumb. Auto-refreshes
+// every 30s. Color matches the tier-aware status:
+//   green  = healthy
+//   warn   = ≤7 days OR ≥warn_pct used OR refresh stale >48h
+//   freeze = ≥freeze_pct OR sub expired — new launches will be refused
+let _diskWidgetState = null;
+
+function _diskStatusToClass(s) {
+  if (s === "warn") return "warn";
+  if (s === "freeze" || s === "danger") return "danger";
+  return "";
+}
+function _toggleDiskPopover() {
+  const el = document.getElementById("disk-widget-slot");
+  if (!el) return;
+  el.classList.toggle("open");
+}
+function _closeDiskPopover(ev) {
+  if (ev) { ev.stopPropagation(); }
+  const el = document.getElementById("disk-widget-slot");
+  if (el) el.classList.remove("open");
+}
+function _wrapWithChip(cardHtml, d) {
+  const disk = d.disk || {};
+  const pct = Math.round(disk.pct_used || 0);
+  const klass = _diskStatusToClass(d.status);
+  return (
+    '<button class="disk-chip ' + klass + '" type="button" onclick="_toggleDiskPopover()" title="Click to expand disk health">'+
+      '<span class="disk-chip-dot"></span>'+
+      '<span>Disk</span>'+
+      '<span class="disk-chip-pct">' + pct + '%</span>'+
+      '<span class="disk-chip-caret">▾</span>'+
+    '</button>'+
+    '<div class="disk-popover" onclick="event.stopPropagation()">'+
+      '<button class="dp-close" type="button" onclick="_closeDiskPopover(event)" title="Minimize">×</button>'+
+      cardHtml +
+    '</div>'
+  );
+}
+// Close popover when clicking outside the chip
+document.addEventListener("click", function(ev) {
+  const el = document.getElementById("disk-widget-slot");
+  if (!el || !el.classList.contains("open")) return;
+  if (!el.contains(ev.target)) el.classList.remove("open");
+});
+
+function renderDiskWidget(d) {
+  const slot = document.getElementById("disk-widget-slot");
+  if (!slot) return;
+  if (!d || !d.available) {
+    slot.innerHTML = "";
+    return;
+  }
+  _diskWidgetState = d;
+  const disk = d.disk || {};
+  const pct = Math.round(disk.pct_used || 0);
+  const tier = String(d.tier || "free").toUpperCase();
+  const status = d.status;  // green | warn | freeze
+  const accent = status === "green" ? "#10b981"
+               : status === "warn"  ? "#f59e0b"
+               :                      "#ef4444";
+  const bg = status === "green" ? "#fff"
+           : status === "warn"  ? "#fffbeb"
+           :                      "#fef2f2";
+  const statusLabel = status === "green" ? "Healthy"
+                    : status === "warn"  ? "Warning · " + pct + "% used"
+                    :                      "Critical · " + pct + "% used — new launches will be refused";
+  // Accept both new (pro/max) and legacy (student/developer) tier names.
+  const canGrow = ["pro", "max", "enterprise", "student", "developer"].includes(String(d.tier || "").toLowerCase());
+  slot.innerHTML = _wrapWithChip('<div style="background:' + bg + ';border:1.5px solid ' + accent + ';border-radius:10px;padding:12px 16px;margin-bottom:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+        '<div style="font-size:13.5px;font-weight:600;color:#1f2937">' +
+          'Appliance disk' +
+          '<span style="display:inline-block;margin-left:8px;padding:2px 8px;background:#ede9fe;color:#6d28d9;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.05em">' + tier + '</span>' +
+        '</div>' +
+        '<div style="font-size:12px;font-weight:600;color:' + accent + '">' + statusLabel + '</div>' +
+      '</div>' +
+      '<div style="margin-bottom:10px">' +
+        '<div style="height:8px;background:#f3f4f6;border-radius:999px;overflow:hidden">' +
+          '<div style="height:100%;width:' + pct + '%;background:' + accent + ';transition:width 0.3s"></div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#6b7280;margin-top:6px">' +
+          disk.used_gb + " / " + disk.total_gb + " GB · " + disk.avail_gb + " GB free" +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button class="btn" onclick="openDiskCleanup()" style="font-size:12px;padding:6px 12px">Free up space →</button>' +
+        (canGrow
+          ? '<button class="btn" onclick="openDiskGrow()" style="font-size:12px;padding:6px 12px;background:#fff;color:#1a2330;border:1px solid #d8e0ea">Grow disk</button>'
+          : '') +
+      '</div>' +
+    '</div>', d);
+}
+async function fetchDiskHealth() {
+  try {
+    const r = await fetch("/api/runtime/disk-health");
+    const d = await r.json();
+    renderDiskWidget(d);
+  } catch (e) { /* keep last render */ }
+}
+async function openDiskCleanup() {
+  let html = '<div class="empty">Scanning disk…</div>';
+  const modal = document.createElement("div");
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,0.5);display:flex;align-items:center;justify-content:center;z-index:9999";
+  modal.innerHTML = '<div style="background:#fff;border-radius:10px;max-width:640px;width:90%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden">' +
+    '<div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">' +
+      '<h3 style="margin:0;font-size:16px">Free up appliance disk</h3>' +
+      '<button onclick="this.closest(\'.modal-disk\').remove()" style="background:none;border:0;font-size:24px;cursor:pointer">×</button>' +
+    '</div>' +
+    '<div id="cleanup-body" style="padding:20px;overflow-y:auto;flex:1">' + html + '</div>' +
+    '<div id="cleanup-foot" style="padding:12px 20px;border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:flex-end"></div>' +
+    '</div>';
+  modal.className = "modal-disk";
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+  try {
+    const r = await fetch("/api/runtime/disk-cleanup/suggestions");
+    const d = await r.json();
+    const body = modal.querySelector("#cleanup-body");
+    const foot = modal.querySelector("#cleanup-foot");
+    body.innerHTML = '<div style="margin-bottom:12px;font-size:13px;color:#475569">Select what to clean. All options below are safe — they never affect running workloads.</div>' +
+      (d.suggestions || []).map((s, i) =>
+        '<label style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid #f1f5f9;cursor:pointer">' +
+          '<input type="checkbox" data-key="' + s.key + '"' + (s.safe ? ' checked' : '') + ' style="margin-top:3px">' +
+          '<div style="flex:1">' +
+            '<div style="font-size:13.5px;font-weight:500">' + s.label +
+              (s.est_reclaim_gb ? ' <span style="color:#059669;font-weight:600;margin-left:6px">≈ ' + s.est_reclaim_gb + ' GB</span>' : '') +
+            '</div>' +
+            '<div style="font-size:12px;color:#6b7280;margin-top:2px">' + s.detail + '</div>' +
+          '</div>' +
+        '</label>'
+      ).join("");
+    foot.innerHTML =
+      '<button class="btn" onclick="this.closest(\'.modal-disk\').remove()" style="padding:8px 14px;background:#fff;border:1px solid #d8e0ea;color:#1a2330">Cancel</button>' +
+      '<button class="btn" id="cleanup-run" style="padding:8px 14px;background:#0f1b2d;color:#fff">Run cleanup</button>';
+    foot.querySelector("#cleanup-run").onclick = async () => {
+      const cats = [...body.querySelectorAll("input[type=checkbox]:checked")].map(i => i.dataset.key);
+      foot.querySelector("#cleanup-run").textContent = "Running…";
+      foot.querySelector("#cleanup-run").disabled = true;
+      try {
+        const r = await fetch("/api/runtime/disk-cleanup/run", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({categories: cats}),
+        });
+        const out = await r.json();
+        body.innerHTML = '<div style="background:#ecfdf5;color:#047857;padding:10px 14px;border-radius:6px;margin-bottom:12px">✓ Cleanup complete.</div>' +
+          '<pre style="background:#0f172a;color:#e2e8f0;padding:10px;border-radius:6px;font-size:11px;overflow:auto;max-height:300px">' +
+            JSON.stringify(out, null, 2) + '</pre>';
+        foot.innerHTML = '<button class="btn" onclick="this.closest(\'.modal-disk\').remove(); fetchDiskHealth()" style="padding:8px 14px;background:#0f1b2d;color:#fff">Done</button>';
+      } catch (e) {
+        body.innerHTML += '<div style="color:#b91c1c">Error: ' + e.message + '</div>';
+      }
+    };
+  } catch (e) {
+    modal.querySelector("#cleanup-body").innerHTML = '<div style="color:#b91c1c">Failed to load suggestions: ' + e.message + '</div>';
+  }
+}
+function openDiskGrow() {
+  const current = (_diskWidgetState && _diskWidgetState.disk && _diskWidgetState.disk.total_gb) || 30;
+  const modal = document.createElement("div");
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,0.5);display:flex;align-items:center;justify-content:center;z-index:9999";
+  modal.className = "modal-disk";
+  modal.innerHTML = '<div style="background:#fff;border-radius:10px;max-width:480px;width:90%">' +
+    '<div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">' +
+      '<h3 style="margin:0;font-size:16px">Grow appliance disk</h3>' +
+      '<button onclick="this.closest(\'.modal-disk\').remove()" style="background:none;border:0;font-size:24px;cursor:pointer">×</button>' +
+    '</div>' +
+    '<div id="grow-body" style="padding:20px">' +
+      '<div style="margin-bottom:14px;font-size:13px;color:#475569">Current size: ' + current + ' GB. Pick a new size:</div>' +
+      '<div style="display:flex;gap:8px;margin-bottom:14px">' +
+        [60, 120, 240].map(g =>
+          '<button class="grow-btn btn" data-gb="' + g + '" style="padding:6px 14px;background:#fff;color:#1a2330;border:1px solid #d8e0ea">' + g + ' GB</button>'
+        ).join("") +
+      '</div>' +
+      '<div style="font-size:12px;color:#6b7280;line-height:1.5">Resize requires a brief restart of the appliance VM (≈30 s + 2 min boot). Running workloads will pause then resume.</div>' +
+    '</div>' +
+    '<div style="padding:12px 20px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end">' +
+      '<button class="btn" onclick="this.closest(\'.modal-disk\').remove()" style="padding:8px 14px;background:#fff;border:1px solid #d8e0ea;color:#1a2330">Close</button>' +
+    '</div>' +
+    '</div>';
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+  modal.querySelectorAll(".grow-btn").forEach(b => {
+    b.onclick = async () => {
+      const target = parseInt(b.dataset.gb, 10);
+      try {
+        const r = await fetch("/api/runtime/disk-grow", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({target_gb: target}),
+        });
+        const d = await r.json();
+        const body = modal.querySelector("#grow-body");
+        if (r.ok && d.deferred) {
+          body.innerHTML = '<div style="background:#e0f2fe;color:#075985;padding:10px;border-radius:6px;margin-bottom:10px">Run this command on the machine running your multipass:</div>' +
+            '<pre style="background:#0f172a;color:#e2e8f0;padding:10px;border-radius:6px;font-size:12px">' + d.command + '</pre>' +
+            '<div style="font-size:12px;color:#6b7280;margin-top:8px">' + d.instructions + '</div>';
+        } else {
+          body.innerHTML = '<div style="background:#fee2e2;color:#b91c1c;padding:10px;border-radius:6px">Failed: ' + ((d.detail && d.detail.reason) || d.reason || "unknown") + '</div>';
+        }
+      } catch (e) {
+        modal.querySelector("#grow-body").innerHTML = '<div style="color:#b91c1c">Error: ' + e.message + '</div>';
+      }
+    };
+  });
+}
+// Initial fetch + 30s auto-refresh
+fetchDiskHealth();
+setInterval(fetchDiskHealth, 30000);
+
+// Boot
+boot();
+</script>
+<script src="/assets/lazy_backends.js"></script>
+</body>
+</html>
