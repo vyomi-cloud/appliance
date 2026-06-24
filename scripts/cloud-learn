@@ -2549,13 +2549,21 @@ outer_run() {
   # lifecycle commands go straight to docker compose; Multipass (Max) falls
   # through to the appliance flow below. `--substrate`/`--docker`/`--multipass`
   # and VYOMI_SUBSTRATE override.
+  local _substrate_explicit=""
   case "$subcmd" in
-    --docker|--multipass) VYOMI_SUBSTRATE="${subcmd#--}"; subcmd="${1:-help}"; [ "$#" -gt 0 ] && shift ;;
+    --docker|--multipass) VYOMI_SUBSTRATE="${subcmd#--}"; _substrate_explicit=1; subcmd="${1:-help}"; [ "$#" -gt 0 ] && shift ;;
   esac
   case "${1:-}" in
-    --docker|--multipass) VYOMI_SUBSTRATE="${1#--}"; shift ;;
-    --substrate=*) VYOMI_SUBSTRATE="${1#--substrate=}"; shift ;;
+    --docker|--multipass) VYOMI_SUBSTRATE="${1#--}"; _substrate_explicit=1; shift ;;
+    --substrate=*) VYOMI_SUBSTRATE="${1#--substrate=}"; _substrate_explicit=1; shift ;;
   esac
+  # Persist an EXPLICIT choice so subsequent `vyomi up` (no flag) remembers it.
+  # This is the mitigation that lets Max users pick Multipass once (`--multipass`)
+  # without waiting on the license-tier cache.
+  if [ -n "$_substrate_explicit" ] && [ -n "${VYOMI_SUBSTRATE:-}" ]; then
+    mkdir -p "${HOME:-/root}/.vyomi" 2>/dev/null \
+      && printf '%s\n' "$VYOMI_SUBSTRATE" > "${HOME:-/root}/.vyomi/substrate" 2>/dev/null || true
+  fi
   case "$subcmd" in
     up|down|stop|restart|status|ps|logs|update)
       if [ "$(_resolve_substrate)" = "docker" ]; then

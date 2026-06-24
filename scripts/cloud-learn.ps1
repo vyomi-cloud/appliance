@@ -764,14 +764,23 @@ if ($RuntimeContext -eq 'inner') {
   # v2.2.2 - tier-aware substrate. Parse --docker/--multipass, then for the
   # Docker tiers (Free/Lite/Pro) route lifecycle commands to docker compose;
   # Max falls through to the Multipass switch below.
+  $substrateExplicit = $false
   if ($cmd -eq '--docker' -or $cmd -eq '--multipass') {
-    $env:VYOMI_SUBSTRATE = $cmd.TrimStart('-')
+    $env:VYOMI_SUBSTRATE = $cmd.TrimStart('-'); $substrateExplicit = $true
     $cmd = if ($cmdArgs.Count -gt 0) { $cmdArgs[0] } else { 'help' }
     $cmdArgs = if ($cmdArgs.Count -gt 1) { $cmdArgs[1..($cmdArgs.Count - 1)] } else { @() }
   }
   if ($cmdArgs.Count -gt 0 -and ($cmdArgs[0] -eq '--docker' -or $cmdArgs[0] -eq '--multipass')) {
-    $env:VYOMI_SUBSTRATE = $cmdArgs[0].TrimStart('-')
+    $env:VYOMI_SUBSTRATE = $cmdArgs[0].TrimStart('-'); $substrateExplicit = $true
     $cmdArgs = if ($cmdArgs.Count -gt 1) { $cmdArgs[1..($cmdArgs.Count - 1)] } else { @() }
+  }
+  # Persist an EXPLICIT choice so subsequent `vyomi up` (no flag) remembers it.
+  if ($substrateExplicit -and $env:VYOMI_SUBSTRATE) {
+    try {
+      $vd = Join-Path $env:USERPROFILE '.vyomi'
+      if (-not (Test-Path $vd)) { New-Item -ItemType Directory -Force -Path $vd | Out-Null }
+      Set-Content -Path (Join-Path $vd 'substrate') -Value $env:VYOMI_SUBSTRATE -Encoding ascii -NoNewline
+    } catch { }
   }
   $lifecycle = @('up', 'down', 'stop', 'restart', 'status', 'ps', 'logs', 'update')
   if (($lifecycle -contains $cmd) -and ((Resolve-Substrate) -eq 'docker')) {
