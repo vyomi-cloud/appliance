@@ -1533,5 +1533,19 @@ setInterval(fetchDiskHealth, 30000);
 </script>
 <script src="/assets/lazy_backends.js">
 </script>
-</body>
+
+<style>
+ #nano-docs{position:fixed;right:16px;bottom:52px;z-index:99998;font:13px system-ui,-apple-system,sans-serif}
+ #nano-docs .pill{background:#0d1030;color:#e4e4e7;border:1px solid #2a2f55;border-radius:999px;padding:8px 14px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35);user-select:none}
+ #nano-docs .pop{position:absolute;right:0;bottom:42px;background:#0d1030;border:1px solid #2a2f55;border-radius:12px;padding:6px;min-width:218px;display:none;box-shadow:0 12px 34px rgba(0,0,0,.45)}
+ #nano-docs.open .pop{display:block}
+ #nano-docs .pop .h{font-size:11px;color:#8b8ba7;padding:6px 10px;text-transform:uppercase;letter-spacing:1px}
+ #nano-docs .pop a{display:flex;justify-content:space-between;gap:14px;padding:8px 10px;border-radius:8px;color:#cdd8e6;text-decoration:none}
+ #nano-docs .pop a:hover{background:#171b3d;color:#fff}
+ #nano-docs .pop a span{color:#7cc4ff}
+</style>
+<div id="nano-docs">
+ <div class="pop"><div class="h">GCP conformance</div><a href="https://vyomi.cloud/docs/gcp" target="_blank" rel="noopener">API doc <span>↗</span></a><a href="https://vyomi.cloud/docs/gcp/sdk" target="_blank" rel="noopener">SDK doc <span>↗</span></a><a href="https://vyomi.cloud/docs/gcp/cli" target="_blank" rel="noopener">Utility doc <span>↗</span></a><a href="https://vyomi.cloud/docs/conformance-pack" target="_blank" rel="noopener">Conformance Pack <span>↗</span></a></div>
+ <div class="pill" onclick="this.parentNode.classList.toggle('open')">📘 Conformance</div>
+</div></body>
 </html>
