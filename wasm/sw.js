@@ -82,6 +82,35 @@ function json(obj, status) {
     { status: status || 200, headers: { "content-type": "application/json" } });
 }
 
+// Base64 a binary buffer (the wire format for object bytes across the page
+// bridge — JSON-safe, and what the S3 core's body param expects).
+function b64FromBuf(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+// S3 object upload is multipart/form-data (the same endpoint boto3 / `aws s3 cp`
+// hit). Read the file(s) here, base64 the bytes, and PUT each through the S3
+// core — one core PutObject per file, so ETag/versioning are conformance-real.
+async function handleUpload(request, bucket) {
+  const fd = await request.formData();
+  const files = fd.getAll("file").filter((f) => f && typeof f.arrayBuffer === "function");
+  if (!files.length) return json({ ok: false, code: "NoFile" }, 400);
+  const results = [];
+  for (const file of files) {
+    const b64 = b64FromBuf(await file.arrayBuffer());
+    results.push(await runInPage(["aws", "s3", "PutObject", {
+      bucket, key: file.name || "upload",
+      body_b64: b64, content_type: file.type || "application/octet-stream",
+    }]));
+  }
+  const ok = results.every((r) => r && r.ok !== false);
+  return json({ ok, uploaded: results.length, results }, ok ? 200 : 400);
+}
+
 // Each console gates on an active space whose provider matches it. We derive
 // the provider from the page making the request, so aws/gcp/azure consoles all
 // pass their gate from the same in-browser substrate.
@@ -124,17 +153,44 @@ async function route(method, path, body) {
   }
   if (method === "GET" && STUBS[path]) return { response: json(STUBS[path]) };
 
-  // 2. specialised data-plane (must precede generic — longer paths)
+  // 2. specialised data-plane — S3 + DynamoDB served by the PROVEN conformance
+  //    cores (via aws_core_adapter on the page). Must precede the generic CRUD
+  //    so bucket/table lifecycle AND items/objects all flow through one core
+  //    store (a bucket created here is the bucket PutObject writes into).
   let m;
-  // S3 objects: /api/s3/buckets/{bucket}/objects[/{key...}]
+  const dec = decodeURIComponent;
+  // ── S3 ──────────────────────────────────────────────────────────────
+  if (path === "/api/s3/buckets") {
+    if (method === "GET")  return { tuple: ["aws", "s3", "ListBuckets", {}] };
+    if (method === "POST") return { tuple: ["aws", "s3", "CreateBucket", body || {}] };
+  }
+  m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/versioning$/);
+  if (m && (method === "PUT" || method === "POST"))
+    return { tuple: ["aws", "s3", "PutVersioning", { bucket: dec(m[1]), status: (body && body.status) || "Enabled" }] };
   m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/objects\/?$/);
-  if (m && method === "GET") return { tuple: ["aws", "s3", "ListObjects", { bucket: m[1] }] };
+  if (m && method === "GET") return { tuple: ["aws", "s3", "ListObjects", { bucket: dec(m[1]) }] };
+  // (POST upload to this path is multipart — handled in the fetch listener.)
   m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/objects\/(.+)$/);
-  if (m && method === "GET") return { tuple: ["aws", "s3", "GetObject", { bucket: m[1], key: m[2] }] };
-  if (m && method === "DELETE") return { tuple: ["aws", "s3", "DeleteObject", { bucket: m[1], key: m[2] }] };
-  // DynamoDB items: /api/dynamodb/tables/{t}/items|query|scan
-  m = path.match(/^\/api\/dynamodb\/tables\/([^/]+)\/(items|scan|query)$/);
-  if (m) return { tuple: ["aws", "dynamodb", "Scan", { table: m[1] }] };
+  if (m && method === "GET")    return { tuple: ["aws", "s3", "GetObject", { bucket: dec(m[1]), key: m[2] }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "s3", "DeleteObject", { bucket: dec(m[1]), key: m[2] }] };
+  m = path.match(/^\/api\/s3\/buckets\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "s3", "GetBucket", { bucket: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "s3", "DeleteBucket", { bucket: dec(m[1]) }] };
+  // ── DynamoDB ────────────────────────────────────────────────────────
+  if (path === "/api/dynamodb/tables") {
+    if (method === "GET")  return { tuple: ["aws", "dynamodb", "ListTables", {}] };
+    if (method === "POST") return { tuple: ["aws", "dynamodb", "CreateTable", body || {}] };
+  }
+  m = path.match(/^\/api\/dynamodb\/tables\/([^/]+)\/items$/);
+  if (m && method === "GET")  return { tuple: ["aws", "dynamodb", "ListItems", { table: dec(m[1]) }] };
+  if (m && method === "POST") return { tuple: ["aws", "dynamodb", "PutItem", { table: dec(m[1]), item: (body && body.item) || body || {} }] };
+  m = path.match(/^\/api\/dynamodb\/tables\/([^/]+)\/query$/);
+  if (m && method === "POST") return { tuple: ["aws", "dynamodb", "Query", { table: dec(m[1]), params: body || {} }] };
+  m = path.match(/^\/api\/dynamodb\/tables\/([^/]+)\/scan$/);
+  if (m && method === "POST") return { tuple: ["aws", "dynamodb", "Scan", { table: dec(m[1]), params: body || {} }] };
+  m = path.match(/^\/api\/dynamodb\/tables\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "dynamodb", "GetTable", { table: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "dynamodb", "DeleteTable", { table: dec(m[1]) }] };
 
   // 3. generic catalog-driven CRUD, from the route table
   for (const r of await routes()) {
@@ -167,6 +223,10 @@ self.addEventListener("fetch", (event) => {
         return json({ space: nanoSpace(await providerOf(event.clientId)) });
       }
       const method = event.request.method;
+      // S3 object upload is multipart — read the file body here (not as JSON).
+      const up = method === "POST" && url.pathname.match(/^\/api\/s3\/buckets\/([^/]+)\/objects\/?$/);
+      if (up) return await handleUpload(event.request, decodeURIComponent(up[1]));
+
       let body = null;
       if (["PUT", "POST", "PATCH"].includes(method)) {
         const txt = await event.request.text();
@@ -175,10 +235,9 @@ self.addEventListener("fetch", (event) => {
       const r = await route(method, url.pathname, body);
       if (r.response) return r.response;
       if (r.miss) return json({ ok: false, code: "NotTranslatedYet", method, path: url.pathname }, 501);
-      let res = await runInPage(r.tuple);
-      // Normalise specialised list shapes to the console's {items:[...]}.
-      if (res && res.Contents) res = { ok: true, items: res.Contents.map((k) => ({ key: k, name: k })) };
-      else if (res && res.Items) res = { ok: true, items: res.Items };
+      // The cores return console-shaped JSON ({buckets|tables|objects|items:[...]}),
+      // so the adapter result is the response body verbatim.
+      const res = await runInPage(r.tuple);
       return json(res, res && res.ok === false ? 404 : 200);
     } catch (e) {
       return json({ ok: false, error: String(e) }, 500);

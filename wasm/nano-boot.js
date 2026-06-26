@@ -19,9 +19,13 @@ const BASE = "";  // wasm/ is the web root (see sw.js)
 const wasControlledAtStart = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
 const MODULES = [
   "backends/store.py",
-  "providers/registry.py", "providers/aws.py", "providers/gcp.py",
-  "providers/azure.py", "providers/oracle.py", "providers/__init__.py",
+  "providers/registry.py", "providers/aws_core_adapter.py", "providers/aws.py",
+  "providers/gcp.py", "providers/azure.py", "providers/oracle.py",
+  "providers/__init__.py",
 ];
+// The PROVEN conformance cores (vendored into wasm/core/ by build_cores.py).
+// aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
+const CORES = ["object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py"];
 
 function banner(text, bad) {
   let b = document.getElementById("nano-banner");
@@ -48,19 +52,29 @@ async function bootBackend() {
     const src = await (await fetch(BASE + "/" + m)).text();
     py.FS.writeFile("/wasm/" + m, src);
   }
+  // The vendored cores live under /core (their own `core` package) so their
+  // `from core.object_store import ...` imports resolve, exactly as in the repo.
+  py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
+  for (const c of CORES)
+    py.FS.writeFile("/core/" + c, await (await fetch(BASE + "/core/" + c)).text());
   py.runPython(`
 import sys; sys.path.insert(0, "/")
 from wasm.backends.store import Backends
 from wasm import providers as P
 import json
 _B = Backends()
-def _disp(provider, service, op, params):
-    return json.dumps(P.dispatch(_B, provider, service, op, params=dict(params)))
+def _disp(payload_json):
+    # ONE JSON-string arg (parsed here), so params with booleans/null/nested
+    # objects survive — embedding JSON.stringify(params) as Python source would
+    # turn true/false/null into NameErrors. (Same pattern as relay/nano-endpoint.)
+    d = json.loads(payload_json)
+    return json.dumps(P.dispatch(_B, d["provider"], d["service"], d["op"],
+                                 params=d.get("params") or {}))
 import builtins; builtins._disp = _disp
 `);
   const dispatch = (prov, svc, op, params) =>
     JSON.parse(py.runPython(
-      `_disp(${JSON.stringify(prov)}, ${JSON.stringify(svc)}, ${JSON.stringify(op)}, ${JSON.stringify(params)})`));
+      `_disp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
 
   // Bridge: SW -> page dispatch -> SW
   navigator.serviceWorker.addEventListener("message", (ev) => {

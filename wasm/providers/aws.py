@@ -1,9 +1,15 @@
-"""AWS provider plugin (WASM substrate). Maps S3 + DynamoDB to the shared
-generic backends. Adding more AWS services = more entries in handlers()."""
+"""AWS provider plugin (WASM substrate).
+
+S3 + DynamoDB are served by the PROVEN conformance cores (core/s3_object_core.py,
+core/dynamodb_core.py) via aws_core_adapter — the SAME logic the conformance
+suite asserts on host CPython AND Pyodide, not a stub. Every (service, op) below
+is a thin call into that adapter. Adding more AWS services = more entries here;
+new data-plane semantics belong in a core + its conformance suite, never inline.
+"""
 from __future__ import annotations
 
 from .registry import CloudProvider, register
-from ..backends.store import Backends
+from . import aws_core_adapter as A
 
 
 class Aws(CloudProvider):
@@ -12,53 +18,29 @@ class Aws(CloudProvider):
     match_hosts = (".amazonaws.com",)
 
     def handlers(self):
+        # Each handler is (backends, account, params) -> dict; S3/DynamoDB ignore
+        # the generic `backends` bundle and use the cores' own stores (adapter).
         return {
-            ("s3", "PutObject"):    _s3_put,
-            ("s3", "GetObject"):    _s3_get,
-            ("s3", "ListObjects"):  _s3_list,
-            ("s3", "DeleteObject"): _s3_del,
-            ("dynamodb", "PutItem"): _ddb_put,
-            ("dynamodb", "GetItem"): _ddb_get,
-            ("dynamodb", "Scan"):    _ddb_scan,
+            # S3 — buckets + objects, all via core/s3_object_core.py
+            ("s3", "ListBuckets"):   lambda b, a, p: A.s3_list_buckets(p),
+            ("s3", "CreateBucket"):  lambda b, a, p: A.s3_create_bucket(p),
+            ("s3", "GetBucket"):     lambda b, a, p: A.s3_get_bucket(p),
+            ("s3", "DeleteBucket"):  lambda b, a, p: A.s3_delete_bucket(p),
+            ("s3", "PutVersioning"): lambda b, a, p: A.s3_set_versioning(p),
+            ("s3", "ListObjects"):   lambda b, a, p: A.s3_list_objects(p),
+            ("s3", "PutObject"):     lambda b, a, p: A.s3_put_object(p),
+            ("s3", "GetObject"):     lambda b, a, p: A.s3_get_object(p),
+            ("s3", "DeleteObject"):  lambda b, a, p: A.s3_delete_object(p),
+            # DynamoDB — tables + items, all via core/dynamodb_core.py
+            ("dynamodb", "ListTables"):  lambda b, a, p: A.ddb_list_tables(p),
+            ("dynamodb", "CreateTable"): lambda b, a, p: A.ddb_create_table(p),
+            ("dynamodb", "GetTable"):    lambda b, a, p: A.ddb_get_table(p),
+            ("dynamodb", "DeleteTable"): lambda b, a, p: A.ddb_delete_table(p),
+            ("dynamodb", "ListItems"):   lambda b, a, p: A.ddb_list_items(p),
+            ("dynamodb", "PutItem"):     lambda b, a, p: A.ddb_put_item(p),
+            ("dynamodb", "Query"):       lambda b, a, p: A.ddb_query(p),
+            ("dynamodb", "Scan"):        lambda b, a, p: A.ddb_scan(p),
         }
-
-
-def _s3_put(b: Backends, acct: str, p: dict) -> dict:
-    r = b.objects.put("aws", acct, p["bucket"], p["key"],
-                      p.get("body", b"").encode() if isinstance(p.get("body"), str) else p.get("body", b""),
-                      p.get("content_type", "application/octet-stream"))
-    return {"ETag": r["etag"]}
-
-
-def _s3_get(b: Backends, acct: str, p: dict) -> dict:
-    o = b.objects.get("aws", acct, p["bucket"], p["key"])
-    if o is None:
-        return {"ok": False, "code": "NoSuchKey"}
-    body = o["body"]
-    return {"Body": body.decode(errors="replace") if isinstance(body, bytes) else body,
-            "ContentType": o["content_type"]}
-
-
-def _s3_list(b: Backends, acct: str, p: dict) -> dict:
-    return {"Contents": b.objects.list("aws", acct, p["bucket"])}
-
-
-def _s3_del(b: Backends, acct: str, p: dict) -> dict:
-    return {"deleted": b.objects.delete("aws", acct, p["bucket"], p["key"])}
-
-
-def _ddb_put(b: Backends, acct: str, p: dict) -> dict:
-    b.nosql.put_item("aws", acct, p["table"], p["key"], p.get("item", {}))
-    return {}
-
-
-def _ddb_get(b: Backends, acct: str, p: dict) -> dict:
-    item = b.nosql.get_item("aws", acct, p["table"], p["key"])
-    return {"Item": item} if item else {"ok": False, "code": "ItemNotFound"}
-
-
-def _ddb_scan(b: Backends, acct: str, p: dict) -> dict:
-    return {"Items": b.nosql.query("aws", acct, p["table"])}
 
 
 register(Aws())

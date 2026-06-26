@@ -183,8 +183,14 @@ PNA) that the naive local approach hits. Security-wise it's the *easier* path.
   load in-browser; direct-ASGI invocation works; blockers were dep-pinning only.
 - ✅ **Nano SPA / consoles** — real aws/gcp/azure consoles served from `wasm/`
   (splash→dashboard→console flow, headless-validated). See `wasm/README.md`.
+- ✅ **Cores wired into the Nano console SW** — `wasm/providers/aws_core_adapter.py`
+  (the in-browser analogue of the Pro/Max FastAPI adapter) serves the console's S3 +
+  DynamoDB data-plane from the PROVEN cores; the JS stub is retired. Cores vendored
+  into `wasm/core/` by `wasm/build_cores.py` (copy-not-fork, byte-identical). Validated
+  under real Pyodide loading the bundle as `nano-boot.js` does (30 checks: real ETags,
+  versioning, typed DDB items, query/scan). Caught + fixed a latent dispatch bug
+  (JSON booleans embedded as Python source).
 - ⬜ Remaining backends (~~DynamoDB~~ ✅ → Vault → RDS/PGlite → IAM/cedar-wasm).
-- ⬜ Wire S3 core into the Nano console service worker (replace the JS stub).
 - ⬜ Cloudflare relay (Worker + Durable Object) + tab-side WS register/dispatch.
 - ⬜ `vyomi-nano-bridge` local binary (shares the WS protocol).
 
@@ -206,7 +212,8 @@ PNA) that the naive local approach hits. Security-wise it's the *easier* path.
 
 ## 11. Roadmap
 
-1. Wire the proven **S3 core** into the Nano console SW (visible in-browser conformance).
+1. ✅ Wire the proven **S3 + DynamoDB cores** into the Nano console SW (visible
+   in-browser conformance — the console data-plane now runs the real cores).
 2. **Cloudflare relay** MVP → `aws --endpoint-url <relay> s3 ls` returns a bucket
    created in the Nano tab (proves the core goal: external app ↔ in-browser sim, $0).
 3. Extend the **swap table** (DynamoDB ✅ → Vault → RDS → IAM), each gated by the shared
