@@ -78,8 +78,8 @@ NOT "comprehensive testing," which is free via the local bridge.
 | MinIO (S3) | in-memory `ObjectStore` (→ OPFS) | ✅ done |
 | DynamoDB-Local | `NoSqlStore` | ✅ done |
 | Azurite (Blob/Queue) | `ObjectStore`/`QueueStore` (azure ns) | pattern ready |
-| Vault (KMS) | WebCrypto (SubtleCrypto) | next |
-| Vault (Secrets/KV) | `KvStore` | planned |
+| Vault (KMS) | `KmsEngine` (stdlib AEAD; WebCrypto later) | ✅ done |
+| Vault (Secrets/KV) | `KvStore` | next |
 | Postgres/MySQL (RDS) | PGlite / sql.js | planned |
 | NATS (eventing) | in-memory pub/sub | planned |
 | Cedar (IAM) | cedar-wasm | planned |
@@ -190,7 +190,15 @@ PNA) that the naive local approach hits. Security-wise it's the *easier* path.
   under real Pyodide loading the bundle as `nano-boot.js` does (30 checks: real ETags,
   versioning, typed DDB items, query/scan). Caught + fixed a latent dispatch bug
   (JSON booleans embedded as Python source).
-- ⬜ Remaining backends (~~DynamoDB~~ ✅ → Vault → RDS/PGlite → IAM/cedar-wasm).
+- ✅ **KMS conformance core** — `core/kms_keystore.py` (KeyStore + KmsEngine crypto
+  seam) + `core/kms_core.py` (real handler logic, substrate-free) +
+  `tests/conformance/test_kms_core.py` (**36 checks GREEN on host CPython AND real
+  Pyodide**). Native JSON wire (TrentService.* dispatch, KeyMetadata, base64
+  Plaintext/CiphertextBlob, Decrypt recovers KeyId from the blob, GenerateDataKey,
+  KeyState enforcement, aliases, `__type` errors). Crypto is REAL but stdlib-only
+  (HMAC-SHA256 keystream + encrypt-then-MAC) so it runs in WASM with no native
+  `cryptography`/openssl dep; a WebCrypto AES-GCM engine can swap in behind the seam.
+- ⬜ Remaining backends (~~DynamoDB~~ ✅ → ~~Vault/KMS~~ ✅ → Vault/KV → RDS/PGlite → IAM/cedar-wasm).
 - ⬜ Cloudflare relay (Worker + Durable Object) + tab-side WS register/dispatch.
 - ⬜ `vyomi-nano-bridge` local binary (shares the WS protocol).
 
@@ -216,8 +224,8 @@ PNA) that the naive local approach hits. Security-wise it's the *easier* path.
    in-browser conformance — the console data-plane now runs the real cores).
 2. **Cloudflare relay** MVP → `aws --endpoint-url <relay> s3 ls` returns a bucket
    created in the Nano tab (proves the core goal: external app ↔ in-browser sim, $0).
-3. Extend the **swap table** (DynamoDB ✅ → Vault → RDS → IAM), each gated by the shared
-   conformance suite on both substrates.
+3. Extend the **swap table** (DynamoDB ✅ → Vault/KMS ✅ → Vault/KV → RDS → IAM), each
+   gated by the shared conformance suite on both substrates.
 4. `vyomi-nano-bridge` local binary (offline/private power users).
 5. Pricing + funnel wiring (free local-bridge → paid relay → Pro/Max compute).
 
