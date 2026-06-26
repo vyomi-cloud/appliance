@@ -76,9 +76,9 @@ NOT "comprehensive testing," which is free via the local bridge.
 | Lite backend (Docker) | Nano backend (WASM) | Status |
 |---|---|---|
 | MinIO (S3) | in-memory `ObjectStore` (→ OPFS) | ✅ done |
-| DynamoDB-Local | `NoSqlStore` | next |
+| DynamoDB-Local | `NoSqlStore` | ✅ done |
 | Azurite (Blob/Queue) | `ObjectStore`/`QueueStore` (azure ns) | pattern ready |
-| Vault (KMS) | WebCrypto (SubtleCrypto) | planned |
+| Vault (KMS) | WebCrypto (SubtleCrypto) | next |
 | Vault (Secrets/KV) | `KvStore` | planned |
 | Postgres/MySQL (RDS) | PGlite / sql.js | planned |
 | NATS (eventing) | in-memory pub/sub | planned |
@@ -173,12 +173,17 @@ PNA) that the naive local approach hits. Security-wise it's the *easier* path.
 
 - ✅ **S3 conformance core** — `core/object_store.py` (seam) + `core/s3_object_core.py`
   (real handler logic, substrate-free) + `tests/conformance/test_s3_core.py`
-  (**27 checks GREEN on host CPython AND Pyodide**). Branch `feat/wasm-conformance-backend`.
+  (**33 checks GREEN on host CPython AND Pyodide**). Branch `feat/wasm-conformance-backend`.
+- ✅ **DynamoDB conformance core** — `core/nosql_store.py` (seam) + `core/dynamodb_core.py`
+  (real `_ddb_*` handler logic, substrate-free) + `tests/conformance/test_dynamodb_core.py`
+  (**45 checks GREEN on host CPython AND real Pyodide**). Native JSON wire (X-Amz-Target
+  dispatch, typed attribute values, KeyConditionExpression begins_with/BETWEEN,
+  AttributeUpdates + SET, Batch*, `__type` errors). Same repeatable pattern as S3.
 - ✅ **Pyodide feasibility de-risked** (5 spikes): pydantic 2.7 (Rust core) + Starlette
   load in-browser; direct-ASGI invocation works; blockers were dep-pinning only.
 - ✅ **Nano SPA / consoles** — real aws/gcp/azure consoles served from `wasm/`
   (splash→dashboard→console flow, headless-validated). See `wasm/README.md`.
-- ⬜ Remaining backends (DynamoDB → Vault → RDS/PGlite → IAM/cedar-wasm).
+- ⬜ Remaining backends (~~DynamoDB~~ ✅ → Vault → RDS/PGlite → IAM/cedar-wasm).
 - ⬜ Wire S3 core into the Nano console service worker (replace the JS stub).
 - ⬜ Cloudflare relay (Worker + Durable Object) + tab-side WS register/dispatch.
 - ⬜ `vyomi-nano-bridge` local binary (shares the WS protocol).
@@ -204,7 +209,7 @@ PNA) that the naive local approach hits. Security-wise it's the *easier* path.
 1. Wire the proven **S3 core** into the Nano console SW (visible in-browser conformance).
 2. **Cloudflare relay** MVP → `aws --endpoint-url <relay> s3 ls` returns a bucket
    created in the Nano tab (proves the core goal: external app ↔ in-browser sim, $0).
-3. Extend the **swap table** (DynamoDB → Vault → RDS → IAM), each gated by the shared
+3. Extend the **swap table** (DynamoDB ✅ → Vault → RDS → IAM), each gated by the shared
    conformance suite on both substrates.
 4. `vyomi-nano-bridge` local binary (offline/private power users).
 5. Pricing + funnel wiring (free local-bridge → paid relay → Pro/Max compute).
