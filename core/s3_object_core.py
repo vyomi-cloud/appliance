@@ -384,3 +384,44 @@ def list_objects_v2(store: ObjectStore, bucket: str, query: dict) -> S3Response:
         parts += ["<CommonPrefixes>", f"<Prefix>{cp}</Prefix>", "</CommonPrefixes>"]
     parts.append("</ListBucketResult>")
     return _xml_response("".join(parts))
+
+
+# ── native-S3 wire dispatcher (method + path → operation) ─────────────────
+# The single routing point for the native AWS S3 wire protocol — what an
+# unmodified aws-cli / SDK speaks. Shared by the Nano relay/bridge (tab side)
+# and, on convergence, the appliance's routes/aws_s3.py. Path is the raw
+# request path, e.g. "/my-bucket/a/key.txt".
+def dispatch(store: ObjectStore, method: str, path: str,
+             query: dict | None = None, headers: dict | None = None,
+             body: bytes = b"") -> S3Response:
+    query = query or {}
+    headers = headers or {}
+    raw = (path or "/").lstrip("/")
+    bucket, _, key = raw.partition("/")
+    method = (method or "GET").upper()
+    if not bucket:
+        return _error_xml("InvalidRequest", "Missing bucket.", "/", 400)
+    if not key:
+        # bucket-level
+        if method in ("PUT",):
+            store.create_bucket(bucket)
+            return _empty_response(200, {"Location": f"/{bucket}"})
+        if method in ("GET",):
+            return list_objects_v2(store, bucket, query)
+        if method in ("HEAD",):
+            return _empty_response(200 if store.bucket_exists(bucket) else 404)
+        if method in ("DELETE",):
+            store.objects.pop(bucket, None)
+            store.buckets.pop(bucket, None)
+            return _empty_response(204)
+        return _error_xml("MethodNotAllowed", method, f"/{bucket}", 405)
+    # object-level
+    if method == "PUT":
+        return put_object(store, bucket, key, body, headers)
+    if method == "GET":
+        return get_object(store, bucket, key, query, headers)
+    if method == "HEAD":
+        return head_object(store, bucket, key, query, headers)
+    if method == "DELETE":
+        return delete_object(store, bucket, key, query, headers)
+    return _error_xml("MethodNotAllowed", method, f"/{bucket}/{key}", 405)

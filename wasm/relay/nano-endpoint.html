@@ -1,0 +1,71 @@
+<!doctype html>
+<!-- Vyomi-Nano relay endpoint (tab side).
+     Boots Pyodide, loads the REAL conformance core (core/object_store.py +
+     core/s3_object_core.py), opens an OUTBOUND WebSocket to the relay, registers,
+     and serves native-S3 wire requests forwarded by the relay — returning the
+     SAME conformance responses proven by tests/conformance/test_s3_core.py.
+
+     This is the tab-side half of BOTH deliveries (Cloudflare relay AND local
+     bridge) — they share this exact WS protocol:
+       relay → tab : {id, method, path, query, headers, body(base64)}
+       tab → relay : {id, status, headers, body(base64)}
+     Relay URL via ?relay=ws://host:port/register  (default localhost:8090). -->
+<html lang="en"><head><meta charset="utf-8"><title>Vyomi-Nano endpoint</title>
+<style>body{font:13px ui-monospace,Menlo,monospace;background:#05071a;color:#e4e4e7;padding:20px}
+.ok{color:#34d399}.err{color:#f87171}.dim{color:#71717a}</style></head>
+<body>
+<h3>Vyomi-Nano — in-browser S3 endpoint</h3>
+<pre id="log">booting…</pre>
+<script type="module">
+import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs";
+const log = (m, c) => { const e=document.getElementById("log"); e.innerHTML += `\n${c?`<span class="${c}">`:""}${m}${c?"</span>":""}`; };
+const params = new URLSearchParams(location.search);
+const RELAY = params.get("relay") || "ws://localhost:8090/register";
+const CORE_BASE = params.get("core") || "/core";   // where to fetch the .py modules
+window.__nano = { registered:false, served:0 };
+
+async function boot() {
+  const py = await loadPyodide();
+  py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
+  for (const f of ["object_store.py", "s3_object_core.py"])
+    py.FS.writeFile("/core/" + f, await (await fetch(CORE_BASE + "/" + f)).text());
+  py.runPython(`
+import sys, json, base64; sys.path.insert(0, "/")
+from core.object_store import InMemoryObjectStore
+from core import s3_object_core as s3
+_STORE = InMemoryObjectStore()
+def _handle(req_json):
+    r = json.loads(req_json)
+    body = base64.b64decode(r.get("body") or "")
+    resp = s3.dispatch(_STORE, r["method"], r["path"], r.get("query") or {}, r.get("headers") or {}, body)
+    return json.dumps({"status": resp.status, "headers": resp.headers,
+                       "body": base64.b64encode(resp.body or b"").decode()})
+import builtins; builtins._handle = _handle
+`);
+  log('<span class="ok">core loaded</span> (real conformance handlers in Pyodide)');
+  const handle = (reqJson) => py.runPython(`_handle(${JSON.stringify(reqJson)})`);
+
+  function connect() {
+    const ws = new WebSocket(RELAY);
+    ws.onopen = () => { window.__nano.registered = true; log(`<span class="ok">registered</span> → ${RELAY}`); };
+    ws.onclose = (ev) => { window.__nano.registered = false; console.log("WS_CLOSE code=" + ev.code + " reason=" + ev.reason); log(`disconnected (code ${ev.code}); retrying…`,'dim'); setTimeout(connect, 1000); };
+    ws.onerror = () => log('ws error','err');
+    ws.onmessage = (ev) => {
+      let req; try { req = JSON.parse(ev.data); } catch { return; }
+      if (req.type === "ping") { ws.send(JSON.stringify({type:"pong"})); return; }
+      try {
+        const respJson = handle(JSON.stringify(req));      // run through the REAL core
+        const resp = JSON.parse(respJson);
+        ws.send(JSON.stringify({ id: req.id, ...resp }));
+        window.__nano.served++;
+      } catch (e) {
+        ws.send(JSON.stringify({ id: req.id, status: 500,
+          headers: {"content-type":"text/plain"},
+          body: btoa("nano endpoint error: " + e) }));
+      }
+    };
+  }
+  connect();
+}
+boot().catch(e => log("boot failed: " + e, "err"));
+</script></body></html>

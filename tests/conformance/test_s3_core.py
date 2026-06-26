@@ -105,6 +105,22 @@ def run() -> int:
     after = s3.get_object(st, "ver", "k", {}, {})
     _check("get after delete-marker 404", after.status == 404)
 
+    # 10. NATIVE WIRE DISPATCH — the exact path aws-cli/SDK take (method+path)
+    #     This is what the relay/bridge forwards from an external app.
+    s3.dispatch(st, "PUT", "/wire-bkt")                                  # aws s3 mb
+    _check("wire create bucket", st.bucket_exists("wire-bkt"))
+    pw = s3.dispatch(st, "PUT", "/wire-bkt/dir/o.txt", body=b"wire-body",  # aws s3 cp
+                     headers={"content-type": "text/plain"})
+    _check("wire put 200 + etag", pw.status == 200 and pw.headers["ETag"] == _md5q(b"wire-body"))
+    gw = s3.dispatch(st, "GET", "/wire-bkt/dir/o.txt")                   # download
+    _check("wire get round-trips", gw.status == 200 and gw.body == b"wire-body")
+    lw = s3.dispatch(st, "GET", "/wire-bkt").body.decode()              # aws s3 ls
+    _check("wire list shows key", "<Key>dir/o.txt</Key>" in lw)
+    dw = s3.dispatch(st, "DELETE", "/wire-bkt/dir/o.txt")               # aws s3 rm
+    _check("wire delete 204", dw.status == 204)
+    _check("wire get-after-delete 404",
+           s3.dispatch(st, "GET", "/wire-bkt/dir/o.txt").status == 404)
+
     print("\nRESULT: PASS — S3 object core conforms (native wire semantics) on this substrate.")
     return 0
 
