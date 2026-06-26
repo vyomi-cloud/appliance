@@ -79,7 +79,7 @@ NOT "comprehensive testing," which is free via the local bridge.
 | DynamoDB-Local | `NoSqlStore` | ✅ done |
 | Azurite (Blob/Queue) | `ObjectStore`/`QueueStore` (azure ns) | pattern ready |
 | Vault (KMS) | `KmsEngine` (stdlib AEAD; WebCrypto later) | ✅ done |
-| Vault (Secrets/KV) | `KvStore` | next |
+| Vault (Secrets/KV) | `KvStore` | ✅ done |
 | Postgres/MySQL (RDS) | PGlite / sql.js | planned |
 | NATS (eventing) | in-memory pub/sub | planned |
 | Cedar (IAM) | cedar-wasm | planned |
@@ -198,7 +198,14 @@ PNA) that the naive local approach hits. Security-wise it's the *easier* path.
   KeyState enforcement, aliases, `__type` errors). Crypto is REAL but stdlib-only
   (HMAC-SHA256 keystream + encrypt-then-MAC) so it runs in WASM with no native
   `cryptography`/openssl dep; a WebCrypto AES-GCM engine can swap in behind the seam.
-- ⬜ Remaining backends (~~DynamoDB~~ ✅ → ~~Vault/KMS~~ ✅ → Vault/KV → RDS/PGlite → IAM/cedar-wasm).
+- ✅ **Secrets Manager conformance core** — `core/kv_store.py` (KvStore seam) +
+  `core/secrets_core.py` (real handler logic, substrate-free) +
+  `tests/conformance/test_secrets_core.py` (**32 checks GREEN on host CPython AND
+  real Pyodide**). Native JSON wire (secretsmanager.* dispatch, ARN/VersionId,
+  SecretString/SecretBinary, AWSCURRENT/AWSPREVIOUS stages, get by stage or
+  VersionId, scheduled deletion + restore, `__type` errors). Canonical-wire upgrade
+  over the thin appliance handler (UUID VersionIds + real version stages).
+- ⬜ Remaining backends (~~DynamoDB~~ ✅ → ~~Vault/KMS~~ ✅ → ~~Vault/KV~~ ✅ → RDS/PGlite → IAM/cedar-wasm).
 - ⬜ Cloudflare relay (Worker + Durable Object) + tab-side WS register/dispatch.
 - ⬜ `vyomi-nano-bridge` local binary (shares the WS protocol).
 
@@ -224,7 +231,7 @@ PNA) that the naive local approach hits. Security-wise it's the *easier* path.
    in-browser conformance — the console data-plane now runs the real cores).
 2. **Cloudflare relay** MVP → `aws --endpoint-url <relay> s3 ls` returns a bucket
    created in the Nano tab (proves the core goal: external app ↔ in-browser sim, $0).
-3. Extend the **swap table** (DynamoDB ✅ → Vault/KMS ✅ → Vault/KV → RDS → IAM), each
+3. Extend the **swap table** (DynamoDB ✅ → Vault/KMS ✅ → Vault/KV ✅ → RDS → IAM), each
    gated by the shared conformance suite on both substrates.
 4. `vyomi-nano-bridge` local binary (offline/private power users).
 5. Pricing + funnel wiring (free local-bridge → paid relay → Pro/Max compute).
