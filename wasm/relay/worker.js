@@ -13,6 +13,11 @@
 function b64encode(bytes) { let s = ""; for (const b of bytes) s += String.fromCharCode(b); return btoa(s); }
 function b64decode(str) { const s = atob(str); const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
 
+const MAX_BODY = 6 * 1024 * 1024;   // 6 MiB request cap (413 above this)
+const MAX_PENDING = 64;             // per-session in-flight cap (429 above this)
+const REQ_TIMEOUT_MS = 20000;       // tab must answer within this (504 otherwise)
+const PING_MS = 25000;              // keepalive so bg-tab throttling can't silently drop the WS
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -61,6 +66,8 @@ export class RelaySession {
         return new Response("expected websocket", { status: 426 });
       const [client, server] = Object.values(new WebSocketPair());
       server.accept();
+      // A fresh tab supersedes any stale one for this session (reconnect/refresh).
+      if (this.tab && this.tab !== server) { try { this.tab.close(1012, "superseded"); } catch (_) {} }
       this.tab = server;
       server.addEventListener("message", (ev) => {
         let msg; try { msg = JSON.parse(ev.data); } catch { return; }
@@ -69,18 +76,25 @@ export class RelaySession {
         if (done) { this.pending.delete(msg.id); done(msg); }
       });
       server.addEventListener("close", () => { if (this.tab === server) this.tab = null; });
+      // Keepalive: ping the tab on a hibernation-safe alarm so background-tab
+      // throttling (or an idle proxy) can't silently drop the held WebSocket.
+      try { await this.state.storage.setAlarm(Date.now() + PING_MS); } catch (_) {}
       return new Response(null, { status: 101, webSocket: client });
     }
 
     if (mode === "proxy") {
       if (!this.tab) return new Response("no Nano tab registered", { status: 503 });
+      if (this.pending.size >= MAX_PENDING)
+        return new Response("session busy (too many in-flight)", { status: 429 });
       const path = request.headers.get("X-Relay-Path") || "/";
       const u = new URL("http://x" + path);
       const query = Object.fromEntries(u.searchParams.entries());
       const bodyBytes = new Uint8Array(await request.arrayBuffer());
+      if (bodyBytes.byteLength > MAX_BODY)
+        return new Response("payload too large", { status: 413 });
       const id = crypto.randomUUID();
       const respP = new Promise((resolve) => {
-        const t = setTimeout(() => { if (this.pending.delete(id)) resolve(null); }, 15000);
+        const t = setTimeout(() => { if (this.pending.delete(id)) resolve(null); }, REQ_TIMEOUT_MS);
         this.pending.set(id, (r) => { clearTimeout(t); resolve(r); });
       });
       this.tab.send(JSON.stringify({
@@ -96,5 +110,13 @@ export class RelaySession {
     }
 
     return new Response("bad relay mode", { status: 400 });
+  }
+
+  // Keepalive tick: ping the held tab and re-arm while one is connected.
+  async alarm() {
+    if (this.tab) {
+      try { this.tab.send(JSON.stringify({ type: "ping" })); } catch (_) {}
+      try { await this.state.storage.setAlarm(Date.now() + PING_MS); } catch (_) {}
+    }
   }
 }

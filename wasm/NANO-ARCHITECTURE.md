@@ -1,8 +1,10 @@
 # Vyomi Nano — Architecture
 
 > Single source of truth for the **Nano free tier**.
-> Status: design **locked 2026-06-26**. S3 conformance core proven (27/27 green on
-> host CPython + Pyodide). Remaining backends + the Cloudflare relay: to build.
+> Status: design **locked 2026-06-26**. All 7 AWS cores + Azure ARM proven green
+> (host CPython + Pyodide). Cloudflare relay **DEPLOYED & live at relay.vyomi.cloud**
+> (+ a brew-installable local tunnel, auto-detected). See `relay/README.md` and
+> `../docs/guides/nano-tunnel.md`.
 
 ---
 
@@ -80,9 +82,9 @@ NOT "comprehensive testing," which is free via the local bridge.
 | Azurite (Blob/Queue) | `ObjectStore`/`QueueStore` (azure ns) | pattern ready |
 | Vault (KMS) | `KmsEngine` (stdlib AEAD; WebCrypto later) | ✅ done |
 | Vault (Secrets/KV) | `KvStore` | ✅ done |
-| Postgres/MySQL (RDS) | PGlite / sql.js | planned |
-| NATS (eventing) | in-memory pub/sub | planned |
-| Cedar (IAM) | cedar-wasm | planned |
+| Postgres/MySQL (RDS) | `SqlStore` (stdlib sqlite3; PGlite later) | ✅ done |
+| NATS (eventing) | `MessagingStore` (SQS + SNS pub/sub fan-out) | ✅ done |
+| Cedar (IAM) | `AuthzEngine` (Python IAM-JSON eval; cedar-wasm later) | ✅ done |
 
 **Repeatable pattern:** extract handler → seam → in-WASM backend → same conformance
 suite green on host CPython **and** Pyodide.
@@ -184,12 +186,18 @@ PNA) that the naive local approach hits. Security-wise it's the *easier* path.
 - ✅ **Nano SPA / consoles** — real aws/gcp/azure consoles served from `wasm/`
   (splash→dashboard→console flow, headless-validated). See `wasm/README.md`.
 - ✅ **Cores wired into the Nano console SW** — `wasm/providers/aws_core_adapter.py`
-  (the in-browser analogue of the Pro/Max FastAPI adapter) serves the console's S3 +
-  DynamoDB data-plane from the PROVEN cores; the JS stub is retired. Cores vendored
-  into `wasm/core/` by `wasm/build_cores.py` (copy-not-fork, byte-identical). Validated
-  under real Pyodide loading the bundle as `nano-boot.js` does (30 checks: real ETags,
-  versioning, typed DDB items, query/scan). Caught + fixed a latent dispatch bug
-  (JSON booleans embedded as Python source).
+  (the in-browser analogue of the Pro/Max FastAPI adapter) serves the console's
+  **S3 + DynamoDB + KMS + Secrets + SQS + IAM + RDS** data-plane from the PROVEN
+  cores; the JS stub is retired. The adapter translates console REST ↔ each core's
+  native wire (S3 method+path, DDB/KMS/Secrets/SQS X-Amz-Target JSON, IAM/RDS Query
+  +XML). Cores vendored into `wasm/core/` by `wasm/build_cores.py` (15 modules,
+  copy-not-fork, byte-identical). Validated under real Pyodide loading the bundle as
+  `nano-boot.js` does (**55 checks**: real ETags, versioning, typed DDB items,
+  query/scan, KMS key+alias lifecycle, secret CRUD, SQS send/receive/in-flight, IAM
+  user CRUD, RDS instance lifecycle stop/start/delete + endpoint). RDS control plane
+  is wired without loading sqlite3 (data plane lazy-loads it). Caught + fixed a latent
+  dispatch bug (JSON booleans embedded as Python source) and an RDS delete adapter
+  bug (re-reading the just-deleted instance lost the `deleting` status).
 - ✅ **KMS conformance core** — `core/kms_keystore.py` (KeyStore + KmsEngine crypto
   seam) + `core/kms_core.py` (real handler logic, substrate-free) +
   `tests/conformance/test_kms_core.py` (**36 checks GREEN on host CPython AND real
@@ -205,9 +213,84 @@ PNA) that the naive local approach hits. Security-wise it's the *easier* path.
   SecretString/SecretBinary, AWSCURRENT/AWSPREVIOUS stages, get by stage or
   VersionId, scheduled deletion + restore, `__type` errors). Canonical-wire upgrade
   over the thin appliance handler (UUID VersionIds + real version stages).
-- ⬜ Remaining backends (~~DynamoDB~~ ✅ → ~~Vault/KMS~~ ✅ → ~~Vault/KV~~ ✅ → RDS/PGlite → IAM/cedar-wasm).
-- ⬜ Cloudflare relay (Worker + Durable Object) + tab-side WS register/dispatch.
+- ✅ **RDS conformance core** — `core/sql_store.py` (SqlStore seam + a REAL SQL
+  engine: stdlib sqlite3) + `core/rds_core.py` (control plane + data plane,
+  substrate-free) + `tests/conformance/test_rds_core.py` (**29 checks GREEN on host
+  CPython AND real Pyodide**). Native RDS Query protocol with XML
+  (CreateDBInstance/Describe/Modify/Delete/Start/Stop/snapshots, endpoint+port,
+  `<ErrorResponse>`) PLUS a real SQL data plane — CREATE TABLE/INSERT/SELECT
+  actually run, per-instance isolated, gated by instance state. sqlite3 is a
+  **loadable Pyodide package** (`pyodide.loadPackage("sqlite3")`), so the core
+  lazy-imports it and the bundle loader must load it before SQL runs; a PGlite/
+  Postgres-wire engine swaps in behind the seam for unmodified-psycopg2 later.
+- ✅ **IAM conformance core** — `core/iam_store.py` (IamStore seam + AuthzEngine
+  decision seam) + `core/iam_core.py` (control plane + evaluator, substrate-free) +
+  `tests/conformance/test_iam_core.py` (**28 checks GREEN on host CPython AND real
+  Pyodide**). Native RDS-style Query protocol with XML (users/roles/policies/groups,
+  attach/detach, inline policies, access keys, `<ErrorResponse><Code>NoSuchEntity>`)
+  PLUS REAL policy evaluation via SimulatePrincipalPolicy — the appliance's own
+  pure-Python IAM-JSON evaluator (explicit-deny-wins across all statements, wildcard
+  action/resource, conditions, group-inherited policies), not a stub. cedarpy (Rust)
+  won't load in WASM; a `cedar-wasm` engine swaps in behind the AuthzEngine seam.
+- ✅ **Messaging/eventing conformance core** — `core/messaging_store.py` (MessagingStore
+  seam, with a controllable clock for visibility timeouts) + `core/sqs_core.py`
+  (faithful SQS port, JSON wire) + `core/sns_core.py` (greenfield SNS, native Query/XML
+  wire) + `tests/conformance/test_messaging_core.py` (**32 checks GREEN on host CPython
+  AND real Pyodide**). SQS: send/receive + visibility-timeout hide & auto-redeliver +
+  delete-by-ReceiptHandle + ChangeMessageVisibility + purge. SNS: topics + subscriptions
+  + REAL **fan-out** (Publish delivers the SNS envelope into the subscribed SQS queue —
+  the canonical SNS→SQS pub/sub pattern, the WASM analogue of NATS). SNS was greenfield
+  (the appliance lacks it) but targets the native SNS wire.
+- ✅ **Swap table COMPLETE** — every Lite backend now has a proven in-WASM equivalent,
+  each gated by a shared conformance suite green on host CPython AND real Pyodide.
+- ✅ **Relay serves ALL 7 services** — `core/aws_wire_router.py` is the native-AWS-wire
+  front door: it inspects each relayed request the way a real cloud front-end does
+  (SigV4 credential scope → `X-Amz-Target` → Query `Action`) and dispatches to the
+  owning proven core in its native wire (S3 method+path; DynamoDB/KMS/Secrets/SQS JSON;
+  IAM/RDS/SNS Query+XML), SNS+SQS sharing one MessagingStore for fan-out. Substrate-free,
+  proven by `tests/conformance/test_aws_wire_router.py` (**22 checks GREEN on host CPython
+  AND real Pyodide**). The relay tab (`wasm/relay/nano-endpoint.html`) loads it; the
+  production Worker (`wasm/relay/worker.js`) is hardened (6 MiB payload cap, 64 in-flight
+  cap, 20 s tab timeout, alarm-based keepalive ping, supersede-stale-tab on reconnect).
+  So an UNMODIFIED SDK/CLI (`--endpoint-url <relay>/<session>`) is served by the SAME
+  logic the conformance suite proves, for every service — not just S3. **Proven in a
+  REAL browser** (headless Chromium, `wasm/relay/e2e-relay.mjs`): external HTTP client
+  → local relay → browser tab (Pyodide + router + all cores) → response across all 7
+  services + the in-tab SQL bridge, with PGlite (real Postgres) loaded in the tab.
+- ✅ **RDS engine swap → PGlite (real Postgres), the first browser-side engine swap** —
+  `core/sql_store.py` gains `PGliteSqlStore` (Postgres compiled to WASM) behind the
+  UNCHANGED `SqlStore` seam, plus an additive ASYNC data plane (`SqlStore.aexecute_sql`
+  + `rds_core.aexecute_sql`, sharing the sync path's instance-state gate — no
+  divergence). PGlite is async, so the swap proves the **async-engine pattern**: the
+  seam stays sync by default (sqlite3, green on host+Pyodide), and an async browser
+  engine overrides only `aexecute_sql`. Gives genuine Postgres dialect/wire — `$1`
+  placeholders, SERIAL, RETURNING, ILIKE, real types — that sqlite can't match, so an
+  unmodified Postgres-SQL app validates faithfully. Proven by
+  `tests/conformance/test_rds_pglite_core.py`: the async contract is GREEN on the
+  sqlite3 default (host + Pyodide), and `run_pglite()` confirms REAL Postgres
+  (PostgreSQL 18.3) on the Pyodide+PGlite substrate. The browser binds it via
+  `wasm/pglite-loader.js` (installs `globalThis.__nano_pglite_new`); the relay tab
+  exposes an in-tab async SQL bridge (`window.__nano.sql`) for the RDS Data-API /
+  in-browser apps. (Key enabler: Pyodide can `await` host async APIs — verified.)
+- ✅ **RDS Data API over the relay** — `core/rds_data_core.py` serves the
+  `boto3.client('rds-data')` rest-json wire (Execute / BatchExecute / transactions,
+  AWS-typed field values, named `:params` rewritten to the engine's placeholder via
+  `SqlStore.param_placeholder`) onto the SqlStore data plane. This is the ONE
+  relational path that survives the HTTP relay (Postgres-wire TCP can't), so an
+  unmodified external app runs real SQL against the in-browser engine. It's async, so
+  the router gained `AwsWireRouter.ahandle` (serves rds-data async, delegates every
+  sync service to `handle`); the relay tab's request handler is now async. Proven by
+  `tests/conformance/test_rds_data_core.py` (Execute/BatchExecute, typed records,
+  isNull, error mapping → GREEN on sqlite3 host+Pyodide AND PGlite real-Postgres), and
+  **end-to-end in a real browser** (`e2e-relay.mjs` step 8: external ExecuteStatement →
+  relay → tab → PGlite → typed records, reading a row the in-tab bridge inserted —
+  proving one shared engine). Transactions are accepted/well-shaped but autocommit (no
+  cross-call rollback yet) — documented in the core.
 - ⬜ `vyomi-nano-bridge` local binary (shares the WS protocol).
+- ⬜ Remaining browser-engine swaps are OPTIONAL fidelity upgrades (the pure-Python
+  defaults already conform): WebCrypto AES-GCM behind `KmsEngine` (async; zero
+  conformance gain over the stdlib AEAD engine), cedar-wasm behind `AuthzEngine` (needs
+  an IAM-JSON→Cedar layer — the Python IAM-JSON evaluator is already more faithful).
 
 ---
 
@@ -222,6 +305,12 @@ PNA) that the naive local approach hits. Security-wise it's the *easier* path.
   must use a reachable endpoint (relay/bridge → handlers, fine) or Pro/Max.
 - **Tab liveness:** the WASM tab must stay open + connected for the relay/bridge to
   serve. Mitigated by keepalive; inherent to free in-browser compute.
+- **Relay is HTTP, not raw TCP:** the relay forwards HTTP, so HTTP-based SDKs (boto3,
+  aws-cli, **RDS Data API**) work end-to-end — `boto3.client('rds-data')` runs real
+  SQL against the in-browser engine over the relay (proven). A native Postgres-wire
+  client (psycopg2 over TCP) can't traverse the HTTP relay — real Postgres (PGlite) is
+  reachable in-browser and over the RDS Data API, not the bare 5432 wire. Bare-wire DB
+  access is a Pro/Max concern (a real reachable Postgres).
 
 ---
 
@@ -229,10 +318,17 @@ PNA) that the naive local approach hits. Security-wise it's the *easier* path.
 
 1. ✅ Wire the proven **S3 + DynamoDB cores** into the Nano console SW (visible
    in-browser conformance — the console data-plane now runs the real cores).
-2. **Cloudflare relay** MVP → `aws --endpoint-url <relay> s3 ls` returns a bucket
-   created in the Nano tab (proves the core goal: external app ↔ in-browser sim, $0).
-3. Extend the **swap table** (DynamoDB ✅ → Vault/KMS ✅ → Vault/KV ✅ → RDS → IAM), each
-   gated by the shared conformance suite on both substrates.
+2. ✅ **Cloudflare relay — DEPLOYED & live at `relay.vyomi.cloud`.** `aws --endpoint-url
+   https://relay.vyomi.cloud/<session> ...` is served by the in-browser cores for ALL 7
+   services (native-wire router). Worker + SQLite Durable Object on a Custom Domain;
+   validated end-to-end against the live edge via `e2e-relay.mjs`. A brew-installable
+   **local tunnel** (`vyomi-tunnel`) is auto-detected and preferred, with dynamic
+   failover to cloud. (Proves the core goal: external app ↔ in-browser sim, $0.)
+3. ✅ Extend the **swap table** (DynamoDB ✅ → Vault/KMS ✅ → Vault/KV ✅ → RDS ✅ → IAM ✅ →
+   NATS/eventing ✅) — COMPLETE; each gated by the shared conformance suite on both
+   substrates. ✅ All cores now wired into the console SW (55-check Pyodide validation).
+   The browser-side engine swaps — WebCrypto/PGlite/cedar-wasm — remain future work
+   behind their seams.
 4. `vyomi-nano-bridge` local binary (offline/private power users).
 5. Pricing + funnel wiring (free local-bridge → paid relay → Pro/Max compute).
 

@@ -22,7 +22,18 @@ ROOT = os.path.dirname(HERE)
 SRC = os.path.join(ROOT, "core")
 OUT = os.path.join(HERE, "core")
 
-CORES = ["object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py"]
+CORES = [
+    "object_store.py", "s3_object_core.py",        # S3
+    "nosql_store.py", "dynamodb_core.py",           # DynamoDB
+    "kms_keystore.py", "kms_core.py",               # KMS
+    "kv_store.py", "secrets_core.py",               # Secrets Manager
+    "sql_store.py", "rds_core.py",                  # RDS
+    "iam_store.py", "iam_core.py",                  # IAM
+    "messaging_store.py", "sqs_core.py", "sns_core.py",  # SQS + SNS (eventing)
+    "rds_data_core.py",                             # RDS Data API (HTTP SQL over the relay)
+    "aws_wire_router.py",                            # native-wire front door (relay/bridge)
+    "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
+]
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")

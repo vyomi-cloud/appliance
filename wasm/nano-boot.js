@@ -13,10 +13,40 @@
  * The console's own boot() fires its fetches at parse; the SW holds them until
  * step 4, so there's no race — early calls just wait for the backend.
  */
-const BASE = "";  // wasm/ is the web root (see sw.js)
+// BASE = the directory this module is served from, so the bundle works both at
+// the web root ("/nano-boot.js" -> "") and under a subpath like the portal's
+// /nano/ ("/nano/nano-boot.js" -> "/nano"). All asset loads + the SW
+// registration below already prefix BASE; the page's fetch shim handles /api.
+const BASE = new URL(".", import.meta.url).pathname.replace(/\/$/, "");
 // Capture control state SYNCHRONOUSLY (see nano-sw.js for why): the console's
 // inline boot() fetches /api/* at parse, before this module runs.
 const wasControlledAtStart = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+// Which cloud this console is — drives the live resource census we persist for
+// the dashboard's per-cloud footprint pies (null on non-console pages).
+const CONSOLE_PROVIDER = (location.pathname.match(/\/(aws|gcp|azure)-console\.html/) || [])[1] || null;
+
+// Persist one key into the shared "nano-spaces" IndexedDB "meta" store (same DB
+// the SW reads). Mirrors sw.js's idb() open so it works whether the SW created
+// the DB first or not.
+function nbMetaPut(k, v) {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open("nano-spaces", 1);
+    r.onupgradeneeded = () => {
+      const db = r.result;
+      if (!db.objectStoreNames.contains("spaces")) db.createObjectStore("spaces", { keyPath: "space_id" });
+      if (!db.objectStoreNames.contains("meta"))   db.createObjectStore("meta",   { keyPath: "k" });
+    };
+    r.onsuccess = () => {
+      try {
+        const tx = r.result.transaction("meta", "readwrite");
+        tx.objectStore("meta").put({ k, v });
+        tx.oncomplete = () => res();
+        tx.onerror = () => rej(tx.error);
+      } catch (e) { rej(e); }
+    };
+    r.onerror = () => rej(r.error);
+  });
+}
 const MODULES = [
   "backends/store.py",
   "providers/registry.py", "providers/aws_core_adapter.py", "providers/aws.py",
@@ -25,7 +55,13 @@ const MODULES = [
 ];
 // The PROVEN conformance cores (vendored into wasm/core/ by build_cores.py).
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
-const CORES = ["object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py"];
+const CORES = [
+  "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py",
+  "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
+  "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
+  "messaging_store.py", "sqs_core.py", "sns_core.py",
+  "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
+];
 
 function banner(text, bad) {
   let b = document.getElementById("nano-banner");
@@ -76,6 +112,31 @@ import builtins; builtins._disp = _disp
     JSON.parse(py.runPython(
       `_disp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
 
+  // ── Live resource census ──────────────────────────────────────────
+  // The dashboard page has no Pyodide, so it can't see the resources THIS
+  // page's backend holds. We count them here (registry._census_dispatch) and
+  // persist to IndexedDB; the SW's /api/runtime/host-distribution reads the
+  // fresh censuses to draw REAL per-cloud footprint pies. Includes the actual
+  // WASM linear-memory size — a genuine live runtime-utilization number.
+  const heapBytes = () => {
+    try { return (py._module && py._module.HEAP8 && py._module.HEAP8.byteLength) || 0; }
+    catch (_) { return 0; }
+  };
+  async function writeCensus() {
+    if (!CONSOLE_PROVIDER) return;
+    try {
+      const c = dispatch(CONSOLE_PROVIDER, "_census", "GET", {});
+      c.wasm_heap_bytes = heapBytes();
+      c.ts = Date.now();
+      await nbMetaPut("census:" + CONSOLE_PROVIDER, c);
+    } catch (_) { /* best-effort — never disturb the console */ }
+  }
+  let _censusTimer = null;
+  const scheduleCensus = () => {
+    if (_censusTimer) return;
+    _censusTimer = setTimeout(() => { _censusTimer = null; writeCensus(); }, 400);
+  };
+
   // Bridge: SW -> page dispatch -> SW
   navigator.serviceWorker.addEventListener("message", (ev) => {
     if (!ev.data || ev.data.type !== "vyomi-dispatch") return;
@@ -83,10 +144,15 @@ import builtins; builtins._disp = _disp
     try {
       const [prov, svc, op, params] = ev.data.tuple;
       port.postMessage(dispatch(prov, svc, op, params || {}));
+      scheduleCensus();  // any op may have mutated state — refresh the footprint
     } catch (e) {
       port.postMessage({ ok: false, error: String(e) });
     }
   });
+
+  writeCensus();                              // initial (heap + any seeded state)
+  setInterval(writeCensus, 5000);             // heartbeat: keeps the census "fresh"
+  addEventListener("pagehide", writeCensus);  // best-effort final snapshot
 
   // Release any held /api/* requests.
   const reg = await navigator.serviceWorker.ready;

@@ -52,16 +52,36 @@ else
 fi
 dc() { "${DC[@]}" -f "$COMPOSE_FILE" -p "$PROJECT" "$@"; }
 
+# Wave 2 — stream the heavy backends (MinIO, Vault, MySQL, DynamoDB, NATS,
+# ElasticMQ, Azurite, Pub/Sub, Firestore) in the BACKGROUND, detached so it
+# survives this shell exiting. They live behind the compose `full` profile, so
+# Wave 1's plain `up -d` skips them; this `--profile full up -d` pulls any
+# missing images (first run) then starts them. The console is already usable
+# from Wave 1 — the appliance's readiness strip (/api/runtime/readiness) flips
+# each backend green as it comes up, matching the Multipass launcher's
+# progressive-startup UX. Log to a tempfile so a failed pull is diagnosable.
+wave2_full_bg() {
+  ( nohup "${DC[@]}" -f "$COMPOSE_FILE" -p "$PROJECT" --profile full up -d \
+      </dev/null >"${TMPDIR:-/tmp}/vyomi-wave2.log" 2>&1 & )
+}
+
 case "${1:-up}" in
   up|start)
+    # Wave 1 — base only (simulator + required deps). Fast: the console is
+    # reachable the moment the simulator is healthy, with no wait on the
+    # heavy backends.
     dc up -d
+    # Wave 2 — the heavy backends download + start in the background.
+    wave2_full_bg
     echo "==> Vyomi (Docker) is starting. Open http://localhost:9000 in ~30s."
+    echo "    Backends (S3/KMS/SQL/NoSQL/queues) are downloading + starting in the"
+    echo "    background — the readiness strip turns each green as it comes up."
     echo "    Pro tier: launch an EC2 instance in the console, then ssh ubuntu@<ip>."
     ;;
-  down|stop)       dc down ;;
-  restart)         dc down; dc up -d ;;
-  status|ps)       dc ps ;;
-  logs)            shift; dc logs "$@" ;;
-  update|upgrade)  dc pull && dc up -d ;;
+  down|stop)       dc --profile full down ;;
+  restart)         dc --profile full down; dc up -d; wave2_full_bg ;;
+  status|ps)       dc --profile full ps ;;
+  logs)            shift; dc --profile full logs "$@" ;;
+  update|upgrade)  dc --profile full pull && dc up -d && wave2_full_bg ;;
   *)               dc "$@" ;;
 esac

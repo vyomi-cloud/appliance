@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Vyomi — Choose your tier</title>
+  <title>Vyomi — Local multi-cloud dev platform</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/brand/favicon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/brand/favicon-16.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/brand/apple-touch-icon.png">
@@ -13,9 +13,9 @@
     body {
       margin: 0; padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      /* v2.0.5: splash-style light-gray as the page background. */
-      background: #f8f9fa;
-      color: #1f2937; min-height: 100vh;
+      /* v2.3.0: portal-matched dark page background. */
+      background: #05071a;
+      color: #a1a1aa; min-height: 100vh;
     }
 
     /* v2.0.5: electric-blue heading accent — applied via override at
@@ -26,10 +26,10 @@
           always visible at the top of the launch view. ─────────────────── */
     .top-bar {
       position: sticky; top: 0; z-index: 100;
-      background: rgba(255, 255, 255, 0.92);
-      backdrop-filter: saturate(180%) blur(16px);
-      -webkit-backdrop-filter: saturate(180%) blur(16px);
-      border-bottom: 1px solid #e7e7e9;
+      background: rgba(8, 8, 11, 0.94);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
       padding: 10px 24px;
       display: flex; align-items: center; justify-content: space-between;
       gap: 16px;
@@ -42,10 +42,11 @@
       border: 1px solid transparent; cursor: pointer; text-decoration: none;
       transition: all 0.15s; font-family: inherit; line-height: 1;
     }
-    .top-bar .tb-btn-secondary {
-      background: #ffffff; color: #1f2937; border-color: #d8e0ea;
+    .top-bar .tb-btn-secondary {   /* same brand gradient as the left-nav icon chips */
+      background: linear-gradient(135deg, #4d8cf3 0%, #7c3aed 100%);
+      color: #fff; border-color: transparent;
     }
-    .top-bar .tb-btn-secondary:hover { border-color: #1f2937; }
+    .top-bar .tb-btn-secondary:hover { filter: brightness(1.08); }
     .top-bar .tb-btn-primary {
       background: #1f2937; color: #ffffff; border-color: #1f2937;
     }
@@ -836,7 +837,7 @@
       position: fixed; inset: 0; z-index: 10000;
       display: flex; align-items: center; justify-content: center;
       flex-direction: column; gap: 24px;
-      background: #f8f9fa;
+      background: #05071a;
       opacity: 0; animation: vyomi-splash-fade 5000ms ease-in-out forwards;
     }
     .vyomi-splash .vyomi-splash-logo {
@@ -845,7 +846,7 @@
       animation: vyomi-splash-logo 5000ms ease-out forwards;
     }
     .vyomi-splash .vyomi-splash-tag {
-      font-size: 13.5px; font-weight: 500; color: #5f6b7a;
+      font-size: 13.5px; font-weight: 500; color: #a1a1aa;
       letter-spacing: 0.04em; opacity: 0;
       animation: vyomi-splash-tag 5000ms ease-out forwards;
     }
@@ -987,6 +988,54 @@
       color: #1f2937 !important;
     }
 </style>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+  <style>
+    /* v2.3.0 left collapsible nav pane — shared with the workspaces page. */
+    #app-body { display: flex; align-items: stretch; }
+    #app-sidebar {
+      flex: none; width: 216px; z-index: 40; background: #0b0e28; color: #c7cbe0;
+      display: flex; flex-direction: column; padding: 14px 10px; gap: 4px;
+      overflow: hidden; transition: width .2s ease; min-height: calc(100vh - 104px);
+    }
+    body.side-collapsed #app-sidebar { width: 62px; }
+    .side-collapse {
+      background: none; border: 0; color: #8b8fb3; cursor: pointer; display: flex;
+      align-items: center; gap: 14px; padding: 8px 10px; border-radius: 9px; margin-bottom: 8px;
+    }
+    .side-collapse:hover { background: #171b3d; color: #fff; }
+    .side-collapse .material-icons { font-size: 24px; }
+    .side-nav { display: flex; flex-direction: column; gap: 4px; }
+    .side-item {
+      display: flex; align-items: center; gap: 14px; padding: 11px 10px; border-radius: 9px;
+      background: none; border: 0; color: #c7cbe0; cursor: pointer; text-decoration: none;
+      font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; width: 100%;
+    }
+    .side-item:hover { background: #171b3d; color: #fff; }
+    .side-item.active { background: #1f2550; color: #fff; }
+    .side-item .material-icons {   /* medium icons on a brand-gradient chip */
+      font-size: 19px; flex: none; color: #fff; border-radius: 8px; padding: 6px;
+      background: linear-gradient(135deg, #4d8cf3 0%, #7c3aed 100%);
+    }
+    body.side-collapsed .side-label { display: none; }
+    /* Collapsed rail: centre the icon so the active/hover background is padded
+       evenly (the wide gradient chip would otherwise overrun the right edge). */
+    body.side-collapsed .side-item,
+    body.side-collapsed .side-collapse { justify-content: center; padding-left: 0; padding-right: 0; }
+    #app-main { flex: 1; min-width: 0; }
+
+    /* ═══════════ v2.3.0 dark theme — matches the portal ═══════════
+       Page bg = #05071a; sections transparent (white removed), text light. */
+    .sdk-strip, .sdk-stats, .sdk-groups, .sdk-list, .lf-grid, .lf-row, .local-fidelity { background: transparent !important; }
+    .sdk-stat, .sdk-group, .lf-card {
+      background: linear-gradient(180deg, #14172e 0%, #0d1228 100%) !important; border-color: rgba(255,255,255,0.10) !important; box-shadow: none !important;
+    }
+    .sdk-chip, .lf-svc {
+      background: rgba(255,255,255,0.05) !important; border-color: rgba(255,255,255,0.12) !important; color: #c7cbe0 !important;
+    }
+    h1, h2, h3, h4, h5, h6 { color: #e4e4e7 !important; }
+    p, .sdk-badge, .sdk-head p, .lf-meta, .lf-head, .sub, .section-sub { color: #a1a1aa !important; }
+    .sdk-stat .v, .sdk-stat b { color: #e4e4e7 !important; }
+  </style>
 </head>
 <body>
   <!-- ── Splash overlay — Vyomi-branded first-paint, 5s, cookie-suppressed.
@@ -994,7 +1043,7 @@
        during page hydration. JS at end of body removes it after 5s
        (or instantly if the cookie is already set). ──────────────────── -->
   <div class="vyomi-splash" id="vyomi-splash" hidden>
-    <img class="vyomi-splash-logo" src="/assets/brand/vyomi-wordmark-light.png" alt="Vyomi">
+    <img class="vyomi-splash-logo" src="/assets/brand/vyomi-wordmark.png" alt="Vyomi">
     <div class="vyomi-splash-tag">Local multi-cloud, in seconds.</div>
     <div class="vyomi-splash-dots"><span></span><span></span><span></span></div>
   </div>
@@ -1003,6 +1052,7 @@
        backend-stack status at all times (green "Appliance is Ready" once up,
        with a Details panel). Shared self-mounting module, also on the
        workspaces page. See static/readiness-strip.js. -->
+  <div id="app-topbar">
   <div id="vyomi-readiness-mount"></div>
 
   <script>
@@ -1033,7 +1083,7 @@
   <!-- ── Sticky top action bar — Activate appliance + Continue to console ── -->
   <nav class="top-bar">
     <a class="tb-brand" href="/pricing" aria-label="vyomi">
-      <img src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi">
+      <img src="/assets/brand/vyomi-wordmark.png" alt="vyomi">
     </a>
     <div class="tb-actions">
       <!-- v2.0.6 (#426): GitHub community CTA — same dropdown pattern as
@@ -1091,6 +1141,22 @@
       </button>
     </div>
   </nav>
+  </div><!-- /app-topbar -->
+
+  <div id="app-body">
+  <!-- v2.3.0: collapsible left nav pane — sits below the top logo bar. -->
+  <aside id="app-sidebar">
+    <button class="side-collapse" type="button" onclick="toggleSidebar()" aria-label="Collapse menu" title="Collapse / expand">
+      <span class="material-icons">menu</span>
+    </button>
+    <nav class="side-nav">
+      <a class="side-item active" href="/" title="Home"><span class="material-icons">home</span><span class="side-label">Home</span></a>
+      <a class="side-item" href="/clouds" onclick="try{localStorage.setItem('vyomi.appview','workspace')}catch(_){}" title="Dashboard"><span class="material-icons">dashboard</span><span class="side-label">Dashboard</span></a>
+      <a class="side-item" href="/clouds" onclick="try{localStorage.setItem('vyomi.appview','spaces')}catch(_){}" title="Active spaces"><span class="material-icons">workspaces</span><span class="side-label">Spaces</span></a>
+      <a class="side-item" href="/clouds" onclick="try{localStorage.setItem('vyomi.appview','kc')}catch(_){}" title="Knowledge Center"><span class="material-icons">menu_book</span><span class="side-label">Knowledge Center</span></a>
+    </nav>
+  </aside>
+  <div id="app-main">
 
   <!-- ── v2.0.6 (#426) Community dropdown styles ─────────────────────
        Mirrors the .tb-activated / .tb-menu pattern used by the
@@ -1138,16 +1204,6 @@
   </style>
 
   <div class="container">
-    <header>
-      <div class="hero-eyebrow">Welcome to Vyomi</div>
-      <h1>Choose your tier.</h1>
-      <div class="sub">Every plan ships with real backends, multi-cloud consoles, and the same conformance harness — pick the surface area you need today.</div>
-
-      <div class="toggle">
-        <button id="bill-monthly" class="active" onclick="setBilling('monthly')">Monthly</button>
-        <button id="bill-annual" onclick="setBilling('annual')">Annual <span class="save">Save ~42%</span></button>
-      </div>
-    </header>
 <!-- ── SDKs / tooling — 4-tile grid (matches portal /features → sdk-strip) ── -->
     <section class="sdk-strip">
       <div class="sdk-head">
@@ -1223,95 +1279,6 @@
     </section>
 <div class="tiers" id="tiers" style="display:none"></div>
 
-    <!-- ── Tier cards (portal-style, light theme) ───────────────────── -->
-    <div class="tier-grid">
-
-      <!-- FREE -->
-      <div class="tier" data-tier="free">
-        <div class="tier-label free">Free</div>
-        <div class="tier-price"><span class="sym">₹</span><span class="num">0</span><span class="per">forever</span></div>
-        <div class="tier-tag">For individual developers exploring the platform.</div>
-        <button class="tier-cta outline" type="button" onclick="selectStaticTier('free')">Get started free</button>
-        <ul class="tier-features">
-          <li class="section">Core</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> 10 service categories × all 3 clouds</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> 1 space · 1 tenant</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Standard SDKs work natively</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Basic Terraform export</li>
-          <li class="section">Support</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Community + GitHub</li>
-        </ul>
-      </div>
-
-      <!-- PRO -->
-      <div class="tier" data-tier="pro">
-        <div class="tier-label pro">Pro</div>
-        <div class="tier-price">
-          <span class="sym">₹</span><span class="num" data-monthly="299" data-annual="175">299</span>
-          <span class="per" data-monthly-text="/ month" data-annual-text="/ mo, billed annually">/ month</span>
-        </div>
-        <div class="tier-tag">All services on the one cloud you pick.</div>
-        <button class="tier-cta primary" type="button" onclick="selectStaticTier('pro')">Start 14-day trial</button>
-        <ul class="tier-features">
-          <li class="section">Core</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> All 35 services × 1 primary cloud</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> 5 spaces · multiple apps</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Full Terraform export</li>
-          <li class="section">Dev</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Cloud Shell drawer</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> CloudSim power model</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Cost simulation (totals)</li>
-          <li class="section">Support</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Discord + GitHub</li>
-        </ul>
-      </div>
-
-      <!-- MAX (featured) -->
-      <div class="tier featured" data-tier="max">
-        <div class="tier-badge">RECOMMENDED</div>
-        <div class="tier-label max">Max</div>
-        <div class="tier-price">
-          <span class="sym">₹</span><span class="num" data-monthly="599" data-annual="350">599</span>
-          <span class="per" data-monthly-text="/ month" data-annual-text="/ mo, billed annually">/ month</span>
-        </div>
-        <div class="tier-tag">All 3 clouds + Cedar IAM + CI integration.</div>
-        <button class="tier-cta accent" type="button" onclick="selectStaticTier('max')">Start 14-day trial</button>
-        <ul class="tier-features">
-          <li class="section">Core</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> All 35 services × all 3 clouds</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> 25 spaces · CI workloads</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Single-cloud Terraform deploy</li>
-          <li class="section">Dev</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Cedar IAM enforcement</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> CI integration</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Per-resource cost simulation</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Network SLA simulation</li>
-          <li class="section">Support</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Email · 48h response</li>
-        </ul>
-      </div>
-
-      <!-- ENTERPRISE -->
-      <div class="tier" data-tier="enterprise">
-        <div class="tier-label enterprise">Enterprise</div>
-        <div class="tier-price"><span class="sym">₹</span><span class="num">99</span><span class="per">/ seat / mo</span></div>
-        <div class="tier-tag">Min 10 seats. Annual contract. Full enterprise stack.</div>
-        <button class="tier-cta outline" type="button" onclick="selectStaticTier('enterprise')">Talk to sales</button>
-        <ul class="tier-features">
-          <li class="section">Core</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Everything in Max</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Unlimited spaces + tenants</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Multi-cloud Terraform deploy</li>
-          <li class="section">Enterprise</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> SSO (SAML/OIDC)</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Helm + air-gapped install</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Custom domain + branding</li>
-          <li class="section">Support</li>
-          <li><span class="check"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg></span> Dedicated Slack · SLA</li>
-        </ul>
-      </div>
-
-    </div>
 
     <!-- ── Local-fidelity emulation services (moved from /clouds) ──────
          Replaces the v2.0.3 "Compare all features" table. Horizontal
@@ -1452,6 +1419,8 @@
       </div>
     </div>
   </div>
+  </div><!-- /app-main -->
+  </div><!-- /app-body -->
 
   <!-- Modal for Pro (cloud picker) + Enterprise (seat count) -->
   <div class="modal-bg" id="modal-bg">
@@ -1461,6 +1430,15 @@
   <div class="toast" id="toast"></div>
 
   <script>
+    // v2.3.0 left nav — collapse toggle (state shared with the workspaces page).
+    function toggleSidebar() {
+      var c = document.body.classList.toggle('side-collapsed');
+      try { localStorage.setItem('vyomi.sidecollapsed', c ? '1' : '0'); } catch (_) {}
+    }
+    (function () {
+      try { if (localStorage.getItem('vyomi.sidecollapsed') === '1') document.body.classList.add('side-collapsed'); } catch (_) {}
+    })();
+
     // Map raw tier names (which may be legacy "student" / "developer" on
     // old JWTs) to the customer-facing display label "Pro" / "Max" etc.
     // The server-side tier_policy.normalize_tier() handles the same job

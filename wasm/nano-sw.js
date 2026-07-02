@@ -11,11 +11,15 @@
  * flip it to true mid-script, masking that the initial fetches already failed.)
  */
 const wasControlledAtStart = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+// BASE = the bundle's mount path (from the page URL), so the dashboard works at
+// the web root AND under a subpath like the portal's /nano/. (Deferred classic
+// script -> no import.meta/currentScript, so derive from location.)
+const NANO_BASE = location.pathname.replace(/\/[^/]*$/, "");
 
 (async () => {
   if (!("serviceWorker" in navigator)) return;
   try {
-    const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" });
+    const reg = await navigator.serviceWorker.register(NANO_BASE + "/sw.js", { scope: NANO_BASE + "/", updateViaCache: "none" });
     try { await reg.update(); } catch (_) {}
     await navigator.serviceWorker.ready;
     if (wasControlledAtStart) { sessionStorage.removeItem("nano-sw-reload"); return; }

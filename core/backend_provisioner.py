@@ -59,10 +59,12 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
+from urllib.parse import urlparse
 
 log = logging.getLogger("cloudlearn.backend_provisioner")
 
@@ -108,7 +110,7 @@ VALID_STATES = {ABSENT, PULLING, STARTING, READY, FAILED, STOPPED}
 # up. Add a new entry here + nothing else changes elsewhere in the code.
 #
 # `health_check`: a callable that takes the container URL (e.g.
-# "http://cloudlearn-minio:9000") and returns True when the backend is
+# "http://vyomi-minio:9000") and returns True when the backend is
 # ready to serve traffic. Runs in a tight loop with a deadline.
 # ─────────────────────────────────────────────────────────────────────────
 
@@ -119,7 +121,7 @@ class Recipe:
     container_name: str                           # what to call the container
     env: dict[str, str] = field(default_factory=dict)
     ports: dict[str, str] = field(default_factory=dict)   # internal -> external (host)
-    network: str = "cloud-learn_default"          # join the simulator's compose net
+    network: Optional[str] = None                 # compose net; None → auto-discover
     volume_name: Optional[str] = None             # persistent volume mount path → name
     volume_mount: Optional[str] = None            # container-side path
     command: Optional[list[str]] = None           # docker CMD override
@@ -128,18 +130,38 @@ class Recipe:
     description: str = ""                         # human-readable for UI
 
 
+def _host_from_env(*env_keys: str, default: str) -> str:
+    """Resolve a backend's on-network hostname from the SAME env var the
+    simulator's client uses (a URL, host:port, or bare host), falling back to
+    `default`. This keeps the provisioner's container name pinned to whatever
+    the simulator actually talks to — immune to the cloudlearn-→vyomi- rename
+    drift that stranded the readiness gauge (see core/appliance_readiness.py
+    for the same _CANONICAL_ENV technique)."""
+    for key in env_keys:
+        val = (os.environ.get(key) or "").strip()
+        if not val:
+            continue
+        if "://" in val:
+            host = urlparse(val).hostname
+            if host:
+                return host
+        else:
+            return val.rsplit(":", 1)[0] if ":" in val else val
+    return default
+
+
 _RECIPES: dict[str, Recipe] = {
     # ─ MinIO (S3 backend — real bytes on disk) ──────────────────────────
     "minio": Recipe(
         name="minio",
         image="minio/minio:latest",
-        container_name="cloudlearn-minio",
+        container_name=_host_from_env("CLOUDLEARN_MINIO_URL", default="vyomi-minio"),
         env={
             "MINIO_ROOT_USER": os.environ.get("CLOUDLEARN_MINIO_ACCESS_KEY", "cloudlearn"),
             "MINIO_ROOT_PASSWORD": os.environ.get("CLOUDLEARN_MINIO_SECRET_KEY", "cloudlearn-dev-secret-key"),
         },
         ports={"9000/tcp": "9100"},
-        volume_name="cloudlearn-minio",
+        volume_name="vyomi-minio",
         volume_mount="/data",
         command=["server", "/data", "--console-address", ":9001"],
         health_url_template="http://{host}:9000/minio/health/ready",
@@ -151,7 +173,7 @@ _RECIPES: dict[str, Recipe] = {
     "vault": Recipe(
         name="vault",
         image="hashicorp/vault:1.15",
-        container_name="cloudlearn-vault",
+        container_name=_host_from_env("CLOUDLEARN_VAULT_URL", default="vyomi-vault"),
         env={
             "VAULT_DEV_ROOT_TOKEN_ID":   os.environ.get("CLOUDLEARN_VAULT_TOKEN", "cloudlearn-dev-token"),
             "VAULT_DEV_LISTEN_ADDRESS":  "0.0.0.0:8200",
@@ -173,9 +195,9 @@ _RECIPES: dict[str, Recipe] = {
     "nats": Recipe(
         name="nats",
         image="nats:2-alpine",
-        container_name="cloudlearn-nats",
+        container_name=_host_from_env("CLOUDLEARN_NATS_URL", default="vyomi-nats"),
         ports={"4222/tcp": "4222", "8222/tcp": "8222"},
-        volume_name="cloudlearn-nats",
+        volume_name="vyomi-nats",
         volume_mount="/data",
         command=["-js", "-sd", "/data", "-m", "8222"],
         # NATS monitoring port returns 200 on /varz when ready.
@@ -189,9 +211,9 @@ _RECIPES: dict[str, Recipe] = {
     "dynamodb": Recipe(
         name="dynamodb",
         image="amazon/dynamodb-local:latest",
-        container_name="cloudlearn-dynamodb",
+        container_name=_host_from_env("CLOUDLEARN_DYNAMODB_URL", default="vyomi-dynamodb"),
         ports={"8000/tcp": "8000"},
-        volume_name="cloudlearn-dynamodb",
+        volume_name="vyomi-dynamodb",
         volume_mount="/data",
         # dynamodb-local needs to be run from its /home/dynamodblocal dir
         # (the launcher expects DynamoDBLocal.jar in the CWD). We can't set
@@ -210,10 +232,12 @@ _RECIPES: dict[str, Recipe] = {
     "elasticmq": Recipe(
         name="elasticmq",
         image="softwaremill/elasticmq-native:latest",
-        container_name="cloudlearn-elasticmq",
+        container_name=_host_from_env("CLOUDLEARN_ELASTICMQ_URL", default="vyomi-elasticmq"),
         ports={"9324/tcp": "9324", "9325/tcp": "9325"},
-        # Statistics UI on 9325; root returns HTML, so 200.
-        health_url_template="http://{host}:9325/",
+        # The elasticmq-native image only listens on the SQS REST port 9324
+        # (no stats UI on 9325). A bare GET there returns HTTP 400, which
+        # _wait_for_ready accepts as "listener alive".
+        health_url_template="http://{host}:9324/",
         health_timeout_s=30,
         description=("ElasticMQ — SQS-compatible queue. Backs AWS SQS legacy/query "
                      "protocol (modern JSON-RPC stays in-memory)."),
@@ -223,13 +247,13 @@ _RECIPES: dict[str, Recipe] = {
     "mysql": Recipe(
         name="mysql",
         image="mysql:8.0",
-        container_name="cloudlearn-sql-mysql",
+        container_name=_host_from_env("CLOUDLEARN_SQL_MYSQL_HOST", default="vyomi-sql-mysql"),
         env={
             "MYSQL_ROOT_PASSWORD": os.environ.get("CLOUDLEARN_SQL_MYSQL_ADMIN_PASSWORD", "cloudlearn"),
             "MYSQL_ROOT_HOST":     "%",
         },
         ports={"3306/tcp": "3306"},
-        volume_name="cloudlearn-sql-mysql",
+        volume_name="vyomi-sql-mysql",
         volume_mount="/var/lib/mysql",
         # MySQL doesn't expose HTTP. Use a TCP-only check by hitting its
         # port and looking for the protocol greeting — but our generic
@@ -337,6 +361,52 @@ def available() -> bool:
         return False
 
 
+_resolved_network: Optional[str] = None
+
+
+def _resolve_network() -> str:
+    """The docker network to attach provisioned backends to.
+
+    Must be the SAME network the simulator container is on, or the simulator's
+    clients can't resolve the backend by its service DNS name. The compose
+    network name is project-derived (`appliance_default`, `vyomi_default`, …),
+    so we can't hardcode it. Resolution order (cached after first success):
+
+      1. Explicit override — VYOMI_BACKEND_NETWORK / CLOUDLEARN_BACKEND_NETWORK.
+      2. Introspect our OWN container (hostname == container id by default) and
+         take its first user-defined network. This is the reliable path inside
+         docker and auto-tracks whatever project name compose used.
+      3. Fallback to the historical compose default.
+    """
+    global _resolved_network
+    if _resolved_network:
+        return _resolved_network
+
+    override = (os.environ.get("VYOMI_BACKEND_NETWORK")
+                or os.environ.get("CLOUDLEARN_BACKEND_NETWORK"))
+    if override:
+        _resolved_network = override
+        return _resolved_network
+
+    try:
+        client = _client()
+        me = client.containers.get(os.environ.get("HOSTNAME") or socket.gethostname())
+        nets = list((me.attrs.get("NetworkSettings", {}).get("Networks", {}) or {}).keys())
+        # Skip the built-in networks; prefer the compose user network.
+        for n in nets:
+            if n not in ("host", "none", "bridge"):
+                _resolved_network = n
+                return _resolved_network
+        if nets:
+            _resolved_network = nets[0]
+            return _resolved_network
+    except Exception:
+        log.debug("provisioner: could not introspect own docker network", exc_info=True)
+
+    _resolved_network = "appliance_default"
+    return _resolved_network
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Sync helpers — used by the background thread
 # ─────────────────────────────────────────────────────────────────────────
@@ -382,11 +452,15 @@ def _start_container(recipe: Recipe, state: ProvisionState) -> str:
     state.state = STARTING
     client = _client()
 
+    # Attach to the simulator's own compose network so its clients can reach
+    # the backend by DNS name. Recipe.network overrides if explicitly set.
+    network = recipe.network or _resolve_network()
+
     # Make sure the network exists (compose default; should already be there)
     try:
-        client.networks.get(recipe.network)
+        client.networks.get(network)
     except NotFound:
-        client.networks.create(recipe.network, driver="bridge")
+        client.networks.create(network, driver="bridge")
 
     # Make sure the volume exists if one is declared
     volumes = {}
@@ -403,7 +477,7 @@ def _start_container(recipe: Recipe, state: ProvisionState) -> str:
         detach=True,
         environment=recipe.env or None,
         command=recipe.command,
-        network=recipe.network,
+        network=network,
         ports=recipe.ports or None,    # container_port → host_port
         volumes=volumes or None,
         restart_policy={"Name": "unless-stopped"},

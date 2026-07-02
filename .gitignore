@@ -58,3 +58,4 @@ vault-shared/
 dist/
 build/
 *.tgz
+wasm/relay/.wrangler/

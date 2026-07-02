@@ -167,6 +167,15 @@ services:
       - "${VYOMI_SIMULATOR_PORT:-${CLOUDLEARN_SIMULATOR_PORT:-9000}}:9000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # The simulator runs as the non-root `cloudlearn` user, but the bind-mounted
+    # /var/run/docker.sock is owned by group `root` on Docker Desktop (Mac/Win)
+    # and by the host `docker` group on Linux. Without membership, the lazy
+    # backend provisioner (core/backend_provisioner.py) + Docker compute backend
+    # get "permission denied" on the socket. Add that group so the socket's rw
+    # bit applies. Default 0 (Docker Desktop); on Linux set VYOMI_DOCKER_GID to
+    # the host docker gid:  VYOMI_DOCKER_GID=$(getent group docker | cut -d: -f3)
+    group_add:
+      - "${VYOMI_DOCKER_GID:-0}"
     depends_on:
       # Default install only requires the 2 small backends. The rest
       # (vault, nats, minio, dynamodb, elasticmq, mysql) are lazy-provisioned

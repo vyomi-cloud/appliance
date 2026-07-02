@@ -2,15 +2,25 @@ name = "vyomi-nano-relay"
 main = "worker.js"
 compatibility_date = "2026-06-01"
 
+# Custom domain — binds relay.vyomi.cloud (zone on this account) to the Worker so
+# the bundle's default wss://relay.vyomi.cloud / https://relay.vyomi.cloud works
+# unchanged. wrangler provisions the DNS record + edge cert on deploy.
+[[routes]]
+pattern = "relay.vyomi.cloud"
+custom_domain = true
+
 # Per-session reverse tunnel: one Durable Object instance per session id holds
 # the registered Nano tab's WebSocket and relays external HTTP to it.
 [[durable_objects.bindings]]
 name = "RELAY"
 class_name = "RelaySession"
 
+# SQLite-backed Durable Object: free on the Workers free plan (classic DOs are
+# paid-only) and supports the setAlarm keepalive the RelaySession uses. Works on
+# paid too, so this is the portable choice. Set once, before the first deploy.
 [[migrations]]
 tag = "v1"
-new_classes = ["RelaySession"]
+new_sqlite_classes = ["RelaySession"]
 
 [vars]
 # Only this origin may register a tab (Origin header check in the Worker).

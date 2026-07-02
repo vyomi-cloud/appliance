@@ -53,6 +53,25 @@ def _gcp_catalog():
                                    active_region="us-central1")
 
 
+def _azure_catalog():
+    # Mirrors azure_services.py's /api/azure/catalog endpoint shape exactly:
+    # the console reads CATALOG.subscription/resourceGroup/location + services[].
+    # Azure rides native ARM (/subscriptions/*), so there are no collection_path
+    # entries here — the SW routes ARM paths to the AzureArm core, not routes.json.
+    # azure_services imports fastapi at module top (for route registration) but
+    # catalog_for_console() needs none of it, so stub fastapi to keep the build
+    # dependency-free (reproducible on a bare host, not just inside the container).
+    for name in ("fastapi", "fastapi.responses"):
+        if name not in sys.modules:
+            stub = types.ModuleType(name)
+            for attr in ("HTTPException", "Request", "JSONResponse", "Response", "APIRouter", "FastAPI"):
+                setattr(stub, attr, type(attr, (), {}))
+            sys.modules[name] = stub
+    m = _load_by_path("providers.azure_services", "providers/azure_services.py")
+    return {"subscription": m.DEFAULT_SUBSCRIPTION, "resourceGroup": m.DEFAULT_RG,
+            "location": m.DEFAULT_LOCATION, "services": m.catalog_for_console()}
+
+
 # A minimal-but-real shell context so the console's space gate passes and the
 # account/region chrome renders. Mirrors server.py's _space_payload defaults.
 def _space(provider):
@@ -72,7 +91,7 @@ FIXTURES = {
     # Console boot (aws-console.html): a single active AWS space.
     "spaces-active.json": {"space": _space("aws")},
     # Launch dashboard (clouds.html) reads /api/spaces as an ARRAY + counts.
-    "spaces.json": {"spaces": [_space("aws"), _space("gcp")], "active_space_id": "nano-aws"},
+    "spaces.json": {"spaces": [_space("aws"), _space("gcp"), _space("azure")], "active_space_id": "nano-aws"},
     "tenants.json": {
         "active_tenant_id": "nano",
         "tenants": [{"tenant_id": "nano", "name": "Nano User"}],
@@ -105,6 +124,13 @@ def main():
         print(f"gcp-catalog.json: {len(gcat.get('services', []))} services")
     except Exception as e:
         print(f"gcp-catalog.json: SKIPPED ({type(e).__name__}: {e})")
+    try:
+        acat = _azure_catalog()
+        with open(os.path.join(OUT, "azure-catalog.json"), "w") as f:
+            json.dump(acat, f)
+        print(f"azure-catalog.json: {len(acat.get('services', []))} services")
+    except Exception as e:
+        print(f"azure-catalog.json: SKIPPED ({type(e).__name__}: {e})")
     for name, body in FIXTURES.items():
         with open(os.path.join(OUT, name), "w") as f:
             json.dump(body, f)

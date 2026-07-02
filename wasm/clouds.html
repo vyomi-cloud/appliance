@@ -1,0 +1,2239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+  (function(){
+    var base = location.pathname.replace(/\/[^\/]*$/, "");
+    window.__NANO_BASE = base;
+    if (!base) return;
+    var of = window.fetch.bind(window);
+    var origin = location.origin;
+    function rw(u){
+      if (typeof u!=="string") return u;
+      if (u.indexOf(origin+"/")===0){                     // same-origin ABSOLUTE url (e.g. ORIGIN + "/api/..")
+        var pth = u.slice(origin.length);
+        return (pth===base || pth.indexOf(base+"/")===0) ? u : origin+base+pth;
+      }
+      if (u.charAt(0)==="/" && u.charAt(1)!=="/"){         // root-relative path (e.g. "/api/..")
+        return (u===base || u.indexOf(base+"/")===0) ? u : base+u;
+      }
+      return u;                                            // relative or cross-origin -> leave alone
+    }
+    window.fetch = function(input, init){
+      if (typeof input==="string") return of(rw(input), init);
+      if (input && input.url) return of(new Request(rw(input.url), input), init);
+      return of(input, init);
+    };
+  })();
+  </script>
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workspaces — vyomi</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/brand/favicon-16.png">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      /* v2.0.5: splash-style light-gray bg. */
+      background: #f8f9fa; color: #1f2937; min-height: 100vh;
+    }
+
+    /* v2.0.5: electric-blue heading accent — applied via override at
+       the end of the style block. Body text stays dark. */
+
+    /* ── Top bar (matches launch page) ───────────────────────────── */
+    .top-bar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(8, 8, 11, 0.94);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding: 10px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px;
+    }
+    .tb-brand img { height: 32px; width: auto; display: block; }
+    .tb-actions { display: flex; align-items: center; gap: 10px; }
+    .tb-btn {
+      padding: 9px 18px; border-radius: 8px; font-size: 13.5px; font-weight: 600;
+      border: 1px solid transparent; cursor: pointer; text-decoration: none;
+      transition: all 0.15s; font-family: inherit; line-height: 1;
+    }
+    .tb-btn-secondary {   /* same brand gradient as the left-nav icon chips */
+      background: linear-gradient(135deg, #4d8cf3 0%, #7c3aed 100%);
+      color: #fff; border-color: transparent;
+    }
+    .tb-btn-secondary:hover { filter: brightness(1.08); }
+
+    .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 64px; }
+
+    /* ── Section heading + sub ───────────────────────────────────── */
+    .section-head { margin-bottom: 20px; }
+    .section-head h2 {
+      font-size: 22px; font-weight: 700; color: #1f2937; margin: 0 0 4px;
+      letter-spacing: -0.01em;
+    }
+    .section-head .sub { font-size: 13.5px; color: #5f6b7a; margin: 0; }
+
+    header.hero { text-align: center; margin: 20px 0 40px; }
+    header.hero .hero-eyebrow {
+      display: inline-block;
+      font-size: 11.5px; font-weight: 700; letter-spacing: 0.16em;
+      text-transform: uppercase; color: #5f6b7a;
+      padding: 4px 12px; border: 1px solid #e7e7e9; border-radius: 999px;
+      background: #f7f8fa; margin-bottom: 14px;
+    }
+    header.hero h1 {
+      font-size: 38px; font-weight: 700; color: #1f2937;
+      margin: 0 0 10px; letter-spacing: -0.025em; line-height: 1.1;
+    }
+    header.hero p  { font-size: 16px; color: #5f6b7a; margin: 0; max-width: 580px; margin: 0 auto; }
+
+    /* ── Existing spaces list ────────────────────────────────────── */
+    .spaces-section { margin-bottom: 44px; }
+    .spaces-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+    }
+    @media (max-width: 900px) { .spaces-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 540px) { .spaces-grid { grid-template-columns: 1fr; } }
+    .space-card {
+      background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 12px;
+      padding: 16px 18px;
+      box-shadow: 0 1px 2px rgba(15,27,45,0.03), 0 4px 12px rgba(15,27,45,0.04);
+      transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+      cursor: pointer; text-decoration: none; color: inherit; display: block;
+    }
+    .space-card:hover {
+      border-color: #94a3b8; transform: translateY(-2px);
+      box-shadow: 0 2px 4px rgba(15,27,45,0.04), 0 10px 22px rgba(15,27,45,0.08);
+    }
+    .space-card.active {
+      border-color: #10b981;
+      box-shadow: 0 0 0 1px #10b981 inset,
+                  0 4px 12px rgba(16,185,129,0.10);
+    }
+    .space-row {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+    }
+    .space-provider {
+      display: inline-block; padding: 2px 8px; border-radius: 6px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+      text-transform: uppercase; color: #fff;
+    }
+    .space-provider.aws   { background: #ec7211; }
+    .space-provider.gcp   { background: #1a73e8; }
+    .space-provider.azure { background: #0078d4; }
+    .space-name { font-weight: 600; color: #1f2937; font-size: 14.5px; flex: 1; }
+    .space-active-pill {
+      font-size: 10px; font-weight: 700; color: #047857;
+      background: rgba(16,185,129,0.10); padding: 2px 8px; border-radius: 9999px;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .space-meta { font-size: 12px; color: #5f6b7a; }
+    .space-meta .dot { margin: 0 6px; opacity: 0.4; }
+
+    .empty-spaces {
+      text-align: center; padding: 24px;
+      background: #f7f8fc; border: 1px dashed #cbd5e1; border-radius: 12px;
+      color: #5f6b7a; font-size: 14px;
+    }
+
+    /* ── Cloud-provider cards (PORTAL /features design, VERTICAL stack) ── */
+    .features-strip { width: 100%; margin: 0; }
+    .clouds-row { display: flex; flex-direction: column; gap: 16px; }
+    .cloud-card {
+      background: #ffffff;
+      border: 2px solid #cbd5e1;
+      border-radius: 14px;
+      padding: 24px 24px 22px;
+      display: flex; flex-direction: column;
+      box-shadow: 0 2px 8px rgba(15,27,45,0.04), 0 12px 24px rgba(15,27,45,0.06);
+      transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+    }
+    .cloud-card:hover {
+      border-color: #94a3b8;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 10px rgba(15,27,45,0.06), 0 18px 36px rgba(15,27,45,0.10);
+    }
+    .cloud-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin-bottom: 14px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 6px 16px -6px rgba(15,27,45,0.20);
+    }
+    .cloud-icon.aws   { background: linear-gradient(135deg, #ff9900 0%, #ec7211 100%); }
+    .cloud-icon.gcp   { background: linear-gradient(135deg, #5b8def 0%, #1a73e8 100%); }
+    .cloud-icon.azure { background: linear-gradient(135deg, #0089d6 0%, #005a9e 100%); }
+    .cloud-icon svg { width: 24px; height: 24px; }
+    .cloud-card h3 { font-size: 17px; font-weight: 700; color: #1f2937; margin: 0 0 14px; }
+
+    .svc-grid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 8px; }
+    @media (max-width: 980px) { .svc-grid { grid-template-columns: repeat(4, 1fr); } }
+    @media (max-width: 540px) { .svc-grid { grid-template-columns: repeat(2, 1fr); } }
+    .svc {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 8px;
+      background: #f7f8fc; border: 1px solid #e7e7e9;
+      font-size: 12.5px; color: #1f2937; min-width: 0;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .svc:hover { border-color: #c5cfd9; background: #ffffff; }
+    .svc .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+
+    .svc-ico { width: 22px; height: 22px; border-radius: 5px;
+                display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .svc-ico svg { width: 14.5px; height: 14.5px; color: #fff; }
+    .svc-ico-aws   { background: linear-gradient(135deg, #ff9900 0%, #ec7211 100%);
+                      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 2px rgba(236,114,17,0.20); }
+    .svc-ico-gcp   { background: linear-gradient(135deg, #5b8def 0%, #1a73e8 100%);
+                      box-shadow: inset 0 1px 0 rgba(255,255,255,0.20), 0 1px 2px rgba(26,115,232,0.22); }
+    .svc-ico-azure { background: linear-gradient(135deg, #00a4ef 0%, #0078d4 100%);
+                      box-shadow: inset 0 1px 0 rgba(255,255,255,0.20), 0 1px 2px rgba(0,120,212,0.22); }
+
+    .cloud-card .meta {
+      margin-top: 14px; padding-top: 14px;
+      border-top: 1px solid #e7e7e9;
+      font-size: 12.5px; color: #5f6b7a;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .cloud-card .open-btn {
+      padding: 8px 16px; border-radius: 8px;
+      color: #fff; text-decoration: none;
+      font-size: 13px; font-weight: 600; white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    .cloud-card.aws   .open-btn { background: linear-gradient(135deg, #ff9900, #ec7211); }
+    .cloud-card.gcp   .open-btn { background: linear-gradient(135deg, #4285f4, #1a73e8); }
+    .cloud-card.azure .open-btn { background: linear-gradient(135deg, #00a4ef, #0078d4); }
+    .cloud-card .open-btn:hover { opacity: 0.92; }
+
+    /* ── Section-head w/ action button (Active spaces row) ─────────── */
+    .section-head.has-action {
+      display: flex; align-items: flex-end; justify-content: space-between;
+      gap: 16px; flex-wrap: wrap;
+    }
+    .section-head.has-action > div { min-width: 0; }
+    .btn-create-space {
+      padding: 10px 18px; border-radius: 8px;
+      background: #1f2937; color: #fff; border: 1px solid #1f2937;
+      font-size: 13.5px; font-weight: 600; cursor: pointer;
+      text-decoration: none; font-family: inherit;
+      transition: background 0.15s;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-create-space:hover { background: #1a2c44; }
+    .btn-create-space::before { content: "+"; font-size: 16px; line-height: 1; }
+
+    /* ── Create-space modal ────────────────────────────────────────── */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 9000;
+      background: rgba(15, 27, 45, 0.42);
+      display: none; align-items: center; justify-content: center;
+      backdrop-filter: blur(2px);
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: #fff; border-radius: 14px;
+      width: 480px; max-width: calc(100vw - 32px); max-height: 90vh; overflow-y: auto;
+      padding: 26px 28px; box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+    }
+    .modal h3 {
+      font-size: 20px; font-weight: 700; color: #1f2937;
+      margin: 0 0 4px; letter-spacing: -0.01em;
+    }
+    .modal .modal-sub { font-size: 13.5px; color: #5f6b7a; margin: 0 0 20px; }
+    .modal .field { margin-bottom: 16px; }
+    .modal .field label {
+      display: block; font-size: 12.5px; font-weight: 600;
+      color: #1f2937; margin-bottom: 6px;
+    }
+    .modal .field input[type="text"] {
+      width: 100%; padding: 9px 12px;
+      border: 1.5px solid #cbd5e1; border-radius: 8px;
+      font-size: 14px; font-family: inherit; color: #1f2937;
+      transition: border-color 0.15s;
+    }
+    .modal .field input[type="text"]:focus {
+      outline: none; border-color: #1f2937;
+    }
+    .provider-picker {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    }
+    .provider-picker label {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 6px; padding: 12px 8px; border-radius: 10px;
+      border: 1.5px solid #cbd5e1; cursor: pointer;
+      transition: all 0.15s; font-size: 12.5px; font-weight: 500;
+    }
+    .provider-picker label:hover { border-color: #94a3b8; }
+    .provider-picker input { display: none; }
+    .provider-picker input:checked + .provider-card {
+      border-color: #1f2937;
+    }
+    .provider-picker label:has(input:checked) {
+      border-color: #1f2937; background: #f7f8fa;
+    }
+    .provider-picker .provider-glyph { width: 26px; height: 26px; }
+    .modal-actions {
+      display: flex; gap: 10px; justify-content: flex-end;
+      margin-top: 22px;
+    }
+    .modal-actions .btn-secondary {
+      padding: 9px 16px; border-radius: 8px; background: #fff;
+      color: #1f2937; border: 1.5px solid #cbd5e1; font-size: 13.5px;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .modal-actions .btn-secondary:hover { border-color: #1f2937; }
+    .modal-actions .btn-primary {
+      padding: 9px 18px; border-radius: 8px; background: #1f2937;
+      color: #fff; border: 1.5px solid #1f2937; font-size: 13.5px;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .modal-actions .btn-primary:hover { background: #1a2c44; }
+    .modal-actions .btn-primary:disabled {
+      opacity: 0.5; cursor: not-allowed; background: #1f2937;
+    }
+    .modal-error {
+      color: #b91c1c; font-size: 13px; margin: 8px 0 0;
+      padding: 8px 12px; background: #fee2e2; border-radius: 6px;
+      display: none;
+    }
+    .modal-error.show { display: block; }
+
+    /* ── Live host stats strip (v2.0.4) ──────────────────────────────
+       Three cards (CPU / Memory / Disk) refreshed every 10s. Visible
+       below the hero, above the "Active spaces" section, so the user
+       sees host pressure before they spin up another space. */
+    .host-stats {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px; margin: 0 0 28px;
+    }
+    @media (max-width: 720px) { .host-stats { grid-template-columns: 1fr; } }
+    .stat-card {
+      background: #ffffff;
+      border: 1px solid #e7e7e9; border-radius: 12px;
+      padding: 14px 16px;
+      box-shadow: 0 1px 2px rgba(15,27,45,0.03);
+      display: flex; flex-direction: column; gap: 6px;
+      position: relative; overflow: hidden;
+    }
+    .stat-card .stat-label {
+      font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: #5f6b7a;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .stat-card .stat-label .live-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #10b981;
+      animation: live-pulse 1800ms ease-in-out infinite;
+    }
+    @keyframes live-pulse {
+      0%, 100% { opacity: 0.4; transform: scale(0.85); }
+      50%      { opacity: 1;   transform: scale(1.15); }
+    }
+    .stat-card .stat-value {
+      font-size: 26px; font-weight: 700; color: #1f2937;
+      letter-spacing: -0.02em; line-height: 1.05;
+    }
+    .stat-card .stat-sub {
+      font-size: 12px; color: #5f6b7a; line-height: 1.3;
+    }
+    .stat-card .stat-bar {
+      height: 4px; border-radius: 2px; background: #eef2f7;
+      margin-top: 4px; overflow: hidden;
+    }
+    /* Curved utilization sparkline (replaces the flat progress bar). */
+    .stat-card .stat-graph { width: 100%; height: 26px; margin-top: 10px; display: block; overflow: visible; }
+    .stat-card .stat-graph path {
+      fill: none; stroke-width: 2; vector-effect: non-scaling-stroke;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+    .stat-card .stat-graph .sg-track { stroke: rgba(255,255,255,0.10); }
+    .stat-card .stat-graph .sg-line { stroke: #10b981; transition: stroke-dashoffset .6s ease, stroke .3s ease; stroke-dasharray: 0 9999; }
+    .stat-card.warn   .stat-graph .sg-line { stroke: #f59e0b; }
+    .stat-card.danger .stat-graph .sg-line { stroke: #ef4444; }
+    .stat-card .stat-bar > span {
+      display: block; height: 100%; width: 0%;
+      background: linear-gradient(90deg, #10b981, #059669);
+      transition: width 0.4s ease, background 0.4s ease;
+    }
+    .stat-card.warn .stat-bar > span {
+      background: linear-gradient(90deg, #f59e0b, #d97706);
+    }
+    .stat-card.danger .stat-bar > span {
+      background: linear-gradient(90deg, #ef4444, #b91c1c);
+    }
+    .stat-card.danger .stat-label .live-dot { background: #ef4444; }
+    .stat-card.warn .stat-label .live-dot   { background: #f59e0b; }
+
+    /* ── Disk-tile inline actions ───────────────────────────────────── */
+    .stat-card .stat-actions {
+      display: flex; gap: 6px; margin-top: 8px;
+    }
+    .stat-card .stat-actions button {
+      flex: 1; padding: 6px 10px; font-size: 11.5px; font-weight: 600;
+      border-radius: 6px; cursor: pointer; font-family: inherit;
+      border: 1px solid #cbd5e1; background: #fff; color: #1f2937;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .stat-card .stat-actions button:hover {
+      border-color: #1f2937; background: #f7f8fa;
+    }
+    .stat-card.warn .stat-actions button,
+    .stat-card.danger .stat-actions button {
+      border-color: #b91c1c; color: #b91c1c;
+    }
+    .stat-card.warn .stat-actions button:hover,
+    .stat-card.danger .stat-actions button:hover {
+      background: #fee2e2;
+    }
+
+    /* ── Disk action modals ─────────────────────────────────────────── */
+    .disk-modal {
+      position: fixed; inset: 0; z-index: 9500;
+      background: rgba(15, 27, 45, 0.5);
+      display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(2px);
+    }
+    .disk-modal .dm-box {
+      background: #fff; border-radius: 12px;
+      width: 560px; max-width: calc(100vw - 32px); max-height: 80vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+    }
+    .disk-modal .dm-head {
+      padding: 16px 20px; border-bottom: 1px solid #f8f9fa;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .disk-modal .dm-head h3 {
+      margin: 0; font-size: 17px; font-weight: 700; color: #1f2937;
+    }
+    .disk-modal .dm-close {
+      background: none; border: 0; font-size: 22px; cursor: pointer;
+      color: #5f6b7a; line-height: 1; padding: 0 4px;
+    }
+    .disk-modal .dm-body { padding: 18px 20px; overflow-y: auto; flex: 1; font-size: 13.5px; color: #1f2937; }
+    .disk-modal .dm-body .empty { color: #5f6b7a; font-size: 13px; padding: 16px; text-align: center; }
+    .disk-modal .dm-foot {
+      padding: 12px 20px; border-top: 1px solid #f8f9fa;
+      display: flex; gap: 10px; justify-content: flex-end;
+    }
+    .disk-modal .dm-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid #f1f3f7;
+    }
+    .disk-modal .dm-row:last-child { border-bottom: 0; }
+    .disk-modal .dm-row label {
+      flex: 1; font-size: 13px; color: #1f2937;
+      display: flex; align-items: center; gap: 10px;
+      cursor: pointer;
+    }
+    .disk-modal .dm-row .dm-size {
+      font-variant-numeric: tabular-nums; font-weight: 600;
+      color: #5f6b7a; font-size: 12.5px;
+    }
+    .disk-modal input[type="number"] {
+      width: 100%; padding: 9px 12px; font-size: 14px;
+      border: 1.5px solid #cbd5e1; border-radius: 8px;
+      font-family: inherit; color: #1f2937;
+    }
+    .disk-modal .dm-foot button {
+      padding: 9px 16px; border-radius: 8px; font-size: 13.5px;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .disk-modal .dm-foot .dm-cancel {
+      background: #fff; color: #1f2937; border: 1.5px solid #cbd5e1;
+    }
+    .disk-modal .dm-foot .dm-cancel:hover { border-color: #1f2937; }
+    .disk-modal .dm-foot .dm-primary {
+      background: #1f2937; color: #fff; border: 1.5px solid #1f2937;
+    }
+    .disk-modal .dm-foot .dm-primary:hover { background: #1a2c44; }
+    .disk-modal .dm-foot .dm-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .disk-modal .dm-note {
+      font-size: 12px; color: #5f6b7a; line-height: 1.5;
+      padding: 10px 12px; background: #f7f8fa; border-radius: 8px;
+      margin-top: 8px;
+    }
+    .disk-modal .dm-error {
+      color: #b91c1c; font-size: 13px; padding: 8px 12px;
+      background: #fee2e2; border-radius: 6px; margin-top: 10px;
+    }
+
+    /* ── Per-provider distribution pies (v2.0.4) ────────────────────
+       3 donut charts (CPU / RAM / Disk) showing AWS · GCP · Azure
+       share of the resources spun up on this host. Live-refreshes
+       with the same 10s loop as the host stats above. */
+    .provider-pies {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px; margin-bottom: 28px;
+    }
+    @media (max-width: 820px) { .provider-pies { grid-template-columns: 1fr; } }
+    .pie-card {
+      background: #ffffff;
+      border: 1px solid #e7e7e9; border-radius: 12px;
+      padding: 14px 16px 12px;
+      box-shadow: 0 1px 2px rgba(15,27,45,0.03);
+      display: flex; flex-direction: column; align-items: center;
+      gap: 8px;
+    }
+    .pie-card .pie-label {
+      align-self: stretch;
+      font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: #5f6b7a;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .pie-card .pie-label .live-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: #10b981;
+      animation: live-pulse 1800ms ease-in-out infinite;
+    }
+    .pie-card .pie-svg-wrap {
+      position: relative; width: 110px; height: 110px;
+    }
+    .pie-card .pie-svg-wrap svg {
+      width: 110px; height: 110px; transform: rotate(-90deg);
+      shape-rendering: geometricPrecision; overflow: visible;
+    }
+    .pie-card .pie-svg-wrap .pie-center {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; text-align: center;
+      pointer-events: none;
+    }
+    .pie-card .pie-svg-wrap .pie-center .pc-val {
+      font-size: 17px; font-weight: 700; color: #1f2937;
+      line-height: 1; letter-spacing: -0.01em;
+    }
+    .pie-card .pie-svg-wrap .pie-center .pc-sub {
+      font-size: 10.5px; color: #5f6b7a; margin-top: 2px;
+      letter-spacing: 0.03em; text-transform: uppercase; font-weight: 600;
+    }
+    .pie-card .pie-legend {
+      align-self: stretch;
+      display: flex; flex-direction: column; gap: 4px;
+      margin-top: 4px;
+    }
+    .pie-card .pie-legend-item {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 11.5px;
+    }
+    .pie-card .pie-legend-item .ll {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: #1f2937; font-weight: 500;
+    }
+    .pie-card .pie-legend-item .swatch {
+      width: 10px; height: 10px; border-radius: 2px;
+    }
+    .pie-card .pie-legend-item .lv {
+      font-variant-numeric: tabular-nums;
+      color: #5f6b7a; font-weight: 600;
+    }
+    .pie-card.empty .pie-svg-wrap svg circle.seg { stroke: #e7e7e9; }
+    .pie-card.empty .pie-center .pc-val { color: #94a3b8; font-size: 14px; }
+
+    /* ── Cloud-locked modal (tier gate) ────────────────────────────
+       Shown when the user clicks a space on a cloud their current
+       subscription doesn't include. Replaces the silent 302 redirect
+       to "/console/<primary>?denied=<provider>" the v2.0.4 server
+       still emits — we intercept BEFORE the navigation so the user
+       gets a clear "not enabled, here's how to fix" dialog instead
+       of being whisked to a different cloud's console. */
+    .cl-modal {
+      position: fixed; inset: 0; z-index: 9700;
+      background: rgba(15, 27, 45, 0.5);
+      display: none; align-items: center; justify-content: center;
+      backdrop-filter: blur(2px);
+    }
+    .cl-modal.open { display: flex; }
+    .cl-modal .cl-box {
+      background: #fff; border-radius: 14px;
+      width: 460px; max-width: calc(100vw - 32px);
+      padding: 28px 30px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+      text-align: center;
+    }
+    .cl-modal .cl-glyph {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: #fef3c7; color: #92400e;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 30px; line-height: 1;
+      margin-bottom: 16px;
+    }
+    .cl-modal h3 {
+      margin: 0 0 6px; font-size: 19px; font-weight: 700;
+      color: #1f2937; letter-spacing: -0.01em;
+    }
+    .cl-modal .cl-sub {
+      margin: 0 0 16px; font-size: 13.5px;
+      color: #5f6b7a; line-height: 1.55;
+    }
+    .cl-modal .cl-context {
+      margin: 0 0 20px; padding: 12px 14px;
+      background: #f7f8fa; border-radius: 8px;
+      font-size: 12.5px; color: #1f2937; line-height: 1.5;
+    }
+    .cl-modal .cl-context strong { color: #1f2937; }
+    .cl-modal .cl-actions {
+      display: flex; gap: 10px; justify-content: center;
+    }
+    .cl-modal .cl-actions button,
+    .cl-modal .cl-actions a {
+      padding: 9px 18px; border-radius: 8px;
+      font-size: 13.5px; font-weight: 600;
+      cursor: pointer; font-family: inherit;
+      text-decoration: none; line-height: 1;
+    }
+    .cl-modal .cl-cancel {
+      background: #fff; color: #1f2937;
+      border: 1.5px solid #cbd5e1;
+    }
+    .cl-modal .cl-cancel:hover { border-color: #1f2937; }
+    .cl-modal .cl-upgrade {
+      background: #1f2937; color: #fff;
+      border: 1.5px solid #1f2937;
+    }
+    .cl-modal .cl-upgrade:hover { background: #1a2c44; }
+    /* Provider color tokens — match the rest of the SPA's brand chips */
+    :root {
+      --prov-aws: #ff9900;
+      --prov-gcp: #4285f4;
+      --prov-azure: #0078d4;
+    }
+
+    /* ── Card wrappers (v2.0.4 polish) — group stats vs spaces ──── */
+    .surface-card {
+      background: #ffffff;
+      border: 1px solid #e7e7e9;
+      border-radius: 16px;
+      padding: 22px 24px 20px;
+      margin-bottom: 28px;
+      box-shadow: 0 1px 2px rgba(15,27,45,0.03), 0 6px 18px rgba(15,27,45,0.04);
+    }
+    /* Appliance health / Host utilization / Service status are ONE tabbed panel —
+       no outer card; their individual tiles are the cards. */
+    #svc-status-card, #stats-card, #host-util-card, #spaces-card {
+      background: transparent; border: none; box-shadow: none; padding: 0;
+      margin-bottom: 28px;
+    }
+    /* Each inner tile is a full card (matches the Service-status tiles). */
+    #stats-card .pie-card, #host-util-card .stat-card {
+      border: 1px solid #e7e7e9; border-radius: 14px;
+      box-shadow: 0 1px 2px rgba(15,27,45,0.03), 0 6px 18px rgba(15,27,45,0.04);
+    }
+    /* Each section header is a SINGLE tab: the title sits as an active tab
+       (accent underline) on a full-width baseline rule, with its description just
+       below. Applies to health / host util / service status / active spaces. */
+    #stats-card > .sc-head, #host-util-card > .sc-head,
+    #svc-status-card > .sc-head, #spaces-card > .sc-head {
+      align-items: flex-end; margin-bottom: 0; border-bottom: 1px solid #e4e4e7;
+    }
+    #stats-card > .sc-head > .sc-title,
+    #host-util-card > .sc-head > .sc-title,
+    #svc-status-card > .sc-head > .sc-title,
+    #spaces-card > .sc-head > .sc-title {
+      display: inline-block; padding: 0 2px 10px; margin-bottom: -1px;
+      border-bottom: 2px solid #2563eb;
+    }
+    #spaces-card > .sc-head > .btn-create-space { margin-bottom: 10px; }
+    /* Restored section description, below the tab baseline. */
+    .sc-desc { margin: 14px 0 18px; font-size: 13px; color: #5f6b7a; }
+
+    /* Material icons — section titles + sub-section (tile) labels. */
+    .sc-title h2 .material-icons { font-size: 20px; vertical-align: -4px; margin-right: 8px; color: #2563eb !important; }
+    .pie-label .material-icons, .stat-label .material-icons {
+      font-size: 16px; margin-right: 6px; color: #5f6b7a; vertical-align: -3px;
+    }
+    .btn-create-space .material-icons { font-size: 17px; vertical-align: -4px; margin-right: 4px; }
+
+    /* ── v2.3.0 left collapsible nav pane — sits below the top logo bar ──── */
+    #app-body { display: flex; align-items: stretch; }
+    #app-sidebar {
+      flex: none; width: 216px; z-index: 40;
+      background: #0b0e28; color: #c7cbe0; display: flex; flex-direction: column;
+      padding: 14px 10px; gap: 4px; overflow: hidden; transition: width .2s ease;
+      min-height: calc(100vh - 104px);          /* fill the viewport below the top bar */
+    }
+    body.side-collapsed #app-sidebar { width: 62px; }
+    .side-collapse {
+      background: none; border: 0; color: #8b8fb3; cursor: pointer; display: flex;
+      align-items: center; gap: 14px; padding: 8px 10px; border-radius: 9px; margin-bottom: 8px;
+    }
+    .side-collapse:hover { background: #171b3d; color: #fff; }
+    .side-brand { height: 22px; margin: 2px 6px 12px; opacity: .95; }
+    body.side-collapsed .side-brand { display: none; }
+    .side-nav { display: flex; flex-direction: column; gap: 4px; }
+    .side-item {
+      display: flex; align-items: center; gap: 14px; padding: 11px 10px; border-radius: 9px;
+      background: none; border: 0; color: #c7cbe0; cursor: pointer; text-decoration: none;
+      font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; width: 100%;
+    }
+    .side-item:hover { background: #171b3d; color: #fff; }
+    .side-item.active { background: #1f2550; color: #fff; }
+    .side-item .material-icons {   /* medium icons on a brand-gradient chip */
+      font-size: 19px; flex: none; color: #fff; border-radius: 8px; padding: 6px;
+      background: linear-gradient(135deg, #4d8cf3 0%, #7c3aed 100%);
+    }
+    body.side-collapsed .side-label { display: none; }
+    /* Collapsed rail: centre the icon so the active/hover background is padded
+       evenly (the wide gradient chip would otherwise overrun the right edge). */
+    body.side-collapsed .side-item,
+    body.side-collapsed .side-collapse { justify-content: center; padding-left: 0; padding-right: 0; }
+    #app-main { flex: 1; min-width: 0; }
+
+    /* Knowledge Center view — the portal KC embedded as-is. */
+    #view-kc { padding: 0; }
+    .kc-frame-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 16px 24px 14px; flex-wrap: wrap;
+    }
+    .kc-frame-head h2 { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 700; color: #1f2937; margin: 0; }
+    .kc-frame-head h2 .material-icons { font-size: 20px; color: #2563eb; }
+    .kc-open {
+      display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: 8px;
+      border: 1px solid #2563eb; color: #2563eb; background: #fff; font-size: 13px; font-weight: 600; text-decoration: none;
+    }
+    .kc-open:hover { background: rgba(37,99,235,.08); }
+    /* KC tiles — rendered natively (light theme), each opens a portal page. */
+    .kc-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; padding-bottom: 32px; }
+    .kc-sec-label {
+      grid-column: 1 / -1; display: flex; align-items: center; gap: 8px;
+      font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: #5f6b7a; margin: 10px 2px 0;
+    }
+    .kc-sec-label::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #2563eb; }
+    .kct {
+      display: flex; flex-direction: column; background: #fff; border: 1px solid #e7e7e9;
+      border-radius: 14px; padding: 18px 18px 15px; text-decoration: none; color: inherit;
+      box-shadow: 0 1px 2px rgba(15,27,45,0.03), 0 6px 18px rgba(15,27,45,0.04);
+      transition: border-color .2s, transform .2s, box-shadow .2s;
+    }
+    .kct:hover { border-color: #2563eb; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(37,99,235,0.10); }
+    .kct.kct-pack { grid-column: 1 / -1; background: linear-gradient(180deg, rgba(22,163,74,.05), #fff); border-color: rgba(22,163,74,.30); }
+    .kct h3 { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: #1f2937 !important; margin: 0 0 7px; }
+    .kct h3 .material-icons { font-size: 20px; }
+    .kct p { font-size: 12.5px; color: #5f6b7a; line-height: 1.5; margin: 0 0 12px; flex: 1; }
+    .kct .kct-sub { font-size: 11.5px; color: #8b8fb3; font-family: ui-monospace, Menlo, monospace; margin-bottom: 12px; }
+    .kct .kct-foot { display: flex; align-items: center; margin-top: auto; }
+    .kct .kct-open { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: #2563eb; }
+    .kct .kct-open .material-icons { font-size: 15px; }
+    .surface-card > .sc-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; margin-bottom: 18px; flex-wrap: wrap;
+    }
+    .surface-card > .sc-head > .sc-title h2 {
+      font-size: 18px; font-weight: 700; color: #1f2937;
+      margin: 0 0 2px; letter-spacing: -0.01em;
+    }
+    .surface-card > .sc-head > .sc-title p {
+      font-size: 13px; color: #5f6b7a; margin: 0;
+    }
+    /* Tighten the inner grids when they sit inside a surface card */
+    .surface-card .provider-pies,
+    .surface-card .host-stats { margin-bottom: 0; }
+    .surface-card .provider-pies { margin-bottom: 16px; }
+    /* Drop the inner card border (since we're already in a surface card) */
+    .surface-card .pie-card,
+    .surface-card .stat-card {
+      border: 1px solid #eef2f7;
+      box-shadow: none;
+    }
+
+    /* ── Provider filter pills (Active spaces card) ───────────────── */
+    .prov-filter {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      margin: 0 0 16px;
+    }
+    .prov-filter button {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 13px; border-radius: 999px;
+      background: #ffffff; color: #1f2937;
+      border: 1.5px solid #e7e7e9;
+      font-size: 12.5px; font-weight: 600;
+      cursor: pointer; font-family: inherit;
+      transition: all 0.15s;
+    }
+    .prov-filter button:hover { border-color: #94a3b8; }
+    .prov-filter button.active {
+      background: #1f2937; color: #fff; border-color: #1f2937;
+    }
+    .prov-filter button.active.aws   { background: #ff9900; border-color: #ec7211; color: #16191f; }
+    .prov-filter button.active.gcp   { background: #1a73e8; border-color: #1a73e8; color: #fff; }
+    .prov-filter button.active.azure { background: #0078d4; border-color: #0078d4; color: #fff; }
+    .prov-filter button .pf-glyph { width: 14px; height: 14px; display: inline-flex; }
+    .prov-filter button .pf-glyph svg { width: 14px; height: 14px; }
+    .prov-filter button .pf-count {
+      display: inline-block; min-width: 18px; padding: 1px 6px;
+      background: rgba(15,27,45,0.08); color: inherit;
+      border-radius: 999px; font-size: 10.5px; font-weight: 700;
+      text-align: center; line-height: 1.3;
+    }
+    .prov-filter button.active .pf-count { background: rgba(255,255,255,0.20); }
+    .prov-filter button.active.aws .pf-count { background: rgba(0,0,0,0.18); color: #16191f; }
+    /* Filtered grid — hide cards whose provider doesn't match */
+    #spaces-grid[data-filter="aws"]   .space-card[data-provider]:not([data-provider="aws"]),
+    #spaces-grid[data-filter="gcp"]   .space-card[data-provider]:not([data-provider="gcp"]),
+    #spaces-grid[data-filter="azure"] .space-card[data-provider]:not([data-provider="azure"]) {
+      display: none;
+    }
+    .spaces-grid .filter-empty {
+      grid-column: 1 / -1; padding: 24px; text-align: center;
+      color: #5f6b7a; font-size: 13.5px;
+      border: 1.5px dashed #cbd5e1; border-radius: 12px;
+    }
+  
+    /* ── v2.0.5 — electric-blue heading accent ─────────────────────
+       Catches every heading the design uses. !important is here on
+       purpose: the per-tier rules above set heading colors at higher
+       specificity and we want this to win without rewriting them. */
+    h1, h2, h3, h4, h5, h6,
+    .tier-label, .tier-price .num, .tier-price .sym, .tier-price .per,
+    .hero-eyebrow, .crumb, .ao-header h1, .sc-title h2,
+    header h1, header.hero h1,
+    .stat-card .stat-label, .pie-card .pie-label,
+    .ao-list-head h2, .ao-form-card h2 {
+      color: #1f2937 !important;
+    }
+
+    /* ═══════════ v2.3.0 dark theme — matches the portal ═══════════
+       Page bg = portal --bg (#05071a); every section/card is transparent
+       (white removed) so the dark page shows through; text + borders → light.
+       Header / sidebar / gradient buttons are already dark. */
+    body { background: #05071a !important; color: #a1a1aa; }
+    #app-body, #app-main, #view-workspace, #view-kc, .container { background: transparent !important; }
+
+    /* Outer section wrappers stay fully transparent. */
+    .surface-card, #stats-card, #host-util-card, #svc-status-card, #spaces-card,
+    .empty-spaces, .filter-empty { background: transparent !important; box-shadow: none !important; }
+    /* Inner tiles use the portal tile gradient (surface → bg-3). */
+    .pie-card, .stat-card, .kct, .space-card {
+      background: linear-gradient(180deg, #14172e 0%, #0d1228 100%) !important;
+      border-color: rgba(255,255,255,0.10) !important;
+      box-shadow: none !important;
+    }
+    .kct:hover, .space-card:hover { background: rgba(255,255,255,0.04) !important; border-color: rgba(96,165,250,0.55) !important; }
+    .kct.kct-pack { background: linear-gradient(180deg, rgba(22,163,74,.08), transparent) !important; }
+    #stats-card > .sc-head, #host-util-card > .sc-head,
+    #svc-status-card > .sc-head, #spaces-card > .sc-head { border-bottom-color: rgba(255,255,255,0.12) !important; }
+
+    /* Headings + strong text → light. */
+    h1, h2, h3, h4, h5, h6, .sc-title h2, .kct h3, header.hero h1,
+    .stat-value, .pc-val, .space-name, .modal h3 { color: #e4e4e7 !important; }
+    /* Body / muted text → mid-light. */
+    p, .sc-desc, header.hero p, .stat-sub, .pc-sub, .kct p, .kct-sub, .stat-label,
+    .pie-label, .kc-sec-label, .empty-spaces, .filter-empty, .modal .modal-sub {
+      color: #a1a1aa !important;
+    }
+
+    /* Small light surfaces → dark equivalents. */
+    .stat-bar { background: rgba(255,255,255,0.08) !important; }
+    .pie-card .pie-svg-wrap svg circle.seg, .pie-card.empty .pie-svg-wrap svg circle.seg { stroke: rgba(255,255,255,0.09) !important; }
+    .pie-card .pie-center .pc-sub, .pie-legend-item .lv, .pie-legend-item .ll { color: #a1a1aa !important; }
+    header.hero .hero-eyebrow { background: rgba(255,255,255,0.05) !important; border-color: rgba(255,255,255,0.12) !important; color: #a1a1aa !important; }
+    .prov-filter button { background: rgba(255,255,255,0.05) !important; color: #e4e4e7 !important; border-color: rgba(255,255,255,0.14) !important; }
+    .stat-card .stat-actions button { background: rgba(255,255,255,0.06) !important; color: #e4e4e7 !important; border-color: rgba(255,255,255,0.16) !important; }
+    .pie-card .pie-legend-item .swatch { outline: 1px solid rgba(255,255,255,0.12); }
+    .kc-open { background: transparent !important; }
+    .kc-frame-head h2 { color: #e4e4e7 !important; }
+    /* Modals → dark surface (readable on the dark backdrop). */
+    .modal, #modal-body, .cl-box { background: #0d1228 !important; color: #e4e4e7 !important; border: 1px solid rgba(255,255,255,0.10) !important; }
+</style>
+  <style>#host-util-card{display:none!important}</style>
+  <script src="./nano-sw.js" defer></script>
+</head>
+<body>
+  <div id="app-topbar">
+  <!-- v2.0.8: persistent appliance readiness / diagnostics strip. While the
+       backends are cold-starting it shows weighted pull progress; once every
+       service is up it STAYS visible as a green "Appliance is Ready" bar with a
+       Details panel listing each backend + live status. Shared, self-mounting
+       module (also used on the launch page) — see static/readiness-strip.js. -->
+  <div id="vyomi-readiness-mount"></div>
+
+  <!-- v2.0.6 (#420): in-app update banner. Hidden until the JS at the
+       bottom of this file polls /api/runtime/update-check and detects
+       a newer release tag on GitHub. -->
+  <div id="update-banner" style="display:none; background:#1f2937; color:#fff; padding:10px 16px; text-align:center; font-size:13.5px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+    <span style="font-weight:600">Vyomi <span id="update-banner-latest">2.0.x</span> is available.</span>
+    <span style="opacity:.85; margin-left:8px;">You're on <span id="update-banner-current">2.0.x</span>.</span>
+    <a id="update-banner-notes" href="#" target="_blank" rel="noopener noreferrer" style="color:#a5b4fc; text-decoration:underline; margin-left:14px;">What's new ↗</a>
+    <a href="#" onclick="alert('Run \\`vyomi upgrade\\` in your terminal to pull the latest image.'); return false;" style="color:#fff; background:#374151; padding:4px 10px; border-radius:4px; margin-left:14px; text-decoration:none;">How to update</a>
+    <button onclick="document.getElementById('update-banner').style.display='none'; sessionStorage.setItem('vyomi.update-banner-dismissed','1');" style="background:none; border:none; color:#9ca3af; margin-left:14px; cursor:pointer; font-size:14px;" aria-label="Dismiss">✕</button>
+  </div>
+  <nav class="top-bar">
+    <a class="tb-brand" href="./" aria-label="vyomi"><img src="assets/brand/vyomi-wordmark.png" alt="vyomi"></a>
+    <div class="tb-actions">
+      <a class="tb-btn tb-btn-secondary" href="./">← Back to launch</a>
+    </div>
+  </nav>
+  </div><!-- /app-topbar -->
+
+  <div id="app-body">
+  <!-- v2.3.0: collapsible left nav pane — sits below the top logo bar. -->
+  <aside id="app-sidebar">
+    <button class="side-collapse" type="button" onclick="toggleSidebar()" aria-label="Collapse menu" title="Collapse / expand">
+      <span class="material-icons">menu</span>
+    </button>
+    <nav class="side-nav">
+      <a class="side-item" href="./" title="Home"><span class="material-icons">home</span><span class="side-label">Home</span></a>
+      <button class="side-item active" type="button" data-view="workspace" onclick="showAppView('workspace')" title="Dashboard"><span class="material-icons">dashboard</span><span class="side-label">Dashboard</span></button>
+      <button class="side-item" type="button" data-view="spaces" onclick="showAppView('spaces')" title="Active spaces"><span class="material-icons">workspaces</span><span class="side-label">Spaces</span></button>
+      <button class="side-item" type="button" data-view="kc" onclick="showAppView('kc')" title="Knowledge Center"><span class="material-icons">menu_book</span><span class="side-label">Knowledge Center</span></button>
+    </nav>
+  </aside>
+  <div id="app-main">
+
+  <div id="view-workspace">
+  <div class="container">
+    <header class="hero">
+      <div class="hero-eyebrow">Dashboard</div>
+      <h1>Appliance at a glance.</h1>
+      <p>Per-cloud workload distribution, live host utilization, and backend service status.</p>
+    </header>
+
+    <!-- ── STATS surface card — pies + live host metrics ────────────── -->
+    <div class="surface-card" id="stats-card">
+      <div class="sc-head">
+        <div class="sc-title">
+          <h2><span class="material-icons">monitor_heart</span>Appliance health</h2>
+        </div>
+      </div>
+      <p class="sc-desc">Per-cloud workload distribution across your clouds (CPU / RAM / Disk).</p>
+
+    <!-- ── Per-provider distribution (3 donut pies) ────────────────── -->
+    <div class="provider-pies" id="provider-pies">
+      <div class="pie-card empty" data-metric="cpu">
+        <div class="pie-label"><span class="material-icons">developer_board</span> CPU distribution</div>
+        <div class="pie-svg-wrap">
+          <svg viewBox="0 0 36 36">
+            <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
+          </svg>
+          <div class="pie-center"><div class="pc-val">—</div><div class="pc-sub">vCPU</div></div>
+        </div>
+        <div class="pie-legend"></div>
+      </div>
+      <div class="pie-card empty" data-metric="ram">
+        <div class="pie-label"><span class="material-icons">memory</span> RAM distribution</div>
+        <div class="pie-svg-wrap">
+          <svg viewBox="0 0 36 36">
+            <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
+          </svg>
+          <div class="pie-center"><div class="pc-val">—</div><div class="pc-sub">RAM</div></div>
+        </div>
+        <div class="pie-legend"></div>
+      </div>
+      <div class="pie-card empty" data-metric="disk">
+        <div class="pie-label"><span class="material-icons">storage</span> Disk distribution</div>
+        <div class="pie-svg-wrap">
+          <svg viewBox="0 0 36 36">
+            <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
+          </svg>
+          <div class="pie-center"><div class="pc-val">—</div><div class="pc-sub">Disk</div></div>
+        </div>
+        <div class="pie-legend"></div>
+      </div>
+    </div>
+
+    </div><!-- /appliance-health surface card (pies only) -->
+
+    <!-- ── Host utilization — split into its own surface card ───────── -->
+    <div class="surface-card" id="host-util-card">
+      <div class="sc-head">
+        <div class="sc-title">
+          <h2><span class="material-icons">speed</span>Host utilization</h2>
+        </div>
+      </div>
+      <p class="sc-desc">Live CPU / RAM / Disk on the host VM.</p>
+
+    <!-- ── Live host stats ─────────────────────────────────────────── -->
+    <div class="host-stats" id="host-stats">
+      <div class="stat-card" id="stat-cpu">
+        <div class="stat-label"><span class="material-icons">developer_board</span> CPU</div>
+        <div class="stat-value" id="stat-cpu-val">—</div>
+        <div class="stat-sub"  id="stat-cpu-sub">—</div>
+        <svg class="stat-graph" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+          <path class="sg-track" d="M0 16 C 15 4,28 22,42 14 S 68 2,82 12 S 96 22,100 8"/>
+          <path class="sg-line" id="stat-cpu-line" d="M0 16 C 15 4,28 22,42 14 S 68 2,82 12 S 96 22,100 8"/>
+        </svg>
+      </div>
+      <div class="stat-card" id="stat-mem">
+        <div class="stat-label"><span class="material-icons">memory</span> Memory</div>
+        <div class="stat-value" id="stat-mem-val">—</div>
+        <div class="stat-sub"  id="stat-mem-sub">—</div>
+        <svg class="stat-graph" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+          <path class="sg-track" d="M0 16 C 15 4,28 22,42 14 S 68 2,82 12 S 96 22,100 8"/>
+          <path class="sg-line" id="stat-mem-line" d="M0 16 C 15 4,28 22,42 14 S 68 2,82 12 S 96 22,100 8"/>
+        </svg>
+      </div>
+      <div class="stat-card" id="stat-disk">
+        <div class="stat-label"><span class="material-icons">storage</span> Disk</div>
+        <div class="stat-value" id="stat-disk-val">—</div>
+        <div class="stat-sub"  id="stat-disk-sub">—</div>
+        <svg class="stat-graph" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+          <path class="sg-track" d="M0 16 C 15 4,28 22,42 14 S 68 2,82 12 S 96 22,100 8"/>
+          <path class="sg-line" id="stat-disk-line" d="M0 16 C 15 4,28 22,42 14 S 68 2,82 12 S 96 22,100 8"/>
+        </svg>
+        <div class="stat-actions">
+          <button type="button" onclick="openDiskCleanup()">Free up space</button>
+          <button type="button" onclick="openDiskGrow()">Grow disk</button>
+        </div>
+      </div>
+    </div>
+
+    </div><!-- /host-utilization surface card -->
+
+    <!-- ── Service status surface card — detailed per-service status, relocated
+         out of the top readiness strip. The strip keeps the green/in-progress
+         banner up top; readiness-strip.js renders each service + live status into
+         #vyomi-services-mount below when that mount exists (this page only). ──── -->
+    <div class="surface-card" id="svc-status-card">
+      <div class="sc-head">
+        <div class="sc-title">
+          <h2><span class="material-icons">dns</span>Service status</h2>
+        </div>
+      </div>
+      <p class="sc-desc">Live status of every emulated backend service.</p>
+      <div id="vyomi-services-mount"></div>
+    </div><!-- /service-status surface card -->
+
+  </div>
+  </div><!-- /view-workspace (Dashboard) -->
+
+  <!-- ── Spaces view — Active spaces, split into its own left-nav tab ──── -->
+  <div id="view-spaces" hidden>
+  <div class="container">
+    <header class="hero">
+      <div class="hero-eyebrow">Workspaces</div>
+      <h1>Pick up where you left off.</h1>
+      <p>Resume an active space — or spin up a fresh one on AWS, GCP, or Azure.</p>
+    </header>
+
+    <!-- ── SPACES surface card — filter pills + grid ────────────────── -->
+    <div class="surface-card" id="spaces-card">
+      <div class="sc-head">
+        <div class="sc-title">
+          <h2><span class="material-icons">workspaces</span>Active spaces</h2>
+        </div>
+        <button class="btn-create-space" type="button" onclick="openCreateSpaceModal()">
+          <span class="material-icons">add</span>Create Space
+        </button>
+      </div>
+      <p class="sc-desc">Click any space to switch context and open its console. Use the pills below to filter by cloud.</p>
+      <div class="prov-filter" id="prov-filter">
+        <button class="active" type="button" data-prov="" onclick="onSpaceFilter('')">
+          All <span class="pf-count" id="pf-count-all">0</span>
+        </button>
+        <button type="button" data-prov="aws" onclick="onSpaceFilter('aws')">
+          <span class="pf-glyph"><svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 4.5 3.4 8.7 8 10 4.6-1.3 8-5.5 8-10V6l-8-4z" fill="#ff9900"/><path d="M12 6.5L8 8.5v3.4c0 2.3 1.7 4.4 4 5 2.3-.6 4-2.7 4-5V8.5l-4-2z" fill="#ec7211"/></svg></span>
+          AWS <span class="pf-count" id="pf-count-aws">0</span>
+        </button>
+        <button type="button" data-prov="gcp" onclick="onSpaceFilter('gcp')">
+          <span class="pf-glyph"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="2.4" fill="#fbbc04"/><circle cx="17" cy="12" r="2.4" fill="#34a853"/><circle cx="12" cy="17" r="2.4" fill="#ea4335"/><circle cx="7" cy="12" r="2.4" fill="#4285f4"/></svg></span>
+          GCP <span class="pf-count" id="pf-count-gcp">0</span>
+        </button>
+        <button type="button" data-prov="azure" onclick="onSpaceFilter('azure')">
+          <span class="pf-glyph"><svg viewBox="0 0 24 24"><path d="M11.5 3 4 19.5h6.2l3.2-9.5L11.5 3z" fill="#50e6ff"/><path d="M13 7.2 10.4 14h5l.4 2-4.5 2H20l-7-10.8z" fill="#0078d4"/></svg></span>
+          Azure <span class="pf-count" id="pf-count-azure">0</span>
+        </button>
+      </div>
+      <div id="spaces-grid" class="spaces-grid" data-filter="">
+        <div class="empty-spaces">Loading spaces…</div>
+      </div>
+    </div><!-- /spaces surface card -->
+
+    <!-- ── Connect external apps (Nano only — shows the relay endpoint URL) ──── -->
+    <style>
+      #connect-card .cx-hint{display:flex;align-items:center;gap:10px;color:#a1a1aa;font-size:13.5px;background:rgba(255,255,255,.03);border:1px dashed rgba(255,255,255,.16);border-radius:12px;padding:14px 16px}
+      #connect-card .cx-hint .material-icons{color:#7c8cf8}
+      #connect-card .cx-urlrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:linear-gradient(180deg,#14172e,#0d1228);border:1px solid rgba(124,58,237,.35);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+      #connect-card .cx-urllabel{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#8b8ba7}
+      #connect-card .cx-url{font-family:ui-monospace,Menlo,monospace;font-size:14px;color:#7cc4ff;flex:1;min-width:180px;word-break:break-all}
+      #connect-card .cx-copy{background:linear-gradient(135deg,#4d8cf3,#7c3aed);color:#fff;border:0;border-radius:8px;padding:7px 15px;font-size:12.5px;font-weight:600;cursor:pointer}
+      #connect-card .cx-tabs{display:inline-flex;border:1px solid rgba(255,255,255,.14);border-radius:999px;overflow:hidden;margin-bottom:10px}
+      #connect-card .cx-tab{background:transparent;border:0;padding:5px 16px;font-size:12px;font-weight:600;color:#a1a1aa;cursor:pointer}
+      #connect-card .cx-tab.active{background:rgba(255,255,255,.14);color:#fff}
+      #connect-card pre.cx-ex{background:#0b0e22;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px 16px;overflow:auto;margin:0 0 12px}
+      #connect-card pre.cx-ex code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#e4e4e7;white-space:pre}
+      #connect-card .cx-note{font-size:12px;color:#8b8ba7;margin:0;line-height:1.5}
+      #connect-card .cx-note code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:4px;color:#cdd8e6}
+    </style>
+    <div class="surface-card" id="connect-card" style="display:none">
+      <div class="sc-head" id="cx-head" role="button" tabindex="0" aria-controls="cx-collapse" aria-expanded="true" style="cursor:pointer;user-select:none">
+        <div class="sc-title"><h2><span class="material-icons">cable</span>Connect external apps</h2></div>
+        <span class="material-icons" id="cx-caret" style="color:#8b8ba7">expand_less</span>
+      </div>
+      <div id="cx-collapse">
+      <p class="sc-desc">Point any AWS SDK, CLI or tool at this in-browser simulator over the relay tunnel — no code changes, just one endpoint URL.</p>
+      <div class="cx-hint" id="cx-off">
+        <span class="material-icons">power</span>
+        <span>Start the <strong>relay tunnel</strong> (the bar at the bottom of the page → <em>Start tunnel</em>) to get your endpoint URL for external apps.</span>
+      </div>
+      <div id="cx-on" style="display:none">
+        <div class="cx-urlrow">
+          <span class="cx-urllabel">Endpoint URL</span>
+          <code class="cx-url" id="cx-url"></code>
+          <button type="button" class="cx-copy" id="cx-copy">Copy</button>
+        </div>
+        <div class="cx-tabs" role="tablist">
+          <button type="button" class="cx-tab active" data-k="cli">Utility (CLI)</button>
+          <button type="button" class="cx-tab" data-k="sdk">SDK (boto3)</button>
+          <button type="button" class="cx-tab" data-k="curl">curl</button>
+        </div>
+        <pre class="cx-ex"><code id="cx-ex"></code></pre>
+        <p class="cx-note">AWS-compatible endpoint — S3 · DynamoDB · KMS · Secrets · SQS/SNS · IAM · RDS (+ RDS Data API). Use any region with dummy credentials (<code>test</code>/<code>test</code>).</p>
+      </div>
+      </div><!-- /cx-collapse -->
+    </div>
+    <script>
+    (function () {
+      function initConnect() {
+        var card = document.getElementById('connect-card');
+        // Nano only: the relay footer (#nano-foot) is injected in the Nano bundle,
+        // not the appliance — so this card stays hidden on the appliance dashboard.
+        if (!card || !document.getElementById('nano-foot')) return;
+        card.style.display = '';
+        // Expand / collapse (click header) — remembers the choice.
+        var head = document.getElementById('cx-head'), collapse = document.getElementById('cx-collapse'), caret = document.getElementById('cx-caret');
+        function setCollapsed(c) {
+          if (collapse) collapse.style.display = c ? 'none' : '';
+          if (caret) caret.textContent = c ? 'expand_more' : 'expand_less';
+          if (head) head.setAttribute('aria-expanded', String(!c));
+          try { localStorage.setItem('vyomi.connectCollapsed', c ? '1' : '0'); } catch (_) {}
+        }
+        var startC = false; try { startC = localStorage.getItem('vyomi.connectCollapsed') === '1'; } catch (_) {}
+        setCollapsed(startC);
+        if (head) {
+          head.addEventListener('click', function () { setCollapsed(collapse && collapse.style.display !== 'none'); });
+          head.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); head.click(); } });
+        }
+        var offEl = document.getElementById('cx-off'), onEl = document.getElementById('cx-on');
+        var urlEl = document.getElementById('cx-url'), exEl = document.getElementById('cx-ex'), copyBtn = document.getElementById('cx-copy');
+        var _url = null, _k = 'cli';
+        function ex(u) { return {
+          cli: 'aws --endpoint-url ' + u + ' s3 ls\naws --endpoint-url ' + u + ' dynamodb list-tables',
+          sdk: 'import boto3\ns3 = boto3.client(\n  "s3", endpoint_url="' + u + '",\n  aws_access_key_id="test", aws_secret_access_key="test",\n  region_name="us-east-1")\nprint(s3.list_buckets())',
+          curl: 'curl ' + u + '/            # S3 ListBuckets'
+        }; }
+        function paint() { if (exEl && _url) exEl.textContent = ex(_url)[_k]; }
+        function setState(conn, url) {
+          var live = conn && url;
+          offEl.style.display = live ? 'none' : '';
+          onEl.style.display  = live ? '' : 'none';
+          if (live) { _url = url; urlEl.textContent = url; paint(); }
+        }
+        card.querySelectorAll('.cx-tab').forEach(function (t) {
+          t.addEventListener('click', function () {
+            card.querySelectorAll('.cx-tab').forEach(function (x) { x.classList.toggle('active', x === t); });
+            _k = t.dataset.k; paint();
+          });
+        });
+        if (copyBtn) copyBtn.addEventListener('click', function () {
+          if (!_url || !navigator.clipboard) return;
+          navigator.clipboard.writeText(_url).then(function () {
+            copyBtn.textContent = 'Copied'; setTimeout(function () { copyBtn.textContent = 'Copy'; }, 1200);
+          }).catch(function () {});
+        });
+        try {
+          var chn = new BroadcastChannel('nano-relay');
+          chn.onmessage = function (ev) { var m = ev.data || {}; if (m.type === 'status') setState(m.state === 'connected', m.external); };
+        } catch (_) {}
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initConnect); else initConnect();
+    })();
+    </script>
+
+  </div>
+  </div><!-- /view-spaces -->
+
+    <!-- ── Overlays (outside the views, so they work from any tab) ────── -->
+    <!-- ── Cloud-locked modal (Pro tier non-primary-cloud click) ────── -->
+    <div class="cl-modal" id="cl-modal" onclick="onClModalBackdrop(event)">
+      <div class="cl-box" onclick="event.stopPropagation()">
+        <div class="cl-glyph">🔒</div>
+        <h3 id="cl-modal-title">Not enabled for the current subscription</h3>
+        <p class="cl-sub" id="cl-modal-sub">
+          This cloud isn't included in your active plan.
+        </p>
+        <div class="cl-context" id="cl-modal-ctx"></div>
+        <div class="cl-actions">
+          <button class="cl-cancel" type="button" onclick="closeClModal()">Stay here</button>
+          <a class="cl-upgrade" href="/pricing">Upgrade plan &rarr;</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Create Space modal ──────────────────────────────────────── -->
+    <div class="modal-backdrop" id="create-space-modal" onclick="onModalBackdropClick(event)">
+      <div class="modal" role="dialog" aria-labelledby="csm-title">
+        <h3 id="csm-title">Create a new space</h3>
+        <p class="modal-sub">A space is a single-cloud project with its own services, IAM, and state.</p>
+
+        <div class="field">
+          <label for="csm-name">Space name</label>
+          <input id="csm-name" type="text" placeholder="e.g. dev-orders, prod-analytics" autocomplete="off">
+        </div>
+
+        <div class="field">
+          <label>Cloud</label>
+          <div class="provider-picker">
+            <label>
+              <input type="radio" name="csm-provider" value="aws" checked>
+              <svg class="provider-glyph" viewBox="0 0 24 24">
+                <path d="M12 2L4 6v6c0 4.5 3.4 8.7 8 10 4.6-1.3 8-5.5 8-10V6l-8-4z" fill="#ff9900"/>
+                <path d="M12 6.5L8 8.5v3.4c0 2.3 1.7 4.4 4 5 2.3-.6 4-2.7 4-5V8.5l-4-2z" fill="#ec7211"/>
+              </svg>
+              <span>AWS</span>
+            </label>
+            <label>
+              <input type="radio" name="csm-provider" value="gcp">
+              <svg class="provider-glyph" viewBox="0 0 24 24">
+                <circle cx="12" cy="7" r="2.4" fill="#fbbc04"/>
+                <circle cx="17" cy="12" r="2.4" fill="#34a853"/>
+                <circle cx="12" cy="17" r="2.4" fill="#ea4335"/>
+                <circle cx="7"  cy="12" r="2.4" fill="#4285f4"/>
+              </svg>
+              <span>GCP</span>
+            </label>
+            <label>
+              <input type="radio" name="csm-provider" value="azure">
+              <svg class="provider-glyph" viewBox="0 0 24 24">
+                <path d="M11.5 3 4 19.5h6.2l3.2-9.5L11.5 3z" fill="#50e6ff"/>
+                <path d="M13 7.2 10.4 14h5l.4 2-4.5 2H20l-7-10.8z" fill="#0078d4"/>
+              </svg>
+              <span>Azure</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="csm-region">Region (optional)</label>
+          <input id="csm-region" type="text" placeholder="defaults: us-east-1 / us-central1 / eastus" autocomplete="off">
+        </div>
+
+        <div class="modal-error" id="csm-error"></div>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" type="button" onclick="closeCreateSpaceModal()">Cancel</button>
+          <button class="btn-primary" type="button" id="csm-submit" onclick="submitCreateSpace()">Create &amp; open console</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Cloud-provider cards moved to the launch page (/) in v2.0.4
+         as "Local-fidelity emulation services". `/clouds` now focuses on
+         workspace management only; the cards block below is retained
+         hidden so the existing CSS still validates and any in-flight
+         bookmarks/anchors keep working. ───────────────────────────── -->
+    <section class="features-strip" style="display:none">
+      <div class="section-head">
+        <h2>Start a new workspace</h2>
+        <p class="sub">Use the + Create Space button above to spin up a fresh space on any cloud.</p>
+      </div>
+
+
+    <!-- ════════ CLOUD-CARDS BLOCK ════════ -->
+    <div class="clouds-row">
+      <div class="cloud-card aws">
+        <div class="cloud-icon aws"><svg viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L4 6v6c0 4.5 3.4 8.7 8 10 4.6-1.3 8-5.5 8-10V6l-8-4z" opacity="0.95"/><path d="M12 6.5L8 8.5v3.4c0 2.3 1.7 4.4 4 5 2.3-.6 4-2.7 4-5V8.5l-4-2z" fill="#ec7211"/></svg></div>
+        <h3>AWS · 12 services</h3>
+        <div class="svc-grid"><div class="svc"><span class="svc-ico svc-ico-aws svc-ec2"><svg viewBox="0 0 20 20" fill="#fff"><path d="M3 4h14v3H3V4zm0 5h14v3H3V9zm0 5h14v2H3v-2zM5 5.5v.5h2v-.5H5zm0 5v.5h2v-.5H5zm10-5h-1V6h1v-.5z"/></svg></span><span class="name">EC2</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-lambda"><svg viewBox="0 0 20 20" fill="#fff"><path d="M4 3h3.5L13 17H9.5L8 13.4 5 17H2l5-6.2L4 3zm5 5l2 4.8L13.5 7H17l-4 10h-3l-1-2.5z" opacity="0.85"/><path d="M5 4h2.2L12 16H9.8L4.5 4H5z"/></svg></span><span class="name">Lambda</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-s3"><svg viewBox="0 0 20 20" fill="#fff"><path d="M4 4l6-2 6 2v2c0 4-2.5 8-6 10-3.5-2-6-6-6-10V4z" opacity="0.95"/><path d="M10 5L7 6.5v3.5c0 2.3 1.3 4.5 3 5.8 1.7-1.3 3-3.5 3-5.8V6.5L10 5z" fill="#ec7211"/></svg></span><span class="name">S3</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-rds"><svg viewBox="0 0 20 20" fill="#fff"><ellipse cx="10" cy="5" rx="6" ry="2"/><path d="M4 6v8c0 1.1 2.7 2 6 2s6-.9 6-2V6c0 1.1-2.7 2-6 2S4 7.1 4 6zm0 4v4c0 1.1 2.7 2 6 2s6-.9 6-2v-4c0 1.1-2.7 2-6 2s-6-.9-6-2z"/></svg></span><span class="name">RDS</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-dynamodb"><svg viewBox="0 0 20 20" fill="#fff"><path d="M3 5h6v3H3V5zm8 0h6v3h-6V5zM3 9h6v3H3V9zm8 0h6v3h-6V9zM3 13h6v3H3v-3zm8 0h6v3h-6v-3z"/></svg></span><span class="name">DynamoDB</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-sqs"><svg viewBox="0 0 20 20" fill="#fff"><path d="M3 4h14v3H3V4zm0 5h14v3H3V9zm0 5h14v2H3v-2zM15 5.5L17 5.7v.6L15 6.5v-1zm0 5L17 10.7v.6L15 11.5v-1z" opacity="0.85"/><circle cx="6" cy="5.5" r="1"/><circle cx="6" cy="10.5" r="1"/></svg></span><span class="name">SQS</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-eventbridge"><svg viewBox="0 0 20 20" fill="#fff" stroke="#fff" stroke-width="1.2"><circle cx="10" cy="4" r="1.8"/><circle cx="4" cy="14" r="1.8"/><circle cx="10" cy="14" r="1.8"/><circle cx="16" cy="14" r="1.8"/><path d="M10 6v6m0 0l-6 2m6-2h6" fill="none"/></svg></span><span class="name">EventBridge</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-iam"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="10" cy="6" r="3"/><path d="M4 17v-1.5c0-2.5 2.7-4.5 6-4.5s6 2 6 4.5V17H4z"/></svg></span><span class="name">IAM</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-vpc"><svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.4"><path d="M3 6c1-2 4-3 7-3s6 1 7 3M3 14c1 2 4 3 7 3s6-1 7-3" stroke-linecap="round"/><circle cx="6" cy="10" r="1.8" fill="#fff"/><circle cx="14" cy="10" r="1.8" fill="#fff"/><circle cx="10" cy="6" r="1.5" fill="#fff"/><circle cx="10" cy="14" r="1.5" fill="#fff"/><path d="M6 10h8M10 6v8" stroke-width="1"/></svg></span><span class="name">VPC</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-secretsmanager"><svg viewBox="0 0 20 20" fill="#fff"><path d="M5 9V6a5 5 0 0110 0v3h1v8H4V9h1zm2 0h6V6a3 3 0 00-6 0v3zm3 3.5a1 1 0 100 2 1 1 0 000-2z"/></svg></span><span class="name">Secrets Mgr</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-kms"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="14" cy="7" r="4"/><path d="M11.5 9.5L4 17v1h2v-2h2v-2h2l1.5-1.5-0.5-0.5-1 1z"/><circle cx="14" cy="6" r="1.3" fill="#ec7211"/></svg></span><span class="name">KMS</span></div><div class="svc"><span class="svc-ico svc-ico-aws svc-cloudwatch"><svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M5 12l3-3 3 3 4-4" stroke-linejoin="round" stroke-linecap="round" fill="none"/></svg></span><span class="name">CloudWatch</span></div></div>
+        <div class="meta">boto3 · aws-sdk-java · aws-sdk-go · aws CLI — works unchanged</div>
+      </div>
+      <div class="cloud-card gcp">
+        <div class="cloud-icon gcp"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="7" r="2.4" fill="#fbbc04"/><circle cx="17" cy="12" r="2.4" fill="#34a853"/><circle cx="12" cy="17" r="2.4" fill="#ea4335"/><circle cx="7" cy="12" r="2.4" fill="#4285f4"/></svg></div>
+        <h3>GCP · 12 services</h3>
+        <div class="svc-grid"><div class="svc"><span class="svc-ico svc-ico-gcp svc-compute"><svg viewBox="0 0 20 20" fill="#fff"><rect x="3" y="4" width="14" height="12" rx="1"/><rect x="5" y="6" width="10" height="2" rx="0.3" fill="#1a73e8"/><rect x="5" y="9" width="10" height="2" rx="0.3" fill="#1a73e8"/><rect x="5" y="12" width="10" height="2" rx="0.3" fill="#1a73e8"/><circle cx="6.5" cy="7" r="0.5" fill="#34a853"/><circle cx="6.5" cy="10" r="0.5" fill="#34a853"/><circle cx="6.5" cy="13" r="0.5" fill="#34a853"/></svg></span><span class="name">Compute</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-functions"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="2" width="16" height="16" rx="4" fill="#fff"/><path d="M7 14c2.5 0 3-2 3.5-4 .4-2 1-3.5 3-3.5h1l-1 2h-.5c-.7 0-1 .8-1.3 2.5-.5 2.5-1.4 4.5-4.7 4.5H7v-1.5z" fill="#4285f4"/></svg></span><span class="name">Functions</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-gcs"><svg viewBox="0 0 20 20" fill="#fff"><path d="M3 6h14l-2 10H5L3 6z"/><path d="M5 6l1-3h8l1 3H5z" fill="#1a73e8"/></svg></span><span class="name">GCS</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-cloudsql"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="2" width="16" height="16" rx="3" fill="#1a73e8"/><ellipse cx="10" cy="6" rx="5" ry="1.5" fill="#fff"/><path d="M5 6v8c0 .8 2.2 1.5 5 1.5s5-.7 5-1.5V6c0 .8-2.2 1.5-5 1.5S5 6.8 5 6z" fill="#fff"/><text x="10" y="13" font-size="3.5" font-family="monospace" font-weight="bold" text-anchor="middle" fill="#1a73e8">SQL</text></svg></span><span class="name">Cloud SQL</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-firestore"><svg viewBox="0 0 20 20" fill="#fff"><path d="M4 6l6-3 6 3-6 3-6-3z"/><path d="M4 10l6 3 6-3" stroke="#fff" stroke-width="1.5" fill="none"/><path d="M4 14l6 3 6-3" stroke="#fff" stroke-width="1.5" fill="none" opacity="0.6"/><circle cx="10" cy="6" r="1" fill="#fbbc04"/></svg></span><span class="name">Firestore</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-pubsub"><svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.5"><path d="M4 8c0-3 3-5 6-5s6 2 6 5-3 5-6 5c-1.5 0-3-.5-4-1.3" fill="none" stroke-linecap="round"/><path d="M5 10l-2 2 2 2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="7" r="0.8" fill="#fff"/><circle cx="13" cy="9" r="0.8" fill="#fff"/></svg></span><span class="name">Pub/Sub</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-eventarc"><svg viewBox="0 0 20 20" fill="#fff" stroke="#fff" stroke-width="1.2"><circle cx="4" cy="10" r="2"/><circle cx="16" cy="5" r="2"/><circle cx="16" cy="15" r="2"/><path d="M5.5 9l9-3.5M5.5 11l9 3.5" fill="none"/></svg></span><span class="name">Eventarc</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-iam"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="10" cy="6" r="3"/><path d="M4 17v-1.5c0-2.5 2.7-4.5 6-4.5s6 2 6 4.5V17H4z"/><circle cx="10" cy="6" r="1" fill="#fbbc04"/></svg></span><span class="name">IAM</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-vpc"><svg viewBox="0 0 20 20" fill="#fff" stroke="#fff" stroke-width="1.3"><circle cx="10" cy="10" r="6" fill="none"/><circle cx="10" cy="4" r="1.5"/><circle cx="10" cy="16" r="1.5"/><circle cx="4" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/><path d="M10 5v10M5 10h10" stroke-width="1"/></svg></span><span class="name">VPC</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-secretmanager"><svg viewBox="0 0 20 20" fill="#fff"><path d="M10 2L4 5v4c0 4 2.5 7.5 6 9 3.5-1.5 6-5 6-9V5l-6-3z"/><circle cx="10" cy="8" r="1.5" fill="#34a853"/><path d="M10 9.5v3" stroke="#34a853" stroke-width="1.2"/></svg></span><span class="name">Secret Mgr</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-kms"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="14" cy="7" r="4"/><path d="M11.5 9.5L4 17v1h2v-2h2v-2h2l1.5-1.5-0.5-0.5-1 1z"/><circle cx="14" cy="6" r="1.3" fill="#fbbc04"/></svg></span><span class="name">KMS</span></div><div class="svc"><span class="svc-ico svc-ico-gcp svc-logging"><svg viewBox="0 0 20 20" fill="#fff"><rect x="3" y="3" width="14" height="14" rx="1.5"/><path d="M5 7h10M5 10h10M5 13h8" stroke="#1a73e8" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="name">Logging</span></div></div>
+        <div class="meta">google-cloud-* (Python/Java/Go) + gcloud CLI</div>
+      </div>
+      <div class="cloud-card azure">
+        <div class="cloud-icon azure"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11.5 3 4 19.5h6.2l3.2-9.5L11.5 3z" fill="#50e6ff"/><path d="M13 7.2 10.4 14h5l.4 2-4.5 2H20l-7-10.8z" fill="#fff"/></svg></div>
+        <h3>Azure · 11 services</h3>
+        <div class="svc-grid"><div class="svc"><span class="svc-ico svc-ico-azure svc-vm"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="3" width="16" height="11" rx="1.5"/><path d="M2 14h16v1H2z" opacity="0.8"/><path d="M7 17h6v1H7z" opacity="0.6"/><path d="M9.5 14l-1 3h3l-1-3" opacity="0.7"/><rect x="4" y="5" width="12" height="7" rx="0.5" fill="#0078d4"/></svg></span><span class="name">VM</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-functionapp"><svg viewBox="0 0 20 20" fill="#fff"><path d="M10 2L3 6v8l7 4 7-4V6l-7-4z" opacity="0.9"/><path d="M7 12c1.5 0 2-1 2.3-2.5.3-1.5.7-2.5 2-2.5h.5L11 8.5h-.3c-.4 0-.5.6-.7 1.6-.3 1.5-.9 2.9-3 2.9z" fill="#0078d4"/></svg></span><span class="name">Function App</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-blob"><svg viewBox="0 0 20 20" fill="#fff"><rect x="3" y="5" width="14" height="11" rx="1"/><circle cx="7" cy="9" r="1.4" fill="#0078d4"/><circle cx="11" cy="9" r="1.4" fill="#0078d4"/><circle cx="15" cy="9" r="1.4" fill="#0078d4"/><path d="M3 12h14" stroke="#0078d4" stroke-width="1" opacity="0.5"/></svg></span><span class="name">Blob</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-sql"><svg viewBox="0 0 20 20" fill="#fff"><ellipse cx="10" cy="5" rx="6" ry="2"/><path d="M4 6v8c0 1.1 2.7 2 6 2s6-.9 6-2V6c0 1.1-2.7 2-6 2S4 7.1 4 6zm0 4v4c0 1.1 2.7 2 6 2s6-.9 6-2v-4c0 1.1-2.7 2-6 2s-6-.9-6-2z"/><text x="10" y="13" font-size="3" font-family="monospace" font-weight="bold" text-anchor="middle" fill="#0078d4">SQL</text></svg></span><span class="name">SQL</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-cosmos"><svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.5"><circle cx="10" cy="10" r="2.5" fill="#fff"/><ellipse cx="10" cy="10" rx="8" ry="3.5"/><ellipse cx="10" cy="10" rx="8" ry="3.5" transform="rotate(60 10 10)"/><ellipse cx="10" cy="10" rx="8" ry="3.5" transform="rotate(120 10 10)"/></svg></span><span class="name">Cosmos DB</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-servicebus"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="6" width="16" height="8" rx="1"/><rect x="4" y="8" width="3" height="4" rx="0.3" fill="#0078d4"/><rect x="8.5" y="8" width="3" height="4" rx="0.3" fill="#0078d4"/><rect x="13" y="8" width="3" height="4" rx="0.3" fill="#0078d4"/><circle cx="5" cy="16" r="0.8"/><circle cx="15" cy="16" r="0.8"/></svg></span><span class="name">Service Bus</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-eventgrid"><svg viewBox="0 0 20 20" fill="#fff"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="12" y="2" width="6" height="6" rx="1"/><rect x="2" y="12" width="6" height="6" rx="1"/><rect x="12" y="12" width="6" height="6" rx="1"/><path d="M8 5h4M5 8v4M15 8v4M8 15h4" stroke="#fff" stroke-width="1" opacity="0.7"/></svg></span><span class="name">Event Grid</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-keyvault"><svg viewBox="0 0 20 20" fill="#fff"><rect x="3" y="6" width="14" height="11" rx="1.5"/><circle cx="10" cy="11" r="2.5" fill="#0078d4"/><circle cx="10" cy="11" r="1" fill="#fff"/><path d="M6 4h8l-1 2H7l-1-2z" opacity="0.85"/></svg></span><span class="name">Key Vault</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-apim"><svg viewBox="0 0 20 20" fill="#fff"><circle cx="10" cy="10" r="7" opacity="0.95"/><circle cx="10" cy="10" r="3" fill="#0078d4"/><path d="M10 3v2M10 15v2M3 10h2M15 10h2" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="name">APIM</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-vnet"><svg viewBox="0 0 20 20" fill="#fff" stroke="#fff" stroke-width="1.3"><path d="M4 4h12v12H4V4z" fill="none"/><circle cx="4" cy="4" r="1.5"/><circle cx="16" cy="4" r="1.5"/><circle cx="4" cy="16" r="1.5"/><circle cx="16" cy="16" r="1.5"/><circle cx="10" cy="10" r="1.5"/><path d="M4 4l6 6M16 4l-6 6M4 16l6-6M16 16l-6-6" stroke-width="1"/></svg></span><span class="name">VNet</span></div><div class="svc"><span class="svc-ico svc-ico-azure svc-storage_mgmt"><svg viewBox="0 0 20 20" fill="#fff"><path d="M2 6c0-1 1-2 2-2h4l2 2h6c1 0 2 1 2 2v8c0 1-1 2-2 2H4c-1 0-2-1-2-2V6z" opacity="0.95"/><rect x="5" y="9" width="10" height="1.5" fill="#0078d4"/><rect x="5" y="12" width="10" height="1.5" fill="#0078d4"/></svg></span><span class="name">Storage Mgmt</span></div></div>
+        <div class="meta">azure-sdk-for-* (Python/Java/Go/.NET) + az CLI</div>
+      </div>
+    </div>
+
+    </section>
+
+  <!-- Knowledge Center — the portal KC tiles, rendered natively. Each tile opens
+       its portal page in a new tab. "Open full portal" pops the whole KC. -->
+  <div id="view-kc" hidden>
+    <div class="container">
+    <header class="hero">
+      <div class="hero-eyebrow">Knowledge Center</div>
+      <h1>Docs, guides &amp; references.</h1>
+      <p>Interactive Swagger consoles, SDK &amp; CLI usage, coverage tables, and the architecture behind the simulator — hosted on the Vyomi portal.</p>
+      <a class="kc-open" href="https://vyomi.cloud/docs" target="_blank" rel="noopener" style="margin-top:8px;">Open full portal <span class="material-icons" style="font-size:16px;">open_in_new</span></a>
+    </header>
+    <div class="kc-tiles">
+      <a class="kct kct-pack" href="https://vyomi.cloud/docs/conformance-pack" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#16a34a">verified</span> Conformance Pack</h3>
+        <p>Per-cloud API · SDK · Utility docs with honest, probe-backed status — 12/14 native-SDK probes green.</p>
+        <span class="kct-foot"><span class="kct-open">Open pack <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <div class="kc-sec-label">API Reference</div>
+      <a class="kct" href="https://vyomi.cloud/docs/aws" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#ff9900">cloud</span> AWS API</h3>
+        <p>S3, EC2, IAM, SQS, RDS, DynamoDB, Lambda, API Gateway, VPC — every endpoint Vyomi simulates, documented inline.</p>
+        <span class="kct-sub">⌨ CLI · boto3 · Java · Go · Terraform</span>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <a class="kct" href="https://vyomi.cloud/docs/gcp" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#4d8cf3">cloud_queue</span> GCP API</h3>
+        <p>Compute, Storage, Cloud SQL, Pub/Sub, Firestore, Functions, API Gateway, VPC, IAM — every endpoint Vyomi simulates.</p>
+        <span class="kct-sub">⌨ gcloud · gsutil · Java · Go · Terraform</span>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <a class="kct" href="https://vyomi.cloud/docs/azure" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#38b6ff">cloud_circle</span> Azure API</h3>
+        <p>Virtual Machines, Blob Storage, SQL, Service Bus, Cosmos DB, Functions, APIM, VNet, Entra / RBAC.</p>
+        <span class="kct-sub">⌨ az CLI · Java · Go</span>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <div class="kc-sec-label">Platform</div>
+      <a class="kct" href="https://vyomi.cloud/docs/coverage" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#2563eb">grid_view</span> Service matrix</h3>
+        <p>35 services across 3 clouds with real-backend / simulated tags and an SDK compatibility table.</p>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <a class="kct" href="https://vyomi.cloud/docs/architecture" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#7c3aed">account_tree</span> Real backends, not mocks</h3>
+        <p>Postgres · MinIO · Vault · NATS · DynamoDB-Local · Cedar — what powers each cloud surface.</p>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <a class="kct" href="https://vyomi.cloud/docs/conformance" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#16a34a">verified</span> SDK pass rates</h3>
+        <p>88% latest. Java · Go · Python tests against unmodified SDKs. Honest gaps documented.</p>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <div class="kc-sec-label">Knowledge</div>
+      <a class="kct" href="https://vyomi.cloud/docs/knowledge/amqp-vs-https" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#38b6ff">cloud_circle</span> Azure messaging, natively</h3>
+        <p>Service Bus speaks AMQP — unserveable locally. How the unmodified azure-storage-queue SDK gives you real queue round-trips over HTTP on Azurite, and…</p>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <a class="kct" href="https://vyomi.cloud/docs/knowledge/grpc-vs-https" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#4d8cf3">cloud_queue</span> GCP KMS & Secrets, natively</h3>
+        <p>Google's SDKs default to gRPC with no emulator. How their own newHttpJsonBuilder() REST transport keeps the unmodified client working against the…</p>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <div class="kc-sec-label">Comparisons</div>
+      <a class="kct" href="https://vyomi.cloud/compare/localstack" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#0891b2">compare_arrows</span> Multi-cloud vs AWS-only</h3>
+        <p>Honest side-by-side: 3 clouds in 1 binary, real OSS backends (Postgres · MinIO · Vault · NATS), INR pricing — and where LocalStack is still the…</p>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+    </div>
+    </div>
+  </div>
+  </div><!-- /app-main -->
+  </div><!-- /app-body -->
+
+  <script>
+    // ── v2.3.0 left nav: view switch (Workspace / Knowledge Center) + collapse ──
+    var APP_VIEWS = { workspace: 'view-workspace', spaces: 'view-spaces', kc: 'view-kc' };
+    function showAppView(view) {
+      if (!APP_VIEWS[view]) view = 'workspace';
+      Object.keys(APP_VIEWS).forEach(function (k) {
+        var el = document.getElementById(APP_VIEWS[k]);
+        if (el) el.hidden = (k !== view);
+      });
+      var items = document.querySelectorAll('#app-sidebar .side-item[data-view]');
+      for (var i = 0; i < items.length; i++)
+        items[i].classList.toggle('active', items[i].getAttribute('data-view') === view);
+      try { localStorage.setItem('vyomi.appview', view); } catch (_) {}
+    }
+    function toggleSidebar() {
+      var c = document.body.classList.toggle('side-collapsed');
+      try { localStorage.setItem('vyomi.sidecollapsed', c ? '1' : '0'); } catch (_) {}
+    }
+    (function () {
+      try { if (localStorage.getItem('vyomi.sidecollapsed') === '1') document.body.classList.add('side-collapsed'); } catch (_) {}
+      // A URL hash (e.g. clouds.html#spaces from a console "back to spaces" link) wins over the last-used view.
+      var hv = (location.hash || '').replace('#', '');
+      if (APP_VIEWS[hv]) { showAppView(hv); return; }
+      try { var v = localStorage.getItem('vyomi.appview'); if (v && v !== 'workspace') showAppView(v); } catch (_) {}
+    })();
+
+    // ── Inject "Open <Cloud> Console →" buttons on each cloud card ───
+    const PROVIDER_PATHS = { aws: 'aws-console.html', gcp: 'gcp-console.html', azure: 'azure-console.html' };
+    document.querySelectorAll('.cloud-card').forEach(card => {
+      for (const key of Object.keys(PROVIDER_PATHS)) {
+        if (card.classList.contains(key)) {
+          const meta = card.querySelector('.meta');
+          if (meta) {
+            const a = document.createElement('a');
+            a.href = PROVIDER_PATHS[key];
+            a.className = 'open-btn';
+            a.textContent = `Open ${ key.toUpperCase() } Console →`;
+            meta.appendChild(a);
+          }
+        }
+      }
+    });
+
+    // ── Provider filter pills — toggle which spaces show ───────────
+    function onSpaceFilter(prov) {
+      const grid = document.getElementById('spaces-grid');
+      if (!grid) return;
+      grid.setAttribute('data-filter', prov || '');
+      document.querySelectorAll('#prov-filter button').forEach(btn => {
+        const p = btn.getAttribute('data-prov') || '';
+        btn.classList.remove('active','aws','gcp','azure');
+        if (p === prov) {
+          btn.classList.add('active');
+          if (prov) btn.classList.add(prov);
+        }
+      });
+      // If filter excludes everything, surface a friendly empty-state
+      const visible = Array.from(grid.querySelectorAll('.space-card'))
+                          .filter(c => c.offsetParent !== null);
+      const existing = grid.querySelector('.filter-empty');
+      if (existing) existing.remove();
+      if (prov && visible.length === 0 && grid.querySelectorAll('.space-card').length > 0) {
+        const div = document.createElement('div');
+        div.className = 'filter-empty';
+        div.textContent = `No ${prov.toUpperCase()} spaces yet — click + Create Space to make one.`;
+        grid.appendChild(div);
+      }
+    }
+
+    // ── Fetch + render existing spaces ───────────────────────────────
+    async function loadSpaces() {
+      const grid = document.getElementById('spaces-grid');
+      try {
+        const r = await fetch('/api/spaces');
+        const d = await r.json();
+        const spaces = d.spaces || [];
+        const active = d.active_space_id;
+        // Update pill counts (per provider + total)
+        const counts = { aws: 0, gcp: 0, azure: 0, total: spaces.length };
+        spaces.forEach(s => {
+          const p = (s.provider || s.provider_id || '').toLowerCase();
+          if (counts[p] !== undefined) counts[p]++;
+        });
+        const setCount = (id, n) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = String(n);
+        };
+        setCount('pf-count-all',  counts.total);
+        setCount('pf-count-aws',  counts.aws);
+        setCount('pf-count-gcp',  counts.gcp);
+        setCount('pf-count-azure',counts.azure);
+        if (spaces.length === 0) {
+          grid.innerHTML = `<div class="empty-spaces">No spaces yet — pick a cloud below to create your first one.</div>`;
+          // Empty state spans full width so it doesn't render as a tiny card
+          grid.style.gridTemplateColumns = '1fr';
+          return;
+        }
+        grid.innerHTML = spaces.map(s => {
+          const provider = (s.provider || 'aws').toLowerCase();
+          const isActive = s.space_id === active;
+          const region = s.region || s.active_region || '';
+          // Total resource count across known fields
+          const counts = [
+            s.ec2_count, s.lambda_count, s.dynamodb_count, s.sqs_count, s.rds_count,
+            s.gcp_count, s.gcp_functions_count, s.azure_count, s.azure_functionapp_count,
+          ].filter(n => typeof n === 'number');
+          const totalRes = counts.reduce((a, b) => a + b, 0);
+          const consolePath = PROVIDER_PATHS[provider] || '/ui';
+          return `
+            <a class="space-card ${ isActive ? 'active' : '' }"
+               href="javascript:void(0)"
+               data-space-id="${ s.space_id }" data-provider="${ provider }"
+               onclick="switchAndOpen('${ s.space_id }', '${ provider }')">
+              <div class="space-row">
+                <span class="space-provider ${ provider }">${ provider }</span>
+                <span class="space-name">${ s.name || s.space_id }</span>
+                ${ isActive ? '<span class="space-active-pill">Active</span>' : '' }
+              </div>
+              <div class="space-meta">
+                ${ region }<span class="dot">·</span>${ totalRes } resource${ totalRes === 1 ? '' : 's' }
+              </div>
+            </a>
+          `;
+        }).join('');
+      } catch (e) {
+        grid.innerHTML = `<div class="empty-spaces">Couldn't load spaces: ${ e.message }</div>`;
+        grid.style.gridTemplateColumns = '1fr';
+      }
+    }
+
+    // Tier policy cache — fetched once per page load. Used to gate
+    // space clicks BEFORE the server-side /console/<provider> redirect
+    // fires, so the user gets a clean modal instead of being whisked
+    // to a different cloud's console with ?denied=… in the URL.
+    let _tierPolicy = null;
+    async function ensureTierPolicy() {
+      if (_tierPolicy) return _tierPolicy;
+      try {
+        const r = await fetch('/api/runtime/tier');
+        if (r.ok) _tierPolicy = await r.json();
+      } catch (_) { /* fall through — null means we don't gate */ }
+      return _tierPolicy;
+    }
+
+    function _canAccessProvider(provider, policy) {
+      if (!policy) return true;  // unknown policy → fail open
+      const ap = policy.active_policy || policy.policy || policy;
+      const provs = ap.providers;
+      if (provs === 'primary_cloud_only') {
+        const primary = (policy.primary_cloud || ap.primary_cloud || '').toLowerCase();
+        if (!primary) return false;
+        return provider === primary;
+      }
+      if (Array.isArray(provs)) return provs.includes(provider);
+      return true;  // unrecognized shape → fail open
+    }
+
+    function openClModal(provider, policy) {
+      const tier   = (policy && policy.active_tier) || 'free';
+      const ap     = (policy && policy.active_policy) || {};
+      const primary= (policy && policy.primary_cloud) || ap.primary_cloud || '—';
+      const label  = { aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
+      document.getElementById('cl-modal-sub').textContent =
+        `Your ${tier.charAt(0).toUpperCase()+tier.slice(1)} plan doesn't include ${label[provider]||provider}.`;
+      let ctx = `<div>Active plan: <strong>${tier.charAt(0).toUpperCase()+tier.slice(1)}</strong></div>`;
+      if (ap.providers === 'primary_cloud_only' && primary) {
+        ctx += `<div style="margin-top:4px">Primary cloud: <strong>${label[primary]||primary}</strong></div>`;
+      }
+      ctx += `<div style="margin-top:8px">Upgrade to <strong>Max</strong> for all 3 clouds simultaneously.</div>`;
+      document.getElementById('cl-modal-ctx').innerHTML = ctx;
+      document.getElementById('cl-modal').classList.add('open');
+    }
+    function closeClModal() {
+      document.getElementById('cl-modal').classList.remove('open');
+    }
+    function onClModalBackdrop(ev) {
+      if (ev.target.id === 'cl-modal') closeClModal();
+    }
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') closeClModal();
+    });
+
+    async function switchAndOpen(spaceId, provider) {
+      // Pre-check the tier policy: if the user's subscription doesn't
+      // include this cloud, surface a friendly modal instead of letting
+      // the server's 302 send them to a different /console/<x>?denied=…
+      // URL.
+      const policy = await ensureTierPolicy();
+      if (!_canAccessProvider(provider, policy)) {
+        openClModal(provider, policy);
+        return;
+      }
+      try {
+        await fetch(`/api/spaces/${ spaceId }/switch`, { method: 'POST' });
+      } catch (e) { /* swallow — opening console works without explicit switch */ }
+      window.location.href = PROVIDER_PATHS[provider] || '/ui';
+    }
+
+    // ── Create Space modal ──────────────────────────────────────────
+    function openCreateSpaceModal() {
+      const el = document.getElementById('create-space-modal');
+      if (!el) return;
+      // Reset state
+      document.getElementById('csm-name').value = '';
+      document.getElementById('csm-region').value = '';
+      document.getElementById('csm-error').classList.remove('show');
+      document.getElementById('csm-submit').disabled = false;
+      document.getElementById('csm-submit').textContent = 'Create & open console';
+      el.classList.add('open');
+      setTimeout(() => document.getElementById('csm-name').focus(), 50);
+    }
+    function closeCreateSpaceModal() {
+      document.getElementById('create-space-modal').classList.remove('open');
+    }
+    function onModalBackdropClick(ev) {
+      // Close only when clicking the dim backdrop, not the modal itself.
+      if (ev.target.id === 'create-space-modal') closeCreateSpaceModal();
+    }
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') closeCreateSpaceModal();
+    });
+
+    async function submitCreateSpace() {
+      const name = document.getElementById('csm-name').value.trim();
+      const provider = document.querySelector('input[name="csm-provider"]:checked')?.value || 'aws';
+      const region = document.getElementById('csm-region').value.trim();
+      const errEl = document.getElementById('csm-error');
+      const btn = document.getElementById('csm-submit');
+      errEl.classList.remove('show');
+
+      if (!name) {
+        errEl.textContent = 'Space name is required.';
+        errEl.classList.add('show');
+        return;
+      }
+      // Lowercase a-z 0-9 - only — keeps S3 / GCS bucket names happy when
+      // services derive resource names from the space.
+      if (!/^[a-z][a-z0-9-]{1,62}$/.test(name)) {
+        errEl.textContent = 'Use 2–63 chars, lowercase letters/digits/dashes, must start with a letter.';
+        errEl.classList.add('show');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Creating…';
+      try {
+        const payload = { provider: provider, name: name };
+        if (region) payload.region = region;
+        const r = await fetch('/api/spaces', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!r.ok) {
+          let detail = await r.text();
+          try { detail = JSON.parse(detail); detail = detail.detail?.reason || detail.detail || detail.message || JSON.stringify(detail); } catch (_) {}
+          throw new Error(detail || `HTTP ${r.status}`);
+        }
+        const d = await r.json();
+        const newId = d?.space?.space_id;
+        if (newId) {
+          // Switch active context to the new space, then jump to console.
+          try { await fetch(`/api/spaces/${newId}/switch`, { method: 'POST' }); } catch (_) {}
+          window.location.href = PROVIDER_PATHS[provider] || '/ui';
+          return;
+        }
+        // Fallback: reload page so it shows the new card.
+        window.location.reload();
+      } catch (e) {
+        errEl.textContent = String(e.message || e);
+        errEl.classList.add('show');
+        btn.disabled = false;
+        btn.textContent = 'Create & open console';
+      }
+    }
+
+    // ── Live host stats (CPU / Memory / Disk) ───────────────────────
+    // Polls /api/host/cpu (live CPU%), /api/host/sizing (memory total),
+    // and /api/runtime/disk-health (live disk used%). Refresh every 10s.
+    // Tier-aware colour shifts: green <70% / amber 70-87 / red >=88%.
+    function _classifyStat(pct) {
+      if (pct >= 88) return 'danger';
+      if (pct >= 70) return 'warn';
+      return '';
+    }
+    // Reveal the curved sparkline left→right up to pct% (via stroke-dashoffset).
+    function setStatCurve(lineId, pct) {
+      const line = document.getElementById(lineId);
+      if (!line) return;
+      const L = line.getTotalLength();
+      const p = Math.min(100, Math.max(0, pct || 0));
+      line.style.strokeDasharray = L;
+      line.style.strokeDashoffset = (L * (1 - p / 100)).toFixed(2);
+    }
+    function _setStatClass(cardId, klass) {
+      const el = document.getElementById(cardId);
+      if (!el) return;
+      el.classList.remove('warn', 'danger');
+      if (klass) el.classList.add(klass);
+    }
+    async function refreshHostStats() {
+      // CPU + memory: parallel fetch (both small endpoints)
+      try {
+        const [cpu, sizing, disk] = await Promise.all([
+          fetch('/api/host/cpu').then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch('/api/host/sizing').then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch('/api/runtime/disk-health').then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
+
+        // ── CPU ────────────────────────────────────────────────────
+        if (cpu) {
+          const pct = (typeof cpu.cpu_percent === 'number') ? cpu.cpu_percent : null;
+          const cores = cpu.cpu_count || (sizing && sizing.cpu_count) || 0;
+          if (pct !== null) {
+            document.getElementById('stat-cpu-val').textContent = pct.toFixed(1) + '%';
+            setStatCurve('stat-cpu-line', pct);
+            _setStatClass('stat-cpu', _classifyStat(pct));
+          } else {
+            document.getElementById('stat-cpu-val').textContent = '—';
+          }
+          const load1 = (typeof cpu.load_1m === 'number') ? cpu.load_1m.toFixed(2) : '—';
+          document.getElementById('stat-cpu-sub').textContent =
+            `${cores} cores · load1m ${load1}`;
+        }
+
+        // ── Memory ────────────────────────────────────────────────
+        // /api/host/sizing gives total; no live "used" — derive a
+        // proxy from load1m / cpu_count (Linux convention). Falls back
+        // to "—" used if we can't compute.
+        if (sizing && typeof sizing.wasm_heap_mb === 'number') {
+          // Nano: REAL in-browser runtime memory — the Pyodide WASM linear heap,
+          // summed across open console sessions. A genuine live utilization number.
+          const mb = sizing.wasm_heap_mb;
+          const n = sizing.runtime_sessions || 0;
+          const pct = Math.min(99, (mb / 512) * 100);  // 512 MiB = rough visual budget
+          document.getElementById('stat-mem-val').textContent = mb + ' MiB';
+          setStatCurve('stat-mem-line', pct);
+          _setStatClass('stat-mem', _classifyStat(pct));
+          document.getElementById('stat-mem-sub').textContent =
+            'Pyodide runtime · ' + n + ' active console' + (n === 1 ? '' : 's');
+        } else if (sizing) {
+          const totGiB = sizing.memory_gib || 0;
+          let usedPct = null;
+          if (cpu && typeof cpu.load_1m === 'number' && cpu.cpu_count) {
+            // Rough proxy: bound load_1m/cpu_count to [0, 1]; not real
+            // memory pressure but tracks system business reasonably for
+            // a sim host. Will replace with a real /api/host/mem in v2.0.5.
+            usedPct = Math.min(95, (cpu.load_1m / cpu.cpu_count) * 100);
+          }
+          document.getElementById('stat-mem-val').textContent =
+            totGiB ? totGiB.toFixed(1) + ' GiB' : '—';
+          if (usedPct !== null) {
+            setStatCurve('stat-mem-line', usedPct);
+            _setStatClass('stat-mem', _classifyStat(usedPct));
+            document.getElementById('stat-mem-sub').textContent =
+              `~${(totGiB * usedPct / 100).toFixed(1)} GiB busy · ${usedPct.toFixed(0)}%`;
+          } else {
+            document.getElementById('stat-mem-sub').textContent = 'total appliance memory';
+          }
+        }
+
+        // ── Disk ──────────────────────────────────────────────────
+        if (disk && disk.disk) {
+          _lastDiskHealth = disk;
+          const d = disk.disk;
+          const pct = (typeof d.pct_used === 'number') ? d.pct_used : null;
+          const used = (typeof d.used_gb === 'number') ? d.used_gb.toFixed(1) : '—';
+          const tot  = (typeof d.total_gb === 'number') ? d.total_gb.toFixed(1) : '—';
+          if (pct !== null) {
+            document.getElementById('stat-disk-val').textContent = pct.toFixed(0) + '%';
+            setStatCurve('stat-disk-line', pct);
+            _setStatClass('stat-disk', _classifyStat(pct));
+          }
+          document.getElementById('stat-disk-sub').textContent =
+            `${used} / ${tot} GB used`;
+        }
+      } catch (e) {
+        // Best-effort; never break the page
+        console.warn('host-stats refresh failed:', e);
+      }
+    }
+
+    // ── Disk action modals (Free up space / Grow disk) ──────────────
+    // Reuses the same backend endpoints AWS/Azure consoles already hit:
+    //   GET  /api/runtime/disk-cleanup/suggestions  → candidate items
+    //   POST /api/runtime/disk-cleanup/run          → actually delete
+    //   POST /api/runtime/disk-grow                 → resize to target
+    let _lastDiskHealth = null;
+    function _fmtBytes(b) {
+      if (!b && b !== 0) return '—';
+      const gb = b / 1073741824;
+      if (gb >= 1) return gb.toFixed(1) + ' GB';
+      const mb = b / 1048576;
+      return mb.toFixed(0) + ' MB';
+    }
+    function _diskModalOpen() {
+      const m = document.createElement('div');
+      m.className = 'disk-modal';
+      m.onclick = (e) => { if (e.target === m) m.remove(); };
+      document.body.appendChild(m);
+      return m;
+    }
+    async function openDiskCleanup() {
+      const m = _diskModalOpen();
+      m.innerHTML = `
+        <div class="dm-box" onclick="event.stopPropagation()">
+          <div class="dm-head">
+            <h3>Free up appliance disk</h3>
+            <button class="dm-close" onclick="this.closest('.disk-modal').remove()">×</button>
+          </div>
+          <div class="dm-body" id="dm-cleanup-body"><div class="empty">Scanning disk…</div></div>
+          <div class="dm-foot" id="dm-cleanup-foot"></div>
+        </div>`;
+      try {
+        const r = await fetch('/api/runtime/disk-cleanup/suggestions');
+        const d = await r.json();
+        const items = d.suggestions || d.items || [];
+        const body = m.querySelector('#dm-cleanup-body');
+        const foot = m.querySelector('#dm-cleanup-foot');
+        if (!items.length) {
+          body.innerHTML = '<div class="empty">Nothing safe to clean right now. Disk is already lean.</div>';
+          foot.innerHTML = '<button class="dm-cancel" onclick="this.closest(\'.disk-modal\').remove()">Close</button>';
+          return;
+        }
+        body.innerHTML = items.map((it, i) => {
+          const bytes = it.bytes || it.size_bytes || 0;
+          const label = it.label || it.name || it.id || it.path || ('item ' + (i+1));
+          const desc  = it.description || it.detail || '';
+          const id    = it.key || it.id || it.path || label;
+          return `
+            <div class="dm-row">
+              <label>
+                <input type="checkbox" data-id="${ id.replace(/"/g,'') }" checked>
+                <div>
+                  <div style="font-weight:600">${ label }</div>
+                  ${ desc ? '<div style="font-size:12px;color:#5f6b7a;margin-top:2px">' + desc + '</div>' : '' }
+                </div>
+              </label>
+              <span class="dm-size">${ _fmtBytes(bytes) }</span>
+            </div>`;
+        }).join('');
+        foot.innerHTML = `
+          <button class="dm-cancel" onclick="this.closest('.disk-modal').remove()">Cancel</button>
+          <button class="dm-primary" id="dm-cleanup-run">Free up selected</button>`;
+        const runBtn = m.querySelector('#dm-cleanup-run');
+        runBtn.onclick = async () => {
+          const ids = Array.from(m.querySelectorAll('input[type="checkbox"]:checked'))
+                          .map(c => c.getAttribute('data-id'));
+          if (!ids.length) return;
+          runBtn.disabled = true;
+          runBtn.textContent = 'Cleaning…';
+          try {
+            const rr = await fetch('/api/runtime/disk-cleanup/run', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ categories: ids })
+            });
+            if (!rr.ok) throw new Error('HTTP ' + rr.status);
+            const dd = await rr.json();
+            body.innerHTML = `
+              <div style="text-align:center;padding:30px">
+                <div style="font-size:36px;line-height:1">✓</div>
+                <div style="margin-top:8px;font-weight:600">Freed ${ _fmtBytes(dd.bytes_freed || dd.freed_bytes || 0) }</div>
+                <div style="font-size:12.5px;color:#5f6b7a;margin-top:4px">${ dd.items_removed || dd.cleared_count || ids.length } items removed</div>
+              </div>`;
+            foot.innerHTML = '<button class="dm-primary" onclick="this.closest(\'.disk-modal\').remove(); refreshHostStats();">Done</button>';
+          } catch (e) {
+            const div = document.createElement('div');
+            div.className = 'dm-error';
+            div.textContent = String(e.message || e);
+            body.appendChild(div);
+            runBtn.disabled = false;
+            runBtn.textContent = 'Retry';
+          }
+        };
+      } catch (e) {
+        m.querySelector('#dm-cleanup-body').innerHTML =
+          '<div class="dm-error">Could not load suggestions: ' + (e.message || e) + '</div>';
+      }
+    }
+    async function openDiskGrow() {
+      const m = _diskModalOpen();
+      const currentTotal = (_lastDiskHealth?.disk?.total_gb) || 30;
+      const suggested = Math.ceil(currentTotal + 10);
+      m.innerHTML = `
+        <div class="dm-box" onclick="event.stopPropagation()">
+          <div class="dm-head">
+            <h3>Grow appliance disk</h3>
+            <button class="dm-close" onclick="this.closest('.disk-modal').remove()">×</button>
+          </div>
+          <div class="dm-body">
+            <div style="margin-bottom:14px">
+              <div style="font-size:13px;color:#5f6b7a">Current</div>
+              <div style="font-size:18px;font-weight:700">${ currentTotal.toFixed(1) } GB</div>
+            </div>
+            <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:6px">Target size (GB)</label>
+            <input type="number" id="dm-grow-target" value="${ suggested }" min="${ Math.ceil(currentTotal) + 1 }" max="500">
+            <div class="dm-note">
+              Resizes the underlying multipass VM disk. Requires host disk free space ≥ growth amount. The simulator briefly pauses while the partition is extended (~5–10s).
+            </div>
+            <div id="dm-grow-error"></div>
+          </div>
+          <div class="dm-foot">
+            <button class="dm-cancel" onclick="this.closest('.disk-modal').remove()">Cancel</button>
+            <button class="dm-primary" id="dm-grow-run">Grow disk →</button>
+          </div>
+        </div>`;
+      const runBtn = m.querySelector('#dm-grow-run');
+      runBtn.onclick = async () => {
+        const target = parseInt(m.querySelector('#dm-grow-target').value, 10);
+        if (!target || target <= currentTotal) {
+          const errSlot = m.querySelector('#dm-grow-error');
+          errSlot.innerHTML = '<div class="dm-error">Target must be larger than the current size.</div>';
+          return;
+        }
+        runBtn.disabled = true;
+        runBtn.textContent = 'Resizing…';
+        try {
+          const rr = await fetch('/api/runtime/disk-grow', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ target_gb: target })
+          });
+          if (!rr.ok) {
+            let detail = await rr.text();
+            try { const j = JSON.parse(detail); detail = j.detail?.reason || j.detail || j.message || detail; } catch (_) {}
+            throw new Error(detail || 'HTTP ' + rr.status);
+          }
+          const dd = await rr.json();
+          m.querySelector('.dm-body').innerHTML =
+            `<div style="text-align:center;padding:30px">
+              <div style="font-size:36px;line-height:1">✓</div>
+              <div style="margin-top:8px;font-weight:600">Disk grown to ${ target } GB</div>
+              <div style="font-size:12.5px;color:#5f6b7a;margin-top:4px">${ dd.message || 'Resize complete.' }</div>
+            </div>`;
+          m.querySelector('.dm-foot').innerHTML =
+            '<button class="dm-primary" onclick="this.closest(\'.disk-modal\').remove(); refreshHostStats();">Done</button>';
+        } catch (e) {
+          const errSlot = m.querySelector('#dm-grow-error');
+          errSlot.innerHTML = '<div class="dm-error">' + (e.message || e) + '</div>';
+          runBtn.disabled = false;
+          runBtn.textContent = 'Retry';
+        }
+      };
+    }
+
+    // ── Provider distribution pies (CPU / RAM / Disk) ───────────────
+    // Aggregates VM counts across all spaces (each space is provider-
+    // locked, so we can simply sum ec2_count / gcp_compute_count /
+    // azure_vm_count per provider). Per-VM averages stand in for
+    // CPU/RAM/Disk until v2.0.5 lands the real-LXD aggregation
+    // endpoint. Today these three pies will all show the same %
+    // shape (because per-VM averages are uniform per provider), but
+    // they ARE keyed off real data — non-zero as soon as you spin up
+    // any VM, and the live-dot pulses so users know they're not stale.
+    // v2.0.5: gray-scale palette across the donut wheels. AWS = darkest,
+    // GCP = mid, Azure = lightest — clear contrast steps along the
+    // black→gray ramp. Replaces brand colors that competed visually.
+    const PROV_PALETTE = { aws: '#60a5fa', gcp: '#a78bfa', azure: '#22d3ee' };
+    const PROV_LABEL   = { aws: 'AWS',     gcp: 'GCP',     azure: 'Azure' };
+    // Per-VM rough averages — a real EC2/GCE/Az VM in our LXD-backed
+    // setup averages a small instance type. Will be replaced with
+    // real LXD-summed limits when /api/runtime/host-distribution
+    // ships in v2.0.5.
+    const PER_VM = {
+      aws:   { vcpu: 2, ram_mb: 2048, disk_mb: 8192  },
+      gcp:   { vcpu: 2, ram_mb: 2048, disk_mb: 8192  },
+      azure: { vcpu: 2, ram_mb: 2048, disk_mb: 8192  },
+    };
+
+    function _spaceVmCount(s, provider) {
+      // Each space's provider matches its lock; only that field is
+      // meaningfully populated. Fall back through the canonical keys.
+      if (provider === 'aws')   return s.ec2_count || s.aws_count || 0;
+      if (provider === 'gcp')   return s.gcp_compute_count || s.gcp_count || 0;
+      if (provider === 'azure') return s.azure_vm_count || s.azure_count || 0;
+      return 0;
+    }
+    // Broader "resource footprint" per provider — anything counted
+    // (buckets, DBs, queues, function apps, VMs) contributes. Pies
+    // show non-zero as soon as the user creates ANY resource, not
+    // just compute VMs. Per-resource weights kept small so even
+    // light resources show a visible slice.
+    const PROV_KEY_PREFIX = { aws: 'aws', gcp: 'gcp', azure: 'azure' };
+    function _spaceResourceFootprint(s, provider) {
+      // Sum every `<provider>_*_count` key + canonical compute counts.
+      // Each non-VM resource counts as 1/4 of a VM in weight (rough —
+      // a bucket consumes far less host CPU than a VM, but >0).
+      let vmCount = 0;
+      let lightCount = 0;
+      for (const k of Object.keys(s)) {
+        if (!k.endsWith('_count')) continue;
+        const v = s[k] || 0;
+        if (!v) continue;
+        // Provider keying: keys begin with the provider name OR (for
+        // AWS legacy) match canonical aws service names without prefix.
+        const isCompute = (
+          k === 'ec2_count' ||
+          k === 'gcp_compute_count' ||
+          k === 'azure_vm_count'
+        );
+        const matchesProvider = (
+          provider === 'aws'   ? (k.startsWith('aws_') || ['ec2_count','lambda_count','rds_count','dynamodb_count','sqs_count','s3_bucket_count','apigateway_count'].includes(k)) :
+          provider === 'gcp'   ? k.startsWith('gcp_') :
+          provider === 'azure' ? k.startsWith('azure_') :
+          false
+        );
+        if (!matchesProvider) continue;
+        if (isCompute) vmCount += v; else lightCount += v;
+      }
+      return { vmCount, lightCount, total: vmCount + lightCount };
+    }
+
+    function _renderPie(card, segments, centerVal, centerSub) {
+      // segments: [{ key, label, color, value, pct }]
+      // Donut chart via stroke-dasharray on a circle r=15.91549
+      // (so its circumference is exactly 100 — pct maps to dasharray
+      // length directly, no math).
+      const svg = card.querySelector('svg');
+      const legend = card.querySelector('.pie-legend');
+      const pcVal = card.querySelector('.pc-val');
+      const pcSub = card.querySelector('.pc-sub');
+      // Wipe existing arcs (keep the bg ring)
+      svg.querySelectorAll('circle.arc').forEach(n => n.remove());
+      let offset = 25; // start at 12 o'clock (SVG arc origin is 3 o'clock, rotated -90 = 12)
+      let total = segments.reduce((acc, s) => acc + (s.pct || 0), 0);
+      if (total <= 0) {
+        card.classList.add('empty');
+        pcVal.textContent = '—';
+        legend.innerHTML = '';
+        return;
+      }
+      card.classList.remove('empty');
+      pcVal.textContent = centerVal;
+      pcSub.textContent = centerSub;
+      // Draw each segment
+      segments.forEach(seg => {
+        if (!seg.pct) return;
+        const arc = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        arc.setAttribute('class', 'arc');
+        arc.setAttribute('cx', '18');
+        arc.setAttribute('cy', '18');
+        arc.setAttribute('r',  '15.91549');
+        arc.setAttribute('fill', 'transparent');
+        arc.setAttribute('stroke', seg.color);
+        arc.setAttribute('stroke-width', '3.5');
+        arc.setAttribute('stroke-dasharray', seg.pct.toFixed(2) + ' ' + (100 - seg.pct).toFixed(2));
+        arc.setAttribute('stroke-dashoffset', offset.toFixed(2));
+        arc.style.transition = 'stroke-dasharray 0.4s ease';
+        svg.appendChild(arc);
+        offset = (offset - seg.pct + 100) % 100;
+      });
+      // Legend
+      legend.innerHTML = segments.map(seg => `
+        <div class="pie-legend-item">
+          <span class="ll"><span class="swatch" style="background:${ seg.color }"></span>${ seg.label }</span>
+          <span class="lv">${ seg.pct.toFixed(1) }%</span>
+        </div>`).join('');
+    }
+
+    function _formatTotal(metric, totals) {
+      if (metric === 'cpu')  return { val: totals.vcpu + ' vCPU',                sub: 'allocated' };
+      if (metric === 'ram')  return { val: (totals.ram_mb  / 1024).toFixed(1) + ' GiB', sub: 'allocated' };
+      if (metric === 'disk') return { val: (totals.disk_mb / 1024).toFixed(1) + ' GB',  sub: 'allocated' };
+      return { val: '—', sub: '' };
+    }
+
+    // Ensure all three CPU/RAM/Disk pies are visible and label the card for the
+    // live "resources" basis. (The un-hide is defensive against any prior build
+    // that hid RAM/Disk.) The appliance (no basis) → else branch, chrome unchanged.
+    function _restorePieChrome(d) {
+      ['ram', 'disk'].forEach(m => {
+        const c = document.querySelector('#stats-card .pie-card[data-metric="' + m + '"]');
+        if (c) c.style.display = '';
+      });
+      const cpuLabel = document.querySelector('#stats-card .pie-card[data-metric="cpu"] .pie-label');
+      if (cpuLabel) cpuLabel.innerHTML = '<span class="material-icons">developer_board</span> CPU distribution';
+      const title = document.querySelector('#stats-card h2');
+      if (title) title.innerHTML = '<span class="material-icons">monitor_heart</span>Appliance health';
+      const desc = document.querySelector('#stats-card .sc-desc');
+      if (!desc) return;
+      if (d && d.basis === 'resources') {
+        const n = (d.runtime && d.runtime.sessions) || 0;
+        desc.textContent = n > 0
+          ? ('Live per-cloud footprint across your resources (weighted vCPU / RAM / Disk) · '
+             + n + ' active console' + (n === 1 ? '' : 's') + '.')
+          : 'Live per-cloud footprint — open a console and create resources to see utilization here.';
+      } else {
+        desc.textContent = 'Per-cloud workload distribution across your clouds (CPU / RAM / Disk).';
+      }
+    }
+
+    async function refreshProviderPies() {
+      try {
+        const r = await fetch('/api/runtime/host-distribution');
+        if (!r.ok) return;
+        const d = await r.json();
+        const provs = d.providers || {};
+        const grandTotal = (d.grand_total_resources || 0);
+
+        // The three CPU/RAM/Disk pies are ALWAYS shown. When a console is live
+        // they carry the real weighted footprint (basis:"resources"); with no
+        // live console they render an honest empty state (grandTotal === 0).
+        _restorePieChrome(d);
+
+        ['cpu', 'ram', 'disk'].forEach(metric => {
+          const card = document.querySelector('.pie-card[data-metric="' + metric + '"]');
+          if (!card) return;
+          // Empty state — surface clearly so users know it's the data, not a bug.
+          if (grandTotal === 0) {
+            const svg = card.querySelector('svg');
+            const legend = card.querySelector('.pie-legend');
+            const pcVal = card.querySelector('.pc-val');
+            const pcSub = card.querySelector('.pc-sub');
+            svg.querySelectorAll('circle.arc').forEach(n => n.remove());
+            card.classList.add('empty');
+            pcVal.textContent = '0';
+            pcSub.textContent = metric === 'cpu' ? 'vCPU' : metric === 'ram' ? 'GiB' : 'GB';
+            legend.innerHTML =
+              '<div class="pie-legend-item" style="justify-content:flex-start;color:#5f6b7a">' +
+                'No workloads yet — create a resource to see the split.' +
+              '</div>';
+            return;
+          }
+          // Pull per-provider values for THIS metric
+          const key = metric === 'cpu' ? 'vcpus' : metric === 'ram' ? 'ram_mb' : 'disk_mb';
+          let total = 0;
+          const vals = {};
+          ['aws','gcp','azure'].forEach(p => {
+            vals[p] = (provs[p] || {})[key] || 0;
+            total += vals[p];
+          });
+          const segments = ['aws','gcp','azure'].map(p => ({
+            key: p, label: PROV_LABEL[p], color: PROV_PALETTE[p],
+            value: vals[p],
+            pct: total ? (100 * vals[p] / total) : 0,
+          }));
+          const totals = {
+            vcpu:    provs.aws?.vcpus    + provs.gcp?.vcpus    + provs.azure?.vcpus    || 0,
+            ram_mb:  (provs.aws?.ram_mb  || 0) + (provs.gcp?.ram_mb  || 0) + (provs.azure?.ram_mb  || 0),
+            disk_mb: (provs.aws?.disk_mb || 0) + (provs.gcp?.disk_mb || 0) + (provs.azure?.disk_mb || 0),
+          };
+          const fmt = _formatTotal(metric, totals);
+          _renderPie(card, segments, fmt.val, fmt.sub);
+        });
+      } catch (e) {
+        console.warn('provider pies refresh failed:', e);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadSpaces();
+      refreshHostStats();
+      refreshProviderPies();
+      setInterval(() => {
+        refreshHostStats();
+        refreshProviderPies();
+      }, 10000);
+      checkForUpdates();
+      // The persistent readiness strip is rendered by the shared, self-mounting
+      // module static/readiness-strip.js (loaded at the end of <body>).
+    });
+
+    // v2.0.6 (#420): poll /api/runtime/update-check + show banner if a
+    // newer release is on GitHub. Cached server-side for 15 min and
+    // dismissed-per-session-tab via sessionStorage so users who click
+    // ✕ don't see it again until they reopen the tab.
+    async function checkForUpdates() {
+      if (sessionStorage.getItem('vyomi.update-banner-dismissed') === '1') return;
+      try {
+        const r = await fetch('/api/runtime/update-check');
+        if (!r.ok) return;
+        const j = await r.json();
+        if (!j.update_available) return;
+        document.getElementById('update-banner-latest').textContent  = j.latest || '';
+        document.getElementById('update-banner-current').textContent = j.current || '';
+        const notes = document.getElementById('update-banner-notes');
+        if (notes && j.release_notes_url) notes.href = j.release_notes_url;
+        document.getElementById('update-banner').style.display = 'block';
+      } catch (e) {
+        // No-op: banner stays hidden, /api/runtime/update-check might
+        // be opted-out via CLOUDLEARN_UPDATE_CHECK_DISABLED=1.
+      }
+    }
+  </script>
+  <!-- Persistent appliance readiness / diagnostics strip (renders into
+       #vyomi-readiness-mount above). Shared with the launch page. -->
+  <script src="./readiness-strip.js" defer></script>
+
+<style>
+ #nano-docs{position:fixed;right:16px;bottom:52px;z-index:99998;font:13px system-ui,-apple-system,sans-serif}
+ #nano-docs .pill{background:#0d1030;color:#e4e4e7;border:1px solid #2a2f55;border-radius:999px;padding:8px 14px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35);user-select:none}
+ #nano-docs .pop{position:absolute;right:0;bottom:42px;background:#0d1030;border:1px solid #2a2f55;border-radius:12px;padding:6px;min-width:218px;display:none;box-shadow:0 12px 34px rgba(0,0,0,.45)}
+ #nano-docs.open .pop{display:block}
+ #nano-docs .pop .h{font-size:11px;color:#8b8ba7;padding:6px 10px;text-transform:uppercase;letter-spacing:1px}
+ #nano-docs .pop a{display:flex;justify-content:space-between;gap:14px;padding:8px 10px;border-radius:8px;color:#cdd8e6;text-decoration:none}
+ #nano-docs .pop a:hover{background:#171b3d;color:#fff}
+ #nano-docs .pop a span{color:#7cc4ff}
+</style>
+<div id="nano-docs">
+ <div class="pop"><div class="h">Conformance</div><a href="https://vyomi.cloud/docs/conformance-pack" target="_blank" rel="noopener">Conformance Pack <span>↗</span></a><a href="https://vyomi.cloud/docs/aws" target="_blank" rel="noopener">AWS · API / SDK / Utility <span>↗</span></a><a href="https://vyomi.cloud/docs/gcp" target="_blank" rel="noopener">GCP · API / SDK / Utility <span>↗</span></a><a href="https://vyomi.cloud/docs/azure" target="_blank" rel="noopener">Azure · API / SDK / Utility <span>↗</span></a></div>
+ <div class="pill" onclick="this.parentNode.classList.toggle('open')">📘 Conformance</div>
+</div>
+<style>
+ #nano-foot{position:fixed;left:0;right:0;bottom:0;z-index:99999;height:34px;display:flex;align-items:center;gap:12px;padding:0 14px;background:#0b0e28;border-top:1px solid #2a2f55;color:#e4e4e7;font:12px system-ui,-apple-system,sans-serif;box-shadow:0 -4px 18px rgba(0,0,0,.35)}
+ #nano-foot .dot{width:9px;height:9px;border-radius:50%;background:#71717a;flex:0 0 auto}
+ #nano-foot.up .dot{background:#34d399;box-shadow:0 0 8px #34d39988}
+ #nano-foot.connecting .dot{background:#fbbf24;box-shadow:0 0 8px #fbbf2488;animation:nano-pulse 1s ease-in-out infinite}
+ @keyframes nano-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+ #nano-foot .lbl{white-space:nowrap}
+ #nano-foot .sp{flex:1}
+ #nano-foot button{background:#171b3d;color:#7cc4ff;border:1px solid #2a2f55;border-radius:6px;padding:3px 10px;cursor:pointer;font:12px system-ui,-apple-system,sans-serif}
+ #nano-foot button:hover{background:#1f2550;color:#fff}
+ #nano-foot .ep{font:11px ui-monospace,Menlo,monospace;color:#8b8ba7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40vw}
+ #nano-logs{position:fixed;left:0;right:0;bottom:34px;z-index:99998;height:240px;background:#05071a;border-top:1px solid #2a2f55;display:none;flex-direction:column;box-shadow:0 -12px 34px rgba(0,0,0,.5)}
+ #nano-logs.open{display:flex}
+ #nano-logs .h{padding:5px 14px;font:11px system-ui,-apple-system,sans-serif;color:#8b8ba7;background:#0a0c24;border-bottom:1px solid #1a1f44}
+ #nano-logs pre{flex:1;margin:0;padding:10px 14px;overflow:auto;font:12px ui-monospace,Menlo,monospace;color:#cdd8e6;white-space:pre-wrap}
+ #nano-logs pre .ok{color:#34d399}#nano-logs pre .err{color:#f87171}#nano-logs pre .dim{color:#71717a}
+</style>
+<div id="nano-logs"><div class="h">Relay endpoint — runs in a shared worker, stays connected across views. Logs:</div><pre id="nano-foot-log"><span class="dim">tunnel off — click “Start tunnel”.</span></pre></div>
+<div id="nano-foot" title="Relay tunnel — lets an external SDK/CLI reach this in-browser sim">
+ <span class="dot"></span><span class="lbl">Relay tunnel: off</span>
+ <span class="ep" id="nano-foot-ep"></span>
+ <span class="sp"></span>
+ <button id="nano-foot-logs">Logs ▴</button>
+ <button id="nano-foot-toggle">Start tunnel</button>
+</div>
+<script>
+(function(){
+  var base = window.__NANO_BASE || "";
+  // Tunnel config + cloud session live in localStorage (the worker can't read it);
+  // the footer resolves them and hands them to the shared worker on start. Defaults
+  // point at the local tunnel (auto-detected) with the Cloudflare relay as fallback.
+  function ls(k, d){ try { return localStorage.getItem(k) || d; } catch(_){ return d; } }
+  function sessionId(){
+    var s = ls("nano_session", null);
+    if(!s){ s = "nano-" + Math.random().toString(36).slice(2,10); try{ localStorage.setItem("nano_session", s); }catch(_){} }
+    return s;
+  }
+  var SESSION = sessionId();
+  var CFG = {
+    localHealth:   ls("nano_local_health", "http://127.0.0.1:8090/health"),
+    localWs:       ls("nano_local_ws",     "ws://127.0.0.1:8090/register"),
+    localExternal: ls("nano_local_ext",    "http://127.0.0.1:8090"),
+    cloudWsBase:   ls("nano_cloud_ws",     "wss://relay.vyomi.cloud/register"),
+    cloudExternal: ls("nano_cloud_ext",    "https://relay.vyomi.cloud"),
+  };
+  var foot = document.getElementById("nano-foot"), lbl = foot.querySelector(".lbl");
+  var epEl = document.getElementById("nano-foot-ep"), logsPane = document.getElementById("nano-logs"), logEl = document.getElementById("nano-foot-log");
+  var toggleBtn = document.getElementById("nano-foot-toggle"), logsBtn = document.getElementById("nano-foot-logs");
+  var phase = "off", lastSeen = 0, mode = null, external = null, noteText = null;
+  document.body.style.paddingBottom = "40px";   // never cover page content
+
+  function render(state, served){
+    phase = state || "off";
+    foot.classList.remove("up","connecting");
+    var via = mode ? (mode==="local" ? " · local (fast · private)" : " · cloud (Cloudflare)") : "";
+    if(phase==="connected"){ foot.classList.add("up"); lbl.textContent = "Relay tunnel: connected" + via + (served!=null?(" · "+served+" served"):""); toggleBtn.textContent="Stop"; }
+    // A `note` from the worker (e.g. "no local tunnel — run `vyomi-tunnel`") means
+    // the tunnel can't connect — show it in the label instead of a forever spinner.
+    else if(phase==="connecting"){ foot.classList.add("connecting"); lbl.textContent = noteText ? ("Relay tunnel: " + noteText) : ("Relay tunnel: connecting…" + via); toggleBtn.textContent="Stop"; }
+    else { lbl.textContent = "Relay tunnel: off"; toggleBtn.textContent="Start tunnel"; }
+    epEl.textContent = (phase==="connected" && external) ? ("apps → " + external) : "";
+    epEl.title = external || "";
+  }
+  function appendLog(line, cls){ var d=document.createElement("div"); d.innerHTML = cls ? ('<span class="'+cls+'">'+(line||"")+'</span>') : (line||""); logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight; }
+  function renderLogs(lines){ logEl.textContent=""; if(!lines||!lines.length){ appendLog("tunnel off — click “Start tunnel”.","dim"); return; } lines.forEach(function(l){ appendLog(l.line,l.cls); }); }
+  logsBtn.onclick = function(){ logsPane.classList.toggle("open"); logsBtn.textContent = logsPane.classList.contains("open") ? "Logs ▾" : "Logs ▴"; };
+
+  var ch = ("BroadcastChannel" in window) ? new BroadcastChannel("nano-relay") : null;
+  if(ch) ch.onmessage = function(ev){ var m=ev.data||{}; if(m.type==="status"){ lastSeen=performance.now(); if(m.mode!==undefined) mode=m.mode; if(m.external!==undefined) external=m.external; if(m.note!==undefined) noteText=m.note; render(m.state,m.served); } else if(m.type==="log"){ appendLog(m.line,m.cls); } else if(m.type==="logs"){ renderLogs(m.lines); } };
+
+  // The shared worker hosts the endpoint; the port carries start/stop/query.
+  var worker=null, port=null, ok=false;
+  try {
+    worker = new SharedWorker(base + "/relay/relay-shared-worker.js", { type:"module", name:"nano-relay" });
+    port = worker.port; port.start();
+    port.onmessage = function(ev){ var m=ev.data||{}; if(m.type==="logs") renderLogs(m.lines); else if(m.type==="status"){ if(m.mode!==undefined) mode=m.mode; if(m.external!==undefined) external=m.external; if(m.note!==undefined) noteText=m.note; render(m.state,m.served); } };
+    ok = true;
+  } catch(e){ ok = false; }
+
+  function setIntent(on){ try{ on ? localStorage.setItem("nano_tunnel_on","1") : localStorage.removeItem("nano_tunnel_on"); }catch(_){} }
+  function intentOn(){ try{ return localStorage.getItem("nano_tunnel_on")==="1"; }catch(_){ return false; } }
+  toggleBtn.onclick = function(){
+    if(!ok){ window.open(base + "/relay/nano-endpoint.html", "nano-relay-endpoint"); return; }   // fallback: standalone tab
+    if(phase==="off"){ setIntent(true); render("connecting"); port.postMessage({type:"start", session:SESSION, config:CFG}); logsPane.classList.add("open"); logsBtn.textContent="Logs ▾"; }
+    else { setIntent(false); port.postMessage({type:"stop"}); render("off"); }
+  };
+  if(ok){
+    // The shared worker is RECREATED on same-tab navigation, so AUTO-RESUME: if the
+    // user left the tunnel on, every view reconnects it automatically (it briefly
+    // re-handshakes during the nav). Open the dashboard + a console in SEPARATE tabs
+    // and the worker has overlapping clients → it stays continuously connected.
+    if(intentOn()){ render("connecting"); port.postMessage({type:"start", session:SESSION, config:CFG}); }
+    port.postMessage({type:"query"});
+    setInterval(function(){
+      if(phase!=="off" && performance.now()-lastSeen>8000){ render("off"); if(intentOn()) port.postMessage({type:"start", session:SESSION, config:CFG}); }
+      port.postMessage({type:"query"});
+    }, 3000);
+  } else { toggleBtn.textContent = "Open relay endpoint ↗"; }
+})();
+</script></body>
+</html>

@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/brand/favicon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/brand/favicon-16.png">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -22,10 +23,10 @@
     /* ── Top bar (matches launch page) ───────────────────────────── */
     .top-bar {
       position: sticky; top: 0; z-index: 100;
-      background: rgba(255,255,255,0.92);
-      backdrop-filter: saturate(180%) blur(16px);
-      -webkit-backdrop-filter: saturate(180%) blur(16px);
-      border-bottom: 1px solid #e7e7e9;
+      background: rgba(8, 8, 11, 0.94);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
       padding: 10px 24px;
       display: flex; align-items: center; justify-content: space-between;
       gap: 16px;
@@ -37,8 +38,11 @@
       border: 1px solid transparent; cursor: pointer; text-decoration: none;
       transition: all 0.15s; font-family: inherit; line-height: 1;
     }
-    .tb-btn-secondary { background: #fff; color: #1f2937; border-color: #d8e0ea; }
-    .tb-btn-secondary:hover { border-color: #1f2937; }
+    .tb-btn-secondary {   /* same brand gradient as the left-nav icon chips */
+      background: linear-gradient(135deg, #4d8cf3 0%, #7c3aed 100%);
+      color: #fff; border-color: transparent;
+    }
+    .tb-btn-secondary:hover { filter: brightness(1.08); }
 
     .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 64px; }
 
@@ -317,6 +321,16 @@
       height: 4px; border-radius: 2px; background: #eef2f7;
       margin-top: 4px; overflow: hidden;
     }
+    /* Curved utilization sparkline (replaces the flat progress bar). */
+    .stat-card .stat-graph { width: 100%; height: 26px; margin-top: 10px; display: block; overflow: visible; }
+    .stat-card .stat-graph path {
+      fill: none; stroke-width: 2; vector-effect: non-scaling-stroke;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+    .stat-card .stat-graph .sg-track { stroke: rgba(255,255,255,0.10); }
+    .stat-card .stat-graph .sg-line { stroke: #10b981; transition: stroke-dashoffset .6s ease, stroke .3s ease; stroke-dasharray: 0 9999; }
+    .stat-card.warn   .stat-graph .sg-line { stroke: #f59e0b; }
+    .stat-card.danger .stat-graph .sg-line { stroke: #ef4444; }
     .stat-card .stat-bar > span {
       display: block; height: 100%; width: 0%;
       background: linear-gradient(90deg, #10b981, #059669);
@@ -457,6 +471,7 @@
     }
     .pie-card .pie-svg-wrap svg {
       width: 110px; height: 110px; transform: rotate(-90deg);
+      shape-rendering: geometricPrecision; overflow: visible;
     }
     .pie-card .pie-svg-wrap .pie-center {
       position: absolute; inset: 0;
@@ -573,6 +588,113 @@
       margin-bottom: 28px;
       box-shadow: 0 1px 2px rgba(15,27,45,0.03), 0 6px 18px rgba(15,27,45,0.04);
     }
+    /* Appliance health / Host utilization / Service status are ONE tabbed panel —
+       no outer card; their individual tiles are the cards. */
+    #svc-status-card, #stats-card, #host-util-card, #spaces-card {
+      background: transparent; border: none; box-shadow: none; padding: 0;
+      margin-bottom: 28px;
+    }
+    /* Each inner tile is a full card (matches the Service-status tiles). */
+    #stats-card .pie-card, #host-util-card .stat-card {
+      border: 1px solid #e7e7e9; border-radius: 14px;
+      box-shadow: 0 1px 2px rgba(15,27,45,0.03), 0 6px 18px rgba(15,27,45,0.04);
+    }
+    /* Each section header is a SINGLE tab: the title sits as an active tab
+       (accent underline) on a full-width baseline rule, with its description just
+       below. Applies to health / host util / service status / active spaces. */
+    #stats-card > .sc-head, #host-util-card > .sc-head,
+    #svc-status-card > .sc-head, #spaces-card > .sc-head {
+      align-items: flex-end; margin-bottom: 0; border-bottom: 1px solid #e4e4e7;
+    }
+    #stats-card > .sc-head > .sc-title,
+    #host-util-card > .sc-head > .sc-title,
+    #svc-status-card > .sc-head > .sc-title,
+    #spaces-card > .sc-head > .sc-title {
+      display: inline-block; padding: 0 2px 10px; margin-bottom: -1px;
+      border-bottom: 2px solid #2563eb;
+    }
+    #spaces-card > .sc-head > .btn-create-space { margin-bottom: 10px; }
+    /* Restored section description, below the tab baseline. */
+    .sc-desc { margin: 14px 0 18px; font-size: 13px; color: #5f6b7a; }
+
+    /* Material icons — section titles + sub-section (tile) labels. */
+    .sc-title h2 .material-icons { font-size: 20px; vertical-align: -4px; margin-right: 8px; color: #2563eb !important; }
+    .pie-label .material-icons, .stat-label .material-icons {
+      font-size: 16px; margin-right: 6px; color: #5f6b7a; vertical-align: -3px;
+    }
+    .btn-create-space .material-icons { font-size: 17px; vertical-align: -4px; margin-right: 4px; }
+
+    /* ── v2.3.0 left collapsible nav pane — sits below the top logo bar ──── */
+    #app-body { display: flex; align-items: stretch; }
+    #app-sidebar {
+      flex: none; width: 216px; z-index: 40;
+      background: #0b0e28; color: #c7cbe0; display: flex; flex-direction: column;
+      padding: 14px 10px; gap: 4px; overflow: hidden; transition: width .2s ease;
+      min-height: calc(100vh - 104px);          /* fill the viewport below the top bar */
+    }
+    body.side-collapsed #app-sidebar { width: 62px; }
+    .side-collapse {
+      background: none; border: 0; color: #8b8fb3; cursor: pointer; display: flex;
+      align-items: center; gap: 14px; padding: 8px 10px; border-radius: 9px; margin-bottom: 8px;
+    }
+    .side-collapse:hover { background: #171b3d; color: #fff; }
+    .side-brand { height: 22px; margin: 2px 6px 12px; opacity: .95; }
+    body.side-collapsed .side-brand { display: none; }
+    .side-nav { display: flex; flex-direction: column; gap: 4px; }
+    .side-item {
+      display: flex; align-items: center; gap: 14px; padding: 11px 10px; border-radius: 9px;
+      background: none; border: 0; color: #c7cbe0; cursor: pointer; text-decoration: none;
+      font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; width: 100%;
+    }
+    .side-item:hover { background: #171b3d; color: #fff; }
+    .side-item.active { background: #1f2550; color: #fff; }
+    .side-item .material-icons {   /* medium icons on a brand-gradient chip */
+      font-size: 19px; flex: none; color: #fff; border-radius: 8px; padding: 6px;
+      background: linear-gradient(135deg, #4d8cf3 0%, #7c3aed 100%);
+    }
+    body.side-collapsed .side-label { display: none; }
+    /* Collapsed rail: centre the icon so the active/hover background is padded
+       evenly (the wide gradient chip would otherwise overrun the right edge). */
+    body.side-collapsed .side-item,
+    body.side-collapsed .side-collapse { justify-content: center; padding-left: 0; padding-right: 0; }
+    #app-main { flex: 1; min-width: 0; }
+
+    /* Knowledge Center view — the portal KC embedded as-is. */
+    #view-kc { padding: 0; }
+    .kc-frame-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 16px 24px 14px; flex-wrap: wrap;
+    }
+    .kc-frame-head h2 { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 700; color: #1f2937; margin: 0; }
+    .kc-frame-head h2 .material-icons { font-size: 20px; color: #2563eb; }
+    .kc-open {
+      display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: 8px;
+      border: 1px solid #2563eb; color: #2563eb; background: #fff; font-size: 13px; font-weight: 600; text-decoration: none;
+    }
+    .kc-open:hover { background: rgba(37,99,235,.08); }
+    /* KC tiles — rendered natively (light theme), each opens a portal page. */
+    .kc-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; padding-bottom: 32px; }
+    .kc-sec-label {
+      grid-column: 1 / -1; display: flex; align-items: center; gap: 8px;
+      font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: #5f6b7a; margin: 10px 2px 0;
+    }
+    .kc-sec-label::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #2563eb; }
+    .kct {
+      display: flex; flex-direction: column; background: #fff; border: 1px solid #e7e7e9;
+      border-radius: 14px; padding: 18px 18px 15px; text-decoration: none; color: inherit;
+      box-shadow: 0 1px 2px rgba(15,27,45,0.03), 0 6px 18px rgba(15,27,45,0.04);
+      transition: border-color .2s, transform .2s, box-shadow .2s;
+    }
+    .kct:hover { border-color: #2563eb; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(37,99,235,0.10); }
+    .kct.kct-pack { grid-column: 1 / -1; background: linear-gradient(180deg, rgba(22,163,74,.05), #fff); border-color: rgba(22,163,74,.30); }
+    .kct h3 { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: #1f2937 !important; margin: 0 0 7px; }
+    .kct h3 .material-icons { font-size: 20px; }
+    .kct p { font-size: 12.5px; color: #5f6b7a; line-height: 1.5; margin: 0 0 12px; flex: 1; }
+    .kct .kct-sub { font-size: 11.5px; color: #8b8fb3; font-family: ui-monospace, Menlo, monospace; margin-bottom: 12px; }
+    .kct .kct-foot { display: flex; align-items: center; margin-top: auto; }
+    .kct .kct-open { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: #2563eb; }
+    .kct .kct-open .material-icons { font-size: 15px; }
     .surface-card > .sc-head {
       display: flex; align-items: center; justify-content: space-between;
       gap: 16px; margin-bottom: 18px; flex-wrap: wrap;
@@ -650,9 +772,53 @@
     .ao-list-head h2, .ao-form-card h2 {
       color: #1f2937 !important;
     }
+
+    /* ═══════════ v2.3.0 dark theme — matches the portal ═══════════
+       Page bg = portal --bg (#05071a); every section/card is transparent
+       (white removed) so the dark page shows through; text + borders → light.
+       Header / sidebar / gradient buttons are already dark. */
+    body { background: #05071a !important; color: #a1a1aa; }
+    #app-body, #app-main, #view-workspace, #view-kc, .container { background: transparent !important; }
+
+    /* Outer section wrappers stay fully transparent. */
+    .surface-card, #stats-card, #host-util-card, #svc-status-card, #spaces-card,
+    .empty-spaces, .filter-empty { background: transparent !important; box-shadow: none !important; }
+    /* Inner tiles use the portal tile gradient (surface → bg-3). */
+    .pie-card, .stat-card, .kct, .space-card {
+      background: linear-gradient(180deg, #14172e 0%, #0d1228 100%) !important;
+      border-color: rgba(255,255,255,0.10) !important;
+      box-shadow: none !important;
+    }
+    .kct:hover, .space-card:hover { background: rgba(255,255,255,0.04) !important; border-color: rgba(96,165,250,0.55) !important; }
+    .kct.kct-pack { background: linear-gradient(180deg, rgba(22,163,74,.08), transparent) !important; }
+    #stats-card > .sc-head, #host-util-card > .sc-head,
+    #svc-status-card > .sc-head, #spaces-card > .sc-head { border-bottom-color: rgba(255,255,255,0.12) !important; }
+
+    /* Headings + strong text → light. */
+    h1, h2, h3, h4, h5, h6, .sc-title h2, .kct h3, header.hero h1,
+    .stat-value, .pc-val, .space-name, .modal h3 { color: #e4e4e7 !important; }
+    /* Body / muted text → mid-light. */
+    p, .sc-desc, header.hero p, .stat-sub, .pc-sub, .kct p, .kct-sub, .stat-label,
+    .pie-label, .kc-sec-label, .empty-spaces, .filter-empty, .modal .modal-sub {
+      color: #a1a1aa !important;
+    }
+
+    /* Small light surfaces → dark equivalents. */
+    .stat-bar { background: rgba(255,255,255,0.08) !important; }
+    .pie-card .pie-svg-wrap svg circle.seg, .pie-card.empty .pie-svg-wrap svg circle.seg { stroke: rgba(255,255,255,0.09) !important; }
+    .pie-card .pie-center .pc-sub, .pie-legend-item .lv, .pie-legend-item .ll { color: #a1a1aa !important; }
+    header.hero .hero-eyebrow { background: rgba(255,255,255,0.05) !important; border-color: rgba(255,255,255,0.12) !important; color: #a1a1aa !important; }
+    .prov-filter button { background: rgba(255,255,255,0.05) !important; color: #e4e4e7 !important; border-color: rgba(255,255,255,0.14) !important; }
+    .stat-card .stat-actions button { background: rgba(255,255,255,0.06) !important; color: #e4e4e7 !important; border-color: rgba(255,255,255,0.16) !important; }
+    .pie-card .pie-legend-item .swatch { outline: 1px solid rgba(255,255,255,0.12); }
+    .kc-open { background: transparent !important; }
+    .kc-frame-head h2 { color: #e4e4e7 !important; }
+    /* Modals → dark surface (readable on the dark backdrop). */
+    .modal, #modal-body, .cl-box { background: #0d1228 !important; color: #e4e4e7 !important; border: 1px solid rgba(255,255,255,0.10) !important; }
 </style>
 </head>
 <body>
+  <div id="app-topbar">
   <!-- v2.0.8: persistent appliance readiness / diagnostics strip. While the
        backends are cold-starting it shows weighted pull progress; once every
        service is up it STAYS visible as a green "Appliance is Ready" bar with a
@@ -671,32 +837,49 @@
     <button onclick="document.getElementById('update-banner').style.display='none'; sessionStorage.setItem('vyomi.update-banner-dismissed','1');" style="background:none; border:none; color:#9ca3af; margin-left:14px; cursor:pointer; font-size:14px;" aria-label="Dismiss">✕</button>
   </div>
   <nav class="top-bar">
-    <a class="tb-brand" href="/" aria-label="vyomi"><img src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi"></a>
+    <a class="tb-brand" href="/" aria-label="vyomi"><img src="/assets/brand/vyomi-wordmark.png" alt="vyomi"></a>
     <div class="tb-actions">
       <a class="tb-btn tb-btn-secondary" href="/">← Back to launch</a>
     </div>
   </nav>
+  </div><!-- /app-topbar -->
 
+  <div id="app-body">
+  <!-- v2.3.0: collapsible left nav pane — sits below the top logo bar. -->
+  <aside id="app-sidebar">
+    <button class="side-collapse" type="button" onclick="toggleSidebar()" aria-label="Collapse menu" title="Collapse / expand">
+      <span class="material-icons">menu</span>
+    </button>
+    <nav class="side-nav">
+      <a class="side-item" href="/" title="Home"><span class="material-icons">home</span><span class="side-label">Home</span></a>
+      <button class="side-item active" type="button" data-view="workspace" onclick="showAppView('workspace')" title="Dashboard"><span class="material-icons">dashboard</span><span class="side-label">Dashboard</span></button>
+      <button class="side-item" type="button" data-view="spaces" onclick="showAppView('spaces')" title="Active spaces"><span class="material-icons">workspaces</span><span class="side-label">Spaces</span></button>
+      <button class="side-item" type="button" data-view="kc" onclick="showAppView('kc')" title="Knowledge Center"><span class="material-icons">menu_book</span><span class="side-label">Knowledge Center</span></button>
+    </nav>
+  </aside>
+  <div id="app-main">
+
+  <div id="view-workspace">
   <div class="container">
     <header class="hero">
-      <div class="hero-eyebrow">Workspaces</div>
-      <h1>Pick up where you left off.</h1>
-      <p>Resume an active space — or spin up a fresh one on AWS, GCP, or Azure.</p>
+      <div class="hero-eyebrow">Dashboard</div>
+      <h1>Appliance at a glance.</h1>
+      <p>Per-cloud workload distribution, live host utilization, and backend service status.</p>
     </header>
 
     <!-- ── STATS surface card — pies + live host metrics ────────────── -->
     <div class="surface-card" id="stats-card">
       <div class="sc-head">
         <div class="sc-title">
-          <h2>Appliance health</h2>
-          <p>Per-cloud workload split + live CPU / RAM / Disk on the host VM.</p>
+          <h2><span class="material-icons">monitor_heart</span>Appliance health</h2>
         </div>
       </div>
+      <p class="sc-desc">Per-cloud workload distribution across your clouds (CPU / RAM / Disk).</p>
 
     <!-- ── Per-provider distribution (3 donut pies) ────────────────── -->
     <div class="provider-pies" id="provider-pies">
       <div class="pie-card empty" data-metric="cpu">
-        <div class="pie-label"><span class="live-dot"></span> CPU distribution</div>
+        <div class="pie-label"><span class="material-icons">developer_board</span> CPU distribution</div>
         <div class="pie-svg-wrap">
           <svg viewBox="0 0 36 36">
             <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
@@ -706,7 +889,7 @@
         <div class="pie-legend"></div>
       </div>
       <div class="pie-card empty" data-metric="ram">
-        <div class="pie-label"><span class="live-dot"></span> RAM distribution</div>
+        <div class="pie-label"><span class="material-icons">memory</span> RAM distribution</div>
         <div class="pie-svg-wrap">
           <svg viewBox="0 0 36 36">
             <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
@@ -716,7 +899,7 @@
         <div class="pie-legend"></div>
       </div>
       <div class="pie-card empty" data-metric="disk">
-        <div class="pie-label"><span class="live-dot"></span> Disk distribution</div>
+        <div class="pie-label"><span class="material-icons">storage</span> Disk distribution</div>
         <div class="pie-svg-wrap">
           <svg viewBox="0 0 36 36">
             <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
@@ -727,25 +910,45 @@
       </div>
     </div>
 
+    </div><!-- /appliance-health surface card (pies only) -->
+
+    <!-- ── Host utilization — split into its own surface card ───────── -->
+    <div class="surface-card" id="host-util-card">
+      <div class="sc-head">
+        <div class="sc-title">
+          <h2><span class="material-icons">speed</span>Host utilization</h2>
+        </div>
+      </div>
+      <p class="sc-desc">Live CPU / RAM / Disk on the host VM.</p>
+
     <!-- ── Live host stats ─────────────────────────────────────────── -->
     <div class="host-stats" id="host-stats">
       <div class="stat-card" id="stat-cpu">
-        <div class="stat-label"><span class="live-dot"></span> CPU</div>
+        <div class="stat-label"><span class="material-icons">developer_board</span> CPU</div>
         <div class="stat-value" id="stat-cpu-val">—</div>
         <div class="stat-sub"  id="stat-cpu-sub">—</div>
-        <div class="stat-bar"><span id="stat-cpu-bar"></span></div>
+        <svg class="stat-graph" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+          <path class="sg-track" d="M0 16 C 15 4,28 22,42 14 S 68 2,82 12 S 96 22,100 8"/>
+          <path class="sg-line" id="stat-cpu-line" d="M0 16 C 15 4,28 22,42 14 S 68 2,82 12 S 96 22,100 8"/>
+        </svg>
       </div>
       <div class="stat-card" id="stat-mem">
-        <div class="stat-label"><span class="live-dot"></span> Memory</div>
+        <div class="stat-label"><span class="material-icons">memory</span> Memory</div>
         <div class="stat-value" id="stat-mem-val">—</div>
         <div class="stat-sub"  id="stat-mem-sub">—</div>
-        <div class="stat-bar"><span id="stat-mem-bar"></span></div>
+        <svg class="stat-graph" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+          <path class="sg-track" d="M0 16 C 15 4,28 22,42 14 S 68 2,82 12 S 96 22,100 8"/>
+          <path class="sg-line" id="stat-mem-line" d="M0 16 C 15 4,28 22,42 14 S 68 2,82 12 S 96 22,100 8"/>
+        </svg>
       </div>
       <div class="stat-card" id="stat-disk">
-        <div class="stat-label"><span class="live-dot"></span> Disk</div>
+        <div class="stat-label"><span class="material-icons">storage</span> Disk</div>
         <div class="stat-value" id="stat-disk-val">—</div>
         <div class="stat-sub"  id="stat-disk-sub">—</div>
-        <div class="stat-bar"><span id="stat-disk-bar"></span></div>
+        <svg class="stat-graph" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+          <path class="sg-track" d="M0 16 C 15 4,28 22,42 14 S 68 2,82 12 S 96 22,100 8"/>
+          <path class="sg-line" id="stat-disk-line" d="M0 16 C 15 4,28 22,42 14 S 68 2,82 12 S 96 22,100 8"/>
+        </svg>
         <div class="stat-actions">
           <button type="button" onclick="openDiskCleanup()">Free up space</button>
           <button type="button" onclick="openDiskGrow()">Grow disk</button>
@@ -753,19 +956,45 @@
       </div>
     </div>
 
-    </div><!-- /stats surface card -->
+    </div><!-- /host-utilization surface card -->
+
+    <!-- ── Service status surface card — detailed per-service status, relocated
+         out of the top readiness strip. The strip keeps the green/in-progress
+         banner up top; readiness-strip.js renders each service + live status into
+         #vyomi-services-mount below when that mount exists (this page only). ──── -->
+    <div class="surface-card" id="svc-status-card">
+      <div class="sc-head">
+        <div class="sc-title">
+          <h2><span class="material-icons">dns</span>Service status</h2>
+        </div>
+      </div>
+      <p class="sc-desc">Live status of every emulated backend service.</p>
+      <div id="vyomi-services-mount"></div>
+    </div><!-- /service-status surface card -->
+
+  </div>
+  </div><!-- /view-workspace (Dashboard) -->
+
+  <!-- ── Spaces view — Active spaces, split into its own left-nav tab ──── -->
+  <div id="view-spaces" hidden>
+  <div class="container">
+    <header class="hero">
+      <div class="hero-eyebrow">Workspaces</div>
+      <h1>Pick up where you left off.</h1>
+      <p>Resume an active space — or spin up a fresh one on AWS, GCP, or Azure.</p>
+    </header>
 
     <!-- ── SPACES surface card — filter pills + grid ────────────────── -->
     <div class="surface-card" id="spaces-card">
       <div class="sc-head">
         <div class="sc-title">
-          <h2>Active spaces</h2>
-          <p>Click any space to switch context and open its console. Use the pills below to filter by cloud.</p>
+          <h2><span class="material-icons">workspaces</span>Active spaces</h2>
         </div>
         <button class="btn-create-space" type="button" onclick="openCreateSpaceModal()">
-          Create Space
+          <span class="material-icons">add</span>Create Space
         </button>
       </div>
+      <p class="sc-desc">Click any space to switch context and open its console. Use the pills below to filter by cloud.</p>
       <div class="prov-filter" id="prov-filter">
         <button class="active" type="button" data-prov="" onclick="onSpaceFilter('')">
           All <span class="pf-count" id="pf-count-all">0</span>
@@ -788,6 +1017,111 @@
       </div>
     </div><!-- /spaces surface card -->
 
+    <!-- ── Connect external apps (Nano only — shows the relay endpoint URL) ──── -->
+    <style>
+      #connect-card .cx-hint{display:flex;align-items:center;gap:10px;color:#a1a1aa;font-size:13.5px;background:rgba(255,255,255,.03);border:1px dashed rgba(255,255,255,.16);border-radius:12px;padding:14px 16px}
+      #connect-card .cx-hint .material-icons{color:#7c8cf8}
+      #connect-card .cx-urlrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:linear-gradient(180deg,#14172e,#0d1228);border:1px solid rgba(124,58,237,.35);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+      #connect-card .cx-urllabel{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#8b8ba7}
+      #connect-card .cx-url{font-family:ui-monospace,Menlo,monospace;font-size:14px;color:#7cc4ff;flex:1;min-width:180px;word-break:break-all}
+      #connect-card .cx-copy{background:linear-gradient(135deg,#4d8cf3,#7c3aed);color:#fff;border:0;border-radius:8px;padding:7px 15px;font-size:12.5px;font-weight:600;cursor:pointer}
+      #connect-card .cx-tabs{display:inline-flex;border:1px solid rgba(255,255,255,.14);border-radius:999px;overflow:hidden;margin-bottom:10px}
+      #connect-card .cx-tab{background:transparent;border:0;padding:5px 16px;font-size:12px;font-weight:600;color:#a1a1aa;cursor:pointer}
+      #connect-card .cx-tab.active{background:rgba(255,255,255,.14);color:#fff}
+      #connect-card pre.cx-ex{background:#0b0e22;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px 16px;overflow:auto;margin:0 0 12px}
+      #connect-card pre.cx-ex code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#e4e4e7;white-space:pre}
+      #connect-card .cx-note{font-size:12px;color:#8b8ba7;margin:0;line-height:1.5}
+      #connect-card .cx-note code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:4px;color:#cdd8e6}
+    </style>
+    <div class="surface-card" id="connect-card" style="display:none">
+      <div class="sc-head" id="cx-head" role="button" tabindex="0" aria-controls="cx-collapse" aria-expanded="true" style="cursor:pointer;user-select:none">
+        <div class="sc-title"><h2><span class="material-icons">cable</span>Connect external apps</h2></div>
+        <span class="material-icons" id="cx-caret" style="color:#8b8ba7">expand_less</span>
+      </div>
+      <div id="cx-collapse">
+      <p class="sc-desc">Point any AWS SDK, CLI or tool at this in-browser simulator over the relay tunnel — no code changes, just one endpoint URL.</p>
+      <div class="cx-hint" id="cx-off">
+        <span class="material-icons">power</span>
+        <span>Start the <strong>relay tunnel</strong> (the bar at the bottom of the page → <em>Start tunnel</em>) to get your endpoint URL for external apps.</span>
+      </div>
+      <div id="cx-on" style="display:none">
+        <div class="cx-urlrow">
+          <span class="cx-urllabel">Endpoint URL</span>
+          <code class="cx-url" id="cx-url"></code>
+          <button type="button" class="cx-copy" id="cx-copy">Copy</button>
+        </div>
+        <div class="cx-tabs" role="tablist">
+          <button type="button" class="cx-tab active" data-k="cli">Utility (CLI)</button>
+          <button type="button" class="cx-tab" data-k="sdk">SDK (boto3)</button>
+          <button type="button" class="cx-tab" data-k="curl">curl</button>
+        </div>
+        <pre class="cx-ex"><code id="cx-ex"></code></pre>
+        <p class="cx-note">AWS-compatible endpoint — S3 · DynamoDB · KMS · Secrets · SQS/SNS · IAM · RDS (+ RDS Data API). Use any region with dummy credentials (<code>test</code>/<code>test</code>).</p>
+      </div>
+      </div><!-- /cx-collapse -->
+    </div>
+    <script>
+    (function () {
+      function initConnect() {
+        var card = document.getElementById('connect-card');
+        // Nano only: the relay footer (#nano-foot) is injected in the Nano bundle,
+        // not the appliance — so this card stays hidden on the appliance dashboard.
+        if (!card || !document.getElementById('nano-foot')) return;
+        card.style.display = '';
+        // Expand / collapse (click header) — remembers the choice.
+        var head = document.getElementById('cx-head'), collapse = document.getElementById('cx-collapse'), caret = document.getElementById('cx-caret');
+        function setCollapsed(c) {
+          if (collapse) collapse.style.display = c ? 'none' : '';
+          if (caret) caret.textContent = c ? 'expand_more' : 'expand_less';
+          if (head) head.setAttribute('aria-expanded', String(!c));
+          try { localStorage.setItem('vyomi.connectCollapsed', c ? '1' : '0'); } catch (_) {}
+        }
+        var startC = false; try { startC = localStorage.getItem('vyomi.connectCollapsed') === '1'; } catch (_) {}
+        setCollapsed(startC);
+        if (head) {
+          head.addEventListener('click', function () { setCollapsed(collapse && collapse.style.display !== 'none'); });
+          head.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); head.click(); } });
+        }
+        var offEl = document.getElementById('cx-off'), onEl = document.getElementById('cx-on');
+        var urlEl = document.getElementById('cx-url'), exEl = document.getElementById('cx-ex'), copyBtn = document.getElementById('cx-copy');
+        var _url = null, _k = 'cli';
+        function ex(u) { return {
+          cli: 'aws --endpoint-url ' + u + ' s3 ls\naws --endpoint-url ' + u + ' dynamodb list-tables',
+          sdk: 'import boto3\ns3 = boto3.client(\n  "s3", endpoint_url="' + u + '",\n  aws_access_key_id="test", aws_secret_access_key="test",\n  region_name="us-east-1")\nprint(s3.list_buckets())',
+          curl: 'curl ' + u + '/            # S3 ListBuckets'
+        }; }
+        function paint() { if (exEl && _url) exEl.textContent = ex(_url)[_k]; }
+        function setState(conn, url) {
+          var live = conn && url;
+          offEl.style.display = live ? 'none' : '';
+          onEl.style.display  = live ? '' : 'none';
+          if (live) { _url = url; urlEl.textContent = url; paint(); }
+        }
+        card.querySelectorAll('.cx-tab').forEach(function (t) {
+          t.addEventListener('click', function () {
+            card.querySelectorAll('.cx-tab').forEach(function (x) { x.classList.toggle('active', x === t); });
+            _k = t.dataset.k; paint();
+          });
+        });
+        if (copyBtn) copyBtn.addEventListener('click', function () {
+          if (!_url || !navigator.clipboard) return;
+          navigator.clipboard.writeText(_url).then(function () {
+            copyBtn.textContent = 'Copied'; setTimeout(function () { copyBtn.textContent = 'Copy'; }, 1200);
+          }).catch(function () {});
+        });
+        try {
+          var chn = new BroadcastChannel('nano-relay');
+          chn.onmessage = function (ev) { var m = ev.data || {}; if (m.type === 'status') setState(m.state === 'connected', m.external); };
+        } catch (_) {}
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initConnect); else initConnect();
+    })();
+    </script>
+
+  </div>
+  </div><!-- /view-spaces -->
+
+    <!-- ── Overlays (outside the views, so they work from any tab) ────── -->
     <!-- ── Cloud-locked modal (Pro tier non-primary-cloud click) ────── -->
     <div class="cl-modal" id="cl-modal" onclick="onClModalBackdrop(event)">
       <div class="cl-box" onclick="event.stopPropagation()">
@@ -896,9 +1230,107 @@
     </div>
 
     </section>
+
+  <!-- Knowledge Center — the portal KC tiles, rendered natively. Each tile opens
+       its portal page in a new tab. "Open full portal" pops the whole KC. -->
+  <div id="view-kc" hidden>
+    <div class="container">
+    <header class="hero">
+      <div class="hero-eyebrow">Knowledge Center</div>
+      <h1>Docs, guides &amp; references.</h1>
+      <p>Interactive Swagger consoles, SDK &amp; CLI usage, coverage tables, and the architecture behind the simulator — hosted on the Vyomi portal.</p>
+      <a class="kc-open" href="https://vyomi.cloud/docs" target="_blank" rel="noopener" style="margin-top:8px;">Open full portal <span class="material-icons" style="font-size:16px;">open_in_new</span></a>
+    </header>
+    <div class="kc-tiles">
+      <a class="kct kct-pack" href="https://vyomi.cloud/docs/conformance-pack" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#16a34a">verified</span> Conformance Pack</h3>
+        <p>Per-cloud API · SDK · Utility docs with honest, probe-backed status — 12/14 native-SDK probes green.</p>
+        <span class="kct-foot"><span class="kct-open">Open pack <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <div class="kc-sec-label">API Reference</div>
+      <a class="kct" href="https://vyomi.cloud/docs/aws" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#ff9900">cloud</span> AWS API</h3>
+        <p>S3, EC2, IAM, SQS, RDS, DynamoDB, Lambda, API Gateway, VPC — every endpoint Vyomi simulates, documented inline.</p>
+        <span class="kct-sub">⌨ CLI · boto3 · Java · Go · Terraform</span>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <a class="kct" href="https://vyomi.cloud/docs/gcp" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#4d8cf3">cloud_queue</span> GCP API</h3>
+        <p>Compute, Storage, Cloud SQL, Pub/Sub, Firestore, Functions, API Gateway, VPC, IAM — every endpoint Vyomi simulates.</p>
+        <span class="kct-sub">⌨ gcloud · gsutil · Java · Go · Terraform</span>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <a class="kct" href="https://vyomi.cloud/docs/azure" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#38b6ff">cloud_circle</span> Azure API</h3>
+        <p>Virtual Machines, Blob Storage, SQL, Service Bus, Cosmos DB, Functions, APIM, VNet, Entra / RBAC.</p>
+        <span class="kct-sub">⌨ az CLI · Java · Go</span>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <div class="kc-sec-label">Platform</div>
+      <a class="kct" href="https://vyomi.cloud/docs/coverage" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#2563eb">grid_view</span> Service matrix</h3>
+        <p>35 services across 3 clouds with real-backend / simulated tags and an SDK compatibility table.</p>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <a class="kct" href="https://vyomi.cloud/docs/architecture" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#7c3aed">account_tree</span> Real backends, not mocks</h3>
+        <p>Postgres · MinIO · Vault · NATS · DynamoDB-Local · Cedar — what powers each cloud surface.</p>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <a class="kct" href="https://vyomi.cloud/docs/conformance" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#16a34a">verified</span> SDK pass rates</h3>
+        <p>88% latest. Java · Go · Python tests against unmodified SDKs. Honest gaps documented.</p>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <div class="kc-sec-label">Knowledge</div>
+      <a class="kct" href="https://vyomi.cloud/docs/knowledge/amqp-vs-https" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#38b6ff">cloud_circle</span> Azure messaging, natively</h3>
+        <p>Service Bus speaks AMQP — unserveable locally. How the unmodified azure-storage-queue SDK gives you real queue round-trips over HTTP on Azurite, and…</p>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <a class="kct" href="https://vyomi.cloud/docs/knowledge/grpc-vs-https" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#4d8cf3">cloud_queue</span> GCP KMS & Secrets, natively</h3>
+        <p>Google's SDKs default to gRPC with no emulator. How their own newHttpJsonBuilder() REST transport keeps the unmodified client working against the…</p>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+      <div class="kc-sec-label">Comparisons</div>
+      <a class="kct" href="https://vyomi.cloud/compare/localstack" target="_blank" rel="noopener">
+        <h3><span class="material-icons" style="color:#0891b2">compare_arrows</span> Multi-cloud vs AWS-only</h3>
+        <p>Honest side-by-side: 3 clouds in 1 binary, real OSS backends (Postgres · MinIO · Vault · NATS), INR pricing — and where LocalStack is still the…</p>
+        <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
+      </a>
+    </div>
+    </div>
   </div>
+  </div><!-- /app-main -->
+  </div><!-- /app-body -->
 
   <script>
+    // ── v2.3.0 left nav: view switch (Workspace / Knowledge Center) + collapse ──
+    var APP_VIEWS = { workspace: 'view-workspace', spaces: 'view-spaces', kc: 'view-kc' };
+    function showAppView(view) {
+      if (!APP_VIEWS[view]) view = 'workspace';
+      Object.keys(APP_VIEWS).forEach(function (k) {
+        var el = document.getElementById(APP_VIEWS[k]);
+        if (el) el.hidden = (k !== view);
+      });
+      var items = document.querySelectorAll('#app-sidebar .side-item[data-view]');
+      for (var i = 0; i < items.length; i++)
+        items[i].classList.toggle('active', items[i].getAttribute('data-view') === view);
+      try { localStorage.setItem('vyomi.appview', view); } catch (_) {}
+    }
+    function toggleSidebar() {
+      var c = document.body.classList.toggle('side-collapsed');
+      try { localStorage.setItem('vyomi.sidecollapsed', c ? '1' : '0'); } catch (_) {}
+    }
+    (function () {
+      try { if (localStorage.getItem('vyomi.sidecollapsed') === '1') document.body.classList.add('side-collapsed'); } catch (_) {}
+      // A URL hash (e.g. clouds.html#spaces from a console "back to spaces" link) wins over the last-used view.
+      var hv = (location.hash || '').replace('#', '');
+      if (APP_VIEWS[hv]) { showAppView(hv); return; }
+      try { var v = localStorage.getItem('vyomi.appview'); if (v && v !== 'workspace') showAppView(v); } catch (_) {}
+    })();
+
     // ── Inject "Open <Cloud> Console →" buttons on each cloud card ───
     const PROVIDER_PATHS = { aws: '/console/aws', gcp: '/console/gcp', azure: '/console/azure' };
     document.querySelectorAll('.cloud-card').forEach(card => {
@@ -1158,6 +1590,15 @@
       if (pct >= 70) return 'warn';
       return '';
     }
+    // Reveal the curved sparkline left→right up to pct% (via stroke-dashoffset).
+    function setStatCurve(lineId, pct) {
+      const line = document.getElementById(lineId);
+      if (!line) return;
+      const L = line.getTotalLength();
+      const p = Math.min(100, Math.max(0, pct || 0));
+      line.style.strokeDasharray = L;
+      line.style.strokeDashoffset = (L * (1 - p / 100)).toFixed(2);
+    }
     function _setStatClass(cardId, klass) {
       const el = document.getElementById(cardId);
       if (!el) return;
@@ -1179,7 +1620,7 @@
           const cores = cpu.cpu_count || (sizing && sizing.cpu_count) || 0;
           if (pct !== null) {
             document.getElementById('stat-cpu-val').textContent = pct.toFixed(1) + '%';
-            document.getElementById('stat-cpu-bar').style.width = Math.min(100, pct) + '%';
+            setStatCurve('stat-cpu-line', pct);
             _setStatClass('stat-cpu', _classifyStat(pct));
           } else {
             document.getElementById('stat-cpu-val').textContent = '—';
@@ -1193,7 +1634,18 @@
         // /api/host/sizing gives total; no live "used" — derive a
         // proxy from load1m / cpu_count (Linux convention). Falls back
         // to "—" used if we can't compute.
-        if (sizing) {
+        if (sizing && typeof sizing.wasm_heap_mb === 'number') {
+          // Nano: REAL in-browser runtime memory — the Pyodide WASM linear heap,
+          // summed across open console sessions. A genuine live utilization number.
+          const mb = sizing.wasm_heap_mb;
+          const n = sizing.runtime_sessions || 0;
+          const pct = Math.min(99, (mb / 512) * 100);  // 512 MiB = rough visual budget
+          document.getElementById('stat-mem-val').textContent = mb + ' MiB';
+          setStatCurve('stat-mem-line', pct);
+          _setStatClass('stat-mem', _classifyStat(pct));
+          document.getElementById('stat-mem-sub').textContent =
+            'Pyodide runtime · ' + n + ' active console' + (n === 1 ? '' : 's');
+        } else if (sizing) {
           const totGiB = sizing.memory_gib || 0;
           let usedPct = null;
           if (cpu && typeof cpu.load_1m === 'number' && cpu.cpu_count) {
@@ -1205,7 +1657,7 @@
           document.getElementById('stat-mem-val').textContent =
             totGiB ? totGiB.toFixed(1) + ' GiB' : '—';
           if (usedPct !== null) {
-            document.getElementById('stat-mem-bar').style.width = usedPct.toFixed(1) + '%';
+            setStatCurve('stat-mem-line', usedPct);
             _setStatClass('stat-mem', _classifyStat(usedPct));
             document.getElementById('stat-mem-sub').textContent =
               `~${(totGiB * usedPct / 100).toFixed(1)} GiB busy · ${usedPct.toFixed(0)}%`;
@@ -1223,7 +1675,7 @@
           const tot  = (typeof d.total_gb === 'number') ? d.total_gb.toFixed(1) : '—';
           if (pct !== null) {
             document.getElementById('stat-disk-val').textContent = pct.toFixed(0) + '%';
-            document.getElementById('stat-disk-bar').style.width = Math.min(100, pct) + '%';
+            setStatCurve('stat-disk-line', pct);
             _setStatClass('stat-disk', _classifyStat(pct));
           }
           document.getElementById('stat-disk-sub').textContent =
@@ -1411,7 +1863,7 @@
     // v2.0.5: gray-scale palette across the donut wheels. AWS = darkest,
     // GCP = mid, Azure = lightest — clear contrast steps along the
     // black→gray ramp. Replaces brand colors that competed visually.
-    const PROV_PALETTE = { aws: '#1f2937', gcp: '#6b7280', azure: '#f8f9fa' };
+    const PROV_PALETTE = { aws: '#60a5fa', gcp: '#a78bfa', azure: '#22d3ee' };
     const PROV_LABEL   = { aws: 'AWS',     gcp: 'GCP',     azure: 'Azure' };
     // Per-VM rough averages — a real EC2/GCE/Az VM in our LXD-backed
     // setup averages a small instance type. Will be replaced with
@@ -1520,6 +1972,31 @@
       return { val: '—', sub: '' };
     }
 
+    // Ensure all three CPU/RAM/Disk pies are visible and label the card for the
+    // live "resources" basis. (The un-hide is defensive against any prior build
+    // that hid RAM/Disk.) The appliance (no basis) → else branch, chrome unchanged.
+    function _restorePieChrome(d) {
+      ['ram', 'disk'].forEach(m => {
+        const c = document.querySelector('#stats-card .pie-card[data-metric="' + m + '"]');
+        if (c) c.style.display = '';
+      });
+      const cpuLabel = document.querySelector('#stats-card .pie-card[data-metric="cpu"] .pie-label');
+      if (cpuLabel) cpuLabel.innerHTML = '<span class="material-icons">developer_board</span> CPU distribution';
+      const title = document.querySelector('#stats-card h2');
+      if (title) title.innerHTML = '<span class="material-icons">monitor_heart</span>Appliance health';
+      const desc = document.querySelector('#stats-card .sc-desc');
+      if (!desc) return;
+      if (d && d.basis === 'resources') {
+        const n = (d.runtime && d.runtime.sessions) || 0;
+        desc.textContent = n > 0
+          ? ('Live per-cloud footprint across your resources (weighted vCPU / RAM / Disk) · '
+             + n + ' active console' + (n === 1 ? '' : 's') + '.')
+          : 'Live per-cloud footprint — open a console and create resources to see utilization here.';
+      } else {
+        desc.textContent = 'Per-cloud workload distribution across your clouds (CPU / RAM / Disk).';
+      }
+    }
+
     async function refreshProviderPies() {
       try {
         const r = await fetch('/api/runtime/host-distribution');
@@ -1527,6 +2004,11 @@
         const d = await r.json();
         const provs = d.providers || {};
         const grandTotal = (d.grand_total_resources || 0);
+
+        // The three CPU/RAM/Disk pies are ALWAYS shown. When a console is live
+        // they carry the real weighted footprint (basis:"resources"); with no
+        // live console they render an honest empty state (grandTotal === 0).
+        _restorePieChrome(d);
 
         ['cpu', 'ram', 'disk'].forEach(metric => {
           const card = document.querySelector('.pie-card[data-metric="' + metric + '"]');

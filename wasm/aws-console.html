@@ -1,6 +1,32 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script>
+  (function(){
+    var base = location.pathname.replace(/\/[^\/]*$/, "");
+    window.__NANO_BASE = base;
+    if (!base) return;
+    var of = window.fetch.bind(window);
+    var origin = location.origin;
+    function rw(u){
+      if (typeof u!=="string") return u;
+      if (u.indexOf(origin+"/")===0){                     // same-origin ABSOLUTE url (e.g. ORIGIN + "/api/..")
+        var pth = u.slice(origin.length);
+        return (pth===base || pth.indexOf(base+"/")===0) ? u : origin+base+pth;
+      }
+      if (u.charAt(0)==="/" && u.charAt(1)!=="/"){         // root-relative path (e.g. "/api/..")
+        return (u===base || u.indexOf(base+"/")===0) ? u : base+u;
+      }
+      return u;                                            // relative or cross-origin -> leave alone
+    }
+    window.fetch = function(input, init){
+      if (typeof input==="string") return of(rw(input), init);
+      if (input && input.url) return of(new Request(rw(input.url), input), init);
+      return of(input, init);
+    };
+  })();
+  </script>
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AWS Management Console — Vyomi</title>
@@ -350,17 +376,17 @@
 }
 #disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
 </style>
-  <script type="module" src="/nano-boot.js"></script>
+  <script type="module" src="./nano-boot.js"></script>
 </head>
 <body>
 
 <!-- ==================== TOP BAR ==================== -->
 <header class="aws-top">
-  <a class="logo" href="/aws-console.html">
+  <a class="logo" href="aws-console.html">
     <svg width="30" height="18" viewBox="0 0 304 182"><path fill="#ff9900" d="M86.4 66.4c0 3.7.4 6.7 1.1 8.9.8 2.2 1.8 4.6 3.2 7.2.5.8.7 1.6.7 2.3 0 1-.6 2-1.9 3l-6.3 4.2c-.9.6-1.8.9-2.6.9-1 0-2-.5-3-1.4-1.4-1.5-2.6-3.1-3.6-4.7-1-1.7-2-3.6-3.1-5.9-7.8 9.2-17.6 13.8-29.4 13.8-8.4 0-15.1-2.4-20-7.2-4.9-4.8-7.4-11.2-7.4-19.2 0-8.5 3-15.4 9.1-20.6 6.1-5.2 14.2-7.8 24.5-7.8 3.4 0 6.9.3 10.6.8 3.7.5 7.5 1.3 11.5 2.2v-7.3c0-7.6-1.6-12.9-4.7-16-3.2-3.1-8.6-4.6-16.3-4.6-3.5 0-7.1.4-10.8 1.3-3.7.9-7.3 2-10.8 3.4-1.6.7-2.8 1.1-3.5 1.3-.7.2-1.2.3-1.6.3-1.4 0-2.1-1-2.1-3.1v-4.9c0-1.6.2-2.8.7-3.5.5-.7 1.4-1.4 2.8-2.1 3.5-1.8 7.7-3.3 12.6-4.5 4.9-1.3 10.1-1.9 15.6-1.9 11.9 0 20.6 2.7 26.2 8.1 5.5 5.4 8.3 13.6 8.3 24.6v32.4zM45.8 81.6c3.3 0 6.7-.6 10.3-1.8 3.6-1.2 6.8-3.4 9.5-6.4 1.6-1.9 2.8-4 3.4-6.4.6-2.4 1-5.3 1-8.7v-4.2c-2.9-.7-6-1.3-9.2-1.7-3.2-.4-6.3-.6-9.4-.6-6.7 0-11.6 1.3-14.9 4-3.3 2.7-4.9 6.5-4.9 11.5 0 4.7 1.2 8.2 3.7 10.6 2.4 2.5 5.9 3.7 10.5 3.7zm80.3 10.8c-1.8 0-3-.3-3.8-1-.8-.6-1.5-2-2.1-3.9L96.7 10.2c-.6-2-.9-3.3-.9-4 0-1.6.8-2.5 2.4-2.5h9.8c1.9 0 3.2.3 3.9 1 .8.6 1.4 2 2 3.9l16.8 66.2 15.6-66.2c.5-2 1.1-3.3 1.9-3.9.8-.6 2.2-1 4-1h8c1.9 0 3.2.3 4 1 .8.6 1.5 2 1.9 3.9l15.8 67 17.3-67c.6-2 1.3-3.3 2-3.9.8-.6 2.1-1 3.9-1h9.3c1.6 0 2.5.8 2.5 2.5 0 .5-.1 1-.2 1.6-.1.6-.3 1.4-.7 2.5l-24.1 77.3c-.6 2-1.3 3.3-2.1 3.9-.8.6-2.1 1-3.8 1h-8.6c-1.9 0-3.2-.3-4-1-.8-.7-1.5-2-1.9-4L156 23l-15.4 64.4c-.5 2-1.1 3.3-1.9 4-.8.7-2.2 1-4 1h-8.6zm128.5 2.7c-5.2 0-10.4-.6-15.4-1.8-5-1.2-8.9-2.5-11.5-4-1.6-.9-2.7-1.9-3.1-2.8-.4-.9-.6-1.9-.6-2.8v-5.1c0-2.1.8-3.1 2.3-3.1.6 0 1.2.1 1.8.3.6.2 1.5.6 2.5 1 3.4 1.5 7.1 2.7 11 3.5 4 .8 7.9 1.2 11.9 1.2 6.3 0 11.2-1.1 14.6-3.3 3.4-2.2 5.2-5.4 5.2-9.5 0-2.8-.9-5.1-2.7-7-1.8-1.9-5.2-3.6-10.1-5.2L246 52c-7.3-2.3-12.7-5.7-16-10.2-3.3-4.4-5-9.3-5-14.5 0-4.2.9-7.9 2.7-11.1 1.8-3.2 4.2-6 7.2-8.2 3-2.3 6.4-4 10.4-5.2 4-1.2 8.2-1.7 12.6-1.7 2.2 0 4.5.1 6.7.4 2.3.3 4.4.7 6.5 1.1 2 .5 3.9 1 5.7 1.6 1.8.6 3.2 1.2 4.2 1.8 1.4.8 2.4 1.6 3 2.5.6.8.9 1.9.9 3.3v4.7c0 2.1-.8 3.2-2.3 3.2-.8 0-2.1-.4-3.8-1.2-5.7-2.6-12.1-3.9-19.2-3.9-5.7 0-10.2.9-13.3 2.8-3.1 1.9-4.7 4.8-4.7 8.9 0 2.8 1 5.2 3 7.1 2 1.9 5.7 3.8 11 5.5l14.2 4.5c7.2 2.3 12.4 5.5 15.5 9.6 3.1 4.1 4.6 8.8 4.6 14 0 4.3-.9 8.2-2.6 11.6-1.8 3.4-4.2 6.4-7.3 8.8-3.1 2.5-6.8 4.3-11.1 5.6-4.5 1.4-9.2 2.1-14.3 2.1z"/></svg>
     <span style="font-size:13px">aws</span>
   </a>
-  <a class="back-spaces" href="/" title="Return to the Simulation Spaces view (switch provider or pick a different space)">
+  <a class="back-spaces" href="clouds.html#spaces" title="Return to the Simulation Spaces view (switch provider or pick a different space)">
     <span class="material-symbols-outlined">arrow_back</span>
     Go back to spaces
   </a>
@@ -550,14 +576,30 @@ async function requireAwsSpace(){
   const space = active && active.space ? active.space : null;
   const provider = space ? String(space.provider || "").toLowerCase() : "";
   if (!space || provider !== "aws") {
+    // Auto-switch: find and activate an AWS space instead of dead-ending
+    // (mirrors requireGcpSpace / requireAzureSpace).
+    try {
+      const sr = await fetch(ORIGIN + "/api/spaces");
+      if (sr.ok) {
+        const data = await sr.json();
+        const spaces = data.spaces || [];
+        const awsSpace = spaces.find(s => String(s.provider || "").toLowerCase() === "aws" && s.status === "running");
+        if (awsSpace) {
+          await fetch(ORIGIN + "/api/spaces/" + awsSpace.space_id + "/switch", {method: "POST"});
+          window.location.reload();
+          return false;
+        }
+      }
+    } catch(_){}
+    // No AWS space exists at all — show message, then go to the Spaces view.
     document.body.innerHTML =
       '<div style="font-family:Amazon Ember,Arial,sans-serif;padding:60px 24px;max-width:560px;margin:60px auto;text-align:center;color:#16191f;background:#fff;border:1px solid #eaeded;border-radius:8px">' +
       '  <div style="font-size:48px;line-height:1">☁️</div>' +
       '  <h1 style="font-size:22px;font-weight:700;margin:16px 0 8px">Select an AWS space first</h1>' +
       '  <p style="font-size:14px;color:#545b64;line-height:1.6">The AWS console only opens inside a selected simulation space. Redirecting to the Spaces view…</p>' +
-      '  <a href="/" style="display:inline-block;margin-top:20px;background:#ff9900;color:#000;padding:9px 20px;border-radius:6px;font-size:13px;text-decoration:none;font-weight:700">Go to Spaces</a>' +
+      '  <a href="clouds.html#spaces" style="display:inline-block;margin-top:20px;background:#ff9900;color:#000;padding:9px 20px;border-radius:6px;font-size:13px;text-decoration:none;font-weight:700">Go to Spaces</a>' +
       '</div>';
-    setTimeout(()=>{ window.location.href = "/"; }, 1800);
+    setTimeout(()=>{ window.location.href = "clouds.html#spaces"; }, 1800);
     return false;
   }
   return true;
@@ -3368,7 +3410,7 @@ setInterval(fetchDiskHealth, 30000);
 // Boot
 boot();
 </script>
-<script src="/assets/lazy_backends.js"></script>
+<script src="assets/lazy_backends.js"></script>
 
 <style>
  #nano-docs{position:fixed;right:16px;bottom:52px;z-index:99998;font:13px system-ui,-apple-system,sans-serif}
@@ -3383,5 +3425,105 @@ boot();
 <div id="nano-docs">
  <div class="pop"><div class="h">AWS conformance</div><a href="https://vyomi.cloud/docs/aws" target="_blank" rel="noopener">API doc <span>↗</span></a><a href="https://vyomi.cloud/docs/aws/sdk" target="_blank" rel="noopener">SDK doc <span>↗</span></a><a href="https://vyomi.cloud/docs/aws/cli" target="_blank" rel="noopener">Utility doc <span>↗</span></a><a href="https://vyomi.cloud/docs/conformance-pack" target="_blank" rel="noopener">Conformance Pack <span>↗</span></a></div>
  <div class="pill" onclick="this.parentNode.classList.toggle('open')">📘 Conformance</div>
-</div></body>
+</div>
+<style>
+ #nano-foot{position:fixed;left:0;right:0;bottom:0;z-index:99999;height:34px;display:flex;align-items:center;gap:12px;padding:0 14px;background:#0b0e28;border-top:1px solid #2a2f55;color:#e4e4e7;font:12px system-ui,-apple-system,sans-serif;box-shadow:0 -4px 18px rgba(0,0,0,.35)}
+ #nano-foot .dot{width:9px;height:9px;border-radius:50%;background:#71717a;flex:0 0 auto}
+ #nano-foot.up .dot{background:#34d399;box-shadow:0 0 8px #34d39988}
+ #nano-foot.connecting .dot{background:#fbbf24;box-shadow:0 0 8px #fbbf2488;animation:nano-pulse 1s ease-in-out infinite}
+ @keyframes nano-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+ #nano-foot .lbl{white-space:nowrap}
+ #nano-foot .sp{flex:1}
+ #nano-foot button{background:#171b3d;color:#7cc4ff;border:1px solid #2a2f55;border-radius:6px;padding:3px 10px;cursor:pointer;font:12px system-ui,-apple-system,sans-serif}
+ #nano-foot button:hover{background:#1f2550;color:#fff}
+ #nano-foot .ep{font:11px ui-monospace,Menlo,monospace;color:#8b8ba7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40vw}
+ #nano-logs{position:fixed;left:0;right:0;bottom:34px;z-index:99998;height:240px;background:#05071a;border-top:1px solid #2a2f55;display:none;flex-direction:column;box-shadow:0 -12px 34px rgba(0,0,0,.5)}
+ #nano-logs.open{display:flex}
+ #nano-logs .h{padding:5px 14px;font:11px system-ui,-apple-system,sans-serif;color:#8b8ba7;background:#0a0c24;border-bottom:1px solid #1a1f44}
+ #nano-logs pre{flex:1;margin:0;padding:10px 14px;overflow:auto;font:12px ui-monospace,Menlo,monospace;color:#cdd8e6;white-space:pre-wrap}
+ #nano-logs pre .ok{color:#34d399}#nano-logs pre .err{color:#f87171}#nano-logs pre .dim{color:#71717a}
+</style>
+<div id="nano-logs"><div class="h">Relay endpoint — runs in a shared worker, stays connected across views. Logs:</div><pre id="nano-foot-log"><span class="dim">tunnel off — click “Start tunnel”.</span></pre></div>
+<div id="nano-foot" title="Relay tunnel — lets an external SDK/CLI reach this in-browser sim">
+ <span class="dot"></span><span class="lbl">Relay tunnel: off</span>
+ <span class="ep" id="nano-foot-ep"></span>
+ <span class="sp"></span>
+ <button id="nano-foot-logs">Logs ▴</button>
+ <button id="nano-foot-toggle">Start tunnel</button>
+</div>
+<script>
+(function(){
+  var base = window.__NANO_BASE || "";
+  // Tunnel config + cloud session live in localStorage (the worker can't read it);
+  // the footer resolves them and hands them to the shared worker on start. Defaults
+  // point at the local tunnel (auto-detected) with the Cloudflare relay as fallback.
+  function ls(k, d){ try { return localStorage.getItem(k) || d; } catch(_){ return d; } }
+  function sessionId(){
+    var s = ls("nano_session", null);
+    if(!s){ s = "nano-" + Math.random().toString(36).slice(2,10); try{ localStorage.setItem("nano_session", s); }catch(_){} }
+    return s;
+  }
+  var SESSION = sessionId();
+  var CFG = {
+    localHealth:   ls("nano_local_health", "http://127.0.0.1:8090/health"),
+    localWs:       ls("nano_local_ws",     "ws://127.0.0.1:8090/register"),
+    localExternal: ls("nano_local_ext",    "http://127.0.0.1:8090"),
+    cloudWsBase:   ls("nano_cloud_ws",     "wss://relay.vyomi.cloud/register"),
+    cloudExternal: ls("nano_cloud_ext",    "https://relay.vyomi.cloud"),
+  };
+  var foot = document.getElementById("nano-foot"), lbl = foot.querySelector(".lbl");
+  var epEl = document.getElementById("nano-foot-ep"), logsPane = document.getElementById("nano-logs"), logEl = document.getElementById("nano-foot-log");
+  var toggleBtn = document.getElementById("nano-foot-toggle"), logsBtn = document.getElementById("nano-foot-logs");
+  var phase = "off", lastSeen = 0, mode = null, external = null, noteText = null;
+  document.body.style.paddingBottom = "40px";   // never cover page content
+
+  function render(state, served){
+    phase = state || "off";
+    foot.classList.remove("up","connecting");
+    var via = mode ? (mode==="local" ? " · local (fast · private)" : " · cloud (Cloudflare)") : "";
+    if(phase==="connected"){ foot.classList.add("up"); lbl.textContent = "Relay tunnel: connected" + via + (served!=null?(" · "+served+" served"):""); toggleBtn.textContent="Stop"; }
+    // A `note` from the worker (e.g. "no local tunnel — run `vyomi-tunnel`") means
+    // the tunnel can't connect — show it in the label instead of a forever spinner.
+    else if(phase==="connecting"){ foot.classList.add("connecting"); lbl.textContent = noteText ? ("Relay tunnel: " + noteText) : ("Relay tunnel: connecting…" + via); toggleBtn.textContent="Stop"; }
+    else { lbl.textContent = "Relay tunnel: off"; toggleBtn.textContent="Start tunnel"; }
+    epEl.textContent = (phase==="connected" && external) ? ("apps → " + external) : "";
+    epEl.title = external || "";
+  }
+  function appendLog(line, cls){ var d=document.createElement("div"); d.innerHTML = cls ? ('<span class="'+cls+'">'+(line||"")+'</span>') : (line||""); logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight; }
+  function renderLogs(lines){ logEl.textContent=""; if(!lines||!lines.length){ appendLog("tunnel off — click “Start tunnel”.","dim"); return; } lines.forEach(function(l){ appendLog(l.line,l.cls); }); }
+  logsBtn.onclick = function(){ logsPane.classList.toggle("open"); logsBtn.textContent = logsPane.classList.contains("open") ? "Logs ▾" : "Logs ▴"; };
+
+  var ch = ("BroadcastChannel" in window) ? new BroadcastChannel("nano-relay") : null;
+  if(ch) ch.onmessage = function(ev){ var m=ev.data||{}; if(m.type==="status"){ lastSeen=performance.now(); if(m.mode!==undefined) mode=m.mode; if(m.external!==undefined) external=m.external; if(m.note!==undefined) noteText=m.note; render(m.state,m.served); } else if(m.type==="log"){ appendLog(m.line,m.cls); } else if(m.type==="logs"){ renderLogs(m.lines); } };
+
+  // The shared worker hosts the endpoint; the port carries start/stop/query.
+  var worker=null, port=null, ok=false;
+  try {
+    worker = new SharedWorker(base + "/relay/relay-shared-worker.js", { type:"module", name:"nano-relay" });
+    port = worker.port; port.start();
+    port.onmessage = function(ev){ var m=ev.data||{}; if(m.type==="logs") renderLogs(m.lines); else if(m.type==="status"){ if(m.mode!==undefined) mode=m.mode; if(m.external!==undefined) external=m.external; if(m.note!==undefined) noteText=m.note; render(m.state,m.served); } };
+    ok = true;
+  } catch(e){ ok = false; }
+
+  function setIntent(on){ try{ on ? localStorage.setItem("nano_tunnel_on","1") : localStorage.removeItem("nano_tunnel_on"); }catch(_){} }
+  function intentOn(){ try{ return localStorage.getItem("nano_tunnel_on")==="1"; }catch(_){ return false; } }
+  toggleBtn.onclick = function(){
+    if(!ok){ window.open(base + "/relay/nano-endpoint.html", "nano-relay-endpoint"); return; }   // fallback: standalone tab
+    if(phase==="off"){ setIntent(true); render("connecting"); port.postMessage({type:"start", session:SESSION, config:CFG}); logsPane.classList.add("open"); logsBtn.textContent="Logs ▾"; }
+    else { setIntent(false); port.postMessage({type:"stop"}); render("off"); }
+  };
+  if(ok){
+    // The shared worker is RECREATED on same-tab navigation, so AUTO-RESUME: if the
+    // user left the tunnel on, every view reconnects it automatically (it briefly
+    // re-handshakes during the nav). Open the dashboard + a console in SEPARATE tabs
+    // and the worker has overlapping clients → it stays continuously connected.
+    if(intentOn()){ render("connecting"); port.postMessage({type:"start", session:SESSION, config:CFG}); }
+    port.postMessage({type:"query"});
+    setInterval(function(){
+      if(phase!=="off" && performance.now()-lastSeen>8000){ render("off"); if(intentOn()) port.postMessage({type:"start", session:SESSION, config:CFG}); }
+      port.postMessage({type:"query"});
+    }, 3000);
+  } else { toggleBtn.textContent = "Open relay endpoint ↗"; }
+})();
+</script></body>
 </html>

@@ -22007,6 +22007,59 @@ class _DiskGrowRequest(BaseModel):
     target_gb: int
 
 
+@app.get("/api/runtime/service-metrics")
+def api_runtime_service_metrics():
+    """Live per-service CPU% + Mem% for the "Service status" cards.
+
+    The simulator deliberately has no docker.sock, so we route a single
+    `docker stats --no-stream` through the runtime bridge (which runs on the
+    VM host) and map each container back to its readiness service. Cached a
+    few seconds so multiple SPA pollers share one bridge call. Returns
+    {name: {cpu_pct, mem_pct}} keyed by the same service names as
+    /api/runtime/readiness. Best-effort: empty when the bridge is unreachable
+    (docker-compose-direct / non-appliance runs)."""
+    import time as _t
+    now = _t.time()
+    cache = getattr(api_runtime_service_metrics, "_cache", None)
+    if cache and (now - cache[0]) < 4.0:
+        return cache[1]
+    out: dict = {}
+    try:
+        from core import appliance_readiness as _ar
+        from core import vm_connect as _vmc
+        r = _vmc._bridge_run("host", [
+            "docker", "stats", "--no-stream",
+            "--format", "{{.Name}}|{{.CPUPerc}}|{{.MemPerc}}",
+        ], timeout=15)
+        if r.get("returncode") == 0:
+            rows = {}
+            for line in (r.get("stdout") or "").splitlines():
+                parts = line.split("|")
+                if len(parts) != 3:
+                    continue
+                cname, cpu_s, mem_s = parts
+                try:
+                    cpu = float(cpu_s.strip().rstrip("%"))
+                    mem = float(mem_s.strip().rstrip("%"))
+                except ValueError:
+                    continue
+                rows[cname] = (cpu, mem)
+            # Map each readiness service to its container by name token:
+            # the compose service host (vyomi-vault, …) or the short name for
+            # the always-on core services (simulator / cloudsim).
+            for name, label, host, port, category, weight in _ar._BACKENDS:
+                token = name if host in ("127.0.0.1", "localhost") else host
+                for cname, (cpu, mem) in rows.items():
+                    if token in cname:
+                        out[name] = {"cpu_pct": round(cpu, 2), "mem_pct": round(mem, 2)}
+                        break
+    except Exception:
+        pass  # best-effort; UI shows "—" when a service has no sample
+    payload = {"services": out, "checked_at": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime())}
+    api_runtime_service_metrics._cache = (now, payload)
+    return payload
+
+
 @app.get("/api/runtime/host-distribution")
 def api_runtime_host_distribution():
     """Aggregated per-provider footprint across ALL spaces, without

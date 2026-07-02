@@ -340,7 +340,7 @@
     </svg>
     Google Cloud
   </a>
-  <a class="back-spaces" href="/ui" title="Return to the Simulation Spaces view (switch provider or pick a different project)">
+  <a class="back-spaces" href="/ui#spaces" title="Return to the Simulation Spaces view (switch provider or pick a different project)">
     <span class="material-symbols-outlined">arrow_back</span>
     Go back to Spaces
   </a>
@@ -503,7 +503,7 @@ async function requireGcpSpace(){
       '  <svg width="64" height="64" viewBox="0 0 24 24" style="margin-bottom:16px"><path fill="#4285F4" d="M12.19 2.38a9.32 9.32 0 0 0-6.62 2.74l3.92 3.93a3.85 3.85 0 0 1 5.49.04l3.91-3.93a9.32 9.32 0 0 0-6.7-2.78z"/><path fill="#34A853" d="M9.5 21.4a9.32 9.32 0 0 0 6.7-2.78l-3.91-3.93a3.85 3.85 0 0 1-5.49.04l-3.92 3.93a9.32 9.32 0 0 0 6.62 2.74z"/><path fill="#EA4335" d="M2.83 5.13a9.32 9.32 0 0 0-.7 11.06l3.93-3.93a3.85 3.85 0 0 1-.04-5.49l-3.19-1.64z"/><path fill="#FBBC04" d="M21.55 5.13l-3.19 1.64a3.85 3.85 0 0 1-.04 5.49l3.93 3.93a9.32 9.32 0 0 0-.7-11.06z"/></svg>' +
       '  <h1 style="font-size:22px;font-weight:500;margin:0 0 8px">No GCP space found</h1>' +
       '  <p style="font-size:14px;color:#5f6368;line-height:1.6">Create a GCP simulation space first.</p>' +
-      '  <a href="/ui" style="display:inline-block;margin-top:20px;background:#1a73e8;color:#fff;padding:10px 22px;border-radius:4px;font-size:13px;text-decoration:none;font-weight:500;text-transform:uppercase;letter-spacing:.5px">Go to Spaces</a>' +
+      '  <a href="/ui#spaces" style="display:inline-block;margin-top:20px;background:#1a73e8;color:#fff;padding:10px 22px;border-radius:4px;font-size:13px;text-decoration:none;font-weight:500;text-transform:uppercase;letter-spacing:.5px">Go to Spaces</a>' +
       '</div>';
     return false;
   }
@@ -581,7 +581,7 @@ function renderProjectModal(){
       list.append(el("div",{class:"empty",style:"padding:24px"},
         "No GCP projects found in this account.",
         el("div",{style:"margin-top:12px"},
-          el("button",{class:"btn-text",onclick:()=>window.location.href="/ui"}, "Go to Spaces"))));
+          el("button",{class:"btn-text",onclick:()=>window.location.href="/ui#spaces"}, "Go to Spaces"))));
       return;
     }
     gcpSpaces.forEach(s => {

@@ -422,7 +422,7 @@
        Inline-styled (no shared stylesheet) to avoid touching the Azure
        portal-style theme tokens. Returns the user to /clouds where they
        can switch space/provider or create a new one. -->
-  <a class="az-back-spaces" href="/clouds"
+  <a class="az-back-spaces" href="/ui#spaces"
      title="Return to Workspaces — switch space, provider, or create a new one"
      style="display:inline-flex; align-items:center; gap:6px;
             margin-left:8px; padding:6px 12px; border-radius:6px;
@@ -837,7 +837,7 @@ async function requireAzureSpace(){
       '  <div style="font-size:48px;line-height:1">☁️</div>' +
       '  <h1 style="font-size:22px;font-weight:600;margin:16px 0 8px">No Azure space found</h1>' +
       '  <p style="font-size:14px;color:#605e5c;line-height:1.5">Create an Azure simulation space first.</p>' +
-      '  <a href="/ui" style="display:inline-block;margin-top:20px;background:#0078d4;color:#fff;padding:8px 18px;border-radius:2px;font-size:13px;text-decoration:none">Go to Spaces now</a>' +
+      '  <a href="/ui#spaces" style="display:inline-block;margin-top:20px;background:#0078d4;color:#fff;padding:8px 18px;border-radius:2px;font-size:13px;text-decoration:none">Go to Spaces now</a>' +
       '</div>';
     return false;
   }

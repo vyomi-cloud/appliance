@@ -1,9 +1,12 @@
 <!doctype html>
 <!-- Vyomi-Nano relay endpoint (tab side).
-     Boots Pyodide, loads the REAL conformance core (core/object_store.py +
-     core/s3_object_core.py), opens an OUTBOUND WebSocket to the relay, registers,
-     and serves native-S3 wire requests forwarded by the relay — returning the
-     SAME conformance responses proven by tests/conformance/test_s3_core.py.
+     Boots Pyodide, loads the FULL set of REAL conformance cores plus
+     core/aws_wire_router.py, opens an OUTBOUND WebSocket to the relay, registers,
+     and serves native-AWS-wire requests forwarded by the relay — for ALL 7
+     services (S3, DynamoDB, KMS, Secrets, SQS, SNS, IAM, RDS). The router picks
+     the owning service exactly as a real cloud front-end (SigV4 scope / X-Amz-
+     Target / Query Action) and returns the SAME responses proven by
+     tests/conformance/ (incl. test_aws_wire_router.py).
 
      This is the tab-side half of BOTH deliveries (Cloudflare relay AND local
      bridge) — they share this exact WS protocol:
@@ -14,50 +17,110 @@
 <style>body{font:13px ui-monospace,Menlo,monospace;background:#05071a;color:#e4e4e7;padding:20px}
 .ok{color:#34d399}.err{color:#f87171}.dim{color:#71717a}</style></head>
 <body>
-<h3>Vyomi-Nano — in-browser S3 endpoint</h3>
+<h3>Vyomi-Nano — in-browser AWS endpoint (S3·DynamoDB·KMS·Secrets·SQS·SNS·IAM·RDS)</h3>
 <pre id="log">booting…</pre>
 <script type="module">
 import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs";
-const log = (m, c) => { const e=document.getElementById("log"); e.innerHTML += `\n${c?`<span class="${c}">`:""}${m}${c?"</span>":""}`; };
+import { installPGlite } from "../pglite-loader.js";   // RDS real-Postgres engine (optional)
+// Same-origin BroadcastChannel so the launch dashboard can MIRROR our splash
+// logs + status (the endpoint runs in its own tab — surviving dashboard→console
+// navigation — while the dashboard drawer shows what's happening in-page).
+const _bc = ("BroadcastChannel" in window) ? new BroadcastChannel("nano-relay") : null;
+const _logbuf = [];   // ring buffer so a freshly-opened dashboard can replay recent lines
+const log = (m, c) => {
+  const e=document.getElementById("log"); e.innerHTML += `\n${c?`<span class="${c}">`:""}${m}${c?"</span>":""}`;
+  _logbuf.push({ line:m, cls:c||"" }); if (_logbuf.length>200) _logbuf.shift();
+  if (_bc) _bc.postMessage({ type:"log", line:m, cls:c||"" });
+};
 const params = new URLSearchParams(location.search);
 const RELAY = params.get("relay") || "ws://localhost:8090/register";
-const CORE_BASE = params.get("core") || "/core";   // where to fetch the .py modules
+// Default the cores dir relative to THIS page, so the endpoint works served at
+// the web root (/relay/ -> /core) AND under the portal's /nano/ (-> /nano/core).
+const CORE_BASE = params.get("core") || new URL("../core/", import.meta.url).pathname.replace(/\/$/, "");
 window.__nano = { registered:false, served:0 };
 
+// Status + log mirroring to any same-origin dashboard/console. Replies to
+// {type:"query"} with current status AND a log snapshot, so a dashboard opened
+// (or navigated-to) AFTER the endpoint started still shows the full picture.
+const _announce = () => { if (_bc) _bc.postMessage({ type:"status",
+  state: window.__nano.registered ? "connected" : "connecting",
+  served: window.__nano.served, relay: RELAY }); };
+if (_bc) _bc.onmessage = (ev) => {
+  const m = ev.data || {};
+  if (m.type === "query") { _announce(); _bc.postMessage({ type:"logs", lines: _logbuf.slice() }); }
+  else if (m.type === "stop") { try { window.close(); } catch(_){} }   // dashboard asked us to stop
+};
+setInterval(_announce, 3000);
+
+// The PROVEN cores (vendored into wasm/core/ by build_cores.py) + the native-wire
+// router. Same set nano-boot.js loads — one source of truth for the data-plane.
+const CORES = [
+  "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py",
+  "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
+  "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
+  "messaging_store.py", "sqs_core.py", "sns_core.py", "rds_data_core.py", "aws_wire_router.py",
+];
 async function boot() {
   const py = await loadPyodide();
+  // RDS's SQL data-plane uses sqlite3 (a loadable Pyodide package); the control
+  // plane doesn't, but load it so SQL-over-RDS works through the relay too.
+  try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
+  // RDS data-plane engine swap: prefer REAL Postgres (PGlite) when it loads,
+  // else keep the sqlite3 default. Both run behind the same SqlStore seam.
+  const hasPg = await installPGlite();
+  py.globals.set("_USE_PGLITE", hasPg);
   py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
-  for (const f of ["object_store.py", "s3_object_core.py"])
+  for (const f of CORES)
     py.FS.writeFile("/core/" + f, await (await fetch(CORE_BASE + "/" + f)).text());
   py.runPython(`
 import sys, json, base64; sys.path.insert(0, "/")
-from core.object_store import InMemoryObjectStore
-from core import s3_object_core as s3
-_STORE = InMemoryObjectStore()
-def _handle(req_json):
+from core.aws_wire_router import AwsWireRouter
+from core import rds_core as _rds
+if _USE_PGLITE:
+    from core.sql_store import PGliteSqlStore
+    _ROUTER = AwsWireRouter(sql_store=PGliteSqlStore())   # RDS = real Postgres
+else:
+    _ROUTER = AwsWireRouter()                              # RDS = sqlite3
+async def _handle(req_json):
+    # async so the RDS Data API (boto3 rds-data) can await the SQL engine; every
+    # other service resolves synchronously inside ahandle().
     r = json.loads(req_json)
     body = base64.b64decode(r.get("body") or "")
-    resp = s3.dispatch(_STORE, r["method"], r["path"], r.get("query") or {}, r.get("headers") or {}, body)
-    return json.dumps({"status": resp.status, "headers": resp.headers,
-                       "body": base64.b64encode(resp.body or b"").decode()})
-import builtins; builtins._handle = _handle
+    resp = await _ROUTER.ahandle(r["method"], r["path"], r.get("query") or {},
+                                 r.get("headers") or {}, body)
+    return json.dumps({"status": resp["status"], "headers": resp["headers"],
+                       "body": base64.b64encode(resp["body"] or b"").decode()})
+async def _sql(payload_json):
+    # In-tab SQL bridge (RDS Data-API / in-browser app): runs ONE statement on the
+    # instance's REAL engine (PGlite/Postgres or sqlite3) via the async data plane.
+    p = json.loads(payload_json)
+    res = await _rds.aexecute_sql(_ROUTER.rds, p["db"], p["sql"], p.get("params"))
+    return json.dumps(res)
+import builtins; builtins._handle = _handle; builtins._sql = _sql
 `);
-  log('<span class="ok">core loaded</span> (real conformance handlers in Pyodide)');
-  const handle = (reqJson) => py.runPython(`_handle(${JSON.stringify(reqJson)})`);
+  log('<span class="ok">cores loaded</span> (S3·DynamoDB·KMS·Secrets·SQS·SNS·IAM·RDS — real handlers in Pyodide)');
+  log(hasPg ? '<span class="ok">RDS engine: PGlite (real Postgres)</span>' : 'RDS engine: sqlite3 (PGlite unavailable)', hasPg ? "" : "dim");
+  // async: _handle awaits the engine for rds-data. reqJson is already a JSON string;
+  // JSON.stringify wraps it as a single Python string-literal arg (json.loads'd inside).
+  const handle = (reqJson) => py.runPythonAsync(`await _handle(${JSON.stringify(reqJson)})`);
+  // In-tab async SQL bridge — same single-JSON-arg pattern as _handle/_disp.
+  window.__nano.sql = async (db, sql, paramsArr = []) =>
+    JSON.parse(await py.runPythonAsync(`await _sql(${JSON.stringify(JSON.stringify({ db, sql, params: paramsArr }))})`));
 
   function connect() {
+    _announce();
     const ws = new WebSocket(RELAY);
-    ws.onopen = () => { window.__nano.registered = true; log(`<span class="ok">registered</span> → ${RELAY}`); };
-    ws.onclose = (ev) => { window.__nano.registered = false; console.log("WS_CLOSE code=" + ev.code + " reason=" + ev.reason); log(`disconnected (code ${ev.code}); retrying…`,'dim'); setTimeout(connect, 1000); };
+    ws.onopen = () => { window.__nano.registered = true; log(`<span class="ok">registered</span> → ${RELAY}`); _announce(); };
+    ws.onclose = (ev) => { window.__nano.registered = false; console.log("WS_CLOSE code=" + ev.code + " reason=" + ev.reason); log(`disconnected (code ${ev.code}); retrying…`,'dim'); _announce(); setTimeout(connect, 1000); };
     ws.onerror = () => log('ws error','err');
-    ws.onmessage = (ev) => {
+    ws.onmessage = async (ev) => {
       let req; try { req = JSON.parse(ev.data); } catch { return; }
       if (req.type === "ping") { ws.send(JSON.stringify({type:"pong"})); return; }
       try {
-        const respJson = handle(JSON.stringify(req));      // run through the REAL core
+        const respJson = await handle(JSON.stringify(req));  // run through the REAL core
         const resp = JSON.parse(respJson);
         ws.send(JSON.stringify({ id: req.id, ...resp }));
-        window.__nano.served++;
+        window.__nano.served++; _announce();
       } catch (e) {
         ws.send(JSON.stringify({ id: req.id, status: 500,
           headers: {"content-type":"text/plain"},

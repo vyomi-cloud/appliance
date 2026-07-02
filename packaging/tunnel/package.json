@@ -1,0 +1,26 @@
+{
+  "name": "vyomi-tunnel",
+  "version": "1.0.0",
+  "description": "Vyomi-Nano local reverse-tunnel — reach the in-browser cloud simulator from any local SDK/CLI. The install-once, zero-cloud counterpart to the hosted Cloudflare relay; the Nano tab auto-detects it and prefers it.",
+  "type": "module",
+  "bin": {
+    "vyomi-tunnel": "bin/vyomi-tunnel.mjs"
+  },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "homepage": "https://vyomi.cloud",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vyomi-cloud/appliance.git",
+    "directory": "packaging/tunnel"
+  }
+}
