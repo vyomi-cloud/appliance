@@ -715,6 +715,39 @@
     #view-usage .u-head h3 { margin: 0; }
     #view-usage pre.u-code { background: #0b0e22 !important; border: 1px solid rgba(255,255,255,0.08); border-radius: 9px; padding: 12px 14px; overflow: auto; margin: 0; }
     #view-usage pre.u-code code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.55; color: #e4e4e7; white-space: pre; background: none; }
+    #view-usage .u-actions { display: flex; align-items: center; gap: 6px; }
+    #view-usage .u-expand {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.06); color: #a1a1aa; border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 8px; padding: 5px; cursor: pointer;
+    }
+    #view-usage .u-expand:hover { color: #fff; border-color: rgba(96,165,250,0.55); }
+    #view-usage .u-expand .material-icons { font-size: 16px; }
+
+    /* Full-instructions dialog (dark, matches the usage view) */
+    #usage-modal .u-modal {
+      background: linear-gradient(180deg, #14172e 0%, #0d1228 100%);
+      border: 1px solid rgba(255,255,255,0.12); border-radius: 16px;
+      width: 640px; max-width: calc(100vw - 32px); max-height: 88vh; overflow-y: auto;
+      padding: 22px 24px 24px; box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+    }
+    #usage-modal .um-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    #usage-modal .um-head h3 { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 20px; font-weight: 700; color: #e4e4e7 !important; }
+    #usage-modal .um-head h3 .material-icons { font-size: 23px; }
+    #usage-modal .um-close { background: transparent; border: 0; color: #8b8ba7; cursor: pointer; padding: 2px; line-height: 1; }
+    #usage-modal .um-close:hover { color: #fff; }
+    #usage-modal .um-desc { margin: 4px 0 14px; font-size: 13px; color: #a1a1aa; }
+    #usage-modal .um-ep { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; padding: 9px 13px; background: #0b0e22; border: 1px solid rgba(124,58,237,0.30); border-radius: 10px; }
+    #usage-modal .um-ep .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; color: #8b8ba7; }
+    #usage-modal .um-ep code { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: #7cc4ff; word-break: break-all; }
+    #usage-modal .um-sec { margin-bottom: 16px; }
+    #usage-modal .um-sec-head { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 700; color: #cdd8e6; margin-bottom: 8px; }
+    #usage-modal .um-sec-head .material-icons { font-size: 17px; color: #7c8cf8; }
+    #usage-modal .um-sec-head .um-copy { margin-left: auto; background: linear-gradient(135deg, #4d8cf3, #7c3aed); color: #fff; border: 0; border-radius: 7px; padding: 4px 12px; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+    #usage-modal pre.u-code { background: #0b0e22; border: 1px solid rgba(255,255,255,0.08); border-radius: 9px; padding: 12px 14px; overflow: auto; margin: 0; }
+    #usage-modal pre.u-code code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.55; color: #e4e4e7; white-space: pre; }
+    #usage-modal .um-note { font-size: 12px; color: #8b8ba7; margin: 4px 0 0; }
+    #usage-modal .um-note code { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; color: #cdd8e6; }
 
     /* Knowledge Center view — the portal KC embedded as-is. */
     #view-kc { padding: 0; }
@@ -1400,6 +1433,21 @@
     </div>
   </div>
 
+  <!-- Full-instructions dialog — opened by a tile's expand icon; shows every
+       transport (CLI · SDK · curl) for one service with per-block copy. -->
+  <div class="modal-backdrop" id="usage-modal">
+    <div class="u-modal" role="dialog" aria-modal="true" aria-labelledby="um-name">
+      <div class="um-head">
+        <h3><span class="material-icons" id="um-icon"></span><span id="um-name"></span></h3>
+        <button class="um-close" type="button" id="um-close" aria-label="Close"><span class="material-icons">close</span></button>
+      </div>
+      <p class="um-desc" id="um-desc"></p>
+      <div class="um-ep"><span class="k">Endpoint</span> <code id="um-ep"></code></div>
+      <div id="um-body"></div>
+      <p class="um-note">Use any region with dummy credentials (<code>test</code>/<code>test</code>). Same endpoint for every service.</p>
+    </div>
+  </div>
+
   <script>
   (function () {
     // Curated AWS service catalog for the quick-start cards. {EP} is replaced with
@@ -1455,6 +1503,50 @@
       var endpoint = isNano ? (ls('nano_relay_external') || derived()) : location.origin;
       function snip(s){ return s[tool].replace(/\{EP\}/g, endpoint); }
 
+      var DESC = {
+        s3: 'Object storage — buckets & objects.',
+        dynamodb: 'Serverless NoSQL key-value & document store.',
+        kms: 'Managed encryption keys (envelope encryption).',
+        secretsmanager: 'Store, version & retrieve secrets.',
+        sqs: 'Managed message queues.',
+        sns: 'Pub/sub topics with fan-out to queues.',
+        iam: 'Users, roles, groups & policies.',
+        rds: 'Managed relational databases (Postgres).'
+      };
+      var TRANSPORTS = [
+        { k:'cli',  label:'Utility (CLI)', icon:'terminal' },
+        { k:'sdk',  label:'SDK (boto3)',   icon:'code' },
+        { k:'curl', label:'curl',          icon:'http' }
+      ];
+      // ── Full-instructions dialog (every transport for one service) ──────
+      var modal = document.getElementById('usage-modal');
+      function openModal(key){
+        var s = SERVICES.filter(function(x){ return x.key===key; })[0]; if(!s || !modal) return;
+        var ic = document.getElementById('um-icon'); ic.textContent = s.icon; ic.style.color = s.color;
+        document.getElementById('um-name').textContent = s.name;
+        document.getElementById('um-desc').textContent = DESC[s.key] || '';
+        document.getElementById('um-ep').textContent = endpoint;
+        var body = document.getElementById('um-body');
+        body.innerHTML = TRANSPORTS.map(function(t){
+          return '<div class="um-sec"><div class="um-sec-head"><span class="material-icons">'+t.icon+'</span>'+t.label
+            + '<button class="um-copy" type="button" data-k="'+t.k+'">Copy</button></div>'
+            + '<pre class="u-code"><code>'+esc(s[t.k].replace(/\{EP\}/g, endpoint))+'</code></pre></div>';
+        }).join('');
+        body.querySelectorAll('.um-copy').forEach(function(b){
+          b.onclick = function(){
+            var txt = s[b.dataset.k].replace(/\{EP\}/g, endpoint);
+            if(navigator.clipboard) navigator.clipboard.writeText(txt).then(function(){ b.textContent='Copied'; setTimeout(function(){ b.textContent='Copy'; },1200); });
+          };
+        });
+        modal.classList.add('open');
+      }
+      function closeModal(){ if(modal) modal.classList.remove('open'); }
+      if(modal){
+        modal.addEventListener('click', function(e){ if(e.target===modal) closeModal(); });
+        var xb = document.getElementById('um-close'); if(xb) xb.onclick = closeModal;
+        document.addEventListener('keydown', function(e){ if(e.key==='Escape' && modal.classList.contains('open')) closeModal(); });
+      }
+
       var grid = document.getElementById('usage-cards');
       var urlEl = document.getElementById('u-ep-url'), badge = document.getElementById('u-ep-badge');
       function paintEp(){
@@ -1465,7 +1557,10 @@
       function render(){
         if(grid) grid.innerHTML = SERVICES.map(function(s){
           return '<div class="kct"><div class="u-head"><h3><span class="material-icons" style="color:'+s.color+'">'+s.icon+'</span>'+s.name+'</h3>'
-            + '<button class="u-copy" type="button" data-c="'+s.key+'">Copy</button></div>'
+            + '<div class="u-actions">'
+            + '<button class="u-expand" type="button" data-c="'+s.key+'" title="Full instructions" aria-label="Full instructions"><span class="material-icons">open_in_full</span></button>'
+            + '<button class="u-copy" type="button" data-c="'+s.key+'">Copy</button>'
+            + '</div></div>'
             + '<pre class="u-code"><code>'+esc(snip(s))+'</code></pre></div>';
         }).join('');
         if(grid) grid.querySelectorAll('.u-copy').forEach(function(b){
@@ -1474,6 +1569,9 @@
             if(s && navigator.clipboard) navigator.clipboard.writeText(snip(s)).then(function(){
               b.textContent='Copied'; setTimeout(function(){ b.textContent='Copy'; },1200); });
           };
+        });
+        if(grid) grid.querySelectorAll('.u-expand').forEach(function(b){
+          b.onclick = function(){ openModal(b.dataset.c); };
         });
         paintEp();
       }
