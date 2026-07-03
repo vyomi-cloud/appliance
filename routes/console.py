@@ -51,16 +51,52 @@ def _console_tier_gate(provider: str) -> RedirectResponse | None:
     return None
 
 
-def _swagger_html(openapi_url: str, title: str):
-    """Swagger UI from locally-bundled assets (works fully offline)."""
+# App-matching dark theme for Swagger UI (bg #05071a, tiles #14172e/#0d1228,
+# text #cdd8e6). Injected before </head> when the page is asked for with
+# ?theme=dark — used by the embedded in-console / dashboard API view.
+_SWAGGER_DARK_CSS = b"""<style id="swagger-dark">
+  body,.swagger-ui{background:#05071a!important}
+  .swagger-ui .topbar{display:none}
+  .swagger-ui,.swagger-ui .info li,.swagger-ui .info p,.swagger-ui .info table,.swagger-ui label,.swagger-ui .opblock-tag,.swagger-ui .opblock .opblock-summary-operation-id,.swagger-ui .opblock .opblock-summary-path,.swagger-ui .opblock .opblock-summary-path__deprecated,.swagger-ui .opblock .opblock-summary-description,.swagger-ui .opblock-description-wrapper p,.swagger-ui .opblock-external-docs-wrapper p,.swagger-ui .response-col_status,.swagger-ui table thead tr td,.swagger-ui table thead tr th,.swagger-ui .parameter__name,.swagger-ui .parameter__type,.swagger-ui .parameter__in,.swagger-ui .prop-type,.swagger-ui .model,.swagger-ui .model-title,.swagger-ui section h4,.swagger-ui .tab li,.swagger-ui .response-col_description__inner p,.swagger-ui .scheme-container .schemes>label,.swagger-ui .servers>label{color:#cdd8e6!important}
+  .swagger-ui .info .title,.swagger-ui h1,.swagger-ui h2,.swagger-ui h3,.swagger-ui h4,.swagger-ui h5{color:#e4e4e7!important}
+  .swagger-ui .scheme-container,.swagger-ui .opblock .opblock-section-header{background:#0d1228!important;box-shadow:none}
+  .swagger-ui .opblock{background:#14172e!important;border-color:rgba(255,255,255,.10)!important;box-shadow:none}
+  .swagger-ui .opblock .opblock-summary{border-color:rgba(255,255,255,.10)!important}
+  .swagger-ui .opblock.opblock-get{background:rgba(97,175,254,.08)!important;border-color:#4d8cf3!important}
+  .swagger-ui .opblock.opblock-post{background:rgba(73,204,144,.08)!important;border-color:#34d399!important}
+  .swagger-ui .opblock.opblock-delete{background:rgba(249,62,62,.08)!important;border-color:#f87171!important}
+  .swagger-ui .opblock.opblock-put{background:rgba(252,161,48,.08)!important;border-color:#fbbf24!important}
+  .swagger-ui input,.swagger-ui textarea,.swagger-ui select{background:#0b0e22!important;color:#e4e4e7!important;border-color:rgba(255,255,255,.14)!important}
+  .swagger-ui section.models,.swagger-ui section.models .model-container,.swagger-ui .model-box{background:#0d1228!important;border-color:rgba(255,255,255,.10)!important}
+  .swagger-ui .btn{color:#cdd8e6;border-color:rgba(255,255,255,.2);background:#171b3d}
+  .swagger-ui .btn.execute{background:linear-gradient(135deg,#4d8cf3,#7c3aed);border:0;color:#fff}
+  .swagger-ui .highlight-code,.swagger-ui .microlight,.swagger-ui .opblock-body pre.microlight{background:#0b0e22!important;color:#e4e4e7!important}
+  .swagger-ui .responses-inner{background:transparent}
+  .swagger-ui svg:not(:root){fill:#cdd8e6}
+  .swagger-ui a,.swagger-ui .info a{color:#7cc4ff}
+  .swagger-ui .opblock-tag{border-color:rgba(255,255,255,.10)}
+  .swagger-ui .tab li.active{color:#fff}
+  .swagger-ui .parameters-col_description input{background:#0b0e22!important}
+  .swagger-ui .prop-format{color:#8b8ba7}
+</style></head>"""
+
+
+def _swagger_html(openapi_url: str, title: str, dark: bool = False):
+    """Swagger UI from locally-bundled assets (works fully offline). dark=True
+    (?theme=dark) injects the app-matching dark theme for the embedded view."""
     from fastapi.openapi.docs import get_swagger_ui_html
-    return get_swagger_ui_html(
+    resp = get_swagger_ui_html(
         openapi_url=openapi_url,
         title=title,
         swagger_js_url="/assets/swagger/swagger-ui-bundle.js",
         swagger_css_url="/assets/swagger/swagger-ui.css",
         swagger_favicon_url="/assets/swagger/favicon-32x32.png",
     )
+    if dark:
+        from fastapi.responses import HTMLResponse
+        body = resp.body.replace(b"</head>", _SWAGGER_DARK_CSS, 1)
+        return HTMLResponse(content=body, status_code=resp.status_code)
+    return resp
 
 
 def _openapi_subset(app: FastAPI, provider: str) -> dict:
@@ -170,8 +206,8 @@ def register(app: FastAPI) -> None:
         return JSONResponse(provider_azure_services.build_openapi())
 
     @app.get("/docs/azure", include_in_schema=False)
-    def docs_azure():
-        return _swagger_html("/openapi-azure.json", "CloudLearn — Azure API")
+    def docs_azure(request: Request):
+        return _swagger_html("/openapi-azure.json", "CloudLearn — Azure API", request.query_params.get("theme") == "dark")
 
     @app.get("/aws", include_in_schema=False)
     def _shortpath_aws():
@@ -271,16 +307,16 @@ def register(app: FastAPI) -> None:
                                                   active_zone=zone))
 
     @app.get("/docs/gcp", include_in_schema=False)
-    def docs_gcp():
-        return _swagger_html("/openapi-gcp.json", "CloudLearn — GCP API")
+    def docs_gcp(request: Request):
+        return _swagger_html("/openapi-gcp.json", "CloudLearn — GCP API", request.query_params.get("theme") == "dark")
 
     @app.get("/docs/aws", include_in_schema=False)
-    def docs_aws():
-        return _swagger_html("/openapi-aws.json", "CloudLearn — AWS API")
+    def docs_aws(request: Request):
+        return _swagger_html("/openapi-aws.json", "CloudLearn — AWS API", request.query_params.get("theme") == "dark")
 
     @app.get("/docs/all", include_in_schema=False)
-    def docs_all():
-        return _swagger_html(app.openapi_url or "/openapi.json", "CloudLearn — All APIs")
+    def docs_all(request: Request):
+        return _swagger_html(app.openapi_url or "/openapi.json", "CloudLearn — All APIs", request.query_params.get("theme") == "dark")
 
     @app.get("/docs/gcp/usage", include_in_schema=False)
     def docs_gcp_usage(request: Request):

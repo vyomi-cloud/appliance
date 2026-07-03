@@ -895,7 +895,9 @@
        (white removed) so the dark page shows through; text + borders → light.
        Header / sidebar / gradient buttons are already dark. */
     body { background: #05071a !important; color: #a1a1aa; }
-    #app-body, #app-main, #view-workspace, #view-kc, #view-usage, .container { background: transparent !important; }
+    #app-body, #app-main, #view-workspace, #view-kc, #view-usage, #view-api, .container { background: transparent !important; }
+    #view-api .api-frame-wrap { border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; overflow: hidden; background: #05071a; margin-bottom: 30px; }
+    #view-api iframe { display: block; width: 100%; height: calc(100vh - 300px); min-height: 480px; border: 0; background: #05071a; }
 
     /* Outer section wrappers stay fully transparent. */
     .surface-card, #stats-card, #host-util-card, #svc-status-card, #spaces-card,
@@ -975,6 +977,7 @@
       <button class="side-item" type="button" data-view="spaces" onclick="showAppView('spaces')" title="Active spaces"><span class="material-icons">workspaces</span><span class="side-label">Spaces</span></button>
       <button class="side-item" type="button" data-view="kc" onclick="showAppView('kc')" title="Knowledge Center"><span class="material-icons">menu_book</span><span class="side-label">Knowledge Center</span></button>
       <button class="side-item" type="button" data-view="usage" onclick="showAppView('usage')" title="SDK &amp; CLI usage — per-service samples pointed at your endpoint"><span class="material-icons">terminal</span><span class="side-label">SDK &amp; CLI usage</span></button>
+      <button class="side-item" type="button" data-view="api" onclick="showAppView('api')" title="API reference — interactive Swagger for every REST endpoint"><span class="material-icons">api</span><span class="side-label">API (Swagger)</span></button>
     </nav>
   </aside>
   <div id="app-main">
@@ -1442,6 +1445,27 @@
        Endpoint is dynamic: Nano → the LIVE relay tunnel URL; Lite/Pro/Max → the
        appliance's own origin. Snippets are rendered client-side from a small
        curated catalog (JS below) with the endpoint substituted. ──────────── -->
+  <!-- ── API (Swagger) — same in-body view shell as SDK & CLI usage: hero +
+       cloud tabs + the interactive Swagger UI (dark-themed via ?theme=dark),
+       served by the portal on Nano and by the appliance on Lite/Pro/Max. ──── -->
+  <div id="view-api" hidden>
+    <div class="container">
+    <header class="hero">
+      <div class="hero-eyebrow">API reference</div>
+      <h1>REST API — Swagger.</h1>
+      <p>Explore and try every REST endpoint the simulator serves — interactive Swagger UI, in the app's dark theme.</p>
+    </header>
+    <div class="tabs-wrap">
+      <div class="usage-tabs" id="api-cloud-tabs" role="tablist">
+        <button class="usage-tab active" type="button" data-c="aws"><span class="material-icons">cloud</span>AWS</button>
+        <button class="usage-tab" type="button" data-c="gcp"><span class="material-icons">cloud_queue</span>Google Cloud</button>
+        <button class="usage-tab" type="button" data-c="azure"><span class="material-icons">cloud_circle</span>Azure</button>
+      </div>
+    </div>
+    <div class="api-frame-wrap"><iframe id="api-frame" title="API Swagger" loading="lazy"></iframe></div>
+    </div>
+  </div>
+
   <div id="view-usage" hidden>
     <div class="container">
     <header class="hero">
@@ -1708,9 +1732,17 @@
 
   <script>
     // ── v2.3.0 left nav: view switch (Workspace / Knowledge Center) + collapse ──
-    var APP_VIEWS = { workspace: 'view-workspace', spaces: 'view-spaces', kc: 'view-kc', usage: 'view-usage' };
+    var APP_VIEWS = { workspace: 'view-workspace', spaces: 'view-spaces', kc: 'view-kc', usage: 'view-usage', api: 'view-api' };
+    // Load the dark Swagger UI for a cloud into the API view's iframe (lazy).
+    function loadApiFrame(cloud) {
+      var f = document.getElementById('api-frame'); if (!f) return;
+      f.setAttribute('src', '/docs/' + cloud + '?theme=dark');
+      var tabs = document.querySelectorAll('#api-cloud-tabs .usage-tab');
+      for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('active', tabs[i].getAttribute('data-c') === cloud);
+    }
     function showAppView(view) {
       if (!APP_VIEWS[view]) view = 'workspace';
+      if (view === 'api') { var f = document.getElementById('api-frame'); if (f && !f.getAttribute('src')) loadApiFrame('aws'); }
       Object.keys(APP_VIEWS).forEach(function (k) {
         var el = document.getElementById(APP_VIEWS[k]);
         if (el) el.hidden = (k !== view);
@@ -1731,6 +1763,11 @@
       if (APP_VIEWS[hv]) { showAppView(hv); return; }
       try { var v = localStorage.getItem('vyomi.appview'); if (v && v !== 'workspace') showAppView(v); } catch (_) {}
     })();
+
+    // API view: cloud tabs (AWS / GCP / Azure) swap the Swagger iframe.
+    document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function (t) {
+      t.addEventListener('click', function () { loadApiFrame(t.getAttribute('data-c')); });
+    });
 
     // ── Inject "Open <Cloud> Console →" buttons on each cloud card ───
     const PROVIDER_PATHS = { aws: 'aws-console.html', gcp: 'gcp-console.html', azure: 'azure-console.html' };
