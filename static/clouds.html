@@ -658,8 +658,37 @@
     body.side-collapsed .side-item,
     body.side-collapsed .side-collapse { justify-content: center; padding-left: 0; padding-right: 0; }
     #app-main { flex: 1; min-width: 0; }
-    #view-usage { padding: 0; }
-    #view-usage iframe { display: block; width: 100%; height: calc(100vh - 56px); min-height: 520px; border: 0; background: #0b0e22; }
+    /* ── SDK & CLI usage view — native design, matches Knowledge Center ──── */
+    #view-usage .usage-ep {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center;
+      max-width: 780px; margin: 0 auto 22px; padding: 12px 18px;
+      background: linear-gradient(180deg, #14172e, #0d1228);
+      border: 1px solid rgba(124,58,237,0.35); border-radius: 12px;
+    }
+    #view-usage .usage-ep .k { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #8b8ba7; }
+    #view-usage .usage-ep code { font-family: ui-monospace, Menlo, monospace; font-size: 13.5px; color: #7cc4ff; word-break: break-all; }
+    #view-usage .usage-ep .badge { font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: 600; }
+    #view-usage .usage-ep .badge.on { background: rgba(52,211,153,0.16); color: #34d399; }
+    #view-usage .usage-ep .badge.off { background: rgba(251,191,36,0.16); color: #fbbf24; }
+    #view-usage .usage-ep button { margin-left: auto; }
+    #view-usage .u-copy, #view-usage .usage-ep button {
+      background: linear-gradient(135deg, #4d8cf3, #7c3aed); color: #fff; border: 0;
+      border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    #view-usage .tabs-wrap { text-align: center; margin-bottom: 24px; }
+    #view-usage .usage-tabs { display: inline-flex; gap: 4px; border: 1px solid rgba(255,255,255,0.14); border-radius: 999px; padding: 4px; }
+    #view-usage .usage-tab {
+      display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 0;
+      padding: 7px 15px; border-radius: 999px; font-size: 13px; font-weight: 600; color: #a1a1aa; cursor: pointer;
+    }
+    #view-usage .usage-tab .material-icons { font-size: 17px; }
+    #view-usage .usage-tab.active { background: linear-gradient(135deg, #4d8cf3, #7c3aed); color: #fff; }
+    #view-usage .kct { cursor: default; }
+    #view-usage .kct:hover { transform: none; box-shadow: none !important; border-color: rgba(255,255,255,0.10) !important; }
+    #view-usage .u-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
+    #view-usage .u-head h3 { margin: 0; }
+    #view-usage pre.u-code { background: #0b0e22 !important; border: 1px solid rgba(255,255,255,0.08); border-radius: 9px; padding: 12px 14px; overflow: auto; margin: 0; }
+    #view-usage pre.u-code code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.55; color: #e4e4e7; white-space: pre; background: none; }
 
     /* Knowledge Center view — the portal KC embedded as-is. */
     #view-kc { padding: 0; }
@@ -780,7 +809,7 @@
        (white removed) so the dark page shows through; text + borders → light.
        Header / sidebar / gradient buttons are already dark. */
     body { background: #05071a !important; color: #a1a1aa; }
-    #app-body, #app-main, #view-workspace, #view-kc, .container { background: transparent !important; }
+    #app-body, #app-main, #view-workspace, #view-kc, #view-usage, .container { background: transparent !important; }
 
     /* Outer section wrappers stay fully transparent. */
     .surface-card, #stats-card, #host-util-card, #svc-status-card, #spaces-card,
@@ -1306,15 +1335,135 @@
     </div>
   </div>
 
-  <!-- ── SDK & CLI usage (per-service samples) — embedded in-body, same as the
-       other views. The doc is same-origin (portal /docs on Nano, the appliance's
-       own /docs on Lite/Pro/Max) so it renders inline; on Nano it rewrites every
-       sample to the LIVE relay endpoint (see docs_routes _NANO_EP_JS). The iframe
-       src is set lazily on first open so it doesn't load until asked for. ──── -->
+  <!-- ── SDK & CLI usage — native view (matches Knowledge Center): centered
+       hero + endpoint card + icon tabs (CLI / SDK / curl) + per-service cards.
+       Endpoint is dynamic: Nano → the LIVE relay tunnel URL; Lite/Pro/Max → the
+       appliance's own origin. Snippets are rendered client-side from a small
+       curated catalog (JS below) with the endpoint substituted. ──────────── -->
   <div id="view-usage" hidden>
-    <iframe id="usage-frame" title="SDK &amp; CLI usage" loading="lazy"
-            referrerpolicy="no-referrer-when-downgrade"></iframe>
+    <div class="container">
+    <header class="hero">
+      <div class="hero-eyebrow">Developer tools</div>
+      <h1>SDK &amp; CLI usage.</h1>
+      <p>Point any AWS SDK, CLI or tool at your endpoint — no code changes, just one URL. Copy a ready-to-run snippet for each service.</p>
+    </header>
+
+    <div class="usage-ep" id="usage-ep">
+      <span class="material-icons" style="color:#7c8cf8;font-size:19px">cable</span>
+      <span class="k">Endpoint</span>
+      <code id="u-ep-url">—</code>
+      <span class="badge off" id="u-ep-badge">—</span>
+      <button type="button" id="u-ep-copy">Copy</button>
+    </div>
+
+    <div class="tabs-wrap">
+      <div class="usage-tabs" role="tablist">
+        <button class="usage-tab active" type="button" data-k="cli"><span class="material-icons">terminal</span>Utility (CLI)</button>
+        <button class="usage-tab" type="button" data-k="sdk"><span class="material-icons">code</span>SDK (boto3)</button>
+        <button class="usage-tab" type="button" data-k="curl"><span class="material-icons">http</span>curl</button>
+      </div>
+    </div>
+
+    <div class="kc-tiles" id="usage-cards"></div>
+
+    <p style="text-align:center;margin:2px 0 34px">
+      <a class="kc-open" id="u-fulldoc" href="/docs/aws/usage?nano=1" target="_blank" rel="noopener">Full per-service reference <span class="material-icons" style="font-size:16px;vertical-align:-3px">open_in_new</span></a>
+    </p>
+    </div>
   </div>
+
+  <script>
+  (function () {
+    // Curated AWS service catalog for the quick-start cards. {EP} is replaced with
+    // the live endpoint. Kept small + in-sync with what the Nano relay serves;
+    // the "Full per-service reference" link covers everything (all clouds).
+    var SERVICES = [
+      { key:'s3', name:'S3', icon:'inventory_2', color:'#ff9900',
+        cli:'aws --endpoint-url {EP} s3 mb s3://demo\naws --endpoint-url {EP} s3 ls',
+        sdk:'import boto3\ns3 = boto3.client("s3", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\ns3.create_bucket(Bucket="demo")\nprint(s3.list_buckets())',
+        curl:'curl {EP}/            # ListBuckets' },
+      { key:'dynamodb', name:'DynamoDB', icon:'table_chart', color:'#4d8cf3',
+        cli:'aws --endpoint-url {EP} dynamodb list-tables',
+        sdk:'import boto3\nddb = boto3.client("dynamodb", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nprint(ddb.list_tables())',
+        curl:'curl -X POST {EP}/ \\\n  -H "X-Amz-Target: DynamoDB_20120810.ListTables" \\\n  -H "Content-Type: application/x-amz-json-1.0" -d "{}"' },
+      { key:'kms', name:'KMS', icon:'vpn_key', color:'#16a34a',
+        cli:'aws --endpoint-url {EP} kms list-keys',
+        sdk:'import boto3\nkms = boto3.client("kms", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nprint(kms.list_keys())',
+        curl:'curl -X POST {EP}/ \\\n  -H "X-Amz-Target: TrentService.ListKeys" \\\n  -H "Content-Type: application/x-amz-json-1.1" -d "{}"' },
+      { key:'secretsmanager', name:'Secrets Manager', icon:'lock', color:'#eab308',
+        cli:'aws --endpoint-url {EP} secretsmanager list-secrets',
+        sdk:'import boto3\nsm = boto3.client("secretsmanager", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nprint(sm.list_secrets())',
+        curl:'curl -X POST {EP}/ \\\n  -H "X-Amz-Target: secretsmanager.ListSecrets" \\\n  -H "Content-Type: application/x-amz-json-1.1" -d "{}"' },
+      { key:'sqs', name:'SQS', icon:'forum', color:'#d97757',
+        cli:'aws --endpoint-url {EP} sqs create-queue --queue-name jobs\naws --endpoint-url {EP} sqs list-queues',
+        sdk:'import boto3\nsqs = boto3.client("sqs", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nsqs.create_queue(QueueName="jobs")\nprint(sqs.list_queues())',
+        curl:'curl "{EP}/?Action=ListQueues"' },
+      { key:'sns', name:'SNS', icon:'campaign', color:'#7c3aed',
+        cli:'aws --endpoint-url {EP} sns create-topic --name alerts\naws --endpoint-url {EP} sns list-topics',
+        sdk:'import boto3\nsns = boto3.client("sns", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nsns.create_topic(Name="alerts")\nprint(sns.list_topics())',
+        curl:'curl "{EP}/?Action=ListTopics"' },
+      { key:'iam', name:'IAM', icon:'admin_panel_settings', color:'#ef4444',
+        cli:'aws --endpoint-url {EP} iam list-users\naws --endpoint-url {EP} iam list-roles',
+        sdk:'import boto3\niam = boto3.client("iam", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nprint(iam.list_users())',
+        curl:'curl "{EP}/?Action=ListUsers&Version=2010-05-08"' },
+      { key:'rds', name:'RDS', icon:'storage', color:'#2563eb',
+        cli:'aws --endpoint-url {EP} rds describe-db-instances',
+        sdk:'import boto3\nrds = boto3.client("rds", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nprint(rds.describe_db_instances())',
+        curl:'curl "{EP}/?Action=DescribeDBInstances&Version=2014-10-31"' }
+    ];
+    function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function ls(k){ try{ return localStorage.getItem(k); }catch(_){ return null; } }
+
+    function initUsage(){
+      var view = document.getElementById('view-usage'); if(!view) return;
+      var isNano = !!document.getElementById('nano-foot');   // relay footer = Nano bundle
+      var tool = 'cli', live = false;
+      function derived(){
+        var o = location.origin;
+        if(!isNano) return o;                                 // appliance → its own origin
+        if(/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(o)) return 'http://127.0.0.1:8090';
+        return 'https://relay.vyomi.cloud/' + encodeURIComponent(ls('nano_session') || 'nano');
+      }
+      var endpoint = isNano ? (ls('nano_relay_external') || derived()) : location.origin;
+      function snip(s){ return s[tool].replace(/\{EP\}/g, endpoint); }
+
+      var grid = document.getElementById('usage-cards');
+      var urlEl = document.getElementById('u-ep-url'), badge = document.getElementById('u-ep-badge');
+      function paintEp(){
+        if(urlEl) urlEl.textContent = endpoint;
+        if(badge){ if(isNano){ badge.textContent = live ? 'live' : 'start the tunnel'; badge.className = 'badge ' + (live?'on':'off'); }
+                   else { badge.textContent = 'appliance'; badge.className = 'badge on'; } }
+      }
+      function render(){
+        if(grid) grid.innerHTML = SERVICES.map(function(s){
+          return '<div class="kct"><div class="u-head"><h3><span class="material-icons" style="color:'+s.color+'">'+s.icon+'</span>'+s.name+'</h3>'
+            + '<button class="u-copy" type="button" data-c="'+s.key+'">Copy</button></div>'
+            + '<pre class="u-code"><code>'+esc(snip(s))+'</code></pre></div>';
+        }).join('');
+        if(grid) grid.querySelectorAll('.u-copy').forEach(function(b){
+          b.onclick = function(){
+            var s = SERVICES.filter(function(x){ return x.key===b.dataset.c; })[0];
+            if(s && navigator.clipboard) navigator.clipboard.writeText(snip(s)).then(function(){
+              b.textContent='Copied'; setTimeout(function(){ b.textContent='Copy'; },1200); });
+          };
+        });
+        paintEp();
+      }
+      view.querySelectorAll('.usage-tab').forEach(function(t){
+        t.onclick = function(){ view.querySelectorAll('.usage-tab').forEach(function(x){ x.classList.toggle('active', x===t); }); tool = t.dataset.k; render(); };
+      });
+      var epc = document.getElementById('u-ep-copy');
+      if(epc) epc.onclick = function(){ if(navigator.clipboard) navigator.clipboard.writeText(endpoint).then(function(){ epc.textContent='Copied'; setTimeout(function(){ epc.textContent='Copy'; },1200); }); };
+      var fd = document.getElementById('u-fulldoc'); if(fd && !isNano) fd.setAttribute('href','/docs/aws/usage');
+      if(isNano){ try{ var chn = new BroadcastChannel('nano-relay');
+        chn.onmessage = function(ev){ var m = ev.data || {};
+          if(m.type==='status' && m.state==='connected' && m.external){ endpoint = m.external; live = true; try{ localStorage.setItem('nano_relay_external', endpoint); }catch(_){} render(); } };
+      }catch(_){} }
+      render();
+    }
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initUsage); else initUsage();
+  })();
+  </script>
   </div><!-- /app-main -->
   </div><!-- /app-body -->
 
@@ -1323,9 +1472,6 @@
     var APP_VIEWS = { workspace: 'view-workspace', spaces: 'view-spaces', kc: 'view-kc', usage: 'view-usage' };
     function showAppView(view) {
       if (!APP_VIEWS[view]) view = 'workspace';
-      // Lazy-load the SDK/CLI usage doc on first open — same origin, so it renders
-      // inline (Nano: relay-rewritten samples; Lite/Pro/Max: the appliance's own).
-      if (view === 'usage') { var uf = document.getElementById('usage-frame'); if (uf && !uf.getAttribute('src')) uf.setAttribute('src', '/docs/aws/usage?nano=1'); }
       Object.keys(APP_VIEWS).forEach(function (k) {
         var el = document.getElementById(APP_VIEWS[k]);
         if (el) el.hidden = (k !== view);
