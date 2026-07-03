@@ -729,6 +729,24 @@
     #view-usage .u-cloud-note { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #b9a15a; background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.22); border-radius: 9px; padding: 8px 12px; margin: -4px 0 14px; }
     #view-usage .u-cloud-note .material-icons { font-size: 16px; color: #fbbf24; }
     #view-usage .u-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; margin-bottom: 6px; }
+    #view-usage .u-info { margin-left: auto; display: inline-flex; gap: 6px; }
+    #view-usage .u-ibtn {
+      display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px; color: #8b8ba7; cursor: pointer; padding: 0;
+    }
+    #view-usage .u-ibtn:hover { color: #fff; border-color: rgba(96,165,250,0.5); }
+    #view-usage .u-ibtn.info { color: #fbbf24; border-color: rgba(251,191,36,0.30); }
+    #view-usage .u-cloud-head .u-ibtn .material-icons { font-size: 16px; }
+    #u-tip {
+      position: fixed; z-index: 9500; max-width: 320px;
+      background: #0b0e22; border: 1px solid rgba(124,58,237,0.40); border-radius: 10px;
+      padding: 10px 13px; font-size: 12px; line-height: 1.55; color: #cdd8e6;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.55); display: none;
+    }
+    #u-tip.open { display: block; }
+    #u-tip .tip-title { display: flex; align-items: center; gap: 5px; font-weight: 700; color: #e4e4e7; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+    #u-tip .tip-title .material-icons { font-size: 14px; color: #7c8cf8; }
 
     /* Full-instructions dialog (dark, matches the usage view) */
     #usage-modal .u-modal {
@@ -1544,6 +1562,7 @@
       { k:'curl', label:'curl', icon:'http' }
     ];
     function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function escAttr(s){ return esc(s).replace(/"/g,'&quot;'); }
     function ls(k){ try{ return localStorage.getItem(k); }catch(_){ return null; } }
 
     function initUsage(){
@@ -1589,6 +1608,29 @@
         document.addEventListener('keydown', function(e){ if(e.key==='Escape' && modal.classList.contains('open')) closeModal(); });
       }
 
+      // ── Header-icon tooltip (setup hint / Nano caveat) ──────────────────
+      var tip = document.getElementById('u-tip');
+      if(!tip){ tip = document.createElement('div'); tip.id = 'u-tip'; document.body.appendChild(tip); }
+      function hideTip(){ tip.classList.remove('open'); tip._for = null; }
+      function showTip(btn){
+        if(tip.classList.contains('open') && tip._for === btn){ hideTip(); return; }   // toggle off
+        tip._for = btn;
+        var ic = btn.classList.contains('info') ? 'info' : 'terminal';
+        tip.innerHTML = '<div class="tip-title"><span class="material-icons">'+ic+'</span>'+esc(btn.dataset.tt||'')+'</div>'+esc(btn.dataset.tip||'');
+        tip.classList.add('open');
+        var r = btn.getBoundingClientRect();
+        var w = Math.min(320, tip.offsetWidth || 320);
+        var left = Math.min(Math.max(10, r.right - w), window.innerWidth - w - 10);
+        var top = r.bottom + 8;
+        if(top + tip.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - tip.offsetHeight - 8);   // flip up if needed
+        tip.style.left = left + 'px'; tip.style.top = top + 'px';
+      }
+      document.addEventListener('click', function(e){
+        if(tip.classList.contains('open') && !tip.contains(e.target) && !(e.target.closest && e.target.closest('.u-ibtn'))) hideTip();
+      });
+      document.addEventListener('keydown', function(e){ if(e.key==='Escape') hideTip(); });
+      window.addEventListener('scroll', hideTip, true);
+
       var grid = document.getElementById('usage-cards');
       var urlEl = document.getElementById('u-ep-url'), badge = document.getElementById('u-ep-badge');
       function paintEp(){
@@ -1609,10 +1651,14 @@
           grid.innerHTML = CLOUDS.map(function(c){
             var svcs = SERVICES.filter(function(s){ return s.cloud===c.id; });
             if(!svcs.length) return '';
-            var head = '<div class="u-cloud-head"><span class="material-icons" style="color:'+c.color+'">'+c.icon+'</span>'+c.name+'</div>';
-            var note = (isNano && c.nanoNote) ? '<div class="u-cloud-note"><span class="material-icons">info</span>'+esc(c.nanoNote)+'</div>' : '';
-            var setup = c.setup ? '<div class="u-cloud-note" style="color:#8b8ba7;background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.10)"><span class="material-icons" style="color:#7c8cf8">terminal</span>'+esc(sub(c.setup))+'</div>' : '';
-            return head + note + setup + '<div class="u-grid">' + svcs.map(cardHtml).join('') + '</div>';
+            // Setup hint + (on Nano) the in-browser caveat live as right-aligned
+            // icons on the cloud header; clicking one shows its note as a tooltip.
+            var icons = '';
+            if(c.setup) icons += '<button class="u-ibtn" type="button" data-tt="Setup" data-tip="'+escAttr(sub(c.setup))+'" title="Setup" aria-label="Setup"><span class="material-icons">terminal</span></button>';
+            if(isNano && c.nanoNote) icons += '<button class="u-ibtn info" type="button" data-tt="Nano" data-tip="'+escAttr(c.nanoNote)+'" title="Nano note" aria-label="Nano note"><span class="material-icons">info</span></button>';
+            var head = '<div class="u-cloud-head"><span class="material-icons" style="color:'+c.color+'">'+c.icon+'</span>'+c.name
+              + (icons ? '<span class="u-info">'+icons+'</span>' : '') + '</div>';
+            return head + '<div class="u-grid">' + svcs.map(cardHtml).join('') + '</div>';
           }).join('');
           grid.querySelectorAll('.u-copy').forEach(function(b){
             b.onclick = function(){
@@ -1621,6 +1667,7 @@
             };
           });
           grid.querySelectorAll('.u-expand').forEach(function(b){ b.onclick = function(){ openModal(b.dataset.c); }; });
+          grid.querySelectorAll('.u-ibtn').forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); showTip(b); }; });
         }
         paintEp();
       }
