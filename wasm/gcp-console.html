@@ -1636,6 +1636,9 @@ setInterval(fetchDiskHealth, 30000);
     else { lbl.textContent = "Relay tunnel: off"; toggleBtn.textContent="Start tunnel"; }
     epEl.textContent = (phase==="connected" && external) ? ("apps → " + external) : "";
     epEl.title = external || "";
+    // Persist the live endpoint so other views (e.g. the /docs/*/usage per-service
+    // samples) can show the SAME relay URL even before their own channel connects.
+    if(phase==="connected" && external){ try{ localStorage.setItem("nano_relay_external", external); if(mode) localStorage.setItem("nano_relay_mode", mode); }catch(_){} }
   }
   function appendLog(line, cls){ var d=document.createElement("div"); d.innerHTML = cls ? ('<span class="'+cls+'">'+(line||"")+'</span>') : (line||""); logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight; }
   function renderLogs(lines){ logEl.textContent=""; if(!lines||!lines.length){ appendLog("tunnel off — click “Start tunnel”.","dim"); return; } lines.forEach(function(l){ appendLog(l.line,l.cls); }); }
