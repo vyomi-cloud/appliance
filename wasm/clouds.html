@@ -1134,111 +1134,116 @@
       </div>
     </div><!-- /spaces surface card -->
 
-    <!-- ── Connect external apps (Nano only — shows the relay endpoint URL) ──── -->
-    <style>
-      #connect-card .cx-hint{display:flex;align-items:center;gap:10px;color:#a1a1aa;font-size:13.5px;background:rgba(255,255,255,.03);border:1px dashed rgba(255,255,255,.16);border-radius:12px;padding:14px 16px}
-      #connect-card .cx-hint .material-icons{color:#7c8cf8}
-      #connect-card .cx-urlrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:linear-gradient(180deg,#14172e,#0d1228);border:1px solid rgba(124,58,237,.35);border-radius:12px;padding:14px 16px;margin-bottom:14px}
-      #connect-card .cx-urllabel{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#8b8ba7}
-      #connect-card .cx-url{font-family:ui-monospace,Menlo,monospace;font-size:14px;color:#7cc4ff;flex:1;min-width:180px;word-break:break-all}
-      #connect-card .cx-copy{background:linear-gradient(135deg,#4d8cf3,#7c3aed);color:#fff;border:0;border-radius:8px;padding:7px 15px;font-size:12.5px;font-weight:600;cursor:pointer}
-      #connect-card .cx-tabs{display:inline-flex;border:1px solid rgba(255,255,255,.14);border-radius:999px;overflow:hidden;margin-bottom:10px}
-      #connect-card .cx-tab{background:transparent;border:0;padding:5px 16px;font-size:12px;font-weight:600;color:#a1a1aa;cursor:pointer}
-      #connect-card .cx-tab.active{background:rgba(255,255,255,.14);color:#fff}
-      #connect-card pre.cx-ex{background:#0b0e22;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px 16px;overflow:auto;margin:0 0 12px}
-      #connect-card pre.cx-ex code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#e4e4e7;white-space:pre}
-      #connect-card .cx-note{font-size:12px;color:#8b8ba7;margin:0;line-height:1.5}
-      #connect-card .cx-note code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:4px;color:#cdd8e6}
-    </style>
-    <div class="surface-card" id="connect-card" style="display:none">
-      <div class="sc-head" id="cx-head" role="button" tabindex="0" aria-controls="cx-collapse" aria-expanded="true" style="cursor:pointer;user-select:none">
-        <div class="sc-title"><h2><span class="material-icons">cable</span>Connect external apps</h2></div>
-        <span class="material-icons" id="cx-caret" style="color:#8b8ba7">expand_less</span>
-      </div>
-      <div id="cx-collapse">
-      <p class="sc-desc">Point any AWS SDK, CLI or tool at this in-browser simulator over the relay tunnel — no code changes, just one endpoint URL.</p>
-      <div class="cx-hint" id="cx-off">
-        <span class="material-icons">power</span>
-        <span>Start the <strong>relay tunnel</strong> (the bar at the bottom of the page → <em>Start tunnel</em>) to get your endpoint URL for external apps.</span>
-      </div>
-      <div id="cx-on" style="display:none">
-        <div class="cx-urlrow">
-          <span class="cx-urllabel">Endpoint URL</span>
-          <code class="cx-url" id="cx-url"></code>
-          <button type="button" class="cx-copy" id="cx-copy">Copy</button>
-        </div>
-        <div class="cx-tabs" role="tablist">
-          <button type="button" class="cx-tab active" data-k="cli">Utility (CLI)</button>
-          <button type="button" class="cx-tab" data-k="sdk">SDK (boto3)</button>
-          <button type="button" class="cx-tab" data-k="curl">curl</button>
-        </div>
-        <pre class="cx-ex"><code id="cx-ex"></code></pre>
-        <p class="cx-note">AWS-compatible endpoint — S3 · DynamoDB · KMS · Secrets · SQS/SNS · IAM · RDS (+ RDS Data API). Use any region with dummy credentials (<code>test</code>/<code>test</code>).</p>
-      </div>
-      </div><!-- /cx-collapse -->
-    </div>
-    <script>
-    (function () {
-      function initConnect() {
-        var card = document.getElementById('connect-card');
-        // Nano only: the relay footer (#nano-foot) is injected in the Nano bundle,
-        // not the appliance — so this card stays hidden on the appliance dashboard.
-        if (!card || !document.getElementById('nano-foot')) return;
-        card.style.display = '';
-        // Expand / collapse (click header) — remembers the choice.
-        var head = document.getElementById('cx-head'), collapse = document.getElementById('cx-collapse'), caret = document.getElementById('cx-caret');
-        function setCollapsed(c) {
-          if (collapse) collapse.style.display = c ? 'none' : '';
-          if (caret) caret.textContent = c ? 'expand_more' : 'expand_less';
-          if (head) head.setAttribute('aria-expanded', String(!c));
-          try { localStorage.setItem('vyomi.connectCollapsed', c ? '1' : '0'); } catch (_) {}
-        }
-        var startC = false; try { startC = localStorage.getItem('vyomi.connectCollapsed') === '1'; } catch (_) {}
-        setCollapsed(startC);
-        if (head) {
-          head.addEventListener('click', function () { setCollapsed(collapse && collapse.style.display !== 'none'); });
-          head.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); head.click(); } });
-        }
-        var offEl = document.getElementById('cx-off'), onEl = document.getElementById('cx-on');
-        var urlEl = document.getElementById('cx-url'), exEl = document.getElementById('cx-ex'), copyBtn = document.getElementById('cx-copy');
-        var _url = null, _k = 'cli';
-        function ex(u) { return {
-          cli: 'aws --endpoint-url ' + u + ' s3 ls\naws --endpoint-url ' + u + ' dynamodb list-tables',
-          sdk: 'import boto3\ns3 = boto3.client(\n  "s3", endpoint_url="' + u + '",\n  aws_access_key_id="test", aws_secret_access_key="test",\n  region_name="us-east-1")\nprint(s3.list_buckets())',
-          curl: 'curl ' + u + '/            # S3 ListBuckets'
-        }; }
-        function paint() { if (exEl && _url) exEl.textContent = ex(_url)[_k]; }
-        function setState(conn, url) {
-          var live = conn && url;
-          offEl.style.display = live ? 'none' : '';
-          onEl.style.display  = live ? '' : 'none';
-          if (live) { _url = url; urlEl.textContent = url; paint(); }
-        }
-        card.querySelectorAll('.cx-tab').forEach(function (t) {
-          t.addEventListener('click', function () {
-            card.querySelectorAll('.cx-tab').forEach(function (x) { x.classList.toggle('active', x === t); });
-            _k = t.dataset.k; paint();
-          });
-        });
-        if (copyBtn) copyBtn.addEventListener('click', function () {
-          if (!_url || !navigator.clipboard) return;
-          navigator.clipboard.writeText(_url).then(function () {
-            copyBtn.textContent = 'Copied'; setTimeout(function () { copyBtn.textContent = 'Copy'; }, 1200);
-          }).catch(function () {});
-        });
-        try {
-          var chn = new BroadcastChannel('nano-relay');
-          chn.onmessage = function (ev) { var m = ev.data || {}; if (m.type === 'status') setState(m.state === 'connected', m.external); };
-        } catch (_) {}
-      }
-      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initConnect); else initConnect();
-    })();
-    </script>
 
   </div>
   </div><!-- /view-spaces -->
 
     <!-- ── Overlays (outside the views, so they work from any tab) ────── -->
+    <!-- ── Connect external apps — floating pill + collapsible pop-up (moved out
+         of the Spaces view). Bottom-right, above the tunnel bar on Nano; endpoint
+         is the relay URL on Nano, the appliance origin on Lite/Pro/Max. ─────── -->
+    <style>
+      #connect-dock{position:fixed;right:16px;z-index:99998;font:13px system-ui,-apple-system,sans-serif}
+      #connect-dock .cx-pill{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,#4d8cf3,#7c3aed);color:#fff;border:0;border-radius:999px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+      #connect-dock .cx-pill .material-icons{font-size:17px}
+      #connect-dock .cx-pill .cx-dot{width:8px;height:8px;border-radius:50%;background:#c7c7cf}
+      #connect-dock.live .cx-pill .cx-dot{background:#34d399;box-shadow:0 0 7px #34d39988}
+      #connect-dock .cx-pop{position:absolute;right:0;bottom:48px;width:430px;max-width:calc(100vw - 32px);background:linear-gradient(180deg,#14172e,#0d1228);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:16px 18px;box-shadow:0 18px 44px rgba(0,0,0,.55);display:none}
+      #connect-dock.open .cx-pop{display:block}
+      #connect-dock .cx-poptitle{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:#e4e4e7;margin:0 0 3px}
+      #connect-dock .cx-poptitle .material-icons{font-size:19px;color:#7c8cf8}
+      #connect-dock .cx-close{margin-left:auto;background:transparent;border:0;color:#8b8ba7;cursor:pointer;padding:0;line-height:1}
+      #connect-dock .cx-close:hover{color:#fff}
+      #connect-dock .cx-desc2{font-size:12.5px;color:#a1a1aa;margin:0 0 12px;line-height:1.5}
+      #connect-dock .cx-hint{display:flex;align-items:center;gap:10px;color:#a1a1aa;font-size:13px;background:rgba(255,255,255,.03);border:1px dashed rgba(255,255,255,.16);border-radius:12px;padding:13px 15px}
+      #connect-dock .cx-hint .material-icons{color:#7c8cf8}
+      #connect-dock .cx-urlrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:linear-gradient(180deg,#14172e,#0d1228);border:1px solid rgba(124,58,237,.35);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+      #connect-dock .cx-urllabel{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#8b8ba7}
+      #connect-dock .cx-url{font-family:ui-monospace,Menlo,monospace;font-size:13.5px;color:#7cc4ff;flex:1;min-width:150px;word-break:break-all}
+      #connect-dock .cx-copy{background:linear-gradient(135deg,#4d8cf3,#7c3aed);color:#fff;border:0;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer}
+      #connect-dock .cx-tabs{display:inline-flex;border:1px solid rgba(255,255,255,.14);border-radius:999px;overflow:hidden;margin-bottom:10px}
+      #connect-dock .cx-tab{background:transparent;border:0;padding:5px 15px;font-size:12px;font-weight:600;color:#a1a1aa;cursor:pointer}
+      #connect-dock .cx-tab.active{background:rgba(255,255,255,.14);color:#fff}
+      #connect-dock pre.cx-ex{background:#0b0e22;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:12px 14px;overflow:auto;margin:0 0 10px}
+      #connect-dock pre.cx-ex code{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#e4e4e7;white-space:pre}
+      #connect-dock .cx-note{font-size:11.5px;color:#8b8ba7;margin:0;line-height:1.5}
+      #connect-dock .cx-note code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:4px;color:#cdd8e6}
+    </style>
+    <div id="connect-dock" style="display:none">
+      <div class="cx-pop" id="cx-pop">
+        <div class="cx-poptitle"><span class="material-icons">cable</span>Connect external apps
+          <button type="button" class="cx-close" id="cx-close" aria-label="Close"><span class="material-icons">close</span></button></div>
+        <p class="cx-desc2">Point any AWS SDK, CLI or tool at this simulator — no code changes, just one endpoint URL.</p>
+        <div class="cx-hint" id="cx-off">
+          <span class="material-icons">power</span>
+          <span>Start the <strong>relay tunnel</strong> (bar at the bottom &rarr; <em>Start tunnel</em>) to get your endpoint URL.</span>
+        </div>
+        <div id="cx-on" style="display:none">
+          <div class="cx-urlrow">
+            <span class="cx-urllabel">Endpoint</span>
+            <code class="cx-url" id="cx-url"></code>
+            <button type="button" class="cx-copy" id="cx-copy">Copy</button>
+          </div>
+          <div class="cx-tabs" role="tablist">
+            <button type="button" class="cx-tab active" data-k="cli">CLI</button>
+            <button type="button" class="cx-tab" data-k="sdk">SDK</button>
+            <button type="button" class="cx-tab" data-k="curl">curl</button>
+          </div>
+          <pre class="cx-ex"><code id="cx-ex"></code></pre>
+          <p class="cx-note">AWS-compatible &mdash; S3 &middot; DynamoDB &middot; KMS &middot; Secrets &middot; SQS/SNS &middot; IAM &middot; RDS. Any region, dummy creds (<code>test</code>/<code>test</code>).</p>
+        </div>
+      </div>
+      <button type="button" class="cx-pill" id="cx-pill"><span class="cx-dot"></span><span class="material-icons">cable</span>Connect apps</button>
+    </div>
+    <script>
+    (function () {
+      function initConnect() {
+        var dock = document.getElementById('connect-dock'); if (!dock) return;
+        var isNano = !!document.getElementById('nano-foot');
+        // On Nano sit above the tunnel bar + conformance pill; on the appliance sit
+        // at the very bottom-right corner.
+        dock.style.bottom = isNano ? '96px' : '16px';
+        dock.style.display = '';
+        var pill = document.getElementById('cx-pill'), closeB = document.getElementById('cx-close');
+        function setOpen(o){ dock.classList.toggle('open', o); }
+        pill.addEventListener('click', function(e){ e.stopPropagation(); setOpen(!dock.classList.contains('open')); });
+        if (closeB) closeB.addEventListener('click', function(){ setOpen(false); });
+        document.addEventListener('click', function(e){ if (dock.classList.contains('open') && !dock.contains(e.target)) setOpen(false); });
+        document.addEventListener('keydown', function(e){ if (e.key === 'Escape') setOpen(false); });
+
+        var offEl = document.getElementById('cx-off'), onEl = document.getElementById('cx-on');
+        var urlEl = document.getElementById('cx-url'), exEl = document.getElementById('cx-ex'), copyBtn = document.getElementById('cx-copy');
+        var _url = null, _k = 'cli';
+        function ex(u){ return {
+          cli: 'aws --endpoint-url ' + u + ' s3 ls\naws --endpoint-url ' + u + ' dynamodb list-tables',
+          sdk: 'import boto3\ns3 = boto3.client(\n  "s3", endpoint_url="' + u + '",\n  aws_access_key_id="test", aws_secret_access_key="test",\n  region_name="us-east-1")\nprint(s3.list_buckets())',
+          curl: 'curl ' + u + '/            # S3 ListBuckets'
+        }; }
+        function paint(){ if (exEl && _url) exEl.textContent = ex(_url)[_k]; }
+        function setState(conn, url){
+          var live = conn && url;
+          dock.classList.toggle('live', !!live);
+          offEl.style.display = live ? 'none' : '';
+          onEl.style.display  = live ? '' : 'none';
+          if (live) { _url = url; urlEl.textContent = url; paint(); }
+        }
+        dock.querySelectorAll('.cx-tab').forEach(function(t){
+          t.addEventListener('click', function(){ dock.querySelectorAll('.cx-tab').forEach(function(x){ x.classList.toggle('active', x === t); }); _k = t.dataset.k; paint(); });
+        });
+        if (copyBtn) copyBtn.addEventListener('click', function(){
+          if (!_url || !navigator.clipboard) return;
+          navigator.clipboard.writeText(_url).then(function(){ copyBtn.textContent = 'Copied'; setTimeout(function(){ copyBtn.textContent = 'Copy'; }, 1200); }).catch(function(){});
+        });
+        if (isNano) {
+          try { var chn = new BroadcastChannel('nano-relay'); chn.onmessage = function(ev){ var m = ev.data || {}; if (m.type === 'status') setState(m.state === 'connected', m.external); }; } catch(_){}
+        } else {
+          offEl.style.display = 'none';           // appliance: origin is always up
+          setState(true, location.origin);
+        }
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initConnect); else initConnect();
+    })();
+    </script>
     <!-- ── Cloud-locked modal (Pro tier non-primary-cloud click) ────── -->
     <div class="cl-modal" id="cl-modal" onclick="onClModalBackdrop(event)">
       <div class="cl-box" onclick="event.stopPropagation()">
