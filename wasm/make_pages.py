@@ -112,9 +112,9 @@ def _docs_widget(cloud=None):
         )
     return f"""
 <style>
- #nano-docs{{position:fixed;right:16px;bottom:52px;z-index:99998;font:13px system-ui,-apple-system,sans-serif}}
- #nano-docs .pill{{background:#0d1030;color:#e4e4e7;border:1px solid #2a2f55;border-radius:999px;padding:8px 14px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35);user-select:none}}
- #nano-docs .pop{{position:absolute;right:0;bottom:42px;background:#0d1030;border:1px solid #2a2f55;border-radius:12px;padding:6px;min-width:218px;display:none;box-shadow:0 12px 34px rgba(0,0,0,.45)}}
+ #nano-docs{{position:fixed;right:14px;bottom:40px;z-index:100000;font:13px system-ui,-apple-system,sans-serif}}
+ #nano-docs .pill{{display:none}}   /* trigger moved into the tunnel bar (#nano-foot-conf) */
+ #nano-docs .pop{{position:absolute;right:0;bottom:0;background:#0d1030;border:1px solid #2a2f55;border-radius:12px;padding:6px;min-width:218px;display:none;box-shadow:0 12px 34px rgba(0,0,0,.45)}}
  #nano-docs.open .pop{{display:block}}
  #nano-docs .pop .h{{font-size:11px;color:#8b8ba7;padding:6px 10px;text-transform:uppercase;letter-spacing:1px}}
  #nano-docs .pop a{{display:flex;justify-content:space-between;gap:14px;padding:8px 10px;border-radius:8px;color:#cdd8e6;text-decoration:none}}
@@ -159,6 +159,8 @@ def _footer_widget():
  <span class="dot"></span><span class="lbl">Relay tunnel: off</span>
  <span class="ep" id="nano-foot-ep"></span>
  <span class="sp"></span>
+ <button id="nano-foot-connect" style="display:none">🔌 Connect apps</button>
+ <button id="nano-foot-conf">📘 Conformance</button>
  <button id="nano-foot-logs">Logs ▴</button>
  <button id="nano-foot-toggle">Start tunnel</button>
 </div>
@@ -238,6 +240,16 @@ def _footer_widget():
       port.postMessage({type:"query"});
     }, 3000);
   } else { toggleBtn.textContent = "Open relay endpoint ↗"; }
+
+  // Conformance button lives in this bar (next to Logs) → toggles the docs pop-up.
+  var confBtn = document.getElementById("nano-foot-conf"), docs = document.getElementById("nano-docs");
+  if(confBtn && docs){
+    confBtn.addEventListener("click", function(e){ e.stopPropagation();
+      var cd = document.getElementById("connect-dock"); if(cd) cd.classList.remove("open");   // one pop-up at a time
+      docs.classList.toggle("open"); });
+    document.addEventListener("click", function(e){ if(docs.classList.contains("open") && !docs.contains(e.target) && !confBtn.contains(e.target)) docs.classList.remove("open"); });
+    document.addEventListener("keydown", function(e){ if(e.key==="Escape") docs.classList.remove("open"); });
+  }
 })();
 </script>"""
 

@@ -1115,7 +1115,10 @@
          of the Spaces view). Bottom-right, above the tunnel bar on Nano; endpoint
          is the relay URL on Nano, the appliance origin on Lite/Pro/Max. ─────── -->
     <style>
-      #connect-dock{position:fixed;right:16px;z-index:99998;font:13px system-ui,-apple-system,sans-serif}
+      #connect-dock{position:fixed;right:16px;z-index:100000;font:13px system-ui,-apple-system,sans-serif}
+      #connect-dock.footer-mode{bottom:40px!important;right:14px}
+      #connect-dock.footer-mode .cx-pill{display:none}
+      #connect-dock.footer-mode .cx-pop{bottom:0}
       #connect-dock .cx-pill{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,#4d8cf3,#7c3aed);color:#fff;border:0;border-radius:999px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35)}
       #connect-dock .cx-pill .material-icons{font-size:17px}
       #connect-dock .cx-pill .cx-dot{width:8px;height:8px;border-radius:50%;background:#c7c7cf}
@@ -1172,15 +1175,21 @@
       function initConnect() {
         var dock = document.getElementById('connect-dock'); if (!dock) return;
         var isNano = !!document.getElementById('nano-foot');
-        // On Nano sit above the tunnel bar + conformance pill; on the appliance sit
-        // at the very bottom-right corner.
-        dock.style.bottom = isNano ? '96px' : '16px';
+        // Nano: the trigger lives IN the tunnel bar (#nano-foot-connect, next to
+        // Logs/Stop) and the pop-up sits just above the bar. Appliance: a
+        // bottom-right pill (no tunnel bar there).
+        if (isNano) dock.classList.add('footer-mode'); else dock.style.bottom = '16px';
         dock.style.display = '';
         var pill = document.getElementById('cx-pill'), closeB = document.getElementById('cx-close');
-        function setOpen(o){ dock.classList.toggle('open', o); }
+        var fbtn = document.getElementById('nano-foot-connect');
+        function setOpen(o){
+          if (o) { var docs = document.getElementById('nano-docs'); if (docs) docs.classList.remove('open'); }  // one pop-up at a time
+          dock.classList.toggle('open', o);
+        }
         pill.addEventListener('click', function(e){ e.stopPropagation(); setOpen(!dock.classList.contains('open')); });
+        if (isNano && fbtn) { fbtn.style.display = ''; fbtn.addEventListener('click', function(e){ e.stopPropagation(); setOpen(!dock.classList.contains('open')); }); }
         if (closeB) closeB.addEventListener('click', function(){ setOpen(false); });
-        document.addEventListener('click', function(e){ if (dock.classList.contains('open') && !dock.contains(e.target)) setOpen(false); });
+        document.addEventListener('click', function(e){ if (dock.classList.contains('open') && !dock.contains(e.target) && !(fbtn && (e.target === fbtn || fbtn.contains(e.target)))) setOpen(false); });
         document.addEventListener('keydown', function(e){ if (e.key === 'Escape') setOpen(false); });
 
         var offEl = document.getElementById('cx-off'), onEl = document.getElementById('cx-on');
