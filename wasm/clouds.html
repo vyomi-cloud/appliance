@@ -675,7 +675,10 @@
     .side-item:hover { background: #171b3d; color: #fff; }
     .side-item.active { background: #1f2550; color: #fff; }
     .side-item .material-icons {   /* large icons on a brand-gradient chip */
-      font-size: 24px; flex: none; color: #fff; border-radius: 9px; padding: 8px;
+      font-size: 24px; flex: none; color: #fff; border-radius: 9px;
+      /* Fixed square + centred glyph so the inner padding is EQUAL on every side
+         (an inline icon-font's line-box makes symmetric `padding` look uneven). */
+      width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
       background: linear-gradient(135deg, #4d8cf3 0%, #7c3aed 100%);
     }
     body.side-collapsed .side-label { display: none; }
