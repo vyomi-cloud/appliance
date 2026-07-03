@@ -904,6 +904,14 @@
     #view-api .api-detail .am-req { color: #f87171; font-size: 10px; font-weight: 700; }
     #view-api .api-detail code.am-inline { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; color: #cdd8e6; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
     #view-api .api-detail .am-none { color: #8b8ba7; font-size: 12.5px; margin: 4px 0 0; }
+    #view-api .api-detail .am-schema { font-size: 11px; color: #7cc4ff; font-family: ui-monospace, Menlo, monospace; font-weight: 500; text-transform: none; letter-spacing: 0; margin-left: 4px; }
+    #view-api .api-detail pre.api-pre { background: #05071a; border: 1px solid rgba(255,255,255,0.09); border-radius: 8px; padding: 10px 12px; overflow: auto; margin: 6px 0 12px; max-height: 340px; }
+    #view-api .api-detail pre.api-pre code { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; line-height: 1.5; color: #cdd8e6; white-space: pre; background: none; }
+    #view-api .api-detail .api-resp { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; }
+    #view-api .api-detail .api-code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 6px; }
+    #view-api .api-detail .api-code.ok { background: rgba(52,211,153,.16); color: #34d399; }
+    #view-api .api-detail .api-code.err { background: rgba(248,113,113,.16); color: #f87171; }
+    #view-api .api-detail .api-rdesc { font-size: 12px; color: #8b8ba7; }
 
     /* Outer section wrappers stay fully transparent. */
     .surface-card, #stats-card, #host-util-card, #svc-status-card, #spaces-card,
@@ -1765,13 +1773,57 @@
     // ── API (Swagger) native renderer — fetch the OpenAPI spec per cloud and
     //    render operations as per-tag cards + a detail modal (no iframe). ────
     (function () {
-      var SPECS = {}, curCloud = 'aws', curOps = [], filter = '', loaded = false;
+      var SPECS = {}, curSpec = null, curCloud = 'aws', curOps = [], filter = '', loaded = false;
       function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
       function schemaName(s){
         if (!s) return '';
         if (s.$ref) return s.$ref.split('/').pop();
         if (s.type === 'array' && s.items) return schemaName(s.items) + '[]';
         return s.type || (s.allOf || s.oneOf || s.anyOf ? 'object' : '');
+      }
+      // Resolve a schema (following $ref against components.schemas) into a sample
+      // JSON payload — used to show example request/response bodies inline.
+      function resolveSchema(s, seen){
+        if (!s || !s.$ref) return s;
+        var name = s.$ref.split('/').pop();
+        if (seen[name]) return { type: 'object' };            // circular — stop
+        var n = {}; for (var k in seen) n[k] = seen[k]; n[name] = 1;
+        var comps = (curSpec && curSpec.components && curSpec.components.schemas) || {};
+        return resolveSchema(comps[name], n);
+      }
+      function sampleOf(schema, seen, depth){
+        seen = seen || {}; depth = depth || 0;
+        if (depth > 6) return null;
+        schema = resolveSchema(schema, seen);
+        if (!schema) return null;
+        if (schema.example !== undefined) return schema.example;
+        if (schema.default !== undefined) return schema.default;
+        if (schema.enum && schema.enum.length) return schema.enum[0];
+        if (schema.allOf){ var m = {}; schema.allOf.forEach(function(x){ var v = sampleOf(x, seen, depth); if (v && typeof v === 'object' && !Array.isArray(v)) for (var k in v) m[k] = v[k]; }); return m; }
+        if (schema.oneOf || schema.anyOf) return sampleOf((schema.oneOf || schema.anyOf)[0], seen, depth);
+        var t = schema.type || (schema.properties ? 'object' : (schema.items ? 'array' : null));
+        if (t === 'object'){
+          var o = {}, props = schema.properties || {};
+          Object.keys(props).forEach(function(k){ o[k] = sampleOf(props[k], seen, depth + 1); });
+          if (!Object.keys(props).length && schema.additionalProperties) o = { key: sampleOf(schema.additionalProperties === true ? { type: 'string' } : schema.additionalProperties, seen, depth + 1) };
+          return o;
+        }
+        if (t === 'array') return [ sampleOf(schema.items || {}, seen, depth + 1) ];
+        if (t === 'string') return schema.format === 'date-time' ? '2024-01-01T00:00:00Z' : (schema.format === 'uuid' ? '00000000-0000-0000-0000-000000000000' : (schema.format || 'string'));
+        if (t === 'integer' || t === 'number') return 0;
+        if (t === 'boolean') return true;
+        return null;
+      }
+      function exampleFor(media){
+        if (!media) return undefined;
+        if (media.example !== undefined) return media.example;
+        if (media.examples){ var k = Object.keys(media.examples)[0]; if (k && media.examples[k]) return media.examples[k].value; }
+        if (media.schema) return sampleOf(media.schema, {}, 0);
+        return undefined;
+      }
+      function payloadPre(v){
+        var json; try { json = JSON.stringify(v, null, 2); } catch (e) { json = String(v); }
+        return '<pre class="api-pre"><code>' + esc(json) + '</code></pre>';
       }
       // Group key: the OpenAPI tag if the spec sets one, else the first meaningful
       // path segment (skipping api/azure-data/version prefixes + {params}) so the
@@ -1807,13 +1859,21 @@
             + o.parameters.map(function(p){ return '<tr><td>' + esc(p.name) + (p.required ? ' <span class="am-req">required</span>' : '') + '</td><td>' + esc(p.in || '') + '</td><td><code class="am-inline">' + esc(schemaName(p.schema) || p.type || '') + '</code></td></tr>'; }).join('') + '</table>';
         }
         if (o.requestBody){
-          var c = o.requestBody.content || {}, ct = Object.keys(c)[0], sch = ct && c[ct].schema;
-          html += '<div class="am-sec-h">Request — body</div><table class="am-t"><tr><th>Content-Type</th><th>Schema</th></tr><tr><td><code class="am-inline">' + esc(ct || '') + '</code></td><td>' + esc(schemaName(sch)) + '</td></tr></table>';
+          var c = o.requestBody.content || {}, ct = Object.keys(c)[0], media = ct && c[ct];
+          html += '<div class="am-sec-h">Request — body <code class="am-inline">' + esc(ct || 'application/json') + '</code>' + (schemaName(media && media.schema) ? ' <span class="am-schema">' + esc(schemaName(media.schema)) + '</span>' : '') + '</div>';
+          var reqEx = exampleFor(media);
+          html += (reqEx == null) ? '<p class="am-none">No documented request schema.</p>' : payloadPre(reqEx);
         }
         var codes = Object.keys(o.responses || {});
         if (codes.length){
-          html += '<div class="am-sec-h">Responses</div><table class="am-t"><tr><th>Status</th><th>Description</th></tr>'
-            + codes.map(function(code){ var r = o.responses[code], sc = r && r.content, sct = sc && Object.keys(sc)[0], ssch = sct && sc[sct].schema, sn = ssch ? schemaName(ssch) : ''; return '<tr><td><code class="am-inline">' + esc(code) + '</code></td><td>' + esc((r && r.description) || '') + (sn ? ' <code class="am-inline">' + esc(sn) + '</code>' : '') + '</td></tr>'; }).join('') + '</table>';
+          html += '<div class="am-sec-h">Responses</div>';
+          codes.forEach(function(code){
+            var r = o.responses[code] || {}, rc = r.content, rct = rc && Object.keys(rc)[0], media = rct && rc[rct];
+            var sn = schemaName(media && media.schema);
+            html += '<div class="api-resp"><span class="api-code ' + (String(code).charAt(0) === '2' ? 'ok' : 'err') + '">' + esc(code) + '</span><span class="api-rdesc">' + esc(r.description || '') + (sn ? ' · ' + esc(sn) : '') + '</span></div>';
+            var resEx = exampleFor(media);
+            if (resEx != null) html += payloadPre(resEx);
+          });
         }
         return html || '<p class="am-none">No parameters, body or documented responses.</p>';
       }
@@ -1848,7 +1908,7 @@
         curCloud = cloud;
         document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.c === cloud); });
         var body = document.getElementById('api-body');
-        if (SPECS[cloud]){ curOps = opsFromSpec(SPECS[cloud]); render(); return; }
+        if (SPECS[cloud]){ curSpec = SPECS[cloud]; curOps = opsFromSpec(curSpec); render(); return; }
         if (body) body.innerHTML = '<div class="api-empty">Loading ' + cloud.toUpperCase() + ' API…</div>';
         // The spec is served at the ORIGIN ROOT (/openapi-*.json), but the Nano
         // base-path shim patches window.fetch to prefix same-origin paths with the
@@ -1860,7 +1920,7 @@
         xhr.onload = function(){
           if (curCloud !== cloud) return;
           if (xhr.status >= 200 && xhr.status < 300){
-            try { var spec = JSON.parse(xhr.responseText); SPECS[cloud] = spec; curOps = opsFromSpec(spec); render(); return; } catch (e) {}
+            try { var spec = JSON.parse(xhr.responseText); SPECS[cloud] = spec; curSpec = spec; curOps = opsFromSpec(spec); render(); return; } catch (e) {}
           }
           fail();
         };
