@@ -632,7 +632,7 @@
       padding: 14px 10px; gap: 4px; overflow: hidden; transition: width .2s ease;
       min-height: calc(100vh - 104px);          /* fill the viewport below the top bar */
     }
-    body.side-collapsed #app-sidebar { width: 62px; }
+    body.side-collapsed #app-sidebar { width: 68px; padding-left: 6px; padding-right: 6px; }
     .side-collapse {
       background: none; border: 0; color: #8b8fb3; cursor: pointer; display: flex;
       align-items: center; gap: 14px; padding: 8px 10px; border-radius: 9px; margin-bottom: 8px;
@@ -656,10 +656,10 @@
       background: linear-gradient(135deg, #4d8cf3 0%, #7c3aed 100%);
     }
     body.side-collapsed .side-label { display: none; }
-    /* Collapsed rail: centre the icon so the active/hover background is padded
-       evenly (the wide gradient chip would otherwise overrun the right edge). */
-    body.side-collapsed .side-item,
-    body.side-collapsed .side-collapse { justify-content: center; padding-left: 0; padding-right: 0; }
+    /* Collapsed rail: each item becomes a centred square so the active/hover
+       shade has EQUAL padding around the 40px icon chip on every side. */
+    body.side-collapsed .side-item { width: 56px; height: 56px; padding: 0; justify-content: center; margin: 0 auto; }
+    body.side-collapsed .side-collapse { justify-content: center; padding: 8px; align-self: center; }
     #app-main { flex: 1; min-width: 0; }
     /* ── SDK & CLI usage view — native design, matches Knowledge Center ──── */
     #view-usage .usage-ep {
