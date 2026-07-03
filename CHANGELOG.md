@@ -4,6 +4,48 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] — 2026-07-03
+
+Nano developer-experience polish — the in-app **API (Swagger)** and **SDK & CLI
+usage** references, a tidier tunnel dock, and a relay reliability fix. All UI is
+shared `clouds.html`, so every change lands on both Nano and the appliance.
+
+### Added
+- **Native API (Swagger) reference — in-app, no iframe.** A new **API (Swagger)**
+  left-nav item renders the OpenAPI spec natively in the dark theme, matching the
+  SDK & CLI usage view: hero + **AWS/GCP/Azure** cloud tabs + a filter box +
+  per-service sections of colour-coded operation cards (GET/POST/PUT/DELETE). Each
+  row **expands inline** (accordion, no dialog) to show request parameters and
+  **example request/response JSON payloads** generated from the schema ($ref
+  resolution against `components.schemas` with a circular guard). The spec is
+  fetched via XHR so it bypasses the Nano base-path fetch shim and reaches the
+  origin-root `/openapi-*.json` on both tiers.
+- **Native SDK & CLI usage view** with per-cloud sections (AWS/GCP/Azure) under
+  each transport tab (CLI/SDK/curl), each service a copy-able card with an
+  **expand → full-instructions** panel; per-cloud setup/Nano notes are compact
+  header icons with click tooltips. Endpoint is dynamic — the live relay URL on
+  Nano, the appliance origin on Lite/Pro/Max.
+- **Dark-themed Swagger UI** (`?theme=dark`) on both the portal and appliance
+  `_swagger_html`, for any standalone `/docs/{cloud}` view (marketing page stays
+  light).
+
+### Changed
+- **Connect external apps** moved from the Active-spaces card to a **bottom-right
+  pill + collapsible pop-up**; on Nano it lives in the **tunnel bar next to
+  Logs/Stop** alongside the **Conformance** button (one pop-up open at a time).
+- **Provider-console dev-tools** (API + SDK/CLI icons) now open the **same native
+  in-app views** as the left nav (`/ui#api` / `/ui#usage`) instead of the old
+  new-tab Swagger/usage docs.
+- **Left-nav icons** enlarged to centred 40×40 chips with equal padding (and a
+  56×56 collapsed square); the **launch-page sidebar** reached parity — it was
+  missing the SDK & CLI usage + API (Swagger) items.
+
+### Fixed
+- **Relay `1006` loop on `www.vyomi.cloud`.** Both the apex and `www` host serve
+  `/nano/` with no redirect, but the relay Worker only allowed the exact apex, so
+  registrations from `www` were 403'd. The origin gate now accepts the apex **and**
+  `https://www.<host>`. Deployed to `relay.vyomi.cloud`.
+
 ## [2.3.0] — 2026-07-03
 
 ### Added
