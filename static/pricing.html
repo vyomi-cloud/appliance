@@ -997,7 +997,7 @@
       display: flex; flex-direction: column; padding: 14px 10px; gap: 4px;
       overflow: hidden; transition: width .2s ease; min-height: calc(100vh - 104px);
     }
-    body.side-collapsed #app-sidebar { width: 62px; }
+    body.side-collapsed #app-sidebar { width: 68px; padding-left: 6px; padding-right: 6px; }
     .side-collapse {
       background: none; border: 0; color: #8b8fb3; cursor: pointer; display: flex;
       align-items: center; gap: 14px; padding: 8px 10px; border-radius: 9px; margin-bottom: 8px;
@@ -1012,15 +1012,16 @@
     }
     .side-item:hover { background: #171b3d; color: #fff; }
     .side-item.active { background: #1f2550; color: #fff; }
-    .side-item .material-icons {   /* medium icons on a brand-gradient chip */
-      font-size: 19px; flex: none; color: #fff; border-radius: 8px; padding: 6px;
+    .side-item .material-icons {   /* large icons on a brand-gradient chip */
+      font-size: 24px; flex: none; color: #fff; border-radius: 9px;
+      width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
       background: linear-gradient(135deg, #4d8cf3 0%, #7c3aed 100%);
     }
     body.side-collapsed .side-label { display: none; }
-    /* Collapsed rail: centre the icon so the active/hover background is padded
-       evenly (the wide gradient chip would otherwise overrun the right edge). */
-    body.side-collapsed .side-item,
-    body.side-collapsed .side-collapse { justify-content: center; padding-left: 0; padding-right: 0; }
+    /* Collapsed rail: each item becomes a centred square so the active/hover
+       shade has EQUAL padding around the 40px icon chip on every side. */
+    body.side-collapsed .side-item { width: 56px; height: 56px; padding: 0; justify-content: center; margin: 0 auto; }
+    body.side-collapsed .side-collapse { justify-content: center; padding: 8px; align-self: center; }
     #app-main { flex: 1; min-width: 0; }
 
     /* ═══════════ v2.3.0 dark theme — matches the portal ═══════════
@@ -1154,6 +1155,8 @@
       <a class="side-item" href="/clouds" onclick="try{localStorage.setItem('vyomi.appview','workspace')}catch(_){}" title="Dashboard"><span class="material-icons">dashboard</span><span class="side-label">Dashboard</span></a>
       <a class="side-item" href="/clouds" onclick="try{localStorage.setItem('vyomi.appview','spaces')}catch(_){}" title="Active spaces"><span class="material-icons">workspaces</span><span class="side-label">Spaces</span></a>
       <a class="side-item" href="/clouds" onclick="try{localStorage.setItem('vyomi.appview','kc')}catch(_){}" title="Knowledge Center"><span class="material-icons">menu_book</span><span class="side-label">Knowledge Center</span></a>
+      <a class="side-item" href="/clouds" onclick="try{localStorage.setItem('vyomi.appview','usage')}catch(_){}" title="SDK &amp; CLI usage"><span class="material-icons">terminal</span><span class="side-label">SDK &amp; CLI usage</span></a>
+      <a class="side-item" href="/clouds" onclick="try{localStorage.setItem('vyomi.appview','api')}catch(_){}" title="API (Swagger)"><span class="material-icons">api</span><span class="side-label">API (Swagger)</span></a>
     </nav>
   </aside>
   <div id="app-main">
