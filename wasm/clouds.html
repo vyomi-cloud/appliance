@@ -684,6 +684,8 @@
     body.side-collapsed .side-item,
     body.side-collapsed .side-collapse { justify-content: center; padding-left: 0; padding-right: 0; }
     #app-main { flex: 1; min-width: 0; }
+    #view-usage { padding: 0; }
+    #view-usage iframe { display: block; width: 100%; height: calc(100vh - 56px); min-height: 520px; border: 0; background: #0b0e22; }
 
     /* Knowledge Center view — the portal KC embedded as-is. */
     #view-kc { padding: 0; }
@@ -883,7 +885,7 @@
       <button class="side-item active" type="button" data-view="workspace" onclick="showAppView('workspace')" title="Dashboard"><span class="material-icons">dashboard</span><span class="side-label">Dashboard</span></button>
       <button class="side-item" type="button" data-view="spaces" onclick="showAppView('spaces')" title="Active spaces"><span class="material-icons">workspaces</span><span class="side-label">Spaces</span></button>
       <button class="side-item" type="button" data-view="kc" onclick="showAppView('kc')" title="Knowledge Center"><span class="material-icons">menu_book</span><span class="side-label">Knowledge Center</span></button>
-      <a class="side-item" href="/docs/aws/usage?nano=1" target="_blank" rel="noopener" title="SDK &amp; CLI usage — per-service samples pointed at your relay endpoint"><span class="material-icons">terminal</span><span class="side-label">SDK &amp; CLI usage</span></a>
+      <button class="side-item" type="button" data-view="usage" onclick="showAppView('usage')" title="SDK &amp; CLI usage — per-service samples pointed at your endpoint"><span class="material-icons">terminal</span><span class="side-label">SDK &amp; CLI usage</span></button>
     </nav>
   </aside>
   <div id="app-main">
@@ -1331,14 +1333,27 @@
     </div>
     </div>
   </div>
+
+  <!-- ── SDK & CLI usage (per-service samples) — embedded in-body, same as the
+       other views. The doc is same-origin (portal /docs on Nano, the appliance's
+       own /docs on Lite/Pro/Max) so it renders inline; on Nano it rewrites every
+       sample to the LIVE relay endpoint (see docs_routes _NANO_EP_JS). The iframe
+       src is set lazily on first open so it doesn't load until asked for. ──── -->
+  <div id="view-usage" hidden>
+    <iframe id="usage-frame" title="SDK &amp; CLI usage" loading="lazy"
+            referrerpolicy="no-referrer-when-downgrade"></iframe>
+  </div>
   </div><!-- /app-main -->
   </div><!-- /app-body -->
 
   <script>
     // ── v2.3.0 left nav: view switch (Workspace / Knowledge Center) + collapse ──
-    var APP_VIEWS = { workspace: 'view-workspace', spaces: 'view-spaces', kc: 'view-kc' };
+    var APP_VIEWS = { workspace: 'view-workspace', spaces: 'view-spaces', kc: 'view-kc', usage: 'view-usage' };
     function showAppView(view) {
       if (!APP_VIEWS[view]) view = 'workspace';
+      // Lazy-load the SDK/CLI usage doc on first open — same origin, so it renders
+      // inline (Nano: relay-rewritten samples; Lite/Pro/Max: the appliance's own).
+      if (view === 'usage') { var uf = document.getElementById('usage-frame'); if (uf && !uf.getAttribute('src')) uf.setAttribute('src', '/docs/aws/usage?nano=1'); }
       Object.keys(APP_VIEWS).forEach(function (k) {
         var el = document.getElementById(APP_VIEWS[k]);
         if (el) el.hidden = (k !== view);
