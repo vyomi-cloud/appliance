@@ -904,11 +904,15 @@
     #view-api .api-tag-head .material-icons { font-size: 19px; color: #7c8cf8; }
     #view-api .api-tag-head .cnt { margin-left: auto; font-size: 11px; color: #8b8ba7; font-weight: 600; }
     #view-api .api-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 6px; }
+    #view-api .api-op-wrap { margin: 0; }
     #view-api .api-op { display: flex; align-items: center; gap: 10px; background: linear-gradient(180deg, #14172e 0%, #0d1228 100%); border: 1px solid rgba(255,255,255,0.10); border-radius: 10px; padding: 9px 12px; cursor: pointer; text-align: left; width: 100%; font: inherit; color: inherit; }
     #view-api .api-op:hover { border-color: rgba(96,165,250,0.55); }
+    #view-api .api-op-wrap.open .api-op { border-color: rgba(96,165,250,0.55); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
     #view-api .api-op .col { min-width: 0; flex: 1; }
     #view-api .api-op .p { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: #e4e4e7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #view-api .api-op .s { font-size: 11px; color: #8b8ba7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+    #view-api .api-caret { margin-left: auto; flex: none; color: #8b8ba7; font-size: 20px; transition: transform .15s ease; }
+    #view-api .api-op-wrap.open .api-caret { transform: rotate(180deg); color: #cdd8e6; }
     #view-api .api-empty { color: #8b8ba7; text-align: center; padding: 34px; }
     .api-m { font-size: 10px; font-weight: 800; letter-spacing: .4px; padding: 4px 7px; border-radius: 6px; flex: none; min-width: 50px; text-align: center; }
     .api-m.get { background: rgba(77,140,243,.16); color: #7cc4ff; }
@@ -916,15 +920,16 @@
     .api-m.put { background: rgba(251,191,36,.16); color: #fbbf24; }
     .api-m.delete { background: rgba(248,113,113,.16); color: #f87171; }
     .api-m.patch { background: rgba(167,139,250,.16); color: #a78bfa; }
-    /* Operation-detail modal (reuses .u-modal dark styling) */
-    #api-modal .am-mp { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    #api-modal .am-mp code { font-family: ui-monospace, Menlo, monospace; font-size: 13.5px; color: #e4e4e7; word-break: break-all; }
-    #api-modal .am-sec-h { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #8b8ba7; margin: 16px 0 8px; font-weight: 700; }
-    #api-modal table.am-t { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-    #api-modal table.am-t td, #api-modal table.am-t th { text-align: left; padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); color: #cdd8e6; vertical-align: top; }
-    #api-modal table.am-t th { color: #8b8ba7; font-weight: 600; font-size: 11px; }
-    #api-modal .am-req { color: #f87171; font-size: 10px; font-weight: 700; }
-    #api-modal code.am-inline { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; color: #cdd8e6; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+    /* Inline detail (accordion — expands under the operation row, no dialog) */
+    #view-api .api-detail { background: #0b0e22; border: 1px solid rgba(96,165,250,0.55); border-top: 0; border-radius: 0 0 10px 10px; padding: 12px 15px 15px; }
+    #view-api .api-detail .am-sec-h { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #8b8ba7; margin: 12px 0 7px; font-weight: 700; }
+    #view-api .api-detail .am-sec-h:first-child { margin-top: 2px; }
+    #view-api .api-detail table.am-t { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    #view-api .api-detail table.am-t td, #view-api .api-detail table.am-t th { text-align: left; padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); color: #cdd8e6; vertical-align: top; }
+    #view-api .api-detail table.am-t th { color: #8b8ba7; font-weight: 600; font-size: 11px; }
+    #view-api .api-detail .am-req { color: #f87171; font-size: 10px; font-weight: 700; }
+    #view-api .api-detail code.am-inline { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; color: #cdd8e6; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+    #view-api .api-detail .am-none { color: #8b8ba7; font-size: 12.5px; margin: 4px 0 0; }
 
     /* Outer section wrappers stay fully transparent. */
     .surface-card, #stats-card, #host-util-card, #svc-status-card, #spaces-card,
@@ -1494,18 +1499,6 @@
     </div>
   </div>
 
-  <!-- API operation-detail modal (native — parameters / body / responses) -->
-  <div class="modal-backdrop" id="api-modal">
-    <div class="u-modal" role="dialog" aria-modal="true">
-      <div class="um-head">
-        <h3 class="am-mp"><span class="api-m" id="am-method"></span><code id="am-path"></code></h3>
-        <button class="um-close" type="button" id="am-close" aria-label="Close"><span class="material-icons">close</span></button>
-      </div>
-      <p class="um-desc" id="am-desc"></p>
-      <div id="am-body"></div>
-    </div>
-  </div>
-
   <div id="view-usage" hidden>
     <div class="container">
     <header class="hero">
@@ -1833,6 +1826,25 @@
         });
         return ops;
       }
+      // Inline detail (parameters · request body · responses) — expands under the row.
+      function detailHtml(o){
+        var html = '', desc = o.op.description || o.summary || '';
+        if (desc) html += '<p class="am-none" style="color:#cdd8e6;margin:0 0 8px">' + esc(desc) + '</p>';
+        if (o.parameters && o.parameters.length){
+          html += '<div class="am-sec-h">Request — parameters</div><table class="am-t"><tr><th>Name</th><th>In</th><th>Type</th></tr>'
+            + o.parameters.map(function(p){ return '<tr><td>' + esc(p.name) + (p.required ? ' <span class="am-req">required</span>' : '') + '</td><td>' + esc(p.in || '') + '</td><td><code class="am-inline">' + esc(schemaName(p.schema) || p.type || '') + '</code></td></tr>'; }).join('') + '</table>';
+        }
+        if (o.requestBody){
+          var c = o.requestBody.content || {}, ct = Object.keys(c)[0], sch = ct && c[ct].schema;
+          html += '<div class="am-sec-h">Request — body</div><table class="am-t"><tr><th>Content-Type</th><th>Schema</th></tr><tr><td><code class="am-inline">' + esc(ct || '') + '</code></td><td>' + esc(schemaName(sch)) + '</td></tr></table>';
+        }
+        var codes = Object.keys(o.responses || {});
+        if (codes.length){
+          html += '<div class="am-sec-h">Responses</div><table class="am-t"><tr><th>Status</th><th>Description</th></tr>'
+            + codes.map(function(code){ var r = o.responses[code], sc = r && r.content, sct = sc && Object.keys(sc)[0], ssch = sct && sc[sct].schema, sn = ssch ? schemaName(ssch) : ''; return '<tr><td><code class="am-inline">' + esc(code) + '</code></td><td>' + esc((r && r.description) || '') + (sn ? ' <code class="am-inline">' + esc(sn) + '</code>' : '') + '</td></tr>'; }).join('') + '</table>';
+        }
+        return html || '<p class="am-none">No parameters, body or documented responses.</p>';
+      }
       function render(){
         var body = document.getElementById('api-body'); if (!body) return;
         var ops = curOps;
@@ -1842,13 +1854,23 @@
         var tags = Object.keys(g).sort();
         body.innerHTML = tags.map(function(tag){
           var cards = g[tag].map(function(o, i){
-            return '<button class="api-op" type="button" data-tag="' + esc(tag) + '" data-i="' + i + '">'
+            return '<div class="api-op-wrap"><button class="api-op" type="button" data-tag="' + esc(tag) + '" data-i="' + i + '" aria-expanded="false">'
               + '<span class="api-m ' + o.method.toLowerCase() + '">' + o.method + '</span>'
-              + '<span class="col"><span class="p">' + esc(o.path) + '</span>' + (o.summary ? '<span class="s">' + esc(o.summary) + '</span>' : '') + '</span></button>';
+              + '<span class="col"><span class="p">' + esc(o.path) + '</span>' + (o.summary ? '<span class="s">' + esc(o.summary) + '</span>' : '') + '</span>'
+              + '<span class="material-icons api-caret">expand_more</span></button>'
+              + '<div class="api-detail" hidden></div></div>';
           }).join('');
           return '<div class="api-tag-head"><span class="material-icons">folder</span>' + esc(tag) + '<span class="cnt">' + g[tag].length + '</span></div><div class="api-grid">' + cards + '</div>';
         }).join('');
-        body.querySelectorAll('.api-op').forEach(function(btn){ btn.onclick = function(){ openOp(g[btn.dataset.tag][+btn.dataset.i]); }; });
+        // Toggle the inline detail on click (lazy-render its content on first open).
+        body.querySelectorAll('.api-op').forEach(function(btn){
+          btn.onclick = function(){
+            var wrap = btn.parentNode, det = wrap.querySelector('.api-detail');
+            if (!det.hidden){ det.hidden = true; wrap.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); return; }
+            if (!det.getAttribute('data-filled')){ det.innerHTML = detailHtml(g[btn.dataset.tag][+btn.dataset.i]); det.setAttribute('data-filled', '1'); }
+            det.hidden = false; wrap.classList.add('open'); btn.setAttribute('aria-expanded', 'true');
+          };
+        });
       }
       function loadSpec(cloud){
         curCloud = cloud;
@@ -1873,35 +1895,9 @@
         xhr.onerror = fail;
         xhr.send();
       }
-      function openOp(o){
-        var modal = document.getElementById('api-modal'); if (!modal || !o) return;
-        var m = document.getElementById('am-method'); m.textContent = o.method; m.className = 'api-m ' + o.method.toLowerCase();
-        document.getElementById('am-path').textContent = o.path;
-        document.getElementById('am-desc').textContent = o.op.description || o.summary || '';
-        var html = '';
-        if (o.parameters && o.parameters.length){
-          html += '<div class="am-sec-h">Parameters</div><table class="am-t"><tr><th>Name</th><th>In</th><th>Type</th></tr>'
-            + o.parameters.map(function(p){ return '<tr><td>' + esc(p.name) + (p.required ? ' <span class="am-req">required</span>' : '') + '</td><td>' + esc(p.in || '') + '</td><td><code class="am-inline">' + esc(schemaName(p.schema) || p.type || '') + '</code></td></tr>'; }).join('') + '</table>';
-        }
-        if (o.requestBody){
-          var c = o.requestBody.content || {}, ct = Object.keys(c)[0], sch = ct && c[ct].schema;
-          html += '<div class="am-sec-h">Request body</div><table class="am-t"><tr><td><code class="am-inline">' + esc(ct || '') + '</code></td><td>' + esc(schemaName(sch)) + '</td></tr></table>';
-        }
-        var codes = Object.keys(o.responses || {});
-        if (codes.length){
-          html += '<div class="am-sec-h">Responses</div><table class="am-t"><tr><th>Status</th><th>Description</th></tr>'
-            + codes.map(function(code){ var r = o.responses[code]; return '<tr><td><code class="am-inline">' + esc(code) + '</code></td><td>' + esc((r && r.description) || '') + '</td></tr>'; }).join('') + '</table>';
-        }
-        document.getElementById('am-body').innerHTML = html || '<p class="um-desc">No additional details.</p>';
-        modal.classList.add('open');
-      }
-      function closeModal(){ var m = document.getElementById('api-modal'); if (m) m.classList.remove('open'); }
       var search = document.getElementById('api-search');
       if (search) search.addEventListener('input', function(){ filter = search.value.trim(); render(); });
       document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.addEventListener('click', function(){ filter = ''; if (search) search.value = ''; loadSpec(t.dataset.c); }); });
-      var modal = document.getElementById('api-modal'), cb = document.getElementById('am-close');
-      if (modal){ modal.addEventListener('click', function(e){ if (e.target === modal) closeModal(); }); if (cb) cb.onclick = closeModal;
-        document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeModal(); }); }
       window.__apiShow = function(){ if (!loaded){ loaded = true; loadSpec('aws'); } };
     })();
 
