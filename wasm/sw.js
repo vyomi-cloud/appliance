@@ -585,12 +585,30 @@ self.addEventListener("fetch", (event) => {
       }
       // Device-flow start — proxy to the portal (same origin, root path, NOT the
       // /nano mount). Stash the poll_token so /poll-activation can complete it.
+      // Record a Nano install — forwarded to the portal's real endpoint (root
+      // path, outside this SW's /nano/ scope). The page supplies a DEVICE
+      // FINGERPRINT as install_id (browser-independent), so the portal's
+      // idempotent upsert dedupes to once-per-machine across browsers + reloads.
+      if (apiPath === "/api/install/register" && method === "POST") {
+        let b = {}; try { const t = await event.request.text(); b = t ? JSON.parse(t) : {}; } catch (_) {}
+        let installId = b.install_id || await metaGet("install_id");
+        if (!installId) installId = "nano-" + Math.random().toString(36).slice(2, 10) + "-" + Date.now().toString(36);
+        try { await metaPut("install_id", installId); } catch (_) {}
+        try {
+          const r = await fetch(self.location.origin + "/api/install/register", {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ install_id: installId, channel: b.channel || "nano", state: b.state || "DOWNLOADED", host_os: (b.host_os || "").slice(0, 32) }),
+          });
+          return new Response(await r.text(), { status: r.status, headers: { "content-type": "application/json" } });
+        } catch (e) { return json({ ok: false, detail: "portal unreachable" }, 200); }
+      }
       if (apiPath === "/api/auth/start-activation" && method === "POST") {
-        let installId = await metaGet("install_id");
-        if (!installId) {
-          installId = "nano-" + Math.random().toString(36).slice(2, 10) + "-" + Date.now().toString(36);
-          try { await metaPut("install_id", installId); } catch (_) {}
-        }
+        // Prefer the page-supplied device fingerprint so activation reuses the
+        // same install_id as the download record (one machine → one row).
+        let inb = {}; try { const t = await event.request.text(); inb = t ? JSON.parse(t) : {}; } catch (_) {}
+        let installId = inb.fp || await metaGet("install_id");
+        if (!installId) installId = "nano-" + Math.random().toString(36).slice(2, 10) + "-" + Date.now().toString(36);
+        try { await metaPut("install_id", installId); } catch (_) {}
         let r;
         try {
           r = await fetch(self.location.origin + "/api/auth/start-activation", {

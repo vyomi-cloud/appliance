@@ -2130,6 +2130,55 @@
       window.location.href = '/clouds';
     }
 
+    // -------- Nano install recording — once per MACHINE ----------------
+    // A browser can't read a hardware id (MAC etc.), so we hash stable,
+    // BROWSER-INDEPENDENT machine attributes (platform, CPU cores, memory,
+    // screen geometry, timezone, GPU renderer — deliberately NOT the
+    // user-agent) into a device fingerprint. Used as the install_id: the
+    // portal's upsert is idempotent by install_id, so the same machine across
+    // any browser + any number of /nano loads counts once. (Bot traffic is
+    // filtered server-side via Cloudflare Bot Management.)
+    async function nanoDeviceFp() {
+      let gpu = "";
+      try {
+        const c = document.createElement("canvas");
+        const gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+        if (gl) { const e = gl.getExtension("WEBGL_debug_renderer_info"); if (e) gpu = gl.getParameter(e.UNMASKED_RENDERER_WEBGL) || ""; }
+      } catch (_) {}
+      const parts = [
+        navigator.platform || "", navigator.hardwareConcurrency || "", navigator.deviceMemory || "",
+        screen.width + "x" + screen.height + "x" + screen.colorDepth,
+        (Intl.DateTimeFormat().resolvedOptions().timeZone) || "", navigator.language || "", gpu,
+      ];
+      try {
+        const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(parts.join("|")));
+        return "nano-fp-" + Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 24);
+      } catch (_) { return null; }
+    }
+    // Fire once per browser (localStorage guard); the portal dedupes across
+    // browsers by the fingerprint. Best-effort — never blocks the page.
+    (function () {
+      async function record() {
+        try {
+          // Nano-only: the relay footer (#nano-foot) is injected only into the
+          // Nano bundle (absent on the appliance, which records its own install
+          // server-side on boot). Checked here (not at parse) because the footer
+          // is injected later in <body>. Same marker the Connect dock uses.
+          if (!document.getElementById("nano-foot")) return;
+          if (localStorage.getItem("nano_install_recorded") === "1") return;
+          const fp = await nanoDeviceFp(); if (!fp) return;
+          const r = await fetch("/api/install/register", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ install_id: fp, channel: "nano", state: "DOWNLOADED", host_os: (navigator.platform || "").slice(0, 32) }),
+          });
+          // Only latch the guard on success — an early (pre-SW-control) load can
+          // 404, and we want the controlled reload to still record.
+          if (r && r.ok) localStorage.setItem("nano_install_recorded", "1");
+        } catch (_) {}
+      }
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", record); else record();
+    })();
+
     // -------- license activation (Phase 5 — single-flow, 1-click) ------
     let _activationPollTimer = null;
 
@@ -2147,8 +2196,10 @@
       btn.disabled = true;
       out.innerHTML = '<div class="status-pending">Contacting portal…</div>';
       try {
+        const _fp = await nanoDeviceFp();
         const r = await fetch('/api/auth/start-activation', {
-          method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(_fp ? { fp: _fp } : {})
         });
         if (!r.ok) throw new Error((await r.text()).slice(0, 200));
         const d = await r.json();
