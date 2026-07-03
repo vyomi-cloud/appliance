@@ -135,17 +135,17 @@ function connect() {
   };
   ws.onclose = (ev) => {
     if (state.stopped) { state.phase = "off"; announce(); return; }
-    // A cloud registration that never opened is almost always the relay's origin
-    // guardrail (relay.vyomi.cloud only accepts the prod origin) or the relay
-    // being down — so retrying silently forever just reads as a stuck spinner.
-    // After a couple of misses, surface an ACTIONABLE note; the 15s local monitor
-    // keeps probing, so the moment a local tunnel appears we switch + this clears.
-    if (!opened && state.mode === "cloud" && ++cloudFailStreak >= 2 && !state.note) {
+    // A registration that never opens: on LOCALHOST the local relay isn't running
+    // (localhost never uses the cloud relay — it can't register there); on PROD the
+    // cloud relay is down/blocked. After a couple of misses, surface an ACTIONABLE
+    // note instead of a silent spinner; the 15s monitor keeps probing so it clears
+    // the moment the tunnel appears.
+    if (!opened && ++cloudFailStreak >= 2 && !state.note) {
       state.note = IS_LOCAL_ORIGIN
         ? "no local tunnel — run `vyomi-tunnel`"
         : "relay unreachable — retrying";
       log(IS_LOCAL_ORIGIN
-        ? "The public relay only serves vyomi.cloud, so localhost can't register. Start a local tunnel: `vyomi-tunnel` (or `node local-relay.mjs`). This connects automatically once it's up."
+        ? "Localhost uses the LOCAL tunnel. Start it: `vyomi-tunnel` (or `node local-relay.mjs`) — it connects automatically once up. (The public relay only serves vyomi.cloud.)"
         : "Relay unreachable — retrying. If it persists, start a local tunnel (`vyomi-tunnel`).", "err");
     }
     state.phase = "connecting"; log("disconnected (code " + ev.code + "); retrying…", "dim"); announce();
@@ -178,10 +178,12 @@ function startMonitor() {
       switchTo("local");
     } else if (state.mode === "local") {
       if (up) { localFails = 0; }
-      else if (++localFails >= 2) {          // two misses ⇒ really gone
+      else if (!IS_LOCAL_ORIGIN && ++localFails >= 2) {   // prod: fall back to cloud
         log("local tunnel gone → falling back to CLOUD", "dim");
         switchTo("cloud");
       }
+      // localhost NEVER falls back to cloud (it can't register there) — stays local
+      // and keeps retrying; the note tells the user to run `vyomi-tunnel`.
     }
   }, 15000);
 }
@@ -200,11 +202,19 @@ async function start(msg) {
   state.stopped = false; state.note = null; cloudFailStreak = 0;
   state.phase = "connecting"; announce();
   try { await bootPyodide(); } catch (e) { log("boot failed: " + (e && e.stack || e), "err"); state.phase = "off"; announce(); return; }
-  state.mode = (await probeLocal()) ? "local" : "cloud";
+  // Localhost ALWAYS uses the LOCAL tunnel — the public relay only serves
+  // vyomi.cloud, so a cloud attempt from localhost just 403s. Prod origins use
+  // local if present, else the cloud relay.
+  const localUp = await probeLocal();
+  state.mode = IS_LOCAL_ORIGIN ? "local" : (localUp ? "local" : "cloud");
   localFails = 0;
-  log(state.mode === "local"
-    ? "tunnel: LOCAL (detected — fast, private, offline)"
-    : "tunnel: CLOUD (Cloudflare — no local tunnel detected)", state.mode === "local" ? "ok" : "dim");
+  if (state.mode === "local" && !localUp) {
+    log("tunnel: LOCAL — no local tunnel running yet. Localhost uses the local relay; run `vyomi-tunnel` (the public relay only serves vyomi.cloud). It connects automatically once up.", "dim");
+  } else {
+    log(state.mode === "local"
+      ? "tunnel: LOCAL (detected — fast, private, offline)"
+      : "tunnel: CLOUD (Cloudflare — no local tunnel detected)", state.mode === "local" ? "ok" : "dim");
+  }
   connect();
   startMonitor();
 }
