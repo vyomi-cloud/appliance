@@ -27,9 +27,14 @@ export default {
     if (parts[0] === "register") {
       const session = url.searchParams.get("session");
       if (!session) return new Response("missing session", { status: 400 });
-      // Sandbox guardrail: only our own SPA may register a tab.
+      // Sandbox guardrail: only our own SPA may register a tab — the prod apex
+      // AND its www host (both serve /nano/ with no redirect, so a user can be on
+      // either origin).
       const origin = request.headers.get("Origin") || "";
-      if (env.ALLOWED_ORIGIN && origin && origin !== env.ALLOWED_ORIGIN)
+      const allowedHost = (env.ALLOWED_ORIGIN || "").replace(/^https?:\/\//, "");
+      const originOk = origin === env.ALLOWED_ORIGIN
+        || (allowedHost && origin === "https://www." + allowedHost);
+      if (env.ALLOWED_ORIGIN && origin && !originOk)
         return new Response("forbidden origin", { status: 403 });
       const stub = env.RELAY.get(env.RELAY.idFromName(session));
       return stub.fetch("https://do/register", { headers: forwardHeaders(request, "register") });
