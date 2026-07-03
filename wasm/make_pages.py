@@ -25,6 +25,8 @@ LINKS = {
     "/console/gcp": "gcp-console.html",
     "/console/azure": "azure-console.html",
     '"/ui#spaces"': '"clouds.html#spaces"',  # console "back to spaces" -> dashboard, Spaces view (must precede "/ui")
+    '"/ui#usage"': '"clouds.html#usage"',    # console dev-tools -> dashboard SDK & CLI usage view
+    '"/ui#api"': '"clouds.html#api"',        # console dev-tools -> dashboard API (Swagger) view
     '"/ui"': '"clouds.html"',      # "back to spaces/dashboard" -> the workspaces dashboard
     '"/clouds"': '"clouds.html"',   # Nano: launch = index.html, dashboard = clouds.html
 }

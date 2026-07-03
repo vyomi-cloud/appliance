@@ -1931,6 +1931,10 @@
       if (search) search.addEventListener('input', function(){ filter = search.value.trim(); render(); });
       document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.addEventListener('click', function(){ filter = ''; if (search) search.value = ''; loadSpec(t.dataset.c); }); });
       window.__apiShow = function(){ if (!loaded){ loaded = true; loadSpec('aws'); } };
+      // Booted straight into the API view (e.g. a console link → clouds.html#api)?
+      // showAppView ran before this IIFE defined __apiShow, so load the spec now.
+      var av = document.getElementById('view-api');
+      if (av && !av.hidden) window.__apiShow();
     })();
 
     // ── Inject "Open <Cloud> Console →" buttons on each cloud card ───
