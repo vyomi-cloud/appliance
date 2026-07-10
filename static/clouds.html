@@ -201,7 +201,7 @@
       display: inline-flex; align-items: center; gap: 6px;
     }
     .btn-create-space:hover { background: #1a2c44; }
-    .btn-create-space::before { content: "+"; font-size: 16px; line-height: 1; }
+    .btn-create-space .material-icons { font-size: 16px; }   /* the "add" glyph (the old ::before "+" was redundant) */
 
     /* ── Create-space modal ────────────────────────────────────────── */
     .modal-backdrop {
@@ -1516,7 +1516,8 @@
        universal "Activate appliance" modal, so both are identical. A persistent
        header chip + a one-time nudge open it; on success we sync the workspace. -->
   <style>
-    .save-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:#f59e0b;border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;font-family:inherit;text-decoration:none;white-space:nowrap;cursor:pointer;margin-left:auto;margin-right:12px;margin-bottom:10px}
+    /* Same dimensions as .btn-create-space (padding/font/radius) — amber to distinguish. */
+    .save-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:#f59e0b;border-radius:8px;padding:10px 18px;font-size:13.5px;font-weight:600;font-family:inherit;text-decoration:none;white-space:nowrap;cursor:pointer;margin-left:auto;margin-right:12px;margin-bottom:10px}
     .save-chip:hover{background:rgba(245,158,11,.2)}
     .save-chip .material-icons{font-size:16px}
     /* Activation dialog — IDENTICAL to the launch-page "Activate appliance" modal. */
