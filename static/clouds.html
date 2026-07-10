@@ -1125,6 +1125,7 @@
         <div class="sc-title">
           <h2><span class="material-icons">workspaces</span>Active spaces</h2>
         </div>
+        <a class="save-chip" id="save-chip" href="index.html#activate" title="Sign in to keep your setup" style="display:none"><span class="material-icons">bookmark_add</span>Sign in to save</a>
         <button class="btn-create-space" type="button" onclick="openCreateSpaceModal()">
           <span class="material-icons">add</span>Create Space
         </button>
@@ -1508,6 +1509,48 @@
     <p style="text-align:center;margin:2px 0 34px">
       <a class="kc-open" id="u-fulldoc" href="/docs/aws/usage?nano=1" target="_blank" rel="noopener">Full per-service reference <span class="material-icons" style="font-size:16px;vertical-align:-3px">open_in_new</span></a>
     </p>
+    </div>
+  </div>
+
+  <!-- ── Sign-in-to-save prompt (Nano only): a one-time, dismissable modal +
+       a persistent header chip. Sign-in reuses the launch-page device-flow via
+       index.html#activate. Perks are the already-true ones (stable relay URL +
+       no idle timeout); workspace sync is flagged "soon". ─────────────────── -->
+  <style>
+    .save-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:#f59e0b;border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;text-decoration:none;white-space:nowrap;margin-left:auto;margin-right:12px}
+    .save-chip:hover{background:rgba(245,158,11,.2)}
+    .save-chip .material-icons{font-size:16px}
+    #save-modal .sv-emoji{font-size:34px;text-align:center;margin-bottom:6px}
+    #save-modal h3{text-align:center;margin:0 0 6px}
+    #save-modal .sv-sub{text-align:center;color:#a1a1aa;font-size:13px;margin:0 auto 16px;max-width:340px;line-height:1.5}
+    #save-modal .sv-perks{list-style:none;margin:0 0 18px;padding:0;display:flex;flex-direction:column;gap:11px}
+    #save-modal .sv-perks li{display:flex;align-items:center;gap:11px;font-size:13px;color:#cdd8e6}
+    #save-modal .sv-perks li .material-icons{font-size:19px;color:#7c8cf8;flex:none}
+    #save-modal .sv-perks li em{color:#8b8ba7;font-style:normal;font-size:11px;background:rgba(255,255,255,.06);padding:1px 7px;border-radius:999px;margin-left:4px}
+    #save-modal .sv-actions{display:flex;align-items:center;justify-content:center;gap:14px}
+    #save-modal .sv-go{background:linear-gradient(135deg,#4d8cf3,#7c3aed);color:#fff;text-decoration:none;border-radius:10px;padding:10px 20px;font-weight:600;font-size:13.5px}
+    #save-modal .sv-go:hover{filter:brightness(1.08)}
+    #save-modal .sv-later{background:none;border:0;color:#8b8ba7;cursor:pointer;font-size:13px}
+    #save-modal .sv-later:hover{color:#cdd8e6}
+    #save-modal .sv-foot{text-align:center;color:#6b7280;font-size:11.5px;margin:16px 0 0}
+    #save-modal .um-close{position:absolute;top:12px;right:14px}
+  </style>
+  <div class="modal-backdrop" id="save-modal">
+    <div class="u-modal" role="dialog" aria-modal="true" style="width:440px;position:relative">
+      <button class="um-close" type="button" id="save-x" aria-label="Close"><span class="material-icons">close</span></button>
+      <div class="sv-emoji">💾</div>
+      <h3>Save your workspace</h3>
+      <p class="sv-sub" id="sv-sub">Sign in to keep your setup and pick up where you left off — on any device.</p>
+      <ul class="sv-perks">
+        <li><span class="material-icons">cable</span>A permanent relay URL — it stops changing each session</li>
+        <li><span class="material-icons">timer_off</span>No 30-minute idle timeout on your tunnel</li>
+        <li><span class="material-icons">devices</span>Your spaces &amp; resources, on any device <em>soon</em></li>
+      </ul>
+      <div class="sv-actions">
+        <a class="sv-go" id="sv-go" href="index.html#activate">Sign in with GitHub →</a>
+        <button class="sv-later" type="button" id="sv-later">Not now</button>
+      </div>
+      <p class="sv-foot">Free · no card · we only ever store your workspace.</p>
     </div>
   </div>
 
@@ -1980,6 +2023,49 @@
       }
     }
 
+    // ── Sign-in-to-save prompt (Nano only): chip + one-time modal ─────
+    var _saveLicActive = false, _licChecked = false, _lastSpaceCount = 0;
+    function _saveIsNano(){ return !!document.getElementById('nano-foot'); }
+    function _swReady(){ return !!(navigator.serviceWorker && navigator.serviceWorker.controller); }
+    // Only trust /api/license/status once the Nano SW controls the page — before
+    // that the fetch hits the PORTAL's endpoint (logged-out → active:false), which
+    // would wrongly show the prompt to a signed-in user.
+    function refreshSaveLic(){
+      if(!_swReady()) return Promise.resolve();
+      return fetch('/api/license/status').then(function(r){ return r.json(); }).then(function(d){ _saveLicActive = !!(d && d.active); _licChecked = true; updateSaveChip(); }).catch(function(){});
+    }
+    function saveNudged(){ try{ return localStorage.getItem('nano_save_prompted') === '1'; }catch(_){ return false; } }
+    function updateSaveChip(){
+      var c = document.getElementById('save-chip'); if(!c) return;
+      var n = parseInt((document.getElementById('pf-count-all')||{}).textContent || '0', 10) || 0;
+      c.style.display = (_licChecked && _saveIsNano() && !_saveLicActive && n >= 1) ? 'inline-flex' : 'none';
+      // Self-heal: if we've CONFIRMED signed-in, close the modal too (a transient
+      // pre-control active:false can flash it open before the real status lands).
+      if(_saveLicActive){ var m = document.getElementById('save-modal'); if(m) m.classList.remove('open'); }
+    }
+    function maybeSaveModal(count){
+      // Only decide once we actually KNOW the license state (a failed pre-SW-control
+      // fetch leaves it unknown — never open the modal on that false negative).
+      if(!_licChecked || !_saveIsNano() || _saveLicActive || saveNudged() || count < 1) return;
+      var m = document.getElementById('save-modal'); if(!m) return;
+      var sub = document.getElementById('sv-sub');
+      if(sub && count > 1) sub.textContent = "You've built " + count + " spaces here. Sign in to keep them and pick up on any device.";
+      m.classList.add('open');
+    }
+    function closeSaveModal(remember){ var m = document.getElementById('save-modal'); if(m) m.classList.remove('open'); if(remember){ try{ localStorage.setItem('nano_save_prompted','1'); }catch(_){} } }
+    (function(){
+      var later = document.getElementById('sv-later'), x = document.getElementById('save-x'), go = document.getElementById('sv-go'), m = document.getElementById('save-modal');
+      if(later) later.addEventListener('click', function(){ closeSaveModal(true); });
+      if(x) x.addEventListener('click', function(){ closeSaveModal(true); });
+      if(go) go.addEventListener('click', function(){ try{ localStorage.setItem('nano_save_prompted','1'); }catch(_){} });   // acting on it → don't re-nudge
+      if(m) m.addEventListener('click', function(e){ if(e.target === m) closeSaveModal(true); });
+      document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeSaveModal(false); });
+      // When the SW takes control (nano-boot), re-check with the correct (Nano)
+      // license and re-decide the prompt using the last-known space count.
+      if(navigator.serviceWorker) navigator.serviceWorker.addEventListener('controllerchange', function(){ refreshSaveLic().then(function(){ maybeSaveModal(_lastSpaceCount); }); });
+      refreshSaveLic();
+    })();
+
     // ── Fetch + render existing spaces ───────────────────────────────
     async function loadSpaces() {
       const grid = document.getElementById('spaces-grid');
@@ -2002,6 +2088,10 @@
         setCount('pf-count-aws',  counts.aws);
         setCount('pf-count-gcp',  counts.gcp);
         setCount('pf-count-azure',counts.azure);
+        // Refresh the license FIRST (needs SW control, which the parse-time call
+        // may have missed), then update the chip + decide on the modal.
+        _lastSpaceCount = counts.total;
+        refreshSaveLic().then(function(){ maybeSaveModal(counts.total); });   // sign-in-to-save prompt
         if (spaces.length === 0) {
           grid.innerHTML = `<div class="empty-spaces">No spaces yet — pick a cloud below to create your first one.</div>`;
           // Empty state spans full width so it doesn't render as a tiny card

@@ -1784,6 +1784,13 @@
       document.getElementById('activate-modal').classList.add('open');
       document.body.style.overflow = 'hidden';
     }
+    // Deep-link: the dashboard's "Sign in to save" prompt sends users to
+    // index.html#activate — auto-open the activation modal so the flow is one hop.
+    (function(){
+      function _openIfHash(){ if((location.hash||"").replace('#','') === 'activate'){ try{ openActivateModal(); }catch(_){} } }
+      if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _openIfHash); else _openIfHash();
+      window.addEventListener('hashchange', _openIfHash);
+    })();
     function closeActivateModal() {
       document.getElementById('activate-modal').classList.remove('open');
       document.body.style.overflow = '';

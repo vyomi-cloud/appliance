@@ -40,6 +40,7 @@ const IDLE_MS = 30 * 60 * 1000;   // pause the tunnel after 30 min with no relay
 const state = {
   phase: "off", served: 0, stopped: false,
   idle: false,       // paused after IDLE_MS of no traffic — user reconnects manually
+  noIdle: false,     // signed-in perk: never idle-pause (footer sets it from license)
   lastActivity: 0,   // ts of the last relayed request (or the connect moment)
   mode: null,        // "local" | "cloud" — which tunnel is active
   external: null,    // the URL an external app points at (differs per mode)
@@ -180,7 +181,7 @@ function startMonitor() {
     if (state.stopped) return;
     // Idle auto-pause: no relayed request for IDLE_MS → disconnect to conserve
     // resources. Honest timeout — the user reconnects with one click, no strings.
-    if (state.phase === "connected" && Date.now() - state.lastActivity > IDLE_MS) { idlePause(); return; }
+    if (state.phase === "connected" && !state.noIdle && Date.now() - state.lastActivity > IDLE_MS) { idlePause(); return; }
     const up = await probeLocal();
     if (state.mode === "cloud" && up) {
       log("local tunnel detected → switching to LOCAL", "ok");
@@ -216,6 +217,7 @@ async function start(msg) {
   if (msg.session) state.session = msg.session;
   if (msg.config) state.cfg = { ...DEFAULT_CFG, ...msg.config };
   if (state.phase === "connected" || (state.phase === "connecting" && !state.stopped && ws)) { announce(); return; }
+  if (msg.noIdle !== undefined) state.noIdle = !!msg.noIdle;
   state.stopped = false; state.note = null; cloudFailStreak = 0; state.idle = false;
   state.lastActivity = Date.now();
   state.phase = "connecting"; announce();
@@ -250,6 +252,7 @@ self.onconnect = (e) => {
     const m = ev.data || {};
     if (m.type === "start") start(m);
     else if (m.type === "stop") stop();
+    else if (m.type === "noidle") { state.noIdle = !!m.on; if (state.idle && state.noIdle) start(m); }   // sign-in mid-session → cancel idle
     else if (m.type === "query") { announce(); bc.postMessage({ type: "logs", lines: logbuf.slice() }); }
   };
   // Greet the new view with current state + log history immediately.
