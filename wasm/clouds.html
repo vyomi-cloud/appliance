@@ -2758,12 +2758,35 @@
  #nano-logs .h{padding:5px 14px;font:11px system-ui,-apple-system,sans-serif;color:#8b8ba7;background:#0a0c24;border-bottom:1px solid #1a1f44}
  #nano-logs pre{flex:1;margin:0;padding:10px 14px;overflow:auto;font:12px ui-monospace,Menlo,monospace;color:#cdd8e6;white-space:pre-wrap}
  #nano-logs pre .ok{color:#34d399}#nano-logs pre .err{color:#f87171}#nano-logs pre .dim{color:#71717a}
+ #nano-foot-star{background:linear-gradient(135deg,#f59e0b,#f97316)!important;color:#fff!important;border:0!important}
+ #nano-foot-star:hover{filter:brightness(1.08);color:#fff!important}
+ #nano-star{position:fixed;right:16px;bottom:44px;z-index:100001;width:292px;background:linear-gradient(180deg,#14172e,#0d1228);border:1px solid #2a2f55;border-radius:14px;padding:15px 16px;box-shadow:0 16px 42px rgba(0,0,0,.55);display:none;font:13px system-ui,-apple-system,sans-serif;color:#cdd8e6}
+ #nano-star .ns-x{position:absolute;top:7px;right:11px;background:none;border:0;color:#8b8ba7;font-size:19px;cursor:pointer;line-height:1;padding:0}
+ #nano-star .ns-x:hover{color:#fff}
+ #nano-star .ns-top{display:flex;align-items:center;gap:8px;font-size:14px;color:#e4e4e7;font-weight:700}
+ #nano-star .ns-emoji{font-size:18px}
+ #nano-star .ns-msg{margin:8px 0 13px;line-height:1.5;color:#a1a1aa;font-size:12.5px}
+ #nano-star .ns-actions{display:flex;align-items:center;gap:10px}
+ #nano-star .ns-go{flex:1;text-align:center;background:linear-gradient(135deg,#f59e0b,#f97316);color:#fff;text-decoration:none;border-radius:9px;padding:8px 12px;font-weight:600;font-size:12.5px}
+ #nano-star .ns-go:hover{filter:brightness(1.08)}
+ #nano-star .ns-later{background:none;border:0;color:#8b8ba7;cursor:pointer;font-size:12.5px}
+ #nano-star .ns-later:hover{color:#cdd8e6}
 </style>
 <div id="nano-logs"><div class="h">Relay endpoint — runs in a shared worker, stays connected across views. Logs:</div><pre id="nano-foot-log"><span class="dim">tunnel off — click “Start tunnel”.</span></pre></div>
+<div id="nano-star">
+ <button class="ns-x" type="button" title="Dismiss">&times;</button>
+ <div class="ns-top"><span class="ns-emoji">⭐</span><span>Enjoying Nano?</span></div>
+ <p class="ns-msg">It's free &amp; open-source. A GitHub star genuinely helps more developers find it — thank you!</p>
+ <div class="ns-actions">
+  <a class="ns-go" href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener">Star on GitHub ⭐</a>
+  <button class="ns-later" type="button">Maybe later</button>
+ </div>
+</div>
 <div id="nano-foot" title="Relay tunnel — lets an external SDK/CLI reach this in-browser sim">
  <span class="dot"></span><span class="lbl">Relay tunnel: off</span>
  <span class="ep" id="nano-foot-ep"></span>
  <span class="sp"></span>
+ <button id="nano-foot-star" title="Star Vyomi on GitHub — it genuinely helps">⭐ Star</button>
  <button id="nano-foot-connect" style="display:none">🔌 Connect apps</button>
  <button id="nano-foot-conf">📘 Conformance</button>
  <button id="nano-foot-logs">Logs ▴</button>
@@ -2792,7 +2815,7 @@
   var foot = document.getElementById("nano-foot"), lbl = foot.querySelector(".lbl");
   var epEl = document.getElementById("nano-foot-ep"), logsPane = document.getElementById("nano-logs"), logEl = document.getElementById("nano-foot-log");
   var toggleBtn = document.getElementById("nano-foot-toggle"), logsBtn = document.getElementById("nano-foot-logs");
-  var phase = "off", lastSeen = 0, mode = null, external = null, noteText = null;
+  var phase = "off", lastSeen = 0, mode = null, external = null, noteText = null, _prevServed = 0, _prevPhase = null;
   document.body.style.paddingBottom = "40px";   // never cover page content
 
   function render(state, served){
@@ -2803,12 +2826,19 @@
     // A `note` from the worker (e.g. "no local tunnel — run `vyomi-tunnel`") means
     // the tunnel can't connect — show it in the label instead of a forever spinner.
     else if(phase==="connecting"){ foot.classList.add("connecting"); lbl.textContent = noteText ? ("Relay tunnel: " + noteText) : ("Relay tunnel: connecting…" + via); toggleBtn.textContent="Stop"; }
+    else if(phase==="idle"){ lbl.textContent = "Relay tunnel: paused (30 min idle)"; toggleBtn.textContent="Reconnect"; }
     else { lbl.textContent = "Relay tunnel: off"; toggleBtn.textContent="Start tunnel"; }
     epEl.textContent = (phase==="connected" && external) ? ("apps → " + external) : "";
     epEl.title = external || "";
     // Persist the live endpoint so other views (e.g. the /docs/*/usage per-service
     // samples) can show the SAME relay URL even before their own channel connects.
     if(phase==="connected" && external){ try{ localStorage.setItem("nano_relay_external", external); if(mode) localStorage.setItem("nano_relay_mode", mode); }catch(_){} }
+    // Gentle GitHub-star nudge at natural moments: the first relayed request (a
+    // "win") or the 30-min idle pause. Once per browser, dismissable, never blocks.
+    if(served!=null && served>=1 && _prevServed<1) maybeNudge();
+    if(phase==="idle" && _prevPhase!=="idle") maybeNudge();
+    if(served!=null) _prevServed = served;
+    _prevPhase = phase;
   }
   function appendLog(line, cls){ var d=document.createElement("div"); d.innerHTML = cls ? ('<span class="'+cls+'">'+(line||"")+'</span>') : (line||""); logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight; }
   function renderLogs(lines){ logEl.textContent=""; if(!lines||!lines.length){ appendLog("tunnel off — click “Start tunnel”.","dim"); return; } lines.forEach(function(l){ appendLog(l.line,l.cls); }); }
@@ -2830,9 +2860,21 @@
   function intentOn(){ try{ return localStorage.getItem("nano_tunnel_on")==="1"; }catch(_){ return false; } }
   toggleBtn.onclick = function(){
     if(!ok){ window.open(base + "/relay/nano-endpoint.html", "nano-relay-endpoint"); return; }   // fallback: standalone tab
-    if(phase==="off"){ setIntent(true); render("connecting"); port.postMessage({type:"start", session:SESSION, config:CFG}); logsPane.classList.add("open"); logsBtn.textContent="Logs ▾"; }
+    if(phase==="off" || phase==="idle"){ setIntent(true); render("connecting"); port.postMessage({type:"start", session:SESSION, config:CFG}); logsPane.classList.add("open"); logsBtn.textContent="Logs ▾"; }
     else { setIntent(false); port.postMessage({type:"stop"}); render("off"); }
   };
+
+  // ── GitHub-star nudge (gentle, one-time, never blocks) + persistent Star ────
+  function starNudged(){ try{ return localStorage.getItem("nano_star_nudged")==="1" || localStorage.getItem("nano_starred")==="1"; }catch(_){ return false; } }
+  function maybeNudge(){ if(starNudged()) return; var c=document.getElementById("nano-star"); if(c) c.style.display="block"; }
+  function hideNudge(remember){ var c=document.getElementById("nano-star"); if(c) c.style.display="none"; if(remember){ try{ localStorage.setItem("nano_star_nudged","1"); }catch(_){} } }
+  function markStarred(){ try{ localStorage.setItem("nano_starred","1"); }catch(_){} hideNudge(false); }
+  var starBtn = document.getElementById("nano-foot-star");
+  if(starBtn) starBtn.onclick = function(){ window.open("https://github.com/vyomi-cloud/appliance","_blank","noopener"); markStarred(); };
+  var nsGo = document.querySelector("#nano-star .ns-go"), nsLater = document.querySelector("#nano-star .ns-later"), nsX = document.querySelector("#nano-star .ns-x");
+  if(nsGo) nsGo.addEventListener("click", markStarred);                       // the <a> opens the repo; we optimistically mark + hide
+  if(nsLater) nsLater.addEventListener("click", function(){ hideNudge(true); });
+  if(nsX) nsX.addEventListener("click", function(){ hideNudge(true); });
   if(ok){
     // The shared worker is RECREATED on same-tab navigation, so AUTO-RESUME: if the
     // user left the tunnel on, every view reconnects it automatically (it briefly

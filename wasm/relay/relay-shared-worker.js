@@ -36,8 +36,11 @@ const DEFAULT_CFG = {
   cloudWsBase:   "wss://relay.vyomi.cloud/register",
   cloudExternal: "https://relay.vyomi.cloud",
 };
+const IDLE_MS = 30 * 60 * 1000;   // pause the tunnel after 30 min with no relayed request
 const state = {
   phase: "off", served: 0, stopped: false,
+  idle: false,       // paused after IDLE_MS of no traffic — user reconnects manually
+  lastActivity: 0,   // ts of the last relayed request (or the connect moment)
   mode: null,        // "local" | "cloud" — which tunnel is active
   external: null,    // the URL an external app points at (differs per mode)
   session: null,     // cloud session id (from the page)
@@ -55,7 +58,8 @@ function log(line, cls) {
 }
 function announce() {
   bc.postMessage({ type: "status", state: state.phase, served: state.served,
-                   mode: state.mode, external: state.external, note: state.note || null });
+                   mode: state.mode, external: state.external, note: state.note || null,
+                   idle: state.idle });
 }
 setInterval(announce, 3000);
 
@@ -128,13 +132,15 @@ function connect() {
   ws = new WebSocket(url);
   let opened = false;
   ws.onopen = () => {
-    opened = true; cloudFailStreak = 0; state.note = null;
+    opened = true; cloudFailStreak = 0; state.note = null; state.idle = false;
     state.phase = "connected"; state.external = externalFor(state.mode);
+    state.lastActivity = Date.now();
     log("registered [" + state.mode + "] · apps → " + state.external, "ok");
     announce();
   };
   ws.onclose = (ev) => {
     if (state.stopped) { state.phase = "off"; announce(); return; }
+    if (state.idle) { state.phase = "idle"; announce(); return; }   // paused — wait for the user, no auto-reconnect
     // A registration that never opens: on LOCALHOST the local relay isn't running
     // (localhost never uses the cloud relay — it can't register there); on PROD the
     // cloud relay is down/blocked. After a couple of misses, surface an ACTIONABLE
@@ -158,7 +164,7 @@ function connect() {
     try {
       const resp = JSON.parse(await handle(JSON.stringify(req)));
       ws.send(JSON.stringify({ id: req.id, ...resp }));
-      state.served++; announce();
+      state.served++; state.lastActivity = Date.now(); announce();
     } catch (e) {
       ws.send(JSON.stringify({ id: req.id, status: 500,
         headers: { "content-type": "text/plain" }, body: btoa("nano endpoint error: " + e) }));
@@ -172,6 +178,9 @@ function startMonitor() {
   if (monitorTimer) return;
   monitorTimer = setInterval(async () => {
     if (state.stopped) return;
+    // Idle auto-pause: no relayed request for IDLE_MS → disconnect to conserve
+    // resources. Honest timeout — the user reconnects with one click, no strings.
+    if (state.phase === "connected" && Date.now() - state.lastActivity > IDLE_MS) { idlePause(); return; }
     const up = await probeLocal();
     if (state.mode === "cloud" && up) {
       log("local tunnel detected → switching to LOCAL", "ok");
@@ -193,13 +202,22 @@ function switchTo(mode) {
   // Closing triggers onclose → reconnect, which now targets the new mode's URL.
   try { if (ws) ws.close(1000, "tunnel-switch"); } catch (_) {}
 }
+// Pause (not stop): keep Pyodide + the cores warm so Reconnect is instant. The
+// onclose handler sees state.idle and does NOT auto-reconnect.
+function idlePause() {
+  state.idle = true; state.phase = "idle";
+  log("Tunnel paused after 30 min idle — external apps can't reach the sim until you Reconnect (one click).", "dim");
+  try { if (ws) ws.close(1000, "idle"); } catch (_) {}
+  announce();
+}
 
 async function start(msg) {
   msg = msg || {};
   if (msg.session) state.session = msg.session;
   if (msg.config) state.cfg = { ...DEFAULT_CFG, ...msg.config };
   if (state.phase === "connected" || (state.phase === "connecting" && !state.stopped && ws)) { announce(); return; }
-  state.stopped = false; state.note = null; cloudFailStreak = 0;
+  state.stopped = false; state.note = null; cloudFailStreak = 0; state.idle = false;
+  state.lastActivity = Date.now();
   state.phase = "connecting"; announce();
   try { await bootPyodide(); } catch (e) { log("boot failed: " + (e && e.stack || e), "err"); state.phase = "off"; announce(); return; }
   // Localhost ALWAYS uses the LOCAL tunnel — the public relay only serves
