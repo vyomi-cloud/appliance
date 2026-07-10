@@ -4,6 +4,48 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2] — 2026-07-11
+
+Nano growth & retention release — a way to **save your work across devices**, a
+gentle **reach** loop, honest **install analytics**, and a tidier tunnel dock.
+All UI is shared `clouds.html`, so the polish lands on both Nano and the
+appliance.
+
+### Added
+- **Sign in to save** — Nano can now be used anonymously, with an unobtrusive
+  header chip inviting sign-in. Signing in (via the **same Activate-appliance**
+  flow) unlocks **workspace sync**: your in-browser spaces follow your account
+  across devices/browsers. Backed by a new portal endpoint
+  (`/api/nano/workspace`, RS256-license-authenticated so a user only ever reads
+  their own blob) and the Nano service worker auto-pushes after each
+  space create/delete and pulls-then-merges on activation.
+- **Signed-in perks** — a **stable relay URL** and **no idle-pause** for
+  activated users.
+- **Idle-tunnel pause + GitHub-star nudge** — an unused relay tunnel auto-pauses
+  after 30 min (and auto-resumes on activity), with a gentle, dismissible nudge
+  to star the repo. A carrot for reach, not a wall.
+- **Install analytics, once per machine** — the install beacon now derives a
+  device-fingerprint `install_id` (platform/cores/memory/screen/timezone/…, not
+  the user-agent), so a machine counts **once** no matter how many times `/nano`
+  is loaded or across browsers. A **free bot filter** (webdriver flag + UA
+  markers) keeps automated hits out of the count.
+
+### Changed
+- **Tunnel bar declutter** — the **Star / Connect apps / Conformance** buttons
+  collapse under a single **⋯** "More" popup menu (rendered as the last button
+  in the bar; outside-click / Escape close it).
+- **"Activate to save"** opens the **identical** "Activate appliance" modal
+  (universal feature, unchanged), and its chip matches the **Create Space**
+  button dimensions (redundant `+` glyph removed).
+- **Brand icons** — every shortcut/icon version is now the **"v + swoosh"**
+  monogram (was a wordmark crop): apple-touch-icon, favicons, light/dark tiles.
+- **Knowledge Center tiles** — 3-per-row layout with the Pack card and labels
+  spanning full width.
+
+### Fixed
+- **Sign-in-to-save runs in place** — no splash screen / appliance-registration
+  detour; the device flow completes inside the dashboard via the SW proxy.
+
 ## [2.3.1] — 2026-07-03
 
 Nano developer-experience polish — the in-app **API (Swagger)** and **SDK & CLI
