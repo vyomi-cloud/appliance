@@ -1153,7 +1153,7 @@
         <div class="sc-title">
           <h2><span class="material-icons">workspaces</span>Active spaces</h2>
         </div>
-        <a class="save-chip" id="save-chip" href="index.html#activate" title="Sign in to keep your setup" style="display:none"><span class="material-icons">bookmark_add</span>Sign in to save</a>
+        <button class="save-chip" id="save-chip" type="button" title="Sign in to keep your setup" style="display:none"><span class="material-icons">bookmark_add</span>Sign in to save</button>
         <button class="btn-create-space" type="button" onclick="openCreateSpaceModal()">
           <span class="material-icons">add</span>Create Space
         </button>
@@ -1545,7 +1545,7 @@
        index.html#activate. Perks are the already-true ones (stable relay URL +
        no idle timeout); workspace sync is flagged "soon". ─────────────────── -->
   <style>
-    .save-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:#f59e0b;border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;text-decoration:none;white-space:nowrap;margin-left:auto;margin-right:12px}
+    .save-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:#f59e0b;border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;font-family:inherit;text-decoration:none;white-space:nowrap;cursor:pointer;margin-left:auto;margin-right:12px;margin-bottom:10px}
     .save-chip:hover{background:rgba(245,158,11,.2)}
     .save-chip .material-icons{font-size:16px}
     #save-modal .sv-emoji{font-size:34px;text-align:center;margin-bottom:6px}
@@ -1556,10 +1556,13 @@
     #save-modal .sv-perks li .material-icons{font-size:19px;color:#7c8cf8;flex:none}
     #save-modal .sv-perks li em{color:#8b8ba7;font-style:normal;font-size:11px;background:rgba(255,255,255,.06);padding:1px 7px;border-radius:999px;margin-left:4px}
     #save-modal .sv-actions{display:flex;align-items:center;justify-content:center;gap:14px}
-    #save-modal .sv-go{background:linear-gradient(135deg,#4d8cf3,#7c3aed);color:#fff;text-decoration:none;border-radius:10px;padding:10px 20px;font-weight:600;font-size:13.5px}
+    #save-modal .sv-go{background:linear-gradient(135deg,#4d8cf3,#7c3aed);color:#fff;text-decoration:none;border:0;cursor:pointer;font-family:inherit;border-radius:10px;padding:10px 20px;font-weight:600;font-size:13.5px}
     #save-modal .sv-go:hover{filter:brightness(1.08)}
+    #save-modal .sv-go:disabled{opacity:.6;cursor:default}
     #save-modal .sv-later{background:none;border:0;color:#8b8ba7;cursor:pointer;font-size:13px}
     #save-modal .sv-later:hover{color:#cdd8e6}
+    #save-modal .sv-status{text-align:center;font-size:12px;color:#cdd8e6;margin:14px 0 0;line-height:1.55}
+    #save-modal .sv-status a{color:#7cc4ff}
     #save-modal .sv-foot{text-align:center;color:#6b7280;font-size:11.5px;margin:16px 0 0}
     #save-modal .um-close{position:absolute;top:12px;right:14px}
   </style>
@@ -1575,9 +1578,10 @@
         <li><span class="material-icons">devices</span>Your spaces &amp; resources, on any device <em>soon</em></li>
       </ul>
       <div class="sv-actions">
-        <a class="sv-go" id="sv-go" href="index.html#activate">Sign in with GitHub →</a>
+        <button class="sv-go" id="sv-go" type="button">Sign in with GitHub →</button>
         <button class="sv-later" type="button" id="sv-later">Not now</button>
       </div>
+      <div class="sv-status" id="sv-status" style="display:none"></div>
       <p class="sv-foot">Free · no card · we only ever store your workspace.</p>
     </div>
   </div>
@@ -2081,11 +2085,42 @@
       m.classList.add('open');
     }
     function closeSaveModal(remember){ var m = document.getElementById('save-modal'); if(m) m.classList.remove('open'); if(remember){ try{ localStorage.setItem('nano_save_prompted','1'); }catch(_){} } }
+    function openSaveModal(){ var m = document.getElementById('save-modal'); if(m) m.classList.add('open'); }
+    // Run the GitHub device-flow IN PLACE (no navigation → no splash / "activate
+    // appliance" screen). The SW proxies start-activation + poll-activation to the
+    // portal; the sign-in itself happens in a new tab on vyomi.cloud.
+    var _svPoll = null;
+    function svSignIn(){
+      var go = document.getElementById('sv-go'), st = document.getElementById('sv-status');
+      if(!go) return;
+      go.disabled = true; go.textContent = 'Opening…';
+      fetch('/api/auth/start-activation', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if(!d || !d.approval_url) throw new Error('no url');
+          window.open(d.approval_url, '_blank', 'noopener');
+          if(st){ st.style.display = 'block'; st.innerHTML = '⏳ Waiting for you to sign in &amp; approve in the new tab…<br><a href="' + d.approval_url + '" target="_blank" rel="noopener">open the sign-in page</a>'; }
+          go.textContent = 'Waiting…';
+          var interval = (d.interval || 5) * 1000, deadline = Date.now() + (d.expires_in || 900) * 1000;
+          if(_svPoll) clearInterval(_svPoll);
+          _svPoll = setInterval(function(){
+            if(Date.now() > deadline){ clearInterval(_svPoll); if(st) st.textContent = 'Sign-in timed out — please try again.'; go.disabled = false; go.textContent = 'Sign in with GitHub →'; return; }
+            fetch('/api/auth/poll-activation', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })
+              .then(function(r){ return r.json(); })
+              .then(function(pd){
+                if(pd && pd.status === 'approved'){ clearInterval(_svPoll); if(st) st.textContent = '✓ Signed in — your setup is saved.'; go.textContent = '✓ Signed in'; _saveLicActive = true; _licChecked = true; updateSaveChip(); setTimeout(function(){ closeSaveModal(false); }, 1500); }
+                else if(pd && pd.status === 'expired'){ clearInterval(_svPoll); if(st) st.textContent = 'Sign-in expired — please try again.'; go.disabled = false; go.textContent = 'Sign in with GitHub →'; }
+              }).catch(function(){});
+          }, interval);
+        })
+        .catch(function(){ if(st){ st.style.display = 'block'; st.textContent = 'Could not start sign-in — please retry.'; } go.disabled = false; go.textContent = 'Sign in with GitHub →'; });
+    }
     (function(){
-      var later = document.getElementById('sv-later'), x = document.getElementById('save-x'), go = document.getElementById('sv-go'), m = document.getElementById('save-modal');
+      var later = document.getElementById('sv-later'), x = document.getElementById('save-x'), go = document.getElementById('sv-go'), m = document.getElementById('save-modal'), chip = document.getElementById('save-chip');
+      if(chip) chip.addEventListener('click', openSaveModal);
       if(later) later.addEventListener('click', function(){ closeSaveModal(true); });
       if(x) x.addEventListener('click', function(){ closeSaveModal(true); });
-      if(go) go.addEventListener('click', function(){ try{ localStorage.setItem('nano_save_prompted','1'); }catch(_){} });   // acting on it → don't re-nudge
+      if(go) go.addEventListener('click', function(){ try{ localStorage.setItem('nano_save_prompted','1'); }catch(_){} svSignIn(); });   // engage → don't re-nudge + start flow
       if(m) m.addEventListener('click', function(e){ if(e.target === m) closeSaveModal(true); });
       document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeSaveModal(false); });
       // When the SW takes control (nano-boot), re-check with the correct (Nano)
