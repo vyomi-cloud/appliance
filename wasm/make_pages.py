@@ -187,9 +187,9 @@ def _footer_widget():
  <span class="dot"></span><span class="lbl">Relay tunnel: off</span>
  <span class="ep" id="nano-foot-ep"></span>
  <span class="sp"></span>
- <button id="nano-foot-more" title="More">⋯ More</button>
  <button id="nano-foot-logs">Logs ▴</button>
  <button id="nano-foot-toggle">Start tunnel</button>
+ <button id="nano-foot-more" title="More">⋯</button>
 </div>
 <div id="nano-foot-menu">
  <button id="nano-menu-star">⭐ Star on GitHub</button>
