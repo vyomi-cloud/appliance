@@ -1125,7 +1125,7 @@
         <div class="sc-title">
           <h2><span class="material-icons">workspaces</span>Active spaces</h2>
         </div>
-        <button class="save-chip" id="save-chip" type="button" title="Sign in to keep your setup" style="display:none"><span class="material-icons">bookmark_add</span>Sign in to save</button>
+        <button class="save-chip" id="save-chip" type="button" title="Activate the appliance to keep your workspace" style="display:none"><span class="material-icons">bookmark_add</span>Activate to save</button>
         <button class="btn-create-space" type="button" onclick="openCreateSpaceModal()">
           <span class="material-icons">add</span>Create Space
         </button>
@@ -1556,14 +1556,14 @@
       <button class="um-close" type="button" id="save-x" aria-label="Close"><span class="material-icons">close</span></button>
       <div class="sv-emoji"><span class="material-icons">cloud_done</span></div>
       <h3>Save your workspace</h3>
-      <p class="sv-sub" id="sv-sub">Sign in to keep your setup and pick up where you left off — on any device.</p>
+      <p class="sv-sub" id="sv-sub">Activate the appliance to keep your setup and pick up where you left off — on any device.</p>
       <ul class="sv-perks">
         <li><span class="material-icons">cable</span>A permanent relay URL — it stops changing each session</li>
         <li><span class="material-icons">timer_off</span>No 30-minute idle timeout on your tunnel</li>
         <li><span class="material-icons">devices</span>Your spaces &amp; resources, on any device <em>soon</em></li>
       </ul>
       <div class="sv-actions">
-        <button class="sv-go" id="sv-go" type="button">Sign in with GitHub →</button>
+        <button class="sv-go" id="sv-go" type="button">Activate appliance →</button>
         <button class="sv-later" type="button" id="sv-later">Not now</button>
       </div>
       <div class="sv-status" id="sv-status" style="display:none"></div>
@@ -2066,7 +2066,7 @@
       if(!_licChecked || !_saveIsNano() || _saveLicActive || saveNudged() || count < 1) return;
       var m = document.getElementById('save-modal'); if(!m) return;
       var sub = document.getElementById('sv-sub');
-      if(sub && count > 1) sub.textContent = "You've built " + count + " spaces here. Sign in to keep them and pick up on any device.";
+      if(sub && count > 1) sub.textContent = "You've built " + count + " spaces here. Activate the appliance to keep them and pick up on any device.";
       m.classList.add('open');
     }
     function closeSaveModal(remember){ var m = document.getElementById('save-modal'); if(m) m.classList.remove('open'); if(remember){ try{ localStorage.setItem('nano_save_prompted','1'); }catch(_){} } }
@@ -2084,21 +2084,21 @@
         .then(function(d){
           if(!d || !d.approval_url) throw new Error('no url');
           window.open(d.approval_url, '_blank', 'noopener');
-          if(st){ st.style.display = 'block'; st.innerHTML = '⏳ Waiting for you to sign in &amp; approve in the new tab…<br><a href="' + d.approval_url + '" target="_blank" rel="noopener">open the sign-in page</a>'; }
+          if(st){ st.style.display = 'block'; st.innerHTML = '⏳ Finish activating in the new tab (sign in &amp; approve)…<br><a href="' + d.approval_url + '" target="_blank" rel="noopener">open the activation page</a>'; }
           go.textContent = 'Waiting…';
           var interval = (d.interval || 5) * 1000, deadline = Date.now() + (d.expires_in || 900) * 1000;
           if(_svPoll) clearInterval(_svPoll);
           _svPoll = setInterval(function(){
-            if(Date.now() > deadline){ clearInterval(_svPoll); if(st) st.textContent = 'Sign-in timed out — please try again.'; go.disabled = false; go.textContent = 'Sign in with GitHub →'; return; }
+            if(Date.now() > deadline){ clearInterval(_svPoll); if(st) st.textContent = 'Sign-in timed out — please try again.'; go.disabled = false; go.textContent = 'Activate appliance →'; return; }
             fetch('/api/auth/poll-activation', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })
               .then(function(r){ return r.json(); })
               .then(function(pd){
-                if(pd && pd.status === 'approved'){ clearInterval(_svPoll); if(st) st.textContent = '✓ Signed in — your setup is saved.'; go.textContent = '✓ Signed in'; _saveLicActive = true; _licChecked = true; updateSaveChip(); setTimeout(function(){ closeSaveModal(false); }, 1500); }
-                else if(pd && pd.status === 'expired'){ clearInterval(_svPoll); if(st) st.textContent = 'Sign-in expired — please try again.'; go.disabled = false; go.textContent = 'Sign in with GitHub →'; }
+                if(pd && pd.status === 'approved'){ clearInterval(_svPoll); if(st) st.textContent = '✓ Activated — your workspace is saved.'; go.textContent = '✓ Activated'; _saveLicActive = true; _licChecked = true; updateSaveChip(); setTimeout(function(){ closeSaveModal(false); }, 1500); }
+                else if(pd && pd.status === 'expired'){ clearInterval(_svPoll); if(st) st.textContent = 'Sign-in expired — please try again.'; go.disabled = false; go.textContent = 'Activate appliance →'; }
               }).catch(function(){});
           }, interval);
         })
-        .catch(function(){ if(st){ st.style.display = 'block'; st.textContent = 'Could not start sign-in — please retry.'; } go.disabled = false; go.textContent = 'Sign in with GitHub →'; });
+        .catch(function(){ if(st){ st.style.display = 'block'; st.textContent = 'Could not start sign-in — please retry.'; } go.disabled = false; go.textContent = 'Activate appliance →'; });
     }
     (function(){
       var later = document.getElementById('sv-later'), x = document.getElementById('save-x'), go = document.getElementById('sv-go'), m = document.getElementById('save-modal'), chip = document.getElementById('save-chip');
