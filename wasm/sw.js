@@ -597,7 +597,7 @@ self.addEventListener("fetch", (event) => {
         try {
           const r = await fetch(self.location.origin + "/api/install/register", {
             method: "POST", headers: { "content-type": "application/json" },
-            body: JSON.stringify({ install_id: installId, channel: b.channel || "nano", state: b.state || "DOWNLOADED", host_os: (b.host_os || "").slice(0, 32) }),
+            body: JSON.stringify({ install_id: installId, channel: b.channel || "nano", state: b.state || "DOWNLOADED", host_os: (b.host_os || "").slice(0, 32), webdriver: !!b.webdriver }),
           });
           return new Response(await r.text(), { status: r.status, headers: { "content-type": "application/json" } });
         } catch (e) { return json({ ok: false, detail: "portal unreachable" }, 200); }

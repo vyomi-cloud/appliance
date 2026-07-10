@@ -2169,7 +2169,8 @@
           const fp = await nanoDeviceFp(); if (!fp) return;
           const r = await fetch("/api/install/register", {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ install_id: fp, channel: "nano", state: "DOWNLOADED", host_os: (navigator.platform || "").slice(0, 32) }),
+            body: JSON.stringify({ install_id: fp, channel: "nano", state: "DOWNLOADED",
+              host_os: (navigator.platform || "").slice(0, 32), webdriver: !!navigator.webdriver }),
           });
           // Only latch the guard on success — an early (pre-SW-control) load can
           // 404, and we want the controlled reload to still record.
