@@ -790,7 +790,7 @@
     }
     .kc-open:hover { background: rgba(37,99,235,.08); }
     /* KC tiles — rendered natively (light theme), each opens a portal page. */
-    .kc-tiles { display: grid; grid-template-columns: 1fr; gap: 16px; padding-bottom: 32px; }   /* every tile full-width, matching the Conformance Pack card */
+    .kc-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding-bottom: 32px; }   /* 3 tiles per row (Conformance Pack + section labels span all 3) */
     .kc-sec-label {
       grid-column: 1 / -1; display: flex; align-items: center; gap: 8px;
       font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
