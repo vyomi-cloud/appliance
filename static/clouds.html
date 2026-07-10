@@ -1512,62 +1512,57 @@
     </div>
   </div>
 
-  <!-- ── Sign-in-to-save prompt (Nano only): a one-time, dismissable modal +
-       a persistent header chip. Sign-in reuses the launch-page device-flow via
-       index.html#activate. Perks are the already-true ones (stable relay URL +
-       no idle timeout); workspace sync is flagged "soon". ─────────────────── -->
+  <!-- ── "Activate to save" (Nano) — opens the SAME dialog as the launch page's
+       universal "Activate appliance" modal, so both are identical. A persistent
+       header chip + a one-time nudge open it; on success we sync the workspace. -->
   <style>
     .save-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:#f59e0b;border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;font-family:inherit;text-decoration:none;white-space:nowrap;cursor:pointer;margin-left:auto;margin-right:12px;margin-bottom:10px}
     .save-chip:hover{background:rgba(245,158,11,.2)}
     .save-chip .material-icons{font-size:16px}
-    /* Darker backdrop so the card really pops (the shared one is faint). */
-    #save-modal{background:rgba(4,6,18,.68);backdrop-filter:blur(5px)}
-    /* The save card gets its own solid, premium styling (the shared .u-modal bg is
-       scoped to #usage-modal, which is why this dialog looked transparent). */
-    #save-modal .u-modal{position:relative;overflow:hidden;width:430px;max-width:calc(100vw - 32px);
-      background:radial-gradient(135% 90% at 50% -10%, #1d2452 0%, #141834 46%, #0c0f24 100%);
-      border:1px solid rgba(124,140,248,.30);border-radius:20px;padding:30px 28px 22px;
-      box-shadow:0 34px 90px rgba(0,0,0,.62), inset 0 1px 0 rgba(255,255,255,.06)}
-    #save-modal .u-modal::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;z-index:0;background:linear-gradient(90deg,#4d8cf3,#7c3aed,#f59e0b)}
-    #save-modal .u-modal::after{content:"";position:absolute;top:0;left:50%;width:300px;height:190px;transform:translateX(-50%);z-index:0;pointer-events:none;background:radial-gradient(closest-side, rgba(124,58,237,.24), transparent 72%)}
-    #save-modal .u-modal>*{position:relative;z-index:1}
-    #save-modal .sv-emoji{width:58px;height:58px;margin:2px auto 14px;border-radius:17px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#4d8cf3,#7c3aed);box-shadow:0 10px 30px rgba(124,58,237,.45)}
-    #save-modal .sv-emoji .material-icons{font-size:29px;color:#fff}
-    #save-modal h3{text-align:center;margin:0 0 7px;font-size:21px;letter-spacing:-.01em;color:#f4f6fb}
-    #save-modal .sv-sub{text-align:center;color:#a9b2c9;font-size:13px;margin:0 auto 18px;max-width:330px;line-height:1.55}
-    #save-modal .sv-perks{list-style:none;margin:0 0 20px;padding:0;display:flex;flex-direction:column;gap:9px}
-    #save-modal .sv-perks li{display:flex;align-items:center;gap:12px;font-size:13px;color:#dbe2f0;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:11px 13px}
-    #save-modal .sv-perks li .material-icons{font-size:18px;color:#a9bcff;background:rgba(124,140,248,.16);border-radius:9px;padding:7px;flex:none}
-    #save-modal .sv-perks li em{color:#e0b661;font-style:normal;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:rgba(245,158,11,.15);padding:2px 7px;border-radius:999px;margin-left:auto}
-    #save-modal .sv-actions{display:flex;flex-direction:column;align-items:center;gap:10px}
-    #save-modal .sv-go{width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,#4d8cf3,#7c3aed);color:#fff;border:0;cursor:pointer;font-family:inherit;border-radius:12px;padding:12px 20px;font-weight:700;font-size:14px;box-shadow:0 10px 28px rgba(77,140,243,.42)}
-    #save-modal .sv-go:hover{filter:brightness(1.08)}
-    #save-modal .sv-go:disabled{opacity:.65;cursor:default;box-shadow:none}
-    #save-modal .sv-later{background:none;border:0;color:#8b93a9;cursor:pointer;font-size:12.5px;font-family:inherit}
-    #save-modal .sv-later:hover{color:#cdd8e6}
-    #save-modal .sv-status{text-align:center;font-size:12px;color:#cdd8e6;margin:14px 0 0;line-height:1.55}
-    #save-modal .sv-status a{color:#7cc4ff}
-    #save-modal .sv-foot{text-align:center;color:#6b7280;font-size:11.5px;margin:16px 0 0}
-    #save-modal .um-close{position:absolute;top:14px;right:15px;z-index:2;background:none;border:0;cursor:pointer;color:#8b93a9;padding:2px;line-height:1}
-    #save-modal .um-close:hover{color:#fff}
+    /* Activation dialog — IDENTICAL to the launch-page "Activate appliance" modal. */
+    #activate-modal.am-overlay{position:fixed;inset:0;z-index:100002;background:rgba(15,27,45,.55);display:none;align-items:flex-start;justify-content:center;padding:80px 16px 16px;overflow-y:auto}
+    #activate-modal.am-overlay.open{display:flex}
+    #activate-modal .am-card{background:#fff;border-radius:14px;width:100%;max-width:520px;box-shadow:0 20px 60px rgba(15,27,45,.30);overflow:hidden;animation:am-pop .18s ease-out}
+    @keyframes am-pop{from{transform:scale(.96) translateY(-8px);opacity:0}to{transform:none;opacity:1}}
+    #activate-modal .am-head{padding:22px 24px 14px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:1px solid #e7e7e9}
+    #activate-modal .am-head h3{margin:0;font-size:18px;color:#1f2937;font-weight:700}
+    #activate-modal .am-head .am-sub{margin-top:4px;font-size:13px;color:#5f6b7a;line-height:1.5}
+    #activate-modal .am-close{background:transparent;border:0;cursor:pointer;font-size:22px;line-height:1;color:#5f6b7a;padding:2px 6px;border-radius:6px;font-family:inherit}
+    #activate-modal .am-close:hover{background:#f2f3f3;color:#1f2937}
+    #activate-modal .am-body{padding:18px 24px 22px}
+    #activate-modal .am-body .am-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#5f6b7a;margin-bottom:8px}
+    #activate-modal .am-body .am-primary-btn{width:100%;padding:12px;border-radius:8px;background:#1f2937;color:#fff;border:0;cursor:pointer;font-weight:600;font-size:14px;font-family:inherit;transition:background .15s}
+    #activate-modal .am-body .am-primary-btn:hover{background:#1a2c44}
+    #activate-modal .am-body .am-primary-btn:disabled{opacity:.6;cursor:default}
+    #activate-modal .am-body textarea{width:100%;padding:10px;border:1px solid #d8e0ea;border-radius:8px;font-family:'SF Mono',Menlo,monospace;font-size:11.5px;resize:vertical;box-sizing:border-box;line-height:1.4}
+    #activate-modal .am-body .am-secondary-btn{margin-top:8px;padding:10px 14px;border-radius:8px;background:#fff;color:#1f2937;border:1px solid #d8e0ea;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit}
+    #activate-modal .am-divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:#9ca3af;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+    #activate-modal .am-divider::before,#activate-modal .am-divider::after{content:"";flex:1;height:1px;background:#e7e7e9}
+    #activate-modal .am-status{margin-top:10px;font-size:12.5px;color:#5f6b7a;min-height:18px}
+    #activate-modal .am-status .status-pending{color:#4b6488}
+    #activate-modal .am-status .status-error{color:#a4262c}
+    #activate-modal .am-status .status-ok{color:#16a34a;font-weight:600}
   </style>
-  <div class="modal-backdrop" id="save-modal">
-    <div class="u-modal" role="dialog" aria-modal="true">
-      <button class="um-close" type="button" id="save-x" aria-label="Close"><span class="material-icons">close</span></button>
-      <div class="sv-emoji"><span class="material-icons">cloud_done</span></div>
-      <h3>Save your workspace</h3>
-      <p class="sv-sub" id="sv-sub">Activate the appliance to keep your setup and pick up where you left off — on any device.</p>
-      <ul class="sv-perks">
-        <li><span class="material-icons">cable</span>A permanent relay URL — it stops changing each session</li>
-        <li><span class="material-icons">timer_off</span>No 30-minute idle timeout on your tunnel</li>
-        <li><span class="material-icons">devices</span>Your spaces, synced across every device</li>
-      </ul>
-      <div class="sv-actions">
-        <button class="sv-go" id="sv-go" type="button">Activate appliance →</button>
-        <button class="sv-later" type="button" id="sv-later">Not now</button>
+  <div class="am-overlay" id="activate-modal" onclick="if(event.target===this)closeActivateModal()">
+    <div class="am-card" role="dialog" aria-modal="true" aria-labelledby="am-title">
+      <div class="am-head">
+        <div>
+          <h3 id="am-title">Activate this appliance</h3>
+          <div class="am-sub">Sign in with your vyomi account — we'll detect your active subscription and apply the right tier automatically. Your workspace is then saved &amp; synced across devices.</div>
+        </div>
+        <button class="am-close" type="button" aria-label="Close" onclick="closeActivateModal()">×</button>
       </div>
-      <div class="sv-status" id="sv-status" style="display:none"></div>
-      <p class="sv-foot">Free · no card · we only ever store your workspace.</p>
+      <div class="am-body">
+        <div class="am-label">Sign in with vyomi</div>
+        <button class="am-primary-btn" type="button" onclick="startDeviceFlow()">Sign in with vyomi →</button>
+        <div id="am-device-status" class="am-status"></div>
+        <div class="am-divider">or</div>
+        <div class="am-label">Paste a license JWT (admin / offline)</div>
+        <textarea id="am-license-input" rows="3" placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."></textarea>
+        <button class="am-secondary-btn" type="button" onclick="activateLicenseKey()">Activate key</button>
+        <div id="am-activate-status" class="am-status"></div>
+        <div style="margin-top:18px;font-size:12px;color:#5f6b7a;line-height:1.5">Don't have a subscription yet? <a href="https://vyomi.cloud/dashboard" target="_blank" rel="noopener" style="color:#1f2937;text-decoration:none">Subscribe on the portal →</a></div>
+      </div>
     </div>
   </div>
 
@@ -2065,64 +2060,67 @@
       if(_saveLicActive){ var m = document.getElementById('save-modal'); if(m) m.classList.remove('open'); }
     }
     function maybeSaveModal(count){
-      // Only decide once we actually KNOW the license state (a failed pre-SW-control
-      // fetch leaves it unknown — never open the modal on that false negative).
+      // Only decide once we KNOW the license state (a pre-SW-control fetch hits the
+      // portal's logged-out endpoint). Auto-open once per browser (latch the guard);
+      // the chip can always re-open it manually.
       if(!_licChecked || !_saveIsNano() || _saveLicActive || saveNudged() || count < 1) return;
-      var m = document.getElementById('save-modal'); if(!m) return;
-      var sub = document.getElementById('sv-sub');
-      if(sub && count > 1) sub.textContent = "You've built " + count + " spaces here. Activate the appliance to keep them and pick up on any device.";
-      m.classList.add('open');
+      try{ localStorage.setItem('nano_save_prompted','1'); }catch(_){}
+      openActivateModal();
     }
-    function closeSaveModal(remember){ var m = document.getElementById('save-modal'); if(m) m.classList.remove('open'); if(remember){ try{ localStorage.setItem('nano_save_prompted','1'); }catch(_){} } }
-    function openSaveModal(){ var m = document.getElementById('save-modal'); if(m) m.classList.add('open'); }
-    // Run the GitHub device-flow IN PLACE (no navigation → no splash / "activate
-    // appliance" screen). The SW proxies start-activation + poll-activation to the
-    // portal; the sign-in itself happens in a new tab on vyomi.cloud.
-    var _svPoll = null;
-    function svSignIn(){
-      var go = document.getElementById('sv-go'), st = document.getElementById('sv-status');
-      if(!go) return;
-      go.disabled = true; go.textContent = 'Opening…';
+    function openActivateModal(){ var m = document.getElementById('activate-modal'); if(m) m.classList.add('open'); }
+    function closeActivateModal(){ var m = document.getElementById('activate-modal'); if(m) m.classList.remove('open'); }
+    // Shared post-activation: mark signed in, hide the chip, and sync the workspace
+    // (merge any spaces saved on another device, then save the union).
+    function _onActivated(){
+      _saveLicActive = true; _licChecked = true; updateSaveChip();
+      fetch('/api/nano/workspace/pull', { method:'POST' })
+        .then(function(){ return fetch('/api/nano/workspace/push', { method:'POST' }); })
+        .then(function(){ if(window.loadSpaces) loadSpaces(); }).catch(function(){});
+    }
+    // Device-flow — IDENTICAL to the launch page, run in place via the SW proxy.
+    var _actPoll = null;
+    function startDeviceFlow(){
+      var btn = document.querySelector('#activate-modal .am-primary-btn'), out = document.getElementById('am-device-status');
+      if(btn) btn.disabled = true; if(out) out.innerHTML = '<span class="status-pending">Contacting portal…</span>';
       fetch('/api/auth/start-activation', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })
         .then(function(r){ return r.json(); })
         .then(function(d){
           if(!d || !d.approval_url) throw new Error('no url');
           window.open(d.approval_url, '_blank', 'noopener');
-          if(st){ st.style.display = 'block'; st.innerHTML = '⏳ Finish activating in the new tab (sign in &amp; approve)…<br><a href="' + d.approval_url + '" target="_blank" rel="noopener">open the activation page</a>'; }
-          go.textContent = 'Waiting…';
+          if(out) out.innerHTML = '<span class="status-pending">⏳ Sign in &amp; approve in the new tab… <a href="' + d.approval_url + '" target="_blank" rel="noopener">open</a></span>';
           var interval = (d.interval || 5) * 1000, deadline = Date.now() + (d.expires_in || 900) * 1000;
-          if(_svPoll) clearInterval(_svPoll);
-          _svPoll = setInterval(function(){
-            if(Date.now() > deadline){ clearInterval(_svPoll); if(st) st.textContent = 'Sign-in timed out — please try again.'; go.disabled = false; go.textContent = 'Activate appliance →'; return; }
+          if(_actPoll) clearInterval(_actPoll);
+          _actPoll = setInterval(function(){
+            if(Date.now() > deadline){ clearInterval(_actPoll); if(out) out.innerHTML = '<span class="status-error">Timed out — please try again.</span>'; if(btn) btn.disabled = false; return; }
             fetch('/api/auth/poll-activation', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })
               .then(function(r){ return r.json(); })
               .then(function(pd){
-                if(pd && pd.status === 'approved'){
-                  clearInterval(_svPoll); go.textContent = '✓ Activated'; _saveLicActive = true; _licChecked = true; updateSaveChip();
-                  if(st) st.textContent = '✓ Activated — syncing your workspace…';
-                  // Merge any spaces saved on another device, then save the union.
-                  fetch('/api/nano/workspace/pull', { method:'POST' })
-                    .then(function(){ return fetch('/api/nano/workspace/push', { method:'POST' }); })
-                    .then(function(){ if(window.loadSpaces) loadSpaces(); })
-                    .catch(function(){})
-                    .then(function(){ if(st) st.textContent = '✓ Activated — your workspace is saved.'; setTimeout(function(){ closeSaveModal(false); }, 1400); });
-                }
-                else if(pd && pd.status === 'expired'){ clearInterval(_svPoll); if(st) st.textContent = 'Sign-in expired — please try again.'; go.disabled = false; go.textContent = 'Activate appliance →'; }
+                if(pd && pd.status === 'approved'){ clearInterval(_actPoll); if(out) out.innerHTML = '<span class="status-ok">✓ Activated' + (pd.active_tier ? ' — tier: ' + pd.active_tier : '') + '. Workspace saved.</span>'; _onActivated(); setTimeout(closeActivateModal, 1600); }
+                else if(pd && pd.status === 'expired'){ clearInterval(_actPoll); if(out) out.innerHTML = '<span class="status-error">Expired — please try again.</span>'; if(btn) btn.disabled = false; }
               }).catch(function(){});
           }, interval);
         })
-        .catch(function(){ if(st){ st.style.display = 'block'; st.textContent = 'Could not start sign-in — please retry.'; } go.disabled = false; go.textContent = 'Activate appliance →'; });
+        .catch(function(){ if(out) out.innerHTML = '<span class="status-error">Could not start — please retry.</span>'; if(btn) btn.disabled = false; });
+    }
+    function activateLicenseKey(){
+      var ta = document.getElementById('am-license-input'), out = document.getElementById('am-activate-status');
+      var key = (ta && ta.value || '').trim();
+      if(!key){ if(out) out.innerHTML = '<span class="status-error">Paste a license JWT first.</span>'; return; }
+      if(out) out.innerHTML = '<span class="status-pending">Validating…</span>';
+      fetch('/api/license/activate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key: key }) })
+        .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
+        .then(function(res){
+          if(res.ok){ if(out) out.innerHTML = '<span class="status-ok">✓ Activated' + (res.d.active_tier ? ' — tier: ' + res.d.active_tier : '') + '. Workspace saved.</span>'; _onActivated(); setTimeout(closeActivateModal, 1600); }
+          else { if(out) out.innerHTML = '<span class="status-error">' + ((res.d.detail && res.d.detail.reason) || 'Invalid or expired key') + '</span>'; }
+        })
+        .catch(function(){ if(out) out.innerHTML = '<span class="status-error">Could not validate.</span>'; });
     }
     (function(){
-      var later = document.getElementById('sv-later'), x = document.getElementById('save-x'), go = document.getElementById('sv-go'), m = document.getElementById('save-modal'), chip = document.getElementById('save-chip');
-      if(chip) chip.addEventListener('click', openSaveModal);
-      if(later) later.addEventListener('click', function(){ closeSaveModal(true); });
-      if(x) x.addEventListener('click', function(){ closeSaveModal(true); });
-      if(go) go.addEventListener('click', function(){ try{ localStorage.setItem('nano_save_prompted','1'); }catch(_){} svSignIn(); });   // engage → don't re-nudge + start flow
-      if(m) m.addEventListener('click', function(e){ if(e.target === m) closeSaveModal(true); });
-      document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeSaveModal(false); });
+      var chip = document.getElementById('save-chip');
+      if(chip) chip.addEventListener('click', openActivateModal);
+      document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeActivateModal(); });
       // When the SW takes control (nano-boot), re-check with the correct (Nano)
-      // license and re-decide the prompt using the last-known space count.
+      // license and re-decide the one-time nudge using the last-known space count.
       if(navigator.serviceWorker) navigator.serviceWorker.addEventListener('controllerchange', function(){ refreshSaveLic().then(function(){ maybeSaveModal(_lastSpaceCount); }); });
       refreshSaveLic();
     })();
