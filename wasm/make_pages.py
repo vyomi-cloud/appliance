@@ -115,7 +115,7 @@ def _docs_widget(cloud=None):
     return f"""
 <style>
  #nano-docs{{position:fixed;right:14px;bottom:40px;z-index:100000;font:13px system-ui,-apple-system,sans-serif}}
- #nano-docs .pill{{display:none}}   /* trigger moved into the tunnel bar (#nano-foot-conf) */
+ #nano-docs .pill{{display:none}}   /* trigger moved into the tunnel bar's "More" menu (#nano-menu-conf) */
  #nano-docs .pop{{position:absolute;right:0;bottom:0;background:#0d1030;border:1px solid #2a2f55;border-radius:12px;padding:6px;min-width:218px;display:none;box-shadow:0 12px 34px rgba(0,0,0,.45)}}
  #nano-docs.open .pop{{display:block}}
  #nano-docs .pop .h{{font-size:11px;color:#8b8ba7;padding:6px 10px;text-transform:uppercase;letter-spacing:1px}}
@@ -155,8 +155,12 @@ def _footer_widget():
  #nano-logs .h{padding:5px 14px;font:11px system-ui,-apple-system,sans-serif;color:#8b8ba7;background:#0a0c24;border-bottom:1px solid #1a1f44}
  #nano-logs pre{flex:1;margin:0;padding:10px 14px;overflow:auto;font:12px ui-monospace,Menlo,monospace;color:#cdd8e6;white-space:pre-wrap}
  #nano-logs pre .ok{color:#34d399}#nano-logs pre .err{color:#f87171}#nano-logs pre .dim{color:#71717a}
- #nano-foot-star{background:linear-gradient(135deg,#f59e0b,#f97316)!important;color:#fff!important;border:0!important}
- #nano-foot-star:hover{filter:brightness(1.08);color:#fff!important}
+ #nano-foot-menu{position:fixed;right:14px;bottom:40px;z-index:100001;background:#0d1030;border:1px solid #2a2f55;border-radius:12px;padding:6px;min-width:196px;display:none;box-shadow:0 12px 34px rgba(0,0,0,.45)}
+ #nano-foot-menu.open{display:block}
+ #nano-foot-menu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;color:#cdd8e6;padding:9px 11px;border-radius:8px;cursor:pointer;font:13px system-ui,-apple-system,sans-serif}
+ #nano-foot-menu button:hover{background:#171b3d;color:#fff}
+ #nano-foot-menu #nano-menu-star{color:#f59e0b}
+ #nano-foot-menu #nano-menu-star:hover{background:rgba(245,158,11,.14);color:#f59e0b}
  #nano-star{position:fixed;right:16px;bottom:44px;z-index:100001;width:292px;background:linear-gradient(180deg,#14172e,#0d1228);border:1px solid #2a2f55;border-radius:14px;padding:15px 16px;box-shadow:0 16px 42px rgba(0,0,0,.55);display:none;font:13px system-ui,-apple-system,sans-serif;color:#cdd8e6}
  #nano-star .ns-x{position:absolute;top:7px;right:11px;background:none;border:0;color:#8b8ba7;font-size:19px;cursor:pointer;line-height:1;padding:0}
  #nano-star .ns-x:hover{color:#fff}
@@ -183,11 +187,14 @@ def _footer_widget():
  <span class="dot"></span><span class="lbl">Relay tunnel: off</span>
  <span class="ep" id="nano-foot-ep"></span>
  <span class="sp"></span>
- <button id="nano-foot-star" title="Star Vyomi on GitHub — it genuinely helps">⭐ Star</button>
- <button id="nano-foot-connect" style="display:none">🔌 Connect apps</button>
- <button id="nano-foot-conf">📘 Conformance</button>
+ <button id="nano-foot-more" title="More">⋯ More</button>
  <button id="nano-foot-logs">Logs ▴</button>
  <button id="nano-foot-toggle">Start tunnel</button>
+</div>
+<div id="nano-foot-menu">
+ <button id="nano-menu-star">⭐ Star on GitHub</button>
+ <button id="nano-menu-connect" style="display:none">🔌 Connect apps</button>
+ <button id="nano-menu-conf">📘 Conformance</button>
 </div>
 <script>
 (function(){
@@ -284,8 +291,16 @@ def _footer_widget():
   function maybeNudge(){ if(starNudged()) return; var c=document.getElementById("nano-star"); if(c) c.style.display="block"; }
   function hideNudge(remember){ var c=document.getElementById("nano-star"); if(c) c.style.display="none"; if(remember){ try{ localStorage.setItem("nano_star_nudged","1"); }catch(_){} } }
   function markStarred(){ try{ localStorage.setItem("nano_starred","1"); }catch(_){} hideNudge(false); }
-  var starBtn = document.getElementById("nano-foot-star");
-  if(starBtn) starBtn.onclick = function(){ window.open("https://github.com/vyomi-cloud/appliance","_blank","noopener"); markStarred(); };
+  // "More" in the tunnel bar → popup menu (Star / Connect apps / Conformance).
+  var moreBtn = document.getElementById("nano-foot-more"), footMenu = document.getElementById("nano-foot-menu");
+  function closeFootMenu(){ if(footMenu) footMenu.classList.remove("open"); }
+  if(moreBtn && footMenu){
+    moreBtn.addEventListener("click", function(e){ e.stopPropagation(); footMenu.classList.toggle("open"); });
+    document.addEventListener("click", function(e){ if(footMenu.classList.contains("open") && !footMenu.contains(e.target) && !moreBtn.contains(e.target)) closeFootMenu(); });
+    document.addEventListener("keydown", function(e){ if(e.key==="Escape") closeFootMenu(); });
+  }
+  var starBtn = document.getElementById("nano-menu-star");
+  if(starBtn) starBtn.onclick = function(){ closeFootMenu(); window.open("https://github.com/vyomi-cloud/appliance","_blank","noopener"); markStarred(); };
   var nsGo = document.querySelector("#nano-star .ns-go"), nsLater = document.querySelector("#nano-star .ns-later"), nsX = document.querySelector("#nano-star .ns-x");
   if(nsGo) nsGo.addEventListener("click", markStarred);                       // the <a> opens the repo; we optimistically mark + hide
   if(nsLater) nsLater.addEventListener("click", function(){ hideNudge(true); });
@@ -305,9 +320,9 @@ def _footer_widget():
   } else { toggleBtn.textContent = "Open relay endpoint ↗"; }
 
   // Conformance button lives in this bar (next to Logs) → toggles the docs pop-up.
-  var confBtn = document.getElementById("nano-foot-conf"), docs = document.getElementById("nano-docs");
+  var confBtn = document.getElementById("nano-menu-conf"), docs = document.getElementById("nano-docs");
   if(confBtn && docs){
-    confBtn.addEventListener("click", function(e){ e.stopPropagation();
+    confBtn.addEventListener("click", function(e){ e.stopPropagation(); closeFootMenu();
       var cd = document.getElementById("connect-dock"); if(cd) cd.classList.remove("open");   // one pop-up at a time
       docs.classList.toggle("open"); });
     document.addEventListener("click", function(e){ if(docs.classList.contains("open") && !docs.contains(e.target) && !confBtn.contains(e.target)) docs.classList.remove("open"); });

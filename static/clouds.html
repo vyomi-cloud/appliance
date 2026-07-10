@@ -1222,19 +1222,19 @@
       function initConnect() {
         var dock = document.getElementById('connect-dock'); if (!dock) return;
         var isNano = !!document.getElementById('nano-foot');
-        // Nano: the trigger lives IN the tunnel bar (#nano-foot-connect, next to
-        // Logs/Stop) and the pop-up sits just above the bar. Appliance: a
-        // bottom-right pill (no tunnel bar there).
+        // Nano: the trigger lives in the tunnel bar's "More" pop-up menu
+        // (#nano-menu-connect) and the connect pop-up sits just above the bar.
+        // Appliance: a bottom-right pill (no tunnel bar there).
         if (isNano) dock.classList.add('footer-mode'); else dock.style.bottom = '16px';
         dock.style.display = '';
         var pill = document.getElementById('cx-pill'), closeB = document.getElementById('cx-close');
-        var fbtn = document.getElementById('nano-foot-connect');
+        var fbtn = document.getElementById('nano-menu-connect');
         function setOpen(o){
           if (o) { var docs = document.getElementById('nano-docs'); if (docs) docs.classList.remove('open'); }  // one pop-up at a time
           dock.classList.toggle('open', o);
         }
         pill.addEventListener('click', function(e){ e.stopPropagation(); setOpen(!dock.classList.contains('open')); });
-        if (isNano && fbtn) { fbtn.style.display = ''; fbtn.addEventListener('click', function(e){ e.stopPropagation(); setOpen(!dock.classList.contains('open')); }); }
+        if (isNano && fbtn) { fbtn.style.display = ''; fbtn.addEventListener('click', function(e){ e.stopPropagation(); var m=document.getElementById('nano-foot-menu'); if(m) m.classList.remove('open'); setOpen(!dock.classList.contains('open')); }); }
         if (closeB) closeB.addEventListener('click', function(){ setOpen(false); });
         document.addEventListener('click', function(e){ if (dock.classList.contains('open') && !dock.contains(e.target) && !(fbtn && (e.target === fbtn || fbtn.contains(e.target)))) setOpen(false); });
         document.addEventListener('keydown', function(e){ if (e.key === 'Escape') setOpen(false); });
