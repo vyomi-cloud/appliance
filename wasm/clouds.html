@@ -1548,28 +1548,41 @@
     .save-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:#f59e0b;border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;font-family:inherit;text-decoration:none;white-space:nowrap;cursor:pointer;margin-left:auto;margin-right:12px;margin-bottom:10px}
     .save-chip:hover{background:rgba(245,158,11,.2)}
     .save-chip .material-icons{font-size:16px}
-    #save-modal .sv-emoji{font-size:34px;text-align:center;margin-bottom:6px}
-    #save-modal h3{text-align:center;margin:0 0 6px}
-    #save-modal .sv-sub{text-align:center;color:#a1a1aa;font-size:13px;margin:0 auto 16px;max-width:340px;line-height:1.5}
-    #save-modal .sv-perks{list-style:none;margin:0 0 18px;padding:0;display:flex;flex-direction:column;gap:11px}
-    #save-modal .sv-perks li{display:flex;align-items:center;gap:11px;font-size:13px;color:#cdd8e6}
-    #save-modal .sv-perks li .material-icons{font-size:19px;color:#7c8cf8;flex:none}
-    #save-modal .sv-perks li em{color:#8b8ba7;font-style:normal;font-size:11px;background:rgba(255,255,255,.06);padding:1px 7px;border-radius:999px;margin-left:4px}
-    #save-modal .sv-actions{display:flex;align-items:center;justify-content:center;gap:14px}
-    #save-modal .sv-go{background:linear-gradient(135deg,#4d8cf3,#7c3aed);color:#fff;text-decoration:none;border:0;cursor:pointer;font-family:inherit;border-radius:10px;padding:10px 20px;font-weight:600;font-size:13.5px}
+    /* Darker backdrop so the card really pops (the shared one is faint). */
+    #save-modal{background:rgba(4,6,18,.68);backdrop-filter:blur(5px)}
+    /* The save card gets its own solid, premium styling (the shared .u-modal bg is
+       scoped to #usage-modal, which is why this dialog looked transparent). */
+    #save-modal .u-modal{position:relative;overflow:hidden;width:430px;max-width:calc(100vw - 32px);
+      background:radial-gradient(135% 90% at 50% -10%, #1d2452 0%, #141834 46%, #0c0f24 100%);
+      border:1px solid rgba(124,140,248,.30);border-radius:20px;padding:30px 28px 22px;
+      box-shadow:0 34px 90px rgba(0,0,0,.62), inset 0 1px 0 rgba(255,255,255,.06)}
+    #save-modal .u-modal::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;z-index:0;background:linear-gradient(90deg,#4d8cf3,#7c3aed,#f59e0b)}
+    #save-modal .u-modal::after{content:"";position:absolute;top:0;left:50%;width:300px;height:190px;transform:translateX(-50%);z-index:0;pointer-events:none;background:radial-gradient(closest-side, rgba(124,58,237,.24), transparent 72%)}
+    #save-modal .u-modal>*{position:relative;z-index:1}
+    #save-modal .sv-emoji{width:58px;height:58px;margin:2px auto 14px;border-radius:17px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#4d8cf3,#7c3aed);box-shadow:0 10px 30px rgba(124,58,237,.45)}
+    #save-modal .sv-emoji .material-icons{font-size:29px;color:#fff}
+    #save-modal h3{text-align:center;margin:0 0 7px;font-size:21px;letter-spacing:-.01em;color:#f4f6fb}
+    #save-modal .sv-sub{text-align:center;color:#a9b2c9;font-size:13px;margin:0 auto 18px;max-width:330px;line-height:1.55}
+    #save-modal .sv-perks{list-style:none;margin:0 0 20px;padding:0;display:flex;flex-direction:column;gap:9px}
+    #save-modal .sv-perks li{display:flex;align-items:center;gap:12px;font-size:13px;color:#dbe2f0;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:11px 13px}
+    #save-modal .sv-perks li .material-icons{font-size:18px;color:#a9bcff;background:rgba(124,140,248,.16);border-radius:9px;padding:7px;flex:none}
+    #save-modal .sv-perks li em{color:#e0b661;font-style:normal;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:rgba(245,158,11,.15);padding:2px 7px;border-radius:999px;margin-left:auto}
+    #save-modal .sv-actions{display:flex;flex-direction:column;align-items:center;gap:10px}
+    #save-modal .sv-go{width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,#4d8cf3,#7c3aed);color:#fff;border:0;cursor:pointer;font-family:inherit;border-radius:12px;padding:12px 20px;font-weight:700;font-size:14px;box-shadow:0 10px 28px rgba(77,140,243,.42)}
     #save-modal .sv-go:hover{filter:brightness(1.08)}
-    #save-modal .sv-go:disabled{opacity:.6;cursor:default}
-    #save-modal .sv-later{background:none;border:0;color:#8b8ba7;cursor:pointer;font-size:13px}
+    #save-modal .sv-go:disabled{opacity:.65;cursor:default;box-shadow:none}
+    #save-modal .sv-later{background:none;border:0;color:#8b93a9;cursor:pointer;font-size:12.5px;font-family:inherit}
     #save-modal .sv-later:hover{color:#cdd8e6}
     #save-modal .sv-status{text-align:center;font-size:12px;color:#cdd8e6;margin:14px 0 0;line-height:1.55}
     #save-modal .sv-status a{color:#7cc4ff}
     #save-modal .sv-foot{text-align:center;color:#6b7280;font-size:11.5px;margin:16px 0 0}
-    #save-modal .um-close{position:absolute;top:12px;right:14px}
+    #save-modal .um-close{position:absolute;top:14px;right:15px;z-index:2;background:none;border:0;cursor:pointer;color:#8b93a9;padding:2px;line-height:1}
+    #save-modal .um-close:hover{color:#fff}
   </style>
   <div class="modal-backdrop" id="save-modal">
-    <div class="u-modal" role="dialog" aria-modal="true" style="width:440px;position:relative">
+    <div class="u-modal" role="dialog" aria-modal="true">
       <button class="um-close" type="button" id="save-x" aria-label="Close"><span class="material-icons">close</span></button>
-      <div class="sv-emoji">💾</div>
+      <div class="sv-emoji"><span class="material-icons">cloud_done</span></div>
       <h3>Save your workspace</h3>
       <p class="sv-sub" id="sv-sub">Sign in to keep your setup and pick up where you left off — on any device.</p>
       <ul class="sv-perks">
