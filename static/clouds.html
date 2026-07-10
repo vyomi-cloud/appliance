@@ -1560,7 +1560,7 @@
       <ul class="sv-perks">
         <li><span class="material-icons">cable</span>A permanent relay URL — it stops changing each session</li>
         <li><span class="material-icons">timer_off</span>No 30-minute idle timeout on your tunnel</li>
-        <li><span class="material-icons">devices</span>Your spaces &amp; resources, on any device <em>soon</em></li>
+        <li><span class="material-icons">devices</span>Your spaces, synced across every device</li>
       </ul>
       <div class="sv-actions">
         <button class="sv-go" id="sv-go" type="button">Activate appliance →</button>
@@ -2041,15 +2041,19 @@
     }
 
     // ── Sign-in-to-save prompt (Nano only): chip + one-time modal ─────
-    var _saveLicActive = false, _licChecked = false, _lastSpaceCount = 0;
+    var _saveLicActive = false, _licChecked = false, _lastSpaceCount = 0, _wsPulled = false;
     function _saveIsNano(){ return !!document.getElementById('nano-foot'); }
     function _swReady(){ return !!(navigator.serviceWorker && navigator.serviceWorker.controller); }
     // Only trust /api/license/status once the Nano SW controls the page — before
     // that the fetch hits the PORTAL's endpoint (logged-out → active:false), which
-    // would wrongly show the prompt to a signed-in user.
+    // would wrongly show the prompt to a signed-in user. When signed in, pull the
+    // synced workspace once (merges spaces saved on another device).
     function refreshSaveLic(){
       if(!_swReady()) return Promise.resolve();
-      return fetch('/api/license/status').then(function(r){ return r.json(); }).then(function(d){ _saveLicActive = !!(d && d.active); _licChecked = true; updateSaveChip(); }).catch(function(){});
+      return fetch('/api/license/status').then(function(r){ return r.json(); }).then(function(d){
+        _saveLicActive = !!(d && d.active); _licChecked = true; updateSaveChip();
+        if(_saveLicActive && !_wsPulled){ _wsPulled = true; fetch('/api/nano/workspace/pull', { method:'POST' }).then(function(){ if(window.loadSpaces) loadSpaces(); }).catch(function(){}); }
+      }).catch(function(){});
     }
     function saveNudged(){ try{ return localStorage.getItem('nano_save_prompted') === '1'; }catch(_){ return false; } }
     function updateSaveChip(){
@@ -2093,7 +2097,16 @@
             fetch('/api/auth/poll-activation', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })
               .then(function(r){ return r.json(); })
               .then(function(pd){
-                if(pd && pd.status === 'approved'){ clearInterval(_svPoll); if(st) st.textContent = '✓ Activated — your workspace is saved.'; go.textContent = '✓ Activated'; _saveLicActive = true; _licChecked = true; updateSaveChip(); setTimeout(function(){ closeSaveModal(false); }, 1500); }
+                if(pd && pd.status === 'approved'){
+                  clearInterval(_svPoll); go.textContent = '✓ Activated'; _saveLicActive = true; _licChecked = true; updateSaveChip();
+                  if(st) st.textContent = '✓ Activated — syncing your workspace…';
+                  // Merge any spaces saved on another device, then save the union.
+                  fetch('/api/nano/workspace/pull', { method:'POST' })
+                    .then(function(){ return fetch('/api/nano/workspace/push', { method:'POST' }); })
+                    .then(function(){ if(window.loadSpaces) loadSpaces(); })
+                    .catch(function(){})
+                    .then(function(){ if(st) st.textContent = '✓ Activated — your workspace is saved.'; setTimeout(function(){ closeSaveModal(false); }, 1400); });
+                }
                 else if(pd && pd.status === 'expired'){ clearInterval(_svPoll); if(st) st.textContent = 'Sign-in expired — please try again.'; go.disabled = false; go.textContent = 'Activate appliance →'; }
               }).catch(function(){});
           }, interval);

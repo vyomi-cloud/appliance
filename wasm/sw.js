@@ -220,6 +220,38 @@ function _req(req) { return new Promise((res, rej) => { req.onsuccess = () => re
 async function spacesAll() { const db = await idb(); return await _req(db.transaction("spaces").objectStore("spaces").getAll()); }
 async function spacePut(s) { const db = await idb(); return await _req(db.transaction("spaces", "readwrite").objectStore("spaces").put(s)); }
 async function spaceDel(id) { const db = await idb(); return await _req(db.transaction("spaces", "readwrite").objectStore("spaces").delete(id)); }
+// ── Nano workspace sync (Step 2): persist the `spaces` store to the portal,
+//    keyed by the signed-in user (license sub), so it follows the account.
+//    Auth = the license JWT from meta (Bearer). No-ops when signed out.
+async function nanoWsPush() {
+  const jwt = await metaGet("license_jwt");
+  if (!jwt) return { ok: false, reason: "not signed in" };
+  const spaces = await spacesAll();
+  try {
+    const r = await fetch(self.location.origin + "/api/nano/workspace", {
+      method: "PUT", headers: { "content-type": "application/json", "authorization": "Bearer " + jwt },
+      body: JSON.stringify({ blob: JSON.stringify({ v: 1, spaces: spaces }) }),
+    });
+    return { ok: r.ok, pushed: spaces.length };
+  } catch (e) { return { ok: false, reason: String(e) }; }
+}
+async function nanoWsPull() {
+  const jwt = await metaGet("license_jwt");
+  if (!jwt) return { ok: false, reason: "not signed in" };
+  try {
+    const r = await fetch(self.location.origin + "/api/nano/workspace", { headers: { "authorization": "Bearer " + jwt } });
+    if (!r.ok) return { ok: false, reason: "http " + r.status };
+    const d = await r.json();
+    if (!d || !d.blob) return { ok: true, merged: 0 };
+    let parsed = {}; try { parsed = JSON.parse(d.blob); } catch (_) {}
+    const remote = (parsed && parsed.spaces) || [];
+    const local = await spacesAll();
+    const have = new Set(local.map((s) => s.space_id));
+    let merged = 0;
+    for (const s of remote) if (s && s.space_id && !have.has(s.space_id)) { await spacePut(s); merged++; }
+    return { ok: true, merged: merged };
+  } catch (e) { return { ok: false, reason: String(e) }; }
+}
 async function metaGet(k) { const db = await idb(); const r = await _req(db.transaction("meta").objectStore("meta").get(k)); return r && r.v; }
 async function metaPut(k, v) { const db = await idb(); return await _req(db.transaction("meta", "readwrite").objectStore("meta").put({ k, v })); }
 
@@ -646,6 +678,10 @@ self.addEventListener("fetch", (event) => {
         return json({ status: "pending" });  // authorization_pending / slow_down → keep polling
       }
 
+      // Nano workspace sync — pull (merge remote spaces) / push (upload local).
+      if (apiPath === "/api/nano/workspace/pull" && method === "POST") return json(await nanoWsPull());
+      if (apiPath === "/api/nano/workspace/push" && method === "POST") return json(await nanoWsPush());
+
       // Create a space → persist it, make it active, return it.
       if (apiPath === "/api/spaces" && method === "POST") {
         let body = {}; try { const t = await event.request.text(); body = t ? JSON.parse(t) : {}; } catch (_) {}
@@ -655,6 +691,7 @@ self.addEventListener("fetch", (event) => {
         const s = mkSpace(provider, (body.name || "").trim(), (body.region || "").trim());
         try { await spacePut(s); await metaPut("active", s.space_id); }
         catch (e) { return json({ ok: false, detail: { reason: "could not persist space: " + e } }, 500); }
+        nanoWsPush();   // fire-and-forget: keep the synced workspace current (no-op if signed out)
         return json({ ok: true, space: s }, 201);
       }
       // Switch active space (best-effort; console gate is provider-scoped).
@@ -668,6 +705,7 @@ self.addEventListener("fetch", (event) => {
       const dm = apiPath.match(/^\/api\/spaces\/([^/]+)$/);
       if (dm && method === "DELETE") {
         try { await spaceDel(decodeURIComponent(dm[1])); } catch (_) {}
+        nanoWsPush();   // keep the synced workspace current
         return json({ ok: true });
       }
       // S3 object upload is multipart — read the file body here (not as JSON).
