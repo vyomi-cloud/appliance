@@ -2162,6 +2162,21 @@
         return "nano-fp-" + Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 24);
       } catch (_) { return null; }
     }
+    // Country for the install globe, read from Cloudflare's edge (same-origin
+    // /cdn-cgi/trace → `loc=XX`). Accurate CF geo without the origin needing the
+    // CF-IPCountry header. Best-effort: short timeout, returns "" on any failure
+    // (local dev / non-CF origin). Not under /api/, so the base-path fetch shim
+    // and the Nano SW leave it alone.
+    async function nanoEdgeCountry() {
+      try {
+        const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 2500);
+        const r = await fetch("/cdn-cgi/trace", { signal: ac.signal, cache: "no-store" });
+        clearTimeout(t);
+        if (!r || !r.ok) return "";
+        const m = (await r.text()).match(/(?:^|\n)loc=([A-Z]{2})(?:\n|$)/);
+        return m ? m[1] : "";
+      } catch (_) { return ""; }
+    }
     // Fire once per browser (localStorage guard); the portal dedupes across
     // browsers by the fingerprint. Best-effort — never blocks the page.
     (function () {
@@ -2174,10 +2189,12 @@
           if (!document.getElementById("nano-foot")) return;
           if (localStorage.getItem("nano_install_recorded") === "1") return;
           const fp = await nanoDeviceFp(); if (!fp) return;
+          const cc = await nanoEdgeCountry();   // Cloudflare edge geo (best-effort)
           const r = await fetch("/api/install/register", {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ install_id: fp, channel: "nano", state: "DOWNLOADED",
-              host_os: (navigator.platform || "").slice(0, 32), webdriver: !!navigator.webdriver }),
+              host_os: (navigator.platform || "").slice(0, 32), webdriver: !!navigator.webdriver,
+              cc: cc || undefined }),
           });
           // Only latch the guard on success — an early (pre-SW-control) load can
           // 404, and we want the controlled reload to still record.
