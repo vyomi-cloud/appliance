@@ -31,6 +31,7 @@ CORES = [
     "iam_store.py", "iam_core.py",                  # IAM
     "messaging_store.py", "sqs_core.py", "sns_core.py",  # SQS + SNS (eventing)
     "rds_data_core.py",                             # RDS Data API (HTTP SQL over the relay)
+    "gcp_storage_core.py",                          # GCP: GCS JSON API (native google-cloud-storage wire)
     "aws_wire_router.py",                            # native-wire front door (relay/bridge)
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
 ]

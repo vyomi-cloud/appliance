@@ -51,6 +51,7 @@ from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
 from core import sns_core as sns
 from core import rds_data_core as rds_data
+from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
 
 # SigV4 credential scope: "Credential=AKID/20230626/us-east-1/<service>/aws4_request"
 _CRED_RE = re.compile(r"Credential=[^/]+/[^/]+/[^/]+/([^/,]+)/aws4_request")
@@ -112,9 +113,14 @@ class AwsWireRouter:
         self.rds = sql_store if sql_store is not None else InMemorySqlStore()
         self.iam = InMemoryIamStore()
         self.msg = InMemoryMessagingStore()   # SHARED by sqs + sns (fan-out)
+        self.gcs = InMemoryObjectStore()      # GCP object storage (own namespace)
 
     # ── service detection ──────────────────────────────────────────────
     def service_of(self, method, path, lheaders, body):
+        # GCP GCS is unambiguous by path (JSON API), and carries no SigV4 — route
+        # it first so it never falls through to the S3 default.
+        if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1")):
+            return "gcs"
         target = lheaders.get("x-amz-target", "") or ""
         if target:
             for prefix, svc in _TARGET_PREFIX.items():
@@ -199,6 +205,13 @@ class AwsWireRouter:
             r = s3.dispatch(self.s3, method, path, query or {}, headers or {}, bytes(body))
             return {"status": r.status, "headers": dict(r.headers or {}),
                     "body": r.body or b""}
+
+        if svc == "gcs":   # GCP GCS JSON API — native google-cloud-storage wire
+            r = gcs.dispatch(self.gcs, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc in _JSON_CT:
             target = lheaders.get("x-amz-target", "") or ""

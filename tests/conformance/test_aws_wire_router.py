@@ -148,8 +148,26 @@ def run() -> int:
                         {"Content-Type": "application/x-www-form-urlencoded"}, body.encode())
     _check("unsigned query routes to sns by Action", "<ListTopicsResult>" in _body(unsigned))
 
-    print("\nRESULT: PASS — AwsWireRouter routes all 7 services to the proven cores "
-          "(native SDK wire) on this substrate.")
+    # ── GCP GCS: native JSON-API wire, routed by /storage/v1 path (no SigV4) ──
+    import json as _json
+    cb = R.handle("POST", "/storage/v1/b", {"project": "p"},
+                  {"content-type": "application/json"}, _json.dumps({"name": "gbucket"}).encode())
+    _check("gcs create bucket 200", cb["status"] == 200 and
+           _json.loads(_body(cb))["kind"] == "storage#bucket")
+    gput = R.handle("POST", "/upload/storage/v1/b/gbucket/o",
+                    {"uploadType": "media", "name": "hi.txt"},
+                    {"content-type": "text/plain"}, b"gcs-bytes")
+    _check("gcs upload object 200", gput["status"] == 200)
+    gdl = R.handle("GET", "/storage/v1/b/gbucket/o/hi.txt", {"alt": "media"}, {}, b"")
+    _check("gcs download round-trips body", gdl["body"] == b"gcs-bytes")
+    glist = R.handle("GET", "/storage/v1/b/gbucket/o", {}, {}, b"")
+    _check("gcs list shows the object", "hi.txt" in _body(glist))
+    # isolation: GCS and S3 are separate namespaces (a bucket in one is not in the other)
+    s3miss = R.handle("GET", "/gbucket", {}, {"Authorization": _sig("s3")}, b"")
+    _check("gcs bucket not visible to s3", s3miss["status"] in (403, 404))
+
+    print("\nRESULT: PASS — AwsWireRouter routes all 7 AWS services + GCP GCS to the "
+          "proven cores (native SDK wire) on this substrate.")
     return 0
 
 
