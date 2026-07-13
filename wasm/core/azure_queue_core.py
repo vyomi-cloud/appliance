@@ -82,6 +82,9 @@ class AzureQueueStore:
     def messages(self, name: str) -> list:
         return self.queues[name]["messages"]
 
+    def persist(self) -> None:
+        """Write-through hook (no-op in-memory; a backed subclass overrides it)."""
+
     # approximate count = messages whose time_next_visible is in the past
     # (Azure counts every message not currently past expiration). We report
     # all live (non-expired) messages, matching x-ms-approximate-messages-count.
@@ -123,6 +126,7 @@ def _reap_expired(store: AzureQueueStore, name: str) -> None:
     now = _now()
     msgs = store.queues[name]["messages"]
     store.queues[name]["messages"] = [m for m in msgs if m.expiration_time > now]
+    store.persist()
 
 
 # ── dispatch ──────────────────────────────────────────────────────────────
@@ -237,6 +241,7 @@ def _message_op(store: AzureQueueStore, method: str, queue: str, tail: list,
         if not tail:
             # clear-messages: DELETE /{queue}/messages
             store.queues[queue]["messages"] = []
+            store.persist()
             return Response(status=204, body=b"", media_type=None)
         message_id = tail[0]
         pop_receipt = query.get("popreceipt", "")
@@ -249,6 +254,7 @@ def _message_op(store: AzureQueueStore, method: str, queue: str, tail: list,
                         "The specified pop receipt did not match the "
                         "pop receipt for a dequeued message.")
         msgs.remove(target)
+        store.persist()
         return Response(status=204, body=b"", media_type=None)
 
     # POST /{queue}/messages  → put message
@@ -273,6 +279,7 @@ def _message_op(store: AzureQueueStore, method: str, queue: str, tail: list,
             dequeue_count=0,
         )
         store.queues[queue]["messages"].append(msg)
+        store.persist()
         row = (
             "<QueueMessage>"
             f"<MessageId>{_esc(msg.message_id)}</MessageId>"
@@ -320,6 +327,7 @@ def _message_op(store: AzureQueueStore, method: str, queue: str, tail: list,
                 m.dequeue_count += 1
                 m.pop_receipt = base64.b64encode(uuid.uuid4().bytes).decode()
                 m.time_next_visible = now + timedelta(seconds=vis)
+                store.persist()
                 rows.append(
                     "<QueueMessage>"
                     f"<MessageId>{_esc(m.message_id)}</MessageId>"

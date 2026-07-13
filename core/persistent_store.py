@@ -30,6 +30,9 @@ from core.messaging_store import InMemoryMessagingStore
 from core.iam_store import InMemoryIamStore
 from core.azure_blob_core import AzureBlobStore
 from core.gcp_firestore_core import FirestoreStore
+from core.azure_cosmos_core import CosmosStore
+from core.azure_queue_core import AzureQueueStore, _Message
+from datetime import datetime
 
 
 # ── bytes-aware JSON codec ────────────────────────────────────────────────
@@ -201,3 +204,59 @@ class PersistentFirestoreStore(_PersistentMixin, FirestoreStore):
     def delete(self, rel: str) -> None:
         super().delete(rel)
         self._save()
+
+
+class PersistentCosmosStore(_PersistentMixin, CosmosStore):
+    """Durable Cosmos (v2.5.0): dbs/colls/docs persisted; the core calls persist()
+    after each mutation (added in azure_cosmos_core)."""
+    _STATE_ATTRS = ("dbs", "colls", "docs")
+
+    def __init__(self, backend: SqliteStateBackend, store_id: str = "cosmos"):
+        CosmosStore.__init__(self)
+        self._pinit(backend, store_id)
+
+
+class PersistentAzureQueueStore(AzureQueueStore):
+    """Durable Azure Queue (v2.5.0): messages are _Message objects (with datetime
+    fields), so we can't use the generic mixin — serialize each message to a dict
+    (datetimes → ISO) on persist(), reconstruct on load. The core calls persist()
+    after every mutation (added in azure_queue_core)."""
+
+    def __init__(self, backend: SqliteStateBackend, store_id: str = "azqueue"):
+        super().__init__()
+        self._backend, self._sid = backend, store_id
+        self._load()
+
+    @staticmethod
+    def _m2d(m):
+        return {"message_id": m.message_id, "text": m.text,
+                "insertion_time": m.insertion_time.isoformat(),
+                "expiration_time": m.expiration_time.isoformat(),
+                "time_next_visible": m.time_next_visible.isoformat(),
+                "pop_receipt": m.pop_receipt, "dequeue_count": m.dequeue_count}
+
+    @staticmethod
+    def _d2m(d):
+        return _Message(d["message_id"], d["text"],
+                        datetime.fromisoformat(d["insertion_time"]),
+                        datetime.fromisoformat(d["expiration_time"]),
+                        datetime.fromisoformat(d["time_next_visible"]),
+                        d["pop_receipt"], d["dequeue_count"])
+
+    def persist(self):
+        state = {name: {"metadata": q["metadata"], "messages": [self._m2d(m) for m in q["messages"]]}
+                 for name, q in self.queues.items()}
+        self._backend.save(self._sid, state)
+
+    def _load(self):
+        for name, q in (self._backend.load(self._sid) or {}).items():
+            self.queues[name] = {"metadata": q.get("metadata", {}),
+                                 "messages": [self._d2m(d) for d in q.get("messages", [])]}
+
+    def create_queue(self, name, metadata=None):
+        super().create_queue(name, metadata)
+        self.persist()
+
+    def delete_queue(self, name):
+        super().delete_queue(name)
+        self.persist()

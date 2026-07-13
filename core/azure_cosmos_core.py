@@ -84,6 +84,9 @@ class CosmosStore:
         self.colls: dict[str, dict[str, dict]] = {}
         self.docs: dict[str, dict[str, dict[str, dict]]] = {}
 
+    def persist(self) -> None:
+        """Write-through hook (no-op in-memory; a backed subclass overrides it)."""
+
 
 # ── resource views ────────────────────────────────────────────────────────
 def _db_view(db_id: str, entry: dict) -> dict:
@@ -251,6 +254,7 @@ def dispatch(store: CosmosStore, method: str, path: str,
             store.dbs[db_id] = entry
             store.colls[db_id] = {}
             store.docs[db_id] = {}
+            store.persist()
             return _json(201, _db_view(db_id, entry),
                          {"etag": entry["_etag"]})
         if method == "GET":                          # list databases
@@ -271,6 +275,7 @@ def dispatch(store: CosmosStore, method: str, path: str,
             store.dbs.pop(db_id, None)
             store.colls.pop(db_id, None)
             store.docs.pop(db_id, None)
+            store.persist()
             return Response(status=204, body=b"", media_type=None)
         return _err(400, "BadRequest", f"Unsupported method {method} on database")
 
@@ -301,6 +306,7 @@ def dispatch(store: CosmosStore, method: str, path: str,
                 entry["indexingPolicy"] = b["indexingPolicy"]
             colls[coll_id] = entry
             store.docs[db_id][coll_id] = {}
+            store.persist()
             return _json(201, _coll_view(db_entry, coll_id, entry),
                          {"etag": entry["_etag"]})
         if method == "GET":                          # list collections
@@ -321,6 +327,7 @@ def dispatch(store: CosmosStore, method: str, path: str,
         if method == "DELETE":
             colls.pop(coll_id, None)
             store.docs[db_id].pop(coll_id, None)
+            store.persist()
             return Response(status=204, body=b"", media_type=None)
         return _err(400, "BadRequest", f"Unsupported method {method} on collection")
 
@@ -363,6 +370,7 @@ def dispatch(store: CosmosStore, method: str, path: str,
             doc["_ts"] = _now_ts()
             doc["_attachments"] = "attachments/"
             docs[doc_id] = doc
+            store.persist()
             return _json(200 if (doc_id in docs and is_upsert) else 201, doc,
                          {"etag": doc["_etag"]})
         if method == "GET":                           # list documents
@@ -394,10 +402,12 @@ def dispatch(store: CosmosStore, method: str, path: str,
         doc["_ts"] = _now_ts()
         doc["_attachments"] = "attachments/"
         docs[doc_id] = doc
+        store.persist()
         return _json(200, doc, {"etag": doc["_etag"]})
     if method == "DELETE":
         if doc_id not in docs:
             return _err(404, "NotFound", f"Document '{doc_id}' not found.")
         docs.pop(doc_id, None)
+        store.persist()
         return Response(status=204, body=b"", media_type=None)
     return _err(400, "BadRequest", f"Unsupported method {method} on document")
