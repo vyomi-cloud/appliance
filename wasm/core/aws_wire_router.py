@@ -93,6 +93,7 @@ from core import azure_keyvault_secrets_core as az_kvsec
 from core import azure_keyvault_keys_core as az_kvkeys
 from core import azure_queue_core as az_queue
 from core.azure_queue_core import AzureQueueStore
+from core import azure_servicebus_core as az_sb
 
 
 def _azure_service(path, lheaders, query):
@@ -209,6 +210,28 @@ class AwsWireRouter:
         self.az_kvsec = s.get("az_kvsec") or InMemoryKvStore()
         self.az_kvkeys = s.get("az_kvkeys") or InMemoryKeyStore()
         self.az_queue = s.get("az_queue") or AzureQueueStore()
+        self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
+
+    def _servicebus_service(self, method, path, lheaders):
+        """Azure Service Bus (topics) — the pub/sub-fan-out peer of SNS/Pub-Sub.
+        Distinct from Azure Storage (carries NO x-ms-* storage headers) and from
+        the ARM control plane (`subscriptions` is segment[1], not segment[0]).
+        Identified by: a subscription-scoped path, a Service Bus runtime marker
+        (BrokerProperties / atom+xml management), or a first segment that already
+        names a known topic (so send/receive on an existing topic routes cleanly)."""
+        if "x-ms-version" in lheaders or "x-ms-blob-type" in lheaders:
+            return False   # Azure Storage (Blob/Queue), not Service Bus
+        segs = [s for s in path.split("?", 1)[0].split("/") if s]
+        if len(segs) >= 3 and segs[1] == "subscriptions":
+            return True    # /{topic}/subscriptions/{sub}[...] — unambiguous
+        if "brokerproperties" in lheaders:
+            return True    # a Service Bus send/receive runtime request
+        ct = (lheaders.get("content-type") or "")
+        if "atom+xml" in ct:
+            return True    # Service Bus entity-management (create topic/subscription)
+        if segs and segs[0] in getattr(self.az_sb, "topics", {}):
+            return True    # send/get/delete on an already-created topic
+        return False
 
     # ── service detection ──────────────────────────────────────────────
     def service_of(self, method, path, lheaders, body, query=None):
@@ -220,6 +243,8 @@ class AwsWireRouter:
         az = _azure_service(path, lheaders, query)   # Azure data plane (x-ms-* / api-version)
         if az:
             return az
+        if self._servicebus_service(method, path, lheaders):
+            return "az-servicebus"
         target = lheaders.get("x-amz-target", "") or ""
         if target:
             for prefix, svc in _TARGET_PREFIX.items():
@@ -323,7 +348,7 @@ class AwsWireRouter:
             _az_core = {
                 "az-blob": (az_blob, self.az_blob), "az-cosmos": (az_cosmos, self.az_cosmos),
                 "az-kv-secrets": (az_kvsec, self.az_kvsec), "az-kv-keys": (az_kvkeys, self.az_kvkeys),
-                "az-queue": (az_queue, self.az_queue),
+                "az-queue": (az_queue, self.az_queue), "az-servicebus": (az_sb, self.az_sb),
             }[svc]
             mod, store = _az_core
             r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))

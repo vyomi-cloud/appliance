@@ -185,27 +185,39 @@ Running backends: **MinIO · fake-gcs-server · Azurite · Postgres · Vault · 
 ## 6. Prioritized gap backlog
 
 **P0 — unified-path regressions (close before promoting the switchover):**
-1. Wire **Azure Blob/Queue → Azurite** (needs the `azure_blob_core` **seam unification** onto the
-   shared `ObjectStore` seam).
-2. Wire **Secrets (×3) → Vault KV** (a `VaultBackedKvStore`, mirroring `VaultBackedKeyStore`).
-3. Restore **Firestore → emulator** and confirm **Pub/Sub** parity in the unified path (or accept
-   NATS-state as the backing and prove the SDK).
+1. ✅ **[CLOSED v2.5.0]** Azure Blob/Queue durable — `PersistentAzureBlobStore` +
+   `PersistentAzureQueueStore` (file-backed substrate) wired in `wire_ingress`; durable across a
+   fresh router. (Chose the persist-hook path over the full seam refactor — MinIO/Azurite
+   byte-backing is a further fidelity step.)
+2. ✅ **[CLOSED v2.5.0]** Secrets (×3) on **Vault KV v2** — `VaultBackedKvStore` wired for
+   `sec`/`gcp_sec`/`az_kvsec`.
+3. ✅ **[CLOSED v2.5.0]** Firestore + Pub/Sub — took the documented "accept the backing and prove
+   the SDK" branch: Firestore durable via `PersistentFirestoreStore`, Pub/Sub on
+   `NatsBackedMessagingStore`; **both proven durable in the anti-drift substrate matrix** and green
+   on their native-SDK conformance suites. (The emulators remain available behind the drifted
+   handlers; the unified path uses the proven persistent/NATS backing.)
 
 **P1 — backing-tech completeness:**
-4. **DynamoDB → DynamoDB-Local** (real NoSQL backend).
-5. **Azure Cosmos** real backend (Postgres-compat or a light emulator) — currently in-memory.
-6. **DynamoDB + Azure-Blob live switchover** through the ingress (the 2 sweep gaps).
+4. ✅ **[CLOSED v2.5.0]** DynamoDB durable via `PersistentNoSqlStore` (file-backed substrate).
+5. ✅ **[CLOSED v2.5.0]** Azure Cosmos durable via `PersistentCosmosStore` (file-backed substrate).
+6. **DynamoDB + Azure-Blob live switchover** through the ingress (the 2 sweep gaps) — remains open
+   (live-server tenant-gate + container-edge; tracked separately from the backing work).
 
 **P2 — operation-level depth (high-value missing ops):**
-7. S3 **multipart upload** + CopyObject; GCS **resumable upload**.
-8. Firestore/Cosmos **richer queries** (>,<,IN, ORDER BY); DynamoDB **transactions/GSI**.
-9. Rotation across KMS/Secrets (all clouds); SQS **FIFO/DLQ**; SNS **filter policies**.
-10. Azure KV keys **wrap/unwrap + sign/verify + EC/AES**.
+7. ✅ **[CLOSED v2.5.0 — CopyObject]** S3 **CopyObject** (COPY/REPLACE directive, XML result); S3
+   multipart + GCS resumable upload remain open (upload-session state — deferred).
+8. ✅ **[CLOSED v2.5.0]** Cosmos **richer queries** (`ORDER BY`, `IN`) + DynamoDB **transactions**
+   (TransactWriteItems/TransactGetItems, atomic + condition guards). Firestore richer queries + GSI
+   remain open.
+9. Rotation across KMS/Secrets (all clouds); SQS **FIFO/DLQ**; SNS **filter policies** — open.
+10. Azure KV keys **wrap/unwrap + sign/verify + EC/AES** — open.
 
 **P3 — cross-cloud symmetry:**
-11. Azure **pub/sub topic core** (Service Bus / Event Grid data plane).
-12. Azure **dedicated IAM/RBAC decision core** (vs generic ARM).
-13. **Azure SQL data plane** (Postgres-compat over the relay).
+11. ✅ **[CLOSED v2.5.0]** Azure **pub/sub topic core** — `azure_servicebus_core` (Service Bus REST
+    wire: topics + subscriptions + **real fan-out** + peek-lock/complete/abandon), the SNS/Pub-Sub
+    peer; wired into the router + Nano relay + anti-drift gate.
+12. Azure **dedicated IAM/RBAC decision core** (vs generic ARM) — open.
+13. **Azure SQL data plane** (Postgres-compat over the relay) — open.
 
 **P4 — new capability (no data plane anywhere):**
 14. Serverless runtime (Lambda/Functions/Function App).

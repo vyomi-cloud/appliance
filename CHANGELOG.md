@@ -4,6 +4,54 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] — 2026-07-13
+
+**Parity Close-out** — closes the cross-cloud parity gaps catalogued in
+`docs/PARITY-GAPS.md`: moves every data service off in-memory onto a real durable
+backend, adds high-value operation depth, and gives Azure the pub/sub-fan-out core
+it was missing so AWS = GCP = Azure on the symmetric surface. Same conformance
+contract; **Nano is untouched** (the new capabilities land in the shared cores, so
+Nano gains them too); the unified-ingress switchover stays opt-in / off by default.
+
+### Added
+- **Azure Service Bus (topics) core** (`core/azure_servicebus_core.py`) — the Azure
+  peer of AWS SNS + GCP Pub/Sub, closing the pub/sub-fan-out symmetry gap. Speaks the
+  native **Service Bus REST wire** (topics + subscriptions + **real fan-out**, receive-
+  and-delete, peek-lock → complete/abandon). Persists through the shared
+  `MessagingStore` seam; wired into `AwsWireRouter` (relay + ingress), the Nano relay
+  loaders, and the anti-drift substrate matrix. 24-check conformance suite, durable
+  across a fresh backed store. (AMQP transport stays out of scope — REST-wire only.)
+- **Operation depth** (added to the shared substrate-free cores → land in Nano *and*
+  Pro/Max at once):
+  - **S3 CopyObject** — server-side copy (`x-amz-copy-source`), COPY/REPLACE metadata
+    directive, URL-decoded + versionId source, `CopyObjectResult` XML.
+  - **DynamoDB transactions** — `TransactWriteItems` (atomic all-or-nothing:
+    Put/Delete/Update/ConditionCheck with `attribute_exists`/`attribute_not_exists`/`=`
+    guards → `TransactionCanceledException`, no partial writes) + `TransactGetItems`.
+  - **Cosmos richer queries** — `ORDER BY c.field [ASC|DESC]` (null/absent last, type-safe
+    on mixed docs) + `c.field IN (...)` membership.
+
+### Changed
+- **Every data service now runs on a real durable backend** (was in-memory), each behind
+  the identical store seam, all proven durable across a fresh instance in the anti-drift
+  substrate matrix:
+  - **Secrets** (AWS/GCP/Azure) → **Vault KV v2** (`VaultBackedKvStore`).
+  - **Azure Blob / Queue**, **DynamoDB**, **Firestore**, **Cosmos** → file-backed sqlite
+    substrate (`PersistentAzureBlobStore` / `PersistentAzureQueueStore` /
+    `PersistentNoSqlStore` / `PersistentFirestoreStore` / `PersistentCosmosStore`).
+  - **Azure Service Bus topics** → file-backed substrate (`PersistentMessagingStore`).
+- **Firestore + Pub/Sub parity confirmed** on the accepted persistent/NATS backing (the
+  documented "prove the SDK on the backing" branch of PARITY P0 #3) — both green on their
+  native-SDK conformance suites and durable in the substrate matrix. Emulators remain
+  available behind the drifted handlers.
+- **Anti-drift gate extended** — the substrate matrix now also proves **Firestore** and
+  **Azure Service Bus** durable on the backed substrate.
+
+### Notes
+- Closes PARITY backlog **P0 #1/#2/#3, P1 #4/#5, P2 #7(CopyObject)/#8, P3 #11**. Deferred
+  (documented): S3 multipart, KMS/Secrets rotation, SNS filter policies, Azure IAM decision
+  core, Azure SQL data plane, live-switchover sweep edges (P1 #6).
+
 ## [2.4.0] — 2026-07-13
 
 **Tri-Cloud, Every Tier** — one conformance contract, best substrate per tier.

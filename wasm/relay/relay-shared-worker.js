@@ -28,7 +28,7 @@ const CORES = [
   "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py",
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
-  "azure_keyvault_keys_core.py", "azure_queue_core.py",
+  "azure_keyvault_keys_core.py", "azure_queue_core.py", "azure_servicebus_core.py",
   "aws_wire_router.py",
 ];
 

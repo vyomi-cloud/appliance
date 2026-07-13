@@ -19,24 +19,28 @@ try:
     from core.persistent_store import (
         SqliteStateBackend, PersistentObjectStore, PersistentKvStore,
         PersistentNoSqlStore, PersistentKeyStore, PersistentMessagingStore,
-        PersistentIamStore)
+        PersistentIamStore, PersistentFirestoreStore)
     from core import gcp_storage_core as gcs
     from core import gcp_secretmanager_core as sec
     from core import gcp_kms_core as kms
     from core import gcp_pubsub_core as ps
     from core import gcp_iam_core as iam
     from core import dynamodb_core as ddb
+    from core import gcp_firestore_core as fs
+    from core import azure_servicebus_core as sb
 except ImportError:  # pragma: no cover - Pyodide flat layout
     from persistent_store import (  # type: ignore
         SqliteStateBackend, PersistentObjectStore, PersistentKvStore,
         PersistentNoSqlStore, PersistentKeyStore, PersistentMessagingStore,
-        PersistentIamStore)
+        PersistentIamStore, PersistentFirestoreStore)
     import gcp_storage_core as gcs  # type: ignore
     import gcp_secretmanager_core as sec  # type: ignore
     import gcp_kms_core as kms  # type: ignore
     import gcp_pubsub_core as ps  # type: ignore
     import gcp_iam_core as iam  # type: ignore
     import dynamodb_core as ddb  # type: ignore
+    import gcp_firestore_core as fs  # type: ignore
+    import azure_servicebus_core as sb  # type: ignore
 
 
 def _check(name, cond):
@@ -119,6 +123,27 @@ def run() -> int:
     gb = json.loads(gb.decode("utf-8")) if isinstance(gb, (bytes, bytearray)) else gb
     item = (gb or {}).get("Item", {})
     _check("nosql: item survives a fresh backed store", item.get("v", {}).get("N") == "42")
+
+    # ── FIRESTORE (documents) — Phase 4: durable on the accepted backing ──
+    fdb = "/v1/projects/demo/databases/(default)/documents"
+    a = PersistentFirestoreStore(be)
+    fs.dispatch(a, "POST", f"{fdb}/users", {"documentId": "alice"},
+                {"content-type": "application/json"},
+                json.dumps({"fields": {"age": {"integerValue": "30"}}}).encode())
+    b = PersistentFirestoreStore(be)   # fresh instance, same backend
+    doc = _j(fs.dispatch(b, "GET", f"{fdb}/users/alice", {}, {}, b""))
+    _check("firestore: document survives a fresh backed store",
+           doc.get("fields", {}).get("age", {}).get("integerValue") == "30")
+
+    # ── SERVICE BUS (Azure topics) — Phase 6: durable fan-out on the backing ──
+    a = PersistentMessagingStore(be, store_id="azsb")
+    sb.dispatch(a, "PUT", "/orders", {}, {}, b"")
+    sb.dispatch(a, "PUT", "/orders/subscriptions/billing", {}, {}, b"")
+    sb.dispatch(a, "POST", "/orders/messages", {}, {"content-type": "text/plain"}, b"sb-durable")
+    b = PersistentMessagingStore(be, store_id="azsb")
+    got = sb.dispatch(b, "DELETE", "/orders/subscriptions/billing/messages/head", {}, {}, b"")
+    _check("servicebus: topic message survives a fresh backed store",
+           got.status == 200 and got.body == b"sb-durable")
 
     print("\nSUBSTRATE MATRIX: ALL GREEN — shared cores are durable on the backed substrate")
     return 0
