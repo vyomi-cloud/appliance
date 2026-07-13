@@ -159,6 +159,16 @@ def _parse_multipart_related(body: bytes, content_type: str) -> tuple[dict, byte
 
 
 # ── dispatch ──────────────────────────────────────────────────────────────
+def _gcs_resumable(store: ObjectStore) -> dict:
+    """In-progress resumable-upload sessions kept on the store.
+    session_id -> {bucket, name, content_type, metadata}."""
+    m = getattr(store, "_gcs_resumable_sessions", None)
+    if m is None:
+        m = {}
+        store._gcs_resumable_sessions = m
+    return m
+
+
 def dispatch(store: ObjectStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> GcsResponse:
@@ -229,11 +239,49 @@ def dispatch(store: ObjectStore, method: str, path: str,
 
         # object collection: /b/{bucket}/o
         if len(segs) == 3:
+            # Resumable upload finalize: PUT to the session URI (?upload_id=...).
+            if is_upload and method == "PUT" and query.get("upload_id"):
+                sess = _gcs_resumable(store).get(query.get("upload_id"))
+                if not sess or sess["bucket"] != bucket:
+                    return _err(404, "notFound", "No such upload session.")
+                media = bytes(body or b"")
+                name = sess["name"]
+                content_type = sess.get("content_type") or headers.get("content-type") or "application/octet-stream"
+                custom = sess.get("metadata") or {}
+                gen = int(objs.get(name, {}).get("generation", "0")) + 1
+                entry = {
+                    "data": media, "size": len(media), "contentType": content_type,
+                    "timeCreated": objs.get(name, {}).get("timeCreated", _now()),
+                    "updated": _now(), "md5Hash": _md5_b64(media),
+                    "crc32c": _crc32c_b64(media), "etag": _etag(),
+                    "generation": gen, "metadata": custom,
+                }
+                objs[name] = entry
+                store.mirror_put(bucket, name, media, content_type, custom)
+                _gcs_resumable(store).pop(query.get("upload_id"), None)
+                return _json(200, _object_view(bucket, name, entry))
             if method == "POST" or is_upload:      # insert object
                 if not store.bucket_exists(bucket):
                     return _err(404, "notFound", "The specified bucket does not exist.")
                 ct = headers.get("content-type", "")
                 upload_type = query.get("uploadType", "media")
+                # Resumable upload initiate: register a session, return its URI in Location.
+                if upload_type == "resumable":
+                    try:
+                        meta = json.loads(body.decode("utf-8")) if body else {}
+                    except Exception:
+                        meta = {}
+                    name = meta.get("name") or query.get("name")
+                    if not name:
+                        return _err(400, "required", "Object name is required.")
+                    sid = uuid.uuid4().hex + uuid.uuid4().hex
+                    _gcs_resumable(store)[sid] = {
+                        "bucket": bucket, "name": name,
+                        "content_type": meta.get("contentType") or query.get("contentType"),
+                        "metadata": meta.get("metadata") or {}}
+                    location = f"/upload/storage/v1/b/{bucket}/o?uploadType=resumable&upload_id={sid}"
+                    return GcsResponse(status=200, body=b"", media_type=None,
+                                       headers={"Location": location, "X-GUploader-UploadID": sid})
                 if upload_type == "multipart" or ct.startswith("multipart/related"):
                     meta, media, media_ct = _parse_multipart_related(body, ct)
                     name = meta.get("name") or query.get("name")

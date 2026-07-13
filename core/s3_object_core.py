@@ -28,6 +28,11 @@ from core.object_store import ObjectStore
 S3_NS = "http://s3.amazonaws.com/doc/2006-03-01/"
 
 
+def _xml_escape(s: str) -> str:
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;"))
+
+
 @dataclass
 class S3Response:
     status: int = 200
@@ -444,6 +449,118 @@ def list_objects_v2(store: ObjectStore, bucket: str, query: dict) -> S3Response:
 # unmodified aws-cli / SDK speaks. Shared by the Nano relay/bridge (tab side)
 # and, on convergence, the appliance's routes/aws_s3.py. Path is the raw
 # request path, e.g. "/my-bucket/a/key.txt".
+# ── multipart upload ──────────────────────────────────────────────────────
+def _mpu(store: ObjectStore) -> dict:
+    """The in-progress multipart uploads, kept on the store (like the base object
+    map). upload_id -> {bucket, key, content_type, metadata, parts:{n:{etag,data}}}."""
+    m = getattr(store, "_multipart_uploads", None)
+    if m is None:
+        m = {}
+        store._multipart_uploads = m
+    return m
+
+
+def create_multipart_upload(store, bucket, key, headers) -> S3Response:
+    headers = {k.lower(): v for k, v in (headers or {}).items()}
+    if not store.bucket_exists(bucket):
+        return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    upload_id = uuid.uuid4().hex + uuid.uuid4().hex
+    _mpu(store)[upload_id] = {
+        "bucket": bucket, "key": key,
+        "content_type": headers.get("content-type", "application/octet-stream"),
+        "metadata": {h[11:]: v for h, v in headers.items() if h.startswith("x-amz-meta-")},
+        "storage_class": headers.get("x-amz-storage-class", "STANDARD"),
+        "parts": {},
+    }
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           f'<InitiateMultipartUploadResult xmlns="{S3_NS}">'
+           f'<Bucket>{bucket}</Bucket><Key>{_xml_escape(key)}</Key>'
+           f'<UploadId>{upload_id}</UploadId></InitiateMultipartUploadResult>')
+    return _xml_response(xml, status=200)
+
+
+def upload_part(store, bucket, key, query, body) -> S3Response:
+    upload_id = query.get("uploadId", "")
+    up = _mpu(store).get(upload_id)
+    if not up or up["bucket"] != bucket or up["key"] != key:
+        return _error_xml("NoSuchUpload", "The specified upload does not exist.", f"/{bucket}/{key}", 404)
+    try:
+        part_number = int(query.get("partNumber", "0"))
+    except ValueError:
+        part_number = 0
+    if part_number < 1 or part_number > 10000:
+        return _error_xml("InvalidArgument", "Part number must be 1..10000.", f"/{bucket}/{key}", 400)
+    data = bytes(body or b"")
+    etag = _etag(data)
+    up["parts"][part_number] = {"etag": etag, "data": data}
+    return _empty_response(200, {"ETag": etag})
+
+
+def list_parts(store, bucket, key, query) -> S3Response:
+    upload_id = query.get("uploadId", "")
+    up = _mpu(store).get(upload_id)
+    if not up:
+        return _error_xml("NoSuchUpload", "The specified upload does not exist.", f"/{bucket}/{key}", 404)
+    parts_xml = "".join(
+        f"<Part><PartNumber>{n}</PartNumber><ETag>{p['etag']}</ETag>"
+        f"<Size>{len(p['data'])}</Size></Part>"
+        for n, p in sorted(up["parts"].items()))
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           f'<ListPartsResult xmlns="{S3_NS}"><Bucket>{bucket}</Bucket>'
+           f'<Key>{_xml_escape(key)}</Key><UploadId>{upload_id}</UploadId>'
+           f'{parts_xml}</ListPartsResult>')
+    return _xml_response(xml, status=200)
+
+
+def abort_multipart_upload(store, bucket, key, query) -> S3Response:
+    upload_id = query.get("uploadId", "")
+    if _mpu(store).pop(upload_id, None) is None:
+        return _error_xml("NoSuchUpload", "The specified upload does not exist.", f"/{bucket}/{key}", 404)
+    return _empty_response(204)
+
+
+def _multipart_etag(parts: list) -> str:
+    """The canonical S3 multipart ETag: md5 of the concatenated binary md5s of each
+    part, hex, suffixed with `-{partcount}`."""
+    digests = b"".join(hashlib.md5(p["data"]).digest() for p in parts)
+    return f'"{hashlib.md5(digests).hexdigest()}-{len(parts)}"'
+
+
+def complete_multipart_upload(store, bucket, key, query, body) -> S3Response:
+    upload_id = query.get("uploadId", "")
+    up = _mpu(store).get(upload_id)
+    if not up or up["bucket"] != bucket or up["key"] != key:
+        return _error_xml("NoSuchUpload", "The specified upload does not exist.", f"/{bucket}/{key}", 404)
+    # Honor the caller's part list + order when supplied; else all stored parts.
+    requested = [int(n) for n in re.findall(r"<PartNumber>\s*(\d+)\s*</PartNumber>", body.decode("utf-8", "ignore"))] \
+        if body else []
+    order = requested or sorted(up["parts"])
+    if not order:
+        return _error_xml("InvalidRequest", "You must specify at least one part.", f"/{bucket}/{key}", 400)
+    parts = []
+    for n in order:
+        p = up["parts"].get(n)
+        if p is None:
+            return _error_xml("InvalidPart", f"Part {n} was not uploaded.", f"/{bucket}/{key}", 400)
+        parts.append(p)
+    data = b"".join(p["data"] for p in parts)
+    etag = _multipart_etag(parts)
+    vstatus = store.versioning_status(bucket)
+    vid = _new_version_id(store, bucket) if vstatus == "Enabled" else "null"
+    version = _make_version_record(data=data, content_type=up["content_type"],
+                                   storage_class=up["storage_class"], metadata=up["metadata"],
+                                   version_id=vid, delete_marker=False, etag=etag)
+    replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
+    _write_object_version(store, bucket, key, version, replace_version_id=replace)
+    _mpu(store).pop(upload_id, None)
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           f'<CompleteMultipartUploadResult xmlns="{S3_NS}">'
+           f'<Location>/{bucket}/{_xml_escape(key)}</Location>'
+           f'<Bucket>{bucket}</Bucket><Key>{_xml_escape(key)}</Key>'
+           f'<ETag>{etag}</ETag></CompleteMultipartUploadResult>')
+    return _xml_response(xml, status=200)
+
+
 def dispatch(store: ObjectStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> S3Response:
@@ -469,14 +586,26 @@ def dispatch(store: ObjectStore, method: str, path: str,
             return _empty_response(204)
         return _error_xml("MethodNotAllowed", method, f"/{bucket}", 405)
     # object-level
+    if method == "POST":
+        if "uploads" in query:                          # ?uploads → initiate
+            return create_multipart_upload(store, bucket, key, headers)
+        if query.get("uploadId"):                        # ?uploadId → complete
+            return complete_multipart_upload(store, bucket, key, query, body)
+        return _error_xml("MethodNotAllowed", method, f"/{bucket}/{key}", 405)
     if method == "PUT":
+        if query.get("uploadId") and query.get("partNumber"):
+            return upload_part(store, bucket, key, query, body)
         if any(h.lower() == "x-amz-copy-source" for h in (headers or {})):
             return copy_object(store, bucket, key, headers)
         return put_object(store, bucket, key, body, headers)
     if method == "GET":
+        if query.get("uploadId"):
+            return list_parts(store, bucket, key, query)
         return get_object(store, bucket, key, query, headers)
     if method == "HEAD":
         return head_object(store, bucket, key, query, headers)
     if method == "DELETE":
+        if query.get("uploadId"):
+            return abort_multipart_upload(store, bucket, key, query)
         return delete_object(store, bucket, key, query, headers)
     return _error_xml("MethodNotAllowed", method, f"/{bucket}/{key}", 405)
