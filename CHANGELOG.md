@@ -4,6 +4,47 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] — 2026-07-13
+
+**Tri-Cloud, Every Tier** — one conformance contract, best substrate per tier.
+Brings the GCP + Azure service parity Nano gained (in-browser WASM cores) up into
+Pro/Max on **real backends**, unifying every tier on a single conformance suite and
+native-wire front door, and killing the GCP/Azure implementation drift. **Nano is
+untouched**; everything here is Pro/Max-only and the switchover is **opt-in** (off
+by default), so existing behavior is unchanged.
+
+### Added
+- **Anti-drift conformance gate** (`core/persistent_store.py` +
+  `test_substrate_matrix.py`) — a file-backed (sqlite, bytes-aware) implementation
+  of every store seam. The shared cores are proven **durable across a fresh instance
+  load** on a non-in-memory substrate (incl. the KMS decrypt case), on host **and**
+  real Pyodide/WASM. This is what keeps Nano and Pro/Max from diverging.
+- **Real-backend store implementations** (Pro/Max only, never vendored to WASM),
+  each behind the identical seam the in-WASM stores use:
+  - `MinioBackedObjectStore` — S3 + GCS object cores on **MinIO** (native
+    `google-cloud-storage` SDK proven end-to-end; bytes are real MinIO objects).
+  - `PostgresBackedSqlStore` — RDS + Cloud SQL data plane on **real Postgres**
+    (RETURNING/SERIAL/ILIKE, fresh-store durable).
+  - `VaultBackedKeyStore` / `VaultKmsEngine` — KMS + Cloud KMS + KV-keys on **Vault
+    Transit** (real crypto; closes the Nano KV-keys real-crypto straggler).
+  - `NatsBackedMessagingStore` — SQS/SNS + Pub/Sub on **NATS JetStream**.
+- **Injectable `AwsWireRouter`** — Nano/relay pass nothing → in-WASM defaults
+  (unchanged); Pro/Max injects the backed stores. The SAME router serves the Nano
+  relay and the appliance.
+- **Unified wire ingress** (`core/wire_ingress.py`) — `build_backed_router()` wires
+  one router to the real backends; `mount(app)` exposes it as a FastAPI catch-all.
+- **IAM decision unification** — AWS `SimulatePrincipalPolicy` + GCP
+  `testIamPermissions` make correct policy decisions on one durable `IamStore` seam.
+
+### Changed
+- **Opt-in live switchover** (`VYOMI_UNIFIED_INGRESS`, default **OFF**): when set,
+  the bespoke S3 native-wire catch-all + Azure `azure_dataplane`/ARM are retired and
+  native cloud SDKs are served by the unified ingress on real backends. The console
+  `/api/*` REST is untouched. Validated live on the appliance: AWS S3 + KMS→Vault and
+  GCP Storage + KMS→Vault serve through the one ingress. (DynamoDB + Azure Blob live
+  switchover, GCP native-wire gating, and data-continuity migration are the ongoing
+  2.4.x work behind the flag.)
+
 ## [2.3.2] — 2026-07-11
 
 Nano growth & retention release — a way to **save your work across devices**, a
