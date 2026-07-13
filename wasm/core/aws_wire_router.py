@@ -182,31 +182,33 @@ class AwsWireRouter:
     """Holds one in-tab store per service (the single source of truth for the
     relay endpoint) and routes native AWS-wire requests to the proven cores."""
 
-    def __init__(self, sql_store=None):
-        self.s3 = InMemoryObjectStore()
-        self.ddb = InMemoryNoSqlStore()
-        self.kms = InMemoryKeyStore()
-        self.sec = InMemoryKvStore()
-        # RDS data-plane engine is injectable: sqlite3 by default (host + Pyodide),
-        # PGliteSqlStore (real Postgres) when the browser bundle supplies it.
-        self.rds = sql_store if sql_store is not None else InMemorySqlStore()
-        self.iam = InMemoryIamStore()
-        self.msg = InMemoryMessagingStore()   # SHARED by sqs + sns (fan-out)
-        # GCP services — each its own store instance so buckets/keys/secrets/
-        # topics/policies/instances are namespaced away from the AWS equivalents.
-        self.gcs = InMemoryObjectStore()
-        self.gcp_fs = FirestoreStore()
-        self.gcp_kms = InMemoryKeyStore()
-        self.gcp_sec = InMemoryKvStore()
-        self.gcp_msg = InMemoryMessagingStore()
-        self.gcp_iam = InMemoryIamStore()
-        self.gcp_sql = InMemorySqlStore()
-        # Azure data-plane services — each its own store instance.
-        self.az_blob = AzureBlobStore()
-        self.az_cosmos = CosmosStore()
-        self.az_kvsec = InMemoryKvStore()
-        self.az_kvkeys = InMemoryKeyStore()
-        self.az_queue = AzureQueueStore()
+    def __init__(self, sql_store=None, stores=None):
+        # Stores are INJECTABLE (v2.4.0): Nano/relay pass nothing → in-WASM
+        # defaults; Pro/Max passes a `stores` map of real backed stores (MinIO,
+        # Postgres, Vault, NATS) behind the identical seam. `sql_store` kept for
+        # back-compat (the browser PGlite path).
+        s = stores or {}
+        self.s3 = s.get("s3") or InMemoryObjectStore()
+        self.ddb = s.get("ddb") or InMemoryNoSqlStore()
+        self.kms = s.get("kms") or InMemoryKeyStore()
+        self.sec = s.get("sec") or InMemoryKvStore()
+        self.rds = s.get("rds") or sql_store or InMemorySqlStore()
+        self.iam = s.get("iam") or InMemoryIamStore()
+        self.msg = s.get("msg") or InMemoryMessagingStore()   # SHARED by sqs + sns (fan-out)
+        # GCP services — each its own store instance (namespaced from AWS).
+        self.gcs = s.get("gcs") or InMemoryObjectStore()
+        self.gcp_fs = s.get("gcp_fs") or FirestoreStore()
+        self.gcp_kms = s.get("gcp_kms") or InMemoryKeyStore()
+        self.gcp_sec = s.get("gcp_sec") or InMemoryKvStore()
+        self.gcp_msg = s.get("gcp_msg") or InMemoryMessagingStore()
+        self.gcp_iam = s.get("gcp_iam") or InMemoryIamStore()
+        self.gcp_sql = s.get("gcp_sql") or InMemorySqlStore()
+        # Azure data-plane services.
+        self.az_blob = s.get("az_blob") or AzureBlobStore()
+        self.az_cosmos = s.get("az_cosmos") or CosmosStore()
+        self.az_kvsec = s.get("az_kvsec") or InMemoryKvStore()
+        self.az_kvkeys = s.get("az_kvkeys") or InMemoryKeyStore()
+        self.az_queue = s.get("az_queue") or AzureQueueStore()
 
     # ── service detection ──────────────────────────────────────────────
     def service_of(self, method, path, lheaders, body, query=None):
