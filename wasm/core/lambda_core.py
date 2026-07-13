@@ -24,14 +24,34 @@ import json
 import uuid
 from dataclasses import dataclass, field
 
-# A curated safe builtins subset — no __import__ / open / exec / eval / compile.
+# A curated safe builtins subset — no open / exec / eval / compile. A restricted
+# __import__ (below) is added so realistic handlers can `import json` etc.
 _SAFE_BUILTINS = {
     name: __builtins__[name] if isinstance(__builtins__, dict) else getattr(__builtins__, name)
     for name in ("abs", "all", "any", "bool", "dict", "enumerate", "filter", "float",
                  "int", "len", "list", "map", "max", "min", "range", "reversed",
                  "round", "set", "sorted", "str", "sum", "tuple", "zip", "print",
-                 "isinstance", "hasattr", "getattr", "repr", "type", "chr", "ord")
+                 "isinstance", "hasattr", "getattr", "repr", "type", "chr", "ord",
+                 "Exception", "ValueError", "KeyError", "TypeError", "IndexError")
 }
+
+# Stdlib modules a function may import — pure/computational only. Deliberately
+# EXCLUDES os / sys / subprocess / socket / importlib / ctypes / io / pathlib /
+# shutil / builtins, so a handler cannot reach the filesystem, network or process.
+_SAFE_MODULES = {"json", "math", "datetime", "base64", "re", "random", "uuid",
+                 "hashlib", "hmac", "itertools", "functools", "collections",
+                 "string", "decimal", "statistics", "textwrap", "time"}
+
+
+def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
+    root = name.split(".")[0]
+    if root not in _SAFE_MODULES:
+        raise ImportError(f"module '{name}' is not available in the Lambda sandbox")
+    import importlib
+    return importlib.import_module(name)
+
+
+_SAFE_BUILTINS["__import__"] = _safe_import
 
 
 @dataclass

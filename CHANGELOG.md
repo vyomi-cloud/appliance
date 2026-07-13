@@ -4,6 +4,35 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] — 2026-07-13
+
+**API Gateway** — the first real API-gateway data plane (PARITY P4 #15). A deployed
+REST API actually routes an HTTP request to a resource + method and executes its
+integration. Every op lands in the shared cores, so **Nano gains it too**.
+
+### Added
+- **API Gateway core** (`core/apigateway_core.py`):
+  - Control plane (native `/restapis/...` wire): CreateRestApi (auto root resource),
+    CreateResource, GetResources, PutMethod, PutIntegration, CreateDeployment.
+  - Data plane: `invoke()` — path-template match (with path parameters) → method →
+    integration → response.
+  - Integrations: **MOCK** (configured status/body) and **AWS_PROXY (Lambda)** — the
+    headline: builds the API-Gateway proxy event, runs a real sandboxed `lambda_core`
+    function, and maps its `{statusCode, headers, body}` back to HTTP. A genuine
+    serverless HTTP API entirely in-core.
+  - Wired into the router (`/restapis`, sharing the Lambda store); vendored to Nano.
+
+### Changed
+- **Lambda sandbox hardened + made realistic** (`core/lambda_core.py`): a safe
+  `__import__` allowlist (json/math/datetime/base64/re/uuid/hashlib/… allowed;
+  os/sys/socket/subprocess/importlib/io blocked), so real-world handlers that
+  `import json` run — while filesystem/network/process access stays blocked.
+
+### Notes
+- Closes PARITY P4 #15's API-gateway remainder. **VPC network-simulation is now the
+  only open parity data plane** (deferred as a dedicated-release subsystem, not shipped
+  as a shallow stub).
+
 ## [2.6.0] — 2026-07-13
 
 **Parity Finish** — closes the *rest* of `docs/PARITY-GAPS.md` after v2.5.0: all of

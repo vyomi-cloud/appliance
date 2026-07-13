@@ -224,9 +224,11 @@ Running backends: **MinIO · fake-gcs-server · Azurite · Postgres · Vault · 
 **P4 — new capability (no data plane anywhere):**
 14. ✅ **[CLOSED v2.6.0]** Serverless runtime — `lambda_core` (function lifecycle + sandboxed
     Python-runtime synchronous Invoke).
-15. ◑ **[PARTIAL v2.6.0]** Event bus — `eventbridge_core` (rules + patterns → SQS delivery) DONE;
-    **API gateway + VPC data planes remain open** (each a dedicated-release-sized subsystem; deferred
-    deliberately rather than shipped as shallow stubs — see v2.6.0 Phase F note).
+15. ◑ **[MOSTLY CLOSED]** Event bus — `eventbridge_core` (v2.6.0). **API gateway** — `apigateway_core`
+    (v2.7.0): real routing + MOCK + **Lambda-proxy** integrations (API-GW → sandboxed `lambda_core`
+    → HTTP = a serverless HTTP API in-core). **VPC network-simulation is the only data plane still
+    open** (subnets / route tables / security-group packet-eval / reachability — a dedicated-release
+    subsystem; deferred rather than shipped as a shallow stub).
 
 ---
 

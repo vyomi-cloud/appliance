@@ -94,6 +94,7 @@ from core.azure_queue_core import AzureQueueStore
 from core import azure_servicebus_core as az_sb
 from core import eventbridge_core as events
 from core import lambda_core as lam
+from core import apigateway_core as apigw
 import types as _types
 
 
@@ -219,6 +220,9 @@ class AwsWireRouter:
         # its own lightweight function registry (a namespace the core attaches to).
         self.events = s.get("events") or self.msg
         self.lam = s.get("lam") or _types.SimpleNamespace()
+        # API Gateway shares the Lambda store so an AWS_PROXY integration can reach
+        # the registered functions (the API-GW → Lambda synergy).
+        self.apigw = s.get("apigw") or self.lam
 
     def _servicebus_service(self, method, path, lheaders):
         """Azure Service Bus (topics) — the pub/sub-fan-out peer of SNS/Pub-Sub.
@@ -255,6 +259,8 @@ class AwsWireRouter:
             return "az-servicebus"
         if "/2015-03-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
             return "lambda"
+        if "/restapis" in path:               # API Gateway v1 control plane
+            return "apigateway"
         target = lheaders.get("x-amz-target", "") or ""
         if target:
             for prefix, svc in _TARGET_PREFIX.items():
@@ -342,6 +348,13 @@ class AwsWireRouter:
 
         if svc == "lambda":   # native Lambda REST (function mgmt + sandboxed invoke)
             r = lam.dispatch(self.lam, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "apigateway":   # native API Gateway v1 control plane (/restapis)
+            r = apigw.dispatch(self.apigw, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
