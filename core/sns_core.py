@@ -18,6 +18,7 @@ filter policies, and raw-message-delivery reuse the same helpers and slot in nex
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -148,6 +149,111 @@ def _list_subscriptions_by_topic(store, params):
     return _envelope("ListSubscriptionsByTopic", f"<Subscriptions>{''.join(members)}</Subscriptions>")
 
 
+def _message_attributes_from_params(params: dict) -> dict:
+    """Reconstruct the SNS Publish MessageAttributes map from the flattened Query
+    wire (`MessageAttributes.entry.N.Name` / `.Value.DataType` / `.Value.StringValue`).
+    Returns {name: {"DataType": ..., "Value": ...}}."""
+    attrs: dict = {}
+    for key, val in params.items():
+        m = re.match(r"^MessageAttributes\.entry\.(\d+)\.Name$", str(key))
+        if not m:
+            continue
+        idx = m.group(1)
+        name = str(val)
+        dtype = params.get(f"MessageAttributes.entry.{idx}.Value.DataType", "String")
+        sval = params.get(f"MessageAttributes.entry.{idx}.Value.StringValue")
+        attrs[name] = {"DataType": dtype, "Value": sval}
+    return attrs
+
+
+def _match_condition(cond, value) -> bool:
+    """Evaluate one SNS filter-policy condition against an attribute value."""
+    if isinstance(cond, str):
+        return value == cond
+    if isinstance(cond, (int, float)):
+        try:
+            return float(value) == float(cond)
+        except (TypeError, ValueError):
+            return False
+    if isinstance(cond, dict):
+        if "prefix" in cond:
+            return isinstance(value, str) and value.startswith(str(cond["prefix"]))
+        if "anything-but" in cond:
+            ab = cond["anything-but"]
+            ab = ab if isinstance(ab, list) else [ab]
+            return value not in [str(x) for x in ab]
+        if "exists" in cond:
+            return (value is not None) == bool(cond["exists"])
+        if "numeric" in cond:
+            spec = cond["numeric"]
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                return False
+            i = 0
+            ok = True
+            while i < len(spec) - 1:
+                op, n = spec[i], float(spec[i + 1])
+                ok = ok and ((op == "=" and v == n) or (op == ">" and v > n) or
+                             (op == "<" and v < n) or (op == ">=" and v >= n) or
+                             (op == "<=" and v <= n))
+                i += 2
+            return ok
+    return False
+
+
+def _passes_filter_policy(policy: dict, msg_attrs: dict) -> bool:
+    """SNS filter-policy semantics: every key in the policy must match (AND); a
+    key matches if the attribute's value satisfies ANY listed condition (OR)."""
+    if not policy:
+        return True
+    for key, conds in policy.items():
+        attr = msg_attrs.get(key)
+        value = attr.get("Value") if isinstance(attr, dict) else None
+        conds = conds if isinstance(conds, list) else [conds]
+        if not any(_match_condition(c, value) for c in conds):
+            return False
+    return True
+
+
+def _set_subscription_attributes(store, params):
+    sub_arn = str(params.get("SubscriptionArn", "")).strip()
+    name = str(params.get("AttributeName", "")).strip()
+    raw = params.get("AttributeValue")
+    for topic in store.topics.values():
+        sub = topic["subscriptions"].get(sub_arn)
+        if sub is None:
+            continue
+        if name == "FilterPolicy":
+            try:
+                sub["filter_policy"] = json.loads(raw) if raw else {}
+            except Exception:
+                raise SnsError("InvalidParameter", "FilterPolicy must be valid JSON.", 400)
+        else:
+            sub.setdefault("attributes", {})[name] = raw
+        store.persist()
+        return _envelope("SetSubscriptionAttributes")
+    raise SnsError("NotFound", "Subscription does not exist.", 404)
+
+
+def _get_subscription_attributes(store, params):
+    sub_arn = str(params.get("SubscriptionArn", "")).strip()
+    for topic in store.topics.values():
+        sub = topic["subscriptions"].get(sub_arn)
+        if sub is None:
+            continue
+        attrs = {"SubscriptionArn": sub_arn, "TopicArn": topic["topic_arn"],
+                 "Protocol": sub["protocol"], "Endpoint": sub["endpoint"],
+                 "Owner": store.account_id}
+        if sub.get("filter_policy"):
+            attrs["FilterPolicy"] = json.dumps(sub["filter_policy"])
+        attrs.update(sub.get("attributes", {}))
+        entries = "".join("<entry>" + _el("key", k) + _el("value", v) + "</entry>"
+                          for k, v in attrs.items())
+        return _envelope("GetSubscriptionAttributes", f"<Attributes>{entries}</Attributes>")
+    raise SnsError("NotFound", "Subscription does not exist.", 404)
+
+
 def _publish(store, params):
     arn = str(params.get("TopicArn", "")).strip()
     topic = _require_topic(store, arn)
@@ -157,6 +263,7 @@ def _publish(store, params):
     message = str(message)
     subject = params.get("Subject")
     message_id = uuid.uuid4().hex
+    msg_attrs = _message_attributes_from_params(params)
     # Fan out to every SQS subscription (the canonical SNS→SQS event pattern).
     envelope = {
         "Type": "Notification", "MessageId": message_id, "TopicArn": arn,
@@ -164,13 +271,20 @@ def _publish(store, params):
     }
     if subject is not None:
         envelope["Subject"] = str(subject)
+    if msg_attrs:
+        envelope["MessageAttributes"] = {
+            k: {"Type": v.get("DataType", "String"), "Value": v.get("Value")}
+            for k, v in msg_attrs.items()}
     body = json.dumps(envelope)
     for sub in topic["subscriptions"].values():
         if sub["protocol"] != "sqs":
             continue  # other protocols (http/email/lambda) slot in next
+        # Per-subscription filter policy: skip subscriptions whose policy rejects.
+        if not _passes_filter_policy(sub.get("filter_policy"), msg_attrs):
+            continue
         queue = store.get_queue_by_arn(sub["endpoint"])
         if queue is not None:
-            sqs_core.enqueue(store, queue, body)
+            sqs_core.enqueue(store, queue, body, msg_attrs or None)
     store.persist()
     return _envelope("Publish", _el("MessageId", message_id))
 
@@ -179,6 +293,8 @@ _OPS = {
     "CreateTopic": _create_topic, "ListTopics": _list_topics, "DeleteTopic": _delete_topic,
     "Subscribe": _subscribe, "Unsubscribe": _unsubscribe,
     "ListSubscriptionsByTopic": _list_subscriptions_by_topic, "Publish": _publish,
+    "SetSubscriptionAttributes": _set_subscription_attributes,
+    "GetSubscriptionAttributes": _get_subscription_attributes,
 }
 
 

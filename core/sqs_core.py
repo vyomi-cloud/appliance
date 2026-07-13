@@ -23,6 +23,7 @@ redrive, and batch ops reuse the same helpers and slot in next.
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -73,7 +74,9 @@ def _name_from_url(url: str) -> str:
 
 # ── shared enqueue primitive (used by SendMessage AND SNS fan-out) ─────────
 def enqueue(store: MessagingStore, queue: dict, body: str,
-            message_attributes: dict | None = None, delay_seconds: int = 0) -> dict:
+            message_attributes: dict | None = None, delay_seconds: int = 0,
+            message_group_id: str | None = None,
+            message_dedup_id: str | None = None) -> dict:
     now = store.now()
     msg = {
         "message_id": "msg-" + uuid.uuid4().hex,
@@ -86,6 +89,8 @@ def enqueue(store: MessagingStore, queue: dict, body: str,
         "receipt_handle": "",
         "in_flight": False,
         "deleted": False,
+        "message_group_id": message_group_id,
+        "message_dedup_id": message_dedup_id,
     }
     queue.setdefault("messages", []).append(msg)
     return msg
@@ -105,8 +110,13 @@ def _create_queue(store, body):
     name = str(body.get("QueueName", "")).strip()
     if not name:
         raise SqsError("com.amazonaws.sqs#MissingParameter", "QueueName is required.", 400)
+    if name.endswith(".fifo") is False and str(body.get("Attributes", {}).get("FifoQueue", "")).lower() == "true":
+        raise SqsError("com.amazonaws.sqs#InvalidParameterValue",
+                       "The name of a FIFO queue can only include alphanumeric characters, "
+                       "hyphens, or underscores, must end with .fifo suffix.", 400)
     if not store.queue_exists(name):
         attrs = dict(body.get("Attributes") or {})
+        is_fifo = name.endswith(".fifo") or str(attrs.get("FifoQueue", "")).lower() == "true"
         store.put_queue(name, {
             "queue_name": name,
             "queue_url": _queue_url(store, name),
@@ -117,9 +127,22 @@ def _create_queue(store, body):
             "tags": dict(body.get("tags") or {}),
             "messages": [],
             "created": _now_iso(),
+            "fifo": is_fifo,
+            "content_based_dedup": str(attrs.get("ContentBasedDeduplication", "")).lower() == "true",
+            "dedup_seen": {},   # dedup_id -> message_id (5-min window, simplified to lifetime)
         })
         store.persist()
     return SqsResponse(body={"QueueUrl": _queue_url(store, name)})
+
+
+def _redrive_policy(q: dict) -> dict | None:
+    raw = q.get("attributes", {}).get("RedrivePolicy")
+    if not raw:
+        return None
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return None
 
 
 def _get_queue_url(store, body):
@@ -178,9 +201,69 @@ def _send_message(store, body):
         raise SqsError("com.amazonaws.sqs#MissingParameter", "MessageBody is required.", 400)
     payload = str(payload)
     delay = int(body.get("DelaySeconds", q.get("delay_seconds", 0)) or 0)
-    msg = enqueue(store, q, payload, body.get("MessageAttributes"), delay)
+    group_id = body.get("MessageGroupId")
+    dedup_id = body.get("MessageDeduplicationId")
+    if q.get("fifo"):
+        if not group_id:
+            raise SqsError("com.amazonaws.sqs#MissingParameter",
+                           "The request must contain the parameter MessageGroupId.", 400)
+        if not dedup_id:
+            if q.get("content_based_dedup"):
+                dedup_id = _md5(payload)
+            else:
+                raise SqsError("com.amazonaws.sqs#InvalidParameterValue",
+                               "The queue should either have ContentBasedDeduplication enabled "
+                               "or MessageDeduplicationId provided explicitly.", 400)
+        seen = q.setdefault("dedup_seen", {})
+        if dedup_id in seen:
+            # Duplicate within the dedup window — accept but do not enqueue again.
+            return SqsResponse(body={"MessageId": seen[dedup_id], "MD5OfMessageBody": _md5(payload),
+                                     "SequenceNumber": "0"})
+        # FIFO ignores per-message delay.
+        delay = 0
+    msg = enqueue(store, q, payload, body.get("MessageAttributes"), delay,
+                  message_group_id=group_id, message_dedup_id=dedup_id)
+    if q.get("fifo") and dedup_id:
+        q["dedup_seen"][dedup_id] = msg["message_id"]
     store.persist()
-    return SqsResponse(body={"MessageId": msg["message_id"], "MD5OfMessageBody": msg["md5_of_body"]})
+    out = {"MessageId": msg["message_id"], "MD5OfMessageBody": msg["md5_of_body"]}
+    if q.get("fifo"):
+        out["SequenceNumber"] = str(len(q["messages"]))
+    return SqsResponse(body=out)
+
+
+def _redrive_expired(store, q, now):
+    """Move messages that have been received > maxReceiveCount times to the DLQ
+    (the canonical SQS redrive). Runs at receive time, before leasing."""
+    policy = _redrive_policy(q)
+    if not policy:
+        return
+    try:
+        max_recv = int(policy.get("maxReceiveCount", 0) or 0)
+    except (TypeError, ValueError):
+        return
+    if max_recv <= 0:
+        return
+    dlq = store.get_queue_by_arn(str(policy.get("deadLetterTargetArn", "")))
+    if dlq is None:
+        return
+    survivors = []
+    moved = False
+    for msg in q["messages"]:
+        if msg.get("deleted"):
+            continue
+        # A message that has already been received max_recv times and is available
+        # again (its lease lapsed without a delete) is dead-lettered.
+        if _available(msg, now) and msg.get("receive_count", 0) >= max_recv:
+            dead = dict(msg)
+            dead.update({"receive_count": 0, "receipt_handle": "", "in_flight": False,
+                         "visible_at": now})
+            dlq.setdefault("messages", []).append(dead)
+            moved = True
+            continue
+        survivors.append(msg)
+    if moved:
+        q["messages"] = survivors
 
 
 def _receive_message(store, body):
@@ -188,25 +271,41 @@ def _receive_message(store, body):
     now = store.now()
     max_n = int(body.get("MaxNumberOfMessages", 1) or 1)
     vis = int(body.get("VisibilityTimeout", q.get("visibility_timeout", _DEFAULT_VISIBILITY)))
+    _redrive_expired(store, q, now)
+    # FIFO: a group with an in-flight (leased, not-yet-deleted) message is locked —
+    # no other message from that group is delivered until the in-flight one is deleted.
+    locked_groups = set()
+    if q.get("fifo"):
+        for m in q["messages"]:
+            if not m.get("deleted") and not _available(m, now) and m.get("message_group_id"):
+                locked_groups.add(m["message_group_id"])
     out = []
     for msg in q["messages"]:
         if len(out) >= max_n:
             break
         if not _available(msg, now):
             continue
+        grp = msg.get("message_group_id")
+        if q.get("fifo") and grp in locked_groups:
+            continue   # preserve per-group ordering
         msg["in_flight"] = True
         msg["receipt_handle"] = "rhdl-" + uuid.uuid4().hex
         msg["visible_at"] = now + vis
         msg["receive_count"] += 1
+        if q.get("fifo") and grp:
+            locked_groups.add(grp)   # lock the group for the rest of this batch
+        attrs = {"ApproximateReceiveCount": str(msg["receive_count"])}
+        if grp:
+            attrs["MessageGroupId"] = grp
         out.append({
             "MessageId": msg["message_id"],
             "ReceiptHandle": msg["receipt_handle"],
             "MD5OfBody": msg["md5_of_body"],
             "Body": msg["body"],
-            "Attributes": {"ApproximateReceiveCount": str(msg["receive_count"])},
+            "Attributes": attrs,
             "MessageAttributes": msg.get("message_attributes", {}),
         })
-    if out:
+    if out or _redrive_policy(q):
         store.persist()
     return SqsResponse(body={"Messages": out} if out else {})
 

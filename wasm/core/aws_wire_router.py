@@ -162,6 +162,7 @@ _QUERY_ACTION = {
     "CreateTopic": "sns", "DeleteTopic": "sns", "ListTopics": "sns",
     "Subscribe": "sns", "Unsubscribe": "sns", "ListSubscriptions": "sns",
     "ListSubscriptionsByTopic": "sns", "Publish": "sns", "GetTopicAttributes": "sns",
+    "SetSubscriptionAttributes": "sns", "GetSubscriptionAttributes": "sns",
     # RDS
     "CreateDBInstance": "rds", "DescribeDBInstances": "rds", "DeleteDBInstance": "rds",
     "ModifyDBInstance": "rds", "StartDBInstance": "rds", "StopDBInstance": "rds",
