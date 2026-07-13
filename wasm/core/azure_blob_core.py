@@ -74,6 +74,9 @@ class AzureBlobStore:
     def container_blobs(self, name: str) -> dict[str, dict]:
         return self.blobs.setdefault(name, {})
 
+    def persist(self) -> None:
+        """Write-through hook (no-op in-memory; a backed subclass overrides it)."""
+
 
 # ── primitives ─────────────────────────────────────────────────────────────
 def _now_http() -> str:
@@ -210,6 +213,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                          if k.startswith("x-ms-meta-")},
         }
         store.container_blobs(container)[blob] = entry
+        store.persist()
         h = _base_headers()
         h["etag"] = entry["etag"]
         h["last-modified"] = entry["last_modified"]
@@ -266,6 +270,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         if entry is None:
             return _err(404, "BlobNotFound", "The specified blob does not exist.")
         blobs.pop(blob, None)
+        store.persist()
         return Response(status=202, headers=_base_headers(), body=b"", media_type=None)
 
     return _err(400, "UnsupportedHttpVerb", f"Unsupported blob operation {method}")

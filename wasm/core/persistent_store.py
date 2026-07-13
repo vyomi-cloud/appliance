@@ -30,6 +30,7 @@ from core.nosql_store import InMemoryNoSqlStore
 from core.kms_keystore import InMemoryKeyStore
 from core.messaging_store import InMemoryMessagingStore
 from core.iam_store import InMemoryIamStore
+from core.azure_blob_core import AzureBlobStore
 
 
 # ── bytes-aware JSON codec ────────────────────────────────────────────────
@@ -163,4 +164,23 @@ class PersistentObjectStore(_PersistentMixin, InMemoryObjectStore):
         self._save()   # the core has already written the full entry to self.objects
 
     def mirror_delete(self, bucket, key) -> None:
+        self._save()
+
+
+class PersistentAzureBlobStore(_PersistentMixin, AzureBlobStore):
+    """Durable Azure Blob (v2.5.0): the bespoke AzureBlobStore state (containers +
+    blobs) persisted to the file-backed substrate. The core calls persist() after
+    each blob put/delete; container create/delete are overridden to persist too."""
+    _STATE_ATTRS = ("containers", "blobs")
+
+    def __init__(self, backend: SqliteStateBackend, store_id: str = "azblob"):
+        AzureBlobStore.__init__(self)
+        self._pinit(backend, store_id)
+
+    def create_container(self, name: str) -> None:
+        super().create_container(name)
+        self._save()
+
+    def delete_container(self, name: str) -> None:
+        super().delete_container(name)
         self._save()

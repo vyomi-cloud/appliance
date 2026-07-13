@@ -29,6 +29,7 @@ def build_backed_router() -> AwsWireRouter:
     from core.minio_backed_store import MinioBackedObjectStore
     from core.postgres_backed_store import PostgresBackedSqlStore
     from core.vault_backed_store import VaultBackedKeyStore, VaultBackedKvStore
+    from core.persistent_store import SqliteStateBackend, PersistentAzureBlobStore
     from core.nats_backed_store import NatsBackedMessagingStore
 
     minio = dict(
@@ -56,6 +57,9 @@ def build_backed_router() -> AwsWireRouter:
         "sec": VaultBackedKvStore(prefix="aws-sec/", **vault),
         "gcp_sec": VaultBackedKvStore(prefix="gcp-sec/", **vault),
         "az_kvsec": VaultBackedKvStore(prefix="az-sec/", **vault),
+        # Azure Blob (v2.5.0) — durable via the file-backed substrate (was in-memory)
+        "az_blob": PersistentAzureBlobStore(
+            SqliteStateBackend(_cfg("VYOMI_AZBLOB_DB", "/tmp/vyomi-azblob.sqlite"))),
         # messaging — SQS/SNS + Pub/Sub on NATS JetStream (separate KV buckets)
         "msg": NatsBackedMessagingStore(servers=nats_servers, bucket="aws_msg"),
         "gcp_msg": NatsBackedMessagingStore(servers=nats_servers, bucket="gcp_msg"),
