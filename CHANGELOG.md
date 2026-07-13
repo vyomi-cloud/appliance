@@ -4,6 +4,32 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] — 2026-07-13
+
+**VPC — the last data plane.** Closes PARITY P4 #15 completely: the first real
+network simulation, and the final open parity data plane. Lands in the shared cores,
+so **Nano gets it too**.
+
+### Added
+- **VPC core** (`core/vpc_core.py`):
+  - Model: VPCs, subnets, **stateful** security groups, route tables + routes,
+    internet gateways, **stateless** network ACLs.
+  - Control plane (native EC2 Query protocol → XML): CreateVpc, CreateSubnet,
+    CreateSecurityGroup, AuthorizeSecurityGroup{Ingress,Egress}, CreateInternetGateway
+    / AttachInternetGateway, CreateRoute, CreateNetworkAcl / …Entry / Associate,
+    DescribeVpcs.
+  - **Data plane — reachability analyzer** (`analyze_reachability`): given a source +
+    destination + port it evaluates the full path — **route table** (longest-prefix
+    match) → **security groups** (stateful; default-deny ingress) → **network ACLs**
+    (stateless; first-match) — and returns `reachable` + the blocking reason + the
+    evaluated path. No catalog stub can fake this; it requires real network semantics.
+  - Wired into the router (EC2 Query: `ec2` cred scope + Action-based); vendored to Nano.
+
+### Milestone
+- **The parity backlog is now fully closed.** P0, P1, P2, P3 and P4 are all done;
+  every parity data plane across AWS, GCP and Azure is covered. Remaining work is
+  per-service depth, not missing subsystems (see `docs/PARITY-GAPS.md` §7).
+
 ## [2.7.0] — 2026-07-13
 
 **API Gateway** — the first real API-gateway data plane (PARITY P4 #15). A deployed

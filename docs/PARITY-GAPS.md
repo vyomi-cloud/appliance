@@ -221,26 +221,42 @@ Running backends: **MinIO · fake-gcs-server · Azurite · Postgres · Vault · 
 13. ✅ **[CLOSED v2.6.0]** Azure **SQL data plane** — `azure_sql_core` (real SQL on the SqlStore seam),
     the RDS/Cloud SQL peer.
 
-**P4 — new capability (no data plane anywhere):**
+**P4 — new capability (no data plane anywhere):**  ✅ **ALL CLOSED (v2.6.0 → v2.8.0)**
 14. ✅ **[CLOSED v2.6.0]** Serverless runtime — `lambda_core` (function lifecycle + sandboxed
     Python-runtime synchronous Invoke).
-15. ◑ **[MOSTLY CLOSED]** Event bus — `eventbridge_core` (v2.6.0). **API gateway** — `apigateway_core`
-    (v2.7.0): real routing + MOCK + **Lambda-proxy** integrations (API-GW → sandboxed `lambda_core`
-    → HTTP = a serverless HTTP API in-core). **VPC network-simulation is the only data plane still
-    open** (subnets / route tables / security-group packet-eval / reachability — a dedicated-release
-    subsystem; deferred rather than shipped as a shallow stub).
+15. ✅ **[CLOSED]** Event bus — `eventbridge_core` (v2.6.0). **API gateway** — `apigateway_core`
+    (v2.7.0): routing + MOCK + **Lambda-proxy** (API-GW → sandboxed `lambda_core` → HTTP = a
+    serverless HTTP API in-core). **VPC** — `vpc_core` (v2.8.0): a real network simulation with a
+    **reachability analyzer** (route table → stateful security groups → stateless NACLs → reachable/
+    blocked + reason + path). **Every parity data plane is now covered — no open data planes remain.**
 
 ---
 
 ## 7. Honest summary
 
-- **~10–11 services per cloud reach a real conformance core**; **11 are native-SDK-proven**
-  across the three clouds. The **data/identity/secrets/messaging/relational** core is solid and
-  largely symmetric.
-- The **biggest real gaps** are: (a) **backing-tech** — Secrets + NoSQL run in-memory, and the
+**As of v2.8.0 — the parity backlog is fully closed. P0, P1, P2, P3 and P4 are all done;
+there are no open data planes left.**
+
+- Every service across the three clouds reaches a **real conformance core**; the
+  data / identity / secrets / messaging / relational / crypto surface is symmetric.
+- The former **backing-tech gap is closed** (v2.5.0): every data service runs on a real durable
+  backend (Vault KV, file-backed substrate, MinIO/Postgres/NATS behind the seams), proven durable
+  in the anti-drift substrate matrix.
+- **Cross-cloud asymmetry is closed** (v2.5.0–v2.6.0): Azure gained the pub/sub topic core
+  (`azure_servicebus_core`), the RBAC decision core (`azure_iam_core`), and the SQL data plane
+  (`azure_sql_core`) — matching its AWS/GCP peers.
+- The former **"no data plane anywhere" categories are closed** (v2.6.0–v2.8.0): serverless
+  (`lambda_core`), event bus (`eventbridge_core`), API gateway (`apigateway_core`, incl. the
+  API-GW→Lambda serverless-HTTP-API path), and networking (`vpc_core`, with a reachability analyzer).
+- **Remaining work is depth, not coverage:** richer per-service operations (e.g. VPC peering / NAT /
+  transit gateways, API-GW authorizers/HTTP integrations, additional KV algorithms) extend cores
+  that already exist — no missing subsystem.
+
+### Original findings (pre-close-out, kept for history)
+- The **biggest real gaps** were: (a) **backing-tech** — Secrets + NoSQL ran in-memory, and the
   unified path regressed Firestore/Pub-Sub/Azure-Blob vs the emulator/Azurite-backed default;
-  (b) **cross-cloud asymmetry** — Azure lacks a pub/sub topic core, a dedicated IAM decision
+  (b) **cross-cloud asymmetry** — Azure lacked a pub/sub topic core, a dedicated IAM decision
   core, and a SQL data plane; (c) **whole categories with no data plane anywhere** — serverless,
-  API gateway, networking, event bus (catalog/ARM only).
+  API gateway, networking, event bus (catalog/ARM only). *All resolved in v2.5.0–v2.8.0.*
 - Everything here is tracked; the P0/P1 items are the ones that gate a clean, real-backend
   cutover of the v2.4.0 unified ingress.

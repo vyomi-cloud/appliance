@@ -97,6 +97,7 @@ from core import azure_servicebus_core as az_sb
 from core import eventbridge_core as events
 from core import lambda_core as lam
 from core import apigateway_core as apigw
+from core import vpc_core as vpc
 import types as _types
 
 
@@ -145,7 +146,7 @@ _SIGNING = {
     "dynamodb": "dynamodb", "kms": "kms", "secretsmanager": "secretsmanager",
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
-    "events": "events", "lambda": "lambda",
+    "events": "events", "lambda": "lambda", "ec2": "vpc",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
@@ -179,6 +180,12 @@ _QUERY_ACTION = {
     "CreatePolicy": "iam", "DeletePolicy": "iam", "ListPolicies": "iam",
     "AttachUserPolicy": "iam", "DetachUserPolicy": "iam",
     "SimulatePrincipalPolicy": "iam", "CreateGroup": "iam", "ListGroups": "iam",
+    # EC2 / VPC
+    "CreateVpc": "vpc", "CreateSubnet": "vpc", "CreateSecurityGroup": "vpc",
+    "AuthorizeSecurityGroupIngress": "vpc", "AuthorizeSecurityGroupEgress": "vpc",
+    "CreateInternetGateway": "vpc", "AttachInternetGateway": "vpc", "CreateRoute": "vpc",
+    "DescribeVpcs": "vpc", "CreateNetworkAcl": "vpc", "CreateNetworkAclEntry": "vpc",
+    "AssociateNetworkAcl": "vpc", "AnalyzeReachability": "vpc",
 }
 
 
@@ -225,6 +232,7 @@ class AwsWireRouter:
         # API Gateway shares the Lambda store so an AWS_PROXY integration can reach
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
+        self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
 
     def _servicebus_service(self, method, path, lheaders):
         """Azure Service Bus (topics) — the pub/sub-fan-out peer of SNS/Pub-Sub.
@@ -413,6 +421,8 @@ class AwsWireRouter:
             r = iam.dispatch(self.iam, params)
         elif svc == "rds":
             r = rds.dispatch(self.rds, params)
+        elif svc == "vpc":
+            r = vpc.dispatch(self.vpc, params)
         else:  # sns
             r = sns.dispatch(self.msg, params)
         hdrs = dict(r.headers or {})
