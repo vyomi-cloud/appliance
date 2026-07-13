@@ -16,6 +16,7 @@ Cores vendored (each green on host CPython AND Pyodide via tests/conformance/):
 Run:  python3 wasm/build_cores.py   (part of the bundle build, with build_fixtures.py)
 """
 import os
+import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -52,6 +53,60 @@ HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT ED
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
 
 
+# Relay loaders whose CORES list is fetched into the Pyodide FS. Every top-level
+# `from core.X import` in a listed module MUST also be listed, or the browser boot
+# raises ImportError (this guard exists because relay-shared-worker.js once lagged
+# aws_wire_router's new GCP/Azure imports and broke Start-tunnel in production).
+_RELAY_LOADERS = ["relay/relay-shared-worker.js", "relay/nano-endpoint.html"]
+_TOPLEVEL_IMPORT = re.compile(r"^from core\.(\w+) import", re.M)
+_TOPLEVEL_FROM = re.compile(r"^from core import (.+)$", re.M)
+
+
+def _cores_in(js_text):
+    """Extract the .py filenames from a loader's `const CORES = [ ... ]` block."""
+    m = re.search(r"const CORES\s*=\s*\[(.*?)\]", js_text, re.S)
+    return set(re.findall(r'"([a-z0-9_]+\.py)"', m.group(1))) if m else set()
+
+
+def _deps_of(module_py):
+    """Top-level core deps of core/<module_py> (as X.py). Lazy/indented imports
+    are excluded — they load on demand, not at module import."""
+    src = open(os.path.join(SRC, module_py)).read()
+    deps = {f"{x}.py" for x in _TOPLEVEL_IMPORT.findall(src)}
+    for grp in _TOPLEVEL_FROM.findall(src):
+        for part in grp.split(","):
+            name = part.strip().split(" as ")[0].strip()
+            if name:
+                deps.add(f"{name}.py")
+    return deps
+
+
+def check_relay_cores():
+    """Fail the build if any relay CORES list is not import-closed."""
+    problems = []
+    for loader in _RELAY_LOADERS:
+        path = os.path.join(HERE, loader)
+        if not os.path.exists(path):
+            continue
+        listed = _cores_in(open(path).read())
+        if not listed:
+            continue
+        for mod in list(listed):
+            if not os.path.exists(os.path.join(SRC, mod)):
+                continue
+            missing = _deps_of(mod) - listed
+            # only flag deps that are actually core modules (exist in core/)
+            missing = {d for d in missing if os.path.exists(os.path.join(SRC, d))}
+            for d in sorted(missing):
+                problems.append(f"  {loader}: '{mod}' imports '{d}' but it's not in the CORES list")
+    if problems:
+        print("\nRELAY CORES DRIFT — these loaders will ImportError at browser boot:")
+        print("\n".join(problems))
+        print("Add the missing modules to the loader's CORES list.")
+        raise SystemExit(1)
+    print("relay CORES lists are import-closed ✓")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     # Make wasm/core an importable package mirror of the repo `core` package, so
@@ -64,6 +119,7 @@ def main():
         with open(os.path.join(OUT, name), "w") as f:
             f.write(HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
+    check_relay_cores()   # fail loudly if a relay loader lags the cores
 
 
 if __name__ == "__main__":
