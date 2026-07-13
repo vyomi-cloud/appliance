@@ -43,6 +43,7 @@ CORES = [
     "azure_keyvault_secrets_core.py",               # Azure: Key Vault secrets (native azure-keyvault-secrets)
     "azure_keyvault_keys_core.py",                  # Azure: Key Vault keys (native azure-keyvault-keys)
     "azure_queue_core.py",                          # Azure: Storage Queue (native azure-storage-queue)
+    "persistent_store.py",                          # v2.4.0: file-backed (sqlite) substrate — the anti-drift gate
     "aws_wire_router.py",                            # native-wire front door (relay/bridge)
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
 ]
