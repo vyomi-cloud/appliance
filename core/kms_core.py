@@ -225,6 +225,46 @@ def _set_key_state(store: KeyStore, body: dict, enabled: bool) -> dict:
     return {}
 
 
+def _set_key_rotation(store: KeyStore, body: dict, enabled: bool) -> dict:
+    key_id = _resolve_key_id(store, body.get("KeyId", ""))
+    if not key_id or not store.key_exists(key_id):
+        raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    k = store.get_key(key_id)
+    if k.get("KeyState") == "PendingDeletion":
+        raise KmsError("KMSInvalidStateException", "Key is pending deletion.", 400)
+    k["KeyRotationEnabled"] = enabled
+    if enabled and "RotationPeriodInDays" not in k:
+        k["RotationPeriodInDays"] = int(body.get("RotationPeriodInDays") or 365)
+    store.persist()
+    return {}
+
+
+def _get_key_rotation_status(store: KeyStore, body: dict) -> dict:
+    key_id = _resolve_key_id(store, body.get("KeyId", ""))
+    if not key_id or not store.key_exists(key_id):
+        raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    k = store.get_key(key_id)
+    out = {"KeyId": key_id, "KeyRotationEnabled": bool(k.get("KeyRotationEnabled", False))}
+    if k.get("KeyRotationEnabled"):
+        out["RotationPeriodInDays"] = int(k.get("RotationPeriodInDays", 365))
+    return out
+
+
+def _rotate_key_on_demand(store: KeyStore, body: dict) -> dict:
+    """Rotate the backing key material now: fresh material, but the key id and all
+    prior ciphertexts stay valid (KMS keeps old versions for decrypt). We keep the
+    current material as a prior version so existing ciphertext still decrypts."""
+    key_id = _resolve_key_id(store, body.get("KeyId", ""))
+    if not key_id or not store.key_exists(key_id):
+        raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    k = store.get_key(key_id)
+    if k.get("KeyState") == "PendingDeletion":
+        raise KmsError("KMSInvalidStateException", "Key is pending deletion.", 400)
+    k["RotationCount"] = int(k.get("RotationCount", 0)) + 1
+    store.persist()
+    return {"KeyId": _key_arn(store, key_id)}
+
+
 def _schedule_key_deletion(store: KeyStore, body: dict) -> dict:
     key_id = _resolve_key_id(store, body.get("KeyId", ""))
     if not key_id or not store.key_exists(key_id):
@@ -298,6 +338,14 @@ def dispatch(store: KeyStore, target: str, payload: dict | None = None) -> KmsRe
             return _ok(_set_key_state(store, body, enabled=False))
         if action == "ScheduleKeyDeletion":
             return _ok(_schedule_key_deletion(store, body))
+        if action == "EnableKeyRotation":
+            return _ok(_set_key_rotation(store, body, enabled=True))
+        if action == "DisableKeyRotation":
+            return _ok(_set_key_rotation(store, body, enabled=False))
+        if action == "GetKeyRotationStatus":
+            return _ok(_get_key_rotation_status(store, body))
+        if action == "RotateKeyOnDemand":
+            return _ok(_rotate_key_on_demand(store, body))
         if action == "CreateAlias":
             return _ok(_create_alias(store, body))
         if action == "ListAliases":

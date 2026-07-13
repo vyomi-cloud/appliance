@@ -142,6 +142,33 @@ def _put_value(store: KvStore, body: dict, update: bool = False) -> dict:
             "VersionStages": version["stages"]}
 
 
+def _rotate_secret(store: KvStore, body: dict) -> dict:
+    """Rotate a secret: enable rotation metadata and (RotateImmediately, default
+    true) create a fresh AWSCURRENT version. Without a rotation Lambda we carry the
+    current value into the new version, mirroring the version-stage transitions a
+    real rotation performs (new VersionId → AWSCURRENT, old → AWSPREVIOUS)."""
+    secret = _require_secret(store, body.get("SecretId") or "")
+    if secret.get("deleted_date"):
+        raise SecretsError("InvalidRequestException",
+                           "You can't perform this operation on the secret because it was marked for deletion.", 400)
+    if body.get("RotationLambdaARN"):
+        secret["rotation_lambda_arn"] = str(body.get("RotationLambdaARN"))
+    if body.get("RotationRules"):
+        secret["rotation_rules"] = dict(body.get("RotationRules") or {})
+    secret["rotation_enabled"] = True
+    vid = _stage_to_version(secret, CURRENT)
+    if body.get("RotateImmediately", True):
+        cur = secret["versions"].get(vid, {}) if vid else {}
+        new_body = {"SecretId": secret["name"],
+                    "SecretString": cur.get("SecretString"),
+                    "SecretBinary": cur.get("SecretBinary")}
+        res = _put_value(store, new_body)   # handles CURRENT→PREVIOUS demotion + new vid
+        vid = res["VersionId"]
+    else:
+        store.persist()
+    return {"ARN": secret["arn"], "Name": secret["name"], "VersionId": vid}
+
+
 def _get_secret_value(store: KvStore, body: dict) -> dict:
     secret = _require_secret(store, body.get("SecretId") or "")
     if secret.get("deleted_date"):
@@ -248,6 +275,8 @@ def dispatch(store: KvStore, target: str, payload: dict | None = None) -> Secret
             return _ok(_delete_secret(store, body))
         if action == "RestoreSecret":
             return _ok(_restore_secret(store, body))
+        if action == "RotateSecret":
+            return _ok(_rotate_secret(store, body))
         return _error("UnknownOperationException", f"The action {action} is not implemented.", 400)
     except SecretsError as e:
         return _error(e.code, e.message, e.status)

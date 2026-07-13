@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import time
 import uuid
@@ -232,6 +233,81 @@ def _decrypt(store: KeyStore, name: str, version: str, body: dict) -> KvResponse
     return _json(200, {"kid": _kid_url(name, version), "value": _b64url_encode(plaintext)})
 
 
+def _wrap_key(store: KeyStore, name: str, version: str, body: dict) -> KvResponse:
+    """Key-wrapping: envelope a symmetric key with the KV key. Same crypto as
+    encrypt (the KV key protects the wrapped material); distinct SDK operation."""
+    meta = store.get_key(_kid_key(name, version)) if version else _latest(store, name)
+    if not meta:
+        return _err(404, "KeyNotFound",
+                    f"A key with (name/id) {name} was not found in this key vault.")
+    version = meta["version"]
+    try:
+        key_bytes = _b64url_decode(body.get("value", ""))
+    except Exception:
+        return _err(400, "BadParameter", "The 'value' field is not valid base64url.")
+    material = store.get_material(_kid_key(name, version))
+    blob = store.engine.encrypt(material, _kid_key(name, version), key_bytes)
+    return _json(200, {"kid": _kid_url(name, version), "value": _b64url_encode(blob)})
+
+
+def _unwrap_key(store: KeyStore, name: str, version: str, body: dict) -> KvResponse:
+    meta = store.get_key(_kid_key(name, version)) if version else _latest(store, name)
+    if not meta:
+        return _err(404, "KeyNotFound",
+                    f"A key with (name/id) {name} was not found in this key vault.")
+    version = meta["version"]
+    try:
+        blob = _b64url_decode(body.get("value", ""))
+    except Exception:
+        return _err(400, "BadParameter", "The 'value' field is not valid base64url.")
+    material = store.get_material(_kid_key(name, version))
+    try:
+        key_bytes = store.engine.decrypt(material, blob)
+    except Exception:
+        return _err(400, "BadParameter", "The wrapped key could not be unwrapped.")
+    return _json(200, {"kid": _kid_url(name, version), "value": _b64url_encode(key_bytes)})
+
+
+def _signature(material: bytes, alg: str, digest: bytes) -> bytes:
+    """Deterministic MAC-based signature over the caller-supplied digest, keyed by
+    the (secret) key material. Not native RSA/ECDSA, but a self-consistent
+    sign→verify pair — an unmodified KV client round-trips sign then verify."""
+    return hmac.new(material, (alg or "").encode() + b"|" + digest, hashlib.sha256).digest()
+
+
+def _sign(store: KeyStore, name: str, version: str, body: dict) -> KvResponse:
+    meta = store.get_key(_kid_key(name, version)) if version else _latest(store, name)
+    if not meta:
+        return _err(404, "KeyNotFound",
+                    f"A key with (name/id) {name} was not found in this key vault.")
+    version = meta["version"]
+    alg = str(body.get("alg", "RS256"))
+    try:
+        digest = _b64url_decode(body.get("value", ""))
+    except Exception:
+        return _err(400, "BadParameter", "The 'value' field is not valid base64url.")
+    material = store.get_material(_kid_key(name, version))
+    sig = _signature(material, alg, digest)
+    return _json(200, {"kid": _kid_url(name, version), "value": _b64url_encode(sig)})
+
+
+def _verify(store: KeyStore, name: str, version: str, body: dict) -> KvResponse:
+    meta = store.get_key(_kid_key(name, version)) if version else _latest(store, name)
+    if not meta:
+        return _err(404, "KeyNotFound",
+                    f"A key with (name/id) {name} was not found in this key vault.")
+    version = meta["version"]
+    alg = str(body.get("alg", "RS256"))
+    try:
+        digest = _b64url_decode(body.get("digest", ""))
+        provided = _b64url_decode(body.get("value", ""))
+    except Exception:
+        return _err(400, "BadParameter", "digest/value must be valid base64url.")
+    material = store.get_material(_kid_key(name, version))
+    expected = _signature(material, alg, digest)
+    return _json(200, {"value": hmac.compare_digest(expected, provided)})
+
+
 def _delete_key(store: KeyStore, name: str) -> KvResponse:
     versions = _versions_for(store, name)
     if not versions:
@@ -299,6 +375,14 @@ def dispatch(store: KeyStore, method: str, path: str,
             return _encrypt(store, name, version, payload)
         if method == "POST" and op == "decrypt":
             return _decrypt(store, name, version, payload)
+        if method == "POST" and op == "wrapkey":
+            return _wrap_key(store, name, version, payload)
+        if method == "POST" and op == "unwrapkey":
+            return _unwrap_key(store, name, version, payload)
+        if method == "POST" and op == "sign":
+            return _sign(store, name, version, payload)
+        if method == "POST" and op == "verify":
+            return _verify(store, name, version, payload)
         return _err(404, "NotFound", f"Unknown operation: {op}")
 
     return _err(404, "NotFound", f"Unknown path: {path}")
