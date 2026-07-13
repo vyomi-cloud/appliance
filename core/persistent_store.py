@@ -29,6 +29,7 @@ from core.kms_keystore import InMemoryKeyStore
 from core.messaging_store import InMemoryMessagingStore
 from core.iam_store import InMemoryIamStore
 from core.azure_blob_core import AzureBlobStore
+from core.gcp_firestore_core import FirestoreStore
 
 
 # ── bytes-aware JSON codec ────────────────────────────────────────────────
@@ -181,4 +182,22 @@ class PersistentAzureBlobStore(_PersistentMixin, AzureBlobStore):
 
     def delete_container(self, name: str) -> None:
         super().delete_container(name)
+        self._save()
+
+
+class PersistentFirestoreStore(_PersistentMixin, FirestoreStore):
+    """Durable Firestore (v2.5.0): the FirestoreStore has clean put/delete methods,
+    so we persist on those — no core edits needed."""
+    _STATE_ATTRS = ("documents",)
+
+    def __init__(self, backend: SqliteStateBackend, store_id: str = "firestore"):
+        FirestoreStore.__init__(self)
+        self._pinit(backend, store_id)
+
+    def put(self, rel: str, entry: dict) -> None:
+        super().put(rel, entry)
+        self._save()
+
+    def delete(self, rel: str) -> None:
+        super().delete(rel)
         self._save()
