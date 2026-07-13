@@ -73,6 +73,8 @@ def mount(app, router: AwsWireRouter | None = None) -> None:
         return Response(content=out["body"], status_code=out["status"],
                         headers={k: v for k, v in (out["headers"] or {}).items()})
 
-    # Registered LAST so it only catches paths no explicit route claimed.
-    app.add_api_route("/{full_path:path}", _ingress,
-                      methods=["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"])
+    # Starlette raw route (NOT add_api_route — that wraps the handler in FastAPI's
+    # request-validation machinery and 422s a raw native-wire request). Registered
+    # LAST so it only catches paths no explicit route already claimed.
+    app.add_route("/{full_path:path}", _ingress,
+                  methods=["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"])

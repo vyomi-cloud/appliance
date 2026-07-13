@@ -22381,13 +22381,26 @@ def api_azure_vm_private_key(instance_id: str):
     )
 
 
+# ── v2.4.0 unified wire ingress (opt-in) ────────────────────────────
+# When VYOMI_UNIFIED_INGRESS is set, native cloud-wire requests are served by
+# the ONE aws_wire_router on real backends (MinIO/Postgres/Vault/NATS) — the
+# same router Nano's relay uses — and the bespoke S3 native-wire catch-all is
+# RETIRED (skipped). Default OFF → the appliance is byte-for-byte unchanged.
+_UNIFIED_INGRESS = os.environ.get("VYOMI_UNIFIED_INGRESS", "").strip().lower() in ("1", "true", "yes")
+
 # ── S3 catch-all routes — TRULY LAST ────────────────────────────────
 # Register AFTER all the explicit /api/{auth,license,...} POST routes
 # defined above. Starlette matches routes in registration order; if
 # we registered the @app.post("/{bucket}/{key:path}") catch-all up
 # top (as the file originally did), it swallowed POST /api/auth/...
 # with bucket=api, key=auth/... and returned a NoSuchBucket XML.
-aws_s3.register(app, aws_xamz_dispatchers=_aws_xamz_dispatchers)
+if not _UNIFIED_INGRESS:
+    aws_s3.register(app, aws_xamz_dispatchers=_aws_xamz_dispatchers)
+else:
+    # Retire the bespoke S3 handler; the unified ingress (final fallback catch-all)
+    # serves S3 + any native cloud wire no explicit route claims.
+    from core.wire_ingress import mount as _mount_unified_ingress
+    _mount_unified_ingress(app)
 
 
 if __name__ == "__main__":
