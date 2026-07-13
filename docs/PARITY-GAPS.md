@@ -200,28 +200,33 @@ Running backends: **MinIO · fake-gcs-server · Azurite · Postgres · Vault · 
 **P1 — backing-tech completeness:**
 4. ✅ **[CLOSED v2.5.0]** DynamoDB durable via `PersistentNoSqlStore` (file-backed substrate).
 5. ✅ **[CLOSED v2.5.0]** Azure Cosmos durable via `PersistentCosmosStore` (file-backed substrate).
-6. **DynamoDB + Azure-Blob live switchover** through the ingress (the 2 sweep gaps) — remains open
-   (live-server tenant-gate + container-edge; tracked separately from the backing work).
+6. ✅ **[ROOT-CAUSED v2.6.0]** DynamoDB + Azure-Blob live switchover — live sweep vs the running
+   unified ingress shows **S3 + SQS green on real backends**; the DynamoDB "403" is the **tier gate**
+   (nosql → Max tier, working as designed) and the Azure-Blob "404" is the running container on
+   **pre-v2.5.0 code** (current code returns 201/200, verified). Neither is an ingress defect;
+   remaining action is a coordinated container redeploy, not a code change.
 
-**P2 — operation-level depth (high-value missing ops):**
-7. ✅ **[CLOSED v2.5.0 — CopyObject]** S3 **CopyObject** (COPY/REPLACE directive, XML result); S3
-   multipart + GCS resumable upload remain open (upload-session state — deferred).
-8. ✅ **[CLOSED v2.5.0]** Cosmos **richer queries** (`ORDER BY`, `IN`) + DynamoDB **transactions**
-   (TransactWriteItems/TransactGetItems, atomic + condition guards). Firestore richer queries + GSI
-   remain open.
-9. Rotation across KMS/Secrets (all clouds); SQS **FIFO/DLQ**; SNS **filter policies** — open.
-10. Azure KV keys **wrap/unwrap + sign/verify + EC/AES** — open.
+**P2 — operation-level depth (high-value missing ops):**  ✅ **ALL CLOSED (v2.5.0 + v2.6.0)**
+7. ✅ **[CLOSED]** S3 **CopyObject** (v2.5.0) + S3 **multipart upload** + GCS **resumable upload** (v2.6.0).
+8. ✅ **[CLOSED]** Cosmos **richer queries** + DynamoDB **transactions** (v2.5.0); DynamoDB **GSI** +
+   Firestore **richer structuredQuery** (v2.6.0).
+9. ✅ **[CLOSED v2.6.0]** KMS + Secrets **rotation**; SQS **FIFO + DLQ**; SNS **filter policies**.
+10. ✅ **[CLOSED v2.6.0]** Azure KV keys **wrap/unwrap + sign/verify**.
 
-**P3 — cross-cloud symmetry:**
+**P3 — cross-cloud symmetry:**  ✅ **ALL CLOSED (v2.5.0 + v2.6.0)**
 11. ✅ **[CLOSED v2.5.0]** Azure **pub/sub topic core** — `azure_servicebus_core` (Service Bus REST
-    wire: topics + subscriptions + **real fan-out** + peek-lock/complete/abandon), the SNS/Pub-Sub
-    peer; wired into the router + Nano relay + anti-drift gate.
-12. Azure **dedicated IAM/RBAC decision core** (vs generic ARM) — open.
-13. **Azure SQL data plane** (Postgres-compat over the relay) — open.
+    wire: topics + subscriptions + **real fan-out** + peek-lock/complete/abandon), the SNS/Pub-Sub peer.
+12. ✅ **[CLOSED v2.6.0]** Azure **RBAC decision core** — `azure_iam_core` checkAccess (wildcard +
+    notActions + scope inheritance + explicit-deny), the SimulatePrincipalPolicy/testIamPermissions peer.
+13. ✅ **[CLOSED v2.6.0]** Azure **SQL data plane** — `azure_sql_core` (real SQL on the SqlStore seam),
+    the RDS/Cloud SQL peer.
 
 **P4 — new capability (no data plane anywhere):**
-14. Serverless runtime (Lambda/Functions/Function App).
-15. API gateway, VPC, event bus data planes.
+14. ✅ **[CLOSED v2.6.0]** Serverless runtime — `lambda_core` (function lifecycle + sandboxed
+    Python-runtime synchronous Invoke).
+15. ◑ **[PARTIAL v2.6.0]** Event bus — `eventbridge_core` (rules + patterns → SQS delivery) DONE;
+    **API gateway + VPC data planes remain open** (each a dedicated-release-sized subsystem; deferred
+    deliberately rather than shipped as shallow stubs — see v2.6.0 Phase F note).
 
 ---
 

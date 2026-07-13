@@ -4,6 +4,46 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] — 2026-07-13
+
+**Parity Finish** — closes the *rest* of `docs/PARITY-GAPS.md` after v2.5.0: all of
+P2 (operation depth), all of P3 (cross-cloud symmetry), and the tractable P4 net-new
+data planes. Every op lands in the shared substrate-free cores, so **Nano gains them
+too**; each is proven by a conformance test.
+
+### Added — operation depth (P2)
+- **S3 multipart upload** (Create/UploadPart/ListParts/Complete/Abort; canonical
+  `md5(concat part-md5s)-N` ETag) + **GCS resumable upload** (session URI + finalize).
+- **DynamoDB GSI** query (CreateTable persists index KeySchema; Query(IndexName=…))
+  + **Firestore richer structuredQuery** (comparison / IN / ARRAY_CONTAINS /
+  compositeFilter AND·OR / orderBy / limit).
+- **SQS FIFO** (MessageGroupId ordering + content dedup) + **DLQ redrive**; **SNS
+  filter policies** (per-subscription delivery filtering).
+- **KMS rotation** (Enable/Disable/GetKeyRotationStatus/RotateKeyOnDemand) + **Secrets
+  Manager RotateSecret**; **Azure Key Vault wrap/unwrap + sign/verify**.
+
+### Added — cross-cloud symmetry (P3) & net-new data planes (P4)
+- **Azure SQL data plane** (`azure_sql_core`) — real SQL on the SqlStore seam, the
+  RDS / Cloud SQL peer.
+- **Azure RBAC decision core** (`azure_iam_core`) — a `checkAccess` evaluator
+  (wildcard actions, notActions, scope inheritance, explicit-deny-wins), the AWS
+  SimulatePrincipalPolicy / GCP testIamPermissions peer.
+- **EventBridge event-bus** (`eventbridge_core`) — rules + event patterns → SQS
+  delivery; wired into the router (AWSEvents.* JSON wire).
+- **Lambda serverless invoke** (`lambda_core`) — function lifecycle + a synchronous
+  Invoke that runs the handler in a **sandboxed Python runtime** (no
+  __import__/open/eval; errors → X-Amz-Function-Error); wired into the router.
+
+### Verified
+- **Live native-SDK sweep** vs the running unified ingress: **S3 + SQS green
+  end-to-end on real backends**. The DynamoDB live-403 was root-caused to the
+  **tier-licensing gate** (nosql → Max tier, by design) and the Azure-Blob live-404
+  to the running container serving **pre-v2.5.0 code** (current code returns
+  201/200) — neither an ingress defect.
+
+### Deferred (documented, not shipped as stubs)
+- API gateway + VPC data planes (each a dedicated-release-sized subsystem).
+
 ## [2.5.0] — 2026-07-13
 
 **Parity Close-out** — closes the cross-cloud parity gaps catalogued in
