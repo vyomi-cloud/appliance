@@ -241,6 +241,15 @@ def _table_view(store: NoSqlStore, table: dict, include_items: bool = True) -> d
         "ItemCount": int(table.get("item_count", 0) or 0),
         "TableSizeBytes": int(table.get("table_size_bytes", 0) or 0),
     }
+    indexes = table.get("indexes", [])
+    if indexes:
+        view["GlobalSecondaryIndexes"] = [{
+            "IndexName": gsi.get("name", ""),
+            "KeySchema": gsi.get("key_schema", []),
+            "Projection": gsi.get("projection", {"ProjectionType": "ALL"}),
+            "IndexStatus": gsi.get("index_status", "ACTIVE"),
+            "ItemCount": int(table.get("item_count", 0) or 0),
+        } for gsi in indexes]
     return view
 
 
@@ -279,6 +288,26 @@ def _create_table_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
         tags = {str(t.get("Key", t.get("key", ""))): str(t.get("Value", t.get("value", "")))
                 for t in tags if isinstance(t, dict)}
 
+    # Global secondary indexes: keep each index's KeySchema so Query(IndexName=...)
+    # can resolve its own partition/sort keys (distinct from the base table's).
+    indexes = []
+    for gsi in (payload.get("GlobalSecondaryIndexes") or []):
+        if not isinstance(gsi, dict):
+            continue
+        gks = gsi.get("KeySchema") or []
+        g_pk = next((str(k.get("AttributeName", "")) for k in gks
+                     if str(k.get("KeyType", "")).upper() == "HASH"), "")
+        g_sk = next((str(k.get("AttributeName", "")) for k in gks
+                     if str(k.get("KeyType", "")).upper() == "RANGE"), "")
+        indexes.append({
+            "name": str(gsi.get("IndexName", "")),
+            "key_schema": gks,
+            "partition_key_name": g_pk,
+            "sort_key_name": g_sk,
+            "projection": gsi.get("Projection") or {"ProjectionType": "ALL"},
+            "index_status": "ACTIVE",
+        })
+
     table = {
         "table_name": table_name,
         "table_arn": _table_arn(store, table_name),
@@ -293,7 +322,7 @@ def _create_table_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
             "WriteCapacityUnits": int(throughput.get("WriteCapacityUnits", 5) or 5),
         },
         "tags": copy.deepcopy(tags or {}),
-        "indexes": [],
+        "indexes": indexes,
         "streams": {"enabled": False, "latest_stream_label": ""},
         "items": {},
         "created": _now(),
@@ -406,11 +435,29 @@ def _sorted_records(table: dict) -> list[dict]:
     return records
 
 
+def _gsi_key_fields(table: dict, index_name: str) -> tuple[str, str] | None:
+    """Resolve a GSI's (partition, sort) key names from the table's stored indexes."""
+    for gsi in table.get("indexes", []):
+        if gsi.get("name") == index_name:
+            return str(gsi.get("partition_key_name", "")), str(gsi.get("sort_key_name", "") or "")
+    return None
+
+
 def _query_filter(table: dict, payload: dict[str, Any]) -> tuple[list[dict], int]:
     records = _sorted_records(table)
     if not records:
         return [], 0
-    pk_name, sk_name = _table_key_fields(table)
+    # Query(IndexName=...) resolves keys from the GSI's own KeySchema, not the base
+    # table's — the whole point of a secondary index.
+    index_name = str(payload.get("IndexName") or payload.get("index_name") or "").strip()
+    if index_name:
+        gsi_keys = _gsi_key_fields(table, index_name)
+        if gsi_keys is None:
+            raise DdbError("ValidationException",
+                           f"The table does not have the specified index: {index_name}", 400)
+        pk_name, sk_name = gsi_keys
+    else:
+        pk_name, sk_name = _table_key_fields(table)
     pk_value = payload.get("partition_key_value")
     sk_equals = payload.get("sort_key_equals")
     sk_begins = str(payload.get("sort_key_begins_with") or "")

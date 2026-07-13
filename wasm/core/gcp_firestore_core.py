@@ -239,35 +239,117 @@ def dispatch(store: FirestoreStore, method: str, path: str,
     return _err(400, "INVALID_ARGUMENT", f"Unsupported request: {method} {path}")
 
 
+def _scalar_list(v: dict) -> list:
+    """Collapse an arrayValue typed value to a list of Python scalars."""
+    vals = ((v or {}).get("arrayValue") or {}).get("values") or []
+    return [_scalar(x) for x in vals]
+
+
+def _eval_field_filter(fields: dict, ff: dict) -> bool:
+    """One structuredQuery fieldFilter against a document's typed `fields` map.
+    Supports the full comparison + membership + array operator set."""
+    field_path = (ff.get("field") or {}).get("fieldPath")
+    op = ff.get("op")
+    stored = fields.get(field_path, {})
+    actual = _scalar(stored)
+    if op in ("EQUAL", "NOT_EQUAL"):
+        target = _scalar(ff.get("value") or {})
+        return (actual == target) if op == "EQUAL" else (actual != target)
+    if op in ("LESS_THAN", "LESS_THAN_OR_EQUAL", "GREATER_THAN", "GREATER_THAN_OR_EQUAL"):
+        target = _scalar(ff.get("value") or {})
+        try:
+            if op == "LESS_THAN":
+                return actual < target
+            if op == "LESS_THAN_OR_EQUAL":
+                return actual <= target
+            if op == "GREATER_THAN":
+                return actual > target
+            return actual >= target
+        except TypeError:
+            return False
+    if op in ("IN", "NOT_IN"):
+        members = _scalar_list(ff.get("value") or {})
+        return (actual in members) if op == "IN" else (actual not in members)
+    if op == "ARRAY_CONTAINS":
+        target = _scalar(ff.get("value") or {})
+        return target in _scalar_list(stored)
+    if op == "ARRAY_CONTAINS_ANY":
+        members = _scalar_list(ff.get("value") or {})
+        return any(m in _scalar_list(stored) for m in members)
+    return True   # unsupported operator → don't filter out
+
+
+def _eval_filter(fields: dict, filt: dict) -> bool:
+    """Evaluate a where clause: a single fieldFilter, a unaryFilter (IS_NULL /
+    IS_NAN and their negations), or a compositeFilter (AND / OR of sub-filters)."""
+    if not filt:
+        return True
+    if "fieldFilter" in filt:
+        return _eval_field_filter(fields, filt["fieldFilter"])
+    if "unaryFilter" in filt:
+        uf = filt["unaryFilter"]
+        fp = (uf.get("field") or {}).get("fieldPath")
+        present = fp in fields
+        val = _scalar(fields.get(fp, {})) if present else None
+        oper = uf.get("op")
+        if oper == "IS_NULL":
+            return present and val is None
+        if oper == "IS_NOT_NULL":
+            return present and val is not None
+        return True
+    if "compositeFilter" in filt:
+        cf = filt["compositeFilter"]
+        subs = cf.get("filters") or []
+        if str(cf.get("op", "AND")).upper() == "OR":
+            return any(_eval_filter(fields, f) for f in subs)
+        return all(_eval_filter(fields, f) for f in subs)
+    return True
+
+
 def _run_query(store: FirestoreStore, base: str, parent_rel: str,
                request: dict) -> FirestoreResponse:
-    """Basic structuredQuery: `from[0].collectionId` (relative to the query
-    parent) + an optional single fieldFilter EQUAL. Returns the Firestore
-    streaming shape — a JSON array of `{"document","readTime"}` rows."""
+    """structuredQuery: `from[0].collectionId` (relative to the query parent) with
+    a where clause (fieldFilter / unaryFilter / compositeFilter AND|OR, full
+    comparison + IN/NOT_IN + ARRAY_CONTAINS[_ANY] operators), plus orderBy,
+    offset and limit. Returns the Firestore streaming shape — a JSON array of
+    `{"document","readTime"}` rows."""
     sq = request.get("structuredQuery", {}) or {}
     froms = sq.get("from", []) or []
     if not froms:
         return _json(200, [])
     coll_id = froms[0].get("collectionId", "")
     coll = f"{parent_rel}/{coll_id}" if parent_rel else coll_id
-
-    # optional single fieldFilter EQUAL
-    field_path = op = target = None
     where = sq.get("where") or {}
-    ff = where.get("fieldFilter")
-    if ff:
-        field_path = (ff.get("field") or {}).get("fieldPath")
-        op = ff.get("op")
-        target = _scalar(ff.get("value") or {})
 
-    rows = []
+    matched = []
+    for rel, entry in store.in_collection(coll):
+        if _eval_filter(entry.get("fields", {}), where):
+            matched.append((rel, entry))
+
+    # orderBy (may be multiple keys); default to document-name order.
+    order_by = sq.get("orderBy") or []
+    if order_by:
+        for ob in reversed(order_by):
+            fp = (ob.get("field") or {}).get("fieldPath")
+            desc = str(ob.get("direction", "ASCENDING")).upper() == "DESCENDING"
+
+            def _key(kv, fp=fp):
+                v = _scalar(kv[1].get("fields", {}).get(fp, {}))
+                return (v is None, type(v).__name__ if v is not None else "", v if v is not None else "")
+            matched.sort(key=_key, reverse=desc)
+    else:
+        matched.sort(key=lambda kv: kv[0])
+
+    offset = int(sq.get("offset", 0) or 0)
+    if offset:
+        matched = matched[offset:]
+    limit = sq.get("limit")
+    if limit is not None:
+        matched = matched[:int(limit)]
+
     read_time = _now()
-    for rel, entry in sorted(store.in_collection(coll), key=lambda kv: kv[0]):
-        if field_path and op == "EQUAL":
-            fields = entry.get("fields", {})
-            if _scalar(fields.get(field_path, {})) != target:
-                continue
-        rows.append({"document": _doc_view(base, rel, entry), "readTime": read_time})
+    rows = [{"document": _doc_view(base, rel, entry), "readTime": read_time}
+            for rel, entry in matched]
     if not rows:
         return _json(200, [{"readTime": read_time}])
     return _json(200, rows)
