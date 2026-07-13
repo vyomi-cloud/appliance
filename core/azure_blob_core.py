@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -236,8 +237,25 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
             h[f"x-ms-meta-{mk}"] = mv
         if method == "HEAD":
             return Response(status=200, headers=h, body=b"", media_type=None)
-        return Response(status=200, headers=h, body=entry["data"],
-                        media_type=entry["content_type"])
+        # Range support — the azure-storage-blob SDK downloads via a ranged GET
+        # (Range / x-ms-range: bytes=start-end) and requires 206 + Content-Range.
+        data = entry["data"]
+        rng = headers.get("x-ms-range") or headers.get("range") or ""
+        m = re.match(r"bytes=(\d*)-(\d*)", rng.strip()) if rng else None
+        if m and (m.group(1) or m.group(2)):
+            total = len(data)
+            start = int(m.group(1)) if m.group(1) else 0
+            end = int(m.group(2)) if m.group(2) else total - 1
+            end = min(end, total - 1)
+            if start > end or start >= total:
+                er = _err(416, "InvalidRange", "The range specified is invalid.")
+                er.headers["content-range"] = f"bytes */{total}"
+                return er
+            sl = data[start:end + 1]
+            h["content-length"] = str(len(sl))
+            h["content-range"] = f"bytes {start}-{end}/{total}"
+            return Response(status=206, headers=h, body=sl, media_type=entry["content_type"])
+        return Response(status=200, headers=h, body=data, media_type=entry["content_type"])
 
     if method == "DELETE":                             # delete blob
         if not store.container_exists(container):
