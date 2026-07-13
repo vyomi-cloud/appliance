@@ -927,8 +927,17 @@ async function selectService(key){
     el("button",{class:"tbtn",onclick:()=>selectService(key)}, icon("refresh"),"Refresh"));
   main.append(tb);
   const wrap=el("div",{class:"wrap",id:"gridWrap"}); wrap.append(el("div",{class:"empty"},"Loading…")); main.append(wrap);
-  const res=await arm("GET", collPath(svc), undefined, svc.apiVersion);
-  renderGrid(svc, (res.json&&res.json.value)||[]);
+  let items;
+  if(svc.dataPlane){
+    // Data-plane services (Blob containers, Cosmos DBs, KV secrets/keys, queues)
+    // are served by the in-WASM cores via /api/azure/{key}, not ARM.
+    try{ const r=await fetch(ORIGIN+"/api/azure/"+svc.key); const j=await r.json(); items=j.items||[]; }
+    catch(e){ items=[]; }
+  } else {
+    const res=await arm("GET", collPath(svc), undefined, svc.apiVersion);
+    items=(res.json&&res.json.value)||[];
+  }
+  renderGrid(svc, items);
 }
 function fmtCell(item, col){
   const v=getPath(item, col[0]);
@@ -3666,12 +3675,15 @@ function openFlatCreate(svc, body){
     inputs[f.name]=inp;
     form.append(el("div",{class:"field"}, el("label",{},f.label), inp));
   });
-  form.append(el("div",{class:"field"}, el("label",{},"Location"), (inputs.__loc__=el("input",{value:LOCATION}))));
+  if(!svc.dataPlane)
+    form.append(el("div",{class:"field"}, el("label",{},"Location"), (inputs.__loc__=el("input",{value:LOCATION}))));
   form.append(el("div",{class:"blade-actions"},
     el("button",{class:"btn",onclick:()=>submitCreate(svc,inputs)},"Create"),
     el("button",{class:"btn sec",onclick:closeBlade},"Cancel")));
   body.append(el("div",{style:"font-size:13px;color:var(--sub);margin-bottom:14px"},
-    "Creates "+svc.namespace+"/"+svc.type+" in resource group "+RG+" via ARM PUT."));
+    svc.dataPlane
+      ? ("Creates a "+svc.label.toLowerCase().replace(/s$/,"")+" via the in-browser "+svc.label+" data-plane core.")
+      : ("Creates "+svc.namespace+"/"+svc.type+" in resource group "+RG+" via ARM PUT.")));
   body.append(form);
   openBlade();
 }
@@ -3679,6 +3691,15 @@ function openFlatCreate(svc, body){
 async function submitCreate(svc, inputs){
   const name=(inputs["name"]?.value||"").trim();
   if(!name){ toast("Name is required","err"); return; }
+  if(svc.dataPlane){
+    // Data-plane create → the in-WASM core via /api/azure/{key} (not ARM).
+    const r=await fetch(ORIGIN+"/api/azure/"+svc.key,{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
+    let j={}; try{ j=await r.json(); }catch(e){}
+    if(r.ok && j.ok!==false){ toast(name+" created"); closeBlade(); selectService(svc.key); }
+    else toast("Create failed"+(j.code?" ("+j.code+")":""),"err");
+    return;
+  }
   const bodyObj={location:(inputs.__loc__.value||LOCATION).trim(), properties:{}};
   svc.createFields.forEach(f=>{
     if(f.name==="name") return;
@@ -3746,7 +3767,13 @@ async function submitWizard(svc, state, synth){
 
 // ---------- delete ----------
 async function confirmDelete(svc, item, fromBlade){
-  if(!confirm("Delete "+item.name+"?\n"+item.id)) return;
+  if(!confirm("Delete "+item.name+"?"+(item.id?"\n"+item.id:""))) return;
+  if(svc.dataPlane){
+    const r=await fetch(ORIGIN+"/api/azure/"+svc.key+"/"+encodeURIComponent(item.name),{method:"DELETE"});
+    if(r.ok){ toast(item.name+" deleted"); if(fromBlade) closeBlade(); selectService(svc.key); }
+    else toast("Delete failed ("+r.status+")","err");
+    return;
+  }
   const res=await arm("DELETE", resPath(svc,item.name), undefined, svc.apiVersion);
   if([200,202,204].includes(res.status)){ toast(item.name+" deleted"); if(fromBlade) closeBlade(); selectService(svc.key); refreshBudgetChip(); }
   else toast("Delete failed ("+res.status+")","err");

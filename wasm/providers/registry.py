@@ -62,6 +62,10 @@ def _resource_dispatch(backends: Backends, provider: str, operation: str,
         from . import gcp_core_adapter as _gca
         if svc in _gca.GCP_CORE_SERVICES:
             return _gca.resource_op(svc, operation, name, body)
+    if provider == "azure":
+        from . import azure_core_adapter as _aca
+        if svc in _aca.AZURE_DP_SERVICES:
+            return _aca.resource_op(svc, operation, name, body)
     r = backends.resources
     if operation == "List":
         return {"ok": True, "items": r.list(provider, account, svc)}
