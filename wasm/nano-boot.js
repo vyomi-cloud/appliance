@@ -49,9 +49,10 @@ function nbMetaPut(k, v) {
 }
 const MODULES = [
   "backends/store.py",
-  "providers/registry.py", "providers/aws_core_adapter.py", "providers/aws.py",
+  "providers/registry.py", "providers/aws_core_adapter.py",
   "providers/gcp_core_adapter.py", "providers/azure_core_adapter.py",
-  "providers/gcp.py", "providers/azure.py", "providers/oracle.py",
+  "providers/dataplane_adapter.py",   // v2.9.0 — net-new data planes (loaded before aws/azure which import it)
+  "providers/aws.py", "providers/gcp.py", "providers/azure.py", "providers/oracle.py",
   "providers/__init__.py",
 ];
 // The PROVEN conformance cores (vendored into wasm/core/ by build_cores.py).

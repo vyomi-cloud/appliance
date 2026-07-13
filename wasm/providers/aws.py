@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from .registry import CloudProvider, register
 from . import aws_core_adapter as A
+from . import dataplane_adapter as D   # v2.9.0 net-new data planes (Lambda/APIGW/VPC/EventBridge)
 
 
 class Aws(CloudProvider):
@@ -79,6 +80,30 @@ class Aws(CloudProvider):
             ("rds", "Reboot"):         lambda b, a, p: A.rds_reboot(p),
             ("rds", "Modify"):         lambda b, a, p: A.rds_modify(p),
             ("rds", "Snapshots"):      lambda b, a, p: A.rds_snapshots(p),
+            # ── v2.9.0 net-new data planes (real cores via dataplane_adapter) ──
+            # Lambda — functions + sandboxed invoke, via core/lambda_core.py
+            ("lambda", "ListFunctions"):  lambda b, a, p: D.lambda_list(p),
+            ("lambda", "CreateFunction"): lambda b, a, p: D.lambda_create(p),
+            ("lambda", "GetFunction"):    lambda b, a, p: D.lambda_get(p),
+            ("lambda", "DeleteFunction"): lambda b, a, p: D.lambda_delete(p),
+            ("lambda", "Invoke"):         lambda b, a, p: D.lambda_invoke(p),
+            # API Gateway — APIs + MOCK/Lambda-proxy + invoke, via core/apigateway_core.py
+            ("apigateway", "ListApis"):   lambda b, a, p: D.apigw_list(p),
+            ("apigateway", "CreateApi"):  lambda b, a, p: D.apigw_create(p),
+            ("apigateway", "DeleteApi"):  lambda b, a, p: D.apigw_delete(p),
+            ("apigateway", "Invoke"):     lambda b, a, p: D.apigw_invoke(p),
+            # VPC — topology + reachability analyzer, via core/vpc_core.py
+            ("vpc", "List"):              lambda b, a, p: D.vpc_list(p),
+            ("vpc", "CreateVpc"):         lambda b, a, p: D.vpc_create(p),
+            ("vpc", "CreateSubnet"):      lambda b, a, p: D.vpc_create_subnet(p),
+            ("vpc", "CreateSecurityGroup"): lambda b, a, p: D.vpc_create_sg(p),
+            ("vpc", "Authorize"):         lambda b, a, p: D.vpc_authorize(p),
+            ("vpc", "Analyze"):           lambda b, a, p: D.vpc_analyze(p),
+            # EventBridge — rules → SQS delivery, via core/eventbridge_core.py
+            ("eventbridge", "ListRules"): lambda b, a, p: D.eb_list(p),
+            ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),
+            ("eventbridge", "DeleteRule"): lambda b, a, p: D.eb_delete(p),
+            ("eventbridge", "PutEvent"):  lambda b, a, p: D.eb_put_event(p),
         }
 
 

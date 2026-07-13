@@ -309,6 +309,40 @@ async function route(method, path, body, query) {
     return { tuple: ["azure", "_arm", method, { path, query: query || {}, body: body || null }] };
   }
 
+  // ── v2.9.0 Azure net-new data planes → real cores (dataplane_adapter) ──
+  let am;
+  // Service Bus (core/azure_servicebus_core.py) — topics + subscriptions + send/receive
+  if (path === "/api/servicebus/topics") {
+    if (method === "GET")  return { tuple: ["azure", "servicebus", "ListTopics", {}] };
+    if (method === "POST") return { tuple: ["azure", "servicebus", "CreateTopic", body || {}] };
+  }
+  am = path.match(/^\/api\/servicebus\/topics\/([^/]+)\/subscriptions$/);
+  if (am && method === "POST") return { tuple: ["azure", "servicebus", "CreateSubscription", { topic: decodeURIComponent(am[1]), ...(body || {}) }] };
+  am = path.match(/^\/api\/servicebus\/topics\/([^/]+)\/send$/);
+  if (am && method === "POST") return { tuple: ["azure", "servicebus", "Send", { topic: decodeURIComponent(am[1]), ...(body || {}) }] };
+  am = path.match(/^\/api\/servicebus\/topics\/([^/]+)\/subscriptions\/([^/]+)\/receive$/);
+  if (am && method === "POST") return { tuple: ["azure", "servicebus", "Receive", { topic: decodeURIComponent(am[1]), subscription: decodeURIComponent(am[2]) }] };
+  am = path.match(/^\/api\/servicebus\/topics\/([^/]+)$/);
+  if (am && method === "DELETE") return { tuple: ["azure", "servicebus", "DeleteTopic", { name: decodeURIComponent(am[1]) }] };
+  // Azure SQL (core/azure_sql_core.py) — servers + databases + real query
+  if (path === "/api/azuresql/servers") {
+    if (method === "GET")  return { tuple: ["azure", "azuresql", "ListServers", {}] };
+    if (method === "POST") return { tuple: ["azure", "azuresql", "CreateServer", body || {}] };
+  }
+  am = path.match(/^\/api\/azuresql\/servers\/([^/]+)\/databases$/);
+  if (am && method === "POST") return { tuple: ["azure", "azuresql", "CreateDatabase", { server: decodeURIComponent(am[1]), ...(body || {}) }] };
+  if (path === "/api/azuresql/query" && method === "POST") return { tuple: ["azure", "azuresql", "Query", body || {}] };
+  am = path.match(/^\/api\/azuresql\/servers\/([^/]+)$/);
+  if (am && method === "DELETE") return { tuple: ["azure", "azuresql", "DeleteServer", { name: decodeURIComponent(am[1]) }] };
+  // Azure RBAC (core/azure_iam_core.py) — role assignments + checkAccess
+  if (path === "/api/azurerbac/assignments") {
+    if (method === "GET")  return { tuple: ["azure", "azurerbac", "ListAssignments", {}] };
+    if (method === "POST") return { tuple: ["azure", "azurerbac", "CreateAssignment", body || {}] };
+  }
+  if (path === "/api/azurerbac/check" && method === "POST") return { tuple: ["azure", "azurerbac", "CheckAccess", body || {}] };
+  am = path.match(/^\/api\/azurerbac\/assignments\/([^/]+)$/);
+  if (am && method === "DELETE") return { tuple: ["azure", "azurerbac", "DeleteAssignment", { name: decodeURIComponent(am[1]) }] };
+
   // 2. specialised data-plane — S3 + DynamoDB served by the PROVEN conformance
   //    cores (via aws_core_adapter on the page). Must precede the generic CRUD
   //    so bucket/table lifecycle AND items/objects all flow through one core
@@ -400,6 +434,41 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/aws\/kms\/keys\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "kms", "GetKey", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "kms", "DeleteKey", { name: dec(m[1]) }] };
+  // ── v2.9.0 net-new data planes → real cores (dataplane_adapter) ──────
+  // Lambda (core/lambda_core.py) — functions + sandboxed invoke
+  if (path === "/api/lambda/functions") {
+    if (method === "GET")  return { tuple: ["aws", "lambda", "ListFunctions", {}] };
+    if (method === "POST") return { tuple: ["aws", "lambda", "CreateFunction", body || {}] };
+  }
+  m = path.match(/^\/api\/lambda\/functions\/([^/]+)\/invoke$/);
+  if (m && method === "POST") return { tuple: ["aws", "lambda", "Invoke", { name: dec(m[1]), ...(body || {}) }] };
+  m = path.match(/^\/api\/lambda\/functions\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "lambda", "GetFunction", { name: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "lambda", "DeleteFunction", { name: dec(m[1]) }] };
+  // API Gateway (core/apigateway_core.py) — APIs + MOCK/Lambda-proxy + invoke
+  if (path === "/api/apigateway/apis") {
+    if (method === "GET")  return { tuple: ["aws", "apigateway", "ListApis", {}] };
+    if (method === "POST") return { tuple: ["aws", "apigateway", "CreateApi", body || {}] };
+  }
+  m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/invoke$/);
+  if (m && method === "POST") return { tuple: ["aws", "apigateway", "Invoke", { id: dec(m[1]), ...(body || {}) }] };
+  m = path.match(/^\/api\/apigateway\/apis\/([^/]+)$/);
+  if (m && method === "DELETE") return { tuple: ["aws", "apigateway", "DeleteApi", { name: dec(m[1]) }] };
+  // VPC (core/vpc_core.py) — topology + reachability analyzer
+  if (path === "/api/vpc" && method === "GET") return { tuple: ["aws", "vpc", "List", {}] };
+  if (path === "/api/vpc/vpcs" && method === "POST") return { tuple: ["aws", "vpc", "CreateVpc", body || {}] };
+  if (path === "/api/vpc/subnets" && method === "POST") return { tuple: ["aws", "vpc", "CreateSubnet", body || {}] };
+  if (path === "/api/vpc/security-groups" && method === "POST") return { tuple: ["aws", "vpc", "CreateSecurityGroup", body || {}] };
+  if (path === "/api/vpc/authorize" && method === "POST") return { tuple: ["aws", "vpc", "Authorize", body || {}] };
+  if (path === "/api/vpc/analyze" && method === "POST") return { tuple: ["aws", "vpc", "Analyze", body || {}] };
+  // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
+  if (path === "/api/eventbridge/rules") {
+    if (method === "GET")  return { tuple: ["aws", "eventbridge", "ListRules", {}] };
+    if (method === "POST") return { tuple: ["aws", "eventbridge", "CreateRule", body || {}] };
+  }
+  if (path === "/api/eventbridge/put-event" && method === "POST") return { tuple: ["aws", "eventbridge", "PutEvent", body || {}] };
+  m = path.match(/^\/api\/eventbridge\/rules\/([^/]+)$/);
+  if (m && method === "DELETE") return { tuple: ["aws", "eventbridge", "DeleteRule", { name: dec(m[1]) }] };
 
   // 3. generic catalog-driven CRUD, from the route table
   for (const r of await routes()) {
