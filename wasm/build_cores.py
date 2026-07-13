@@ -38,6 +38,11 @@ CORES = [
     "gcp_pubsub_core.py",                           # GCP: Pub/Sub REST (native google-cloud-pubsub)
     "gcp_iam_core.py",                              # GCP: Cloud IAM REST (SA + policy eval)
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
+    "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
+    "azure_cosmos_core.py",                         # Azure: Cosmos DB SQL/Core API (native azure-cosmos)
+    "azure_keyvault_secrets_core.py",               # Azure: Key Vault secrets (native azure-keyvault-secrets)
+    "azure_keyvault_keys_core.py",                  # Azure: Key Vault keys (native azure-keyvault-keys)
+    "azure_queue_core.py",                          # Azure: Storage Queue (native azure-storage-queue)
     "aws_wire_router.py",                            # native-wire front door (relay/bridge)
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
 ]

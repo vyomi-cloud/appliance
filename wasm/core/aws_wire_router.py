@@ -68,17 +68,68 @@ def _gcp_service(path):
         return "gcp-gcs"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
         return "gcp-cloudsql"
-    if "/databases/" in path and "/documents" in path:
-        return "gcp-firestore"
-    if "/keyRings" in path:
-        return "gcp-kms"
-    if "/secrets" in path:
-        return "gcp-secretmanager"
-    if "/topics" in path or "/subscriptions" in path:
-        return "gcp-pubsub"
-    if "/serviceAccounts" in path or path.endswith(
-            (":getIamPolicy", ":setIamPolicy", ":testIamPermissions")):
-        return "gcp-iam"
+    # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
+    # /keys, /topics never collide (GCP always scopes these under a project).
+    if "/projects/" in path:
+        if "/databases/" in path and "/documents" in path:
+            return "gcp-firestore"
+        if "/keyRings" in path:
+            return "gcp-kms"
+        if "/secrets" in path:
+            return "gcp-secretmanager"
+        if "/topics" in path or "/subscriptions" in path:
+            return "gcp-pubsub"
+        if "/serviceAccounts" in path or path.endswith(
+                (":getIamPolicy", ":setIamPolicy", ":testIamPermissions")):
+            return "gcp-iam"
+    return None
+
+
+from core import azure_blob_core as az_blob
+from core.azure_blob_core import AzureBlobStore
+from core import azure_cosmos_core as az_cosmos
+from core.azure_cosmos_core import CosmosStore
+from core import azure_keyvault_secrets_core as az_kvsec
+from core import azure_keyvault_keys_core as az_kvkeys
+from core import azure_queue_core as az_queue
+from core.azure_queue_core import AzureQueueStore
+
+
+def _azure_service(path, lheaders, query):
+    """Route an Azure data-plane request. Azure carries no SigV4; we read the
+    x-ms-* headers, the ?api-version / ?restype / ?comp query, and the path
+    shape. Known limits: over a single relay we can't see the .blob/.queue host,
+    so root `?comp=list` (list-containers vs list-queues) defaults to blob."""
+    query = query or {}
+    p = path
+    if p.startswith("/devstoreaccount1/"):     # Azurite account prefix
+        p = p[len("/devstoreaccount1"):]
+    elif p == "/devstoreaccount1":
+        p = "/"
+    apiv = ("api-version" in query) or ("api-version=" in path)
+    # Key Vault (data plane): root /keys or /secrets WITH api-version (GCP secrets
+    # live under /v1/projects/…; a plain S3 bucket named "keys" has no api-version).
+    if apiv and "/projects/" not in p:
+        s0 = p.lstrip("/").split("/", 1)[0]
+        if s0 == "keys":
+            return "az-kv-keys"
+        if s0 == "secrets":
+            return "az-kv-secrets"
+    # Cosmos DB: /dbs path or the documentdb headers.
+    if p.startswith("/dbs") or any(k.startswith("x-ms-documentdb") for k in lheaders):
+        return "az-cosmos"
+    # Blob / Queue: identified by the x-ms-* storage headers.
+    if "x-ms-version" in lheaders or "x-ms-blob-type" in lheaders:
+        if "/messages" in p:
+            return "az-queue"
+        if "x-ms-blob-type" in lheaders or query.get("restype") == "container":
+            return "az-blob"
+        segs = [s for s in p.split("/") if s]
+        if len(segs) >= 2:          # /{container}/{blob}
+            return "az-blob"
+        if len(segs) == 1:          # /{queue} create/delete/metadata (blob container ops carry restype)
+            return "az-queue"
+        return "az-blob"            # root ?comp=list → default to containers
     return None
 
 # SigV4 credential scope: "Credential=AKID/20230626/us-east-1/<service>/aws4_request"
@@ -150,14 +201,23 @@ class AwsWireRouter:
         self.gcp_msg = InMemoryMessagingStore()
         self.gcp_iam = InMemoryIamStore()
         self.gcp_sql = InMemorySqlStore()
+        # Azure data-plane services — each its own store instance.
+        self.az_blob = AzureBlobStore()
+        self.az_cosmos = CosmosStore()
+        self.az_kvsec = InMemoryKvStore()
+        self.az_kvkeys = InMemoryKeyStore()
+        self.az_queue = AzureQueueStore()
 
     # ── service detection ──────────────────────────────────────────────
-    def service_of(self, method, path, lheaders, body):
+    def service_of(self, method, path, lheaders, body, query=None):
         # GCP services are unambiguous by path (REST) and carry no SigV4 — route
         # them first so they never fall through to the S3 default.
         gcp = _gcp_service(path)
         if gcp:
             return gcp
+        az = _azure_service(path, lheaders, query)   # Azure data plane (x-ms-* / api-version)
+        if az:
+            return az
         target = lheaders.get("x-amz-target", "") or ""
         if target:
             for prefix, svc in _TARGET_PREFIX.items():
@@ -218,7 +278,7 @@ class AwsWireRouter:
         b = body if isinstance(body, (bytes, bytearray)) else (body or b"")
         if isinstance(b, str):
             b = b.encode("utf-8")
-        if self.service_of(method, path, lheaders, b) == "rds-data":
+        if self.service_of(method, path, lheaders, b, query) == "rds-data":
             r = await rds_data.dispatch(self.rds, path, self._json_body(b))
             hdrs = dict(r.headers or {})
             hdrs.setdefault("content-type", "application/json")
@@ -232,7 +292,7 @@ class AwsWireRouter:
         body = body if isinstance(body, (bytes, bytearray)) else (body or b"")
         if isinstance(body, str):
             body = body.encode("utf-8")
-        svc = self.service_of(method, path, lheaders, body)
+        svc = self.service_of(method, path, lheaders, body, query)
 
         if svc == "rds-data":  # async-only — guard the sync path
             return {"status": 400, "headers": {"x-amzn-errortype": "BadRequestException"},
@@ -251,6 +311,19 @@ class AwsWireRouter:
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql),
             }[svc]
             mod, store = _gcp_core
+            r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc and svc.startswith("az-"):   # Azure data plane — native azure-* SDK wire
+            _az_core = {
+                "az-blob": (az_blob, self.az_blob), "az-cosmos": (az_cosmos, self.az_cosmos),
+                "az-kv-secrets": (az_kvsec, self.az_kvsec), "az-kv-keys": (az_kvkeys, self.az_kvkeys),
+                "az-queue": (az_queue, self.az_queue),
+            }[svc]
+            mod, store = _az_core
             r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):

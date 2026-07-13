@@ -227,9 +227,41 @@ def run() -> int:
     inst = R.handle("GET", "/sql/v1beta4/projects/demo/instances/pg1", {}, {}, b"")
     _check("gcp cloudsql instance routes", inst["status"] == 200 and "RUNNABLE" in _body(inst))
 
-    print("\nRESULT: PASS — AwsWireRouter routes all 7 AWS services + all 7 GCP services "
-          "(GCS, Firestore, KMS, Secret Manager, Pub/Sub, IAM, Cloud SQL) to the proven "
-          "cores (native SDK wire) on this substrate.")
+    # ── Azure: data-plane services route by x-ms-* / api-version / path shape ──
+    XMS = {"x-ms-version": "2021-12-02"}
+    # Blob: create container, put blob (x-ms-blob-type), get blob round-trips
+    R.handle("PUT", "/pics", {"restype": "container"}, XMS, b"")
+    bput = R.handle("PUT", "/pics/cat.png", {}, {**XMS, "x-ms-blob-type": "BlockBlob"}, b"meow")
+    _check("azure blob put routes 201", bput["status"] == 201)
+    bget = R.handle("GET", "/pics/cat.png", {}, XMS, b"")
+    _check("azure blob get round-trips body", bget["body"] == b"meow")
+    # Queue: create, put message (/messages), get message
+    R.handle("PUT", "/jobs", {}, XMS, b"")
+    R.handle("POST", "/jobs/messages", {}, XMS, b"<QueueMessage><MessageText>hello</MessageText></QueueMessage>")
+    qget = R.handle("GET", "/jobs/messages", {"numofmessages": "1"}, XMS, b"")
+    _check("azure queue publish→get delivers", b"hello" in qget["body"])
+    # Cosmos: /dbs path
+    cdb = R.handle("POST", "/dbs", {}, {**XMS, "x-ms-documentdb-version": "2018"}, _j.dumps({"id": "appdb"}).encode())
+    _check("azure cosmos create db routes", cdb["status"] in (200, 201) and "appdb" in _body(cdb))
+    # Key Vault secrets: /secrets + api-version
+    sput = R.handle("PUT", "/secrets/db-pw", {"api-version": "7.4"}, {}, _j.dumps({"value": "s3cr3t"}).encode())
+    _check("azure kv secret set routes", sput["status"] == 200 and "/secrets/db-pw/" in _body(sput))
+    # Key Vault keys: /keys + api-version, encrypt→decrypt round-trips
+    R.handle("POST", "/keys/k1/create", {"api-version": "7.4"}, {}, _j.dumps({"kty": "RSA"}).encode())
+    import base64 as _b64u
+    pt = _b64u.urlsafe_b64encode(b"vault-secret").rstrip(b"=").decode()
+    kk = _j.loads(_body(R.handle("GET", "/keys/k1", {"api-version": "7.4"}, {}, b"")))
+    ver = kk["key"]["kid"].rsplit("/", 1)[-1]
+    enc = R.handle("POST", f"/keys/k1/{ver}/encrypt", {"api-version": "7.4"}, {}, _j.dumps({"alg": "RSA-OAEP", "value": pt}).encode())
+    ctv = _j.loads(_body(enc))["value"]
+    dec = R.handle("POST", f"/keys/k1/{ver}/decrypt", {"api-version": "7.4"}, {}, _j.dumps({"alg": "RSA-OAEP", "value": ctv}).encode())
+    dv = _j.loads(_body(dec))["value"]
+    dv += "=" * (-len(dv) % 4)
+    _check("azure kv key encrypt→decrypt round-trips", _b64u.urlsafe_b64decode(dv) == b"vault-secret")
+
+    print("\nRESULT: PASS — AwsWireRouter routes all 7 AWS + all 7 GCP + all 5 Azure "
+          "data-plane services (Blob, Cosmos, Key Vault keys/secrets, Queue) to the "
+          "proven cores (native SDK wire) on this substrate.")
     return 0
 
 

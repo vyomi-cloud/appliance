@@ -62,6 +62,9 @@ const CORES = [
   // GCP cores — imported by aws_wire_router for the /storage/v1, /v1/projects/*, /sql/* routes.
   "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py",
+  // Azure data-plane cores — imported by aws_wire_router for the x-ms-*/dbs/keys/secrets routes.
+  "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
+  "azure_keyvault_keys_core.py", "azure_queue_core.py",
   "aws_wire_router.py",
 ];
 async function boot() {
