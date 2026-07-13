@@ -50,6 +50,7 @@ function nbMetaPut(k, v) {
 const MODULES = [
   "backends/store.py",
   "providers/registry.py", "providers/aws_core_adapter.py", "providers/aws.py",
+  "providers/gcp_core_adapter.py",
   "providers/gcp.py", "providers/azure.py", "providers/oracle.py",
   "providers/__init__.py",
 ];
@@ -61,6 +62,9 @@ const CORES = [
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "messaging_store.py", "sqs_core.py", "sns_core.py",
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
+  // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
+  "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py",
 ];
 
 function banner(text, bad) {

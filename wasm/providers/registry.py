@@ -52,10 +52,17 @@ def _resource_dispatch(backends: Backends, provider: str, operation: str,
     service the same way (list/create on collection_path, get/update/delete on
     resource_path), so one handler backs them all. `params.service` is the
     catalog service key (ec2, s3, iam, …); `params.name` the resource id."""
-    r = backends.resources
     svc = params.get("service", "")
     name = params.get("name", "")
     body = params.get("body") or {}
+    # GCP: the 7 conformance-core services are served by the proven cores (the
+    # same ones the relay serves over native google-cloud-* wire), not the
+    # generic store. Lazy import to avoid load-order coupling (like _arm_dispatch).
+    if provider == "gcp":
+        from . import gcp_core_adapter as _gca
+        if svc in _gca.GCP_CORE_SERVICES:
+            return _gca.resource_op(svc, operation, name, body)
+    r = backends.resources
     if operation == "List":
         return {"ok": True, "items": r.list(provider, account, svc)}
     if operation == "Create":
