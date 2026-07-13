@@ -114,6 +114,20 @@ def dispatch(store: InMemoryKvStore, method: str, path: str,
              body: bytes = b"") -> KvResponse:
     query = query or {}
     method = method.upper()
+    lheaders = {(k or "").lower(): v for k, v in (headers or {}).items()}
+
+    # Key Vault auth challenge: the SDK sends an unauthenticated probe first and
+    # expects a 401 + WWW-Authenticate, then retries with the bearer token (and
+    # the real body). We never verify the token — the challenge just drives the
+    # SDK's handshake so `azure-keyvault-secrets` works unchanged. Gated on an SDK
+    # marker so substrate tests (which send no headers) are unaffected.
+    _sdk = ("x-ms-client-request-id" in lheaders
+            or "azsdk" in lheaders.get("user-agent", "").lower())
+    if _sdk and "authorization" not in lheaders:
+        return KvResponse(status=401, headers={
+            "www-authenticate": ('Bearer authorization="https://login.microsoftonline.com/common", '
+                                 'resource="https://vault.azure.net"')},
+            body=b"", media_type=None)
 
     if not query.get("api-version"):
         return _err(400, "BadParameter", "The api-version query parameter is required.")

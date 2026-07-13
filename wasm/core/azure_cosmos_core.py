@@ -217,6 +217,17 @@ def dispatch(store: CosmosStore, method: str, path: str,
     p = path.split("?", 1)[0].rstrip("/")
     segs = [s for s in p.split("/") if s != ""]
 
+    # Database-account discovery: the azure-cosmos SDK issues `GET /` at init to
+    # learn the account's regions. Empty location lists make it fall back to the
+    # configured endpoint (this single in-WASM endpoint).
+    if not segs and method == "GET":
+        return _json(200, {
+            "id": "localhost", "_self": "", "_rid": "localhost", "_dbs": "//dbs/",
+            "writableLocations": [], "readableLocations": [],
+            "enableMultipleWriteLocations": False,
+            "userConsistencyPolicy": {"defaultConsistencyLevel": "Session"},
+        })
+
     if not segs or segs[0] != "dbs":
         return _err(404, "NotFound", f"Unknown resource path: {path}")
 
