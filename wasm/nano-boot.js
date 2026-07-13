@@ -68,6 +68,12 @@ const CORES = [
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_queue_core.py",
+  // v2.5.0–2.8.0 net-new service cores — loaded so the console backend is in
+  // lock-step with the relay + build_cores (usable now via the Nano relay;
+  // dedicated console UI pages are a follow-up). Deps (messaging_store, sql_store,
+  // iam_store, lambda_core) are already listed above.
+  "azure_servicebus_core.py", "eventbridge_core.py", "lambda_core.py",
+  "apigateway_core.py", "vpc_core.py", "azure_sql_core.py", "azure_iam_core.py",
 ];
 
 function banner(text, bad) {

@@ -22395,6 +22395,16 @@ _UNIFIED_INGRESS = os.environ.get("VYOMI_UNIFIED_INGRESS", "").strip().lower() i
 # top (as the file originally did), it swallowed POST /api/auth/...
 # with bucket=api, key=auth/... and returned a NoSuchBucket XML.
 if not _UNIFIED_INGRESS:
+    # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)
+    # on the DEFAULT path — targeted, additive routes for path prefixes that have no
+    # legacy handler, so they work WITHOUT enabling the greedy unified ingress.
+    # Registered BEFORE the S3 catch-all (`/{bucket}/{key:path}`) so these specific
+    # paths win — Starlette matches in registration order, not by specificity.
+    try:
+        from core.wire_ingress import mount_new_services as _mount_new_services
+        _mount_new_services(app)
+    except Exception as _e:   # never let this break appliance boot
+        print(f"[wire_ingress] net-new service mount skipped: {_e}")
     aws_s3.register(app, aws_xamz_dispatchers=_aws_xamz_dispatchers)
 else:
     # Retire the bespoke S3 handler; the unified ingress (final fallback catch-all)

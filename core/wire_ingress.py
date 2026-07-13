@@ -105,3 +105,39 @@ def mount(app, router: AwsWireRouter | None = None) -> None:
     # LAST so it only catches paths no explicit route already claimed.
     app.add_route("/{full_path:path}", _ingress,
                   methods=["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"])
+
+
+def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
+    """Expose the v2.6.0–2.8.0 NET-NEW services on the DEFAULT appliance path —
+    additively and SAFELY. Unlike `mount()` (a greedy catch-all, opt-in behind the
+    unified-ingress flag), this registers ONLY the specific path prefixes of the
+    net-new services, which have NO legacy handler to conflict with:
+
+        /2015-03-31/functions...        Lambda (serverless invoke)
+        /restapis...                    API Gateway
+        /azure-sql/...                  Azure SQL data plane
+        /providers/Microsoft.Authorization/...   Azure RBAC checkAccess
+
+    So the appliance serves these regardless of VYOMI_UNIFIED_INGRESS, without
+    touching the existing S3/DynamoDB/… handlers. These services are in-memory (no
+    backend deps), so a plain in-WASM-style router is used — no MinIO/Vault/NATS
+    required at mount time. Header/Action-routed net-new services (EventBridge,
+    VPC, Service Bus — dispatched on `/` by X-Amz-Target/Action) can't be isolated
+    from the existing `/` handlers additively, so they remain served via the full
+    unified ingress (mount())."""
+    from fastapi import Request, Response
+
+    r = router or AwsWireRouter()
+
+    async def _proxy(request: Request):
+        body = await request.body()
+        out = await r.ahandle(request.method, request.url.path,
+                              dict(request.query_params), dict(request.headers), body)
+        return Response(content=out["body"], status_code=out["status"],
+                        headers={k: v for k, v in (out["headers"] or {}).items()})
+
+    methods = ["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"]
+    for prefix in ("/2015-03-31/functions", "/restapis", "/azure-sql",
+                   "/providers/Microsoft.Authorization"):
+        app.add_route(prefix, _proxy, methods=methods)
+        app.add_route(prefix + "/{rest:path}", _proxy, methods=methods)

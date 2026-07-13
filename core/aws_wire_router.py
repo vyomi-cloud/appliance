@@ -96,6 +96,8 @@ from core import eventbridge_core as events
 from core import lambda_core as lam
 from core import apigateway_core as apigw
 from core import vpc_core as vpc
+from core import azure_sql_core as az_sql
+from core import azure_iam_core as az_iam
 import types as _types
 
 
@@ -269,6 +271,10 @@ class AwsWireRouter:
             return "lambda"
         if "/restapis" in path:               # API Gateway v1 control plane
             return "apigateway"
+        if "microsoft.authorization" in path.lower():   # Azure RBAC checkAccess
+            return "azure-sql-iam-rbac"
+        if path.startswith("/azure-sql/") or path == "/azure-sql":  # Azure SQL data plane
+            return "azure-sql"
         target = lheaders.get("x-amz-target", "") or ""
         if target:
             for prefix, svc in _TARGET_PREFIX.items():
@@ -363,6 +369,21 @@ class AwsWireRouter:
 
         if svc == "apigateway":   # native API Gateway v1 control plane (/restapis)
             r = apigw.dispatch(self.apigw, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "azure-sql-iam-rbac":   # Azure RBAC checkAccess (shares the IAM store)
+            r = az_iam.dispatch(self.iam, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "azure-sql":   # Azure SQL data plane (shares the SqlStore, `/azure-sql` prefix)
+            sql_path = path[len("/azure-sql"):] or "/"
+            r = az_sql.dispatch(self.rds, method, sql_path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type

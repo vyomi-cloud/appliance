@@ -259,6 +259,32 @@ def run() -> int:
     dv += "=" * (-len(dv) % 4)
     _check("azure kv key encrypt→decrypt round-trips", _b64u.urlsafe_b64decode(dv) == b"vault-secret")
 
+    # ── v2.8.0 net-new + late-wired services on the shared router ──────────
+    # Lambda REST + sandboxed invoke
+    R.handle("POST", "/2015-03-31/functions", {}, {},
+             _j.dumps({"FunctionName": "fn", "Code": {"Source": "def handler(e,c):\n    return {'n': e.get('n',0)+1}"}}).encode())
+    linv = R.handle("POST", "/2015-03-31/functions/fn/invocations", {}, {}, _j.dumps({"n": 41}).encode())
+    _check("lambda invoke routes", _j.loads(_body(linv)) == {"n": 42})
+    # API Gateway control plane
+    _check("apigateway routes", R.handle("POST", "/restapis", {}, {}, _j.dumps({"name": "a"}).encode())["status"] == 201)
+    # VPC via EC2 Query
+    _check("vpc routes", b"<vpcId>" in R.handle("POST", "/", {}, {}, b"Action=CreateVpc&CidrBlock=10.0.0.0/16")["body"])
+    # EventBridge via X-Amz-Target
+    _check("eventbridge routes",
+           R.handle("POST", "/", {}, {"x-amz-target": "AWSEvents.PutRule"}, _j.dumps({"Name": "r"}).encode())["status"] == 200)
+    # Azure SQL data plane (/azure-sql prefix) — real SQL
+    R.handle("PUT", "/azure-sql/servers/s", {}, {}, b"")
+    R.handle("PUT", "/azure-sql/servers/s/databases/d", {}, {}, b"")
+    R.handle("POST", "/azure-sql/servers/s/databases/d/query", {}, {}, _j.dumps({"sql": "CREATE TABLE t(x int)"}).encode())
+    R.handle("POST", "/azure-sql/servers/s/databases/d/query", {}, {}, _j.dumps({"sql": "INSERT INTO t VALUES (7)"}).encode())
+    asql = _j.loads(_body(R.handle("POST", "/azure-sql/servers/s/databases/d/query", {}, {}, _j.dumps({"sql": "SELECT x FROM t"}).encode())))
+    _check("azure sql routes (real SQL)", asql["rows"] == [[7]])
+    # Azure RBAC checkAccess (microsoft.authorization path)
+    _AZ = "/subscriptions/S/providers/Microsoft.Authorization"
+    R.handle("PUT", f"{_AZ}/roleAssignments/ra", {}, {}, _j.dumps({"properties": {"principalId": "u", "roleName": "Reader", "scope": "/subscriptions/S"}}).encode())
+    rbac = _j.loads(_body(R.handle("POST", f"{_AZ}/checkAccess", {}, {}, _j.dumps({"principalId": "u", "action": "x/read", "scope": "/subscriptions/S"}).encode())))
+    _check("azure rbac checkAccess routes", rbac["value"][0]["accessDecision"] == "Allowed")
+
     print("\nRESULT: PASS — AwsWireRouter routes all 7 AWS + all 7 GCP + all 5 Azure "
           "data-plane services (Blob, Cosmos, Key Vault keys/secrets, Queue) to the "
           "proven cores (native SDK wire) on this substrate.")

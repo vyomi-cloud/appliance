@@ -4,6 +4,36 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.1] — 2026-07-13
+
+**Tier exposure** — makes the v2.5.0–2.8.0 parity work actually *reachable* on every
+tier (v2.8.0 shipped the cores; this closes the wiring gaps). No new services.
+
+### Added
+- **`azure_sql` + `azure_iam` now live** — wired into the shared `AwsWireRouter` with
+  collision-free discriminators (`/azure-sql/...` prefix for SQL; `microsoft.authorization`
+  in path for RBAC). Because the router is shared, both are now served on the **Nano
+  relay** and the **Pro/Max unified ingress**. Covered by the router conformance test.
+- **Net-new services on the default Pro/Max path** — `wire_ingress.mount_new_services()`
+  registers targeted, always-on, additive routes for the path-distinct net-new services
+  (Lambda `/2015-03-31/functions`, API Gateway `/restapis`, Azure SQL `/azure-sql`,
+  Azure RBAC `/providers/Microsoft.Authorization`). Registered before the S3 catch-all
+  so they win — no unified-ingress flag flip, existing handlers undisturbed (verified
+  with FastAPI TestClient).
+
+### Changed
+- `nano-boot.js` loads the v2.5.0–2.8.0 net-new cores so the console backend stays in
+  lock-step with the relay + build. (Operation-depth on existing services was already
+  live in the console; the net-new services are usable via the Nano relay today —
+  dedicated console UI pages are follow-up.)
+
+### Notes
+- Reachability after this release: the original 7 services + all operation depth are on
+  **all four surfaces**; Lambda / API Gateway / Azure SQL / Azure RBAC are on the Nano
+  relay + **default Pro/Max** + unified ingress; Service Bus / EventBridge / VPC are on
+  the Nano relay + unified ingress (Action/header-routed, so not additively isolable on
+  default Pro/Max). See `docs/releases/v2.8.1-tier-exposure.md` for the full matrix.
+
 ## [2.8.0] — 2026-07-13
 
 **VPC — the last data plane.** Closes PARITY P4 #15 completely: the first real
