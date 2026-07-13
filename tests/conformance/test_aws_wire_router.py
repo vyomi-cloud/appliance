@@ -166,8 +166,70 @@ def run() -> int:
     s3miss = R.handle("GET", "/gbucket", {}, {"Authorization": _sig("s3")}, b"")
     _check("gcs bucket not visible to s3", s3miss["status"] in (403, 404))
 
-    print("\nRESULT: PASS — AwsWireRouter routes all 7 AWS services + GCP GCS to the "
-          "proven cores (native SDK wire) on this substrate.")
+    # ── GCP: every service routes by REST path to its proven core ──────────
+    import json as _j
+    P = "/v1/projects/demo"
+
+    # Firestore
+    fs = R.handle("POST", f"{P}/databases/(default)/documents/users", {"documentId": "alice"},
+                  {"content-type": "application/json"},
+                  _j.dumps({"fields": {"age": {"integerValue": "30"}}}).encode())
+    _check("gcp firestore create routes", fs["status"] in (200, 201))
+    fsg = R.handle("GET", f"{P}/databases/(default)/documents/users/alice", {}, {}, b"")
+    _check("gcp firestore get round-trips typed field",
+           _j.loads(_body(fsg))["fields"]["age"]["integerValue"] == "30")
+
+    # Cloud KMS — create ring+key, encrypt, decrypt round-trips
+    R.handle("POST", f"{P}/locations/us/keyRings", {"keyRingId": "r"}, {"content-type": "application/json"}, b"{}")
+    R.handle("POST", f"{P}/locations/us/keyRings/r/cryptoKeys", {"cryptoKeyId": "k"},
+             {"content-type": "application/json"}, _j.dumps({"purpose": "ENCRYPT_DECRYPT"}).encode())
+    import base64 as _b64
+    enc = R.handle("POST", f"{P}/locations/us/keyRings/r/cryptoKeys/k:encrypt", {},
+                   {"content-type": "application/json"},
+                   _j.dumps({"plaintext": _b64.b64encode(b"top-secret").decode()}).encode())
+    _check("gcp kms encrypt routes 200", enc["status"] == 200)
+    ct = _j.loads(_body(enc))["ciphertext"]
+    dec = R.handle("POST", f"{P}/locations/us/keyRings/r/cryptoKeys/k:decrypt", {},
+                   {"content-type": "application/json"}, _j.dumps({"ciphertext": ct}).encode())
+    _check("gcp kms decrypt recovers plaintext",
+           _b64.b64decode(_j.loads(_body(dec))["plaintext"]) == b"top-secret")
+
+    # Secret Manager — create, addVersion, access
+    R.handle("POST", f"{P}/secrets", {"secretId": "db-pw"}, {"content-type": "application/json"},
+             _j.dumps({"replication": {"automatic": {}}}).encode())
+    R.handle("POST", f"{P}/secrets/db-pw:addVersion", {}, {"content-type": "application/json"},
+             _j.dumps({"payload": {"data": _b64.b64encode(b"hunter2").decode()}}).encode())
+    acc = R.handle("GET", f"{P}/secrets/db-pw/versions/latest:access", {}, {}, b"")
+    _check("gcp secret access round-trips",
+           _b64.b64decode(_j.loads(_body(acc))["payload"]["data"]) == b"hunter2")
+
+    # Pub/Sub — topic, subscription, publish, pull
+    R.handle("PUT", f"{P}/topics/orders", {}, {"content-type": "application/json"}, b"{}")
+    R.handle("PUT", f"{P}/subscriptions/orders-sub", {}, {"content-type": "application/json"},
+             _j.dumps({"topic": f"projects/demo/topics/orders"}).encode())
+    R.handle("POST", f"{P}/topics/orders:publish", {}, {"content-type": "application/json"},
+             _j.dumps({"messages": [{"data": _b64.b64encode(b"order-42").decode()}]}).encode())
+    pull = R.handle("POST", f"{P}/subscriptions/orders-sub:pull", {}, {"content-type": "application/json"},
+                    _j.dumps({"maxMessages": 10}).encode())
+    msgs = _j.loads(_body(pull)).get("receivedMessages", [])
+    _check("gcp pubsub publish→pull delivers",
+           msgs and _b64.b64decode(msgs[0]["message"]["data"]) == b"order-42")
+
+    # Cloud IAM — service account create + get
+    R.handle("POST", f"{P}/serviceAccounts", {}, {"content-type": "application/json"},
+             _j.dumps({"accountId": "svc", "serviceAccount": {"displayName": "Svc"}}).encode())
+    sa = R.handle("GET", f"{P}/serviceAccounts/svc@demo.iam.gserviceaccount.com", {}, {}, b"")
+    _check("gcp iam service account routes", sa["status"] == 200 and "email" in _body(sa))
+
+    # Cloud SQL — instance insert + get
+    R.handle("POST", "/sql/v1beta4/projects/demo/instances", {}, {"content-type": "application/json"},
+             _j.dumps({"name": "pg1", "databaseVersion": "POSTGRES_15", "settings": {"tier": "db-f1-micro"}}).encode())
+    inst = R.handle("GET", "/sql/v1beta4/projects/demo/instances/pg1", {}, {}, b"")
+    _check("gcp cloudsql instance routes", inst["status"] == 200 and "RUNNABLE" in _body(inst))
+
+    print("\nRESULT: PASS — AwsWireRouter routes all 7 AWS services + all 7 GCP services "
+          "(GCS, Firestore, KMS, Secret Manager, Pub/Sub, IAM, Cloud SQL) to the proven "
+          "cores (native SDK wire) on this substrate.")
     return 0
 
 

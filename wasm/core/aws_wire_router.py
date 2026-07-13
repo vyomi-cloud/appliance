@@ -52,6 +52,34 @@ from core import sqs_core as sqs
 from core import sns_core as sns
 from core import rds_data_core as rds_data
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
+from core import gcp_firestore_core as gcp_fs
+from core.gcp_firestore_core import FirestoreStore
+from core import gcp_kms_core as gcp_kms
+from core import gcp_secretmanager_core as gcp_sec
+from core import gcp_pubsub_core as gcp_ps
+from core import gcp_iam_core as gcp_iam
+from core import gcp_cloudsql_core as gcp_sql
+
+
+def _gcp_service(path):
+    """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
+    client is pointed at the relay and the path is the service discriminator)."""
+    if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1")):
+        return "gcp-gcs"
+    if path.startswith(("/sql/v1beta4", "/sql/v1")):
+        return "gcp-cloudsql"
+    if "/databases/" in path and "/documents" in path:
+        return "gcp-firestore"
+    if "/keyRings" in path:
+        return "gcp-kms"
+    if "/secrets" in path:
+        return "gcp-secretmanager"
+    if "/topics" in path or "/subscriptions" in path:
+        return "gcp-pubsub"
+    if "/serviceAccounts" in path or path.endswith(
+            (":getIamPolicy", ":setIamPolicy", ":testIamPermissions")):
+        return "gcp-iam"
+    return None
 
 # SigV4 credential scope: "Credential=AKID/20230626/us-east-1/<service>/aws4_request"
 _CRED_RE = re.compile(r"Credential=[^/]+/[^/]+/[^/]+/([^/,]+)/aws4_request")
@@ -113,14 +141,23 @@ class AwsWireRouter:
         self.rds = sql_store if sql_store is not None else InMemorySqlStore()
         self.iam = InMemoryIamStore()
         self.msg = InMemoryMessagingStore()   # SHARED by sqs + sns (fan-out)
-        self.gcs = InMemoryObjectStore()      # GCP object storage (own namespace)
+        # GCP services — each its own store instance so buckets/keys/secrets/
+        # topics/policies/instances are namespaced away from the AWS equivalents.
+        self.gcs = InMemoryObjectStore()
+        self.gcp_fs = FirestoreStore()
+        self.gcp_kms = InMemoryKeyStore()
+        self.gcp_sec = InMemoryKvStore()
+        self.gcp_msg = InMemoryMessagingStore()
+        self.gcp_iam = InMemoryIamStore()
+        self.gcp_sql = InMemorySqlStore()
 
     # ── service detection ──────────────────────────────────────────────
     def service_of(self, method, path, lheaders, body):
-        # GCP GCS is unambiguous by path (JSON API), and carries no SigV4 — route
-        # it first so it never falls through to the S3 default.
-        if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1")):
-            return "gcs"
+        # GCP services are unambiguous by path (REST) and carry no SigV4 — route
+        # them first so they never fall through to the S3 default.
+        gcp = _gcp_service(path)
+        if gcp:
+            return gcp
         target = lheaders.get("x-amz-target", "") or ""
         if target:
             for prefix, svc in _TARGET_PREFIX.items():
@@ -206,8 +243,15 @@ class AwsWireRouter:
             return {"status": r.status, "headers": dict(r.headers or {}),
                     "body": r.body or b""}
 
-        if svc == "gcs":   # GCP GCS JSON API — native google-cloud-storage wire
-            r = gcs.dispatch(self.gcs, method, path, query or {}, headers or {}, bytes(body))
+        if svc and svc.startswith("gcp-"):   # GCP services — native google-cloud-* REST wire
+            _gcp_core = {
+                "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs),
+                "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
+                "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
+                "gcp-cloudsql": (gcp_sql, self.gcp_sql),
+            }[svc]
+            mod, store = _gcp_core
+            r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type

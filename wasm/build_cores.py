@@ -32,6 +32,12 @@ CORES = [
     "messaging_store.py", "sqs_core.py", "sns_core.py",  # SQS + SNS (eventing)
     "rds_data_core.py",                             # RDS Data API (HTTP SQL over the relay)
     "gcp_storage_core.py",                          # GCP: GCS JSON API (native google-cloud-storage wire)
+    "gcp_firestore_core.py",                        # GCP: Firestore REST (native google-cloud-firestore)
+    "gcp_kms_core.py",                              # GCP: Cloud KMS REST (native google-cloud-kms)
+    "gcp_secretmanager_core.py",                    # GCP: Secret Manager REST (native google-cloud-secret-manager)
+    "gcp_pubsub_core.py",                           # GCP: Pub/Sub REST (native google-cloud-pubsub)
+    "gcp_iam_core.py",                              # GCP: Cloud IAM REST (SA + policy eval)
+    "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
     "aws_wire_router.py",                            # native-wire front door (relay/bridge)
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
 ]
