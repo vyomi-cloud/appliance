@@ -138,9 +138,33 @@ def _run_query(docs: list[dict], query: str) -> list[dict]:
     if m:
         where = m.group(1).strip()
 
+    def _lit(rhs: str) -> Any:
+        rhs = rhs.strip()
+        if (rhs.startswith("'") and rhs.endswith("'")) or \
+           (rhs.startswith('"') and rhs.endswith('"')):
+            return rhs[1:-1]
+        if rhs.lower() in ("true", "false"):
+            return rhs.lower() == "true"
+        if rhs.lower() == "null":
+            return None
+        try:
+            return int(rhs)
+        except ValueError:
+            try:
+                return float(rhs)
+            except ValueError:
+                return rhs
+
     def _match(doc: dict) -> bool:
         if not where:
             return True
+        # c.field IN (v1, v2, ...) — membership test.
+        inm = re.match(r"^\s*(?:c|root)\.([A-Za-z_][\w]*)\s+in\s*\((.*)\)\s*$",
+                       where, re.IGNORECASE | re.DOTALL)
+        if inm:
+            field_name = inm.group(1)
+            members = [_lit(p) for p in inm.group(2).split(",")]
+            return doc.get(field_name) in members
         cm = re.match(
             r"""^\s*(?:c|root)\.([A-Za-z_][\w]*)\s*
                 (=|==|!=|<>|>=|<=|>|<)\s*
@@ -149,23 +173,7 @@ def _run_query(docs: list[dict], query: str) -> list[dict]:
         if not cm:
             return True  # unsupported predicate -> don't filter it out
         field_name, op, rhs = cm.group(1), cm.group(2), cm.group(3).strip()
-        # parse rhs literal
-        val: Any
-        if (rhs.startswith("'") and rhs.endswith("'")) or \
-           (rhs.startswith('"') and rhs.endswith('"')):
-            val = rhs[1:-1]
-        elif rhs.lower() in ("true", "false"):
-            val = rhs.lower() == "true"
-        elif rhs.lower() == "null":
-            val = None
-        else:
-            try:
-                val = int(rhs)
-            except ValueError:
-                try:
-                    val = float(rhs)
-                except ValueError:
-                    val = rhs
+        val: Any = _lit(rhs)
         actual = doc.get(field_name)
         if op in ("=", "=="):
             return actual == val
@@ -185,6 +193,20 @@ def _run_query(docs: list[dict], query: str) -> list[dict]:
         return True
 
     matched = [d for d in docs if _match(d)]
+
+    # ORDER BY c.field [ASC|DESC] — Cosmos allows a single ordering key.
+    om = re.search(r"\border\s+by\b\s+(?:c|root)\.([A-Za-z_][\w]*)\s*(asc|desc)?",
+                   q, re.IGNORECASE)
+    if om:
+        order_field, direction = om.group(1), (om.group(2) or "asc").lower()
+        # Cosmos orders with undefined/null last; keep it total + type-safe by
+        # sorting on a (present?, coerced-key) tuple so mixed/absent values don't raise.
+        def _sort_key(d: dict):
+            v = d.get(order_field)
+            present = order_field in d and v is not None
+            # group by type then value to avoid str-vs-int TypeError on mixed docs.
+            return (not present, type(v).__name__ if present else "", v if present else "")
+        matched = sorted(matched, key=_sort_key, reverse=(direction == "desc"))
 
     # Projection: SELECT * vs SELECT c.a, c.b
     sm = re.match(r"^\s*select\s+(.*?)\s+from\b", ql, re.DOTALL)

@@ -486,6 +486,39 @@ def _error(code: str, message: str, status: int = 400) -> DdbResponse:
                        headers={"x-amzn-requestid": _req_id()})
 
 
+# ── transactional condition evaluation (TransactWriteItems guards) ─────────
+# A pragmatic subset of ConditionExpression sufficient for the common transactional
+# guards an unmodified SDK emits: attribute_exists(x) / attribute_not_exists(x)
+# (idempotent-write guard) and a simple `attr = :v` / `#a = :v` equality. Anything
+# unrecognised is treated as satisfied (never a false transaction failure).
+def _eval_condition(table: dict, key_payload: dict[str, Any], expr: str,
+                    names: dict[str, Any], values: dict[str, Any]) -> bool:
+    expr = (expr or "").strip()
+    if not expr:
+        return True
+    record = _get_item_record(None, table, {"Key": key_payload})  # store unused for read
+    item = record.get("item", {}) if record else {}
+
+    def _resolve(tok: str) -> str:
+        tok = tok.strip()
+        return str(names.get(tok, tok)) if tok.startswith("#") else tok
+
+    fn = re.match(r"^\s*(attribute_exists|attribute_not_exists)\s*\(\s*(.+?)\s*\)\s*$",
+                  expr, re.IGNORECASE)
+    if fn:
+        attr = _resolve(fn.group(2))
+        present = attr in item
+        return present if fn.group(1).lower() == "attribute_exists" else not present
+
+    eq = re.match(r"^\s*(#?[\w.]+)\s*=\s*(:[\w]+)\s*$", expr)
+    if eq:
+        attr = _resolve(eq.group(1))
+        want = json_to_native(values.get(eq.group(2), {}))
+        return item.get(attr) == want
+
+    return True   # unsupported predicate → don't fail the transaction
+
+
 # ── native-wire dispatcher (X-Amz-Target action → operation) ───────────────
 # The single routing point for the native AWS DynamoDB JSON protocol — what an
 # unmodified aws-cli / boto3 client speaks. Shared by the Nano relay/bridge (tab
@@ -579,6 +612,52 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None) -> Ddb
                     elif "DeleteRequest" in op:
                         _delete_item_record(store, table, {"Key": op["DeleteRequest"].get("Key", {})})
             return _ok({"UnprocessedItems": {}})
+
+        if action == "TransactWriteItems":
+            # All-or-nothing: evaluate every guard/ConditionCheck against the
+            # current state FIRST; only if all pass do we apply the writes. A
+            # failed guard raises TransactionCanceledException with no side effects.
+            ops = payload.get("TransactItems") or payload.get("transact_items") or []
+            planned = []
+            for entry in ops:
+                if not isinstance(entry, dict):
+                    continue
+                kind, spec = next(iter(entry.items()))
+                tname = str(spec.get("TableName") or spec.get("table_name") or "").strip()
+                table = _require_table(store, tname)
+                key_payload = (spec.get("Item") if kind == "Put"
+                               else spec.get("Key")) or {}
+                cond = str(spec.get("ConditionExpression")
+                           or spec.get("condition_expression") or "").strip()
+                names = spec.get("ExpressionAttributeNames") or {}
+                values = spec.get("ExpressionAttributeValues") or {}
+                if cond and not _eval_condition(table, key_payload, cond, names, values):
+                    return _error("TransactionCanceledException",
+                                  "Transaction cancelled, please refer cancellation "
+                                  "reasons for specific reasons [ConditionalCheckFailed]",
+                                  400)
+                planned.append((kind, table, spec))
+            for kind, table, spec in planned:
+                if kind == "Put":
+                    _put_item_record(store, table, {"Item": spec.get("Item", {})})
+                elif kind == "Delete":
+                    _delete_item_record(store, table, {"Key": spec.get("Key", {})})
+                elif kind == "Update":
+                    _update_item_record(store, table, spec)
+                # ConditionCheck: guard already evaluated above, no mutation.
+            return _ok({})
+
+        if action == "TransactGetItems":
+            ops = payload.get("TransactItems") or payload.get("transact_items") or []
+            responses = []
+            for entry in ops:
+                get = (entry or {}).get("Get") or {}
+                tname = str(get.get("TableName") or "").strip()
+                table = _find_table(store, tname)
+                record = _get_item_record(store, table, {"Key": get.get("Key", {})}) if table else None
+                responses.append({"Item": native_item_to_json(record.get("item", {}))}
+                                 if record else {})
+            return _ok({"Responses": responses})
 
         if action == "TagResource":
             table = _require_table(store, table_name())

@@ -17,6 +17,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import re
+import urllib.parse
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -263,6 +264,58 @@ def put_object(store: ObjectStore, bucket: str, key: str, body: bytes, headers: 
                                  "x-amz-version-id": entry.get("current_version_id", vid)})
 
 
+def copy_object(store: ObjectStore, bucket: str, key: str, headers: dict) -> S3Response:
+    """PUT with an `x-amz-copy-source` header — server-side copy. The source is
+    `/<bucket>/<key>[?versionId=...]` (URL-encoded). MetadataDirective COPY (default)
+    inherits the source's content-type + user metadata; REPLACE takes them from the
+    request. Returns a CopyObjectResult XML body (SDKs parse ETag/LastModified there,
+    NOT from headers) with the destination's version id in the header."""
+    headers = {k.lower(): v for k, v in (headers or {}).items()}
+    if not store.bucket_exists(bucket):
+        return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    raw_src = headers.get("x-amz-copy-source", "")
+    src, _, src_query = raw_src.partition("?")
+    src = urllib.parse.unquote(src.lstrip("/"))
+    src_bucket, _, src_key = src.partition("/")
+    src_vid = None
+    if src_query:
+        src_vid = urllib.parse.parse_qs(src_query).get("versionId", [None])[0]
+    if not store.bucket_exists(src_bucket):
+        return _error_xml("NoSuchBucket", "The specified bucket does not exist.",
+                          f"/{src_bucket}", 404)
+    src_entry = _ensure_object_entry(store, src_bucket, src_key, create=False)
+    src_obj = _find_version(src_entry, src_vid)
+    if not src_obj or src_obj.get("is_delete_marker"):
+        return _error_xml("NoSuchKey", "The specified key does not exist.",
+                          f"/{src_bucket}/{src_key}", 404)
+
+    directive = headers.get("x-amz-metadata-directive", "COPY").upper()
+    if directive == "REPLACE":
+        content_type = headers.get("content-type", "application/octet-stream")
+        user_meta = {h[11:]: v for h, v in headers.items() if h.startswith("x-amz-meta-")}
+    else:
+        content_type = src_obj["content_type"]
+        user_meta = copy.deepcopy(src_obj.get("metadata", {}))
+    storage_class = headers.get("x-amz-storage-class", src_obj.get("storage_class", "STANDARD"))
+
+    vstatus = store.versioning_status(bucket)
+    vid = _new_version_id(store, bucket) if vstatus == "Enabled" else "null"
+    version = _make_version_record(data=src_obj["data"], content_type=content_type,
+                                   storage_class=storage_class, metadata=user_meta,
+                                   version_id=vid, delete_marker=False)
+    replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
+    entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           f'<CopyObjectResult xmlns="{S3_NS}">'
+           f'<ETag>{version["etag"]}</ETag>'   # etag already carries literal quotes
+           f'<LastModified>{version["last_modified"]}</LastModified>'
+           '</CopyObjectResult>')
+    extra = {"x-amz-version-id": entry.get("current_version_id", vid)}
+    if src_vid:
+        extra["x-amz-copy-source-version-id"] = src_vid
+    return _xml_response(xml, status=200, extra=extra)
+
+
 def head_object(store: ObjectStore, bucket: str, key: str, query: dict, headers: dict) -> S3Response:
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}/{key}", 404)
@@ -417,6 +470,8 @@ def dispatch(store: ObjectStore, method: str, path: str,
         return _error_xml("MethodNotAllowed", method, f"/{bucket}", 405)
     # object-level
     if method == "PUT":
+        if any(h.lower() == "x-amz-copy-source" for h in (headers or {})):
+            return copy_object(store, bucket, key, headers)
         return put_object(store, bucket, key, body, headers)
     if method == "GET":
         return get_object(store, bucket, key, query, headers)
