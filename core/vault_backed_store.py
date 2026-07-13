@@ -17,6 +17,7 @@ import json
 import urllib.request
 
 from core.kms_keystore import KmsEngine, InMemoryKeyStore
+from core.kv_store import InMemoryKvStore
 
 
 def _safe(key_id: str) -> str:
@@ -79,6 +80,66 @@ class VaultKmsEngine(KmsEngine):
         key_id, ct = blob.decode("utf-8").split("|", 1)
         r = self._req("POST", f"{self._mount}/decrypt/{_safe(key_id)}", {"ciphertext": ct})
         return base64.b64decode(r["data"]["plaintext"])
+
+
+def _vault_req(addr, token, method, path, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(f"{addr.rstrip('/')}/v1/{path}", data=data, method=method,
+                                 headers={"X-Vault-Token": token, "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            return json.loads(r.read().decode() or "{}")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+
+def _k(name):   # opaque single-level Vault key (reversible, no slashes)
+    return base64.urlsafe_b64encode(name.encode()).decode().rstrip("=")
+
+
+def _unk(k):
+    return base64.urlsafe_b64decode(k + "=" * (-len(k) % 4)).decode()
+
+
+class VaultBackedKvStore(InMemoryKvStore):
+    """Secrets on Vault KV v2 (Secrets Manager / GCP Secret Manager / Azure KV secrets
+    share the KvStore seam). Keeps the in-memory dict authoritative (so direct
+    `store.secrets` access + all seam reads work) and write-throughs to Vault on
+    persist()/drop; loads on init. Pro/Max only (talks to Vault) — never WASM."""
+
+    def __init__(self, addr: str = "http://localhost:8200", token: str = "vyomi-dev-token",
+                 mount: str = "secret", prefix: str = "vyomi/", account_id: str | None = None):
+        if account_id is None:
+            super().__init__()
+        else:
+            super().__init__(account_id=account_id)
+        self._addr, self._token, self._mount, self._prefix = addr, token, mount, prefix
+        self._load()
+
+    def _path(self, kind, name):   # kind = "data" | "metadata"
+        return f"{self._mount}/{kind}/{self._prefix}{_k(name)}"
+
+    def _load(self):
+        r = _vault_req(self._addr, self._token, "GET",
+                       f"{self._mount}/metadata/{self._prefix}?list=true")
+        for key in ((r or {}).get("data", {}) or {}).get("keys", []):
+            try:
+                name = _unk(key)
+            except Exception:
+                continue
+            got = _vault_req(self._addr, self._token, "GET", self._path("data", name))
+            if got:
+                self.secrets[name] = got["data"]["data"]
+
+    def persist(self):   # write-through the current secret set (cores call this after mutation)
+        for name, record in self.secrets.items():
+            _vault_req(self._addr, self._token, "POST", self._path("data", name), {"data": record})
+
+    def drop_secret(self, name):
+        super().drop_secret(name)
+        _vault_req(self._addr, self._token, "DELETE", self._path("metadata", name))
 
 
 class VaultBackedKeyStore(InMemoryKeyStore):

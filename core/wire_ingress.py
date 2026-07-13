@@ -28,7 +28,7 @@ def build_backed_router() -> AwsWireRouter:
     """An AwsWireRouter wired to the appliance's real backends behind the seams."""
     from core.minio_backed_store import MinioBackedObjectStore
     from core.postgres_backed_store import PostgresBackedSqlStore
-    from core.vault_backed_store import VaultBackedKeyStore
+    from core.vault_backed_store import VaultBackedKeyStore, VaultBackedKvStore
     from core.nats_backed_store import NatsBackedMessagingStore
 
     minio = dict(
@@ -52,6 +52,10 @@ def build_backed_router() -> AwsWireRouter:
         "kms": VaultBackedKeyStore(**vault),
         "gcp_kms": VaultBackedKeyStore(**vault),
         "az_kvkeys": VaultBackedKeyStore(**vault),
+        # secrets (v2.5.0) — Vault KV v2, namespaced per cloud
+        "sec": VaultBackedKvStore(prefix="aws-sec/", **vault),
+        "gcp_sec": VaultBackedKvStore(prefix="gcp-sec/", **vault),
+        "az_kvsec": VaultBackedKvStore(prefix="az-sec/", **vault),
         # messaging — SQS/SNS + Pub/Sub on NATS JetStream (separate KV buckets)
         "msg": NatsBackedMessagingStore(servers=nats_servers, bucket="aws_msg"),
         "gcp_msg": NatsBackedMessagingStore(servers=nats_servers, bucket="gcp_msg"),
