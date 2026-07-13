@@ -1121,15 +1121,25 @@ def register(app, _h=None) -> None:
                 "startTime": op["startTime"], "endTime": op["endTime"],
                 "properties": {"provisioningState": op["status"]}}
 
-    # Data-plane sub-apps (Blob REST, SQL connect, Service Bus, Cosmos).
-    try:
-        from core import azure_dataplane as _dp
-        _dp.register(app)
-    except Exception:
-        pass
+    # v2.4.0: when the unified wire ingress is on, RETIRE the bespoke Azure native
+    # wire — the data plane (azure_dataplane: Blob/Queue/Cosmos) AND the ARM control
+    # plane (/subscriptions/*) fall through to core.wire_ingress. The /api/azure/*
+    # console routes above stay registered. Default OFF → unchanged.
+    import os as _os
+    _UNIFIED = _os.environ.get("VYOMI_UNIFIED_INGRESS", "").strip().lower() in ("1", "true", "yes")
 
-    @app.api_route("/subscriptions/{rest:path}",
-                   methods=["GET", "PUT", "POST", "PATCH", "DELETE"],
-                   include_in_schema=False)
+    # Data-plane sub-apps (Blob REST, SQL connect, Service Bus, Cosmos).
+    if not _UNIFIED:
+        try:
+            from core import azure_dataplane as _dp
+            _dp.register(app)
+        except Exception:
+            pass
+
     async def arm_dispatch(rest: str, request: Request):
         return await handle_arm(request, rest)
+
+    if not _UNIFIED:
+        app.add_api_route("/subscriptions/{rest:path}", arm_dispatch,
+                          methods=["GET", "PUT", "POST", "PATCH", "DELETE"],
+                          include_in_schema=False)
