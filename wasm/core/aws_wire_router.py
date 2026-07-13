@@ -94,6 +94,9 @@ from core import azure_keyvault_keys_core as az_kvkeys
 from core import azure_queue_core as az_queue
 from core.azure_queue_core import AzureQueueStore
 from core import azure_servicebus_core as az_sb
+from core import eventbridge_core as events
+from core import lambda_core as lam
+import types as _types
 
 
 def _azure_service(path, lheaders, query):
@@ -141,18 +144,20 @@ _SIGNING = {
     "dynamodb": "dynamodb", "kms": "kms", "secretsmanager": "secretsmanager",
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
+    "events": "events", "lambda": "lambda",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
 _TARGET_PREFIX = {
     "DynamoDB_": "dynamodb", "TrentService": "kms",
-    "secretsmanager": "secretsmanager", "AmazonSQS": "sqs",
+    "secretsmanager": "secretsmanager", "AmazonSQS": "sqs", "AWSEvents": "events",
 }
 
 # Native JSON content-types the real SDK expects back per service.
 _JSON_CT = {
     "dynamodb": "application/x-amz-json-1.0", "kms": "application/x-amz-json-1.1",
     "secretsmanager": "application/x-amz-json-1.1", "sqs": "application/x-amz-json-1.0",
+    "events": "application/x-amz-json-1.1",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -212,6 +217,10 @@ class AwsWireRouter:
         self.az_kvkeys = s.get("az_kvkeys") or InMemoryKeyStore()
         self.az_queue = s.get("az_queue") or AzureQueueStore()
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
+        # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
+        # its own lightweight function registry (a namespace the core attaches to).
+        self.events = s.get("events") or self.msg
+        self.lam = s.get("lam") or _types.SimpleNamespace()
 
     def _servicebus_service(self, method, path, lheaders):
         """Azure Service Bus (topics) — the pub/sub-fan-out peer of SNS/Pub-Sub.
@@ -246,6 +255,8 @@ class AwsWireRouter:
             return az
         if self._servicebus_service(method, path, lheaders):
             return "az-servicebus"
+        if "/2015-03-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
+            return "lambda"
         target = lheaders.get("x-amz-target", "") or ""
         if target:
             for prefix, svc in _TARGET_PREFIX.items():
@@ -331,6 +342,13 @@ class AwsWireRouter:
             return {"status": r.status, "headers": dict(r.headers or {}),
                     "body": r.body or b""}
 
+        if svc == "lambda":   # native Lambda REST (function mgmt + sandboxed invoke)
+            r = lam.dispatch(self.lam, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
         if svc and svc.startswith("gcp-"):   # GCP services — native google-cloud-* REST wire
             _gcp_core = {
                 "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs),
@@ -367,6 +385,8 @@ class AwsWireRouter:
                 r = kms.dispatch(self.kms, target, payload)
             elif svc == "secretsmanager":
                 r = secrets.dispatch(self.sec, target, payload)
+            elif svc == "events":
+                r = events.dispatch(self.events, target, payload)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload)
             hdrs = dict(r.headers or {})
