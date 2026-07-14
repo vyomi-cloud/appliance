@@ -58,11 +58,13 @@ func (c *Config) dispatchMultipass(cmd string, args []string) int {
 	case "help", "-h", "--help":
 		usage()
 		return 0
-	case "up", "restart", "upgrade":
-		fmt.Println("vyomi: the Multipass (Max) provisioning path is not yet available in")
-		fmt.Println("       this compiled build. Use the Docker tiers (`vyomi --docker up`)")
-		fmt.Println("       or the shell launcher for Max. Full VM provisioning ships next.")
-		return 3
+	case "up":
+		return fail(c.multipassUp())
+	case "restart":
+		return fail(c.multipassRestart())
+	case "upgrade":
+		c.initializeLog()
+		return fail(c.invokeUpgrade())
 	default:
 		fmt.Println("vyomi: unknown command:", cmd)
 		usage()

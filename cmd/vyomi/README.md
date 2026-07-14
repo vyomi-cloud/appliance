@@ -36,8 +36,11 @@ Stdlib only — no external modules.
 | **Docker substrate** (up/down/restart/status/logs/update) | ✅ tested on real Docker |
 | Inner-context compose path | ✅ |
 | doctor / usage / dispatch / exit codes | ✅ |
-| Host-aware VM sizing formula | ✅ (Windows mem/disk detection lands with Multipass) |
-| **Multipass provisioning** (`up`/`restart`/`upgrade`: install, VM launch, cloud-init, mounts, health, socat bridge, VBox NAT) | ⏳ next increment (simple stop/status/force-stop wired) |
+| Host-aware VM sizing formula (+ Windows GlobalMemoryStatusEx / GetDiskFreeSpaceEx) | ✅ |
+| **Multipass provisioning** (`up`/`restart`/`upgrade`): winget install, VM launch, cloud-init, manifests, ssh key, workspace tar-sync, runtime bridge systemd unit, launcher, health poll | ✅ |
+| netsh localhost bridge + VBox NAT forward (user-context) + URL banner / browser open | ✅ |
+| Unit tests: sizing tiers, IP selection, list parse, cloud-init + manifest generation | ✅ (6 tests) |
+| VBox NAT **auto-elevation** for SYSTEM-owned VMs (Windows-Home edge) | ⏳ prints manual fallback for now |
 | WiX MSI: ship `vyomi.exe` instead of `.ps1`+`.cmd`; shortcut → `vyomi.exe up` | ⏳ |
 | Release pipeline: Go cross-compile → stage `vyomi.exe`; drop the PS1 | ⏳ |
 

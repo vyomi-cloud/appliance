@@ -16,10 +16,13 @@ type Sizing struct {
 	DiskGb int
 }
 
+const gib = 1024 * 1024 * 1024
+
 func recommendedSizing() Sizing {
 	cpu := runtime.NumCPU()
-	memGb := totalMemGb()  // best-effort; 8.0 fallback
-	freeGb := freeDiskGb() // best-effort; 30.0 fallback
+	memGb := float64(hostMemBytes()) / gib
+	_, freeBytes := diskBytes(homeDir())
+	freeGb := float64(freeBytes) / gib
 
 	// Reserve ~4GB for the host OS/hypervisor, then give the VM 85% of the rest.
 	vmMem := int(math.Floor((memGb - 4) * 0.85))

@@ -10,7 +10,10 @@ import (
 	"os"
 )
 
-func progress(msg string) { fmt.Fprintln(os.Stderr, msg) }
+func progress(msg string) {
+	fmt.Fprintln(os.Stderr, msg)
+	logAppend(msg)
+}
 
 func usage() {
 	fmt.Print(`vyomi - local multi-cloud simulator launcher

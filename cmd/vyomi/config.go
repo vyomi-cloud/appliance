@@ -78,5 +78,10 @@ func loadConfig() *Config {
 	os.Setenv("CLOUDLEARN_DISTRIBUTION_MODE", "appliance")
 	os.Setenv("CLOUD_LEARN_RUNTIME_CONTEXT", rc)
 	os.Setenv("VYOMI_RUNTIME_CONTEXT", rc)
+	// Multipass lands on PATH only in shells opened AFTER its install; add the
+	// default dir so `vyomi up` finds it without the user fixing PATH by hand.
+	if rc == "outer" {
+		addMultipassToPath()
+	}
 	return c
 }
