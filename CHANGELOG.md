@@ -4,6 +4,34 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] — 2026-07-14
+
+**Compiled launcher + console data-plane integration.** Two headline changes, plus
+the Windows installer now ships a native binary instead of a PowerShell script.
+
+### Added — compiled `vyomi` launcher (`cmd/vyomi/`)
+- A single stdlib-only Go binary that replaces `scripts/cloud-learn.ps1` as the
+  Windows launcher. Same behavior over both substrates — **Docker** (Free/Lite/Pro)
+  and **Multipass VM** (Max): `up`/`down`/`restart`/`status`/`logs`/`update`/`upgrade`,
+  host-aware VM sizing, cloud-init/manifests/ssh-key generation, workspace tar-sync,
+  runtime-bridge systemd unit, health polling, netsh/VBox localhost bridges.
+- Windows MSI (`packaging/windows/cloudlearn.wxs`) now installs `bin\vyomi.exe` and
+  **excludes `scripts\cloud-learn.ps1`** — the program a user runs is compiled machine
+  code, not a modifiable on-disk script. This satisfies winget's no-scripted-
+  applications policy (PR microsoft/winget-pkgs#392224). Release + preview pipelines
+  cross-compile the binary (`GOOS=windows GOARCH=amd64`).
+- 6 unit tests (sizing tiers, IP selection, list parse, cloud-init/manifest generation,
+  substrate resolution); builds + cross-compiles clean; verified on a real Windows
+  install (`vyomi.exe` present, `.ps1` gone; launcher drives Multipass correctly).
+
+### Added — console data-plane integration (pt1: backend)
+- The SPA/console dispatch chain now drives the REAL v2.5.0–2.8.0 data-plane cores
+  (via `wasm/providers/dataplane_adapter.py` + handler wiring + SW REST routes) instead
+  of the generic name-only catalog CRUD — for all 7 net-new services (Lambda, API
+  Gateway, VPC, EventBridge, Service Bus, Azure SQL, Azure RBAC), including the
+  cross-service flows (EventBridge→SQS, API-Gateway→Lambda). Gated by a conformance
+  test. The dashboard's clickable UI *forms* (pt2) are a documented follow-up.
+
 ## [2.8.1] — 2026-07-13
 
 **Tier exposure** — makes the v2.5.0–2.8.0 parity work actually *reachable* on every
