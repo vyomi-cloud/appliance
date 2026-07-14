@@ -36,10 +36,14 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path stage, stage\bin | Out-Null
+          # Keep in lockstep with the release tarball (release.yml) so the preview
+          # MSI is a faithful copy of the shipped bundle — notably the cloudlite
+          # compose file the Docker (Free/Lite/Pro) substrate needs.
           $items = @(
-            'core','providers','routes','static','packs','scripts','packaging',
+            'core','providers','routes','static','packs','scripts','packaging','docs',
             'cloudsim-backbone','server.py','setup_cython.py','requirements.txt',
             'VERSION','Dockerfile','docker-compose.yml','docker-compose.appliance.yml',
+            'docker-compose.cloudlite.yml',
             '.env.example','install.sh','README.md','CHANGELOG.md','LICENSE'
           )
           foreach ($i in $items) {
