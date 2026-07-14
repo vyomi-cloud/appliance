@@ -3,9 +3,13 @@
   Vyomi appliance — Windows MSI (WiX v4/v5).
 
   Installs the full launcher bundle (the same file set as the release
-  tarball / .deb / .rpm) into "%ProgramFiles%\Vyomi", drops a `vyomi.cmd`
-  shim on the system PATH, and adds a Start-menu shortcut. `vyomi up` then
-  boots the appliance VM via the PowerShell launcher (scripts\cloud-learn.ps1).
+  tarball / .deb / .rpm) into "%ProgramFiles%\Vyomi", puts the COMPILED
+  `vyomi.exe` launcher on the system PATH, and adds a Start-menu shortcut.
+  `vyomi up` boots the appliance directly from the native binary — there is NO
+  on-disk PowerShell script (scripts\cloud-learn.ps1 is excluded), which is what
+  satisfies winget's no-scripted-applications policy (PR microsoft/winget-pkgs#392224).
+  The bash launcher (scripts\cloud-learn) stays in the bundle because it runs
+  INSIDE the Linux appliance VM, not on the host.
 
   Build (see .github/workflows/release.yml → windows-msi job):
     wix build packaging\windows\cloudlearn.wxs `
@@ -14,9 +18,9 @@
       -d StageDir=<abs path to staged bundle> `
       -o dist\cloud-learn-2.1.0-x64.msi
 
-  The StageDir must contain the extracted bundle PLUS a generated
-  bin\vyomi.cmd shim (the workflow creates both). UpgradeCode is stable
-  across versions so MajorUpgrade replaces older installs in place.
+  The StageDir must contain the extracted bundle PLUS a compiled bin\vyomi.exe
+  (the workflow cross-compiles it via `GOOS=windows GOARCH=amd64 go build`).
+  UpgradeCode is stable across versions so MajorUpgrade replaces older installs.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Vyomi"
@@ -62,13 +66,17 @@
     -->
     <ComponentGroup Id="BundleFiles" Directory="INSTALLFOLDER">
       <Files Include="$(var.StageDir)\**">
-        <Exclude Files="$(var.StageDir)\bin\vyomi.cmd" />
+        <!-- The compiled launcher gets its own component (so we can attach the
+             PATH entry). The host PowerShell script is NOT installed at all —
+             the native vyomi.exe replaces it (winget no-scripted-apps policy). -->
+        <Exclude Files="$(var.StageDir)\bin\vyomi.exe" />
+        <Exclude Files="$(var.StageDir)\scripts\cloud-learn.ps1" />
       </Files>
     </ComponentGroup>
 
-    <!-- `vyomi` command shim + system PATH entry. -->
+    <!-- The compiled `vyomi` launcher + system PATH entry. -->
     <Component Id="VyomiShimComponent" Directory="BINDIR" Guid="*">
-      <File Id="vyomiCmd" Source="$(var.StageDir)\bin\vyomi.cmd" KeyPath="yes" />
+      <File Id="vyomiExe" Name="vyomi.exe" Source="$(var.StageDir)\bin\vyomi.exe" KeyPath="yes" />
       <Environment Id="VyomiPath"
                    Name="PATH"
                    Value="[BINDIR]"
@@ -78,13 +86,13 @@
                    Permanent="no" />
     </Component>
 
-    <!-- Start-menu shortcut → `vyomi up`. -->
+    <!-- Start-menu shortcut → the native `vyomi.exe up` (no powershell wrapper). -->
     <Component Id="StartMenuShortcut" Directory="AppProgramsFolder" Guid="*">
       <Shortcut Id="VyomiStartShortcut"
                 Name="Vyomi appliance"
                 Description="Boot the Vyomi appliance and open the console"
-                Target="[System64Folder]WindowsPowerShell\v1.0\powershell.exe"
-                Arguments="-NoExit -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]scripts\cloud-learn.ps1&quot; up"
+                Target="[BINDIR]vyomi.exe"
+                Arguments="up"
                 WorkingDirectory="INSTALLFOLDER" />
       <RemoveFolder Id="RemoveAppProgramsFolder" On="uninstall" />
       <RegistryValue Root="HKCU" Key="Software\Vyomi" Name="installed" Type="integer" Value="1" KeyPath="yes" />

@@ -11,7 +11,7 @@ on:
     branches: [feat/windows-msi-v2.1.0]
     paths:
       - packaging/windows/**
-      - scripts/cloud-learn.ps1
+      - cmd/vyomi/**
       - .github/workflows/windows-msi-preview.yml
 
 permissions:
@@ -22,6 +22,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: '1.26'}
 
       - name: Resolve version from VERSION file
         shell: pwsh
@@ -30,7 +32,7 @@ jobs:
           "MSI_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "MSI_VERSION=$ver"
 
-      - name: Stage the launcher bundle + vyomi.cmd shim
+      - name: Stage the launcher bundle + compiled vyomi.exe launcher
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path stage, stage\bin | Out-Null
@@ -43,8 +45,14 @@ jobs:
           foreach ($i in $items) {
             if (Test-Path $i) { Copy-Item -Path $i -Destination stage\ -Recurse -Force }
           }
-          $shim = "@echo off`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"%~dp0..\scripts\cloud-learn.ps1`" %*`r`n"
-          Set-Content -Path stage\bin\vyomi.cmd -Value $shim -Encoding ascii -NoNewline
+          # Compile the native launcher (replaces the PowerShell script — winget
+          # no-scripted-apps policy). cmd/vyomi is its own Go module.
+          $env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
+          $exe = Join-Path (Resolve-Path stage\bin).Path "vyomi.exe"
+          go -C cmd/vyomi build -trimpath -ldflags "-s -w" -o "$exe" .
+          if (-not (Test-Path $exe)) { throw "vyomi.exe was not built" }
+          # Don't ship the host PowerShell launcher (the native binary replaces it).
+          Remove-Item -Force -ErrorAction SilentlyContinue stage\scripts\cloud-learn.ps1
           Write-Host "Staged $((Get-ChildItem stage -Recurse -File | Measure-Object).Count) files."
 
       - name: Install WiX toolset

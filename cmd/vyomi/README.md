@@ -41,8 +41,9 @@ Stdlib only — no external modules.
 | netsh localhost bridge + VBox NAT forward (user-context) + URL banner / browser open | ✅ |
 | Unit tests: sizing tiers, IP selection, list parse, cloud-init + manifest generation | ✅ (6 tests) |
 | VBox NAT **auto-elevation** for SYSTEM-owned VMs (Windows-Home edge) | ⏳ prints manual fallback for now |
-| WiX MSI: ship `vyomi.exe` instead of `.ps1`+`.cmd`; shortcut → `vyomi.exe up` | ⏳ |
-| Release pipeline: Go cross-compile → stage `vyomi.exe`; drop the PS1 | ⏳ |
+| WiX MSI: ship `vyomi.exe` instead of `.ps1`+`.cmd`; shortcut → `vyomi.exe up`; exclude the `.ps1` | ✅ |
+| Release + preview pipelines: `setup-go` → cross-compile `vyomi.exe` → stage it; drop the PS1 | ✅ |
+| **Remaining before resubmit:** real Windows+VM smoke test (Multipass parity), then bump the winget manifest & resubmit per the moderator | ⏳ |
 
 ## Files
 - `main.go` — entry, usage, doctor, flag parsing

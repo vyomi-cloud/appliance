@@ -217,17 +217,27 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: {name: release-artifacts, path: dist}
+      - uses: actions/setup-go@v5
+        with: {go-version: '1.26'}
 
-      - name: Stage the bundle + vyomi.cmd shim
+      - name: Stage the bundle + compiled vyomi.exe launcher
         shell: pwsh
         run: |
           $ver = "${{ needs.build.outputs.version }}"
           New-Item -ItemType Directory -Force -Path stage, stage/bin | Out-Null
           # Extract the exact same bundle the .tar.gz / .deb / .rpm ship.
           tar -xzf "dist/cloud-learn-$ver.tar.gz" -C stage --strip-components=1
-          # `vyomi` shim → forwards to the PowerShell launcher one dir up.
-          $shim = "@echo off`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"%~dp0..\scripts\cloud-learn.ps1`" %*`r`n"
-          Set-Content -Path stage/bin/vyomi.cmd -Value $shim -Encoding ascii -NoNewline
+          # Compile the native launcher (replaces the PowerShell script). winget
+          # rejects scripted/wrapper apps, so the program a user runs must be a
+          # compiled binary — see PR microsoft/winget-pkgs#392224.
+          $env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
+          $exe = Join-Path (Resolve-Path stage/bin).Path "vyomi.exe"
+          # cmd/vyomi is its own Go module → build from inside it (go -C).
+          go -C cmd/vyomi build -trimpath -ldflags "-s -w" -o "$exe" .
+          if (-not (Test-Path $exe)) { throw "vyomi.exe was not built" }
+          # Do NOT ship the host PowerShell launcher — the native binary replaces
+          # it. (The bash launcher stays: it runs INSIDE the Linux appliance VM.)
+          Remove-Item -Force -ErrorAction SilentlyContinue stage/scripts/cloud-learn.ps1
 
       - name: Install WiX toolset
         # Pin to v5: WiX v7 requires accepting the Open Source Maintenance Fee
