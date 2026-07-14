@@ -4,7 +4,7 @@
 # ProductCode from the release MSI. InstallerSha256 below is filled from the real
 # v2.1.0.2 release MSI when the PR to microsoft/winget-pkgs is opened.
 PackageIdentifier: Vyomi.Vyomi
-PackageVersion: 2.1.0.2
+PackageVersion: 2.9.0
 InstallerType: msi
 Scope: machine
 InstallModes:
@@ -13,7 +13,7 @@ InstallModes:
 UpgradeBehavior: install
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/vyomi-cloud/appliance/releases/download/v2.1.0.2/cloud-learn-2.1.0.2-x64.msi
-    InstallerSha256: FILLED_FROM_v2.1.0.2_RELEASE_MSI
+    InstallerUrl: https://github.com/vyomi-cloud/appliance/releases/download/v2.9.0/cloud-learn-2.9.0-x64.msi
+    InstallerSha256: d38b813a59bb12d7b6cc0e44998d0afd2635d55312d9a0956bb09368155be271
 ManifestType: installer
 ManifestVersion: 1.6.0
