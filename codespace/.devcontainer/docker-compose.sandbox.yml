@@ -1,0 +1,206 @@
+# Vyomi Cloud Sandbox — turnkey multi-cloud compose.
+#
+# One PULL-ONLY compose carrying backends for ALL three clouds, tagged with
+# Docker Compose `profiles:` so a devcontainer starts only the subset it needs:
+#
+#   COMPOSE_PROFILES=aws          → S3·DynamoDB·SQS·SNS·IAM·KMS·Secrets·RDS·EC2
+#   COMPOSE_PROFILES=gcp          → GCS·Firestore·Pub/Sub·IAM·KMS·Secret Mgr·CloudSQL·Compute
+#   COMPOSE_PROFILES=azure        → Blob·Cosmos·Service Bus·Key Vault·RBAC·SQL·VM
+#   COMPOSE_PROFILES=aws,gcp,azure → the FULL profile (everything)
+#
+# `simulator`, `postgres` and shared engines (Vault, NATS) have no profile tag
+# → they ALWAYS start (Postgres backs RDS/CloudSQL/Azure SQL; Vault backs
+# KMS/Secrets/Key Vault; NATS backs the messaging services). Compute (EC2/GCE/
+# VM) launches as sibling Docker containers via the Codespace's docker-in-docker.
+# Unlicensed = Free tier (1 VM + 1 RDS + 1 bucket per space). See plan §3.1-§3.2.
+name: vyomi-sandbox
+
+networks:
+  vyomi-net:
+    name: vyomi-net
+
+services:
+  simulator:
+    image: ${VYOMI_SIMULATOR_IMAGE:-vyomi/appliance:latest}
+    pull_policy: always
+    user: "0:0"                      # root → reach the docker-in-docker socket for compute
+    ports:
+      - "9000:9000"
+    networks: [vyomi-net]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - vyomi-sql-postgres
+      - cloudsim
+    environment:
+      CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
+      CLOUDLEARN_LICENSE_BACKEND_URL: ${VYOMI_LICENSE_BACKEND_URL:-https://vyomi.cloud}
+      CLOUDLEARN_DISTRIBUTION_MODE: developer
+      # Sandbox = self-contained dev env (not a commercial tier). Without a license
+      # from vyomi.cloud the appliance falls back to free-tier and locks services
+      # (DynamoDB/SQS/etc. → 403 tier_service_locked). Disable tier gating so the
+      # profile's full service set works. Overridable via VYOMI_TIER_ENFORCE.
+      CLOUDLEARN_TIER_ENFORCE: ${VYOMI_TIER_ENFORCE:-0}
+      CLOUDLEARN_PUBLIC_URL: ${CLOUDLEARN_PUBLIC_URL:-}
+      VYOMI_LICENSE_JWT: ${VYOMI_LICENSE_JWT:-}
+      VYOMI_INSTALL_ID: ${CODESPACE_NAME:-vyomi-sandbox}
+      VYOMI_PROFILE: ${VYOMI_PROFILE:-all-clouds}
+      # Real compute (EC2/GCE/VM) as sibling Docker containers.
+      VYOMI_COMPUTE_BACKEND: ${VYOMI_COMPUTE_BACKEND:-docker}
+      VYOMI_INSTANCE_IMAGE: ${VYOMI_INSTANCE_IMAGE:-vyomi/instance:ubuntu-24.04}
+      VYOMI_INSTANCE_NETWORK: vyomi-net
+      # ── shared engines ──
+      CLOUDLEARN_SQL_PG_HOST: vyomi-sql-postgres
+      CLOUDLEARN_SQL_PG_PORT: "5432"
+      CLOUDLEARN_SQL_PG_ADMIN_USER: postgres
+      CLOUDLEARN_SQL_PG_ADMIN_PASSWORD: cloudlearn
+      CLOUDLEARN_SQL_MYSQL_HOST: vyomi-sql-mysql
+      CLOUDLEARN_VAULT_URL: http://vyomi-vault:8200
+      CLOUDLEARN_VAULT_TOKEN: vyomi-dev-token
+      CLOUDLEARN_NATS_URL: nats://vyomi-nats:4222
+      CLOUDLEARN_CLOUDSIM_URL: http://cloudsim:9010    # compute backbone (CloudSim Plus) — always on
+      # ── AWS backends ──
+      CLOUDLEARN_MINIO_URL: http://vyomi-minio:9000
+      CLOUDLEARN_MINIO_ACCESS_KEY: cloudlearn
+      CLOUDLEARN_MINIO_SECRET_KEY: cloudlearn-dev-secret-key
+      CLOUDLEARN_DYNAMODB_URL: http://vyomi-dynamodb:8000
+      CLOUDLEARN_ELASTICMQ_URL: http://vyomi-elasticmq:9324
+      # ── GCP backends ──
+      CLOUDLEARN_GCS_URL: http://vyomi-gcs:4443
+      PUBSUB_EMULATOR_HOST: vyomi-pubsub:8085
+      CLOUDLEARN_PUBSUB_EMULATOR_HOST: vyomi-pubsub:8085
+      FIRESTORE_EMULATOR_HOST: vyomi-firestore:8080
+      CLOUDLEARN_FIRESTORE_EMULATOR_HOST: vyomi-firestore:8080
+      # ── Azure backends ──
+      CLOUDLEARN_AZURITE_URL: http://vyomi-azurite:10000
+      CLOUDLEARN_AZURITE_QUEUE_URL: http://vyomi-azurite:10001
+    volumes:
+      - vyomi-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${VYOMI_DOCKER_GID:-0}"
+    tmpfs:
+      - /tmp:size=100M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── Always-on shared engines ──────────────────────────────────────────────
+  vyomi-sql-postgres:            # RDS + CloudSQL + Azure SQL
+    image: postgres:16-alpine
+    networks: [vyomi-net]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: cloudlearn
+    volumes:
+      - vyomi-sql-pg:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  vyomi-vault:                   # KMS + Secrets Manager + Key Vault
+    image: hashicorp/vault:1.15
+    networks: [vyomi-net]
+    command: ["server", "-dev", "-dev-root-token-id=vyomi-dev-token", "-dev-listen-address=0.0.0.0:8200"]
+    cap_add: [IPC_LOCK]
+    restart: unless-stopped
+
+  vyomi-nats:                    # SQS/SNS · Pub/Sub · Service Bus · eventing
+    image: nats:2-alpine
+    networks: [vyomi-net]
+    restart: unless-stopped
+
+  cloudsim:                      # CloudSim Plus — the compute backbone (EC2/GCE/VM sim).
+    # Always-on core: pull-only (no build context in the sandbox); mirrors the
+    # main appliance compose. Published image, so no MinIO-style 404.
+    image: ${VYOMI_CLOUDSIM_IMAGE:-vyomi/cloudsim:latest}
+    networks: [vyomi-net]
+    environment:
+      CLOUDLEARN_CLOUDSIM_HOST: 0.0.0.0
+      CLOUDLEARN_CLOUDSIM_PORT: "9010"
+      CLOUDLEARN_CLOUDSIM_STATE_FILE: /data/cloudsim_state.json
+    volumes:
+      - cloudsim-data:/data
+    restart: unless-stopped
+
+  # ── AWS backends (profile: aws) ───────────────────────────────────────────
+  vyomi-minio:
+    profiles: ["aws"]
+    # MinIO's community image is no longer freely pullable — docker.io/minio/minio
+    # 404s AND quay.io/minio/minio 401s. We self-mirror it (built from source,
+    # multi-arch amd64+arm64) as vyomi/minio, same pattern as vyomi/cloudsim.
+    # Overridable via VYOMI_MINIO_IMAGE.
+    image: ${VYOMI_MINIO_IMAGE:-vyomi/minio:latest}
+    networks: [vyomi-net]
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: cloudlearn
+      MINIO_ROOT_PASSWORD: cloudlearn-dev-secret-key
+    volumes:
+      - vyomi-minio:/data
+    restart: unless-stopped
+
+  vyomi-dynamodb:
+    profiles: ["aws"]
+    image: amazon/dynamodb-local:latest
+    networks: [vyomi-net]
+    restart: unless-stopped
+
+  vyomi-elasticmq:
+    profiles: ["aws"]
+    image: softwaremill/elasticmq-native:latest
+    networks: [vyomi-net]
+    restart: unless-stopped
+
+  # ── GCP backends (profile: gcp) ───────────────────────────────────────────
+  vyomi-gcs:
+    profiles: ["gcp"]
+    image: fsouza/fake-gcs-server:latest
+    networks: [vyomi-net]
+    command: ["-scheme", "http", "-port", "4443", "-backend", "filesystem", "-data", "/data"]
+    volumes:
+      - vyomi-gcs:/data
+    restart: unless-stopped
+
+  vyomi-firestore:
+    profiles: ["gcp"]
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    networks: [vyomi-net]
+    command: ["gcloud", "beta", "emulators", "firestore", "start", "--host-port=0.0.0.0:8080"]
+    restart: unless-stopped
+
+  vyomi-pubsub:
+    profiles: ["gcp"]
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    networks: [vyomi-net]
+    command: ["gcloud", "beta", "emulators", "pubsub", "start", "--host-port=0.0.0.0:8085"]
+    restart: unless-stopped
+
+  # ── Azure backends (profile: azure) ───────────────────────────────────────
+  vyomi-azurite:
+    profiles: ["azure"]
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    networks: [vyomi-net]
+    command: ["azurite", "--blobHost", "0.0.0.0", "--queueHost", "0.0.0.0"]
+    restart: unless-stopped
+
+  # ── Optional MySQL (RDS/CloudSQL MySQL engine) ────────────────────────────
+  vyomi-sql-mysql:
+    profiles: ["aws", "gcp"]
+    image: mysql:8.0
+    networks: [vyomi-net]
+    environment:
+      MYSQL_ROOT_PASSWORD: cloudlearn
+      MYSQL_ROOT_HOST: "%"
+    volumes:
+      - vyomi-sql-mysql:/var/lib/mysql
+    restart: unless-stopped
+
+volumes:
+  vyomi-data:
+  vyomi-sql-pg:
+  vyomi-sql-mysql:
+  vyomi-minio:
+  vyomi-gcs:
+  cloudsim-data:

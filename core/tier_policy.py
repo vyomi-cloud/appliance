@@ -677,6 +677,55 @@ def check_service(tier: str, service_key: str,
     return {"ok": True}
 
 
+# ── Profile-based cloud restriction (VYOMI_PROFILE) ─────────────────────────
+# A sandbox boots a specific cloud set (e.g. aws-full). Requests to a cloud NOT
+# in the profile are blocked — INDEPENDENT of tier gating, so it holds even with
+# CLOUDLEARN_TIER_ENFORCE=0. Empty / unknown / all-clouds profile → no restriction.
+_PROFILE_CLOUDS: dict[str, set[str]] = {
+    "all-clouds": {"aws", "gcp", "azure"},
+    "aws-full":   {"aws"},
+    "aws-core":   {"aws"},
+    "gcp-full":   {"gcp"},
+    "gcp-core":   {"gcp"},
+    "azure-full": {"azure"},
+    "azure-core": {"azure"},
+}
+
+
+def active_profile() -> str:
+    """The VYOMI_PROFILE the appliance booted with (empty = unrestricted)."""
+    import os
+    return os.environ.get("VYOMI_PROFILE", "").strip()
+
+
+def profile_clouds(profile: str | None = None) -> set[str] | None:
+    """Clouds allowed by the profile, or None when no restriction applies
+    (unset / unknown / all-clouds → every cloud)."""
+    clouds = _PROFILE_CLOUDS.get(profile if profile is not None else active_profile())
+    if not clouds or clouds == {"aws", "gcp", "azure"}:
+        return None
+    return clouds
+
+
+def check_profile(service_key: str | None = None,
+                  request_cloud: str | None = None) -> dict[str, Any]:
+    """Enforce the active VYOMI_PROFILE's cloud restriction (tier-independent).
+    aws-full → GCP/Azure denied; gcp-full → AWS/Azure denied; etc."""
+    clouds = profile_clouds()
+    if not clouds:
+        return {"ok": True}
+    if request_cloud and request_cloud not in clouds:
+        prof = active_profile()
+        return {
+            "ok": False, "code": "profile_cloud_locked",
+            "reason": (f"{request_cloud} is not part of the '{prof}' sandbox profile "
+                       f"(allowed: {', '.join(sorted(clouds))})."),
+            "profile": prof, "allowed_clouds": sorted(clouds),
+            "request_provider": request_cloud, "request_service": service_key,
+        }
+    return {"ok": True}
+
+
 def check_quantity(tier: str, resource_type: str, current_count: int) -> dict[str, Any]:
     """Would creating one more of this resource exceed the tier cap?"""
     p = policy_for(tier)

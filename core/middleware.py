@@ -450,6 +450,26 @@ async def tenant_context_middleware(request, call_next):
     (ContextVar). Without the header, requests fall through to the globally
     active tenant. Cross-tenant access is then blocked by the state proxy."""
     tid = (request.headers.get("x-cloudlearn-tenant") or "").strip()
+    # Shared-instance multi-user: when no explicit header, bind the request to the
+    # developer's tenant from their signed `vyomi_dev` cookie. Off unless
+    # VYOMI_SHARED_INSTANCE is set; fail-soft (any error falls through to the
+    # global active tenant, i.e. unchanged behavior).
+    if not tid:
+        try:
+            from core import shared_tenancy as _sh
+            if _sh.shared_enabled():
+                resolved = _sh.resolve_dev_token(request.cookies.get(_sh.COOKIE_NAME, ""))
+                if resolved:
+                    # Offboarded developer (Phase 6): valid token, but access has
+                    # been severed. Refuse — their resources stay, but they can't
+                    # reach them. 403 rather than falling through to a global tenant.
+                    if _sh.is_disabled(resolved):
+                        return JSONResponse(status_code=403, content={
+                            "error": {"ok": False, "code": "offboarded",
+                                      "reason": "Access for this developer has been revoked."}})
+                    tid = resolved
+        except Exception:
+            pass
     if tid:
         from core.app_context import tenants_state as _tenants_state
         known_tenants = _tenants_state().get("tenants", {})
@@ -458,6 +478,8 @@ async def tenant_context_middleware(request, call_next):
                 "error": {"ok": False, "code": "unknown_tenant",
                           "reason": f"Tenant '{tid}' not found"}
             })
+        # MVP: shared namespaces are unconditional/unfiltered/unlimited — NO per-tenant
+        # resource quota. (Fairness caps are deferred; see shared_tenancy.set_quota.)
     token = REQUEST_TENANT.set(tid) if tid else None
     try:
         response = await call_next(request)
@@ -596,10 +618,23 @@ async def _tier_enforcement_middleware(request: Request, call_next):
         except Exception:
             pass  # fail-open on lookup errors (logged via diagnostics elsewhere)
 
+    provider, service_key = _resolve_provider_service(request)
+
+    # -- PROFILE gate (VYOMI_PROFILE) — enforced INDEPENDENTLY of tier ---------
+    # A sandbox booted for one cloud (e.g. aws-full) denies requests to clouds
+    # not in the profile (GCP/Azure), even when CLOUDLEARN_TIER_ENFORCE=0.
+    if provider and service_key:
+        from core import tier_policy as _tp
+        pres = _tp.check_profile(service_key, request_cloud=provider)
+        if not pres.get("ok"):
+            pres["active_profile"] = _tp.active_profile()
+            pres["docs"] = "https://vyomi.cloud/docs/profiles"
+            return JSONResponse(
+                {"error": pres}, status_code=403,
+                headers={"X-Vyomi-Profile-Denied": pres.get("code", "profile_locked")})
+
     if not _TIER_ENFORCE:
         return await call_next(request)
-
-    provider, service_key = _resolve_provider_service(request)
     if not provider or not service_key:
         return await call_next(request)
 

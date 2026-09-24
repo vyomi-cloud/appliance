@@ -94,10 +94,19 @@ class DockerComputeBackend(ComputeBackend):
         if self.status(inst) != "absent":
             self.start(inst)
             return inst.container_name
+        # Tenant tag — isolates + attributes instances per developer namespace in
+        # a shared instance (Phase 3). Empty/default when not in shared mode.
+        _tenant = ""
+        try:
+            from core import app_context as _ctx
+            _tenant = _ctx.active_tenant_id() or ""
+        except Exception:
+            _tenant = ""
         args = [
             "run", "-d", "--name", inst.container_name,
             "--label", "vyomi.instance=1",
             "--label", f"vyomi.instance_id={inst.instance_id}",
+            "--label", f"vyomi.tenant={_tenant}",
             "--restart", "unless-stopped",
             # instance-type sizing -> cgroup limits (LXD limits.cpu/limits.memory)
             "--cpus", str(inst.cpus),

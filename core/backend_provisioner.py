@@ -154,7 +154,12 @@ _RECIPES: dict[str, Recipe] = {
     # ─ MinIO (S3 backend — real bytes on disk) ──────────────────────────
     "minio": Recipe(
         name="minio",
-        image="minio/minio:latest",
+        # MinIO's community image is no longer freely pullable — docker.io/minio/minio
+        # 404s (tag list empty) AND quay.io/minio/minio 401s. So we mirror it to Vyomi's
+        # own registry (vyomi/minio, same pattern as vyomi/cloudsim / vyomi/appliance).
+        # Env-overridable; matches docker-compose*.yml VYOMI_MINIO_IMAGE. A FRESH install
+        # needs vyomi/minio pushed to the registry (the old box only worked off a cache).
+        image=os.environ.get("VYOMI_MINIO_IMAGE", "vyomi/minio:latest"),
         container_name=_host_from_env("CLOUDLEARN_MINIO_URL", default="vyomi-minio"),
         env={
             "MINIO_ROOT_USER": os.environ.get("CLOUDLEARN_MINIO_ACCESS_KEY", "cloudlearn"),
@@ -420,12 +425,24 @@ def _find_existing_container(recipe: Recipe) -> Optional[Any]:
 
 
 def _pull_image(recipe: Recipe, state: ProvisionState) -> None:
-    """Pulls the image, streaming progress into `state.pull_progress_pct`."""
+    """Ensure the image is available. Prefer a LOCALLY-present image (no registry
+    hit) so a mirrored / air-gapped / pre-loaded image works even when it isn't
+    pullable from any public registry — e.g. MinIO, whose community images keep
+    disappearing from Docker Hub (404) and quay (401). Only pull when absent, and
+    if the pull fails but the image IS present locally, use the local copy."""
     client = _client()
-    log.info("provisioner: pulling %s", recipe.image)
     state.state = PULLING
+    # 1) already present locally → use it, no registry call.
+    try:
+        client.images.get(recipe.image)
+        log.info("provisioner: %s present locally — skipping pull", recipe.image)
+        state.pull_progress_pct = 100
+        return
+    except Exception:
+        pass
+    # 2) not local → pull, streaming progress.
+    log.info("provisioner: pulling %s", recipe.image)
     state.pull_progress_pct = 0
-    # The low-level pull API streams JSON lines we can use for progress.
     try:
         layers: dict[str, dict[str, int]] = {}  # layer_id -> {current, total}
         for line in client.api.pull(recipe.image, stream=True, decode=True):
@@ -443,6 +460,14 @@ def _pull_image(recipe: Recipe, state: ProvisionState) -> None:
                 state.pull_progress_pct = min(99, int(done_bytes * 100 / total_bytes))
         state.pull_progress_pct = 100
     except Exception as e:
+        # 3) pull failed — but if the image is present locally after all, use it.
+        try:
+            client.images.get(recipe.image)
+            log.warning("provisioner: pull of %s failed (%s) — using local copy", recipe.image, e)
+            state.pull_progress_pct = 100
+            return
+        except Exception:
+            pass
         raise RuntimeError(f"image pull failed: {e}") from e
 
 

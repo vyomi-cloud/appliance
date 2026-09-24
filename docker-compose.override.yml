@@ -14,7 +14,6 @@ services:
   vyomi-minio:
     ports: !override
       - "39000:9000"
-      - "39001:9001"
   vyomi-nats:
     ports: !override
       - "34222:4222"

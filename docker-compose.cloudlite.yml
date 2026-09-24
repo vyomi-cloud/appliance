@@ -159,7 +159,9 @@ services:
 
   vyomi-minio:
     profiles: ["full"]
-    image: minio/minio:latest
+    # MinIO removed its public Docker Hub image (docker.io/minio/minio → 404);
+    # official registry is now quay.io. Overridable via VYOMI_MINIO_IMAGE.
+    image: ${VYOMI_MINIO_IMAGE:-vyomi/minio:latest}
     networks: [vyomi-net]
     command: ["server", "/data"]
     environment:

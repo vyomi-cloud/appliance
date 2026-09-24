@@ -1,0 +1,31 @@
+{
+  "name": "Vyomi Sandbox — All Clouds (full)",
+  "//": "DEFAULT / full profile: AWS + GCP + Azure, all services + compute. Turnkey — other profiles are selectable folders (.devcontainer/aws, /gcp, /azure). See plan §3.1-§3.2.",
+
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": { "moby": true, "version": "latest" },
+    "//sshd": "installs + starts openssh-server so `gh codespace ssh` works (used by the portal's server-side readiness check behind org/private port visibility).",
+    "ghcr.io/devcontainers/features/sshd:1": {}
+  },
+
+  "forwardPorts": [9000],
+  "portsAttributes": { "9000": { "label": "Vyomi Console", "onAutoForward": "openBrowser" } },
+
+  "//postCreate": "Keep provisioning fast; boot.sh installs SDK/CLIs in the background.",
+  "postCreateCommand": "bash .devcontainer/boot.sh up",
+  "postStartCommand": "bash .devcontainer/boot.sh heartbeat",
+
+  "containerEnv": {
+    "COMPOSE_PROFILES": "aws,gcp,azure",
+    "VYOMI_PROFILE": "all-clouds"
+  },
+  "remoteEnv": {
+    "VYOMI_SANDBOX_TTL": "8h",
+    "VYOMI_LICENSE_BACKEND_URL": "https://vyomi.cloud",
+    "VYOMI_BILLING": "free_personal_quota"
+  },
+
+  "//hostRequirements": "All-clouds runs ~11 backends incl. the gcloud emulators — needs a bigger machine.",
+  "hostRequirements": { "cpus": 8, "memory": "16gb", "storage": "48gb" }
+}

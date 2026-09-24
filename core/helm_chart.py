@@ -288,7 +288,7 @@ cloudlearn/simulator:latest
 # Real-backend services used by CloudLearn:
 hashicorp/vault:1.15
 nats:2.10
-minio/minio:RELEASE.2024-01-16T16-07-38Z
+quay.io/minio/minio:RELEASE.2024-01-16T16-07-38Z
 amazon/dynamodb-local:2.0
 softwaremill/elasticmq:1.5.7
 postgres:15-alpine

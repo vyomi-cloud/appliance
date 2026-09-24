@@ -1,0 +1,20 @@
+{
+  "profiles": [
+    { "id": "all-clouds", "name": "All Clouds (full)", "clouds": ["aws","gcp","azure"], "compose_profiles": "aws,gcp,azure",
+      "devcontainer_path": ".devcontainer/devcontainer.json", "compute": "docker",
+      "description": "Everything — AWS + GCP + Azure, all services + compute. The full turnkey profile." },
+    { "id": "aws-full", "name": "AWS (full)", "clouds": ["aws"], "compose_profiles": "aws",
+      "devcontainer_path": ".devcontainer/aws/devcontainer.json", "compute": "docker",
+      "services": ["s3","dynamodb","sqs","sns","iam","kms","secretsmanager","rds","vpc","apigateway","eventbridge","lambda","ec2"] },
+    { "id": "gcp-full", "name": "GCP (full)", "clouds": ["gcp"], "compose_profiles": "gcp",
+      "devcontainer_path": ".devcontainer/gcp/devcontainer.json", "compute": "docker",
+      "services": ["storage","firestore","pubsub","secretmanager","iam","kms","vpc","eventarc","functions","cloudsql","compute"] },
+    { "id": "azure-full", "name": "Azure (full)", "clouds": ["azure"], "compose_profiles": "azure",
+      "devcontainer_path": ".devcontainer/azure/devcontainer.json", "compute": "docker",
+      "services": ["storage","cosmos","servicebus","keyvault","rbac","vnet","sql","vm"] },
+    { "id": "aws-core", "name": "AWS Core (conformance)", "clouds": ["aws"], "compose_profiles": "aws",
+      "devcontainer_path": ".devcontainer/aws/devcontainer.json", "compute": "none",
+      "services": ["s3","dynamodb","sqs","sns","iam","kms","secretsmanager","rds"],
+      "note": "The lean, relay-proven conformance set — WASM-realizable (Nano) too." }
+  ]
+}

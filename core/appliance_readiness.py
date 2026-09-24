@@ -102,6 +102,29 @@ def _probe_one(host: str, port: int, timeout: float = 0.25) -> bool:
         return False
 
 
+def _active_backends() -> list[tuple[str, str, str, int, str, int]]:
+    """Scope the tracked backends to the profile that's actually RUNNING, so the
+    readiness banner reaches 100% for the profile's services (not stranded at
+    ~53% counting GCP/Azure containers a profiled sandbox never starts).
+
+    Cloud set comes from the active VYOMI_PROFILE (single source of truth), else
+    COMPOSE_PROFILES; unset / all-clouds → count everything (full appliance)."""
+    clouds: set[str] | None = None
+    try:
+        from core.tier_policy import profile_clouds
+        clouds = profile_clouds()      # None when unset/all-clouds → no scoping
+    except Exception:
+        clouds = None
+    if clouds is None:
+        active = os.environ.get("COMPOSE_PROFILES", "").strip()
+        if not active:
+            return _BACKENDS
+        clouds = {p.strip() for p in active.split(",") if p.strip()}
+    cats = set(clouds)
+    cats.add("core")   # simulator / postgres / cloudsim are the always-on backbone
+    return [b for b in _BACKENDS if b[4] in cats]
+
+
 def probe_all() -> dict[str, Any]:
     """Probe every tracked backend; return a SPA-shaped dict.
 
@@ -130,7 +153,7 @@ def probe_all() -> dict[str, Any]:
     total_weight = 0
     by_cat: dict[str, dict[str, int]] = {}
 
-    for name, label, default_host, port, category, weight in _BACKENDS:
+    for name, label, default_host, port, category, weight in _active_backends():
         # Honour env-var override; lets a customer point at an external
         # backend (eg. a managed Postgres) without us caring whether
         # the docker container is up.

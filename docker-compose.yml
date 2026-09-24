@@ -83,14 +83,17 @@ services:
 
   vyomi-minio:
     profiles: ["full"]
-    image: minio/minio:latest
-    command: ["server", "/data", "--address", ":9000", "--console-address", ":9001"]
+    # MinIO removed its public Docker Hub image (docker.io/minio/minio → 404);
+    # official registry is now quay.io. Overridable via VYOMI_MINIO_IMAGE.
+    image: ${VYOMI_MINIO_IMAGE:-vyomi/minio:latest}
+    # MinIO's community console is deprecated/stripped (2025); appliance uses the
+    # S3 API on :9000, not the console — so no --console-address / 9001 port.
+    command: ["server", "/data", "--address", ":9000"]
     environment:
       MINIO_ROOT_USER: cloudlearn
       MINIO_ROOT_PASSWORD: cloudlearn-dev-secret-key
     ports:
       - "9100:9000"
-      - "9101:9001"
     volumes:
       - vyomi-minio:/data
     restart: unless-stopped

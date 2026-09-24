@@ -1001,8 +1001,56 @@
     <a class="tb-brand" href="./" aria-label="vyomi"><img src="assets/brand/vyomi-wordmark.png" alt="vyomi"></a>
     <div class="tb-actions">
       <a class="tb-btn tb-btn-secondary" href="./">← Back to launch</a>
+      <style>
+        #tb-user-trigger:hover { background: rgba(255,255,255,.06); }
+        #tb-user-out:hover { background: rgba(124,92,246,.16); color:#fff; }
+      </style>
+      <div id="tb-user" style="display:none; position:relative; align-items:center; margin-left:12px;">
+        <button id="tb-user-trigger" type="button" aria-haspopup="true" title="Account" style="display:inline-flex;align-items:center;background:none;border:0;cursor:pointer;padding:2px;border-radius:50%;">
+          <span id="tb-user-avatar" style="width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#7c3aed,#22d3ee);color:#fff;font-weight:700;font-size:13px;">?</span>
+        </button>
+        <div id="tb-user-menu" role="menu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);min-width:210px;background:#0c1030;border:1px solid rgba(124,92,246,.3);border-radius:10px;box-shadow:0 20px 40px -10px rgba(0,0,0,.6);padding:6px;z-index:9999;">
+          <div id="tb-user-menu-email" style="padding:8px 12px 10px;color:#94a3b8;font-size:11px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:4px;word-break:break-all;"></div>
+          <button id="tb-user-out" type="button" role="menuitem" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:0;color:#e4e4e7;border-radius:6px;padding:9px 12px;font-size:13px;cursor:pointer;">
+            <span class="material-icons" style="font-size:17px;">logout</span> Sign out
+          </button>
+        </div>
+      </div>
     </div>
   </nav>
+  <script>
+  /* Logged-in user chip next to "Back to launch". Uses XHR (not fetch) so the
+     Nano fetch-shim + service worker don't rewrite it into /nano/… — /api/auth/*
+     is outside the SW scope, so this reaches the portal directly. */
+  (function(){
+    function show(email){
+      var box = document.getElementById('tb-user'); if (!box) return;
+      document.getElementById('tb-user-avatar').textContent = (email || '?').charAt(0).toUpperCase();
+      var me = document.getElementById('tb-user-menu-email'); if (me) me.textContent = email || '';
+      box.style.display = 'inline-flex';
+    }
+    try {
+      var x = new XMLHttpRequest();
+      x.open('GET', '/api/auth/me', true); x.withCredentials = true;
+      x.onload = function(){
+        try { var d = JSON.parse(x.responseText); if (d && d.authenticated) show(d.email); } catch (e) {}
+      };
+      x.send();
+    } catch (e) {}
+    var trigger = document.getElementById('tb-user-trigger');
+    var menu = document.getElementById('tb-user-menu');
+    if (trigger && menu) {
+      trigger.addEventListener('click', function(e){ e.stopPropagation(); menu.style.display = (menu.style.display === 'block') ? 'none' : 'block'; });
+      menu.addEventListener('click', function(e){ e.stopPropagation(); });
+      document.addEventListener('click', function(){ menu.style.display = 'none'; });
+    }
+    var out = document.getElementById('tb-user-out');
+    if (out) out.addEventListener('click', function(){
+      try { var l = new XMLHttpRequest(); l.open('POST', '/api/auth/logout', true); l.withCredentials = true; l.onloadend = function(){ location.href = '/nano/'; }; l.send(); }
+      catch (e) { location.href = '/nano/'; }
+    });
+  })();
+  </script>
   </div><!-- /app-topbar -->
 
   <div id="app-body">

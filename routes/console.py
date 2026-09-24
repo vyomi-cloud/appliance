@@ -18,6 +18,14 @@ from core import app_context as ctx
 def _console_tier_gate(provider: str) -> RedirectResponse | None:
     try:
         from core import tier_policy as _tp
+        # PROFILE gate first — a profiled sandbox (e.g. aws-full) blocks the
+        # consoles of clouds not in the profile, INDEPENDENT of tier. Bounce to
+        # the first allowed cloud's console with a param the SPA shows as a toast.
+        _pclouds = _tp.profile_clouds()
+        if _pclouds and provider not in _pclouds:
+            _dest = sorted(_pclouds)[0]
+            return RedirectResponse(
+                f"/console/{_dest}?denied={provider}&reason=profile", status_code=302)
         tenant = ctx._tenant_dict(ctx._active_tenant_id()) or {}
     except Exception:
         return None  # fail-open on internal errors — middleware still gates APIs
@@ -113,6 +121,19 @@ def _openapi_subset(app: FastAPI, provider: str) -> dict:
 
 
 def register(app: FastAPI) -> None:
+
+    @app.get("/api/runtime/profile", include_in_schema=False)
+    def runtime_profile() -> dict:
+        """The active sandbox profile + which clouds it allows. The SPA / cloud
+        picker / consoles use this to HIDE out-of-profile clouds. When there's no
+        restriction (unset / all-clouds), allowed_clouds is all three."""
+        from core import tier_policy as _tp
+        clouds = _tp.profile_clouds()
+        return {
+            "profile": _tp.active_profile(),
+            "restricted": clouds is not None,
+            "allowed_clouds": sorted(clouds) if clouds else ["aws", "gcp", "azure"],
+        }
 
     @app.get("/api/runtime/backends", include_in_schema=False)
     def runtime_backends() -> dict:

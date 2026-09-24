@@ -1,0 +1,17 @@
+{
+  "name": "Vyomi Sandbox — GCP (full)",
+  "//": "Cloud Storage · Firestore · Pub/Sub · IAM · KMS · Secret Manager · Cloud SQL · Compute Engine. Shares ../boot.sh + ../docker-compose.sandbox.yml.",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": { "moby": true, "version": "latest" },
+    "ghcr.io/devcontainers/features/sshd:1": {}
+  },
+  "forwardPorts": [9000],
+  "portsAttributes": { "9000": { "label": "Vyomi Console", "onAutoForward": "openBrowser" } },
+  "postCreateCommand": "bash .devcontainer/boot.sh up",
+  "postStartCommand": "bash .devcontainer/boot.sh heartbeat",
+  "containerEnv": { "COMPOSE_PROFILES": "gcp", "VYOMI_PROFILE": "gcp-full" },
+  "remoteEnv": { "VYOMI_SANDBOX_TTL": "8h", "VYOMI_LICENSE_BACKEND_URL": "https://vyomi.cloud", "VYOMI_BILLING": "free_personal_quota" },
+  "//hostRequirements": "gcloud emulators (firestore + pubsub) are heavier.",
+  "hostRequirements": { "cpus": 4, "memory": "16gb", "storage": "40gb" }
+}

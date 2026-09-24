@@ -1,0 +1,62 @@
+name: "Setup Vyomi"
+description: "Boot a local multi-cloud digital twin (AWS/GCP/Azure) for integration tests. Point your SDKs/CLIs at the twin — no cloud account, no bill."
+branding:
+  icon: cloud
+  color: purple
+
+# Release 3.0 · Phase 1 — the "Cloud CI Testing" solution enabler.
+# Runs the appliance image ephemerally in CI and waits for it to be healthy.
+# See docs/ROADMAP-v3.md.
+
+inputs:
+  version:
+    description: "Appliance image tag (e.g. 2.2.2, latest)"
+    required: false
+    default: "latest"
+  port:
+    description: "Host port to expose the twin on"
+    required: false
+    default: "9000"
+  wait-timeout:
+    description: "Seconds to wait for the twin to become healthy"
+    required: false
+    default: "120"
+
+outputs:
+  endpoint:
+    description: "Base URL of the running twin (point SDKs/CLIs here)"
+    value: ${{ steps.up.outputs.endpoint }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: up
+      shell: bash
+      run: |
+        set -euo pipefail
+        IMAGE="vyomi/appliance:${{ inputs.version }}"
+        PORT="${{ inputs.port }}"
+        ENDPOINT="http://localhost:${PORT}"
+
+        echo "::group::Pull ${IMAGE}"
+        docker pull "${IMAGE}"
+        echo "::endgroup::"
+
+        # Ephemeral/CI profile: simulator only (the API/SDK surface). Heavy
+        # backends lazy-provision on first use; keeps CI boot fast.
+        docker run -d --name vyomi-twin -p "${PORT}:9000" \
+          -e CLOUDLEARN_DISTRIBUTION_MODE=developer \
+          "${IMAGE}"
+
+        echo "endpoint=${ENDPOINT}" >> "${GITHUB_OUTPUT}"
+        echo "Waiting for the twin at ${ENDPOINT} (timeout ${{ inputs.wait-timeout }}s)…"
+        for i in $(seq 1 ${{ inputs.wait-timeout }}); do
+          if curl -fsS "${ENDPOINT}/api/runtime/tier" >/dev/null 2>&1; then
+            echo "✅ Vyomi twin ready at ${ENDPOINT}"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "::error::Vyomi twin did not become healthy in ${{ inputs.wait-timeout }}s"
+        docker logs vyomi-twin || true
+        exit 1

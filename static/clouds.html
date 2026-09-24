@@ -2849,5 +2849,40 @@
   <!-- Persistent appliance readiness / diagnostics strip (renders into
        #vyomi-readiness-mount above). Shared with the launch page. -->
   <script src="/assets/readiness-strip.js" defer></script>
+
+  <!-- ══ Profile restriction: hide clouds/spaces not in the active VYOMI_PROFILE ══
+       An aws-full sandbox shows only AWS — GCP/Azure cloud cards, existing spaces,
+       filters and the create-space picker are hidden. No restriction (all-clouds /
+       unset) → everything shows. Enforced server-side too (middleware + console gate);
+       this is the UX layer so out-of-profile clouds aren't even offered. -->
+  <script>
+  (async function applyProfileRestriction(){
+    try {
+      const r = await fetch('/api/runtime/profile', {cache:'no-store'});
+      if(!r.ok) return;
+      const j = await r.json();
+      if(!j || !j.restricted) return;
+      const allowed = new Set(j.allowed_clouds || []);
+      const blocked = ['aws','gcp','azure'].filter(c => !allowed.has(c));
+      if(!blocked.length) return;
+      const sel = [];
+      blocked.forEach(function(c){
+        sel.push('.cloud-card.'+c);                                   // "pick a cloud" cards
+        sel.push('.space-card[data-provider="'+c+'"]');              // existing spaces of that cloud
+        sel.push('[data-prov="'+c+'"]');                             // space filter buttons
+        sel.push('.provider-picker label:has(input[value="'+c+'"])'); // create-space picker
+      });
+      const st = document.createElement('style');
+      st.textContent = sel.join(',') + '{display:none !important;}';
+      document.head.appendChild(st);
+      // Disable the create-space radios for blocked clouds; select an allowed one.
+      blocked.forEach(function(c){
+        document.querySelectorAll('.provider-picker input[value="'+c+'"]').forEach(function(i){ i.disabled = true; i.checked = false; });
+      });
+      const firstAllowed = document.querySelector('.provider-picker input[value="'+[...allowed][0]+'"]');
+      if(firstAllowed) firstAllowed.checked = true;
+    } catch(e) { /* fail-open — server still enforces */ }
+  })();
+  </script>
 </body>
 </html>
