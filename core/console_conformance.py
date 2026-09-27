@@ -113,6 +113,37 @@ def rollup() -> dict:
     }
 
 
+def summary() -> dict:
+    """A flat workspace-level summary for the status-bar pill (§4). Aggregates over
+    `_SIGNAL`: how many services are fully conformant, the summed check counts, and
+    the WORST status across all services (the coarse pill colour/label driver).
+
+    Shape (stable — the pill reads these keys directly):
+        { services_total, services_full, checks_passed, checks_total, status }
+
+    `status` is the worst per-service status ("conformant" > "partial" > "unknown"),
+    so the pill only shows green when EVERY service is conformant — never a false
+    green. Deterministic and offline; live-runner-ready (F5 swaps the backing feed)."""
+    worst = "conformant"
+    services_full = passed = total = 0
+    for sig in _SIGNAL.values():
+        if sig.get("mode") == "full":
+            services_full += 1
+        st = sig.get("status", "unknown")
+        if _STATUS_RANK.get(st, 2) > _STATUS_RANK.get(worst, 2):
+            worst = st
+        c = sig.get("checks", {})
+        passed += int(c.get("passed", 0))
+        total += int(c.get("total", 0))
+    return {
+        "services_total": len(_SIGNAL),
+        "services_full": services_full,
+        "checks_passed": passed,
+        "checks_total": total,
+        "status": worst,
+    }
+
+
 def widget_modes() -> dict:
     """Map service_id -> widget `mode` (`full`/`degraded`/`generic`). This is what
     the capability manifest merges into `widgets` so the center-canvas gates on it.

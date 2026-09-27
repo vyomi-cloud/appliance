@@ -98,8 +98,9 @@ def _capabilities() -> dict:
              "terminology": "policy", "backed_by": "in-proc",
              "conformance": conf.service_signal("iam")},
         ],
-        # Workspace-level conformance rollup for the status-bar pill.
-        "conformance": conf.rollup(),
+        # Workspace-level conformance summary for the status-bar pill (§4): flat
+        # {services_total, services_full, checks_passed, checks_total, status}.
+        "conformance": conf.summary(),
         "workspace": {
             "name": os.environ.get("VYOMI_WORKSPACE_NAME", "vyomi-dev-01"),
             "endpoint": os.environ.get("VYOMI_S3_ENDPOINT", ""),
