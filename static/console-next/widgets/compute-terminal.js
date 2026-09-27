@@ -25,6 +25,9 @@ class ComputeTerminal extends LitElement {
     _connect: { state: true },     // connect-info result (ssh/alternatives/lxc)
     _busy: { state: true },
     _msg: { state: true },
+    _cmd: { state: true },         // terminal command input
+    _term: { state: true },        // terminal output lines [{ prompt, cmd, out, code }]
+    _running: { state: true },     // a console-exec is in flight
   };
 
   static styles = css`
@@ -77,6 +80,24 @@ class ComputeTerminal extends LitElement {
     .hint { color: var(--vy-fg-dim); font-size: var(--vy-fs-xs); margin-top: var(--vy-s2); }
     .ok { color: var(--vy-ok); font-size: var(--vy-fs-sm); margin-top: var(--vy-s2); }
     .err { color: var(--vy-err); font-size: var(--vy-fs-sm); margin-top: var(--vy-s2); font-family: var(--vy-mono); }
+    .term-out {
+      background: var(--vy-bg); border: 1px solid var(--vy-border);
+      border-radius: var(--vy-radius); padding: var(--vy-s2) var(--vy-s3);
+      font-family: var(--vy-mono); font-size: var(--vy-fs-sm); color: var(--vy-fg);
+      min-height: 120px; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-all;
+    }
+    .term-out .p { color: var(--vy-accent); }
+    .term-out .c { color: var(--vy-fg); }
+    .term-out .o { color: var(--vy-fg-muted); }
+    .term-out .nz { color: var(--vy-err); }
+    .term-in { display: flex; align-items: center; gap: var(--vy-s2); margin-top: var(--vy-s2); }
+    .term-in .p { color: var(--vy-accent); font-family: var(--vy-mono); font-size: var(--vy-fs-sm); }
+    .term-in input {
+      flex: 1; background: var(--vy-bg); color: var(--vy-fg); font-family: var(--vy-mono);
+      border: 1px solid var(--vy-border); border-radius: var(--vy-radius);
+      padding: var(--vy-s1) var(--vy-s2); font-size: var(--vy-fs-sm); outline: none;
+    }
+    .term-in input:focus { border-color: var(--vy-accent); }
   `;
 
   connectedCallback() {
@@ -110,6 +131,8 @@ class ComputeTerminal extends LitElement {
   async _select(id) {
     this._sel = id;
     this._connect = null;
+    this._term = [];
+    this._cmd = '';
     this._msg = '';
     const inst = this._find(id);
     // Connect info only exists for a running instance — fetch lazily on select.
@@ -201,6 +224,57 @@ class ComputeTerminal extends LitElement {
 
   _copy(text) { navigator.clipboard?.writeText(text || '').catch(() => {}); }
 
+  // In-browser terminal: POST the command to the existing console-exec endpoint
+  //   POST /api/ec2/instances/{id}/console/exec  { command }  → { output, exit_code, cwd }
+  // and append it to the scrollback. Kept minimal (no xterm dependency) — a command
+  // input + output pane. SSH remains the primary access path (shown above); this is
+  // the in-console convenience terminal, exactly what the classic console offers.
+  async _run() {
+    const id = this._sel;
+    const cmd = (this._cmd || '').trim();
+    if (!id || !cmd || this._running) return;
+    this._running = true;
+    this._cmd = '';
+    const cwd = (this._term && this._term.length && this._term[this._term.length - 1].cwd) || '~';
+    try {
+      const r = await apiSend('POST', `/api/ec2/instances/${encodeURIComponent(id)}/console/exec`, { command: cmd });
+      let out = (r && r.output) || '';
+      if (out === '\f') { this._term = []; this._running = false; return; }  // clear
+      this._term = [...(this._term || []), {
+        cwd, cmd, out, code: (r && r.exit_code) || 0,
+      }];
+    } catch (e) {
+      this._term = [...(this._term || []), { cwd, cmd, out: (e.message || 'error') + '\n', code: 1 }];
+    } finally {
+      this._running = false;
+      await this.updateComplete;
+      const pane = this.renderRoot && this.renderRoot.querySelector('.term-out');
+      if (pane) pane.scrollTop = pane.scrollHeight;
+    }
+  }
+
+  _terminalBlock(inst) {
+    if (this._state(inst) !== 'running') return '';
+    return html`
+      <div class="sub">Terminal — runs inside the instance (in-console convenience; SSH above is primary)</div>
+      <div class="term-out">
+        ${(this._term || []).map((l) => html`<div
+          ><span class="p">${l.cwd} $ </span><span class="c">${l.cmd}</span>
+          <div class="${l.code ? 'nz' : 'o'}">${l.out}</div></div>`)}
+        ${(!this._term || !this._term.length)
+          ? html`<span class="o">Type a command (e.g. \`uname -a\`, \`ls\`, \`whoami\`) and press Enter.</span>` : ''}
+      </div>
+      <div class="term-in">
+        <span class="p">$</span>
+        <input type="text" placeholder=${this._running ? 'running…' : 'command'}
+          .value=${this._cmd || ''} ?disabled=${this._running}
+          @input=${(e) => (this._cmd = e.target.value)}
+          @keydown=${(e) => { if (e.key === 'Enter') this._run(); }} />
+        <button class="act" ?disabled=${this._running || !(this._cmd || '').trim()} @click=${this._run}>▸ run</button>
+      </div>
+    `;
+  }
+
   render() {
     const svc = this.service || {};
     const mode = (this.caps && this.caps.connect && this.caps.connect.mode) || 'endpoint';
@@ -251,6 +325,7 @@ class ComputeTerminal extends LitElement {
                   </div>
                   <div class="sub">Connect</div>
                   ${this._connectBlock(inst)}
+                  ${this._terminalBlock(inst)}
                   ${this._msg ? html`<div class="err">${this._msg}</div>` : ''}
                 </div>
               ` : html`<div class="meta" style="padding:var(--vy-s3)">Select an instance to view connect info.</div>`}
