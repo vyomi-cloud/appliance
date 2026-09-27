@@ -35,6 +35,10 @@ class Instance:
     privileged: bool = True               # required for docker-in-instance (DinD)
     ssh_pubkey: str | None = None         # injected at create() -> authorized_keys
     network: str | None = None            # attach to a specific docker network
+    ssh_port: int | None = None           # host port published -> container :22
+                                          # (port-publish SSH: ssh -p <ssh_port> host)
+    ip_address: str | None = None         # static IP on `network` (routable-IP SSH,
+                                          # Linux bridge; ssh ubuntu@<ip> on :22)
     labels: dict = field(default_factory=dict)
 
     @property
@@ -119,8 +123,20 @@ class DockerComputeBackend(ComputeBackend):
         # the box and survives stop/start.
         if inst.ssh_pubkey:
             args += ["-e", f"VYOMI_SSH_PUBKEY={inst.ssh_pubkey}"]
+        # SSH reachability. The Docker backend never mapped sshd after the LXD
+        # proxy-device path was dropped, so instances were unreachable by SSH
+        # (the advertised IP is a placeholder). Two additive, non-exclusive paths:
+        #   • port-publish  -> map a host port to :22; works on EVERY platform
+        #                      (incl. macOS Docker Desktop) as ssh -p <port> host.
+        #   • routable-IP   -> attach to a user-defined bridge; the container's
+        #                      own IP is routable from a Linux host (ssh ubuntu@ip
+        #                      on :22), matching the real-cloud UX.
+        if inst.ssh_port:
+            args += ["-p", f"0.0.0.0:{inst.ssh_port}:22"]
         if inst.network:
             args += ["--network", inst.network]
+            if inst.ip_address:             # pin the advertised IP on the bridge
+                args += ["--ip", inst.ip_address]
         if inst.privileged:                 # == LXD security.nesting, for DinD
             args.append("--privileged")
         args.append(inst.image)
@@ -162,9 +178,19 @@ class DockerComputeBackend(ComputeBackend):
         return self._run(flags + cmd, stdin=stdin)
 
     def ssh_info(self, inst: Instance) -> dict:
-        """Connection details for `ssh`. The instance image runs sshd on :22 and
-        the public key was injected at launch, so this is host + user only."""
-        return {"host": self.ipv4(inst), "port": 22, "user": "ubuntu"}
+        """Reachability facts for `ssh` (the injected key is already on the box).
+        sshd listens on :22 in the container; the server composes the final
+        host:port command from these, since only the server knows the appliance's
+        externally-reachable host (for the port-publish path):
+          • container_ip   — the container's own IP (routable from a Linux host).
+          • routable_ip    — the pinned bridge IP, when set (== advertised IP).
+          • published_port — the host port mapped to :22 (port-publish path)."""
+        return {
+            "user": "ubuntu",
+            "container_ip": self.ipv4(inst),
+            "routable_ip": inst.ip_address,
+            "published_port": inst.ssh_port,
+        }
 
 
 # ── SSH key management ───────────────────────────────────────────────────────

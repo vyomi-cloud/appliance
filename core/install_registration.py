@@ -102,6 +102,52 @@ def _host_os() -> str:
     return f"{sys.platform}"  # 'linux' / 'darwin' / 'win32'
 
 
+def _resolve_country(state: dict) -> str:
+    """Best-effort 2-letter ISO country for the install globe, sent as `cc`.
+
+    Installs that DON'T reach the portal through Cloudflare (direct-to-origin,
+    a self-hosted portal, an air-gapped relay) never get a `CF-IPCountry` header,
+    so the portal files them as '??' and they never light up the globe. This
+    supplies the same country signal from our side.
+
+    Privacy: we ask Cloudflare's PUBLIC trace endpoint for the COUNTRY ONLY and
+    keep just that 2-letter string — no IP is read or stored (identical to the
+    signal the Nano browser beacon already sends). The portal trusts `cc` only
+    when the edge header is absent, so this never overrides authoritative geo.
+
+    Resolved once and cached on `state`; a failed lookup is NOT cached, so a
+    transient network blip at boot retries on the next registration. Operators
+    can pin it with VYOMI_INSTALL_CC=<XX> (air-gapped / fixed region) or disable
+    the lookup entirely with VYOMI_INSTALL_GEO=0."""
+    forced = (os.environ.get("VYOMI_INSTALL_CC") or "").strip().upper()
+    if len(forced) == 2 and forced.isalpha():
+        return forced
+    if (os.environ.get("VYOMI_INSTALL_GEO") or "").strip().lower() in ("0", "false", "no", "off"):
+        return ""
+    cache = state.setdefault("install_registration", {})
+    cached = cache.get("cc")
+    if isinstance(cached, str) and cached:      # already resolved successfully
+        return cached
+    resolved = ""
+    try:
+        req = urllib.request.Request(
+            "https://www.cloudflare.com/cdn-cgi/trace",
+            headers={"User-Agent": "vyomi-appliance"},
+        )
+        with urllib.request.urlopen(req, timeout=3) as r:
+            for line in r.read(4096).decode("utf-8", "replace").splitlines():
+                if line.startswith("loc="):
+                    v = line[4:].strip().upper()
+                    if len(v) == 2 and v.isalpha() and v not in ("XX", "T1"):
+                        resolved = v
+                    break
+    except Exception:
+        resolved = ""                            # fail-silent; retry next time
+    if resolved:
+        cache["cc"] = resolved                   # cache only a real hit
+    return resolved
+
+
 def _should_skip(state: dict, current_state: str, ttl_seconds: int) -> bool:
     """Throttle: skip if the last successful registration was for the
     SAME state and within the TTL window. State transitions always
@@ -154,6 +200,11 @@ def register_install(
         "state":         current_state,
         "registered_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
+    # Country hint for the install globe — only used by the portal when the
+    # Cloudflare CF-IPCountry edge header is absent (e.g. not proxied through CF).
+    cc = _resolve_country(state)
+    if cc:
+        payload["cc"] = cc
     # Carry the license JTI when we have one — lets the portal link this
     # install to a specific user / subscription without us shipping
     # email / sub. JTI alone is opaque; the portal already knows the

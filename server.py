@@ -7320,6 +7320,198 @@ def _docker_available() -> bool:
     return _runtime_available("docker")
 
 
+# ── instance SSH reachability (port-publish + routable-IP) ────────────────────
+# The Docker backend had NO SSH exposure after the LXD proxy-device path was
+# dropped — the advertised IP is a placeholder, and `docker run` mapped no port,
+# so `ssh` reached nothing. Two additive, non-exclusive paths restore it:
+#   • port-publish  -> a host port mapped to the container's :22. Works on EVERY
+#                      platform (incl. macOS Docker Desktop) as `ssh -p <port>`.
+#   • routable-IP   -> the container on a user-defined bridge gets an IP routable
+#                      from a Linux host, so `ssh ubuntu@<ip>` on :22 matches the
+#                      real-cloud UX. Linux-only (Docker Desktop can't route
+#                      container IPs from the macOS/Windows host).
+# Mode: VYOMI_INSTANCE_SSH_MODE = port | routable | both | auto
+#   (auto = both on Linux, port elsewhere).
+_VYOMI_VPC_NETWORK = os.environ.get("VYOMI_INSTANCE_NETWORK") or "vyomi-vpc"
+_VYOMI_VPC_SUBNET = os.environ.get("VYOMI_INSTANCE_SUBNET") or "10.201.0.0/16"
+_VPC_NETWORK_READY = {"done": False}
+
+
+def _instance_ssh_mode() -> str:
+    m = (os.environ.get("VYOMI_INSTANCE_SSH_MODE") or "auto").strip().lower()
+    return m if m in {"port", "routable", "both", "auto"} else "auto"
+
+
+def _port_publish_enabled() -> bool:
+    return _instance_ssh_mode() in {"port", "both", "auto"}
+
+
+def _routable_ip_enabled() -> bool:
+    mode = _instance_ssh_mode()
+    if mode in {"routable", "both"}:
+        return True
+    if mode == "port":
+        return False
+    return sys.platform.startswith("linux")   # auto
+
+
+def _ensure_vpc_network() -> str | None:
+    """Idempotently create the user-defined bridge whose subnet yields
+    host-routable instance IPs (Linux). Returns the network name, or None when
+    routable-IP is disabled / creation fails (caller falls back to port-publish)."""
+    if not _routable_ip_enabled() or not _docker_available():
+        return None
+    net = _VYOMI_VPC_NETWORK
+    if _VPC_NETWORK_READY["done"]:
+        return net
+    try:
+        cp = subprocess.run(["docker", "network", "inspect", net],
+                            capture_output=True, timeout=30)
+        if cp.returncode != 0:
+            subprocess.run(["docker", "network", "create", "--subnet",
+                            _VYOMI_VPC_SUBNET, net], capture_output=True, timeout=60)
+    except Exception:
+        return None
+    _VPC_NETWORK_READY["done"] = True
+    return net
+
+
+def _ssh_advertise_host() -> str:
+    """Externally-reachable host for the port-publish SSH path. Operator override
+    via VYOMI_SSH_ADVERTISE_HOST; else derive from the captured public base; else
+    127.0.0.1 (correct when the user is on the appliance host — the common local
+    case)."""
+    h = (os.environ.get("VYOMI_SSH_ADVERTISE_HOST") or "").strip()
+    if h:
+        return h
+    try:
+        base = _gcp_public_host() or ""
+    except Exception:
+        base = ""
+    host = base.split("@")[-1].split(":")[0].strip()
+    if host and host not in {"localhost", "127.0.0.1", ""}:
+        return host
+    return "127.0.0.1"
+
+
+def _docker_backed(instance: dict) -> bool:
+    """True when this instance record is served by the Docker compute backend
+    (vs LXD/Multipass). Docker containers are named vyomi-i-<id>."""
+    if str(instance.get("console_backend") or "") == "docker-exec":
+        return True
+    cn = str(instance.get("container_name") or instance.get("container_id") or "")
+    return cn.startswith("vyomi-i-")
+
+
+def _docker_ssh_key_path() -> str:
+    try:
+        from core.compute import ensure_instance_ssh_key
+        _, priv = ensure_instance_ssh_key()
+        return str(priv)
+    except Exception:
+        return "~/.vyomi/instance-keys/id_ed25519"
+
+
+def _docker_connect_info(instance: dict, provider: str) -> dict:
+    """Docker-backend analogue of vm_connect.connect_info (which is LXD-only).
+    Builds SSH connect info from the routable bridge IP and/or the published host
+    port. Same shape the SPA already renders for the Connect tab."""
+    inst = _docker_instance_obj(instance)
+    info = _docker_compute().ssh_info(inst)
+    user = info.get("user") or "ubuntu"
+    key_path = _docker_ssh_key_path()
+    container_ip = info.get("container_ip") or instance.get("private_ip") or ""
+    published_port = info.get("published_port") or instance.get("ssh_host_port")
+    opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    iid = str(instance.get("instance_id") or "")
+
+    primary = None
+    alternatives: list[dict] = []
+    if _routable_ip_enabled() and container_ip:
+        primary = {
+            "label": "Direct (routable IP, :22)",
+            "command": f"ssh -i {key_path} {opts} {user}@{container_ip}",
+            "user": user, "host": container_ip, "port": 22,
+        }
+    if published_port:
+        pub_host = _ssh_advertise_host()
+        pub = {
+            "label": "Port-forward (host:port)",
+            "command": f"ssh -i {key_path} {opts} -p {int(published_port)} {user}@{pub_host}",
+            "user": user, "host": pub_host, "port": int(published_port),
+        }
+        if primary is None:
+            primary = pub
+        else:
+            alternatives.append(pub)
+
+    if primary is None:
+        return {"ok": False, "instance_id": iid,
+                "reason": "ssh_not_provisioned — no routable IP or published port "
+                          "(start the instance / enable VYOMI_INSTANCE_SSH_MODE)"}
+
+    instance["ssh_command"] = primary["command"]
+    instance["ssh_port"] = primary["port"]
+    instance["ssh_host"] = primary["host"]
+    instance["ssh_target"] = f"{user}@{primary['host']}"
+
+    key_url = {
+        "aws":   f"/api/aws/ec2/instances/{iid}/private-key.pem",
+        "gcp":   f"/api/gcp/compute/instances/{iid}/private-key.pem",
+        "azure": f"/api/azure/vm/{iid}/private-key.pem",
+    }.get(provider) or f"/api/{provider}/instances/{iid}/private-key.pem"
+
+    return {
+        "ok": True,
+        "instance_id": iid,
+        "provisioned": True,
+        "container_name": inst.container_name,
+        "backend": "docker",
+        "auth_mode": "shared_instance_key",
+        "ssh": {
+            "command": primary["command"],
+            "user": user,
+            "host": primary["host"],
+            "port": primary["port"],
+            "key_download_url": key_url,
+            "key_local_filename": f"vyomi-{iid}.pem",
+            "host_identity_path": key_path,
+        },
+        "alternatives": alternatives,
+        # Shell fallback (works on the appliance host itself, always) — the
+        # Docker analogue of vm_connect's `lxc shell`.
+        "lxc": {
+            "command": f"docker exec -it {inst.container_name} bash",
+            "note": "Works when you're on the machine running the appliance.",
+        },
+        "note": (("Direct SSH to the instance's routable IP on :22. "
+                  if primary["port"] == 22 else
+                  "SSH is port-forwarded from the appliance host. ")
+                 + ("A second host:port option is listed below." if alternatives else "")).strip(),
+    }
+
+
+def _update_docker_ssh_metadata(instance: dict) -> None:
+    """Best-effort: stamp ssh_command/host/port onto the instance dict so SPA
+    tables show it without an extra fetch."""
+    try:
+        _docker_connect_info(instance, "aws")
+    except Exception:
+        for k in ("ssh_command", "ssh_port", "ssh_host", "ssh_target"):
+            instance.pop(k, None)
+
+
+def _docker_private_key_pem(instance: dict) -> bytes | None:
+    """The shared instance private key (all Docker instances share one keypair;
+    the pubkey is injected at launch)."""
+    try:
+        from core.compute import ensure_instance_ssh_key
+        _, priv = ensure_instance_ssh_key()
+        return Path(priv).read_bytes()
+    except Exception:
+        return None
+
+
 def _docker_instance_obj(instance: dict):
     """Build a core.compute.Instance from the server instance dict."""
     from core.compute import Instance, ensure_instance_ssh_key
@@ -7340,13 +7532,22 @@ def _docker_instance_obj(instance: dict):
         mem = int(instance.get("memory_mb") or instance.get("memory") or 1024) or 1024
     except (TypeError, ValueError):
         mem = 1024
+    _ssh_port = instance.get("ssh_host_port")
+    try:
+        _ssh_port = int(_ssh_port) if str(_ssh_port or "").strip().isdigit() else None
+    except (TypeError, ValueError):
+        _ssh_port = None
     return Instance(
         instance_id=str(instance["instance_id"]),
         image=image,
         cpus=cpus,
         memory_mb=mem,
         ssh_pubkey=pubkey,
-        network=(os.environ.get("VYOMI_INSTANCE_NETWORK") or None),
+        # routable-IP: attach to the VPC bridge (Linux) so the container gets a
+        # host-routable IP; else honour an explicit operator network.
+        network=(_ensure_vpc_network() or os.environ.get("VYOMI_INSTANCE_NETWORK") or None),
+        # port-publish: map this host port -> container :22 (set at first start).
+        ssh_port=(_ssh_port if _port_publish_enabled() else None),
     )
 
 
@@ -7371,6 +7572,7 @@ def _sync_docker_instance(instance: dict) -> None:
         if ip:
             instance["private_ip"] = ip
             instance["runtime_internal_ip"] = ip
+        _update_docker_ssh_metadata(instance)
         if str(instance.get("launch_status") or "").strip().lower() in {"queued", "starting", "error", "pending"}:
             instance["launch_status"] = "ready"
             instance["launch_error"] = ""
@@ -7382,6 +7584,11 @@ def _sync_docker_instance(instance: dict) -> None:
 def _start_docker_instance(instance: dict) -> dict:
     if not _docker_available():
         raise HTTPException(status_code=503, detail="DockerUnavailable")
+    # Allocate the SSH host port ONCE, before the container is created — a
+    # published port can't be added on a later `docker start`, so it must be
+    # decided at `docker run` time and persisted on the instance record.
+    if _port_publish_enabled() and not str(instance.get("ssh_host_port") or "").strip().isdigit():
+        instance["ssh_host_port"] = _allocate_host_port()
     inst = _docker_instance_obj(instance)
     # create() is idempotent: reuses an existing container/volume, else
     # `docker run`s it (and (re)starts a stopped one).
@@ -7401,6 +7608,7 @@ def _start_docker_instance(instance: dict) -> dict:
     if ip:
         instance["private_ip"] = ip
         instance["runtime_internal_ip"] = ip
+    _update_docker_ssh_metadata(instance)
     return instance
 
 
@@ -22325,12 +22533,38 @@ def _connect_info_response(provider: str, instance_id: str) -> dict:
             "state": state_running,
             "hint": "Start the instance before connecting.",
         })
+    # Docker-backed instances (Pro / Codespaces) aren't LXD — vm_connect's
+    # lxc-proxy provisioning doesn't apply. Serve SSH connect info from the
+    # Docker backend (routable bridge IP and/or published host port).
+    if _docker_backed(inst):
+        info = _docker_connect_info(inst, provider)
+        if not info.get("ok"):
+            raise HTTPException(503, detail=info)
+        _persist_state()
+        return info
     # Pass the deployment-level STATE so port claims are global, not per-space.
     info = _vmc.connect_info(STATE, inst, provider=provider)
     if not info.get("ok"):
         raise HTTPException(503, detail=info)
     _persist_state()
     return info
+
+
+def _private_key_pem_response(provider: str, instance_id: str) -> Response:
+    """Serve the private key for SSH. LXD/Multipass instances use a per-instance
+    workspace key (vm_connect); Docker instances share one injected keypair — try
+    the per-instance key first, then fall back to the shared Docker key."""
+    pem = _vmc.read_private_key(instance_id)
+    if not pem:
+        inst, _ = _find_instance_across_spaces(provider, instance_id)
+        if inst and _docker_backed(inst):
+            pem = _docker_private_key_pem(inst)
+    if not pem:
+        raise HTTPException(404, "private key not provisioned yet — open Connect first")
+    return Response(
+        content=pem, media_type="application/x-pem-file",
+        headers={"Content-Disposition": f'attachment; filename="vyomi-{instance_id}.pem"'},
+    )
 
 
 @app.get("/api/aws/ec2/instances/{instance_id}/connect-info")
@@ -22340,13 +22574,7 @@ def api_ec2_connect_info(instance_id: str):
 
 @app.get("/api/aws/ec2/instances/{instance_id}/private-key.pem")
 def api_ec2_private_key(instance_id: str):
-    pem = _vmc.read_private_key(instance_id)
-    if not pem:
-        raise HTTPException(404, "private key not provisioned yet — open Connect first")
-    return Response(
-        content=pem, media_type="application/x-pem-file",
-        headers={"Content-Disposition": f'attachment; filename="vyomi-{instance_id}.pem"'},
-    )
+    return _private_key_pem_response("aws", instance_id)
 
 
 @app.get("/api/gcp/compute/instances/{instance_id}/connect-info")
@@ -22356,13 +22584,7 @@ def api_gce_connect_info(instance_id: str):
 
 @app.get("/api/gcp/compute/instances/{instance_id}/private-key.pem")
 def api_gce_private_key(instance_id: str):
-    pem = _vmc.read_private_key(instance_id)
-    if not pem:
-        raise HTTPException(404, "private key not provisioned yet — open Connect first")
-    return Response(
-        content=pem, media_type="application/x-pem-file",
-        headers={"Content-Disposition": f'attachment; filename="vyomi-{instance_id}.pem"'},
-    )
+    return _private_key_pem_response("gcp", instance_id)
 
 
 @app.get("/api/azure/vm/{instance_id}/connect-info")
@@ -22372,13 +22594,7 @@ def api_azure_vm_connect_info(instance_id: str):
 
 @app.get("/api/azure/vm/{instance_id}/private-key.pem")
 def api_azure_vm_private_key(instance_id: str):
-    pem = _vmc.read_private_key(instance_id)
-    if not pem:
-        raise HTTPException(404, "private key not provisioned yet — open Connect first")
-    return Response(
-        content=pem, media_type="application/x-pem-file",
-        headers={"Content-Disposition": f'attachment; filename="vyomi-{instance_id}.pem"'},
-    )
+    return _private_key_pem_response("azure", instance_id)
 
 
 # ── v2.4.0 unified wire ingress (opt-in) ────────────────────────────

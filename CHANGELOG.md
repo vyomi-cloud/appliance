@@ -4,6 +4,26 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] — 2026-09-28
+
+**Patch: real SSH into compute + honest install-globe geo.**
+
+### Fixed — SSH into simulated compute (Docker/LXD)
+- Compute instances were launched with no published port, so the advertised IP was
+  unreachable and `ssh` connected to nothing. Instances now expose SSH two ways
+  (both additive): **port-publish** (`-p <host_port>:22`, works on every platform incl.
+  macOS Docker Desktop → `ssh -p <port> ubuntu@<host>`) and **routable-IP** (a
+  user-defined bridge gives the container a host-routable IP on Linux →
+  `ssh ubuntu@<ip>` on :22). Mode via `VYOMI_INSTANCE_SSH_MODE` (`port|routable|both|auto`).
+- Docker-backed instances now have a working Connect-info path + `.pem` download
+  (previously LXD-only); the console/DescribeInstances surface a real, runnable command.
+
+### Added — install-globe country hint (`cc`)
+- The appliance resolves its own country (Cloudflare public trace, country-only, no IP
+  stored) and sends it as `cc` at registration, so installs that don't traverse
+  Cloudflare still place a dot on the community globe. Operator controls:
+  `VYOMI_INSTALL_CC=<XX>` to pin, `VYOMI_INSTALL_GEO=0` to disable.
+
 ## [2.9.0] — 2026-07-14
 
 **Compiled launcher + console data-plane integration.** Two headline changes, plus
