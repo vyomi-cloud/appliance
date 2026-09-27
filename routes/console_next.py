@@ -55,6 +55,7 @@ def _capabilities() -> dict:
                      "secretsmanager": "kv-secret-viewer",
                      "kms": "kms-crypto-view",
                      "ec2": "compute-terminal",
+                     "lambda": "serverless-invoke",
                      "iam": "generic-control-plane"}
     widgets = {
         "object-browser": "generic", "sql-console": "generic",
@@ -107,6 +108,9 @@ def _capabilities() -> dict:
             {"id": "ec2", "label": "EC2", "icon": "🖥", "widget": "compute-terminal",
              "terminology": "instance", "backed_by": "Docker/LXD",
              "conformance": conf.service_signal("ec2")},
+            {"id": "lambda", "label": "Lambda", "icon": "ƒ", "widget": "serverless-invoke",
+             "terminology": "function", "backed_by": "in-proc runtime",
+             "conformance": conf.service_signal("lambda")},
             {"id": "iam", "label": "IAM", "icon": "◆", "widget": "generic-control-plane",
              "terminology": "policy", "backed_by": "in-proc",
              "conformance": conf.service_signal("iam")},

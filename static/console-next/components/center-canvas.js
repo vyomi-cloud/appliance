@@ -14,6 +14,7 @@ import '../widgets/queue-topic-viewer.js';
 import '../widgets/kv-secret-viewer.js';
 import '../widgets/kms-crypto-view.js';
 import '../widgets/compute-terminal.js';
+import '../widgets/serverless-invoke.js';
 import '../widgets/generic-control-plane.js';
 
 class CenterCanvas extends LitElement {
@@ -87,6 +88,13 @@ class CenterCanvas extends LitElement {
         .service=${svc}
         .deepLink=${this.deepLink}
       ></vyomi-compute-terminal>`;
+    }
+    if (svc.widget === 'serverless-invoke' && mode === 'full') {
+      return html`<vyomi-serverless-invoke
+        .caps=${this.caps}
+        .service=${svc}
+        .deepLink=${this.deepLink}
+      ></vyomi-serverless-invoke>`;
     }
     return html`<vyomi-generic-control-plane
       .service=${svc}

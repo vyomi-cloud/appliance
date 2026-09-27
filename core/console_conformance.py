@@ -95,6 +95,16 @@ _SIGNAL = {
         "checks": {"passed": 34, "total": 34},
         "note": "EC2 core conformant; compute-terminal widget is conformance-gated green.",
     },
+    "lambda": {
+        # backend conformant AND the serverless-invoke widget now ships — the rich
+        # data-plane view (list functions / config / JSON payload editor + invoke →
+        # response payload + status + logs / optional create) is wired in
+        # center-canvas over the REAL Lambda runtime (sandboxed handler), so gate
+        # to "full".
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 27, "total": 27},
+        "note": "Lambda core conformant; serverless-invoke widget is conformance-gated green.",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.
