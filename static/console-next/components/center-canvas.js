@@ -11,6 +11,7 @@ import { widgetMode } from '../api.js';
 import '../widgets/object-browser.js';
 import '../widgets/nosql-item-viewer.js';
 import '../widgets/queue-topic-viewer.js';
+import '../widgets/kv-secret-viewer.js';
 import '../widgets/generic-control-plane.js';
 
 class CenterCanvas extends LitElement {
@@ -63,6 +64,13 @@ class CenterCanvas extends LitElement {
         .service=${svc}
         .deepLink=${this.deepLink}
       ></vyomi-queue-topic-viewer>`;
+    }
+    if (svc.widget === 'kv-secret-viewer' && mode === 'full') {
+      return html`<vyomi-kv-secret-viewer
+        .caps=${this.caps}
+        .service=${svc}
+        .deepLink=${this.deepLink}
+      ></vyomi-kv-secret-viewer>`;
     }
     return html`<vyomi-generic-control-plane
       .service=${svc}

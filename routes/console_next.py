@@ -52,6 +52,7 @@ def _capabilities() -> dict:
     # Map the service-level conformance mode onto each service's WIDGET id.
     svc_to_widget = {"s3": "object-browser", "dynamodb": "nosql-item-viewer",
                      "rds": "sql-console", "sqs": "queue-topic-viewer",
+                     "secretsmanager": "kv-secret-viewer",
                      "iam": "generic-control-plane"}
     widgets = {
         "object-browser": "generic", "sql-console": "generic",
@@ -94,7 +95,11 @@ def _capabilities() -> dict:
             {"id": "sqs", "label": "SQS + SNS", "icon": "⇄", "widget": "queue-topic-viewer",
              "terminology": "queue / topic", "backed_by": "in-proc messaging",
              "conformance": conf.service_signal("sqs")},
-            {"id": "iam", "label": "IAM", "icon": "⚿", "widget": "generic-control-plane",
+            {"id": "secretsmanager", "label": "Secrets Manager", "icon": "⚿",
+             "widget": "kv-secret-viewer", "terminology": "secret",
+             "backed_by": "in-proc KvStore",
+             "conformance": conf.service_signal("secretsmanager")},
+            {"id": "iam", "label": "IAM", "icon": "◆", "widget": "generic-control-plane",
              "terminology": "policy", "backed_by": "in-proc",
              "conformance": conf.service_signal("iam")},
         ],
@@ -264,6 +269,52 @@ def register(app: FastAPI) -> None:
         if not arn:
             raise HTTPException(400, detail="ValidationError topic_arn is required")
         return _guard(lambda: _msg().publish(arn, p.get("message", ""), p.get("subject")))
+
+    # ── Secrets Manager kv-secret-viewer (§13): clean JSON facade over the
+    #    substrate-agnostic secrets_core + a shared KvStore (core/console_secrets).
+    #    Values are only fetched on a deliberate reveal; the widget masks by default.
+    def _sec():
+        from core import console_secrets as s
+        return s
+
+    def _sguard(fn):
+        from core.console_secrets import SecretsError
+        try:
+            return fn()
+        except SecretsError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/secrets", include_in_schema=False)
+    def api_console_secrets_list():
+        return _sguard(lambda: _sec().list_secrets())
+
+    @app.post("/api/console/secrets", include_in_schema=False)
+    def api_console_secrets_create(payload: dict = Body(default=None)):
+        p = payload or {}
+        name = (p.get("name") or "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError name is required")
+        return _sguard(lambda: _sec().create_secret(
+            name, p.get("secret_string", ""), (p.get("description") or "").strip()))
+
+    @app.get("/api/console/secrets/{name}", include_in_schema=False)
+    def api_console_secrets_describe(name: str):
+        return _sguard(lambda: _sec().describe_secret(name))
+
+    @app.delete("/api/console/secrets/{name}", include_in_schema=False)
+    def api_console_secrets_delete(name: str):
+        return _sguard(lambda: _sec().delete_secret(name))
+
+    @app.get("/api/console/secrets/{name}/value", include_in_schema=False)
+    def api_console_secrets_value(name: str,
+                                  version_id: str = Query(default=None),
+                                  version_stage: str = Query(default=None)):
+        return _sguard(lambda: _sec().get_secret_value(name, version_id, version_stage))
+
+    @app.post("/api/console/secrets/{name}/value", include_in_schema=False)
+    def api_console_secrets_put(name: str, payload: dict = Body(default=None)):
+        p = payload or {}
+        return _sguard(lambda: _sec().put_secret_value(name, p.get("secret_string", "")))
 
     # ── The SPA shell — serves index.html at /console-next and any sub-path so the
     #    client-side router can own deep-links. Asset refs inside index.html are

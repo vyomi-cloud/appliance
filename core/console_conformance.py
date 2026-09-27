@@ -63,6 +63,15 @@ _SIGNAL = {
         "checks": {"passed": 32, "total": 32},
         "note": "SQS+SNS core conformant; queue-topic-viewer widget is conformance-gated green.",
     },
+    "secretsmanager": {
+        # backend conformant AND the kv-secret-viewer widget now ships — the rich
+        # data-plane view (list secrets / describe versions+stages / masked value
+        # with deliberate reveal / create + put-value) is wired in center-canvas,
+        # so gate to "full".
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 32, "total": 32},
+        "note": "Secrets Manager core conformant; kv-secret-viewer widget is conformance-gated green.",
+    },
     "iam": {
         "mode": "generic", "status": "partial",
         "checks": {"passed": 20, "total": 28},
