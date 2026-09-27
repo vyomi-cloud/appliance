@@ -9,6 +9,7 @@ import { LitElement, html, css } from '../vendor/lit-core.min.js';
 import { widgetMode } from '../api.js';
 
 import '../widgets/object-browser.js';
+import '../widgets/nosql-item-viewer.js';
 import '../widgets/generic-control-plane.js';
 
 class CenterCanvas extends LitElement {
@@ -47,6 +48,13 @@ class CenterCanvas extends LitElement {
         .service=${svc}
         .deepLink=${this.deepLink}
       ></vyomi-object-browser>`;
+    }
+    if (svc.widget === 'nosql-item-viewer' && mode === 'full') {
+      return html`<vyomi-nosql-item-viewer
+        .caps=${this.caps}
+        .service=${svc}
+        .deepLink=${this.deepLink}
+      ></vyomi-nosql-item-viewer>`;
     }
     return html`<vyomi-generic-control-plane
       .service=${svc}

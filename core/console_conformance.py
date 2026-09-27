@@ -43,13 +43,12 @@ _SIGNAL = {
         "note": "S3 object store — real MinIO; object-browser is conformance-gated green.",
     },
     "dynamodb": {
-        # backend conformant, but the nosql-item-viewer widget isn't built yet
-        # (P1a landed only sql-console) — gate to generic so the UI falls back
-        # to the generic view instead of an unregistered element. Flip to "full"
-        # when widgets/nosql-item-viewer.js ships.
-        "mode": "generic", "status": "conformant",
+        # backend conformant AND the nosql-item-viewer widget now ships — the rich
+        # data-plane view (list tables / browse+get/put items / key query) is wired
+        # in center-canvas, so gate to "full".
+        "mode": "full", "status": "conformant",
         "checks": {"passed": 45, "total": 45},
-        "note": "DynamoDB core conformant; nosql-item-viewer widget pending (generic view for now).",
+        "note": "DynamoDB core conformant; nosql-item-viewer widget is conformance-gated green.",
     },
     "rds": {
         "mode": "full", "status": "conformant",
