@@ -86,6 +86,15 @@ _SIGNAL = {
         "checks": {"passed": 20, "total": 28},
         "note": "IAM — control-plane + policy simulator; rich generic-control-plane view.",
     },
+    "ec2": {
+        # backend conformant AND the compute-terminal widget now ships — the rich
+        # data-plane view (list instances / SSH connect-info + .pem download / app
+        # URL / in-browser console-exec terminal) is wired in center-canvas over the
+        # real EC2 state + connect-info endpoints, so gate to "full".
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 34, "total": 34},
+        "note": "EC2 core conformant; compute-terminal widget is conformance-gated green.",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.

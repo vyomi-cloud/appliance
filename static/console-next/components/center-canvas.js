@@ -13,6 +13,7 @@ import '../widgets/nosql-item-viewer.js';
 import '../widgets/queue-topic-viewer.js';
 import '../widgets/kv-secret-viewer.js';
 import '../widgets/kms-crypto-view.js';
+import '../widgets/compute-terminal.js';
 import '../widgets/generic-control-plane.js';
 
 class CenterCanvas extends LitElement {
@@ -79,6 +80,13 @@ class CenterCanvas extends LitElement {
         .service=${svc}
         .deepLink=${this.deepLink}
       ></vyomi-kms-crypto-view>`;
+    }
+    if (svc.widget === 'compute-terminal' && mode === 'full') {
+      return html`<vyomi-compute-terminal
+        .caps=${this.caps}
+        .service=${svc}
+        .deepLink=${this.deepLink}
+      ></vyomi-compute-terminal>`;
     }
     return html`<vyomi-generic-control-plane
       .service=${svc}

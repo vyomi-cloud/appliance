@@ -54,6 +54,7 @@ def _capabilities() -> dict:
                      "rds": "sql-console", "sqs": "queue-topic-viewer",
                      "secretsmanager": "kv-secret-viewer",
                      "kms": "kms-crypto-view",
+                     "ec2": "compute-terminal",
                      "iam": "generic-control-plane"}
     widgets = {
         "object-browser": "generic", "sql-console": "generic",
@@ -103,6 +104,9 @@ def _capabilities() -> dict:
             {"id": "kms", "label": "KMS", "icon": "🔑", "widget": "kms-crypto-view",
              "terminology": "key", "backed_by": "in-proc KmsEngine",
              "conformance": conf.service_signal("kms")},
+            {"id": "ec2", "label": "EC2", "icon": "🖥", "widget": "compute-terminal",
+             "terminology": "instance", "backed_by": "Docker/LXD",
+             "conformance": conf.service_signal("ec2")},
             {"id": "iam", "label": "IAM", "icon": "◆", "widget": "generic-control-plane",
              "terminology": "policy", "backed_by": "in-proc",
              "conformance": conf.service_signal("iam")},
