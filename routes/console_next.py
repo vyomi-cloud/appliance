@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -38,23 +38,36 @@ def _capabilities() -> dict:
     other widgets are declared per their conformance/backing status. The UI degrades
     purely from these flags — it never checks the substrate name.
     """
+    from core import console_conformance as conf
+
     substrate = os.environ.get("VYOMI_SUBSTRATE", "local")  # local | codespaces | nano
     connect_mode = os.environ.get("VYOMI_CONNECT_MODE", "endpoint")  # endpoint | ssh | relay
 
+    # ── Conformance-driven widget modes (§14.5) ──
+    # The rich widget for a service renders ONLY when its widget mode is "full";
+    # otherwise the center-canvas falls back to generic-control-plane. The per-service
+    # mode comes from the conformance signal (core/console_conformance.py) so the gate
+    # is honest and there is no substrate branching — the UI reads these flags.
+    svc_modes = conf.widget_modes()  # service_id -> full|degraded|generic
+    # Map the service-level conformance mode onto each service's WIDGET id.
+    svc_to_widget = {"s3": "object-browser", "dynamodb": "nosql-item-viewer",
+                     "rds": "sql-console", "sqs": "queue-topic-viewer",
+                     "iam": "generic-control-plane"}
+    widgets = {
+        "object-browser": "generic", "sql-console": "generic",
+        "compute-terminal": "generic", "serverless-invoke": "generic",
+        "nosql-item-viewer": "generic", "kv-secret-viewer": "generic",
+        "kms-crypto-view": "generic", "queue-topic-viewer": "generic",
+        "generic-control-plane": "full",
+    }
+    for sid, wid in svc_to_widget.items():
+        if wid in widgets:
+            widgets[wid] = svc_modes.get(sid, "generic")
+
     return {
         "substrate": substrate,
-        "cloud_lenses": ["aws"],  # lenses with a rich data-plane in this P0 vertical
-        "widgets": {
-            "object-browser": "full",       # S3 → real MinIO (wired in P0)
-            "sql-console": "generic",       # RDS widget lands in P1
-            "compute-terminal": "generic",  # EC2 widget lands in P1
-            "serverless-invoke": "generic",
-            "nosql-item-viewer": "generic",
-            "kv-secret-viewer": "generic",
-            "kms-crypto-view": "generic",
-            "queue-topic-viewer": "generic",
-            "generic-control-plane": "full",
-        },
+        "cloud_lenses": ["aws"],  # lenses with a rich data-plane in this vertical
+        "widgets": widgets,
         "features": {
             "glassbox": True,      # Calls tab is live in P0
             "snapshot": False,     # P2
@@ -65,17 +78,28 @@ def _capabilities() -> dict:
         },
         "connect": {"mode": connect_mode},
         # The service rail is generated from this catalog — the shell renders only
-        # these services, each mapped to a widget the manifest above gates.
+        # these services, each mapped to a widget the manifest above gates. Each
+        # carries its per-service conformance signal so the rail + widgets show the
+        # honest state (§14.5).
         "services": [
             {"id": "s3", "label": "S3", "icon": "▤", "widget": "object-browser",
-             "terminology": "bucket", "backed_by": "MinIO"},
+             "terminology": "bucket", "backed_by": "MinIO",
+             "conformance": conf.service_signal("s3")},
             {"id": "dynamodb", "label": "DynamoDB", "icon": "⊞", "widget": "nosql-item-viewer",
-             "terminology": "table", "backed_by": "DynamoDB-Local"},
+             "terminology": "table", "backed_by": "DynamoDB-Local",
+             "conformance": conf.service_signal("dynamodb")},
             {"id": "rds", "label": "RDS", "icon": "◫", "widget": "sql-console",
-             "terminology": "db instance", "backed_by": "MySQL/Postgres"},
+             "terminology": "db instance", "backed_by": "PostgreSQL/sqlite",
+             "conformance": conf.service_signal("rds")},
+            {"id": "sqs", "label": "SQS + SNS", "icon": "⇄", "widget": "queue-topic-viewer",
+             "terminology": "queue / topic", "backed_by": "in-proc messaging",
+             "conformance": conf.service_signal("sqs")},
             {"id": "iam", "label": "IAM", "icon": "⚿", "widget": "generic-control-plane",
-             "terminology": "policy", "backed_by": "in-proc"},
+             "terminology": "policy", "backed_by": "in-proc",
+             "conformance": conf.service_signal("iam")},
         ],
+        # Workspace-level conformance rollup for the status-bar pill.
+        "conformance": conf.rollup(),
         "workspace": {
             "name": os.environ.get("VYOMI_WORKSPACE_NAME", "vyomi-dev-01"),
             "endpoint": os.environ.get("VYOMI_S3_ENDPOINT", ""),
@@ -124,6 +148,121 @@ def register(app: FastAPI) -> None:
         from core.glassbox import RING
         RING.clear()
         return {"ok": True}
+
+    # ── Conformance signal (F5 seam) — per-service + workspace rollup. The pill
+    #    reads the rollup; the widgets/rail read per-service. Stubbed source today
+    #    (core/console_conformance.py), live-runner-ready shape. ──
+    @app.get("/api/console/conformance", include_in_schema=False)
+    def api_console_conformance():
+        from core import console_conformance as conf
+        return {"rollup": conf.rollup(), "services": conf.all_signals()}
+
+    # ── RDS sql-console (§13.4): relay-safe SQL via the RDS Data API core ──
+    @app.get("/api/console/rds/databases", include_in_schema=False)
+    def api_console_rds_databases():
+        from core import console_sql
+        return console_sql.list_databases()
+
+    @app.post("/api/console/rds/execute", include_in_schema=False)
+    async def api_console_rds_execute(payload: dict = Body(default=None)):
+        from core import console_sql
+        payload = payload or {}
+        sql = (payload.get("sql") or "").strip()
+        if not sql:
+            raise HTTPException(400, detail="ValidationError sql is required")
+        return await console_sql.execute(payload.get("db") or "",
+                                         sql, payload.get("parameters"))
+
+    @app.get("/api/console/rds/databases/{db_id}/schema", include_in_schema=False)
+    async def api_console_rds_schema(db_id: str):
+        from core import console_sql
+        return await console_sql.schema(db_id)
+
+    # ── SQS + SNS queue/topic-viewer (§13): ONE shared MessagingStore so the widget
+    #    can show REAL SNS→SQS fan-out. Drives core/sqs_core + core/sns_core. ──
+    def _msg():
+        from core import console_messaging as m
+        return m
+
+    def _guard(fn):
+        from core.console_messaging import MessagingError
+        try:
+            return fn()
+        except MessagingError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/messaging/queues", include_in_schema=False)
+    def api_console_mq_list():
+        return _msg().list_queues()
+
+    @app.post("/api/console/messaging/queues", include_in_schema=False)
+    def api_console_mq_create(payload: dict = Body(default=None)):
+        name = (payload or {}).get("name", "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError name is required")
+        return _guard(lambda: _msg().create_queue(name))
+
+    @app.delete("/api/console/messaging/queues/{name}", include_in_schema=False)
+    def api_console_mq_delete(name: str):
+        return _guard(lambda: _msg().delete_queue(name))
+
+    @app.post("/api/console/messaging/queues/{name}/send", include_in_schema=False)
+    def api_console_mq_send(name: str, payload: dict = Body(default=None)):
+        body = (payload or {}).get("body", "")
+        return _guard(lambda: _msg().send_message(name, body))
+
+    @app.post("/api/console/messaging/queues/{name}/receive", include_in_schema=False)
+    def api_console_mq_receive(name: str, payload: dict = Body(default=None)):
+        p = payload or {}
+        return _guard(lambda: _msg().receive_messages(
+            name, int(p.get("max", 10)), int(p.get("visibility", 0))))
+
+    @app.get("/api/console/messaging/queues/{name}/peek", include_in_schema=False)
+    def api_console_mq_peek(name: str):
+        return _guard(lambda: _msg().peek_messages(name))
+
+    @app.post("/api/console/messaging/queues/{name}/purge", include_in_schema=False)
+    def api_console_mq_purge(name: str):
+        return _guard(lambda: _msg().purge_queue(name))
+
+    @app.get("/api/console/messaging/topics", include_in_schema=False)
+    def api_console_topics_list():
+        return _msg().list_topics()
+
+    @app.post("/api/console/messaging/topics", include_in_schema=False)
+    def api_console_topics_create(payload: dict = Body(default=None)):
+        name = (payload or {}).get("name", "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError name is required")
+        return _guard(lambda: _msg().create_topic(name))
+
+    # Topic ARNs contain ':' (and are awkward in a path segment), so the ARN travels
+    # in the body/query for topic sub-operations — keeps the routes unambiguous.
+    @app.post("/api/console/messaging/topics/delete", include_in_schema=False)
+    def api_console_topics_delete(payload: dict = Body(default=None)):
+        arn = (payload or {}).get("topic_arn", "").strip()
+        return _guard(lambda: _msg().delete_topic(arn))
+
+    @app.get("/api/console/messaging/topics/subscriptions", include_in_schema=False)
+    def api_console_topics_subs(topic_arn: str = Query(...)):
+        return _guard(lambda: _msg().list_subscriptions(topic_arn))
+
+    @app.post("/api/console/messaging/topics/subscribe", include_in_schema=False)
+    def api_console_topics_subscribe(payload: dict = Body(default=None)):
+        p = payload or {}
+        arn = p.get("topic_arn", "").strip()
+        queue = p.get("queue", "").strip()
+        if not arn or not queue:
+            raise HTTPException(400, detail="ValidationError topic_arn and queue are required")
+        return _guard(lambda: _msg().subscribe_queue(arn, queue))
+
+    @app.post("/api/console/messaging/topics/publish", include_in_schema=False)
+    def api_console_topics_publish(payload: dict = Body(default=None)):
+        p = payload or {}
+        arn = p.get("topic_arn", "").strip()
+        if not arn:
+            raise HTTPException(400, detail="ValidationError topic_arn is required")
+        return _guard(lambda: _msg().publish(arn, p.get("message", ""), p.get("subject")))
 
     # ── The SPA shell — serves index.html at /console-next and any sub-path so the
     #    client-side router can own deep-links. Asset refs inside index.html are

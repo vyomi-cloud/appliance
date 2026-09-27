@@ -197,6 +197,45 @@ def _resolve_service_action(method: str, path: str, headers: Dict[str, str],
     if xms:
         cloud = "azure"
 
+    # console-next data-plane facades (P1a): these console-scoped endpoints drive
+    # the real service cores, so classify them as that AWS service (not "console")
+    # — the Calls tab, explainer and backend.ref then behave like any AWS call.
+    if path.startswith("/api/console/rds/"):
+        tail = path.rsplit("/", 1)[-1]
+        act = {"execute": "ExecuteStatement", "batch": "BatchExecuteStatement",
+               "schema": "DescribeSchema"}.get(tail, tail or "RDSData")
+        return ("aws", "rds", act)
+    if path.startswith("/api/console/messaging/topics"):
+        if path.endswith("/publish"):
+            act = "Publish"
+        elif path.endswith("/subscribe"):
+            act = "Subscribe"
+        elif path.endswith("/subscriptions"):
+            act = "ListSubscriptionsByTopic"
+        elif path.endswith("/delete"):
+            act = "DeleteTopic"
+        elif method == "POST":
+            act = "CreateTopic"
+        else:
+            act = "ListTopics"
+        return ("aws", "sns", act)
+    if path.startswith("/api/console/messaging/queues"):
+        if path.endswith("/send"):
+            act = "SendMessage"
+        elif path.endswith("/receive"):
+            act = "ReceiveMessage"
+        elif path.endswith("/purge"):
+            act = "PurgeQueue"
+        elif path.endswith("/peek"):
+            act = "PeekMessages"
+        elif method == "DELETE":
+            act = "DeleteQueue"
+        elif method == "POST":
+            act = "CreateQueue"
+        else:
+            act = "ListQueues"
+        return ("aws", "sqs", act)
+
     # console-next / vyomi control-plane REST API.
     if path.startswith("/api/console/"):
         return ("vyomi", "console", path.rsplit("/", 1)[-1] or "console")
@@ -305,10 +344,70 @@ def _json_field(body: bytes, *names) -> Optional[str]:
     return None
 
 
+def _path_seg_after(path: str, marker: str) -> Optional[str]:
+    """Return the path segment immediately after `marker` (e.g. after '/tables/' or
+    '/queues/'), used to recover the RDS db / DDB table / SQS queue from the URL."""
+    needle = "/" + marker.strip("/") + "/"
+    if needle not in path:
+        return None
+    rest = path.split(needle, 1)[1]
+    seg = rest.split("/", 1)[0].split("?", 1)[0]
+    return seg or None
+
+
 def _backend_ref(service: str, action: str, method: str, path: str,
                  req_body: bytes = b"", resp_body: bytes = b"") -> Dict[str, Any]:
     """Produce {kind, served_by, ref} — the typed handle the Inspector turns into a
-    one-click deep-link into the State tab / resource detail. P0 wires S3 fully."""
+    one-click deep-link into the State tab / resource detail (§12.4).
+
+    P1a extends this beyond S3 to the new rich widgets: RDS rows, DynamoDB items,
+    SQS messages, SNS topics — so `view in backend ▸` deep-links into each widget.
+    The `ref.type` prefix (`s3.` / `rds.` / `dynamodb.` / `sqs.` / `sns.`) is what
+    the SPA routes on (data, not substrate)."""
+    # ── RDS Data API (ExecuteStatement over the console-scoped path) → rds.rows ──
+    if service in ("rds", "rds-data") or path.startswith("/api/console/rds/"):
+        db = (_json_field(req_body, "resourceArn", "database", "db")
+              or _path_seg_after(path, "databases") or None)
+        # An `arn:...:db:<id>` resourceArn collapses to just the instance id.
+        if db and ":" in db:
+            db = db.rsplit(":", 1)[-1].rsplit("/", 1)[-1]
+        sql = _json_field(req_body, "sql") or ""
+        ref: Dict[str, Any] = {"type": "rds.rows"}
+        if db:
+            ref["db"] = db
+        if sql:
+            ref["sql"] = sql[:200]
+        return {"kind": "sqlite/postgres", "served_by": "rds_data_core", "ref": ref}
+
+    # ── DynamoDB console facade → dynamodb.item ──
+    if service == "dynamodb":
+        table = _path_seg_after(path, "tables") or _json_field(req_body, "TableName", "table_name")
+        ref = {"type": "dynamodb.item" if "items" in path or method in ("POST", "PUT") else "dynamodb.table"}
+        if table:
+            ref["table"] = table
+        return {"kind": "dynamodb-local", "served_by": "dynamodb_core", "ref": ref}
+
+    # ── SQS console/messaging facade → sqs.message ──
+    if service == "sqs":
+        queue = (_path_seg_after(path, "queues")
+                 or _json_field(req_body, "QueueName", "queue", "queue_name") or None)
+        ref = {"type": "sqs.message" if ("messages" in path or "send" in path
+                                         or "receive" in path) else "sqs.queue"}
+        if queue:
+            ref["queue"] = queue
+        return {"kind": "nats/in-proc", "served_by": "sqs_core", "ref": ref}
+
+    # ── SNS console/messaging facade → sns.topic ──
+    if service == "sns" or path.startswith("/api/console/messaging/topics"):
+        topic = (_path_seg_after(path, "topics")
+                 or _json_field(req_body, "TopicArn", "topic", "name") or None)
+        if topic and ":" in topic:
+            topic = topic.rsplit(":", 1)[-1]
+        ref = {"type": "sns.topic"}
+        if topic:
+            ref["topic"] = topic
+        return {"kind": "nats/in-proc", "served_by": "sns_core", "ref": ref}
+
     if service == "s3":
         bucket = None
         key = None
