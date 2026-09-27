@@ -181,12 +181,12 @@ register_azure_routes(app, None)
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb
-from routes import lazy_backends, shared
+from routes import lazy_backends, shared, console_next
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb,
-            lazy_backends, shared]:
+            lazy_backends, shared, console_next]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -200,6 +200,14 @@ register_middleware(app)
 # middleware (FastAPI's middleware order is reverse-LIFO).
 from core.header_aliases import HeaderAliasMiddleware
 app.add_middleware(HeaderAliasMiddleware)
+
+# ── Glass-box capture middleware (console-next P0 — §12.3) ────────────
+# Additive, observe-only ASGI tap. Registered LAST so it is the OUTERMOST
+# layer and sees the final response status/body of every request. It builds
+# the §12.2 event, redacts credentials at tap time (§12.7), and rings it into
+# an in-memory buffer the Inspector streams over SSE. Zero persistence.
+from core.glassbox import GlassBoxCaptureMiddleware
+app.add_middleware(GlassBoxCaptureMiddleware)
 
 # ── Azure state injection ────────────────────────────────────────────
 init_azure_state()

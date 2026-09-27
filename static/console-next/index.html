@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vyomi Console (next)</title>
+  <!-- Base-path-aware: assets load relative to /console-next-assets/. This bundle
+       works at web root AND under a subpath (Nano /nano/ scope) — §15.1 #6.
+       We compute the asset base from THIS document's URL at runtime (see boot.js). -->
+  <link rel="preconnect" href="/" />
+  <style>
+    html, body { margin: 0; height: 100%; background: #0d1117; }
+    #boot-msg {
+      position: fixed; inset: 0; display: grid; place-items: center;
+      color: #9aa7b4; font: 13px -apple-system, system-ui, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div id="boot-msg">Loading Vyomi console…</div>
+  <vyomi-console></vyomi-console>
+  <!-- Single ES-module entry. It resolves the asset base then imports the app. -->
+  <script type="module">
+    // Derive the asset base from where THIS module was served, so the same
+    // index.html works at /console-next/ and under any subpath (Nano).
+    const here = new URL(document.currentScript?.src || location.href, location.href);
+    // The SPA is served at /console-next[/...]; its assets live at /console-next-assets/.
+    // Compute a base that works regardless of subpath prefix.
+    const path = location.pathname;
+    const idx = path.indexOf('/console-next');
+    const prefix = idx >= 0 ? path.slice(0, idx) : '';
+    const ASSET_BASE = prefix + '/console-next-assets/';
+    window.__VY_ASSET_BASE = ASSET_BASE;
+    window.__VY_API_BASE = prefix + '/';   // /api/* is served at the (sub)root
+    import(ASSET_BASE + 'boot.js');
+  </script>
+</body>
+</html>
