@@ -10,6 +10,7 @@ import { widgetMode } from '../api.js';
 
 import '../widgets/object-browser.js';
 import '../widgets/nosql-item-viewer.js';
+import '../widgets/queue-topic-viewer.js';
 import '../widgets/generic-control-plane.js';
 
 class CenterCanvas extends LitElement {
@@ -55,6 +56,13 @@ class CenterCanvas extends LitElement {
         .service=${svc}
         .deepLink=${this.deepLink}
       ></vyomi-nosql-item-viewer>`;
+    }
+    if (svc.widget === 'queue-topic-viewer' && mode === 'full') {
+      return html`<vyomi-queue-topic-viewer
+        .caps=${this.caps}
+        .service=${svc}
+        .deepLink=${this.deepLink}
+      ></vyomi-queue-topic-viewer>`;
     }
     return html`<vyomi-generic-control-plane
       .service=${svc}

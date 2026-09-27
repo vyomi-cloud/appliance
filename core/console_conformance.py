@@ -56,11 +56,12 @@ _SIGNAL = {
         "note": "RDS Data API (ExecuteStatement) — relay-safe SQL over HTTP; real SQL engine.",
     },
     "sqs": {
-        # backend conformant, but the queue-topic-viewer widget isn't built yet
-        # (P1a partial) — gate to generic until widgets/queue-topic-viewer.js ships.
-        "mode": "generic", "status": "conformant",
+        # backend conformant AND the queue-topic-viewer widget now ships — the rich
+        # data-plane view (list queues+topics / send+peek+receive / SNS→SQS subscribe
+        # + publish fan-out) is wired in center-canvas, so gate to "full".
+        "mode": "full", "status": "conformant",
         "checks": {"passed": 32, "total": 32},
-        "note": "SQS+SNS core conformant; queue-topic-viewer widget pending (generic view for now).",
+        "note": "SQS+SNS core conformant; queue-topic-viewer widget is conformance-gated green.",
     },
     "iam": {
         "mode": "generic", "status": "partial",
