@@ -72,6 +72,15 @@ _SIGNAL = {
         "checks": {"passed": 32, "total": 32},
         "note": "Secrets Manager core conformant; kv-secret-viewer widget is conformance-gated green.",
     },
+    "kms": {
+        # backend conformant AND the kms-crypto-view widget now ships — the rich
+        # data-plane view (list keys / create key / encrypt→ciphertext / decrypt→
+        # plaintext round-trip / generate-data-key) is wired in center-canvas over
+        # the REAL kms_core crypto, so gate to "full".
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 36, "total": 36},
+        "note": "KMS core conformant; kms-crypto-view widget is conformance-gated green.",
+    },
     "iam": {
         "mode": "generic", "status": "partial",
         "checks": {"passed": 20, "total": 28},

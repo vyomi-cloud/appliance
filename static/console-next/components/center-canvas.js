@@ -12,6 +12,7 @@ import '../widgets/object-browser.js';
 import '../widgets/nosql-item-viewer.js';
 import '../widgets/queue-topic-viewer.js';
 import '../widgets/kv-secret-viewer.js';
+import '../widgets/kms-crypto-view.js';
 import '../widgets/generic-control-plane.js';
 
 class CenterCanvas extends LitElement {
@@ -71,6 +72,13 @@ class CenterCanvas extends LitElement {
         .service=${svc}
         .deepLink=${this.deepLink}
       ></vyomi-kv-secret-viewer>`;
+    }
+    if (svc.widget === 'kms-crypto-view' && mode === 'full') {
+      return html`<vyomi-kms-crypto-view
+        .caps=${this.caps}
+        .service=${svc}
+        .deepLink=${this.deepLink}
+      ></vyomi-kms-crypto-view>`;
     }
     return html`<vyomi-generic-control-plane
       .service=${svc}

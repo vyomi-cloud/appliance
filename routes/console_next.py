@@ -53,6 +53,7 @@ def _capabilities() -> dict:
     svc_to_widget = {"s3": "object-browser", "dynamodb": "nosql-item-viewer",
                      "rds": "sql-console", "sqs": "queue-topic-viewer",
                      "secretsmanager": "kv-secret-viewer",
+                     "kms": "kms-crypto-view",
                      "iam": "generic-control-plane"}
     widgets = {
         "object-browser": "generic", "sql-console": "generic",
@@ -99,6 +100,9 @@ def _capabilities() -> dict:
              "widget": "kv-secret-viewer", "terminology": "secret",
              "backed_by": "in-proc KvStore",
              "conformance": conf.service_signal("secretsmanager")},
+            {"id": "kms", "label": "KMS", "icon": "🔑", "widget": "kms-crypto-view",
+             "terminology": "key", "backed_by": "in-proc KmsEngine",
+             "conformance": conf.service_signal("kms")},
             {"id": "iam", "label": "IAM", "icon": "◆", "widget": "generic-control-plane",
              "terminology": "policy", "backed_by": "in-proc",
              "conformance": conf.service_signal("iam")},
@@ -315,6 +319,58 @@ def register(app: FastAPI) -> None:
     def api_console_secrets_put(name: str, payload: dict = Body(default=None)):
         p = payload or {}
         return _sguard(lambda: _sec().put_secret_value(name, p.get("secret_string", "")))
+
+    # ── KMS kms-crypto-view (§13): clean JSON facade over the substrate-agnostic
+    #    kms_core + a shared KeyStore (core/console_kms). Reuses the REAL crypto core
+    #    (no fake crypto); plaintext/ciphertext cross the wire base64-encoded (the
+    #    native KMS shape). Purely additive — touches no existing KMS handlers.
+    def _kms():
+        from core import console_kms as k
+        return k
+
+    def _kguard(fn):
+        from core.console_kms import KmsError
+        try:
+            return fn()
+        except KmsError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/kms/keys", include_in_schema=False)
+    def api_console_kms_list():
+        return _kguard(lambda: _kms().list_keys())
+
+    @app.post("/api/console/kms/keys", include_in_schema=False)
+    def api_console_kms_create(payload: dict = Body(default=None)):
+        p = payload or {}
+        return _kguard(lambda: _kms().create_key((p.get("description") or "").strip()))
+
+    @app.get("/api/console/kms/keys/{key_id}", include_in_schema=False)
+    def api_console_kms_describe(key_id: str):
+        return _kguard(lambda: _kms().describe_key(key_id))
+
+    @app.post("/api/console/kms/encrypt", include_in_schema=False)
+    def api_console_kms_encrypt(payload: dict = Body(default=None)):
+        p = payload or {}
+        key_id = (p.get("key_id") or "").strip()
+        if not key_id:
+            raise HTTPException(400, detail="ValidationError key_id is required")
+        return _kguard(lambda: _kms().encrypt(key_id, p.get("plaintext", "")))
+
+    @app.post("/api/console/kms/decrypt", include_in_schema=False)
+    def api_console_kms_decrypt(payload: dict = Body(default=None)):
+        p = payload or {}
+        blob = p.get("ciphertext_blob", "")
+        if not blob:
+            raise HTTPException(400, detail="ValidationError ciphertext_blob is required")
+        return _kguard(lambda: _kms().decrypt(blob, (p.get("key_id") or "").strip() or None))
+
+    @app.post("/api/console/kms/data-key", include_in_schema=False)
+    def api_console_kms_data_key(payload: dict = Body(default=None)):
+        p = payload or {}
+        key_id = (p.get("key_id") or "").strip()
+        if not key_id:
+            raise HTTPException(400, detail="ValidationError key_id is required")
+        return _kguard(lambda: _kms().generate_data_key(key_id, p.get("key_spec", "AES_256")))
 
     # ── The SPA shell — serves index.html at /console-next and any sub-path so the
     #    client-side router can own deep-links. Asset refs inside index.html are
