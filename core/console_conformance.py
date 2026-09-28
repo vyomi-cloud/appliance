@@ -141,6 +141,16 @@ _SIGNAL = {
         "checks": {"passed": 14, "total": 14},
         "note": "GCP Pub/Sub — queue-topic-viewer serves Pub/Sub via the same widget (lens=gcp).",
     },
+    # Secret Manager reuses the SAME kv-secret-viewer widget under lens=gcp; only the
+    # manifest `api` block differs (§15.2). A GCP secret carries versions (newest =
+    # current, prior = previous), so the masked value + deliberate reveal, version→
+    # stage list, and put-value (new current, prior demoted) flow work unchanged.
+    # Secret + version CRUD + masked-reveal is conformant, so gate to "full".
+    "gcp.secretmanager": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 12, "total": 12},
+        "note": "GCP Secret Manager — kv-secret-viewer serves Secret Manager via the same widget (lens=gcp).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.

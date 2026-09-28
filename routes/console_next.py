@@ -306,6 +306,12 @@ def _gcp_services(conf) -> list:
          "connect": dict(_PUBSUB_CONNECT),
          "labels": dict(_PUBSUB_LABELS),
          "conformance": conf.service_signal("gcp.pubsub")},
+        {"id": "secretmanager", "label": "Secret Manager", "icon": "⚿",
+         "widget": "kv-secret-viewer", "terminology": "secret",
+         "backed_by": "in-proc secret store",
+         "api": dict(_GCP_SECRETS_API),
+         "connect": dict(_GCP_SECRETS_CONNECT),
+         "conformance": conf.service_signal("gcp.secretmanager")},
     ]
 
 
@@ -896,6 +902,57 @@ def register(app: FastAPI) -> None:
     def api_console_secrets_put(name: str, payload: dict = Body(default=None)):
         p = payload or {}
         return _sguard(lambda: _sec().put_secret_value(name, p.get("secret_string", "")))
+
+    # ── GCP Secret Manager kv-secret-viewer (§13): the GCP lens's data plane for the
+    #    SAME kv-secret-viewer widget — the manifest `api` block points here instead
+    #    of /api/console/secrets/* (§15.2 — no if(cloud) branching). GCP secrets carry
+    #    versions too (newest = current, prior = previous), so describe/reveal/put all
+    #    return the SAME JSON shapes the widget consumes. Independent in-memory store
+    #    (core/console_gcp_secrets) so GCP secrets state is isolated from the AWS
+    #    Secrets facade; purely additive. Values are only fetched on a deliberate
+    #    reveal; the widget masks by default.
+    def _gsec():
+        from core import console_gcp_secrets as g
+        return g
+
+    def _gsecguard(fn):
+        from core.console_gcp_secrets import GcpSecretsError
+        try:
+            return fn()
+        except GcpSecretsError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/gcp-secrets/secrets", include_in_schema=False)
+    def api_console_gcp_secrets_list():
+        return _gsecguard(lambda: _gsec().list_secrets())
+
+    @app.post("/api/console/gcp-secrets/secrets", include_in_schema=False)
+    def api_console_gcp_secrets_create(payload: dict = Body(default=None)):
+        p = payload or {}
+        name = (p.get("name") or "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError name is required")
+        return _gsecguard(lambda: _gsec().create_secret(
+            name, p.get("secret_string", ""), (p.get("description") or "").strip()))
+
+    @app.get("/api/console/gcp-secrets/secrets/{name}", include_in_schema=False)
+    def api_console_gcp_secrets_describe(name: str):
+        return _gsecguard(lambda: _gsec().describe_secret(name))
+
+    @app.delete("/api/console/gcp-secrets/secrets/{name}", include_in_schema=False)
+    def api_console_gcp_secrets_delete(name: str):
+        return _gsecguard(lambda: _gsec().delete_secret(name))
+
+    @app.get("/api/console/gcp-secrets/secrets/{name}/value", include_in_schema=False)
+    def api_console_gcp_secrets_value(name: str,
+                                      version_id: str = Query(default=None),
+                                      version_stage: str = Query(default=None)):
+        return _gsecguard(lambda: _gsec().get_secret_value(name, version_id, version_stage))
+
+    @app.post("/api/console/gcp-secrets/secrets/{name}/value", include_in_schema=False)
+    def api_console_gcp_secrets_put(name: str, payload: dict = Body(default=None)):
+        p = payload or {}
+        return _gsecguard(lambda: _gsec().put_secret_value(name, p.get("secret_string", "")))
 
     # ── KMS kms-crypto-view (§13): clean JSON facade over the substrate-agnostic
     #    kms_core + a shared KeyStore (core/console_kms). Reuses the REAL crypto core
