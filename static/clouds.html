@@ -67,6 +67,47 @@
       margin: 0 0 10px; letter-spacing: -0.025em; line-height: 1.1;
     }
     header.hero p  { font-size: 16px; color: #5f6b7a; margin: 0; max-width: 580px; margin: 0 auto; }
+    /* Home (Spaces) hero action buttons — Activate appliance + GitHub community. */
+    header.hero .hero-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 22px; }
+    .hero-btn {
+      display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px;
+      border-radius: 9px; font-size: 13.5px; font-weight: 600; font-family: inherit;
+      cursor: pointer; text-decoration: none; border: 1px solid transparent; transition: all .15s;
+    }
+    .hero-btn .material-icons { font-size: 17px; }
+    .hero-btn-activate { background: #1f2937; color: #fff; }
+    .hero-btn-activate:hover { background: #1a2c44; }
+    .hero-btn-github { background: #fff; color: #1f2937; border-color: #d7dbe0; }
+    .hero-btn-github:hover { border-color: #1f2937; background: #f7f8fa; }
+    /* GitHub community dropdown — ported from the launch page (live star count). */
+    .tb-community { position: relative; display: inline-flex; }
+    .tb-community .tb-caret { display: inline-flex; align-items: center; width: 14px; height: 14px; margin-left: 2px; transition: transform .15s; }
+    .tb-community .tb-caret svg { width: 14px; height: 14px; }
+    .tb-community.open .tb-caret { transform: rotate(180deg); }
+    .tb-community-menu {
+      position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+      width: 320px; max-width: 92vw; text-align: left;
+      background: #fff; border: 1px solid #eceef1; border-radius: 10px;
+      box-shadow: 0 12px 32px rgba(15,27,45,0.16); padding: 12px 10px 8px; display: none; z-index: 200;
+    }
+    .tb-community.open .tb-community-menu { display: block; }
+    .tbc-title { font-size: 14px; font-weight: 700; color: #1f2937; padding: 2px 8px; }
+    .tbc-sub   { font-size: 12px; color: #6b7280; padding: 0 8px 8px; }
+    .tbc-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 7px; text-decoration: none; color: #1f2937; font-size: 13.5px; transition: background .12s; }
+    .tbc-row:hover { background: #f3f4f6; }
+    .tbc-row .tbc-row-ic  { font-size: 16px; line-height: 1; width: 18px; text-align: center; }
+    .tbc-row .tbc-row-lbl { flex: 1; line-height: 1.2; }
+    .tbc-row .tbc-row-meta { font-size: 11.5px; color: #6b7280; font-weight: 500; }
+    .tbc-row .tbc-row-arrow { color: #9ca3af; font-size: 13px; }
+    .tbc-row-primary { background: #1f2937; color: #fff; margin-bottom: 4px; }
+    .tbc-row-primary:hover { background: #0f172a; }
+    .tbc-row-primary .tbc-row-meta { color: rgba(255,255,255,.78); background: rgba(255,255,255,.12); padding: 3px 9px; border-radius: 99px; }
+    .tbc-row-primary .tbc-spin { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: rspin .8s linear infinite; }
+    .tbc-sep  { height: 1px; background: #f1f5f9; margin: 6px 4px 4px; }
+    .tbc-foot { display: flex; gap: 12px; padding: 4px 10px 2px; }
+    .tbc-foot a { color: #9ca3af; text-decoration: none; font-size: 11.5px; }
+    .tbc-foot a:hover { color: #1f2937; }
+    @keyframes rspin { to { transform: rotate(360deg); } }
 
     /* ── Existing spaces list ────────────────────────────────────── */
     .spaces-section { margin-bottom: 44px; }
@@ -110,6 +151,20 @@
     }
     .space-meta { font-size: 12px; color: #5f6b7a; }
     .space-meta .dot { margin: 0 6px; opacity: 0.4; }
+    /* Cost savings widget — sits below the cloud details on each space card. */
+    .space-savings {
+      display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+      margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(15,27,45,0.08);
+    }
+    .space-savings .material-icons { font-size: 16px; color: #16a34a; }
+    .space-savings-amt { font-size: 13px; font-weight: 700; color: #16a34a; }
+    .space-savings-unit { font-size: 11px; font-weight: 500; color: #5f6b7a; margin-left: 3px; }
+    .space-savings-yr { font-size: 11px; color: #5f6b7a; }
+    .space-savings-track {
+      flex: 1 1 60px; min-width: 40px; height: 5px; border-radius: 999px;
+      background: rgba(22,163,74,0.14); overflow: hidden;
+    }
+    .space-savings-track i { display: block; height: 100%; background: linear-gradient(90deg,#16a34a,#22c55e); border-radius: 999px; }
 
     .empty-spaces {
       text-align: center; padding: 24px;
@@ -203,37 +258,40 @@
     .btn-create-space:hover { background: #1a2c44; }
     .btn-create-space .material-icons { font-size: 16px; }   /* the "add" glyph (the old ::before "+" was redundant) */
 
-    /* ── Create-space modal ────────────────────────────────────────── */
+    /* ── Create-space modal (dark theme — matches the console surfaces) ── */
     .modal-backdrop {
       position: fixed; inset: 0; z-index: 9000;
-      background: rgba(15, 27, 45, 0.42);
+      background: rgba(3, 6, 20, 0.62);
       display: none; align-items: center; justify-content: center;
-      backdrop-filter: blur(2px);
+      backdrop-filter: blur(3px);
     }
     .modal-backdrop.open { display: flex; }
     .modal {
-      background: #fff; border-radius: 14px;
+      background: #12162e; border: 1px solid rgba(255,255,255,0.12); border-radius: 14px;
       width: 480px; max-width: calc(100vw - 32px); max-height: 90vh; overflow-y: auto;
-      padding: 26px 28px; box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+      padding: 26px 28px; box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+      color: #cdd8e6;
     }
     .modal h3 {
-      font-size: 20px; font-weight: 700; color: #1f2937;
+      font-size: 20px; font-weight: 700; color: #e4e4e7;
       margin: 0 0 4px; letter-spacing: -0.01em;
     }
-    .modal .modal-sub { font-size: 13.5px; color: #5f6b7a; margin: 0 0 20px; }
+    .modal .modal-sub { font-size: 13.5px; color: #8b8ba7; margin: 0 0 20px; }
     .modal .field { margin-bottom: 16px; }
     .modal .field label {
       display: block; font-size: 12.5px; font-weight: 600;
-      color: #1f2937; margin-bottom: 6px;
+      color: #cdd8e6; margin-bottom: 6px;
     }
     .modal .field input[type="text"] {
       width: 100%; padding: 9px 12px;
-      border: 1.5px solid #cbd5e1; border-radius: 8px;
-      font-size: 14px; font-family: inherit; color: #1f2937;
-      transition: border-color 0.15s;
+      background: rgba(255,255,255,0.05);
+      border: 1.5px solid rgba(255,255,255,0.15); border-radius: 8px;
+      font-size: 14px; font-family: inherit; color: #e4e4e7;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
+    .modal .field input[type="text"]::placeholder { color: #6b7280; }
     .modal .field input[type="text"]:focus {
-      outline: none; border-color: #1f2937;
+      outline: none; border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96,165,250,0.18);
     }
     .provider-picker {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
@@ -241,16 +299,13 @@
     .provider-picker label {
       display: flex; flex-direction: column; align-items: center;
       gap: 6px; padding: 12px 8px; border-radius: 10px;
-      border: 1.5px solid #cbd5e1; cursor: pointer;
-      transition: all 0.15s; font-size: 12.5px; font-weight: 500;
+      border: 1.5px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.03);
+      cursor: pointer; transition: all 0.15s; font-size: 12.5px; font-weight: 500; color: #cdd8e6;
     }
-    .provider-picker label:hover { border-color: #94a3b8; }
+    .provider-picker label:hover { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.06); }
     .provider-picker input { display: none; }
-    .provider-picker input:checked + .provider-card {
-      border-color: #1f2937;
-    }
     .provider-picker label:has(input:checked) {
-      border-color: #1f2937; background: #f7f8fa;
+      border-color: #60a5fa; background: rgba(96,165,250,0.14); color: #fff;
     }
     .provider-picker .provider-glyph { width: 26px; height: 26px; }
     .modal-actions {
@@ -258,23 +313,24 @@
       margin-top: 22px;
     }
     .modal-actions .btn-secondary {
-      padding: 9px 16px; border-radius: 8px; background: #fff;
-      color: #1f2937; border: 1.5px solid #cbd5e1; font-size: 13.5px;
-      font-weight: 600; cursor: pointer; font-family: inherit;
+      padding: 9px 16px; border-radius: 8px; background: transparent;
+      color: #cdd8e6; border: 1.5px solid rgba(255,255,255,0.18); font-size: 13.5px;
+      font-weight: 600; cursor: pointer; font-family: inherit; transition: all .15s;
     }
-    .modal-actions .btn-secondary:hover { border-color: #1f2937; }
+    .modal-actions .btn-secondary:hover { border-color: #60a5fa; color: #fff; }
     .modal-actions .btn-primary {
-      padding: 9px 18px; border-radius: 8px; background: #1f2937;
-      color: #fff; border: 1.5px solid #1f2937; font-size: 13.5px;
-      font-weight: 600; cursor: pointer; font-family: inherit;
+      padding: 9px 18px; border-radius: 8px; background: #3b82f6;
+      color: #fff; border: 1.5px solid #3b82f6; font-size: 13.5px;
+      font-weight: 600; cursor: pointer; font-family: inherit; transition: background .15s;
     }
-    .modal-actions .btn-primary:hover { background: #1a2c44; }
+    .modal-actions .btn-primary:hover { background: #2563eb; border-color: #2563eb; }
     .modal-actions .btn-primary:disabled {
-      opacity: 0.5; cursor: not-allowed; background: #1f2937;
+      opacity: 0.5; cursor: not-allowed; background: #3b82f6;
     }
     .modal-error {
-      color: #b91c1c; font-size: 13px; margin: 8px 0 0;
-      padding: 8px 12px; background: #fee2e2; border-radius: 6px;
+      color: #fca5a5; font-size: 13px; margin: 8px 0 0;
+      padding: 8px 12px; background: rgba(248,113,113,0.12);
+      border: 1px solid rgba(248,113,113,0.28); border-radius: 6px;
       display: none;
     }
     .modal-error.show { display: block; }
@@ -626,38 +682,40 @@
 
     /* ── v2.3.0 left collapsible nav pane — sits below the top logo bar ──── */
     #app-body { display: flex; align-items: stretch; }
+    /* Side menu — UX matched to Vyomi Nano: thin-stroke gray icons (no chip),
+       softer item padding, indigo active state. */
     #app-sidebar {
       flex: none; width: 216px; z-index: 40;
-      background: #0b0e28; color: #c7cbe0; display: flex; flex-direction: column;
+      background: #0f121c; border-right: 1px solid #20263a; color: #c7cbe0; display: flex; flex-direction: column;
       padding: 14px 10px; gap: 4px; overflow: hidden; transition: width .2s ease;
       min-height: calc(100vh - 104px);          /* fill the viewport below the top bar */
     }
     body.side-collapsed #app-sidebar { width: 68px; padding-left: 6px; padding-right: 6px; }
     .side-collapse {
-      background: none; border: 0; color: #8b8fb3; cursor: pointer; display: flex;
-      align-items: center; gap: 14px; padding: 8px 10px; border-radius: 9px; margin-bottom: 8px;
+      background: none; border: 0; color: #a7b0c4; cursor: pointer; display: flex;
+      align-items: center; gap: 11px; padding: 8px 10px; border-radius: 8px; margin-bottom: 8px;
     }
-    .side-collapse:hover { background: #171b3d; color: #fff; }
+    .side-collapse:hover { background: #121524; color: #fff; }
     .side-brand { height: 22px; margin: 2px 6px 12px; opacity: .95; }
     body.side-collapsed .side-brand { display: none; }
     .side-nav { display: flex; flex-direction: column; gap: 4px; }
     .side-item {
-      display: flex; align-items: center; gap: 14px; padding: 11px 10px; border-radius: 9px;
-      background: none; border: 0; color: #c7cbe0; cursor: pointer; text-decoration: none;
-      font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; width: 100%;
+      display: flex; align-items: center; gap: 11px; padding: 8px 12px; border-radius: 8px;
+      background: none; border: 0; color: #a7b0c4; cursor: pointer; text-decoration: none;
+      font: inherit; font-size: 13.5px; font-weight: 500; white-space: nowrap; width: 100%;
     }
-    .side-item:hover { background: #171b3d; color: #fff; }
-    .side-item.active { background: #1f2550; color: #fff; }
-    .side-item .material-icons {   /* large icons on a brand-gradient chip */
-      font-size: 24px; flex: none; color: #fff; border-radius: 9px;
-      /* Fixed square + centred glyph so the inner padding is EQUAL on every side
-         (an inline icon-font's line-box makes symmetric `padding` look uneven). */
-      width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
-      background: linear-gradient(135deg, #4d8cf3 0%, #7c3aed 100%);
+    .side-item:hover { background: #121524; color: #e8ecf5; }
+    .side-item.active { background: rgba(99,102,241,.14); color: #fff; }
+    /* Icons matched to Nano: gray thin glyphs, no gradient chip. */
+    .side-item .material-icons {
+      font-size: 20px; flex: none; color: #6b7488; background: none; border-radius: 0;
+      width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
+      transition: color .12s;
     }
+    .side-item:hover .material-icons { color: #e8ecf5; }
+    .side-item.active .material-icons { color: #818cf8; }
     body.side-collapsed .side-label { display: none; }
-    /* Collapsed rail: each item becomes a centred square so the active/hover
-       shade has EQUAL padding around the 40px icon chip on every side. */
+    /* Collapsed rail: each item becomes a centred square. */
     body.side-collapsed .side-item { width: 56px; height: 56px; padding: 0; justify-content: center; margin: 0 auto; }
     body.side-collapsed .side-collapse { justify-content: center; padding: 8px; align-self: center; }
     #app-main { flex: 1; min-width: 0; }
@@ -764,7 +822,13 @@
     }
     .kc-open:hover { background: rgba(37,99,235,.08); }
     /* KC tiles — rendered natively (light theme), each opens a portal page. */
-    .kc-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding-bottom: 32px; }   /* 3 tiles per row (Conformance Pack + section labels span all 3) */
+    /* Responsive tile grid: 3/row on desktop, 2 on tablet, 1 on narrow.
+       Section labels + the Conformance Pack span the full row via
+       grid-column: 1 / -1, which resolves correctly at every breakpoint
+       because each keeps an explicit column count (no auto-fill). */
+    .kc-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding-bottom: 32px; }
+    @media (max-width: 1180px) { .kc-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 720px)  { .kc-tiles { grid-template-columns: minmax(0, 1fr); } }
     .kc-sec-label {
       grid-column: 1 / -1; display: flex; align-items: center; gap: 8px;
       font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
@@ -950,7 +1014,7 @@
     .modal, #modal-body, .cl-box { background: #0d1228 !important; color: #e4e4e7 !important; border: 1px solid rgba(255,255,255,0.10) !important; }
 </style>
 </head>
-<body>
+<body class="side-collapsed">
   <div id="app-topbar">
   <!-- v2.0.8: persistent appliance readiness / diagnostics strip. While the
        backends are cold-starting it shows weighted pull progress; once every
@@ -970,10 +1034,8 @@
     <button onclick="document.getElementById('update-banner').style.display='none'; sessionStorage.setItem('vyomi.update-banner-dismissed','1');" style="background:none; border:none; color:#9ca3af; margin-left:14px; cursor:pointer; font-size:14px;" aria-label="Dismiss">✕</button>
   </div>
   <nav class="top-bar">
-    <a class="tb-brand" href="/" aria-label="vyomi"><img src="/assets/brand/vyomi-wordmark.png" alt="vyomi"></a>
-    <div class="tb-actions">
-      <a class="tb-btn tb-btn-secondary" href="/">← Back to launch</a>
-    </div>
+    <a class="tb-brand" href="/clouds" onclick="showAppView('spaces');return false;" aria-label="vyomi"><img src="/assets/brand/vyomi-wordmark.png" alt="vyomi"></a>
+    <div class="tb-actions"></div>
   </nav>
   </div><!-- /app-topbar -->
 
@@ -984,9 +1046,8 @@
       <span class="material-icons">menu</span>
     </button>
     <nav class="side-nav">
-      <a class="side-item" href="/" title="Home"><span class="material-icons">home</span><span class="side-label">Home</span></a>
-      <button class="side-item active" type="button" data-view="workspace" onclick="showAppView('workspace')" title="Dashboard"><span class="material-icons">dashboard</span><span class="side-label">Dashboard</span></button>
-      <button class="side-item" type="button" data-view="spaces" onclick="showAppView('spaces')" title="Active spaces"><span class="material-icons">workspaces</span><span class="side-label">Spaces</span></button>
+      <button class="side-item active" type="button" data-view="spaces" onclick="showAppView('spaces')" title="Home"><span class="material-icons">home</span><span class="side-label">Home</span></button>
+      <button class="side-item" type="button" data-view="workspace" onclick="showAppView('workspace')" title="Dashboard"><span class="material-icons">dashboard</span><span class="side-label">Dashboard</span></button>
       <button class="side-item" type="button" data-view="kc" onclick="showAppView('kc')" title="Knowledge Center"><span class="material-icons">menu_book</span><span class="side-label">Knowledge Center</span></button>
       <button class="side-item" type="button" data-view="usage" onclick="showAppView('usage')" title="SDK &amp; CLI usage — per-service samples pointed at your endpoint"><span class="material-icons">terminal</span><span class="side-label">SDK &amp; CLI usage</span></button>
       <button class="side-item" type="button" data-view="api" onclick="showAppView('api')" title="API reference — interactive Swagger for every REST endpoint"><span class="material-icons">api</span><span class="side-label">API (Swagger)</span></button>
@@ -994,7 +1055,7 @@
   </aside>
   <div id="app-main">
 
-  <div id="view-workspace">
+  <div id="view-workspace" hidden>
   <div class="container">
     <header class="hero">
       <div class="hero-eyebrow">Dashboard</div>
@@ -1111,12 +1172,45 @@
   </div><!-- /view-workspace (Dashboard) -->
 
   <!-- ── Spaces view — Active spaces, split into its own left-nav tab ──── -->
-  <div id="view-spaces" hidden>
+  <div id="view-spaces">
   <div class="container">
     <header class="hero">
       <div class="hero-eyebrow">Workspaces</div>
       <h1>Pick up where you left off.</h1>
       <p>Resume an active space — or spin up a fresh one on AWS, GCP, or Azure.</p>
+      <div class="hero-actions">
+        <button class="hero-btn hero-btn-activate" type="button" onclick="openActivateModal()">
+          <span class="material-icons">verified</span>Activate appliance
+        </button>
+        <div class="tb-community" id="tb-community">
+          <button class="hero-btn hero-btn-github" type="button" onclick="toggleCommunityMenu(event)">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+            <span>GitHub community</span>
+            <span class="tb-caret" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"></polyline></svg></span>
+          </button>
+          <div class="tb-community-menu" role="menu">
+            <div class="tbc-title">Join the Vyomi community</div>
+            <div class="tbc-sub">Star us · Watch releases · Join Discussions</div>
+            <a class="tbc-row tbc-row-primary" href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('star')">
+              <span class="tbc-row-ic">⭐</span>
+              <span class="tbc-row-lbl"><strong>Star on GitHub</strong></span>
+              <span class="tbc-row-meta" id="tbc-star-count"><span class="tbc-spin"></span>loading</span>
+            </a>
+            <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/subscription" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('watch')">
+              <span class="tbc-row-ic">👀</span><span class="tbc-row-lbl">Watch releases</span><span class="tbc-row-meta tbc-row-arrow">↗</span>
+            </a>
+            <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/discussions" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('discussions')">
+              <span class="tbc-row-ic">💬</span><span class="tbc-row-lbl">Discussions</span><span class="tbc-row-meta tbc-row-arrow">↗</span>
+            </a>
+            <div class="tbc-sep"></div>
+            <div class="tbc-foot">
+              <a href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('source')">Source ↗</a>
+              <a href="https://github.com/vyomi-cloud/appliance/issues" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('issues')">Issues ↗</a>
+              <a href="https://github.com/vyomi-cloud/appliance/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('contributing')">Contributing ↗</a>
+            </div>
+          </div>
+        </div>
+      </div>
     </header>
 
     <!-- ── SPACES surface card — filter pills + grid ────────────────── -->
@@ -1819,11 +1913,16 @@
       try { localStorage.setItem('vyomi.sidecollapsed', c ? '1' : '0'); } catch (_) {}
     }
     (function () {
-      try { if (localStorage.getItem('vyomi.sidecollapsed') === '1') document.body.classList.add('side-collapsed'); } catch (_) {}
+      // Sidebar is collapsed by DEFAULT (set on <body>); only expand if the
+      // user explicitly expanded it before (stored '0').
+      try { if (localStorage.getItem('vyomi.sidecollapsed') === '0') document.body.classList.remove('side-collapsed'); } catch (_) {}
       // A URL hash (e.g. clouds.html#spaces from a console "back to spaces" link) wins over the last-used view.
       var hv = (location.hash || '').replace('#', '');
       if (APP_VIEWS[hv]) { showAppView(hv); return; }
-      try { var v = localStorage.getItem('vyomi.appview'); if (v && v !== 'workspace') showAppView(v); } catch (_) {}
+      // "Home page" is now the Spaces view: an explicitly-chosen non-default view
+      // still wins; otherwise (no preference or the old 'workspace' default) land on Spaces.
+      try { var v = localStorage.getItem('vyomi.appview'); showAppView(v && v !== 'workspace' && APP_VIEWS[v] ? v : 'spaces'); }
+      catch (_) { showAppView('spaces'); }
     })();
 
     // ── API (Swagger) native renderer — fetch the OpenAPI spec per cloud and
@@ -2070,6 +2169,45 @@
     }
     function openActivateModal(){ var m = document.getElementById('activate-modal'); if(m) m.classList.add('open'); }
     function closeActivateModal(){ var m = document.getElementById('activate-modal'); if(m) m.classList.remove('open'); }
+    // ── GitHub community dropdown (ported from the launch page) ──────────
+    function toggleCommunityMenu(evt){
+      if (evt) evt.stopPropagation();
+      var w = document.getElementById('tb-community'); if (!w) return;
+      var wasOpen = w.classList.contains('open');
+      w.classList.toggle('open');
+      if (!wasOpen){ _loadStarCount(); trackCommunityClick('modal_open'); }
+    }
+    function closeCommunityMenu(){ var w = document.getElementById('tb-community'); if (w) w.classList.remove('open'); }
+    (function(){
+      document.addEventListener('click', function(e){
+        var w = document.getElementById('tb-community');
+        if (w && w.classList.contains('open') && !w.contains(e.target)) closeCommunityMenu();
+      });
+      document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeCommunityMenu(); });
+    })();
+    async function _loadStarCount(){
+      var tag = document.getElementById('tbc-star-count'); if (!tag) return;
+      try {
+        var c = JSON.parse(sessionStorage.getItem('vyomi.community.stars') || 'null');
+        if (c && (Date.now() - c.at) < 600000 && typeof c.count === 'number'){ _renderStarCount(c.count); return; }
+      } catch (e) {}
+      try {
+        var r = await fetch('https://api.github.com/repos/vyomi-cloud/appliance', { headers: {'Accept':'application/vnd.github+json'} });
+        if (!r.ok) throw new Error('http '+r.status);
+        var j = await r.json();
+        var count = j.stargazers_count || 0;
+        try { sessionStorage.setItem('vyomi.community.stars', JSON.stringify({count:count, at:Date.now()})); } catch (e) {}
+        _renderStarCount(count);
+      } catch (e) { tag.innerHTML = '↗'; }
+    }
+    function _renderStarCount(n){
+      var tag = document.getElementById('tbc-star-count'); if (!tag) return;
+      var fmt = n >= 1000 ? (n/1000).toFixed(1).replace(/\.0$/,'') + 'k' : String(n);
+      tag.innerHTML = '⭐ ' + fmt;
+    }
+    function trackCommunityClick(action){
+      try { fetch('/api/runtime/community-click', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:action, where:'console'}) }); } catch (e) {}
+    }
     // Shared post-activation: mark signed in, hide the chip, and sync the workspace
     // (merge any spaces saved on another device, then save the union).
     function _onActivated(){
@@ -2127,6 +2265,24 @@
     })();
 
     // ── Fetch + render existing spaces ───────────────────────────────
+    // Client-side monthly-savings estimate from a space's resource counts.
+    // The backend only ticks cost_savings for the ACTIVE space, so new /
+    // non-active spaces would otherwise read $0. Rates mirror core/cost_model
+    // (SERVICE_MONTHLY + default VM monthly = hourly × 730h).
+    const _SPACE_RATE = {
+      ec2_count: 30.37, rds_count: 25.55, dynamodb_count: 1.25, sqs_count: 0.40, lambda_count: 0.20,  // AWS
+      gcp_count: 24.53, gcp_functions_count: 0.20,                                                     // GCP
+      azure_count: 30.37, azure_functionapp_count: 0.20,                                               // Azure
+    };
+    function estimateSpaceSavings(s) {
+      let total = 0;
+      for (const key in _SPACE_RATE) {
+        const n = (typeof s[key] === 'number') ? s[key] : 0;
+        total += n * _SPACE_RATE[key];
+      }
+      return total;
+    }
+
     async function loadSpaces() {
       const grid = document.getElementById('spaces-grid');
       try {
@@ -2169,6 +2325,14 @@
           ].filter(n => typeof n === 'number');
           const totalRes = counts.reduce((a, b) => a + b, 0);
           const consolePath = PROVIDER_PATHS[provider] || '/ui';
+          // Per-space cost savings (core/cost_model; simulator cost = $0).
+          const cs = s.cost_savings || {};
+          // Prefer the backend's ticked figure; for new / non-active spaces the
+          // backend hasn't computed it, so estimate from the space's own counts.
+          let savings = (typeof cs.savings_usd === 'number' && cs.savings_usd > 0) ? cs.savings_usd : estimateSpaceSavings(s);
+          savings = Number(savings) || 0;
+          // Progress bar: scale $/mo against a $50 reference, clamped 6–100%.
+          const savingsBar = savings > 0 ? Math.max(6, Math.min(100, Math.round((savings / 50) * 100))) : 0;
           return `
             <a class="space-card ${ isActive ? 'active' : '' }"
                href="javascript:void(0)"
@@ -2181,6 +2345,12 @@
               </div>
               <div class="space-meta">
                 ${ region }<span class="dot">·</span>${ totalRes } resource${ totalRes === 1 ? '' : 's' }
+              </div>
+              <div class="space-savings" title="What you'd pay ${ provider.toUpperCase() } for this space's services — saved by running locally ($0)">
+                <span class="material-icons">savings</span>
+                <span class="space-savings-amt">$${ savings.toFixed(2) }<span class="space-savings-unit">/mo saved</span></span>
+                ${ savings > 0 ? `<span class="space-savings-yr">~$${ (savings * 12).toFixed(0) }/yr</span>` : '' }
+                <span class="space-savings-track"><i style="width:${ savingsBar }%"></i></span>
               </div>
             </a>
           `;

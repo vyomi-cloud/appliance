@@ -899,24 +899,50 @@ function renderHome(main){
   }
   grid.append(recent);
 
-  // 3) Cost and usage (col-6) — synthesized bar chart
+  // 3) Cost savings (col-6) — REAL 12-month projection from the LIVE in-browser
+  //    resource census (/api/runtime/host-distribution → providers.aws.by_service),
+  //    priced with rates that mirror core/cost_model. Simulator cost = $0, so every
+  //    dollar of real-AWS cost for what you've spun up is a dollar saved.
+  const _NANO_RATE = {
+    s3:0.50, dynamodb:1.25, kms:1.00, secretsmanager:0.40, sqs:0.40, iam:0, rds:25.55, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0,
+    compute:24.53, storage:0.50, cloudsql:25.00, pubsub:0.40, firestore:0.18, functions:0.20, secretmanager:0.18,
+    'microsoft.compute/virtualmachines':30.37, 'microsoft.sql/servers':4.99, 'microsoft.storage/storageaccounts':0.50,
+    'microsoft.documentdb/databaseaccounts':24.48, 'microsoft.web/sites':0.20, 'microsoft.servicebus/namespaces':9.81, 'microsoft.keyvault/vaults':0.03
+  };
+  function nanoSavingsFromByService(bs){
+    var t = 0; for (var k in (bs||{})) { var r = _NANO_RATE.hasOwnProperty(k) ? _NANO_RATE[k] : 1.0; t += (Number(bs[k])||0) * r; } return t;
+  }
   const cost = el("div",{class:"widget"});
-  cost.append(el("div",{class:"wh"}, icon("attach_money"), "Cost and usage",
+  cost.append(el("div",{class:"wh"}, icon("savings"), "Cost savings",
     el("a",{class:"info"}, "Info")));
   const costBody = el("div",{class:"wb"});
-  costBody.append(el("div",{class:"desc"},
-    "Estimated month-to-date spend in simulator (synthetic data — not real billing)."));
+  const costDesc = el("div",{class:"desc"},
+    "What you'd pay AWS each month for the resources you've spun up in this browser — saved by running locally ($0).");
+  costBody.append(costDesc);
+  const costAmt = el("span",{style:"font-size:24px;font-weight:800;color:var(--orange,#ec7211)"}, "$0");
+  costBody.append(el("div",{style:"display:flex;align-items:baseline;gap:8px;margin:10px 0 2px"},
+    costAmt, el("span",{style:"font-size:12px;color:var(--sub)"}, "/mo saved vs AWS")));
   const bar = el("div",{class:"cost-bar"});
-  // Deterministic 12-month pseudo-data
-  for (let i=0;i<12;i++){ const h = 30 + ((i*23 + 7) % 70); bar.append(el("div",{style:`height:${h}%`})); }
+  for (let i=0;i<12;i++){ bar.append(el("div",{style:"height:4%"})); }
   costBody.append(bar);
   costBody.append(el("div",{style:"display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--sub)"},
     el("span",{}, "Jul"), el("span",{}, "Aug"), el("span",{}, "Sep"),
     el("span",{}, "Oct"), el("span",{}, "Nov"), el("span",{}, "Dec"),
     el("span",{}, "Jan"), el("span",{}, "Feb"), el("span",{}, "Mar"),
     el("span",{}, "Apr"), el("span",{}, "May"), el("span",{}, "Jun")));
+  const costFoot = el("div",{style:"margin-top:8px;font-size:11px;color:var(--sub)"}, "Projected 12-month savings: $0");
+  costBody.append(costFoot);
   cost.append(costBody);
   grid.append(cost);
+  fetch("/api/runtime/host-distribution").then(function(r){return r.json();}).then(function(d){
+    var bs = (((d.providers||{}).aws)||{}).by_service || {};
+    var monthly = nanoSavingsFromByService(bs);
+    costAmt.textContent = "$"+monthly.toFixed(2);
+    costFoot.textContent = "Projected 12-month savings: $"+(monthly*12).toFixed(2);
+    var bars = bar.children;
+    for (var i=0;i<12;i++){ bars[i].style.height = (monthly>0 ? Math.max(6, Math.round(((i+1)/12)*100)) : 4)+"%"; if (monthly>0) bars[i].title = "After "+(i+1)+" mo: $"+(monthly*(i+1)).toFixed(2)+" saved"; }
+    if (monthly<=0){ costDesc.textContent = "Spin up AWS services (EC2, S3, RDS…) and your monthly savings vs real AWS appear here."; }
+  }).catch(function(){});
 
   // 4) Build a solution (col-6)
   const build = el("div",{class:"widget"});

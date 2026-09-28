@@ -877,6 +877,46 @@ function renderRail(){
 }
 function markActive(key){ CURRENT=key; document.querySelectorAll(".navitem").forEach(n=>n.classList.toggle("active",n.dataset.key===key)); }
 
+// ---------- Cost savings card — REAL 12-month projection ----------
+// Reads active_space.cost_savings.by_provider (core/cost_model, simulator cost
+// = $0) via /api/spaces and projects the current monthly rate over 12 months.
+// Client-side only; shared shape with the AWS/GCP consoles.
+function buildSavingsCard(provider, cloud, accent){
+  const card = el("div",{class:"card",style:"cursor:default;display:block;margin-bottom:16px"});
+  card.append(el("div",{style:"display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:6px"}, icon("savings"), "Cost savings"));
+  const desc = el("div",{style:"font-size:12px;color:var(--sub)"}, `What you'd pay ${cloud} each month for the services you've spun up — saved by running locally ($0).`);
+  card.append(desc);
+  const amt = el("span",{style:`font-size:24px;font-weight:800;color:${accent}`}, "$0");
+  card.append(el("div",{style:"display:flex;align-items:baseline;gap:8px;margin:10px 0 2px"},
+    amt, el("span",{style:"font-size:12px;color:var(--sub)"}, `/mo saved vs ${cloud}`)));
+  const bar = el("div",{style:"height:90px;display:flex;align-items:flex-end;gap:3px;margin-top:6px"});
+  for(let i=0;i<12;i++){ bar.append(el("div",{style:`flex:1;background:${accent};opacity:.85;border-radius:2px 2px 0 0;height:4%`})); }
+  card.append(bar);
+  const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"], now=new Date();
+  const labels=el("div",{style:"display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--sub)"});
+  for(let i=0;i<12;i++){ labels.append(el("span",{}, MON[(now.getMonth()+i)%12])); }
+  card.append(labels);
+  const foot=el("div",{style:"margin-top:8px;font-size:11px;color:var(--sub)"}, "Projected 12-month savings: $0");
+  card.append(foot);
+  const x=new XMLHttpRequest(); x.open("GET","/api/spaces",true);
+  x.onload=function(){
+    let monthly=0;
+    try{
+      const cs=((JSON.parse(x.responseText).active_space||{}).cost_savings)||{};
+      const bp=cs.by_provider||{};
+      if(bp[provider]!=null){ monthly=Number(bp[provider])||0; }
+      else { const bs=cs.by_service||{}; Object.keys(bs).forEach(k=>{ if(k.indexOf(provider+".")===0) monthly+=Number(bs[k])||0; }); }
+    }catch(e){}
+    amt.textContent="$"+monthly.toFixed(2);
+    foot.textContent="Projected 12-month savings: $"+(monthly*12).toFixed(2);
+    const bars=bar.children;
+    for(let i=0;i<12;i++){ bars[i].style.height=(monthly>0?Math.max(6,Math.round(((i+1)/12)*100)):4)+"%"; if(monthly>0) bars[i].title="After "+(i+1)+" mo: $"+(monthly*(i+1)).toFixed(2)+" saved"; }
+    if(monthly<=0){ desc.textContent=`Spin up ${cloud} services and your monthly savings vs real ${cloud} appear here.`; }
+  };
+  x.send();
+  return card;
+}
+
 // ---------- Home dashboard ----------
 async function selectHome(){
   markActive("__home__");
@@ -884,6 +924,7 @@ async function selectHome(){
   main.innerHTML="";
   main.append(crumb(["Home"]), pageHead("dashboard","Azure (CloudLearn simulator)","All resources in resource group "+RG));
   const wrap=el("div",{class:"wrap"});
+  wrap.append(buildSavingsCard("azure", "Azure", "#0078d4"));
   const grid=el("div",{class:"cards"}); wrap.append(el("div",{style:"font-size:13px;color:var(--sub);margin-bottom:12px"},"Services — click to manage resources."), grid);
   main.append(wrap);
   for(const s of CATALOG.services){

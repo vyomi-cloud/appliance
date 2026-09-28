@@ -274,6 +274,37 @@ _RECIPES: dict[str, Recipe] = {
         description=("MySQL 8 — full MySQL wire protocol. Backs GCP Cloud SQL MySQL "
                      "and Azure Database for MySQL."),
     ),
+
+    # ─ GCP Pub/Sub emulator (gcloud) ────────────────────────────────────
+    # Counted by core/appliance_readiness.py but was previously missing here,
+    # so the progressive/lazy path could never start it → readiness stalled
+    # short of 100% whenever the GCP compose "full" profile wasn't active.
+    "pubsub": Recipe(
+        name="pubsub",
+        image=os.environ.get("VYOMI_GCLOUD_EMULATOR_IMAGE",
+                             "gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators"),
+        container_name=_host_from_env("CLOUDLEARN_PUBSUB_EMULATOR_HOST", default="vyomi-pubsub"),
+        command=["gcloud", "beta", "emulators", "pubsub", "start", "--host-port=0.0.0.0:8085"],
+        # The emulator answers HTTP on 8085 (a bare GET returns 4xx once the
+        # listener is up); _wait_for_ready accepts 2xx..4xx as "alive". The
+        # gcloud image is ~1.4 GB, so allow a generous first-pull + JVM boot.
+        health_url_template="http://{host}:8085/",
+        health_timeout_s=90,
+        description="Pub/Sub emulator (gcloud) — backs GCP Pub/Sub.",
+    ),
+
+    # ─ GCP Firestore emulator (gcloud) ──────────────────────────────────
+    "firestore": Recipe(
+        name="firestore",
+        image=os.environ.get("VYOMI_GCLOUD_EMULATOR_IMAGE",
+                             "gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators"),
+        container_name=_host_from_env("CLOUDLEARN_FIRESTORE_EMULATOR_HOST", default="vyomi-firestore"),
+        command=["gcloud", "beta", "emulators", "firestore", "start", "--host-port=0.0.0.0:8080"],
+        # Firestore emulator returns 200 "Ok" on GET / once ready.
+        health_url_template="http://{host}:8080/",
+        health_timeout_s=90,
+        description="Firestore emulator (gcloud) — backs GCP Firestore.",
+    ),
 }
 
 

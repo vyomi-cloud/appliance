@@ -872,24 +872,56 @@ function renderHome(main){
   }
   grid.append(recent);
 
-  // 3) Cost and usage (col-6) — synthesized bar chart
+  // 3) Cost savings (col-6) — REAL 12-month projection from core/cost_model,
+  //    fetched live via /api/spaces → active_space.cost_savings.by_provider.
+  //    Simulator cost is $0, so every dollar of real-AWS cost for the services
+  //    you've spun up is a dollar saved. Client-side only (no backend change).
+  const SAVINGS_PROVIDER = "aws", SAVINGS_CLOUD = "AWS";
   const cost = el("div",{class:"widget"});
-  cost.append(el("div",{class:"wh"}, icon("attach_money"), "Cost and usage",
+  cost.append(el("div",{class:"wh"}, icon("savings"), "Cost savings",
     el("a",{class:"info"}, "Info")));
   const costBody = el("div",{class:"wb"});
-  costBody.append(el("div",{class:"desc"},
-    "Estimated month-to-date spend in simulator (synthetic data — not real billing)."));
+  const costDesc = el("div",{class:"desc"},
+    `What you'd pay ${SAVINGS_CLOUD} each month for the services you've spun up — saved by running locally ($0).`);
+  costBody.append(costDesc);
+  const savAmt = el("span",{style:"font-size:26px;font-weight:800;color:var(--orange)"}, "$0");
+  costBody.append(el("div",{style:"display:flex;align-items:baseline;gap:8px;margin:12px 0 2px"},
+    savAmt, el("span",{style:"font-size:12px;color:var(--sub)"}, `/mo saved vs ${SAVINGS_CLOUD}`)));
   const bar = el("div",{class:"cost-bar"});
-  // Deterministic 12-month pseudo-data
-  for (let i=0;i<12;i++){ const h = 30 + ((i*23 + 7) % 70); bar.append(el("div",{style:`height:${h}%`})); }
+  for (let i=0;i<12;i++){ bar.append(el("div",{style:"height:4%"})); }
   costBody.append(bar);
-  costBody.append(el("div",{style:"display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--sub)"},
-    el("span",{}, "Jul"), el("span",{}, "Aug"), el("span",{}, "Sep"),
-    el("span",{}, "Oct"), el("span",{}, "Nov"), el("span",{}, "Dec"),
-    el("span",{}, "Jan"), el("span",{}, "Feb"), el("span",{}, "Mar"),
-    el("span",{}, "Apr"), el("span",{}, "May"), el("span",{}, "Jun")));
+  const barLabels = el("div",{style:"display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--sub)"});
+  costBody.append(barLabels);
+  const savFoot = el("div",{style:"margin-top:8px;font-size:11px;color:var(--sub)"}, "Projected 12-month savings: $0");
+  costBody.append(savFoot);
   cost.append(costBody);
   grid.append(cost);
+  (function(){
+    const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const now=new Date();
+    for(let i=0;i<12;i++){ barLabels.append(el("span",{}, MON[(now.getMonth()+i)%12])); }
+    const x=new XMLHttpRequest();
+    x.open("GET","/api/spaces",true);
+    x.onload=function(){
+      let monthly=0;
+      try{
+        const cs=((JSON.parse(x.responseText).active_space||{}).cost_savings)||{};
+        const bp=cs.by_provider||{};
+        if(bp[SAVINGS_PROVIDER]!=null){ monthly=Number(bp[SAVINGS_PROVIDER])||0; }
+        else { const bs=cs.by_service||{}; Object.keys(bs).forEach(k=>{ if(k.indexOf(SAVINGS_PROVIDER+".")===0) monthly+=Number(bs[k])||0; }); }
+      }catch(e){}
+      savAmt.textContent="$"+monthly.toFixed(2);
+      savFoot.textContent="Projected 12-month savings: $"+(monthly*12).toFixed(2);
+      // Cumulative projection: bar i = (i+1) months at the current monthly rate.
+      const bars=bar.children;
+      for(let i=0;i<12;i++){
+        bars[i].style.height=(monthly>0 ? Math.max(6, Math.round(((i+1)/12)*100)) : 4)+"%";
+        if(monthly>0) bars[i].title="After "+(i+1)+" mo: $"+(monthly*(i+1)).toFixed(2)+" saved";
+      }
+      if(monthly<=0){ costDesc.textContent=`Spin up ${SAVINGS_CLOUD} services (EC2, S3, RDS…) — your monthly savings vs real ${SAVINGS_CLOUD} appear here.`; }
+    };
+    x.send();
+  })();
 
   // 4) Build a solution (col-6)
   const build = el("div",{class:"widget"});

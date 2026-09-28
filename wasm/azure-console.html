@@ -904,6 +904,49 @@ function renderRail(){
 }
 function markActive(key){ CURRENT=key; document.querySelectorAll(".navitem").forEach(n=>n.classList.toggle("active",n.dataset.key===key)); }
 
+// Cost savings card — computes from the LIVE in-browser resource census
+// (/api/runtime/host-distribution → providers[cloud].by_service) using rates
+// that mirror core/cost_model. Nano resources are ephemeral, so this reflects
+// what this console currently holds; simulator cost = $0 → all of it is saved.
+var _NANO_RATE = {
+  s3:0.50, dynamodb:1.25, kms:1.00, secretsmanager:0.40, sqs:0.40, iam:0, rds:25.55, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0,
+  compute:24.53, storage:0.50, cloudsql:25.00, pubsub:0.40, firestore:0.18, functions:0.20, secretmanager:0.18,
+  'microsoft.compute/virtualmachines':30.37, 'microsoft.sql/servers':4.99, 'microsoft.storage/storageaccounts':0.50,
+  'microsoft.documentdb/databaseaccounts':24.48, 'microsoft.web/sites':0.20, 'microsoft.servicebus/namespaces':9.81, 'microsoft.keyvault/vaults':0.03
+};
+function nanoSavingsFromByService(bs){
+  var t = 0; for (var k in (bs||{})) { var r = _NANO_RATE.hasOwnProperty(k) ? _NANO_RATE[k] : 1.0; t += (Number(bs[k])||0) * r; } return t;
+}
+function buildSavingsCard(provider, cloud, accent){
+  var card = el("div",{class:"card",style:"margin-bottom:16px"});
+  card.append(el("div",{class:"h"}, icon("savings"), "Cost savings"));
+  var b = el("div",{class:"b",style:"font-size:12px;color:var(--sub)"});
+  var desc = el("div",{}, "What you'd pay "+cloud+" each month for the resources you've spun up in this browser — saved by running locally ($0).");
+  b.append(desc);
+  var amt = el("span",{style:"font-size:24px;font-weight:800;color:"+accent}, "$0");
+  b.append(el("div",{style:"display:flex;align-items:baseline;gap:8px;margin:10px 0 2px"}, amt, el("span",{style:"font-size:12px;color:var(--sub)"}, "/mo saved vs "+cloud)));
+  var bar = el("div",{style:"height:90px;display:flex;align-items:flex-end;gap:3px;margin-top:6px"});
+  for (var i=0;i<12;i++){ bar.append(el("div",{style:"flex:1;background:"+accent+";opacity:.85;border-radius:2px 2px 0 0;height:4%"})); }
+  b.append(bar);
+  var MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"], now=new Date();
+  var labels=el("div",{style:"display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--sub)"});
+  for (var j=0;j<12;j++){ labels.append(el("span",{}, MON[(now.getMonth()+j)%12])); }
+  b.append(labels);
+  var foot=el("div",{style:"margin-top:8px;font-size:11px;color:var(--sub)"}, "Projected 12-month savings: $0");
+  b.append(foot);
+  card.append(b);
+  fetch("/api/runtime/host-distribution").then(function(r){return r.json();}).then(function(d){
+    var bs = (((d.providers||{})[provider])||{}).by_service || {};
+    var monthly = nanoSavingsFromByService(bs);
+    amt.textContent = "$"+monthly.toFixed(2);
+    foot.textContent = "Projected 12-month savings: $"+(monthly*12).toFixed(2);
+    var bars = bar.children;
+    for (var i=0;i<12;i++){ bars[i].style.height = (monthly>0 ? Math.max(6, Math.round(((i+1)/12)*100)) : 4)+"%"; if (monthly>0) bars[i].title = "After "+(i+1)+" mo: $"+(monthly*(i+1)).toFixed(2)+" saved"; }
+    if (monthly<=0){ desc.textContent = "Spin up "+cloud+" resources and your monthly savings vs real "+cloud+" appear here."; }
+  }).catch(function(){});
+  return card;
+}
+
 // ---------- Home dashboard ----------
 async function selectHome(){
   markActive("__home__");
@@ -911,6 +954,7 @@ async function selectHome(){
   main.innerHTML="";
   main.append(crumb(["Home"]), pageHead("dashboard","Azure (CloudLearn simulator)","All resources in resource group "+RG));
   const wrap=el("div",{class:"wrap"});
+  wrap.append(buildSavingsCard("azure", "Azure", "#0078d4"));
   const grid=el("div",{class:"cards"}); wrap.append(el("div",{style:"font-size:13px;color:var(--sub);margin-bottom:12px"},"Services — click to manage resources."), grid);
   main.append(wrap);
   for(const s of CATALOG.services){

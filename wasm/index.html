@@ -861,11 +861,14 @@
        prefers-reduced-motion: skip the animation entirely. */
     .vyomi-splash {
       position: fixed; inset: 0; z-index: 10000;
-      display: flex; align-items: center; justify-content: center;
+      display: none; align-items: center; justify-content: center;
       flex-direction: column; gap: 24px;
       background: #05071a;
       opacity: 0; animation: vyomi-splash-fade 5000ms ease-in-out forwards;
     }
+    /* JS adds .vyomi-splash-on to show it — explicit class beats the
+       [hidden]-attribute-vs-display:flex quirk that could keep it invisible. */
+    .vyomi-splash.vyomi-splash-on { display: flex; }
     .vyomi-splash .vyomi-splash-logo {
       width: 280px; max-width: 60vw; height: auto; display: block;
       transform: translateY(8px) scale(0.96);
@@ -1071,7 +1074,7 @@
        Inserted at the very top of <body> so it covers all content
        during page hydration. JS at end of body removes it after 5s
        (or instantly if the cookie is already set). ──────────────────── -->
-  <div class="vyomi-splash" id="vyomi-splash" hidden>
+  <div class="vyomi-splash" id="vyomi-splash">
     <img class="vyomi-splash-logo" src="assets/brand/vyomi-wordmark.png" alt="Vyomi">
     <div class="vyomi-splash-tag">Local multi-cloud, in seconds.</div>
     <div class="vyomi-splash-dots"><span></span><span></span><span></span></div>
@@ -1086,23 +1089,38 @@
 
   <script>
     // Splash gate — run BEFORE any heavy SPA logic so the user sees brand
-    // immediately. Cookie `vyomi_splash_seen=v1` valid 24h suppresses on
-    // repeat visits. The `?nosplash=1` query param also suppresses (handy
-    // for screenshot/conformance harness).
+    // immediately. Shown ONCE, on the very first launch; a persistent
+    // localStorage flag `vyomi.nano.splash.seen` suppresses it on every
+    // subsequent visit (no expiry — unlike the old 24h cookie). The
+    // `?nosplash=1` query param also suppresses (screenshot/conformance).
     (function() {
       try {
         var url = new URL(window.location.href);
         if (url.searchParams.get('nosplash') === '1') return;
-        if (document.cookie.split(';').some(function(c){
-          return c.trim().indexOf('vyomi_splash_seen=v1') === 0;
-        })) return;
+        // `?splash=1` force-shows it every time (ignores the one-time flag) —
+        // handy to preview/verify without clearing storage.
+        var force = url.searchParams.get('splash') === '1';
+        // nano-sw.js reloads an UNCONTROLLED load (up to 4×) to gain service-worker
+        // control. Painting the splash on those loads would flash it and consume
+        // its one-time flag before the real (controlled) load — so wait until the
+        // page is SW-controlled (or SW is unsupported). `?splash=1` bypasses.
+        var controlled = !('serviceWorker' in navigator) || !!navigator.serviceWorker.controller;
+        if (!controlled && !force) return;
+        // Bump SPLASH_VER to re-show the splash ONCE to everyone after a
+        // change (new branding, etc.); it then persists and never repeats.
+        var KEY = 'vyomi.nano.splash.seen', SPLASH_VER = 'v4';
+        var seen = false;
+        try { seen = localStorage.getItem(KEY) === SPLASH_VER; } catch (_) {}
+        if (seen && !force) return;
+        // The splash now lives on clouds.html — the page /nano/ redirects logged-in
+        // users to. A launch-page splash never survives that redirect, and setting
+        // the one-time flag here would suppress it on clouds.html. So do nothing on
+        // a normal load; ?splash=1 still previews it here.
+        if (!force) return;
         var el = document.getElementById('vyomi-splash');
         if (!el) return;
         el.hidden = false;
-        // Set cookie immediately so a fast refresh doesn't re-show.
-        var d = new Date(); d.setTime(d.getTime() + 24 * 3600 * 1000);
-        document.cookie = 'vyomi_splash_seen=v1; expires=' + d.toUTCString() +
-                          '; path=/; SameSite=Lax';
+        el.classList.add('vyomi-splash-on');
         // Remove from DOM after the animation completes so it stops
         // capturing scroll/focus.
         setTimeout(function() { try { el.remove(); } catch(_) {} }, 5100);

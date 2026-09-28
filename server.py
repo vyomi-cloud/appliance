@@ -11378,6 +11378,49 @@ def _register_install_at_boot():
 
 
 @app.on_event("startup")
+def _warm_backends_in_background():
+    """v3.0.1 progressive-startup Wave 2: proactively provision the profile's
+    backend containers in a daemon thread so the appliance reaches 'ready' on
+    its own — dependent images download and services come up automatically,
+    instead of only when a service is first accessed (which stranded the
+    readiness gauge at a partial % like 32% when GCP/AWS backends were never
+    hit). Idempotent — provision_async no-ops on already-running backends — and
+    fully fail-open so a provisioning hiccup never blocks startup.
+
+    Skipped when the Docker daemon is unreachable, during conformance
+    (CLOUDLEARN_READINESS_GATE=disabled), or via CLOUDLEARN_BACKEND_WARMUP=off
+    (for appliance devs who don't want the ~3.5 GB pull on every boot)."""
+    import os as _os
+    import threading as _threading
+    if _os.environ.get("CLOUDLEARN_BACKEND_WARMUP", "").strip().lower() in ("off", "0", "false", "disabled"):
+        return
+    if _os.environ.get("CLOUDLEARN_READINESS_GATE", "").strip().lower() in ("disabled", "off", "0", "false"):
+        return
+
+    def _run():
+        try:
+            from core import backend_provisioner as _bp
+            if not _bp.available():
+                return  # no Docker SDK / daemon → lazy on-access path stays
+            # Scope to the backends the active profile tracks (so a single-cloud
+            # profile doesn't pull other clouds' images); fall back to all recipes.
+            try:
+                from core import appliance_readiness as _ar
+                tracked = {b[0] for b in _ar._active_backends()}
+            except Exception:
+                tracked = None
+            for _name in _bp.list_recipes():
+                if tracked is None or _name in tracked:
+                    try:
+                        _bp.provision_async(_name)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+    _threading.Thread(target=_run, daemon=True, name="cloudlearn-backend-warmup").start()
+
+
+@app.on_event("startup")
 def _start_license_background_tasks():
     """Spin up two daemon threads on appliance boot:
        1. Revocation poll (24h) — catches admin revocations

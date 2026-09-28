@@ -2,6 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <!-- The standalone launch/landing page is retired — the console at /clouds is
+       the product surface. Redirect browsers there BEFORE this page renders, so
+       the old landing (and its legacy purple sidebar) never shows. SDK / S3
+       clients never reach this HTML — the root handler serves them XML. -->
+  <script>location.replace("/clouds");</script>
+  <meta http-equiv="refresh" content="0; url=/clouds">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Vyomi — Local multi-cloud dev platform</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/brand/favicon-32.png">
