@@ -199,7 +199,7 @@ class ComputeTerminal extends LitElement {
   async _launch() {
     const path = this._launchPath();
     if (!path || this._launching) return;
-    const ami = (this._launchImage || '').trim() || 'sim-ubuntu-22.04';
+    const ami = (this._launchImage || '').trim() || 'ami-ubuntu2404';
     const instanceType = (this._launchType || '').trim() || 't3.micro';
     this._launching = true;
     this._msg = '';
@@ -428,7 +428,7 @@ class ComputeTerminal extends LitElement {
               ${this._canLaunch() ? html`
                 <div class="launch">
                   <div class="lh">Launch instance</div>
-                  <input type="text" placeholder="image / AMI (sim-ubuntu-22.04)"
+                  <input type="text" placeholder="image / AMI (ami-ubuntu2404)"
                     .value=${this._launchImage || ''} ?disabled=${this._launching}
                     @input=${(e) => (this._launchImage = e.target.value)}
                     @keydown=${(e) => { if (e.key === 'Enter') this._launch(); }} />
