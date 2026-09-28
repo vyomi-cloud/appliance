@@ -131,6 +131,16 @@ _SIGNAL = {
         "checks": {"passed": 12, "total": 12},
         "note": "GCP Firestore — nosql-item-viewer serves Firestore via the same widget (lens=gcp).",
     },
+    # Pub/Sub reuses the SAME queue-topic-viewer widget under lens=gcp; only the
+    # manifest `api` block differs (§15.2). A Pub/Sub topic fans out to
+    # subscriptions you pull from — the widget's queue column IS the subscription
+    # list, so the flagship publish→fan-out→pull flow works unchanged. Topic +
+    # subscription CRUD + publish/pull fan-out is conformant, so gate to "full".
+    "gcp.pubsub": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 14, "total": 14},
+        "note": "GCP Pub/Sub — queue-topic-viewer serves Pub/Sub via the same widget (lens=gcp).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.

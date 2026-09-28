@@ -158,6 +158,47 @@ _SQS_MESSAGING_API = {
     "publish": "/api/console/messaging/topics/publish",
 }
 
+_PUBSUB_MESSAGING_API = {
+    "listQueues": "/api/console/gcp-pubsub/subscriptions",
+    "createQueue": "/api/console/gcp-pubsub/subscriptions",
+    "sendMessage": "/api/console/gcp-pubsub/subscriptions/{queue}/send",
+    "receive": "/api/console/gcp-pubsub/subscriptions/{queue}/receive",
+    "peek": "/api/console/gcp-pubsub/subscriptions/{queue}/peek",
+    "purge": "/api/console/gcp-pubsub/subscriptions/{queue}/purge",
+    "listTopics": "/api/console/gcp-pubsub/topics",
+    "createTopic": "/api/console/gcp-pubsub/topics",
+    "listSubscriptions": "/api/console/gcp-pubsub/topics/subscriptions",
+    "subscribe": "/api/console/gcp-pubsub/topics/subscribe",
+    "publish": "/api/console/gcp-pubsub/topics/publish",
+}
+
+# The GCP Pub/Sub lens's connect snippet/CLI (§15.2) — the SAME queue-topic-viewer
+# widget renders these; only this descriptor data differs (no widget branching). A
+# Pub/Sub "topic" fans out to "subscriptions" you pull from — the widget's queue
+# column IS the subscription list, the topic column the topics.
+_PUBSUB_CONNECT = {
+    "snippet": (
+        "from google.cloud import pubsub_v1\n"
+        "# point the native clients at the console endpoint\n"
+        'opts = {"api_endpoint": "{ep}"}\n'
+        "pub = pubsub_v1.PublisherClient(client_options=opts)\n"
+        "sub = pubsub_v1.SubscriberClient(client_options=opts)\n"
+        'topic = pub.topic_path("cloudlearn", "events")\n'
+        "pub.create_topic(name=topic)\n"
+        'subp = sub.subscription_path("cloudlearn", "{queue}")\n'
+        "sub.create_subscription(name=subp, topic=topic)\n"
+        'pub.publish(topic, b"hello")           # fans out to {queue}\n'
+        "sub.pull(subscription=subp, max_messages=10)"
+    ),
+    "cli": ("gcloud pubsub topics list\ngcloud pubsub subscriptions list"),
+}
+
+# Rail-panel parentheticals for the Pub/Sub lens (the widget reads service.labels;
+# AWS keeps the SQS/SNS defaults). A subscription is the pull-target ("queue"), the
+# topic fans out, and wiring a subscription to a topic is the "pull" attach step.
+_PUBSUB_LABELS = {"queues": "subscriptions", "topics": "Pub/Sub", "subscribe": "pull"}
+
+
 def _aws_services(conf) -> list:
     """The AWS-lens service catalog (unchanged from P0/P2 — the rich vertical)."""
     return [
@@ -214,6 +255,12 @@ def _gcp_services(conf) -> list:
          "api": dict(_FIRESTORE_NOSQL_API),
          "connect": dict(_FIRESTORE_CONNECT),
          "conformance": conf.service_signal("gcp.firestore")},
+        {"id": "pubsub", "label": "Pub/Sub", "icon": "⇄", "widget": "queue-topic-viewer",
+         "terminology": "topic / subscription", "backed_by": "in-proc pub/sub",
+         "api": dict(_PUBSUB_MESSAGING_API),
+         "connect": dict(_PUBSUB_CONNECT),
+         "labels": dict(_PUBSUB_LABELS),
+         "conformance": conf.service_signal("gcp.pubsub")},
     ]
 
 
@@ -666,6 +713,98 @@ def register(app: FastAPI) -> None:
         if not arn:
             raise HTTPException(400, detail="ValidationError topic_arn is required")
         return _guard(lambda: _msg().publish(arn, p.get("message", ""), p.get("subject")))
+
+    # ── GCP Pub/Sub queue-topic-viewer (P3 — the GCP lens's messaging data plane) ──
+    #    The SAME queue-topic-viewer widget renders Pub/Sub under lens=gcp; the ONLY
+    #    difference is the manifest `api` block pointing here instead of
+    #    /api/console/messaging/* (§15.2 — no if(cloud) branching). A "queue" is a
+    #    Pub/Sub SUBSCRIPTION (a pull-target with its own backlog) and the topic
+    #    fans out to every attached subscription — the flagship fan-out stays REAL.
+    #    Independent in-memory store (core/console_gcp_pubsub) so GCP messaging state
+    #    is isolated from the AWS messaging facade; purely additive.
+    def _ps():
+        from core import console_gcp_pubsub as p
+        return p
+
+    def _psguard(fn):
+        from core.console_gcp_pubsub import PubSubError
+        try:
+            return fn()
+        except PubSubError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/gcp-pubsub/subscriptions", include_in_schema=False)
+    def api_console_ps_list():
+        return _ps().list_queues()
+
+    @app.post("/api/console/gcp-pubsub/subscriptions", include_in_schema=False)
+    def api_console_ps_create(payload: dict = Body(default=None)):
+        name = (payload or {}).get("name", "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError name is required")
+        return _psguard(lambda: _ps().create_queue(name))
+
+    @app.delete("/api/console/gcp-pubsub/subscriptions/{name}", include_in_schema=False)
+    def api_console_ps_delete(name: str):
+        return _psguard(lambda: _ps().delete_queue(name))
+
+    @app.post("/api/console/gcp-pubsub/subscriptions/{name}/send", include_in_schema=False)
+    def api_console_ps_send(name: str, payload: dict = Body(default=None)):
+        body = (payload or {}).get("body", "")
+        return _psguard(lambda: _ps().send_message(name, body))
+
+    @app.post("/api/console/gcp-pubsub/subscriptions/{name}/receive", include_in_schema=False)
+    def api_console_ps_receive(name: str, payload: dict = Body(default=None)):
+        p = payload or {}
+        return _psguard(lambda: _ps().receive_messages(
+            name, int(p.get("max", 10)), int(p.get("visibility", 0))))
+
+    @app.get("/api/console/gcp-pubsub/subscriptions/{name}/peek", include_in_schema=False)
+    def api_console_ps_peek(name: str):
+        return _psguard(lambda: _ps().peek_messages(name))
+
+    @app.post("/api/console/gcp-pubsub/subscriptions/{name}/purge", include_in_schema=False)
+    def api_console_ps_purge(name: str):
+        return _psguard(lambda: _ps().purge_queue(name))
+
+    @app.get("/api/console/gcp-pubsub/topics", include_in_schema=False)
+    def api_console_ps_topics_list():
+        return _ps().list_topics()
+
+    @app.post("/api/console/gcp-pubsub/topics", include_in_schema=False)
+    def api_console_ps_topics_create(payload: dict = Body(default=None)):
+        name = (payload or {}).get("name", "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError name is required")
+        return _psguard(lambda: _ps().create_topic(name))
+
+    # The topic identifier travels in the body/query (matches the AWS messaging
+    # facade's convention) — keeps the routes unambiguous.
+    @app.post("/api/console/gcp-pubsub/topics/delete", include_in_schema=False)
+    def api_console_ps_topics_delete(payload: dict = Body(default=None)):
+        arn = (payload or {}).get("topic_arn", "").strip()
+        return _psguard(lambda: _ps().delete_topic(arn))
+
+    @app.get("/api/console/gcp-pubsub/topics/subscriptions", include_in_schema=False)
+    def api_console_ps_topics_subs(topic_arn: str = Query(...)):
+        return _psguard(lambda: _ps().list_subscriptions(topic_arn))
+
+    @app.post("/api/console/gcp-pubsub/topics/subscribe", include_in_schema=False)
+    def api_console_ps_topics_subscribe(payload: dict = Body(default=None)):
+        p = payload or {}
+        arn = p.get("topic_arn", "").strip()
+        queue = p.get("queue", "").strip()
+        if not arn or not queue:
+            raise HTTPException(400, detail="ValidationError topic_arn and queue are required")
+        return _psguard(lambda: _ps().subscribe_queue(arn, queue))
+
+    @app.post("/api/console/gcp-pubsub/topics/publish", include_in_schema=False)
+    def api_console_ps_topics_publish(payload: dict = Body(default=None)):
+        p = payload or {}
+        arn = p.get("topic_arn", "").strip()
+        if not arn:
+            raise HTTPException(400, detail="ValidationError topic_arn is required")
+        return _psguard(lambda: _ps().publish(arn, p.get("message", ""), p.get("subject")))
 
     # ── Secrets Manager kv-secret-viewer (§13): clean JSON facade over the
     #    substrate-agnostic secrets_core + a shared KvStore (core/console_secrets).
