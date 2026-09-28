@@ -17,6 +17,7 @@ import './components/command-palette.js';
 class VyomiConsole extends LitElement {
   static properties = {
     _caps: { state: true },
+    _lens: { state: true },           // current cloud lens (aws|gcp|…)
     _selected: { state: true },       // { serviceId } | null
     _inspectorOpen: { state: true },
     _paletteOpen: { state: true },
@@ -55,6 +56,7 @@ class VyomiConsole extends LitElement {
   constructor() {
     super();
     this._caps = null;
+    this._lens = 'aws';
     this._selected = null;
     this._inspectorOpen = true;
     this._paletteOpen = false;
@@ -67,12 +69,30 @@ class VyomiConsole extends LitElement {
     super.connectedCallback();
     window.addEventListener('keydown', this._onKey);
     try {
-      this._caps = await loadCapabilities();
+      this._caps = await loadCapabilities(this._lens);
       // Default selection: first service in the catalog.
       const svcs = this._caps.services || [];
       if (svcs.length) this._selected = { serviceId: svcs[0].id };
     } catch (e) {
       this._error = 'Could not load capabilities: ' + e.message;
+    }
+  }
+
+  // Cloud-lens switch (§15.2): re-fetch the manifest for the chosen lens and
+  // re-render the whole shell from it. NO cloud branching — the new manifest's
+  // `services` + per-service `api` blocks drive the rail + widgets.
+  async _switchLens(e) {
+    const lens = (e.detail && e.detail.lens) || 'aws';
+    if (lens === this._lens) return;
+    try {
+      const caps = await loadCapabilities(lens);
+      this._lens = lens;
+      this._caps = caps;
+      this._deepLink = null;
+      const svcs = caps.services || [];
+      this._selected = svcs.length ? { serviceId: svcs[0].id } : null;
+    } catch (err) {
+      this._error = 'Could not load capabilities for lens ' + lens + ': ' + err.message;
     }
   }
 
@@ -130,7 +150,9 @@ class VyomiConsole extends LitElement {
       <div class="shell">
         <vyomi-status-bar
           .caps=${caps}
+          .lens=${this._lens}
           .inspectorOpen=${this._inspectorOpen}
+          @switch-lens=${this._switchLens}
           @toggle-inspector=${() => (this._inspectorOpen = !this._inspectorOpen)}
           @open-palette=${() => (this._paletteOpen = true)}
         ></vyomi-status-bar>

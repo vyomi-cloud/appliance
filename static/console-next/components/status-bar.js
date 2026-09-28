@@ -6,6 +6,7 @@ import { LitElement, html, css } from '../vendor/lit-core.min.js';
 class StatusBar extends LitElement {
   static properties = {
     caps: { attribute: false },
+    lens: { attribute: false },
     inspectorOpen: { attribute: false },
     _copied: { state: true },
   };
@@ -93,18 +94,27 @@ class StatusBar extends LitElement {
     return html`<span class="pill ${cls}" title=${title}><span class="dot">●</span> ${label}</span>`;
   }
 
+  // Live cloud-lens switch: emit `switch-lens` so the shell re-fetches the manifest
+  // for that lens and re-renders the rail + widgets. Capability-driven — the switcher
+  // only knows the lens NAMES from the manifest; it holds no cloud logic (§15.2).
+  _onLensChange(e) {
+    const lens = (e.target.value || 'aws').toLowerCase();
+    this.dispatchEvent(new CustomEvent('switch-lens', { detail: { lens } }));
+  }
+
   render() {
     const caps = this.caps || {};
     const ws = caps.workspace || {};
     const lenses = caps.cloud_lenses || ['aws'];
+    const current = (this.lens || caps.lens || lenses[0] || 'aws').toLowerCase();
     const ep = this._endpoint();
     return html`
       <div class="bar">
         <span class="ws"><span class="dot">◐</span> ${ws.name || 'workspace'}</span>
 
-        <!-- cloud-lens switcher (stub — P0 has one rich lens) -->
-        <select class="lens" title="Cloud lens (stub)">
-          ${lenses.map((l) => html`<option>${l.toUpperCase()}</option>`)}
+        <!-- cloud-lens switcher — live; re-fetches the manifest for the chosen lens -->
+        <select class="lens" title="Cloud lens" @change=${this._onLensChange}>
+          ${lenses.map((l) => html`<option value=${l} ?selected=${l === current}>${l.toUpperCase()}</option>`)}
         </select>
 
         <!-- endpoint, click to copy -->

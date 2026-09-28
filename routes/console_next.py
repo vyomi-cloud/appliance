@@ -30,8 +30,94 @@ _ASSETS_DIR = os.path.join(_HERE, "..", "static", "console-next")
 _INDEX = os.path.join(_ASSETS_DIR, "index.html")
 
 
-def _capabilities() -> dict:
-    """Return the runtime capability manifest for THIS substrate (§15.1).
+# The set of cloud lenses this vertical can serve. Each lens has a rich data-plane;
+# the manifest carries a per-lens `services` catalog so widgets stay cloud-agnostic
+# (§15.2): differences between clouds live HERE as data, never as widget branching.
+CLOUD_LENSES = ["aws", "gcp"]
+
+
+# ── S3 object-browser endpoint contract (the `api` block a cloud-agnostic
+#    object-browser reads). Path templates use {bucket}/{key} placeholders the
+#    widget substitutes + URL-encodes. These are the AWS-lens defaults; the GCS
+#    lens supplies the SAME shape pointed at the GCS console-facade (§15.2). ──
+_S3_OBJECT_BROWSER_API = {
+    "listBuckets": "/api/s3/buckets",
+    "createBucket": "/api/s3/buckets/{bucket}",
+    "listObjects": "/api/s3/buckets/{bucket}/objects",
+    "uploadObject": "/api/s3/buckets/{bucket}/objects",
+    "objectMeta": "/api/s3/buckets/{bucket}/objects/{key}/meta",
+    "objectDownload": "/api/s3/buckets/{bucket}/objects/{key}/download",
+}
+
+_GCS_OBJECT_BROWSER_API = {
+    "listBuckets": "/api/console/gcs/buckets",
+    "createBucket": "/api/console/gcs/buckets/{bucket}",
+    "listObjects": "/api/console/gcs/buckets/{bucket}/objects",
+    "uploadObject": "/api/console/gcs/buckets/{bucket}/objects",
+    "objectMeta": "/api/console/gcs/buckets/{bucket}/objects/{key}/meta",
+    "objectDownload": "/api/console/gcs/buckets/{bucket}/objects/{key}/download",
+}
+
+
+def _aws_services(conf) -> list:
+    """The AWS-lens service catalog (unchanged from P0/P2 — the rich vertical)."""
+    return [
+        {"id": "s3", "label": "S3", "icon": "▤", "widget": "object-browser",
+         "terminology": "bucket", "backed_by": "MinIO",
+         "api": dict(_S3_OBJECT_BROWSER_API),
+         "conformance": conf.service_signal("s3")},
+        {"id": "dynamodb", "label": "DynamoDB", "icon": "⊞", "widget": "nosql-item-viewer",
+         "terminology": "table", "backed_by": "DynamoDB-Local",
+         "conformance": conf.service_signal("dynamodb")},
+        {"id": "rds", "label": "RDS", "icon": "◫", "widget": "sql-console",
+         "terminology": "db instance", "backed_by": "PostgreSQL/sqlite",
+         "conformance": conf.service_signal("rds")},
+        {"id": "sqs", "label": "SQS + SNS", "icon": "⇄", "widget": "queue-topic-viewer",
+         "terminology": "queue / topic", "backed_by": "in-proc messaging",
+         "conformance": conf.service_signal("sqs")},
+        {"id": "secretsmanager", "label": "Secrets Manager", "icon": "⚿",
+         "widget": "kv-secret-viewer", "terminology": "secret",
+         "backed_by": "in-proc KvStore",
+         "conformance": conf.service_signal("secretsmanager")},
+        {"id": "kms", "label": "KMS", "icon": "🔑", "widget": "kms-crypto-view",
+         "terminology": "key", "backed_by": "in-proc KmsEngine",
+         "conformance": conf.service_signal("kms")},
+        {"id": "ec2", "label": "EC2", "icon": "🖥", "widget": "compute-terminal",
+         "terminology": "instance", "backed_by": "Docker/LXD",
+         "conformance": conf.service_signal("ec2")},
+        {"id": "lambda", "label": "Lambda", "icon": "ƒ", "widget": "serverless-invoke",
+         "terminology": "function", "backed_by": "in-proc runtime",
+         "conformance": conf.service_signal("lambda")},
+        {"id": "iam", "label": "IAM", "icon": "◆", "widget": "generic-control-plane",
+         "terminology": "policy", "backed_by": "in-proc",
+         "conformance": conf.service_signal("iam")},
+    ]
+
+
+def _gcp_services(conf) -> list:
+    """The GCP-lens service catalog (P3 — the SECOND cloud). `storage` reuses the
+    SAME object-browser widget: the ONLY difference is the `api` block (§15.2)."""
+    return [
+        {"id": "storage", "label": "Cloud Storage", "icon": "▤", "widget": "object-browser",
+         "terminology": "bucket", "backed_by": "gcp_storage",
+         "api": dict(_GCS_OBJECT_BROWSER_API),
+         "conformance": conf.service_signal("gcp.storage")},
+    ]
+
+
+def _lens_services(lens: str, conf) -> list:
+    if lens == "gcp":
+        return _gcp_services(conf)
+    return _aws_services(conf)
+
+
+def _capabilities(lens: str = "aws") -> dict:
+    """Return the runtime capability manifest for THIS substrate + cloud lens (§15.1).
+
+    `lens` selects which cloud's `services` catalog is returned (aws|gcp). The lens
+    switcher in the status-bar re-fetches this manifest for the chosen lens; widgets
+    are cloud-agnostic and read their endpoints from each service's `api` block, so
+    there is NO if(cloud===...) branching in component code (§15.2).
 
     On the local FastAPI substrate S3 is backed by real MinIO, so object-browser is
     "full"; there is a real endpoint (not a relay); SSH exists on real compute. The
@@ -40,23 +126,21 @@ def _capabilities() -> dict:
     """
     from core import console_conformance as conf
 
+    lens = (lens or "aws").lower()
+    if lens not in CLOUD_LENSES:
+        lens = "aws"
+
     substrate = os.environ.get("VYOMI_SUBSTRATE", "local")  # local | codespaces | nano
     connect_mode = os.environ.get("VYOMI_CONNECT_MODE", "endpoint")  # endpoint | ssh | relay
+
+    services = _lens_services(lens, conf)
 
     # ── Conformance-driven widget modes (§14.5) ──
     # The rich widget for a service renders ONLY when its widget mode is "full";
     # otherwise the center-canvas falls back to generic-control-plane. The per-service
     # mode comes from the conformance signal (core/console_conformance.py) so the gate
-    # is honest and there is no substrate branching — the UI reads these flags.
-    svc_modes = conf.widget_modes()  # service_id -> full|degraded|generic
-    # Map the service-level conformance mode onto each service's WIDGET id.
-    svc_to_widget = {"s3": "object-browser", "dynamodb": "nosql-item-viewer",
-                     "rds": "sql-console", "sqs": "queue-topic-viewer",
-                     "secretsmanager": "kv-secret-viewer",
-                     "kms": "kms-crypto-view",
-                     "ec2": "compute-terminal",
-                     "lambda": "serverless-invoke",
-                     "iam": "generic-control-plane"}
+    # is honest and there is no substrate branching — the UI reads these flags. Built
+    # from the SELECTED lens's catalog so each cloud's widgets gate honestly.
     widgets = {
         "object-browser": "generic", "sql-console": "generic",
         "compute-terminal": "generic", "serverless-invoke": "generic",
@@ -64,13 +148,17 @@ def _capabilities() -> dict:
         "kms-crypto-view": "generic", "queue-topic-viewer": "generic",
         "generic-control-plane": "full",
     }
-    for sid, wid in svc_to_widget.items():
-        if wid in widgets:
-            widgets[wid] = svc_modes.get(sid, "generic")
+    for svc in services:
+        wid = svc.get("widget")
+        mode = ((svc.get("conformance") or {}).get("mode")) or "generic"
+        # generic-control-plane is always "full" (it IS the fallback view).
+        if wid and wid != "generic-control-plane":
+            widgets[wid] = mode
 
     return {
         "substrate": substrate,
-        "cloud_lenses": ["aws"],  # lenses with a rich data-plane in this vertical
+        "lens": lens,
+        "cloud_lenses": list(CLOUD_LENSES),  # lenses this vertical can switch between
         "widgets": widgets,
         "features": {
             "glassbox": True,      # Calls tab is live in P0
@@ -85,36 +173,7 @@ def _capabilities() -> dict:
         # these services, each mapped to a widget the manifest above gates. Each
         # carries its per-service conformance signal so the rail + widgets show the
         # honest state (§14.5).
-        "services": [
-            {"id": "s3", "label": "S3", "icon": "▤", "widget": "object-browser",
-             "terminology": "bucket", "backed_by": "MinIO",
-             "conformance": conf.service_signal("s3")},
-            {"id": "dynamodb", "label": "DynamoDB", "icon": "⊞", "widget": "nosql-item-viewer",
-             "terminology": "table", "backed_by": "DynamoDB-Local",
-             "conformance": conf.service_signal("dynamodb")},
-            {"id": "rds", "label": "RDS", "icon": "◫", "widget": "sql-console",
-             "terminology": "db instance", "backed_by": "PostgreSQL/sqlite",
-             "conformance": conf.service_signal("rds")},
-            {"id": "sqs", "label": "SQS + SNS", "icon": "⇄", "widget": "queue-topic-viewer",
-             "terminology": "queue / topic", "backed_by": "in-proc messaging",
-             "conformance": conf.service_signal("sqs")},
-            {"id": "secretsmanager", "label": "Secrets Manager", "icon": "⚿",
-             "widget": "kv-secret-viewer", "terminology": "secret",
-             "backed_by": "in-proc KvStore",
-             "conformance": conf.service_signal("secretsmanager")},
-            {"id": "kms", "label": "KMS", "icon": "🔑", "widget": "kms-crypto-view",
-             "terminology": "key", "backed_by": "in-proc KmsEngine",
-             "conformance": conf.service_signal("kms")},
-            {"id": "ec2", "label": "EC2", "icon": "🖥", "widget": "compute-terminal",
-             "terminology": "instance", "backed_by": "Docker/LXD",
-             "conformance": conf.service_signal("ec2")},
-            {"id": "lambda", "label": "Lambda", "icon": "ƒ", "widget": "serverless-invoke",
-             "terminology": "function", "backed_by": "in-proc runtime",
-             "conformance": conf.service_signal("lambda")},
-            {"id": "iam", "label": "IAM", "icon": "◆", "widget": "generic-control-plane",
-             "terminology": "policy", "backed_by": "in-proc",
-             "conformance": conf.service_signal("iam")},
-        ],
+        "services": services,
         # Workspace-level conformance summary for the status-bar pill (§4): flat
         # {services_total, services_full, checks_passed, checks_total, status}.
         "conformance": conf.summary(),
@@ -136,10 +195,13 @@ def register(app: FastAPI) -> None:
                   StaticFiles(directory=_ASSETS_DIR),
                   name="console-next-assets")
 
-    # ── Capability manifest (§15.1) ──
+    # ── Capability manifest (§15.1) ── lens-aware: ?lens=aws|gcp (default aws).
+    #    The status-bar cloud-lens switcher re-fetches this per lens; widgets read
+    #    their endpoints from each service's `api` block so there is no cloud
+    #    branching in component code (§15.2).
     @app.get("/api/console/capabilities", include_in_schema=False)
-    def api_console_capabilities():
-        return JSONResponse(_capabilities())
+    def api_console_capabilities(lens: str = Query(default="aws")):
+        return JSONResponse(_capabilities(lens))
 
     # ── Glass-box: one-shot buffer snapshot ──
     @app.get("/api/console/calls", include_in_schema=False)

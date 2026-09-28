@@ -47,11 +47,19 @@ async function asError(r) {
 export function apiUrl(path) { return u(path); }
 
 // ── Capability manifest (the single source of substrate/cloud truth) ──
+// Lens-aware: each cloud lens (aws|gcp|…) has its own manifest. `capabilities()`
+// returns whichever lens was loaded most recently — the CURRENT lens. Switching
+// lenses re-fetches (cached per lens); the UI re-renders purely from the returned
+// data — no if(cloud) branching anywhere (§15.2).
 let _caps = null;
-export async function loadCapabilities() {
-  if (_caps) return _caps;
-  _caps = await apiGet('/api/console/capabilities');
-  return _caps;
+const _byLens = {};
+export async function loadCapabilities(lens) {
+  const l = (lens || 'aws').toLowerCase();
+  if (_byLens[l]) { _caps = _byLens[l]; return _caps; }
+  const caps = await apiGet('/api/console/capabilities?lens=' + encodeURIComponent(l));
+  _byLens[l] = caps;
+  _caps = caps;
+  return caps;
 }
 export function capabilities() { return _caps; }
 

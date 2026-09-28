@@ -1,13 +1,19 @@
-// object-browser widget (§13.3 / §14.3) — the P0 data-plane vertical.
+// object-browser widget (§13.3 / §14.3) — the data-plane vertical.
 //
-// Lists buckets + objects, views an object, uploads a file — all against the
-// appliance's existing /api/s3 REST API, which is backed by real MinIO on the
-// local stack. Rendered inside the common Connect contract with the mandatory
-// `⛃ backed by MinIO` badge (§13.1).
+// Lists buckets + objects, views an object, uploads a file. It is CLOUD-AGNOSTIC:
+// it reads its endpoint paths from the selected service descriptor's `api` block
+// (§15.2) — so the SAME widget serves S3 (AWS lens) and Cloud Storage (GCP lens)
+// with ZERO branching. When no `api` block is present it falls back to the S3
+// defaults, so the AWS lens keeps working unchanged. Rendered inside the common
+// Connect contract with the mandatory `⛃ backed by …` badge (§13.1).
 //
-// It talks ONLY to /api/* (§15.1 #2); it has no substrate knowledge. It also
+// It talks ONLY to /api/* (§15.1 #2); it has no substrate/cloud knowledge. It also
 // honors a deepLink (backend.ref) pushed from the glass-box Inspector — clicking
 // a PutObject/HeadObject call jumps here and selects that bucket/object.
+//
+// API contract (service.api): { listBuckets, createBucket, listObjects,
+// uploadObject, objectMeta, objectDownload } — path templates with {bucket}/{key}
+// placeholders this widget substitutes + URL-encodes.
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
 import { apiGet, apiSend, apiUrl } from '../api.js';
@@ -91,9 +97,39 @@ class ObjectBrowser extends LitElement {
     }
   }
 
+  // ── Endpoint resolution (§15.2): read paths from the service descriptor's `api`
+  //    block, falling back to the S3 defaults so the AWS lens works unchanged. The
+  //    widget is thereby cloud-agnostic — the GCP lens supplies GCS paths of the
+  //    same shape and NOTHING below changes. ──
+  static _S3_DEFAULTS = {
+    listBuckets: '/api/s3/buckets',
+    createBucket: '/api/s3/buckets/{bucket}',
+    listObjects: '/api/s3/buckets/{bucket}/objects',
+    uploadObject: '/api/s3/buckets/{bucket}/objects',
+    objectMeta: '/api/s3/buckets/{bucket}/objects/{key}/meta',
+    objectDownload: '/api/s3/buckets/{bucket}/objects/{key}/download',
+  };
+
+  _tpl(name) {
+    const api = (this.service && this.service.api) || {};
+    return api[name] || ObjectBrowser._S3_DEFAULTS[name];
+  }
+
+  // Substitute + URL-encode {bucket}/{key} placeholders in a path template.
+  _path(name, { bucket, key } = {}) {
+    let p = this._tpl(name);
+    if (bucket != null) p = p.replace('{bucket}', encodeURIComponent(bucket));
+    if (key != null) p = p.replace('{key}', encodeURIComponent(key));
+    return p;
+  }
+
+  _backedBy() {
+    return (this.service && this.service.backed_by) || 'MinIO';
+  }
+
   async _loadBuckets() {
     try {
-      const r = await apiGet('/api/s3/buckets');
+      const r = await apiGet(this._path('listBuckets'));
       this._buckets = r.buckets || [];
       if (!this._bucket && this._buckets.length) {
         this._selectBucket(this._buckets[0].name);
@@ -108,7 +144,7 @@ class ObjectBrowser extends LitElement {
     this._viewing = null;
     this._msg = '';
     try {
-      const r = await apiGet(`/api/s3/buckets/${encodeURIComponent(name)}/objects`);
+      const r = await apiGet(this._path('listObjects', { bucket: name }));
       this._objects = r.objects || [];
     } catch (e) {
       this._objects = [];
@@ -121,7 +157,7 @@ class ObjectBrowser extends LitElement {
     if (!name) return;
     this._busy = true;
     try {
-      await apiSend('POST', `/api/s3/buckets/${encodeURIComponent(name)}`);
+      await apiSend('POST', this._path('createBucket', { bucket: name }));
       this._newBucket = '';
       await this._loadBuckets();
       await this._selectBucket(name);
@@ -140,8 +176,8 @@ class ObjectBrowser extends LitElement {
     try {
       const fd = new FormData();
       fd.append('file', file, file.name);
-      await apiSend('POST', `/api/s3/buckets/${encodeURIComponent(this._bucket)}/objects`, fd, true);
-      this._msg = `Uploaded ${file.name} → MinIO`;
+      await apiSend('POST', this._path('uploadObject', { bucket: this._bucket }), fd, true);
+      this._msg = `Uploaded ${file.name} → ${this._backedBy()}`;
       await this._selectBucket(this._bucket);
     } catch (err) {
       this._msg = 'Upload failed: ' + err.message;
@@ -155,12 +191,8 @@ class ObjectBrowser extends LitElement {
     if (!this._bucket) return;
     this._msg = '';
     try {
-      const meta = await apiGet(
-        `/api/s3/buckets/${encodeURIComponent(this._bucket)}/objects/${encodeURIComponent(key)}/meta`
-      );
-      const url = apiUrl(
-        `/api/s3/buckets/${encodeURIComponent(this._bucket)}/objects/${encodeURIComponent(key)}/download`
-      );
+      const meta = await apiGet(this._path('objectMeta', { bucket: this._bucket, key }));
+      const url = apiUrl(this._path('objectDownload', { bucket: this._bucket, key }));
       const ct = (meta.content_type || '').toLowerCase();
       let text = null;
       let imageUrl = null;
@@ -211,9 +243,9 @@ class ObjectBrowser extends LitElement {
     const mode = (this.caps && this.caps.connect && this.caps.connect.mode) || 'endpoint';
     return html`
       <vyomi-connect-contract
-        .resourceId=${this._bucket || 'S3'}
-        .resourceKind=${'bucket'}
-        .backedBy=${'MinIO'}
+        .resourceId=${this._bucket || (this.service && this.service.label) || 'S3'}
+        .resourceKind=${(this.service && this.service.terminology) || 'bucket'}
+        .backedBy=${this._backedBy()}
         .connectMode=${mode}
         .endpoint=${ep}
         .snippet=${this._snippet()}
@@ -270,7 +302,7 @@ class ObjectBrowser extends LitElement {
                   ${this._viewing.meta.content_type} ·
                   ${this._viewing.meta.size_human} ·
                   etag ${(this._viewing.meta.etag || '').slice(0, 12)} ·
-                  real bytes from MinIO
+                  real bytes from ${this._backedBy()}
                 </div>
                 ${this._viewing.imageUrl
                   ? html`<img class="preview" src=${this._viewing.imageUrl} alt=${this._viewing.key} />`
