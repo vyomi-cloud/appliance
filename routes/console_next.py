@@ -380,10 +380,10 @@ def register(app: FastAPI) -> None:
             raise HTTPException(400, detail="ValidationError key_id is required")
         return _kguard(lambda: _kms().generate_data_key(key_id, p.get("key_spec", "AES_256")))
 
-    # ── Snapshots (§12.6, P2 slice 1): capture / list / restore of the console's
-    #    in-process backend store state. Control-plane-first; fork + replay are a
-    #    later slice. No substrate branching — the registry walks a common store
-    #    table (core/console_snapshots.py). ──
+    # ── Snapshots (§12.6): capture / list / restore / FORK of the console's
+    #    in-process backend store state. Control-plane-first. No substrate
+    #    branching — the registry walks a common store table
+    #    (core/console_snapshots.py). ──
     @app.post("/api/console/snapshots", include_in_schema=False)
     def api_console_snapshots_capture(payload: dict = Body(default=None)):
         from core import console_snapshots as snaps
@@ -401,6 +401,17 @@ def register(app: FastAPI) -> None:
         from core import console_snapshots as snaps
         try:
             return snaps.restore(snap_id)
+        except snaps.SnapshotError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    # ── Fork (§12.6): branch a new named line of state off an existing snapshot.
+    #    Additive; reuses the same registry/store table (capture+restore internals). ──
+    @app.post("/api/console/snapshots/{snap_id}/fork", include_in_schema=False)
+    def api_console_snapshots_fork(snap_id: str, payload: dict = Body(default=None)):
+        from core import console_snapshots as snaps
+        name = ((payload or {}).get("name") or "").strip()
+        try:
+            return snaps.fork(snap_id, name=name)
         except snaps.SnapshotError as e:
             raise HTTPException(e.status, detail=e.message)
 

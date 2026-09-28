@@ -26,8 +26,13 @@ HONEST CONSTRAINTS (surfaced in the UI — §12.6, §10, §14.5)
   in particular: the instance METADATA is captured, but the live SQL rows (the
   SqlStore data plane / sqlite3·PGlite connections) are a later fidelity slice
   (§14.5). That richer per-backend "full data" capture is a follow-up.
-- FORK and REPLAY (§12.6) are explicitly NOT built in this slice — capture / list /
-  restore only.
+- FORK (§12.6) is now built (P2 slice 2): fork(snap_id, name) creates a new NAMED
+  branch of state — a fresh snapshot generation seeded from the parent snapshot's
+  captured payload, tagged {kind:"fork", parent:<snap_id>}. It reuses the capture/
+  restore internals (same store table, same deep-copy discipline). list() surfaces
+  the lineage (kind + parent) so the UI can draw the branch. REPLAY lives in the
+  glass-box path (routes/console_next.py), not here — capture/list/restore/fork
+  are the state-registry primitives.
 
 DESIGN: additive, commonality-first (§15.2) — there is NO if(substrate) branching.
 The registry just walks a table of (store singleton, serialiser, loader) tuples; each
@@ -154,7 +159,16 @@ class SnapshotRegistry:
                 stores[store_id] = dump(getter())
             except Exception as e:  # a store that can't serialise must not sink the snapshot
                 stores[store_id] = {"__error__": str(e)}
-        snap_id = "snap_" + uuid.uuid4().hex[:12]
+        return self._store(name=name, note=note, stores=stores)
+
+    def _store(self, *, name: str, note: str, stores: dict[str, dict],
+               kind: str = "snapshot", parent: str | None = None) -> dict:
+        """Persist a new generation from an already-built `stores` payload.
+
+        Shared by capture() (payload from the live stores) and fork() (payload
+        deep-copied from the parent snapshot) — one code path, one id/size/evict
+        discipline, no branching on substrate."""
+        snap_id = ("fork_" if kind == "fork" else "snap_") + uuid.uuid4().hex[:12]
         size = len(json.dumps(stores, default=str).encode("utf-8"))
         record = {
             "id": snap_id,
@@ -163,11 +177,31 @@ class SnapshotRegistry:
             "note": note or "",
             "stores": stores,
             "size": size,
+            "kind": kind,
+            "parent": parent,
         }
         self._snaps[snap_id] = record
         self._order.insert(0, snap_id)
         self._evict()
         return self._meta(record)
+
+    # ── fork ───────────────────────────────────────────────────────────────
+    def fork(self, snap_id: str, name: str = "") -> dict:
+        """Create a new NAMED branch of state seeded from an existing snapshot.
+
+        The fork is a fresh generation whose captured payload is a deep copy of
+        the parent's — an independent line of state the user can restore into and
+        evolve without touching the parent. Reuses the capture/restore internals:
+        the same `stores` payload the parent holds is what `restore()` would load,
+        so a fork restores byte-for-byte to the parent's captured point."""
+        parent = self._snaps.get(snap_id)
+        if parent is None:
+            raise SnapshotError(f"snapshot {snap_id!r} not found", status=404)
+        stores = copy.deepcopy(parent["stores"])
+        default_name = f"{parent.get('name') or snap_id}-fork"
+        note = f"forked from {parent.get('name') or snap_id} ({snap_id})"
+        return self._store(name=name or default_name, note=note,
+                           stores=stores, kind="fork", parent=snap_id)
 
     def _evict(self) -> None:
         while len(self._order) > self._max:
@@ -203,6 +237,8 @@ class SnapshotRegistry:
             "note": record["note"],
             "size": record["size"],
             "stores": sorted(record["stores"].keys()),
+            "kind": record.get("kind", "snapshot"),
+            "parent": record.get("parent"),
         }
 
 
@@ -220,3 +256,7 @@ def list_snapshots() -> list[dict]:
 
 def restore(snap_id: str) -> dict:
     return REGISTRY.restore(snap_id)
+
+
+def fork(snap_id: str, name: str = "") -> dict:
+    return REGISTRY.fork(snap_id, name=name)

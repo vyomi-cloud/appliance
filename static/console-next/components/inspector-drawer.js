@@ -1,6 +1,7 @@
 // Glass-box Inspector drawer (§12) — the flagship. Right-hand persistent drawer
 // with four tabs; P0 ships the LIVE Calls tab (SSE stream of the §12.2 events).
-// Snapshots is live (P2: capture/list/restore of in-process store state);
+// Snapshots is live (P2: capture/list/restore/FORK of in-process store state);
+// Calls now offers REPLAY (re-issue a captured call against current state).
 // State / Conformance remain placeholders (P1).
 //
 // The event shape is identical across substrates (§15.1 #5), so this UI is the
@@ -105,9 +106,14 @@ class InspectorDrawer extends LitElement {
     .snapname { color: var(--vy-fg); font-family: var(--vy-mono); overflow: hidden; text-overflow: ellipsis;
       white-space: nowrap; }
     .snapmeta { color: var(--vy-fg-dim); font-size: var(--vy-fs-xs); margin-top: 2px; }
-    .snaprestore { margin-left: auto; background: transparent; color: var(--vy-fg-muted);
+    .snaprestore { background: transparent; color: var(--vy-fg-muted);
       border: 1px solid var(--vy-border); border-radius: var(--vy-radius); padding: 1px var(--vy-s2);
       font-size: var(--vy-fs-xs); cursor: pointer; }
+    .snapfork { margin-left: auto; background: transparent; color: var(--vy-accent);
+      border: 1px solid var(--vy-accent); border-radius: var(--vy-radius); padding: 1px var(--vy-s2);
+      font-size: var(--vy-fs-xs); cursor: pointer; }
+    .snapfork[disabled], .snaprestore[disabled] { opacity: .5; cursor: default; }
+    .lineage { color: var(--vy-info); }
     .snapnote { padding: var(--vy-s3); color: var(--vy-fg-dim); font-size: var(--vy-fs-xs);
       border-top: 1px solid var(--vy-border-soft); line-height: 1.5; }
   `;
@@ -183,8 +189,8 @@ class InspectorDrawer extends LitElement {
     this.dispatchEvent(new CustomEvent('deep-link', { detail: { ref }, bubbles: true, composed: true }));
   }
 
-  // ── Snapshots tab (§12.6) — capture / list / restore of the console's
-  //    in-process backend store state. Fork + replay are a later slice. ──
+  // ── Snapshots tab (§12.6) — capture / list / restore / FORK of the console's
+  //    in-process backend store state. ──
   _selectTab(t) {
     this._tab = t;
     if (t === 'snapshots' && !this._snapsLoaded) this._loadSnapshots();
@@ -230,6 +236,20 @@ class InspectorDrawer extends LitElement {
     }
   }
 
+  async _forkSnapshot(id) {
+    if (this._snapBusy) return;
+    this._snapBusy = true;
+    this._snapErr = '';
+    try {
+      await apiSend('POST', `/api/console/snapshots/${encodeURIComponent(id)}/fork`, {});
+      await this._loadSnapshots();
+    } catch (e) {
+      this._snapErr = (e && e.message) || 'fork failed';
+    } finally {
+      this._snapBusy = false;
+    }
+  }
+
   _fmtSize(n) {
     if (n == null) return '—';
     if (n < 1024) return `${n} B`;
@@ -259,23 +279,34 @@ class InspectorDrawer extends LitElement {
       </ul>
       <div class="snapnote">
         Captures the console's in-process backend state (control-plane first).
-        Real MinIO objects, live SQL rows and Docker/LXD volumes are a later
-        fidelity slice; fork &amp; replay come later too.
+        <b>Fork</b> branches a new named line of state off any snapshot. Real MinIO
+        objects, live SQL rows and Docker/LXD volumes are a later fidelity slice.
       </div>
     `;
   }
 
+  _parentName(id) {
+    const p = (this._snaps || []).find((x) => x.id === id);
+    return p ? p.name : id;
+  }
+
   _renderSnapRow(s) {
     const stores = (s.stores || []).join(', ');
+    const isFork = s.kind === 'fork';
     return html`
       <li class="snap">
         <div class="snaprow">
-          <span class="snapname">${s.name}</span>
+          <span class="snapname">${isFork ? '⑂ ' : ''}${s.name}</span>
+          <button class="snapfork" ?disabled=${this._snapBusy} title="branch a new line of state"
+            @click=${() => this._forkSnapshot(s.id)}>fork</button>
           <button class="snaprestore" ?disabled=${this._snapBusy}
             @click=${() => this._restoreSnapshot(s.id)}>restore</button>
         </div>
         <div class="snapmeta">${this._fmtWhen(s.created)} · ${this._fmtSize(s.size)}${stores ? ` · ${stores}` : ''}</div>
-        ${s.note ? html`<div class="snapmeta">↳ ${s.note}</div>` : ''}
+        ${isFork && s.parent
+          ? html`<div class="snapmeta lineage">⑂ forked from <b>${this._parentName(s.parent)}</b></div>`
+          : ''}
+        ${s.note && !isFork ? html`<div class="snapmeta">↳ ${s.note}</div>` : ''}
       </li>
     `;
   }
