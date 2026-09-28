@@ -1,14 +1,21 @@
-// sql-console widget (§13.4 / §14.3) — RDS real SQL console.
+// sql-console widget (§13.4 / §14.3) — real SQL console.
 //
-// A SQL editor + run button + result grid + schema (tables/columns) browser, all
-// against the console-next RDS Data API path (/api/console/rds/execute), which drives
-// the same rds_data_core (ExecuteStatement) the Nano relay uses — the relay-safe SQL
-// surface. Rendered inside the common Connect contract with the mandatory
-// `⛃ backed by <engine>` badge and a psycopg2 / rds-data / CLI snippet.
+// A SQL editor + run button + result grid + schema (tables/columns) browser. It is
+// CLOUD-AGNOSTIC: it reads its endpoint paths from the selected service descriptor's
+// `api` block (§15.2) — so the SAME widget serves AWS RDS (RDS Data API /
+// ExecuteStatement) and GCP Cloud SQL with ZERO branching. When no `api` block is
+// present it falls back to the RDS defaults, so the AWS lens keeps working unchanged.
+//
+// The default AWS path drives the same rds_data_core (ExecuteStatement) the Nano relay
+// uses — the relay-safe SQL surface. Rendered inside the common Connect contract with
+// the mandatory `⛃ backed by <engine>` badge and a psycopg2 / rds-data / CLI snippet.
 //
 // It talks ONLY to /api/* (§15.1 #2) — no substrate knowledge. Honors a deepLink
 // (backend.ref {rds.rows, db, sql}) from the glass-box Inspector: pre-fills the db +
 // SQL and runs it, so `view in backend ▸` on an ExecuteStatement lands on the rows.
+//
+// API contract (service.api): { databases, execute, schema } — path templates with a
+// {db} placeholder this widget substitutes + URL-encodes.
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
 import { apiGet, apiSend } from '../api.js';
@@ -86,9 +93,31 @@ class SqlConsole extends LitElement {
     }
   }
 
+  // ── Endpoint resolution (§15.2): read paths from the service descriptor's `api`
+  //    block, falling back to the RDS Data API defaults so the AWS lens works
+  //    unchanged. The widget is thereby cloud-agnostic — the GCP lens supplies Cloud
+  //    SQL paths of the same shape and NOTHING below changes. ──
+  static _RDS_DEFAULTS = {
+    databases: '/api/console/rds/databases',
+    execute: '/api/console/rds/execute',
+    schema: '/api/console/rds/databases/{db}/schema',
+  };
+
+  _tpl(name) {
+    const api = (this.service && this.service.api) || {};
+    return api[name] || SqlConsole._RDS_DEFAULTS[name];
+  }
+
+  // Substitute + URL-encode the {db} placeholder in a path template.
+  _path(name, { db } = {}) {
+    let p = this._tpl(name);
+    if (db != null) p = p.replace('{db}', encodeURIComponent(db));
+    return p;
+  }
+
   async _loadDbs() {
     try {
-      const r = await apiGet('/api/console/rds/databases');
+      const r = await apiGet(this._path('databases'));
       this._dbs = r.databases || [];
       if (!this._db) this._db = r.default || (this._dbs[0] && this._dbs[0].db_instance_identifier);
       this._loadSchema();
@@ -100,7 +129,7 @@ class SqlConsole extends LitElement {
   async _loadSchema() {
     if (!this._db) return;
     try {
-      this._schema = await apiGet(`/api/console/rds/databases/${encodeURIComponent(this._db)}/schema`);
+      this._schema = await apiGet(this._path('schema', { db: this._db }));
     } catch (_) { this._schema = { tables: [] }; }
   }
 
@@ -110,7 +139,7 @@ class SqlConsole extends LitElement {
     this._busy = true;
     this._msg = '';
     try {
-      const r = await apiSend('POST', '/api/console/rds/execute', { db: this._db, sql });
+      const r = await apiSend('POST', this._path('execute'), { db: this._db, sql });
       this._result = r;
       if (r.ok) this._loadSchema();   // DDL may have changed the schema
     } catch (e) {
@@ -125,14 +154,34 @@ class SqlConsole extends LitElement {
     this._run();
   }
 
-  _snippet() {
-    const ep = this._endpoint();
-    return `import boto3\nrds = boto3.client("rds-data", endpoint_url="${ep}",\n    aws_access_key_id="test", aws_secret_access_key="test")\nrds.execute_statement(\n    resourceArn="arn:aws:rds:us-east-1:123456789012:db:${this._db || 'acme'}",\n    database="${this._db || 'acme'}",\n    sql="SELECT * FROM orders WHERE qty > 10")`;
+  // The connect snippet/CLI/hint are descriptor-driven too (§15.2): a service may
+  // carry a `connect` block { snippet, cli, hint } — templates with {ep} and {db}
+  // placeholders. Absent → the AWS RDS Data API defaults, so the AWS lens is
+  // unchanged; the GCP lens supplies a Cloud SQL variant with NO widget branching.
+  static _RDS_CONNECT = {
+    snippet:
+      'import boto3\nrds = boto3.client("rds-data", endpoint_url="{ep}",\n' +
+      '    aws_access_key_id="test", aws_secret_access_key="test")\nrds.execute_statement(\n' +
+      '    resourceArn="arn:aws:rds:us-east-1:123456789012:db:{db}",\n' +
+      '    database="{db}",\n    sql="SELECT * FROM orders WHERE qty > 10")',
+    cli:
+      'aws --endpoint-url {ep} rds-data execute-statement \\\n' +
+      '  --resource-arn arn:aws:rds:...:db:{db} --database {db} \\\n  --sql "SELECT * FROM orders"',
+    hint: '⌘/Ctrl+Enter · runs via RDS Data API (ExecuteStatement) — relay-safe',
+  };
+
+  _connect(name) {
+    const c = (this.service && this.service.connect) || {};
+    return c[name] || SqlConsole._RDS_CONNECT[name];
   }
-  _cli() {
-    const ep = this._endpoint();
-    return `aws --endpoint-url ${ep} rds-data execute-statement \\\n  --resource-arn arn:aws:rds:...:db:${this._db || 'acme'} --database ${this._db || 'acme'} \\\n  --sql "SELECT * FROM orders"`;
+
+  _fill(tpl) {
+    return String(tpl).split('{ep}').join(this._endpoint()).split('{db}').join(this._db || 'acme');
   }
+
+  _snippet() { return this._fill(this._connect('snippet')); }
+  _cli() { return this._fill(this._connect('cli')); }
+  _hint() { return this._connect('hint'); }
   _endpoint() {
     return (this.caps && this.caps.workspace && this.caps.workspace.endpoint) || location.origin;
   }
@@ -143,8 +192,8 @@ class SqlConsole extends LitElement {
     const r = this._result;
     return html`
       <vyomi-connect-contract
-        .resourceId=${this._db || 'RDS'}
-        .resourceKind=${'db instance'}
+        .resourceId=${this._db || svc.label || 'RDS'}
+        .resourceKind=${svc.terminology || 'db instance'}
         .backedBy=${svc.backed_by || 'PostgreSQL/sqlite'}
         .connectMode=${mode}
         .endpoint=${this._endpoint()}
@@ -180,7 +229,7 @@ class SqlConsole extends LitElement {
                 @keydown=${(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') this._run(); }}></textarea>
               <div class="barr">
                 <button class="act" ?disabled=${this._busy} @click=${this._run}>▸ run</button>
-                <span class="hint">⌘/Ctrl+Enter · runs via RDS Data API (ExecuteStatement) — relay-safe</span>
+                <span class="hint">${this._hint()}</span>
               </div>
 
               ${r && !r.ok ? html`<div class="err">✗ ${r.error}</div>` : ''}

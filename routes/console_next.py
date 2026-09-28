@@ -59,6 +59,42 @@ _GCS_OBJECT_BROWSER_API = {
 }
 
 
+# ── sql-console endpoint contract (the `api` block the cloud-agnostic sql-console
+#    reads). Path templates use a {db} placeholder the widget substitutes +
+#    URL-encodes. These are the AWS-lens (RDS Data API) defaults; the Cloud SQL lens
+#    supplies the SAME shape pointed at the Cloud SQL console-facade (§15.2). ──
+_RDS_SQL_CONSOLE_API = {
+    "databases": "/api/console/rds/databases",
+    "execute": "/api/console/rds/execute",
+    "schema": "/api/console/rds/databases/{db}/schema",
+}
+
+_CLOUDSQL_SQL_CONSOLE_API = {
+    "databases": "/api/console/cloudsql/databases",
+    "execute": "/api/console/cloudsql/execute",
+    "schema": "/api/console/cloudsql/databases/{db}/schema",
+}
+
+# The GCP Cloud SQL lens's connect snippet/CLI/hint (§15.2) — the SAME sql-console
+# widget renders these; only this descriptor data differs (no widget branching). Cloud
+# SQL is Postgres-backed; the console runs SQL via the same relay-safe SQL engine.
+_CLOUDSQL_CONNECT = {
+    "snippet": (
+        "import sqlalchemy\n"
+        "# Cloud SQL (Postgres) via the Cloud SQL Python Connector\n"
+        "engine = sqlalchemy.create_engine(\n"
+        '    "postgresql+pg8000://admin@/{db}?host={ep}")\n'
+        'with engine.connect() as c:\n'
+        '    c.execute(sqlalchemy.text("SELECT * FROM orders WHERE qty > 10"))'
+    ),
+    "cli": (
+        "gcloud sql connect {db} --user=admin \\\n"
+        '  --database={db}   # then: SELECT * FROM orders;'
+    ),
+    "hint": "⌘/Ctrl+Enter · runs against Cloud SQL (Postgres engine)",
+}
+
+
 def _aws_services(conf) -> list:
     """The AWS-lens service catalog (unchanged from P0/P2 — the rich vertical)."""
     return [
@@ -71,6 +107,7 @@ def _aws_services(conf) -> list:
          "conformance": conf.service_signal("dynamodb")},
         {"id": "rds", "label": "RDS", "icon": "◫", "widget": "sql-console",
          "terminology": "db instance", "backed_by": "PostgreSQL/sqlite",
+         "api": dict(_RDS_SQL_CONSOLE_API),
          "conformance": conf.service_signal("rds")},
         {"id": "sqs", "label": "SQS + SNS", "icon": "⇄", "widget": "queue-topic-viewer",
          "terminology": "queue / topic", "backed_by": "in-proc messaging",
