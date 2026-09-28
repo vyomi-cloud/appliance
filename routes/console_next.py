@@ -94,22 +94,96 @@ _AZURE_BLOB_CONNECT = {
 #    reads). Path templates use a {db} placeholder the widget substitutes +
 #    URL-encodes. These are the AWS-lens (RDS Data API) defaults; the Cloud SQL lens
 #    supplies the SAME shape pointed at the Cloud SQL console-facade (§15.2). ──
+#
+# Launch (create db instance): each `api` block also carries a `create` path +
+# a `createForm` hint pointing at the REAL NATIVE provisioning endpoint (the one
+# the classic console / native SDK uses) — NOT the /api/console/* SQL facade. The
+# sql-console widget's "Create database instance" control is capability-driven: it
+# shows ONLY when `api.create` is present, and it builds the per-cloud request
+# BODY from `createForm` (method + field labels/defaults + a body template with
+# {id}/{engine} placeholders) so the widget stays generic (no if(cloud) branching).
 _RDS_SQL_CONSOLE_API = {
     "databases": "/api/console/rds/databases",
     "execute": "/api/console/rds/execute",
     "schema": "/api/console/rds/databases/{db}/schema",
+    # Native RDS CreateDBInstance (providers/aws_routes.py → api_rds_create_database,
+    # RDSDatabaseRequest). Real provisioning — spins the Docker/LXD runtime bundle.
+    "create": "/api/rds/databases",
+    "createForm": {
+        "method": "POST",
+        "title": "Create DB instance",
+        "idLabel": "db instance identifier",
+        "idPlaceholder": "vy-rds-01",
+        "engineLabel": "engine",
+        "engineDefault": "postgres",
+        "engineOptions": ["postgres", "mysql", "mariadb"],
+        # Body mirrors RDSDatabaseRequest (accepts db_instance_identifier / engine /
+        # db_instance_class). {id}/{engine} substituted from the form.
+        "body": {
+            "db_instance_identifier": "{id}",
+            "engine": "{engine}",
+            "db_instance_class": "db.t3.micro",
+        },
+    },
 }
 
 _CLOUDSQL_SQL_CONSOLE_API = {
     "databases": "/api/console/cloudsql/databases",
     "execute": "/api/console/cloudsql/execute",
     "schema": "/api/console/cloudsql/databases/{db}/schema",
+    # Native Cloud SQL Admin insert (server.py → api_gcp_sql_create_instance).
+    # Real provisioning — spins the gcp_sql runtime bundle. Project defaults to
+    # cloudlearn (the appliance's fixed project) so the console needn't thread it.
+    "create": "/api/gcp/sql/v1beta4/projects/cloudlearn/instances",
+    "createForm": {
+        "method": "POST",
+        "title": "Create instance",
+        "idLabel": "instance name",
+        "idPlaceholder": "vy-sql-01",
+        "engineLabel": "database version",
+        "engineDefault": "POSTGRES_15",
+        "engineOptions": ["POSTGRES_15", "POSTGRES_14", "MYSQL_8_0"],
+        # Cloud SQL Admin instances#insert shape: name + databaseVersion + region +
+        # settings.tier (_gcp_sql_instance_record reads these).
+        "body": {
+            "name": "{id}",
+            "databaseVersion": "{engine}",
+            "region": "us-central1",
+            "settings": {"tier": "db-f1-micro"},
+        },
+    },
 }
 
 _AZURE_SQL_CONSOLE_API = {
     "databases": "/api/console/azure-sql/databases",
     "execute": "/api/console/azure-sql/execute",
     "schema": "/api/console/azure-sql/databases/{db}/schema",
+    # Native ARM create (PUT) of a Microsoft.Sql/servers resource — the generic ARM
+    # dispatcher (providers/azure_services.py handle_arm) upserts the record. The
+    # {id} (server name) travels in the PATH (ARM is name-in-URL), so the widget
+    # substitutes it into `create` before sending; api-version is on the query.
+    "create": ("/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/"
+               "cloudlearn-rg/providers/Microsoft.Sql/servers/{id}"
+               "?api-version=2023-05-01-preview"),
+    "createForm": {
+        "method": "PUT",
+        "title": "Create SQL server",
+        "idLabel": "server name",
+        "idPlaceholder": "vy-sqlsrv-01",
+        "idInPath": True,             # {id} goes in the ARM URL, not the body
+        "engineLabel": "version",
+        "engineDefault": "12.0",
+        "engineOptions": ["12.0"],
+        # ARM Microsoft.Sql/servers PUT shape: location + properties.
+        "body": {
+            "location": "eastus",
+            "properties": {
+                "administratorLogin": "sqladmin",
+                "administratorLoginPassword": "Password123!",
+                "version": "{engine}",
+            },
+        },
+    },
 }
 
 # The Azure SQL Database lens's connect snippet/CLI/hint (§15.2) — the SAME

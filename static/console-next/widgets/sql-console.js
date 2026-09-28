@@ -33,6 +33,10 @@ class SqlConsole extends LitElement {
     _schema: { state: true },   // { tables: [{name, columns}] }
     _busy: { state: true },
     _msg: { state: true },
+    _newId: { state: true },      // Create form: instance identifier input
+    _newEngine: { state: true },  // Create form: engine / version input
+    _creating: { state: true },   // a create (native provision) is in flight
+    _createMsg: { state: true },  // create result banner
   };
 
   static styles = css`
@@ -73,6 +77,20 @@ class SqlConsole extends LitElement {
     .ok { color: var(--vy-ok); font-size: var(--vy-fs-sm); margin-top: var(--vy-s2); }
     .err { color: var(--vy-err); font-size: var(--vy-fs-sm); margin-top: var(--vy-s2); font-family: var(--vy-mono); }
     .hint { color: var(--vy-fg-dim); font-size: var(--vy-fs-xs); margin-top: var(--vy-s2); }
+    .launch { padding: var(--vy-s2); border-top: 1px solid var(--vy-border-soft); }
+    .launch .lh { color: var(--vy-fg-dim); font-size: var(--vy-fs-xs); text-transform: uppercase;
+      letter-spacing: .06em; margin-bottom: var(--vy-s1); }
+    .launch input, .launch select {
+      width: 100%; box-sizing: border-box; background: var(--vy-bg); color: var(--vy-fg);
+      font-family: var(--vy-mono); border: 1px solid var(--vy-border);
+      border-radius: var(--vy-radius); padding: var(--vy-s1) var(--vy-s2);
+      font-size: var(--vy-fs-sm); outline: none; margin-bottom: var(--vy-s1);
+    }
+    .launch input:focus, .launch select:focus { border-color: var(--vy-accent); }
+    .launch button.act { width: 100%; }
+    .launch .cmsg { font-size: var(--vy-fs-xs); margin-top: var(--vy-s1); }
+    .launch .cmsg.ok { color: var(--vy-ok); }
+    .launch .cmsg.err { color: var(--vy-err); font-family: var(--vy-mono); }
   `;
 
   constructor() {
@@ -154,6 +172,72 @@ class SqlConsole extends LitElement {
     this._run();
   }
 
+  // ── Create db instance (§13 launch hook — same pattern as compute-terminal's
+  //    Launch): capability-driven. The "Create database instance" control shows
+  //    ONLY when the SELECTED descriptor advertises `api.create` — the REAL NATIVE
+  //    provisioning endpoint (RDS CreateDBInstance / Cloud SQL insert / ARM
+  //    Microsoft.Sql/servers PUT), NOT the /api/console/* SQL facade. The widget
+  //    stays cloud-agnostic: it reads the per-cloud method + form field labels +
+  //    request BODY TEMPLATE from `api.createForm` and substitutes {id}/{engine}. ──
+  _createPath() {
+    const api = this.service && this.service.api;
+    return (api && api.create) || null;
+  }
+
+  _createForm() {
+    const api = this.service && this.service.api;
+    return (api && api.createForm) || {};
+  }
+
+  _canCreate() { return !!this._createPath(); }
+
+  // Deep-substitute {id}/{engine} into a body template (recurses into nested
+  // objects, e.g. Cloud SQL settings.tier / ARM properties.*). Leaves non-string
+  // leaves untouched.
+  _fillBody(tpl, subs) {
+    if (Array.isArray(tpl)) return tpl.map((v) => this._fillBody(v, subs));
+    if (tpl && typeof tpl === 'object') {
+      const out = {};
+      for (const [k, v] of Object.entries(tpl)) out[k] = this._fillBody(v, subs);
+      return out;
+    }
+    if (typeof tpl === 'string') {
+      let s = tpl;
+      for (const [k, val] of Object.entries(subs)) s = s.split(`{${k}}`).join(val);
+      return s;
+    }
+    return tpl;
+  }
+
+  async _create() {
+    let path = this._createPath();
+    if (!path || this._creating) return;
+    const f = this._createForm();
+    const id = (this._newId || '').trim() || (f.idPlaceholder || `vy-${Date.now().toString(36)}`);
+    const engine = (this._newEngine || '').trim() || f.engineDefault || '';
+    const method = f.method || 'POST';
+    const subs = { id, engine };
+    // {id} in the ARM path (name-in-URL) — substitute + URL-encode before sending.
+    if (f.idInPath) path = path.split('{id}').join(encodeURIComponent(id));
+    const body = this._fillBody(f.body || {}, subs);
+    this._creating = true;
+    this._msg = '';
+    this._createMsg = '';
+    try {
+      await apiSend(method, path, body);
+      await this._loadDbs();
+      // Select the freshly-created instance so its schema loads.
+      this._db = id;
+      this._loadSchema();
+      this._createMsg = `Created ${id}${engine ? ` (${engine})` : ''} — provisioning`;
+      this._newId = '';
+    } catch (e) {
+      this._createMsg = 'Create failed: ' + e.message;
+    } finally {
+      this._creating = false;
+    }
+  }
+
   // The connect snippet/CLI/hint are descriptor-driven too (§15.2): a service may
   // carry a `connect` block { snippet, cli, hint } — templates with {ep} and {db}
   // placeholders. Absent → the AWS RDS Data API defaults, so the AWS lens is
@@ -184,6 +268,40 @@ class SqlConsole extends LitElement {
   _hint() { return this._connect('hint'); }
   _endpoint() {
     return (this.caps && this.caps.workspace && this.caps.workspace.endpoint) || location.origin;
+  }
+
+  // The "Create database instance" form (§13 launch hook). Descriptor-driven:
+  // labels/placeholders/engine options come from api.createForm, so the SAME
+  // markup serves RDS / Cloud SQL / Azure SQL with NO branching.
+  _createBlock() {
+    const f = this._createForm();
+    const opts = f.engineOptions || [];
+    return html`
+      <div class="launch">
+        <div class="lh">${f.title || 'Create database instance'}</div>
+        <input type="text" placeholder=${f.idPlaceholder || 'identifier'}
+          .value=${this._newId || ''} ?disabled=${this._creating}
+          @input=${(e) => (this._newId = e.target.value)}
+          @keydown=${(e) => { if (e.key === 'Enter') this._create(); }} />
+        ${opts.length ? html`
+          <select ?disabled=${this._creating}
+            @change=${(e) => (this._newEngine = e.target.value)}>
+            ${opts.map((o) => html`<option .value=${o}
+              ?selected=${o === (this._newEngine || f.engineDefault)}>${o}</option>`)}
+          </select>
+        ` : html`
+          <input type="text" placeholder=${f.engineLabel || 'engine'}
+            .value=${this._newEngine != null ? this._newEngine : (f.engineDefault || '')}
+            ?disabled=${this._creating}
+            @input=${(e) => (this._newEngine = e.target.value)} />
+        `}
+        <button class="act" ?disabled=${this._creating} @click=${this._create}>
+          ${this._creating ? 'creating…' : '▸ create instance'}</button>
+        ${this._createMsg
+          ? html`<div class="cmsg ${/(failed|error)/i.test(this._createMsg) ? 'err' : 'ok'}">${this._createMsg}</div>`
+          : ''}
+      </div>
+    `;
   }
 
   render() {
@@ -221,6 +339,7 @@ class SqlConsole extends LitElement {
                 ${(this._schema && this._schema.tables && this._schema.tables.length === 0)
                   ? html`<li style="cursor:default;color:var(--vy-fg-dim)">— no tables — run a CREATE TABLE —</li>` : ''}
               </ul>
+              ${this._canCreate() ? this._createBlock() : ''}
             </div>
 
             <div class="panel" style="padding:var(--vy-s3)">
