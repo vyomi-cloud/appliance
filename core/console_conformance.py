@@ -113,6 +113,14 @@ _SIGNAL = {
         "checks": {"passed": 12, "total": 12},
         "note": "GCP Cloud Storage — object-browser serves GCS via the same widget (lens=gcp).",
     },
+    # Cloud SQL (Postgres-backed) reuses the SAME sql-console widget under lens=gcp;
+    # only the manifest `api` block differs (§15.2). SQL runs against the same
+    # relay-safe SQL engine the RDS Data API facade uses, so gate to "full".
+    "gcp.cloudsql": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 29, "total": 29},
+        "note": "GCP Cloud SQL — sql-console serves Cloud SQL via the same widget (lens=gcp).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.

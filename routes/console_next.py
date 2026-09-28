@@ -139,6 +139,11 @@ def _gcp_services(conf) -> list:
          "terminology": "bucket", "backed_by": "gcp_storage",
          "api": dict(_GCS_OBJECT_BROWSER_API),
          "conformance": conf.service_signal("gcp.storage")},
+        {"id": "cloudsql", "label": "Cloud SQL", "icon": "◫", "widget": "sql-console",
+         "terminology": "instance", "backed_by": "PostgreSQL",
+         "api": dict(_CLOUDSQL_SQL_CONSOLE_API),
+         "connect": dict(_CLOUDSQL_CONNECT),
+         "conformance": conf.service_signal("gcp.cloudsql")},
     ]
 
 
@@ -417,6 +422,32 @@ def register(app: FastAPI) -> None:
     async def api_console_rds_schema(db_id: str):
         from core import console_sql
         return await console_sql.schema(db_id)
+
+    # ── Cloud SQL sql-console (P3 — the GCP lens's SQL data plane) ── the SAME
+    #    sql-console widget renders Cloud SQL under lens=gcp; the ONLY difference is
+    #    the manifest `api` block pointing here (§15.2). Cloud SQL is Postgres-backed,
+    #    so this facade reuses the SAME relay-safe SQL engine as RDS
+    #    (core/console_cloudsql mirrors console_sql with its own store), returning the
+    #    SAME response shape. Purely additive; touches no existing Cloud SQL handler.
+    @app.get("/api/console/cloudsql/databases", include_in_schema=False)
+    def api_console_cloudsql_databases():
+        from core import console_cloudsql
+        return console_cloudsql.list_databases()
+
+    @app.post("/api/console/cloudsql/execute", include_in_schema=False)
+    async def api_console_cloudsql_execute(payload: dict = Body(default=None)):
+        from core import console_cloudsql
+        payload = payload or {}
+        sql = (payload.get("sql") or "").strip()
+        if not sql:
+            raise HTTPException(400, detail="ValidationError sql is required")
+        return await console_cloudsql.execute(payload.get("db") or "",
+                                              sql, payload.get("parameters"))
+
+    @app.get("/api/console/cloudsql/databases/{db_id}/schema", include_in_schema=False)
+    async def api_console_cloudsql_schema(db_id: str):
+        from core import console_cloudsql
+        return await console_cloudsql.schema(db_id)
 
     # ── SQS + SNS queue/topic-viewer (§13): ONE shared MessagingStore so the widget
     #    can show REAL SNS→SQS fan-out. Drives core/sqs_core + core/sns_core. ──
