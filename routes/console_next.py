@@ -442,6 +442,34 @@ _GCP_KMS_CONNECT = {
     ),
 }
 
+_AZURE_KV_KEYS_API = {
+    "listKeys": "/api/console/azure-kv-keys/keys",
+    "createKey": "/api/console/azure-kv-keys/keys",
+    "describeKey": "/api/console/azure-kv-keys/keys/{key_id}",
+    "encrypt": "/api/console/azure-kv-keys/encrypt",
+    "decrypt": "/api/console/azure-kv-keys/decrypt",
+    "dataKey": "/api/console/azure-kv-keys/data-key",
+}
+
+# The Azure Key Vault (keys) lens's connect snippet/CLI (§15.2) — the SAME
+# kms-crypto-view widget renders these; only this descriptor data differs (no widget
+# branching). Crypto is REAL (shared kms_core) over an independent key store.
+_AZURE_KV_KEYS_CONNECT = {
+    "snippet": (
+        "from azure.keyvault.keys.crypto import CryptographyClient, EncryptionAlgorithm\n"
+        "from azure.identity import DefaultAzureCredential\n"
+        "# point the native client at the console endpoint\n"
+        'crypto = CryptographyClient("{ep}/keys/{key_id}",\n'
+        "    credential=DefaultAzureCredential())\n"
+        'ct = crypto.encrypt(EncryptionAlgorithm.a256_gcm, b"hello").ciphertext\n'
+        "crypto.decrypt(EncryptionAlgorithm.a256_gcm, ct).plaintext"
+    ),
+    "cli": (
+        "az keyvault key encrypt --vault-name vyomi-kv --name {key_id} \\\n"
+        "  --algorithm A256GCM --value hello"
+    ),
+}
+
 
 # ── compute-terminal endpoint contract (the `api` block the cloud-agnostic
 #    compute-terminal reads). The connect-info / key / exec paths use an
@@ -649,6 +677,12 @@ def _azure_services(conf) -> list:
          "api": dict(_AZURE_KV_SECRETS_API),
          "connect": dict(_AZURE_KV_SECRETS_CONNECT),
          "conformance": conf.service_signal("azure.keyvault_secrets")},
+        {"id": "keyvault-keys", "label": "Key Vault Keys", "icon": "🔑",
+         "widget": "kms-crypto-view", "terminology": "key",
+         "backed_by": "in-proc KmsEngine",
+         "api": dict(_AZURE_KV_KEYS_API),
+         "connect": dict(_AZURE_KV_KEYS_CONNECT),
+         "conformance": conf.service_signal("azure.keyvault_keys")},
     ]
 
 
@@ -1631,6 +1665,61 @@ def register(app: FastAPI) -> None:
         if not key_id:
             raise HTTPException(400, detail="ValidationError key_id is required")
         return _gkguard(lambda: _gkms().generate_data_key(key_id, p.get("key_spec", "AES_256")))
+
+    # ── Azure Key Vault (keys) kms-crypto-view (P4 — the Azure lens's data plane for
+    #    the SAME kms-crypto-view widget) ── the manifest `api` block points here
+    #    instead of /api/console/kms/* (§15.2 — no if(cloud) branching). Reuses the
+    #    REAL crypto core (core/kms_core, no fake crypto) over an INDEPENDENT KeyStore
+    #    (core/console_azure_kv_keys) so Azure key state is isolated from the AWS/GCP
+    #    KMS facades, mirroring the console_gcp_kms independent-store approach. Purely
+    #    additive.
+    def _azkms():
+        from core import console_azure_kv_keys as k
+        return k
+
+    def _azkguard(fn):
+        from core.console_azure_kv_keys import AzureKvKeysError
+        try:
+            return fn()
+        except AzureKvKeysError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/azure-kv-keys/keys", include_in_schema=False)
+    def api_console_az_kms_list():
+        return _azkguard(lambda: _azkms().list_keys())
+
+    @app.post("/api/console/azure-kv-keys/keys", include_in_schema=False)
+    def api_console_az_kms_create(payload: dict = Body(default=None)):
+        p = payload or {}
+        return _azkguard(lambda: _azkms().create_key((p.get("description") or "").strip()))
+
+    @app.get("/api/console/azure-kv-keys/keys/{key_id}", include_in_schema=False)
+    def api_console_az_kms_describe(key_id: str):
+        return _azkguard(lambda: _azkms().describe_key(key_id))
+
+    @app.post("/api/console/azure-kv-keys/encrypt", include_in_schema=False)
+    def api_console_az_kms_encrypt(payload: dict = Body(default=None)):
+        p = payload or {}
+        key_id = (p.get("key_id") or "").strip()
+        if not key_id:
+            raise HTTPException(400, detail="ValidationError key_id is required")
+        return _azkguard(lambda: _azkms().encrypt(key_id, p.get("plaintext", "")))
+
+    @app.post("/api/console/azure-kv-keys/decrypt", include_in_schema=False)
+    def api_console_az_kms_decrypt(payload: dict = Body(default=None)):
+        p = payload or {}
+        blob = p.get("ciphertext_blob", "")
+        if not blob:
+            raise HTTPException(400, detail="ValidationError ciphertext_blob is required")
+        return _azkguard(lambda: _azkms().decrypt(blob, (p.get("key_id") or "").strip() or None))
+
+    @app.post("/api/console/azure-kv-keys/data-key", include_in_schema=False)
+    def api_console_az_kms_data_key(payload: dict = Body(default=None)):
+        p = payload or {}
+        key_id = (p.get("key_id") or "").strip()
+        if not key_id:
+            raise HTTPException(400, detail="ValidationError key_id is required")
+        return _azkguard(lambda: _azkms().generate_data_key(key_id, p.get("key_spec", "AES_256")))
 
     # ── GCS console-facade (P3 — the GCP lens's object-browser data plane) ──
     #    The SAME object-browser widget renders GCS under lens=gcp; the ONLY

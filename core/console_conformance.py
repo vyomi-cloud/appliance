@@ -239,6 +239,15 @@ _SIGNAL = {
         "checks": {"passed": 32, "total": 32},
         "note": "Azure Key Vault secrets — kv-secret-viewer serves Key Vault via the same widget (lens=azure).",
     },
+    # Key Vault (keys) reuses the SAME kms-crypto-view widget under lens=azure; only the
+    # manifest `api` block differs (§15.2). It drives the REAL kms_core crypto over an
+    # independent key store, so key CRUD + the encrypt/decrypt round-trip + data-key are
+    # conformant — gate to "full".
+    "azure.keyvault_keys": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 36, "total": 36},
+        "note": "Azure Key Vault keys — kms-crypto-view serves Key Vault keys (real kms_core crypto) via the same widget (lens=azure).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.
