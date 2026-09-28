@@ -137,6 +137,27 @@ _FIRESTORE_CONNECT = {
 }
 
 
+# ── queue-topic-viewer endpoint contract (the `api` block the cloud-agnostic
+#    queue-topic-viewer reads). Path templates use {queue}/{topic_arn} placeholders
+#    the widget substitutes + URL-encodes (the SNS ARN travels in the query string,
+#    so listSubscriptions has NO {topic_arn} — the widget appends ?topic_arn=). These
+#    are the AWS-lens (SQS+SNS messaging) defaults; the GCP Pub/Sub lens supplies the
+#    SAME shape pointed at the Pub/Sub console-facade (§15.2 — no if(cloud) branching
+#    in the widget). ──
+_SQS_MESSAGING_API = {
+    "listQueues": "/api/console/messaging/queues",
+    "createQueue": "/api/console/messaging/queues",
+    "sendMessage": "/api/console/messaging/queues/{queue}/send",
+    "receive": "/api/console/messaging/queues/{queue}/receive",
+    "peek": "/api/console/messaging/queues/{queue}/peek",
+    "purge": "/api/console/messaging/queues/{queue}/purge",
+    "listTopics": "/api/console/messaging/topics",
+    "createTopic": "/api/console/messaging/topics",
+    "listSubscriptions": "/api/console/messaging/topics/subscriptions",
+    "subscribe": "/api/console/messaging/topics/subscribe",
+    "publish": "/api/console/messaging/topics/publish",
+}
+
 def _aws_services(conf) -> list:
     """The AWS-lens service catalog (unchanged from P0/P2 — the rich vertical)."""
     return [
@@ -154,6 +175,7 @@ def _aws_services(conf) -> list:
          "conformance": conf.service_signal("rds")},
         {"id": "sqs", "label": "SQS + SNS", "icon": "⇄", "widget": "queue-topic-viewer",
          "terminology": "queue / topic", "backed_by": "in-proc messaging",
+         "api": dict(_SQS_MESSAGING_API),
          "conformance": conf.service_signal("sqs")},
         {"id": "secretsmanager", "label": "Secrets Manager", "icon": "⚿",
          "widget": "kv-secret-viewer", "terminology": "secret",

@@ -1,18 +1,31 @@
-// queue-topic-viewer widget (§13 / §14.3) — SQS + SNS queue/topic viewer.
+// queue-topic-viewer widget (§13 / §14.3) — queue/topic viewer.
 //
-// Lists SQS queues and SNS topics, sends a message to a queue, peeks/receives
-// messages, and wires + shows SNS→SQS subscriptions so the flagship fan-out
-// (publish to a topic → message lands in every subscribed queue) is visible and
-// real. All against the console-next messaging facade under
-// /api/console/messaging/* (§15.1 #2 — talks ONLY to /api/*, no substrate
-// knowledge), which drives the SAME sqs_core + sns_core over ONE shared
-// MessagingStore the Nano relay uses, so the behaviour is byte-identical across
-// substrates (§15). Rendered inside the common Connect contract with the mandatory
-// `⛃ backed by <engine>` badge (§13.1) and a boto3 / CLI snippet.
+// Lists queues and topics, sends a message to a queue, peeks/receives messages,
+// and wires + shows topic→queue subscriptions so the flagship fan-out (publish to
+// a topic → message lands in every subscribed queue) is visible and real. It is
+// CLOUD-AGNOSTIC: it reads its endpoint paths from the selected service
+// descriptor's `api` block (§15.2) — so the SAME widget serves AWS SQS+SNS
+// (/api/console/messaging/*, driving sqs_core + sns_core over ONE shared
+// MessagingStore) and GCP Pub/Sub (/api/console/gcp-pubsub/*) with ZERO branching.
+// When no `api` block is present it falls back to the AWS messaging defaults, so
+// the AWS lens keeps working unchanged.
+//
+// All against a console-next facade under /api/* (§15.1 #2 — talks ONLY to /api/*,
+// no substrate knowledge). On the AWS lens the facade drives the SAME sqs_core +
+// sns_core over ONE shared MessagingStore the Nano relay uses, so the behaviour is
+// byte-identical across substrates (§15). Rendered inside the common Connect
+// contract with the mandatory `⛃ backed by <engine>` badge (§13.1) and a boto3 /
+// CLI snippet (also descriptor-driven via the service's `connect` block, SQS/SNS
+// defaults preserved).
 //
 // Honors a deepLink (backend.ref {sqs.queue / sns.topic}) pushed from the glass-box
 // Inspector: selecting a SendMessage/Publish call jumps here and selects that
 // queue / topic.
+//
+// API contract (service.api): { listQueues, createQueue, sendMessage, receive,
+// peek, purge, listTopics, createTopic, deleteTopic, listSubscriptions, subscribe,
+// publish } — path templates with {queue}/{topic_arn} placeholders this widget
+// substitutes + URL-encodes.
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
 import { apiGet, apiSend } from '../api.js';
@@ -101,6 +114,41 @@ class QueueTopicViewer extends LitElement {
     .editor { padding: var(--vy-s3); }
   `;
 
+  // ── Endpoint resolution (§15.2): read paths from the service descriptor's `api`
+  //    block, falling back to the AWS messaging (SQS+SNS) REST defaults so the AWS
+  //    lens works unchanged. The widget is thereby cloud-agnostic — the GCP lens
+  //    supplies Pub/Sub paths of the same shape and NOTHING below changes.
+  //    Placeholders: {queue} (queue name) and {topic_arn} (topic identifier). The
+  //    topic identifier travels in the path here (URL-encoded) — the AWS SNS ARN
+  //    contains ':' but encodeURIComponent handles that; the facades that carry the
+  //    ARN in the query string simply ignore the {topic_arn} placeholder. ──
+  static _MSG_DEFAULTS = {
+    listQueues: '/api/console/messaging/queues',
+    createQueue: '/api/console/messaging/queues',
+    sendMessage: '/api/console/messaging/queues/{queue}/send',
+    receive: '/api/console/messaging/queues/{queue}/receive',
+    peek: '/api/console/messaging/queues/{queue}/peek',
+    purge: '/api/console/messaging/queues/{queue}/purge',
+    listTopics: '/api/console/messaging/topics',
+    createTopic: '/api/console/messaging/topics',
+    listSubscriptions: '/api/console/messaging/topics/subscriptions',
+    subscribe: '/api/console/messaging/topics/subscribe',
+    publish: '/api/console/messaging/topics/publish',
+  };
+
+  _tpl(name) {
+    const api = (this.service && this.service.api) || {};
+    return api[name] || QueueTopicViewer._MSG_DEFAULTS[name];
+  }
+
+  // Substitute + URL-encode the {queue}/{topic_arn} placeholders in a template.
+  _path(name, { queue, topicArn } = {}) {
+    let p = this._tpl(name);
+    if (queue != null) p = p.replace('{queue}', encodeURIComponent(queue));
+    if (topicArn != null) p = p.replace('{topic_arn}', encodeURIComponent(topicArn));
+    return p;
+  }
+
   connectedCallback() {
     super.connectedCallback();
     this._reloadAll();
@@ -121,7 +169,7 @@ class QueueTopicViewer extends LitElement {
 
   async _loadQueues() {
     try {
-      const r = await apiGet('/api/console/messaging/queues');
+      const r = await apiGet(this._path('listQueues'));
       this._queues = r.queues || [];
       if (!this._queue && this._queues.length) {
         this._selectQueue(this._queues[0].queue_name);
@@ -133,7 +181,7 @@ class QueueTopicViewer extends LitElement {
 
   async _loadTopics() {
     try {
-      const r = await apiGet('/api/console/messaging/topics');
+      const r = await apiGet(this._path('listTopics'));
       this._topics = r.topics || [];
       if (!this._topic && this._topics.length) {
         this._selectTopic(this._topics[0].topic_arn);
@@ -152,7 +200,7 @@ class QueueTopicViewer extends LitElement {
   async _peek(name) {
     if (!name) return;
     try {
-      const r = await apiGet(`/api/console/messaging/queues/${encodeURIComponent(name)}/peek`);
+      const r = await apiGet(this._path('peek', { queue: name }));
       this._msgs = r.messages || [];
     } catch (e) {
       this._msgs = [];
@@ -169,8 +217,14 @@ class QueueTopicViewer extends LitElement {
   async _loadSubs(arn) {
     if (!arn) return;
     try {
-      const r = await apiGet(
-        `/api/console/messaging/topics/subscriptions?topic_arn=${encodeURIComponent(arn)}`);
+      // The subscriptions listing needs the topic identifier. If the template
+      // carries a {topic_arn} placeholder (a path-style facade) it's substituted;
+      // otherwise (the AWS messaging default) the arn travels as a query param.
+      let path = this._tpl('listSubscriptions');
+      path = path.includes('{topic_arn}')
+        ? path.replace('{topic_arn}', encodeURIComponent(arn))
+        : `${path}?topic_arn=${encodeURIComponent(arn)}`;
+      const r = await apiGet(path);
       this._subs = r.subscriptions || [];
     } catch (e) {
       this._subs = [];
@@ -183,7 +237,7 @@ class QueueTopicViewer extends LitElement {
     if (!name) return;
     this._busy = true;
     try {
-      await apiSend('POST', '/api/console/messaging/queues', { name });
+      await apiSend('POST', this._path('createQueue'), { name });
       this._newQueue = '';
       await this._loadQueues();
       await this._selectQueue(name);
@@ -199,7 +253,7 @@ class QueueTopicViewer extends LitElement {
     if (!name) return;
     this._busy = true;
     try {
-      const r = await apiSend('POST', '/api/console/messaging/topics', { name });
+      const r = await apiSend('POST', this._path('createTopic'), { name });
       this._newTopic = '';
       await this._loadTopics();
       if (r && r.topic_arn) await this._selectTopic(r.topic_arn);
@@ -219,8 +273,8 @@ class QueueTopicViewer extends LitElement {
     this._msg = '';
     try {
       const r = await apiSend('POST',
-        `/api/console/messaging/queues/${encodeURIComponent(name)}/send`, { body });
-      this._msg = `Sent → SQS (MessageId ${r.message_id || '—'})`;
+        this._path('sendMessage', { queue: name }), { body });
+      this._msg = `Sent (MessageId ${r.message_id || '—'})`;
       await this._peek(name);
       await this._loadQueues();
     } catch (e) {
@@ -237,7 +291,7 @@ class QueueTopicViewer extends LitElement {
     this._msg = '';
     try {
       const r = await apiSend('POST',
-        `/api/console/messaging/queues/${encodeURIComponent(name)}/receive`,
+        this._path('receive', { queue: name }),
         { max: 10, visibility: 30 });
       this._msg = `Received ${r.count} message(s) — leased for 30s (hidden on refresh)`;
       await this._peek(name);
@@ -254,7 +308,7 @@ class QueueTopicViewer extends LitElement {
     if (!name) return;
     this._busy = true;
     try {
-      await apiSend('POST', `/api/console/messaging/queues/${encodeURIComponent(name)}/purge`, {});
+      await apiSend('POST', this._path('purge', { queue: name }), {});
       this._msg = 'Purged';
       await this._peek(name);
       await this._loadQueues();
@@ -273,9 +327,9 @@ class QueueTopicViewer extends LitElement {
     this._busy = true;
     this._msg = '';
     try {
-      await apiSend('POST', '/api/console/messaging/topics/subscribe',
+      await apiSend('POST', this._path('subscribe', { topicArn: arn }),
         { topic_arn: arn, queue });
-      this._msg = `Subscribed ${queue} → topic (protocol=sqs)`;
+      this._msg = `Subscribed ${queue} → topic`;
       await this._loadSubs(arn);
       await this._loadTopics();
     } catch (e) {
@@ -294,9 +348,9 @@ class QueueTopicViewer extends LitElement {
     this._msg = '';
     try {
       const subject = (this._pubSubject || '').trim();
-      const r = await apiSend('POST', '/api/console/messaging/topics/publish',
+      const r = await apiSend('POST', this._path('publish', { topicArn: arn }),
         { topic_arn: arn, message, ...(subject ? { subject } : {}) });
-      this._msg = `Published → fanned out to ${r.fanned_out_to} SQS queue(s)`;
+      this._msg = `Published → fanned out to ${r.fanned_out_to} queue(s)`;
       // Refresh queues + the selected queue so the fan-out is visible immediately.
       await this._loadQueues();
       if (this._queue) await this._peek(this._queue);
@@ -311,19 +365,53 @@ class QueueTopicViewer extends LitElement {
     return (this.caps && this.caps.workspace && this.caps.workspace.endpoint) || location.origin;
   }
 
-  _snippet() {
-    const ep = this._endpoint();
-    const q = this._queue || 'jobs';
-    return `import boto3\nsqs = boto3.client("sqs", endpoint_url="${ep}",\n    aws_access_key_id="test", aws_secret_access_key="test", region_name="us-east-1")\nsns = boto3.client("sns", endpoint_url="${ep}",\n    aws_access_key_id="test", aws_secret_access_key="test", region_name="us-east-1")\nq = sqs.create_queue(QueueName="${q}")["QueueUrl"]\nt = sns.create_topic(Name="events")["TopicArn"]\narn = sqs.get_queue_attributes(QueueUrl=q, AttributeNames=["QueueArn"])["Attributes"]["QueueArn"]\nsns.subscribe(TopicArn=t, Protocol="sqs", Endpoint=arn)\nsns.publish(TopicArn=t, Message="hello")   # fans out to ${q}\nprint(sqs.receive_message(QueueUrl=q))`;
+  // The connect snippet/CLI are descriptor-driven too (§15.2): a service may carry a
+  // `connect` block { snippet, cli } — templates with {ep} and {queue} placeholders.
+  // Absent → the AWS SQS+SNS (boto3) defaults, so the AWS lens is unchanged; the GCP
+  // lens supplies a Pub/Sub variant with NO widget branching.
+  static _MSG_CONNECT = {
+    snippet:
+      'import boto3\nsqs = boto3.client("sqs", endpoint_url="{ep}",\n' +
+      '    aws_access_key_id="test", aws_secret_access_key="test", region_name="us-east-1")\n' +
+      'sns = boto3.client("sns", endpoint_url="{ep}",\n' +
+      '    aws_access_key_id="test", aws_secret_access_key="test", region_name="us-east-1")\n' +
+      'q = sqs.create_queue(QueueName="{queue}")["QueueUrl"]\n' +
+      't = sns.create_topic(Name="events")["TopicArn"]\n' +
+      'arn = sqs.get_queue_attributes(QueueUrl=q, AttributeNames=["QueueArn"])["Attributes"]["QueueArn"]\n' +
+      'sns.subscribe(TopicArn=t, Protocol="sqs", Endpoint=arn)\n' +
+      'sns.publish(TopicArn=t, Message="hello")   # fans out to {queue}\n' +
+      'print(sqs.receive_message(QueueUrl=q))',
+    cli: 'aws --endpoint-url {ep} sqs list-queues\naws --endpoint-url {ep} sns list-topics',
+  };
+
+  _connect(name) {
+    const c = (this.service && this.service.connect) || {};
+    return c[name] || QueueTopicViewer._MSG_CONNECT[name];
   }
 
-  _cli() {
-    const ep = this._endpoint();
-    return `aws --endpoint-url ${ep} sqs list-queues\naws --endpoint-url ${ep} sns list-topics`;
+  _fill(tpl) {
+    return String(tpl).split('{ep}').join(this._endpoint())
+      .split('{queue}').join(this._queue || 'jobs');
+  }
+
+  _snippet() { return this._fill(this._connect('snippet')); }
+  _cli() { return this._fill(this._connect('cli')); }
+
+  // Cosmetic parentheticals on the two rail panels + subscribe button. Descriptor
+  // may override via service.labels { queues, topics, subscribe }; AWS defaults keep
+  // the SQS/SNS wording (no widget branching — just data).
+  _labels() {
+    const l = (this.service && this.service.labels) || {};
+    return {
+      queues: l.queues || 'SQS',
+      topics: l.topics || 'SNS',
+      subscribe: l.subscribe || 'sqs',
+    };
   }
 
   render() {
     const svc = this.service || {};
+    const lbl = this._labels();
     const mode = (this.caps && this.caps.connect && this.caps.connect.mode) || 'endpoint';
     const q = this._queue;
     const topic = this._topic;
@@ -342,7 +430,7 @@ class QueueTopicViewer extends LitElement {
           <div class="cols">
             <!-- Queues (SQS) -->
             <div class="panel">
-              <div class="ph">Queues (SQS)
+              <div class="ph">Queues (${lbl.queues})
                 <span style="flex:1"></span>
                 <button class="ghost" ?disabled=${this._busy} @click=${this._loadQueues}>↻</button>
               </div>
@@ -366,7 +454,7 @@ class QueueTopicViewer extends LitElement {
 
             <!-- Topics (SNS) -->
             <div class="panel">
-              <div class="ph">Topics (SNS)
+              <div class="ph">Topics (${lbl.topics})
                 <span style="flex:1"></span>
                 <button class="ghost" ?disabled=${this._busy} @click=${this._loadTopics}>↻</button>
               </div>
@@ -445,7 +533,7 @@ class QueueTopicViewer extends LitElement {
                   ${(this._queues || []).map((qq) => html`<option .value=${qq.queue_name}
                     ?selected=${qq.queue_name === this._subQueue}>${qq.queue_name}</option>`)}
                 </select>
-                <button class="ghost" ?disabled=${this._busy} @click=${this._subscribe}>+ subscribe (sqs)</button>
+                <button class="ghost" ?disabled=${this._busy} @click=${this._subscribe}>+ subscribe (${lbl.subscribe})</button>
               </div>
 
               <div class="sub">Publish — ${topicName}</div>
