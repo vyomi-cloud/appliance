@@ -1,7 +1,9 @@
-// Status bar (§4): workspace · cloud-lens switcher (stub) · endpoint (click-copy) ·
-// conformance pill (placeholder) · TTL/reset (stubs) · Inspector toggle · ⌘K.
+// Status bar (§4): workspace · cloud-lens switcher · endpoint (click-copy) ·
+// conformance pill · Familiar-mode toggle (§7) · TTL/reset (stubs) · Inspector
+// toggle · ⌘K.
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
+import { setFamiliar, isFamiliar } from '../api.js';
 
 class StatusBar extends LitElement {
   static properties = {
@@ -9,6 +11,7 @@ class StatusBar extends LitElement {
     lens: { attribute: false },
     inspectorOpen: { attribute: false },
     _copied: { state: true },
+    _familiar: { state: true },   // §7 optional native-lens theme (theming only)
   };
 
   static styles = css`
@@ -70,6 +73,52 @@ class StatusBar extends LitElement {
     .btn.on { color: var(--vy-accent); border-color: var(--vy-accent); }
     .copied { color: var(--vy-ok); }
   `;
+
+  constructor() {
+    super();
+    // Reflect the persisted Familiar choice into local state on construction so the
+    // toggle renders in the right position without waiting for a lens (§7).
+    this._familiar = isFamiliar();
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    // Re-assert the persisted theme against the current lens on (re)mount, so a
+    // reload or a lens switch keeps the familiar accent aligned with the lens.
+    this._familiar = setFamiliar(this._familiar, this._currentLens());
+  }
+
+  updated(changed) {
+    // If the lens changed while Familiar is on, re-theme to the new provider accent.
+    if (changed.has('lens') && this._familiar) {
+      setFamiliar(true, this._currentLens());
+    }
+  }
+
+  _currentLens() {
+    const caps = this.caps || {};
+    const lenses = caps.cloud_lenses || ['aws'];
+    return (this.lens || caps.lens || lenses[0] || 'aws').toLowerCase();
+  }
+
+  // Toggle the OPTIONAL native-lens theme (§7). Theming only — this flips a
+  // document attribute + persists the choice; it changes NO behaviour and forks
+  // NO component. The accent tracks the current cloud lens.
+  _toggleFamiliar() {
+    this._familiar = setFamiliar(!this._familiar, this._currentLens());
+  }
+
+  // The toggle's label is descriptor-driven (§7 — labels may be swapped via the
+  // manifest): if the manifest carries `familiar.labels[<lens>]` use it, else show
+  // the lens name in the familiar state and "Familiar" in the native state. Purely a
+  // label — the capability manifest remains the only source of variation (§15.2).
+  _familiarLabel() {
+    const caps = this.caps || {};
+    const labels = (caps.familiar && caps.familiar.labels) || {};
+    const lens = this._currentLens();
+    if (this._familiar) return labels[lens] || lens.toUpperCase();
+    return labels.off || 'Familiar';
+  }
 
   _copyEndpoint() {
     const ep = this._endpoint();
@@ -142,6 +191,12 @@ class StatusBar extends LitElement {
         <button class="btn" title="reset workspace (stub)">⟲ reset</button>
 
         <span class="spacer"></span>
+
+        <!-- Familiar mode (§7) — OPTIONAL native-lens theme, theming only. Reads
+             the current lens for its label/accent; forks nothing. -->
+        <button class="btn ${this._familiar ? 'on' : ''}"
+          title="Familiar mode — optional native-lens theme (§7); theming only, changes no behaviour"
+          @click=${this._toggleFamiliar}>${this._familiarLabel()} ▾</button>
 
         <button class="btn" title="command palette (⌘K)" @click=${() => this.dispatchEvent(new CustomEvent('open-palette'))}>⌘K</button>
         <button class="btn ${this.inspectorOpen ? 'on' : ''}" title="Inspector (⌘I)"

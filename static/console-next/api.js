@@ -76,3 +76,33 @@ export function degradeNote(widgetId) {
 export function feature(name) {
   return !!(_caps && _caps.features && _caps.features[name]);
 }
+
+// ── Familiar mode (§7 — "recognizable, not cloned") ──
+// OPTIONAL native-lens THEME. This is theming only: it sets a `data-vy-familiar`
+// attribute on <html>, which tokens.css uses to override design tokens (accent /
+// spacing) — every Shadow-DOM component re-themes via inherited custom properties,
+// no component is forked and NO behaviour changes (§7, §15.2). The choice persists
+// in localStorage. The attribute value tracks the current cloud lens so the accent
+// matches AWS/GCP/Azure; turning it off removes the attribute with zero residue.
+const _FAMILIAR_KEY = 'vy.console.familiar';
+
+export function isFamiliar() {
+  try { return localStorage.getItem(_FAMILIAR_KEY) === '1'; }
+  catch (_) { return false; }
+}
+
+// setFamiliar(on, lens) — apply/remove the theme, persist the choice, and return the
+// resolved boolean. `lens` selects which provider accent to theme toward (default
+// aws). Safe to call repeatedly (idempotent) and on any (re)mount / lens switch.
+export function setFamiliar(on, lens) {
+  const el = (typeof document !== 'undefined') && document.documentElement;
+  const l = (lens || 'aws').toLowerCase();
+  if (on) {
+    if (el) el.setAttribute('data-vy-familiar', l);
+    try { localStorage.setItem(_FAMILIAR_KEY, '1'); } catch (_) { /* private mode */ }
+    return true;
+  }
+  if (el) el.removeAttribute('data-vy-familiar');
+  try { localStorage.setItem(_FAMILIAR_KEY, '0'); } catch (_) { /* private mode */ }
+  return false;
+}

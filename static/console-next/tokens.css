@@ -60,3 +60,35 @@
   --vy-rail-w: 200px;
   --vy-inspector-w: 440px;
 }
+
+/* ── Familiar mode (§7 — "recognizable, not cloned") ──────────────────────────
+ * OPTIONAL native-lens theme. This is THEMING ONLY over the one engine — it is NOT
+ * a fork and it changes NO behaviour. Turning on "Familiar" sets a
+ * `data-vy-familiar="<lens>"` attribute on <html>; because design tokens are custom
+ * properties (inherited), overriding them here re-themes every Shadow-DOM component
+ * at once — no component code is touched, nothing is capability-gated differently.
+ *
+ * Each block only nudges the *accent* + a little spacing toward the provider's
+ * recognizable feel (AWS amber, GCP blue, Azure blue). We deliberately do NOT clone
+ * layouts, iconography, or pixels — that is the anti-mimicry line in §7. Removing
+ * the attribute restores the default Vyomi-native identity with zero residue. */
+[data-vy-familiar] {
+  /* Slightly airier, squarer default across every familiar lens. */
+  --vy-radius:    4px;
+  --vy-radius-lg: 8px;
+}
+[data-vy-familiar="aws"] {
+  --vy-accent:    #ff9900;   /* AWS "smile" amber */
+  --vy-accent-fg: #16191f;
+  --vy-info:      #ff9900;
+}
+[data-vy-familiar="gcp"] {
+  --vy-accent:    #4285f4;   /* Google blue */
+  --vy-accent-fg: #ffffff;
+  --vy-info:      #669df6;
+}
+[data-vy-familiar="azure"] {
+  --vy-accent:    #0078d4;   /* Azure blue */
+  --vy-accent-fg: #ffffff;
+  --vy-info:      #50a0e0;
+}
