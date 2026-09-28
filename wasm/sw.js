@@ -542,7 +542,9 @@ self.addEventListener("fetch", (event) => {
         // "_console" is not a cloud in the registry — nano-boot routes it straight
         // to console_next_adapter.handle("capabilities", {...}). It forces
         // substrate="nano" internally regardless of the query arg.
-        const res = await runInPage(["_console", "capabilities", "GET", { lens, substrate }]);
+        // Tuple is [provider, service, OP, params]; the op slot MUST be "capabilities"
+        // (not the HTTP method) so handle() dispatches the manifest, not the 501 stub.
+        const res = await runInPage(["_console", "capabilities", "capabilities", { lens, substrate }]);
         return json(res, 200);
       }
       if (apiPath.startsWith("/api/console/")) {
