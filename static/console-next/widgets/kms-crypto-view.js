@@ -1,15 +1,25 @@
-// kms-crypto-view widget (§13 / §14.3) — AWS KMS crypto playground.
+// kms-crypto-view widget (§13 / §14.3) — KMS crypto playground.
 //
 // Lists KMS keys, creates a key, and runs a live encrypt→ciphertext / decrypt→
-// plaintext round-trip (plus generate-data-key for envelope encryption) — all
-// against the appliance's KMS console REST API under /api/console/kms/* (backed by
-// the substrate-agnostic kms_core over a shared KeyStore, exactly what the Nano
-// relay drives). Rendered inside the common Connect contract with the mandatory
-// `⛃ backed by <engine>` badge (§13.1) and a boto3 / CLI snippet.
+// plaintext round-trip (plus generate-data-key for envelope encryption). It is
+// CLOUD-AGNOSTIC: it reads its endpoint paths from the selected service descriptor's
+// `api` block (§15.2) — so the SAME widget serves AWS KMS (/api/console/kms/*,
+// driving the substrate-agnostic kms_core over a shared KeyStore, exactly what the
+// Nano relay drives) and GCP Cloud KMS (/api/console/gcp-kms/*) with ZERO branching.
+// When no `api` block is present it falls back to the AWS KMS defaults, so the AWS
+// lens keeps working unchanged.
+//
+// Rendered inside the common Connect contract with the mandatory `⛃ backed by
+// <engine>` badge (§13.1) and a boto3 / CLI snippet (also descriptor-driven via the
+// service's `connect` block, AWS KMS defaults preserved).
 //
 // It talks ONLY to /api/* (§15.1 #2) — no substrate knowledge. Crypto is REAL:
 // the widget passes base64 blobs (the native KMS wire) to the core and never does
 // its own crypto — encrypt returns an honest CiphertextBlob, decrypt round-trips it.
+//
+// API contract (service.api): { listKeys, createKey, describeKey, encrypt, decrypt,
+// dataKey } — path templates with a {key_id} placeholder this widget substitutes +
+// URL-encodes.
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
 import { apiGet, apiSend } from '../api.js';
@@ -97,6 +107,32 @@ class KmsCryptoView extends LitElement {
       border-radius: var(--vy-radius); padding: 0 var(--vy-s1); }
   `;
 
+  // ── Endpoint resolution (§15.2): read paths from the service descriptor's `api`
+  //    block, falling back to the AWS KMS console REST defaults so the AWS lens
+  //    works unchanged. The widget is thereby cloud-agnostic — the GCP lens supplies
+  //    Cloud KMS paths of the same shape and NOTHING below changes. The only
+  //    placeholder is {key_id} (the describe path), which the widget URL-encodes. ──
+  static _KMS_DEFAULTS = {
+    listKeys: '/api/console/kms/keys',
+    createKey: '/api/console/kms/keys',
+    describeKey: '/api/console/kms/keys/{key_id}',
+    encrypt: '/api/console/kms/encrypt',
+    decrypt: '/api/console/kms/decrypt',
+    dataKey: '/api/console/kms/data-key',
+  };
+
+  _tpl(name) {
+    const api = (this.service && this.service.api) || {};
+    return api[name] || KmsCryptoView._KMS_DEFAULTS[name];
+  }
+
+  // Substitute + URL-encode the {key_id} placeholder in a template.
+  _path(name, { keyId } = {}) {
+    let p = this._tpl(name);
+    if (keyId != null) p = p.replace('{key_id}', encodeURIComponent(keyId));
+    return p;
+  }
+
   connectedCallback() {
     super.connectedCallback();
     this._loadKeys();
@@ -112,7 +148,7 @@ class KmsCryptoView extends LitElement {
 
   async _loadKeys() {
     try {
-      const r = await apiGet('/api/console/kms/keys');
+      const r = await apiGet(this._path('listKeys'));
       this._keys = r.keys || [];
       if (!this._sel && this._keys.length) this._select(this._keys[0].key_id);
     } catch (e) {
@@ -124,7 +160,7 @@ class KmsCryptoView extends LitElement {
     this._sel = keyId;
     this._msg = '';
     try {
-      this._detail = await apiGet(`/api/console/kms/keys/${encodeURIComponent(keyId)}`);
+      this._detail = await apiGet(this._path('describeKey', { keyId }));
     } catch (e) {
       this._detail = null;
       this._msg = 'Could not describe key: ' + e.message;
@@ -135,7 +171,7 @@ class KmsCryptoView extends LitElement {
     this._busy = true;
     this._msg = '';
     try {
-      const r = await apiSend('POST', '/api/console/kms/keys',
+      const r = await apiSend('POST', this._path('createKey'),
         { description: (this._newDesc || '').trim() });
       this._newDesc = '';
       await this._loadKeys();
@@ -152,7 +188,7 @@ class KmsCryptoView extends LitElement {
     this._busy = true;
     this._msg = '';
     try {
-      const r = await apiSend('POST', '/api/console/kms/encrypt',
+      const r = await apiSend('POST', this._path('encrypt'),
         { key_id: this._sel, plaintext: b64FromText(this._plaintext || '') });
       this._cipher = r.ciphertext_blob || '';
       this._decrypted = null;
@@ -171,7 +207,7 @@ class KmsCryptoView extends LitElement {
     try {
       // KeyId is intentionally NOT sent — the blob self-identifies its key (real
       // symmetric-KMS semantics). This proves the round-trip end to end.
-      const r = await apiSend('POST', '/api/console/kms/decrypt',
+      const r = await apiSend('POST', this._path('decrypt'),
         { ciphertext_blob: this._cipher });
       this._decrypted = textFromB64(r.plaintext || '');
       this._msg = `Decrypted with key ${(r.key_id || '').split('/').pop()}`;
@@ -187,7 +223,7 @@ class KmsCryptoView extends LitElement {
     this._busy = true;
     this._msg = '';
     try {
-      this._dataKey = await apiSend('POST', '/api/console/kms/data-key',
+      this._dataKey = await apiSend('POST', this._path('dataKey'),
         { key_id: this._sel, key_spec: 'AES_256' });
       this._msg = 'Generated a 256-bit data key (plaintext + wrapped ciphertext)';
     } catch (e) {
@@ -201,17 +237,32 @@ class KmsCryptoView extends LitElement {
     return (this.caps && this.caps.workspace && this.caps.workspace.endpoint) || location.origin;
   }
 
-  _snippet() {
-    const ep = this._endpoint();
-    const k = this._sel || 'my-key-id';
-    return `import boto3\nkms = boto3.client("kms", endpoint_url="${ep}",\n    aws_access_key_id="test", aws_secret_access_key="test")\nk = kms.create_key()["KeyMetadata"]["KeyId"]\nct = kms.encrypt(KeyId=k, Plaintext=b"hello")["CiphertextBlob"]\nkms.decrypt(CiphertextBlob=ct)["Plaintext"]`;
+  // The connect snippet/CLI are descriptor-driven too (§15.2): a service may carry a
+  // `connect` block { snippet, cli } — templates with {ep} and {key_id} placeholders.
+  // Absent → the AWS KMS (boto3) defaults, so the AWS lens is unchanged; the GCP lens
+  // supplies a Cloud KMS variant with NO widget branching.
+  static _KMS_CONNECT = {
+    snippet:
+      'import boto3\nkms = boto3.client("kms", endpoint_url="{ep}",\n' +
+      '    aws_access_key_id="test", aws_secret_access_key="test")\n' +
+      'k = kms.create_key()["KeyMetadata"]["KeyId"]\n' +
+      'ct = kms.encrypt(KeyId=k, Plaintext=b"hello")["CiphertextBlob"]\n' +
+      'kms.decrypt(CiphertextBlob=ct)["Plaintext"]',
+    cli: 'aws --endpoint-url {ep} kms encrypt --key-id {key_id} --plaintext "$(echo -n hello | base64)"',
+  };
+
+  _connect(name) {
+    const c = (this.service && this.service.connect) || {};
+    return c[name] || KmsCryptoView._KMS_CONNECT[name];
   }
 
-  _cli() {
-    const ep = this._endpoint();
-    const k = this._sel || 'my-key-id';
-    return `aws --endpoint-url ${ep} kms encrypt --key-id ${k} --plaintext "$(echo -n hello | base64)"`;
+  _fill(tpl) {
+    return String(tpl).split('{ep}').join(this._endpoint())
+      .split('{key_id}').join(this._sel || 'my-key-id');
   }
+
+  _snippet() { return this._fill(this._connect('snippet')); }
+  _cli() { return this._fill(this._connect('cli')); }
 
   render() {
     const svc = this.service || {};

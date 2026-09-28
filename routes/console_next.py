@@ -243,6 +243,48 @@ _GCP_SECRETS_CONNECT = {
 }
 
 
+# ── kms-crypto-view endpoint contract (the `api` block the cloud-agnostic
+#    kms-crypto-view reads). The describe path uses a {key_id} placeholder the widget
+#    substitutes + URL-encodes. These are the AWS-lens (KMS) defaults; the GCP Cloud
+#    KMS lens supplies the SAME shape pointed at the Cloud KMS console-facade (§15.2 —
+#    no if(cloud) branching in the widget). ──
+_KMS_API = {
+    "listKeys": "/api/console/kms/keys",
+    "createKey": "/api/console/kms/keys",
+    "describeKey": "/api/console/kms/keys/{key_id}",
+    "encrypt": "/api/console/kms/encrypt",
+    "decrypt": "/api/console/kms/decrypt",
+    "dataKey": "/api/console/kms/data-key",
+}
+
+_GCP_KMS_API = {
+    "listKeys": "/api/console/gcp-kms/keys",
+    "createKey": "/api/console/gcp-kms/keys",
+    "describeKey": "/api/console/gcp-kms/keys/{key_id}",
+    "encrypt": "/api/console/gcp-kms/encrypt",
+    "decrypt": "/api/console/gcp-kms/decrypt",
+    "dataKey": "/api/console/gcp-kms/data-key",
+}
+
+# The GCP Cloud KMS lens's connect snippet/CLI (§15.2) — the SAME kms-crypto-view
+# widget renders these; only this descriptor data differs (no widget branching).
+_GCP_KMS_CONNECT = {
+    "snippet": (
+        "from google.cloud import kms\n"
+        "# point the native client at the console endpoint\n"
+        'opts = {"api_endpoint": "{ep}"}\n'
+        "client = kms.KeyManagementServiceClient(client_options=opts)\n"
+        'key_name = "{key_id}"\n'
+        'ct = client.encrypt(request={"name": key_name, "plaintext": b"hello"}).ciphertext\n'
+        'client.decrypt(request={"name": key_name, "ciphertext": ct}).plaintext'
+    ),
+    "cli": (
+        "gcloud kms encrypt --key {key_id} --plaintext-file - --ciphertext-file - "
+        "<<< hello"
+    ),
+}
+
+
 def _aws_services(conf) -> list:
     """The AWS-lens service catalog (unchanged from P0/P2 — the rich vertical)."""
     return [
@@ -269,6 +311,7 @@ def _aws_services(conf) -> list:
          "conformance": conf.service_signal("secretsmanager")},
         {"id": "kms", "label": "KMS", "icon": "🔑", "widget": "kms-crypto-view",
          "terminology": "key", "backed_by": "in-proc KmsEngine",
+         "api": dict(_KMS_API),
          "conformance": conf.service_signal("kms")},
         {"id": "ec2", "label": "EC2", "icon": "🖥", "widget": "compute-terminal",
          "terminology": "instance", "backed_by": "Docker/LXD",
