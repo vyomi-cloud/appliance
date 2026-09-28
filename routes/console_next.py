@@ -104,6 +104,32 @@ _CLOUDSQL_SQL_CONSOLE_API = {
     "schema": "/api/console/cloudsql/databases/{db}/schema",
 }
 
+_AZURE_SQL_CONSOLE_API = {
+    "databases": "/api/console/azure-sql/databases",
+    "execute": "/api/console/azure-sql/execute",
+    "schema": "/api/console/azure-sql/databases/{db}/schema",
+}
+
+# The Azure SQL Database lens's connect snippet/CLI/hint (§15.2) — the SAME
+# sql-console widget renders these; only this descriptor data differs (no widget
+# branching). Azure SQL runs via the same relay-safe SQL engine as RDS/Cloud SQL.
+_AZURE_SQL_CONNECT = {
+    "snippet": (
+        "import pyodbc\n"
+        "# Azure SQL Database via the ODBC driver\n"
+        'conn = pyodbc.connect(\n'
+        '    "Driver={{ODBC Driver 18 for SQL Server}};"\n'
+        '    "Server={ep};Database={db};Uid=sqladmin;Pwd=***")\n'
+        'cur = conn.cursor()\n'
+        'cur.execute("SELECT * FROM orders WHERE qty > 10")'
+    ),
+    "cli": (
+        "az sql db show --name {db} \\\n"
+        "  --server vyomi-sqlsrv --resource-group vyomi-rg"
+    ),
+    "hint": "⌘/Ctrl+Enter · runs against Azure SQL (Postgres engine)",
+}
+
 # The GCP Cloud SQL lens's connect snippet/CLI/hint (§15.2) — the SAME sql-console
 # widget renders these; only this descriptor data differs (no widget branching). Cloud
 # SQL is Postgres-backed; the console runs SQL via the same relay-safe SQL engine.
@@ -497,6 +523,11 @@ def _azure_services(conf) -> list:
          "api": dict(_AZURE_BLOB_OBJECT_BROWSER_API),
          "connect": dict(_AZURE_BLOB_CONNECT),
          "conformance": conf.service_signal("azure.blob")},
+        {"id": "sql", "label": "SQL Database", "icon": "◫", "widget": "sql-console",
+         "terminology": "database", "backed_by": "PostgreSQL/sqlite",
+         "api": dict(_AZURE_SQL_CONSOLE_API),
+         "connect": dict(_AZURE_SQL_CONNECT),
+         "conformance": conf.service_signal("azure.sql")},
     ]
 
 
@@ -803,6 +834,32 @@ def register(app: FastAPI) -> None:
     async def api_console_cloudsql_schema(db_id: str):
         from core import console_cloudsql
         return await console_cloudsql.schema(db_id)
+
+    # ── Azure SQL Database sql-console (P4 — the Azure lens's SQL data plane) ── the
+    #    SAME sql-console widget renders Azure SQL under lens=azure; the ONLY
+    #    difference is the manifest `api` block pointing here (§15.2). Azure SQL reuses
+    #    the SAME relay-safe SQL engine as RDS/Cloud SQL (core/console_azure_sql mirrors
+    #    console_sql with its own store), returning the SAME response shape. Purely
+    #    additive; touches no existing Azure SQL handler.
+    @app.get("/api/console/azure-sql/databases", include_in_schema=False)
+    def api_console_azure_sql_databases():
+        from core import console_azure_sql
+        return console_azure_sql.list_databases()
+
+    @app.post("/api/console/azure-sql/execute", include_in_schema=False)
+    async def api_console_azure_sql_execute(payload: dict = Body(default=None)):
+        from core import console_azure_sql
+        payload = payload or {}
+        sql = (payload.get("sql") or "").strip()
+        if not sql:
+            raise HTTPException(400, detail="ValidationError sql is required")
+        return await console_azure_sql.execute(payload.get("db") or "",
+                                               sql, payload.get("parameters"))
+
+    @app.get("/api/console/azure-sql/databases/{db_id}/schema", include_in_schema=False)
+    async def api_console_azure_sql_schema(db_id: str):
+        from core import console_azure_sql
+        return await console_azure_sql.schema(db_id)
 
     # ── Firestore nosql-item-viewer (P3 — the GCP lens's NoSQL data plane) ── the
     #    SAME nosql-item-viewer widget renders Firestore under lens=gcp; the ONLY

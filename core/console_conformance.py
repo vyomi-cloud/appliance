@@ -201,6 +201,14 @@ _SIGNAL = {
         "checks": {"passed": 12, "total": 12},
         "note": "Azure Blob Storage — object-browser serves Azure Blob via the same widget (lens=azure).",
     },
+    # Azure SQL Database reuses the SAME sql-console widget under lens=azure; only the
+    # manifest `api` block differs (§15.2). SQL runs against the same relay-safe SQL
+    # engine the RDS Data API / Cloud SQL facades use, so gate to "full".
+    "azure.sql": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 29, "total": 29},
+        "note": "Azure SQL Database — sql-console serves Azure SQL via the same widget (lens=azure).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.
