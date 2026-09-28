@@ -482,6 +482,12 @@ _EC2_API = {
     "connectInfo": "/api/aws/ec2/instances/{instance_id}/connect-info",
     "keyDownload": "/api/aws/ec2/instances/{instance_id}/private-key.pem",
     "exec": "/api/ec2/instances/{instance_id}/console/exec",
+    # RunInstances (EC2 create) — the AWS lens carries a `launch` capability; the
+    # cloud-agnostic compute-terminal reveals its "Launch instance" control ONLY
+    # when the selected descriptor's `api` block has this key (§15.2 — capability-
+    # driven, no if(cloud) in the widget). GCE / Azure VM console facades expose no
+    # create endpoint, so they omit `launch` and the button self-hides for them.
+    "launch": "/api/ec2/instances",
 }
 
 _GCE_API = {

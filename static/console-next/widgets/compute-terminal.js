@@ -38,6 +38,9 @@ class ComputeTerminal extends LitElement {
     _cmd: { state: true },         // terminal command input
     _term: { state: true },        // terminal output lines [{ prompt, cmd, out, code }]
     _running: { state: true },     // a console-exec is in flight
+    _launchImage: { state: true }, // Launch form: image / AMI input
+    _launchType: { state: true },  // Launch form: instance-type input
+    _launching: { state: true },   // a launch (RunInstances) is in flight
   };
 
   static styles = css`
@@ -108,6 +111,17 @@ class ComputeTerminal extends LitElement {
       padding: var(--vy-s1) var(--vy-s2); font-size: var(--vy-fs-sm); outline: none;
     }
     .term-in input:focus { border-color: var(--vy-accent); }
+    .launch { padding: var(--vy-s2); border-top: 1px solid var(--vy-border-soft); }
+    .launch .lh { color: var(--vy-fg-dim); font-size: var(--vy-fs-xs); text-transform: uppercase;
+      letter-spacing: .06em; margin-bottom: var(--vy-s1); }
+    .launch input {
+      width: 100%; box-sizing: border-box; background: var(--vy-bg); color: var(--vy-fg);
+      font-family: var(--vy-mono); border: 1px solid var(--vy-border);
+      border-radius: var(--vy-radius); padding: var(--vy-s1) var(--vy-s2);
+      font-size: var(--vy-fs-sm); outline: none; margin-bottom: var(--vy-s1);
+    }
+    .launch input:focus { border-color: var(--vy-accent); }
+    .launch button.act { width: 100%; }
   `;
 
   // ── Endpoint resolution (§15.2): read paths from the service descriptor's `api`
@@ -120,12 +134,30 @@ class ComputeTerminal extends LitElement {
     connectInfo: '/api/aws/ec2/instances/{instance_id}/connect-info',
     keyDownload: '/api/aws/ec2/instances/{instance_id}/private-key.pem',
     exec: '/api/ec2/instances/{instance_id}/console/exec',
+    // RunInstances (create) — AWS EC2 default so the AWS lens can launch even
+    // without a descriptor. This lives OUTSIDE the capability check below so
+    // clouds that supply their own `api` block (GCE / Azure VM) do NOT inherit
+    // it: launch is a per-descriptor capability, not a widget-wide default.
+    launch: '/api/ec2/instances',
   };
 
   _tpl(name) {
     const api = (this.service && this.service.api) || {};
     return api[name] || ComputeTerminal._EC2_DEFAULTS[name];
   }
+
+  // Capability check (§15.2 — no if(cloud)): the "Launch instance" control shows
+  // ONLY when the SELECTED descriptor advertises a create endpoint. When a lens
+  // supplies its own `api` block, the capability is read STRICTLY from it (so a
+  // GCE / Azure VM descriptor without `launch` hides the button); the AWS lens
+  // with no descriptor falls back to the EC2 default so it keeps launching.
+  _launchPath() {
+    const api = this.service && this.service.api;
+    if (api) return api.launch || null;
+    return ComputeTerminal._EC2_DEFAULTS.launch;  // AWS default (no descriptor)
+  }
+
+  _canLaunch() { return !!this._launchPath(); }
 
   // Substitute + URL-encode the {instance_id} placeholder in a template.
   _apiPath(name, { instanceId } = {}) {
@@ -154,6 +186,38 @@ class ComputeTerminal extends LitElement {
       if (!this._sel && this._instances.length) this._select(this._iid(this._instances[0]));
     } catch (e) {
       this._msg = 'Could not list instances: ' + e.message;
+    }
+  }
+
+  // Launch a new instance (RunInstances) — POST to the descriptor's create
+  // endpoint, then refresh the list and select the freshly-created instance.
+  // Cloud-agnostic: the path comes from service.api.launch (§15.2). The request
+  // body carries the common shape the EC2 create endpoint accepts (name +
+  // instance_type + ami); other lenses that later gain a create endpoint supply
+  // their own path and this SAME body maps through their EC2InstanceRequest-shaped
+  // model. Image/type default to sensible values when the inputs are blank.
+  async _launch() {
+    const path = this._launchPath();
+    if (!path || this._launching) return;
+    const ami = (this._launchImage || '').trim() || 'sim-ubuntu-22.04';
+    const instanceType = (this._launchType || '').trim() || 't3.micro';
+    this._launching = true;
+    this._msg = '';
+    try {
+      const r = await apiSend('POST', path, {
+        name: `vy-${Date.now().toString(36)}`,
+        ami,
+        instance_type: instanceType,
+      });
+      await this._loadInstances();
+      // Select the new instance if the create response surfaced its id.
+      const newId = this._iid(r && (r.instance || r)) || (r && (r.instance_id || r.instanceId || r.id));
+      if (newId && this._find(newId)) await this._select(newId);
+      this._msg = `Launched ${newId || 'instance'} (${instanceType}, ${ami})`;
+    } catch (e) {
+      this._msg = 'Launch failed: ' + e.message;
+    } finally {
+      this._launching = false;
     }
   }
 
@@ -361,6 +425,21 @@ class ComputeTerminal extends LitElement {
                 ${(this._instances && this._instances.length === 0)
                   ? html`<li style="cursor:default;color:var(--vy-fg-dim)">— no instances —</li>` : ''}
               </ul>
+              ${this._canLaunch() ? html`
+                <div class="launch">
+                  <div class="lh">Launch instance</div>
+                  <input type="text" placeholder="image / AMI (sim-ubuntu-22.04)"
+                    .value=${this._launchImage || ''} ?disabled=${this._launching}
+                    @input=${(e) => (this._launchImage = e.target.value)}
+                    @keydown=${(e) => { if (e.key === 'Enter') this._launch(); }} />
+                  <input type="text" placeholder="instance type (t3.micro)"
+                    .value=${this._launchType || ''} ?disabled=${this._launching}
+                    @input=${(e) => (this._launchType = e.target.value)}
+                    @keydown=${(e) => { if (e.key === 'Enter') this._launch(); }} />
+                  <button class="act" ?disabled=${this._launching} @click=${this._launch}>
+                    ${this._launching ? 'launching…' : '▸ launch instance'}</button>
+                </div>
+              ` : ''}
             </div>
 
             <div class="panel">
@@ -381,9 +460,11 @@ class ComputeTerminal extends LitElement {
                   <div class="sub">Connect</div>
                   ${this._connectBlock(inst)}
                   ${this._terminalBlock(inst)}
-                  ${this._msg ? html`<div class="err">${this._msg}</div>` : ''}
+                  ${this._msg ? html`<div class=${/(failed|unavailable|Could not)/.test(this._msg) ? 'err' : 'ok'}>${this._msg}</div>` : ''}
                 </div>
-              ` : html`<div class="meta" style="padding:var(--vy-s3)">Select an instance to view connect info.</div>`}
+              ` : html`<div class="meta" style="padding:var(--vy-s3)">
+                  ${this._msg ? html`<div class=${/(failed|unavailable|Could not)/.test(this._msg) ? 'err' : 'ok'}>${this._msg}</div>` : ''}
+                  Select an instance to view connect info.</div>`}
             </div>
           </div>
         </div>
