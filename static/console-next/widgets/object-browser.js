@@ -11,9 +11,12 @@
 // honors a deepLink (backend.ref) pushed from the glass-box Inspector — clicking
 // a PutObject/HeadObject call jumps here and selects that bucket/object.
 //
-// API contract (service.api): { listBuckets, createBucket, listObjects,
-// uploadObject, objectMeta, objectDownload } — path templates with {bucket}/{key}
-// placeholders this widget substitutes + URL-encodes.
+// API contract (service.api): { listBuckets, createBucket, deleteBucket,
+// listObjects, uploadObject, objectMeta, objectDownload, deleteObject } — path
+// templates with {bucket}/{key} placeholders this widget substitutes + URL-encodes.
+// These are REAL native endpoints (AWS lens → /api/s3/* backed by MinIO; the SAME
+// endpoints the classic aws-console.html hits, so a bucket/object created here
+// lands in the SAME backend a boto3/aws-cli client sees). No console-facade fakes.
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
 import { apiGet, apiSend, apiUrl, cliForAction } from '../api.js';
@@ -104,10 +107,12 @@ class ObjectBrowser extends LitElement {
   static _S3_DEFAULTS = {
     listBuckets: '/api/s3/buckets',
     createBucket: '/api/s3/buckets/{bucket}',
+    deleteBucket: '/api/s3/buckets/{bucket}',
     listObjects: '/api/s3/buckets/{bucket}/objects',
     uploadObject: '/api/s3/buckets/{bucket}/objects',
     objectMeta: '/api/s3/buckets/{bucket}/objects/{key}/meta',
     objectDownload: '/api/s3/buckets/{bucket}/objects/{key}/download',
+    deleteObject: '/api/s3/buckets/{bucket}/objects/{key}',
   };
 
   _tpl(name) {
@@ -116,10 +121,16 @@ class ObjectBrowser extends LitElement {
   }
 
   // Substitute + URL-encode {bucket}/{key} placeholders in a path template.
+  // The key maps onto a native {key:path} segment, so encode PER SEGMENT and keep
+  // the slashes — a `%2F`-escaped key would not match the route (mirrors how the
+  // classic aws-console.html builds its object URLs).
   _path(name, { bucket, key } = {}) {
     let p = this._tpl(name);
     if (bucket != null) p = p.replace('{bucket}', encodeURIComponent(bucket));
-    if (key != null) p = p.replace('{key}', encodeURIComponent(key));
+    if (key != null) {
+      const enc = String(key).split('/').map(encodeURIComponent).join('/');
+      p = p.replace('{key}', enc);
+    }
     return p;
   }
 
@@ -184,6 +195,50 @@ class ObjectBrowser extends LitElement {
     } finally {
       this._busy = false;
       e.target.value = '';
+    }
+  }
+
+  // Delete one object — native DELETE /api/s3/buckets/{bucket}/objects/{key:path}
+  // (the SAME call the classic console's Delete button makes). Real removal from the
+  // backend; a boto3 head_object would then 404.
+  async _deleteObject(key) {
+    if (!key || !this._bucket) return;
+    if (!confirm(`Delete object "${key}"? This can't be undone.`)) return;
+    this._busy = true;
+    this._msg = `Deleting ${key}…`;
+    try {
+      await apiSend('DELETE', this._path('deleteObject', { bucket: this._bucket, key }));
+      if (this._viewing && this._viewing.key === key) this._viewing = null;
+      this._msg = `Deleted ${key} from ${this._backedBy()}`;
+      await this._selectBucket(this._bucket);
+    } catch (e) {
+      this._msg = 'Delete failed: ' + e.message;
+    } finally {
+      this._busy = false;
+    }
+  }
+
+  // Delete the selected bucket — native DELETE /api/s3/buckets/{bucket}. Mirrors the
+  // classic console's "Empty bucket then delete" flow: pass ?force=1 so a non-empty
+  // bucket is emptied first (the native handler drops its objects), matching the real
+  // S3 console UX and the conformance contract.
+  async _deleteBucket() {
+    const name = this._bucket;
+    if (!name) return;
+    if (!confirm(`Delete bucket "${name}" and everything in it? This can't be undone.`)) return;
+    this._busy = true;
+    this._msg = `Deleting bucket ${name}…`;
+    try {
+      await apiSend('DELETE', this._path('deleteBucket', { bucket: name }) + '?force=1');
+      this._msg = `Deleted bucket ${name} from ${this._backedBy()}`;
+      this._bucket = null;
+      this._objects = [];
+      this._viewing = null;
+      await this._loadBuckets();
+    } catch (e) {
+      this._msg = 'Delete bucket failed: ' + e.message;
+    } finally {
+      this._busy = false;
     }
   }
 
@@ -302,6 +357,8 @@ class ObjectBrowser extends LitElement {
                   (o) => html`<li class=${this._viewing && this._viewing.key === o.key ? 'sel' : ''}
                     @click=${() => this._view(o.key)}>
                     ▢ ${o.key}<span class="sz">${o.size_human || o.size}</span>
+                    <button class="ghost" title="delete object" ?disabled=${this._busy}
+                      @click=${(e) => { e.stopPropagation(); this._deleteObject(o.key); }}>✕</button>
                   </li>`
                 )}
                 ${(this._objects && this._objects.length === 0)
@@ -332,8 +389,8 @@ class ObjectBrowser extends LitElement {
         </div>
 
         <div slot="actions">
-          <button class="ghost" title="empty bucket (stub)">empty</button>
-          <button class="ghost" title="delete bucket (stub)">delete bucket</button>
+          <button class="ghost" title="delete bucket (real — DELETE /api/s3/buckets/{bucket}?force=1)"
+            ?disabled=${!this._bucket || this._busy} @click=${this._deleteBucket}>delete bucket</button>
           <button class="ghost" title="snapshot — P2" disabled>snapshot</button>
           <button class="ghost" title="fork — P2" disabled>fork</button>
         </div>

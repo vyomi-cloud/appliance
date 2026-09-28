@@ -43,10 +43,12 @@ CLOUD_LENSES = ["aws", "gcp", "azure"]
 _S3_OBJECT_BROWSER_API = {
     "listBuckets": "/api/s3/buckets",
     "createBucket": "/api/s3/buckets/{bucket}",
+    "deleteBucket": "/api/s3/buckets/{bucket}",
     "listObjects": "/api/s3/buckets/{bucket}/objects",
     "uploadObject": "/api/s3/buckets/{bucket}/objects",
     "objectMeta": "/api/s3/buckets/{bucket}/objects/{key}/meta",
     "objectDownload": "/api/s3/buckets/{bucket}/objects/{key}/download",
+    "deleteObject": "/api/s3/buckets/{bucket}/objects/{key}",
 }
 
 _GCS_OBJECT_BROWSER_API = {
