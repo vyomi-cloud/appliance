@@ -375,6 +375,31 @@ _GCP_SECRETS_CONNECT = {
     "cli": 'gcloud secrets versions access latest --secret={name}',
 }
 
+_AZURE_KV_SECRETS_API = {
+    "listSecrets": "/api/console/azure-kv-secrets/secrets",
+    "createSecret": "/api/console/azure-kv-secrets/secrets",
+    "describeSecret": "/api/console/azure-kv-secrets/secrets/{name}",
+    "deleteSecret": "/api/console/azure-kv-secrets/secrets/{name}",
+    "getValue": "/api/console/azure-kv-secrets/secrets/{name}/value",
+    "putValue": "/api/console/azure-kv-secrets/secrets/{name}/value",
+}
+
+# The Azure Key Vault (secrets) lens's connect snippet/CLI (§15.2) — the SAME
+# kv-secret-viewer widget renders these; only this descriptor data differs (no widget
+# branching). Key Vault secrets carry versions too; the value stays masked by default.
+_AZURE_KV_SECRETS_CONNECT = {
+    "snippet": (
+        "from azure.keyvault.secrets import SecretClient\n"
+        "from azure.identity import DefaultAzureCredential\n"
+        "# point the native client at the console endpoint\n"
+        'client = SecretClient(vault_url="{ep}",\n'
+        "    credential=DefaultAzureCredential())\n"
+        'client.set_secret("{name}", "s3cr3t")\n'
+        'client.get_secret("{name}").value'
+    ),
+    "cli": "az keyvault secret show --vault-name vyomi-kv --name {name}",
+}
+
 
 # ── kms-crypto-view endpoint contract (the `api` block the cloud-agnostic
 #    kms-crypto-view reads). The describe path uses a {key_id} placeholder the widget
@@ -618,6 +643,12 @@ def _azure_services(conf) -> list:
          "connect": dict(_AZURE_SERVICEBUS_CONNECT),
          "labels": dict(_AZURE_SERVICEBUS_LABELS),
          "conformance": conf.service_signal("azure.servicebus")},
+        {"id": "keyvault", "label": "Key Vault Secrets", "icon": "⚿",
+         "widget": "kv-secret-viewer", "terminology": "secret",
+         "backed_by": "in-proc secret store",
+         "api": dict(_AZURE_KV_SECRETS_API),
+         "connect": dict(_AZURE_KV_SECRETS_CONNECT),
+         "conformance": conf.service_signal("azure.keyvault_secrets")},
     ]
 
 
@@ -1443,6 +1474,57 @@ def register(app: FastAPI) -> None:
     def api_console_gcp_secrets_put(name: str, payload: dict = Body(default=None)):
         p = payload or {}
         return _gsecguard(lambda: _gsec().put_secret_value(name, p.get("secret_string", "")))
+
+    # ── Azure Key Vault (secrets) kv-secret-viewer (P4 — the Azure lens's data plane
+    #    for the SAME kv-secret-viewer widget) ── the manifest `api` block points here
+    #    instead of /api/console/secrets/* (§15.2 — no if(cloud) branching). Key Vault
+    #    secrets carry versions too (newest = current, prior = previous), so
+    #    describe/reveal/put all return the SAME JSON shapes the widget consumes.
+    #    Independent in-memory store (core/console_azure_kv_secrets) so Azure secrets
+    #    state is isolated from the AWS/GCP Secrets facades; purely additive. Values
+    #    are only fetched on a deliberate reveal; the widget masks by default.
+    def _azsec():
+        from core import console_azure_kv_secrets as g
+        return g
+
+    def _azsecguard(fn):
+        from core.console_azure_kv_secrets import AzureKvSecretsError
+        try:
+            return fn()
+        except AzureKvSecretsError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/azure-kv-secrets/secrets", include_in_schema=False)
+    def api_console_az_secrets_list():
+        return _azsecguard(lambda: _azsec().list_secrets())
+
+    @app.post("/api/console/azure-kv-secrets/secrets", include_in_schema=False)
+    def api_console_az_secrets_create(payload: dict = Body(default=None)):
+        p = payload or {}
+        name = (p.get("name") or "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError name is required")
+        return _azsecguard(lambda: _azsec().create_secret(
+            name, p.get("secret_string", ""), (p.get("description") or "").strip()))
+
+    @app.get("/api/console/azure-kv-secrets/secrets/{name}", include_in_schema=False)
+    def api_console_az_secrets_describe(name: str):
+        return _azsecguard(lambda: _azsec().describe_secret(name))
+
+    @app.delete("/api/console/azure-kv-secrets/secrets/{name}", include_in_schema=False)
+    def api_console_az_secrets_delete(name: str):
+        return _azsecguard(lambda: _azsec().delete_secret(name))
+
+    @app.get("/api/console/azure-kv-secrets/secrets/{name}/value", include_in_schema=False)
+    def api_console_az_secrets_value(name: str,
+                                     version_id: str = Query(default=None),
+                                     version_stage: str = Query(default=None)):
+        return _azsecguard(lambda: _azsec().get_secret_value(name, version_id, version_stage))
+
+    @app.post("/api/console/azure-kv-secrets/secrets/{name}/value", include_in_schema=False)
+    def api_console_az_secrets_put(name: str, payload: dict = Body(default=None)):
+        p = payload or {}
+        return _azsecguard(lambda: _azsec().put_secret_value(name, p.get("secret_string", "")))
 
     # ── KMS kms-crypto-view (§13): clean JSON facade over the substrate-agnostic
     #    kms_core + a shared KeyStore (core/console_kms). Reuses the REAL crypto core

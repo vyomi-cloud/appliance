@@ -229,6 +229,16 @@ _SIGNAL = {
         "checks": {"passed": 11, "total": 11},
         "note": "Azure Service Bus — queue-topic-viewer serves Service Bus via the same widget (lens=azure).",
     },
+    # Key Vault (secrets) reuses the SAME kv-secret-viewer widget under lens=azure; only
+    # the manifest `api` block differs (§15.2). Secrets carry versions (newest =
+    # current, prior = previous) and the value stays masked until a deliberate reveal.
+    # Secret + version CRUD + masked-reveal round-trips through the console facade, so
+    # gate to "full".
+    "azure.keyvault_secrets": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 32, "total": 32},
+        "note": "Azure Key Vault secrets — kv-secret-viewer serves Key Vault via the same widget (lens=azure).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.
