@@ -529,6 +529,34 @@ _GCF_CONNECT = {
     ),
 }
 
+# The Azure Functions lens's serverless-invoke contract (P4) — the SAME
+# serverless-invoke widget renders Azure Functions under lens=azure; only the
+# manifest `api` block differs (§15.2 — no if(cloud) branching), pointing at the
+# Azure Functions console-facade instead of /api/lambda/*.
+_AZURE_FUNCTIONS_API = {
+    "listFunctions": "/api/console/azure-functions/functions",
+    "getFunction": "/api/console/azure-functions/functions/{name}",
+    "invoke": "/api/console/azure-functions/functions/{name}/invoke",
+    "createFunction": "/api/console/azure-functions/functions",
+}
+
+# The Azure Functions lens's connect snippet/CLI (§15.2) — the SAME serverless-invoke
+# widget renders these; only this descriptor data differs (no widget branching). The
+# console facade runs the SAME sandboxed handler runtime as Lambda / Cloud Functions.
+_AZURE_FUNCTIONS_CONNECT = {
+    "snippet": (
+        "import requests\n"
+        "# invoke the deployed function (via the console endpoint)\n"
+        'resp = requests.post("{ep}/api/console/azure-functions/functions/{name}/invoke",\n'
+        '    json={"payload": {"hello": "world"}})\n'
+        'print(resp.json()["payload"])'
+    ),
+    "cli": (
+        "az functionapp function invoke --name {name} \\\n"
+        "  --resource-group cloudlearn-rg --function-name main"
+    ),
+}
+
 
 # The GCP Compute Engine lens's connect snippet/CLI (§15.2) — the SAME compute-terminal
 # widget renders these; only this descriptor data differs (no widget branching).
@@ -723,6 +751,12 @@ def _azure_services(conf) -> list:
          "api": dict(_AZURE_VM_API),
          "connect": dict(_AZURE_VM_CONNECT),
          "conformance": conf.service_signal("azure.vm")},
+        {"id": "functions", "label": "Functions", "icon": "ƒ",
+         "widget": "serverless-invoke", "terminology": "function",
+         "backed_by": "in-proc runtime",
+         "api": dict(_AZURE_FUNCTIONS_API),
+         "connect": dict(_AZURE_FUNCTIONS_CONNECT),
+         "conformance": conf.service_signal("azure.functions")},
     ]
 
 
@@ -2032,6 +2066,52 @@ def register(app: FastAPI) -> None:
     def api_console_gcf_invoke(name: str, payload: dict = Body(default=None)):
         p = payload or {}
         return _gcfguard(lambda: _gcf().invoke(name, p.get("payload")))
+
+    # ── Azure Functions serverless-invoke (P4 — the Azure lens's serverless data
+    #    plane) ── the SAME serverless-invoke widget renders Azure Functions under
+    #    lens=azure; the ONLY difference is the manifest `api` block pointing here
+    #    instead of /api/lambda/* (§15.2 — no if(cloud) branching). Mirrors the GCF
+    #    facade: returns the SAME JSON response shapes the widget consumes and runs
+    #    the REAL sandboxed handler (core/console_azure_functions executes the user
+    #    code in a subprocess, exactly like the Lambda / Cloud Functions runtimes).
+    #    Independent in-memory store so Azure function state is isolated from the AWS
+    #    Lambda / GCP Cloud Functions facades; purely additive.
+    def _azfn():
+        from core import console_azure_functions as a
+        return a
+
+    def _azfnguard(fn):
+        from core.console_azure_functions import AzureFunctionError
+        try:
+            return fn()
+        except AzureFunctionError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/azure-functions/functions", include_in_schema=False)
+    def api_console_azfn_list():
+        return _azfnguard(lambda: _azfn().list_functions())
+
+    @app.post("/api/console/azure-functions/functions", include_in_schema=False)
+    def api_console_azfn_create(payload: dict = Body(default=None)):
+        p = payload or {}
+        name = (p.get("function_name") or p.get("name") or "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError function_name is required")
+        return _azfnguard(lambda: _azfn().create_function(
+            name, p.get("code", ""), (p.get("entry_point") or "").strip()))
+
+    @app.get("/api/console/azure-functions/functions/{name}", include_in_schema=False)
+    def api_console_azfn_get(name: str):
+        return _azfnguard(lambda: _azfn().get_function(name))
+
+    @app.delete("/api/console/azure-functions/functions/{name}", include_in_schema=False)
+    def api_console_azfn_delete(name: str):
+        return _azfnguard(lambda: _azfn().delete_function(name))
+
+    @app.post("/api/console/azure-functions/functions/{name}/invoke", include_in_schema=False)
+    def api_console_azfn_invoke(name: str, payload: dict = Body(default=None)):
+        p = payload or {}
+        return _azfnguard(lambda: _azfn().invoke(name, p.get("payload")))
 
     # ── Snapshots (§12.6): capture / list / restore / FORK of the console's
     #    in-process backend store state. Control-plane-first. No substrate

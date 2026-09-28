@@ -260,6 +260,18 @@ _SIGNAL = {
         "checks": {"passed": 34, "total": 34},
         "note": "Azure Virtual Machines — compute-terminal serves Azure VMs via the same widget (lens=azure).",
     },
+    # Azure Functions reuse the SAME serverless-invoke widget under lens=azure; only
+    # the manifest `api`/`connect` blocks differ (§15.2). It lists functions, shows
+    # config, and INVOKES the REAL sandboxed handler (core/console_azure_functions
+    # runs the user code in a subprocess, exactly like the Lambda / Cloud Functions
+    # runtimes), returning the SAME response shape, so the list / config / JSON-payload
+    # invoke → payload + status + logs / create flow works unchanged. Backend runs the
+    # real handler AND the widget ships, so gate to "full".
+    "azure.functions": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 27, "total": 27},
+        "note": "Azure Functions — serverless-invoke serves Azure Functions via the same widget (lens=azure) over the real handler runtime.",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.
