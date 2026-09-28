@@ -151,6 +151,16 @@ _SIGNAL = {
         "checks": {"passed": 12, "total": 12},
         "note": "GCP Secret Manager — kv-secret-viewer serves Secret Manager via the same widget (lens=gcp).",
     },
+    # Cloud KMS reuses the SAME kms-crypto-view widget under lens=gcp; only the
+    # manifest `api` block differs (§15.2). It drives the REAL kms_core crypto over an
+    # independent KeyStore, so the list keys / create key / encrypt→ciphertext /
+    # decrypt→plaintext round-trip / generate-data-key playground works unchanged.
+    # Key CRUD + real crypto round-trip is conformant, so gate to "full".
+    "gcp.kms": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 36, "total": 36},
+        "note": "GCP Cloud KMS — kms-crypto-view serves Cloud KMS via the same widget (lens=gcp) over the real kms_core.",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.

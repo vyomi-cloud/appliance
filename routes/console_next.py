@@ -355,6 +355,12 @@ def _gcp_services(conf) -> list:
          "api": dict(_GCP_SECRETS_API),
          "connect": dict(_GCP_SECRETS_CONNECT),
          "conformance": conf.service_signal("gcp.secretmanager")},
+        {"id": "kms", "label": "Cloud KMS", "icon": "🔑",
+         "widget": "kms-crypto-view", "terminology": "key",
+         "backed_by": "in-proc KmsEngine",
+         "api": dict(_GCP_KMS_API),
+         "connect": dict(_GCP_KMS_CONNECT),
+         "conformance": conf.service_signal("gcp.kms")},
     ]
 
 
@@ -1048,6 +1054,60 @@ def register(app: FastAPI) -> None:
         if not key_id:
             raise HTTPException(400, detail="ValidationError key_id is required")
         return _kguard(lambda: _kms().generate_data_key(key_id, p.get("key_spec", "AES_256")))
+
+    # ── GCP Cloud KMS kms-crypto-view (§13): the GCP lens's data plane for the SAME
+    #    kms-crypto-view widget — the manifest `api` block points here instead of
+    #    /api/console/kms/* (§15.2 — no if(cloud) branching). Reuses the REAL crypto
+    #    core (core/kms_core, no fake crypto) over an INDEPENDENT KeyStore
+    #    (core/console_gcp_kms) so GCP key state is isolated from the AWS KMS facade,
+    #    mirroring the console_gcp_secrets independent-store approach. Purely additive.
+    def _gkms():
+        from core import console_gcp_kms as k
+        return k
+
+    def _gkguard(fn):
+        from core.console_gcp_kms import GcpKmsError
+        try:
+            return fn()
+        except GcpKmsError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/gcp-kms/keys", include_in_schema=False)
+    def api_console_gcp_kms_list():
+        return _gkguard(lambda: _gkms().list_keys())
+
+    @app.post("/api/console/gcp-kms/keys", include_in_schema=False)
+    def api_console_gcp_kms_create(payload: dict = Body(default=None)):
+        p = payload or {}
+        return _gkguard(lambda: _gkms().create_key((p.get("description") or "").strip()))
+
+    @app.get("/api/console/gcp-kms/keys/{key_id}", include_in_schema=False)
+    def api_console_gcp_kms_describe(key_id: str):
+        return _gkguard(lambda: _gkms().describe_key(key_id))
+
+    @app.post("/api/console/gcp-kms/encrypt", include_in_schema=False)
+    def api_console_gcp_kms_encrypt(payload: dict = Body(default=None)):
+        p = payload or {}
+        key_id = (p.get("key_id") or "").strip()
+        if not key_id:
+            raise HTTPException(400, detail="ValidationError key_id is required")
+        return _gkguard(lambda: _gkms().encrypt(key_id, p.get("plaintext", "")))
+
+    @app.post("/api/console/gcp-kms/decrypt", include_in_schema=False)
+    def api_console_gcp_kms_decrypt(payload: dict = Body(default=None)):
+        p = payload or {}
+        blob = p.get("ciphertext_blob", "")
+        if not blob:
+            raise HTTPException(400, detail="ValidationError ciphertext_blob is required")
+        return _gkguard(lambda: _gkms().decrypt(blob, (p.get("key_id") or "").strip() or None))
+
+    @app.post("/api/console/gcp-kms/data-key", include_in_schema=False)
+    def api_console_gcp_kms_data_key(payload: dict = Body(default=None)):
+        p = payload or {}
+        key_id = (p.get("key_id") or "").strip()
+        if not key_id:
+            raise HTTPException(400, detail="ValidationError key_id is required")
+        return _gkguard(lambda: _gkms().generate_data_key(key_id, p.get("key_spec", "AES_256")))
 
     # ── GCS console-facade (P3 — the GCP lens's object-browser data plane) ──
     #    The SAME object-browser widget renders GCS under lens=gcp; the ONLY
