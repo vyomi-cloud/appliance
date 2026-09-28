@@ -175,6 +175,37 @@ _FIRESTORE_NOSQL_API = {
     "queryItems": "/api/console/firestore/collections/{table}/query",
 }
 
+_AZURE_COSMOS_NOSQL_API = {
+    "listTables": "/api/console/azure-cosmos/containers",
+    "createTable": "/api/console/azure-cosmos/containers",
+    "getTable": "/api/console/azure-cosmos/containers/{table}",
+    "listItems": "/api/console/azure-cosmos/containers/{table}/items",
+    "putItem": "/api/console/azure-cosmos/containers/{table}/items",
+    "deleteItem": "/api/console/azure-cosmos/containers/{table}/items",
+    "queryItems": "/api/console/azure-cosmos/containers/{table}/query",
+}
+
+# The Azure Cosmos DB lens's connect snippet/CLI (§15.2) — the SAME nosql-item-viewer
+# widget renders these; only this descriptor data differs (no widget branching).
+# Cosmos (Core/SQL API) is a document DB; a "table" is a CONTAINER and the required
+# document `id` plays the role of the partition key.
+_AZURE_COSMOS_CONNECT = {
+    "snippet": (
+        "from azure.cosmos import CosmosClient\n"
+        "# point the native client at the console endpoint\n"
+        'client = CosmosClient("{ep}", credential="devkey")\n'
+        'db = client.create_database_if_not_exists("vyomi-cosmos")\n'
+        'cont = db.create_container_if_not_exists("{table}",\n'
+        '    partition_key={"paths": ["/id"]})\n'
+        'cont.upsert_item({"id": "item-1", "note": "hello"})\n'
+        'cont.read_item("item-1", partition_key="item-1")'
+    ),
+    "cli": (
+        "az cosmosdb sql container show \\\n"
+        "  --account-name vyomi-cosmos --database-name vyomi-cosmos --name {table}"
+    ),
+}
+
 # The GCP Firestore lens's connect snippet/CLI (§15.2) — the SAME nosql-item-viewer
 # widget renders these; only this descriptor data differs (no widget branching).
 # Firestore is a document DB; a "table" is a COLLECTION and the document id plays the
@@ -528,6 +559,11 @@ def _azure_services(conf) -> list:
          "api": dict(_AZURE_SQL_CONSOLE_API),
          "connect": dict(_AZURE_SQL_CONNECT),
          "conformance": conf.service_signal("azure.sql")},
+        {"id": "cosmos", "label": "Cosmos DB", "icon": "⊞", "widget": "nosql-item-viewer",
+         "terminology": "container", "backed_by": "in-proc doc store",
+         "api": dict(_AZURE_COSMOS_NOSQL_API),
+         "connect": dict(_AZURE_COSMOS_CONNECT),
+         "conformance": conf.service_signal("azure.cosmos")},
     ]
 
 
@@ -860,6 +896,69 @@ def register(app: FastAPI) -> None:
     async def api_console_azure_sql_schema(db_id: str):
         from core import console_azure_sql
         return await console_azure_sql.schema(db_id)
+
+    # ── Azure Cosmos DB nosql-item-viewer (P4 — the Azure lens's NoSQL data plane) ──
+    #    the SAME nosql-item-viewer widget renders Cosmos under lens=azure; the ONLY
+    #    difference is the manifest `api` block pointing here (§15.2). This facade
+    #    returns the SAME JSON response shapes as the DynamoDB/Firestore console REST
+    #    APIs so the widget is cloud-agnostic. A "table" is a Cosmos CONTAINER and an
+    #    "item" a DOCUMENT (the required `id` field is surfaced as the partition key).
+    #    Independent in-memory store (core/console_azure_cosmos) so Azure NoSQL state
+    #    is isolated from the AWS/GCP facades; purely additive.
+    def _cos():
+        from core import console_azure_cosmos as c
+        return c
+
+    def _cosguard(fn):
+        from core.console_azure_cosmos import CosmosError
+        try:
+            return fn()
+        except CosmosError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/azure-cosmos/containers", include_in_schema=False)
+    def api_console_cos_list():
+        return _cosguard(lambda: _cos().list_containers())
+
+    @app.post("/api/console/azure-cosmos/containers", include_in_schema=False)
+    def api_console_cos_create(payload: dict = Body(default=None)):
+        p = payload or {}
+        name = (p.get("table_name") or p.get("name") or "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError table_name is required")
+        return _cosguard(lambda: _cos().create_container(name))
+
+    @app.get("/api/console/azure-cosmos/containers/{name}", include_in_schema=False)
+    def api_console_cos_get(name: str):
+        return _cosguard(lambda: _cos().get_container(name))
+
+    @app.delete("/api/console/azure-cosmos/containers/{name}", include_in_schema=False)
+    def api_console_cos_delete(name: str):
+        return _cosguard(lambda: _cos().delete_container(name))
+
+    @app.get("/api/console/azure-cosmos/containers/{name}/items", include_in_schema=False)
+    def api_console_cos_list_items(name: str):
+        return _cosguard(lambda: _cos().list_documents(name))
+
+    @app.post("/api/console/azure-cosmos/containers/{name}/items", include_in_schema=False)
+    def api_console_cos_put_item(name: str, payload: dict = Body(default=None)):
+        item = (payload or {}).get("item")
+        if not isinstance(item, dict):
+            raise HTTPException(400, detail="ValidationError item (object) is required")
+        return _cosguard(lambda: _cos().put_document(name, item))
+
+    @app.delete("/api/console/azure-cosmos/containers/{name}/items", include_in_schema=False)
+    def api_console_cos_delete_item(name: str, payload: dict = Body(default=None)):
+        key = (payload or {}).get("key")
+        if not isinstance(key, dict):
+            raise HTTPException(400, detail="ValidationError key (object) is required")
+        return _cosguard(lambda: _cos().delete_document(name, key))
+
+    @app.post("/api/console/azure-cosmos/containers/{name}/query", include_in_schema=False)
+    def api_console_cos_query(name: str, payload: dict = Body(default=None)):
+        p = payload or {}
+        return _cosguard(lambda: _cos().query_documents(
+            name, p.get("partition_key_value"), p.get("sort_key_begins_with", "")))
 
     # ── Firestore nosql-item-viewer (P3 — the GCP lens's NoSQL data plane) ── the
     #    SAME nosql-item-viewer widget renders Firestore under lens=gcp; the ONLY

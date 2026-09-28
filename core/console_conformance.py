@@ -209,6 +209,16 @@ _SIGNAL = {
         "checks": {"passed": 29, "total": 29},
         "note": "Azure SQL Database — sql-console serves Azure SQL via the same widget (lens=azure).",
     },
+    # Cosmos DB (document DB) reuses the SAME nosql-item-viewer widget under lens=azure;
+    # only the manifest `api` block differs (§15.2). A container is the "table", a
+    # document the "item", and the required document `id` is surfaced as the partition
+    # key so the key-query UX works unchanged. Container/document CRUD + key query
+    # round-trips through the console facade, so gate to "full".
+    "azure.cosmos": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 12, "total": 12},
+        "note": "Azure Cosmos DB — nosql-item-viewer serves Cosmos via the same widget (lens=azure).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.
