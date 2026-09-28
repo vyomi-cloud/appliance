@@ -799,13 +799,39 @@ def _lens_summary(services: list) -> dict:
     }
 
 
-def _capabilities(lens: str = "aws") -> dict:
+def _resolve_substrate(substrate: str | None = None) -> str:
+    """Pick the substrate for this manifest (local | codespaces | nano).
+
+    Precedence: explicit `?substrate=` query arg → env `VYOMI_CONSOLE_SUBSTRATE`
+    → legacy env `VYOMI_SUBSTRATE` → default "local". Unknown values fall back to
+    "local" so a bad query param can never fork the UI into an undefined state.
+    """
+    val = (substrate
+           or os.environ.get("VYOMI_CONSOLE_SUBSTRATE")
+           or os.environ.get("VYOMI_SUBSTRATE")
+           or "local")
+    val = str(val).strip().lower()
+    return val if val in ("local", "codespaces", "nano") else "local"
+
+
+def _capabilities(lens: str = "aws", substrate: str | None = None) -> dict:
     """Return the runtime capability manifest for THIS substrate + cloud lens (§15.1).
 
-    `lens` selects which cloud's `services` catalog is returned (aws|gcp). The lens
-    switcher in the status-bar re-fetches this manifest for the chosen lens; widgets
-    are cloud-agnostic and read their endpoints from each service's `api` block, so
-    there is NO if(cloud===...) branching in component code (§15.2).
+    `lens` selects which cloud's `services` catalog is returned (aws|gcp|azure). The
+    lens switcher in the status-bar re-fetches this manifest for the chosen lens;
+    widgets are cloud-agnostic and read their endpoints from each service's `api`
+    block, so there is NO if(cloud===...) branching in component code (§15.2).
+
+    `substrate` selects the serving substrate (local|codespaces|nano). Differences
+    between substrates live HERE as capability *data* (§15.1 guarantee #3), never as
+    forked UI: on **nano** the API is served by the SW→Pyodide cores over the same
+    /api/* contract, so all data-plane widgets stay "full" (their WASM equivalents
+    exist — object/sql[PGlite]/nosql/queue/kv/kms/generic per §14.9), while the two
+    widgets with no in-browser real compute degrade: compute-terminal → "degraded"
+    (no LXD/Docker/SSH in a tab) and serverless-invoke → "partial" (Pyodide invoke
+    works, no container deploy). Those carry a `degrade_note` the SAME widget renders
+    from the flag — it never checks the substrate name. On nano connect.mode="relay"
+    and features.ssh=false (§14.8, §14.10).
 
     On the local FastAPI substrate S3 is backed by real MinIO, so object-browser is
     "full"; there is a real endpoint (not a relay); SSH exists on real compute. The
@@ -818,8 +844,14 @@ def _capabilities(lens: str = "aws") -> dict:
     if lens not in CLOUD_LENSES:
         lens = "aws"
 
-    substrate = os.environ.get("VYOMI_SUBSTRATE", "local")  # local | codespaces | nano
-    connect_mode = os.environ.get("VYOMI_CONNECT_MODE", "endpoint")  # endpoint | ssh | relay
+    substrate = _resolve_substrate(substrate)
+    # connect.mode is substrate-driven: nano reaches its SW-served API via the relay
+    # (§14.8) — external SDK/CLI clients hit the relay endpoint, not host:port/SSH.
+    # local/codespaces keep the env-configured mode (endpoint | ssh).
+    if substrate == "nano":
+        connect_mode = "relay"
+    else:
+        connect_mode = os.environ.get("VYOMI_CONNECT_MODE", "endpoint")  # endpoint | ssh | relay
 
     services = _lens_services(lens, conf)
 
@@ -843,11 +875,35 @@ def _capabilities(lens: str = "aws") -> dict:
         if wid and wid != "generic-control-plane":
             widgets[wid] = mode
 
+    # ── Nano substrate capability degrade (§14.9, §14.10) ──
+    # Nano has no real compute in a browser tab. The SAME widgets render a degraded
+    # state driven purely by these flags (no if(substrate) in the widget). Only the
+    # two compute-shaped widgets are affected; every data-plane widget keeps whatever
+    # conformance mode the lens gave it (its WASM equivalent exists). A `degrade_note`
+    # (map keyed by widget) tells the widget what CTA to show — it reads the note, it
+    # never reads the substrate name.
+    degrade_notes: dict = {}
+    if substrate == "nano":
+        # compute-terminal: metadata only, no SSH → "open a Codespace to SSH".
+        widgets["compute-terminal"] = "degraded"
+        degrade_notes["compute-terminal"] = (
+            "No VM/SSH in a browser tab — open a Codespace to SSH into real compute."
+        )
+        # serverless-invoke: invoke works (Pyodide), but no container deploy.
+        widgets["serverless-invoke"] = "partial"
+        degrade_notes["serverless-invoke"] = (
+            "Invoke runs in-browser (Pyodide); container deploy needs a Codespace."
+        )
+
     return {
         "substrate": substrate,
         "lens": lens,
         "cloud_lenses": list(CLOUD_LENSES),  # lenses this vertical can switch between
         "widgets": widgets,
+        # Per-widget degrade CTA copy (substrate-driven, §14.9). Empty on local/
+        # codespaces. The widget reads widgets[name] + degrade_notes[name] — never
+        # the substrate name (§15.2 anti-fork).
+        "degrade_notes": degrade_notes,
         "features": {
             "glassbox": True,      # Calls tab is live in P0
             "snapshot": False,     # P2
@@ -888,9 +944,14 @@ def register(app: FastAPI) -> None:
     #    The status-bar cloud-lens switcher re-fetches this per lens; widgets read
     #    their endpoints from each service's `api` block so there is no cloud
     #    branching in component code (§15.2).
+    #    ?substrate=local|codespaces|nano lets the same bundle declare its serving
+    #    substrate (default from env VYOMI_CONSOLE_SUBSTRATE / VYOMI_SUBSTRATE); on
+    #    nano this flips connect.mode→relay and degrades compute-terminal/serverless
+    #    per §14.9 — as capability DATA, never forked UI.
     @app.get("/api/console/capabilities", include_in_schema=False)
-    def api_console_capabilities(lens: str = Query(default="aws")):
-        return JSONResponse(_capabilities(lens))
+    def api_console_capabilities(lens: str = Query(default="aws"),
+                                 substrate: str = Query(default=None)):
+        return JSONResponse(_capabilities(lens, substrate))
 
     # ── Glass-box: one-shot buffer snapshot ──
     @app.get("/api/console/calls", include_in_schema=False)

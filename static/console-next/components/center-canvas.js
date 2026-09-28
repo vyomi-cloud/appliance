@@ -6,7 +6,7 @@
 // plane fallback; "full" renders the rich widget.
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
-import { widgetMode } from '../api.js';
+import { widgetMode, degradeNote } from '../api.js';
 
 import '../widgets/object-browser.js';
 import '../widgets/nosql-item-viewer.js';
@@ -96,9 +96,14 @@ class CenterCanvas extends LitElement {
         .deepLink=${this.deepLink}
       ></vyomi-serverless-invoke>`;
     }
+    // Fallback view. On a substrate that degraded this widget (e.g. Nano compute-
+    // terminal="degraded" / serverless-invoke="partial", §14.9) the manifest carries
+    // a degrade_note; pass it so the SAME fallback renders the capability-driven CTA.
+    // Note-driven — the canvas never checks the substrate name (§15.2).
     return html`<vyomi-generic-control-plane
       .service=${svc}
       .mode=${mode}
+      .degradeNote=${degradeNote(svc.widget)}
     ></vyomi-generic-control-plane>`;
   }
 }

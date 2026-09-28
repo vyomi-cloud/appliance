@@ -24,6 +24,13 @@ class StatusBar extends LitElement {
     }
     .ws { display: flex; align-items: center; gap: var(--vy-s2); font-weight: 600; }
     .dot { color: var(--vy-ok); }
+    /* substrate tag (§14.8): shows which substrate serves /api/* — "· nano" /
+       "· local" / "· codespaces". Read straight from the manifest; no logic. */
+    .substrate {
+      color: var(--vy-fg-dim); font-weight: 500; font-size: var(--vy-fs-xs);
+      text-transform: lowercase;
+    }
+    .substrate.nano { color: var(--vy-accent); }
     .lens {
       background: var(--vy-bg-elev-2); color: var(--vy-fg);
       border: 1px solid var(--vy-border); border-radius: var(--vy-radius);
@@ -108,9 +115,14 @@ class StatusBar extends LitElement {
     const lenses = caps.cloud_lenses || ['aws'];
     const current = (this.lens || caps.lens || lenses[0] || 'aws').toLowerCase();
     const ep = this._endpoint();
+    // Substrate tag from the manifest (§14.8). Same component everywhere — the only
+    // difference is this data field; no if(substrate) branching (§15.2).
+    const substrate = (caps.substrate || 'local').toLowerCase();
     return html`
       <div class="bar">
-        <span class="ws"><span class="dot">◐</span> ${ws.name || 'workspace'}</span>
+        <span class="ws"><span class="dot">◐</span> ${ws.name || 'workspace'}
+          <span class="substrate ${substrate}" title="serving substrate">· ${substrate}</span>
+        </span>
 
         <!-- cloud-lens switcher — live; re-fetches the manifest for the chosen lens -->
         <select class="lens" title="Cloud lens" @change=${this._onLensChange}>

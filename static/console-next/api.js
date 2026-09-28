@@ -67,6 +67,12 @@ export function capabilities() { return _caps; }
 export function widgetMode(widgetId) {
   return _caps && _caps.widgets ? _caps.widgets[widgetId] : undefined;
 }
+// degradeNote(id) -> substrate-driven CTA copy for a degraded/partial widget, or ''.
+// Read from the manifest's degrade_notes map (§14.9) — capability-driven, the caller
+// never checks the substrate name (§15.2).
+export function degradeNote(widgetId) {
+  return (_caps && _caps.degrade_notes && _caps.degrade_notes[widgetId]) || '';
+}
 export function feature(name) {
   return !!(_caps && _caps.features && _caps.features[name]);
 }

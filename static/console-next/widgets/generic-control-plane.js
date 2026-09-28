@@ -12,6 +12,10 @@ class GenericControlPlane extends LitElement {
   static properties = {
     service: { attribute: false },
     mode: { attribute: false },
+    // Substrate-driven degrade CTA (§14.9). Non-empty only when the manifest marked
+    // this widget "degraded"/"partial" on the current substrate (e.g. Nano compute).
+    // Rendered as data — this component never checks the substrate name (§15.2).
+    degradeNote: { attribute: false },
   };
 
   static styles = css`
@@ -25,10 +29,32 @@ class GenericControlPlane extends LitElement {
       border: 1px solid var(--vy-warn); border-radius: var(--vy-radius);
       padding: 0 var(--vy-s2); font-size: var(--vy-fs-xs); margin-right: var(--vy-s2);
     }
+    /* substrate degrade banner (§14.9) — the "open a Codespace" CTA state. */
+    .degrade {
+      color: var(--vy-fg); background: var(--vy-badge-bg);
+      border: 1px solid var(--vy-warn); border-radius: var(--vy-radius);
+      padding: var(--vy-s2); margin-bottom: var(--vy-s2);
+      font-size: var(--vy-fs-sm); line-height: 1.5;
+    }
   `;
 
   render() {
     const s = this.service || {};
+    const mode = (this.mode || 'generic').toLowerCase();
+    const note = this.degradeNote || '';
+    // A degraded/partial widget on this substrate renders its capability-driven CTA
+    // in place of the "coming in P1" copy. Same component, note-driven (§15.2).
+    const liveBody = note
+      ? html`<div class="degrade">
+               <span class="tag">${mode.toUpperCase()}</span>
+               ${note}
+             </div>`
+      : html`<div class="note">
+               <span class="tag">${mode.toUpperCase()}</span>
+               The rich <b>${s.widget}</b> data-plane view is conformance-gated (§14.5)
+               and lands in P1. Until then this service uses the generic control-plane
+               view — the SDK/CLI already work against the endpoint above.
+             </div>`;
     return html`
       <vyomi-connect-contract
         .resourceId=${s.label || s.id}
@@ -39,12 +65,7 @@ class GenericControlPlane extends LitElement {
         .snippet=${`# ${s.label} control-plane\n# point your SDK at the endpoint; the rich\n# ${s.widget} widget lands in P1 (conformance-gated).`}
       >
         <div slot="live">
-          <div class="note">
-            <span class="tag">${(this.mode || 'generic').toUpperCase()}</span>
-            The rich <b>${s.widget}</b> data-plane view is conformance-gated (§14.5)
-            and lands in P1. Until then this service uses the generic control-plane
-            view — the SDK/CLI already work against the endpoint above.
-          </div>
+          ${liveBody}
         </div>
         <div slot="actions">
           <button style="opacity:.5" disabled>snapshot</button>
