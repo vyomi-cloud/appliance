@@ -219,6 +219,16 @@ _SIGNAL = {
         "checks": {"passed": 12, "total": 12},
         "note": "Azure Cosmos DB — nosql-item-viewer serves Cosmos via the same widget (lens=azure).",
     },
+    # Service Bus reuses the SAME queue-topic-viewer widget under lens=azure; only the
+    # manifest `api` block differs (§15.2). A "queue" is a Service Bus queue, the topic
+    # fans out to attached subscriptions (an existing queue attached as the sub) — the
+    # publish→fan-out+receive/peek path round-trips through the console facade, so gate
+    # to "full".
+    "azure.servicebus": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 11, "total": 11},
+        "note": "Azure Service Bus — queue-topic-viewer serves Service Bus via the same widget (lens=azure).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.

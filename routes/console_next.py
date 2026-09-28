@@ -284,6 +284,53 @@ _PUBSUB_CONNECT = {
 # topic fans out, and wiring a subscription to a topic is the "pull" attach step.
 _PUBSUB_LABELS = {"queues": "subscriptions", "topics": "Pub/Sub", "subscribe": "pull"}
 
+# The Azure Service Bus lens's queue-topic-viewer endpoint contract — the SAME widget
+# renders these; only this descriptor data differs (no widget branching). A Service Bus
+# "queue" is a pull-target backlog; a "topic" fans out to attached subscriptions (an
+# existing queue is attached as the subscription). Points at the Azure console-facade
+# (§15.2) instead of /api/console/messaging/*.
+_AZURE_SERVICEBUS_MESSAGING_API = {
+    "listQueues": "/api/console/azure-servicebus/queues",
+    "createQueue": "/api/console/azure-servicebus/queues",
+    "sendMessage": "/api/console/azure-servicebus/queues/{queue}/send",
+    "receive": "/api/console/azure-servicebus/queues/{queue}/receive",
+    "peek": "/api/console/azure-servicebus/queues/{queue}/peek",
+    "purge": "/api/console/azure-servicebus/queues/{queue}/purge",
+    "listTopics": "/api/console/azure-servicebus/topics",
+    "createTopic": "/api/console/azure-servicebus/topics",
+    "listSubscriptions": "/api/console/azure-servicebus/topics/subscriptions",
+    "subscribe": "/api/console/azure-servicebus/topics/subscribe",
+    "publish": "/api/console/azure-servicebus/topics/publish",
+}
+
+# The Azure Service Bus lens's connect snippet/CLI (§15.2) — the SAME queue-topic-viewer
+# widget renders these; only this descriptor data differs (no widget branching). A
+# Service Bus topic fans out to subscriptions you receive from — the widget's queue
+# column IS the queue/subscription list, the topic column the topics.
+_AZURE_SERVICEBUS_CONNECT = {
+    "snippet": (
+        "from azure.servicebus import ServiceBusClient, ServiceBusMessage\n"
+        "# point the native client at the console endpoint\n"
+        'client = ServiceBusClient.from_connection_string(\n'
+        '    "Endpoint={ep};SharedAccessKeyName=dev;SharedAccessKey=***")\n'
+        'with client.get_topic_sender("events") as sender:\n'
+        '    sender.send_messages(ServiceBusMessage(b"hello"))  # fans out to {queue}\n'
+        'with client.get_queue_receiver("{queue}") as receiver:\n'
+        "    for msg in receiver.receive_messages(max_message_count=10):\n"
+        "        print(str(msg))"
+    ),
+    "cli": (
+        "az servicebus queue list --namespace-name vyomi-sb \\\n"
+        "  --resource-group vyomi-rg"
+    ),
+}
+
+# Rail-panel parentheticals for the Service Bus lens (the widget reads service.labels).
+# A subscription is an attached queue you receive from, the topic fans out, and wiring
+# a queue to a topic is the "subscription" attach step.
+_AZURE_SERVICEBUS_LABELS = {
+    "queues": "queues / subscriptions", "topics": "Service Bus", "subscribe": "subscription"}
+
 
 # ── kv-secret-viewer endpoint contract (the `api` block the cloud-agnostic
 #    kv-secret-viewer reads). Path templates use a {name} placeholder the widget
@@ -564,6 +611,13 @@ def _azure_services(conf) -> list:
          "api": dict(_AZURE_COSMOS_NOSQL_API),
          "connect": dict(_AZURE_COSMOS_CONNECT),
          "conformance": conf.service_signal("azure.cosmos")},
+        {"id": "servicebus", "label": "Service Bus", "icon": "⇄",
+         "widget": "queue-topic-viewer", "terminology": "queue / topic",
+         "backed_by": "in-proc messaging",
+         "api": dict(_AZURE_SERVICEBUS_MESSAGING_API),
+         "connect": dict(_AZURE_SERVICEBUS_CONNECT),
+         "labels": dict(_AZURE_SERVICEBUS_LABELS),
+         "conformance": conf.service_signal("azure.servicebus")},
     ]
 
 
@@ -1199,6 +1253,99 @@ def register(app: FastAPI) -> None:
         if not arn:
             raise HTTPException(400, detail="ValidationError topic_arn is required")
         return _psguard(lambda: _ps().publish(arn, p.get("message", ""), p.get("subject")))
+
+    # ── Azure Service Bus queue-topic-viewer (P4 — the Azure lens's messaging data
+    #    plane) ── The SAME queue-topic-viewer widget renders Service Bus under
+    #    lens=azure; the ONLY difference is the manifest `api` block pointing here
+    #    instead of /api/console/messaging/* (§15.2 — no if(cloud) branching). A
+    #    "queue" is a Service Bus queue (a pull-target with its own backlog) and a
+    #    topic fans out to every attached subscription (an existing queue attached as
+    #    the subscription) — the flagship fan-out stays REAL. Independent in-memory
+    #    store (core/console_azure_servicebus) so Azure messaging state is isolated
+    #    from the AWS/GCP messaging facades; purely additive.
+    def _sb():
+        from core import console_azure_servicebus as p
+        return p
+
+    def _sbguard(fn):
+        from core.console_azure_servicebus import ServiceBusError
+        try:
+            return fn()
+        except ServiceBusError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/azure-servicebus/queues", include_in_schema=False)
+    def api_console_sb_list():
+        return _sb().list_queues()
+
+    @app.post("/api/console/azure-servicebus/queues", include_in_schema=False)
+    def api_console_sb_create(payload: dict = Body(default=None)):
+        name = (payload or {}).get("name", "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError name is required")
+        return _sbguard(lambda: _sb().create_queue(name))
+
+    @app.delete("/api/console/azure-servicebus/queues/{name}", include_in_schema=False)
+    def api_console_sb_delete(name: str):
+        return _sbguard(lambda: _sb().delete_queue(name))
+
+    @app.post("/api/console/azure-servicebus/queues/{name}/send", include_in_schema=False)
+    def api_console_sb_send(name: str, payload: dict = Body(default=None)):
+        body = (payload or {}).get("body", "")
+        return _sbguard(lambda: _sb().send_message(name, body))
+
+    @app.post("/api/console/azure-servicebus/queues/{name}/receive", include_in_schema=False)
+    def api_console_sb_receive(name: str, payload: dict = Body(default=None)):
+        p = payload or {}
+        return _sbguard(lambda: _sb().receive_messages(
+            name, int(p.get("max", 10)), int(p.get("visibility", 0))))
+
+    @app.get("/api/console/azure-servicebus/queues/{name}/peek", include_in_schema=False)
+    def api_console_sb_peek(name: str):
+        return _sbguard(lambda: _sb().peek_messages(name))
+
+    @app.post("/api/console/azure-servicebus/queues/{name}/purge", include_in_schema=False)
+    def api_console_sb_purge(name: str):
+        return _sbguard(lambda: _sb().purge_queue(name))
+
+    @app.get("/api/console/azure-servicebus/topics", include_in_schema=False)
+    def api_console_sb_topics_list():
+        return _sb().list_topics()
+
+    @app.post("/api/console/azure-servicebus/topics", include_in_schema=False)
+    def api_console_sb_topics_create(payload: dict = Body(default=None)):
+        name = (payload or {}).get("name", "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError name is required")
+        return _sbguard(lambda: _sb().create_topic(name))
+
+    # The topic identifier travels in the body/query (matches the AWS messaging
+    # facade's convention) — keeps the routes unambiguous.
+    @app.post("/api/console/azure-servicebus/topics/delete", include_in_schema=False)
+    def api_console_sb_topics_delete(payload: dict = Body(default=None)):
+        arn = (payload or {}).get("topic_arn", "").strip()
+        return _sbguard(lambda: _sb().delete_topic(arn))
+
+    @app.get("/api/console/azure-servicebus/topics/subscriptions", include_in_schema=False)
+    def api_console_sb_topics_subs(topic_arn: str = Query(...)):
+        return _sbguard(lambda: _sb().list_subscriptions(topic_arn))
+
+    @app.post("/api/console/azure-servicebus/topics/subscribe", include_in_schema=False)
+    def api_console_sb_topics_subscribe(payload: dict = Body(default=None)):
+        p = payload or {}
+        arn = p.get("topic_arn", "").strip()
+        queue = p.get("queue", "").strip()
+        if not arn or not queue:
+            raise HTTPException(400, detail="ValidationError topic_arn and queue are required")
+        return _sbguard(lambda: _sb().subscribe_queue(arn, queue))
+
+    @app.post("/api/console/azure-servicebus/topics/publish", include_in_schema=False)
+    def api_console_sb_topics_publish(payload: dict = Body(default=None)):
+        p = payload or {}
+        arn = p.get("topic_arn", "").strip()
+        if not arn:
+            raise HTTPException(400, detail="ValidationError topic_arn is required")
+        return _sbguard(lambda: _sb().publish(arn, p.get("message", ""), p.get("subject")))
 
     # ── Secrets Manager kv-secret-viewer (§13): clean JSON facade over the
     #    substrate-agnostic secrets_core + a shared KvStore (core/console_secrets).
