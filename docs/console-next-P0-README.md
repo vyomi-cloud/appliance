@@ -176,3 +176,74 @@ Needs the live stack (Docker + MinIO + a real browser):
   console, or handler modified.**
 
 **Doc:** this file.
+
+---
+
+## Nano substrate (P-Nano)
+
+Nano is **not a second console** — it is a third *substrate* for this same
+console-next engine (§14.8, §15). The SPA talks only to `/api/*`; on Nano that API
+is served by an in-tab **Service Worker → Pyodide cores** stack instead of FastAPI.
+The only thing that differs is one field in the capability manifest — no
+`if (substrate)` anywhere in widget code (§15.1 guarantee #2, §15.2 anti-fork).
+
+### How the engine runs on Nano
+- The **same bundle** (`static/console-next/`) is served under the Nano `/nano/` SW
+  scope (base-path-aware, §15.1 guarantee #6). The SW intercepts `BASE + /api/*`,
+  strips the prefix, and dispatches to the Pyodide cores (`aws_core_adapter` /
+  `aws_wire_router` + the vendored cores).
+- The cores are the same proven in-WASM stores used by the Nano relay bundle:
+  ObjectStore (S3), NoSqlStore (DynamoDB), KvStore (Secrets), KmsEngine (KMS),
+  MessagingStore (SQS/SNS), SqlStore→**PGlite** (real Postgres in WASM) / sqlite.
+- External SDK/CLI clients reach Nano via the **relay** (already built): the console
+  and the relay front-door share the same cores/state in the tab.
+
+### Capability degradations (data, not screens)
+`GET /api/console/capabilities?substrate=nano` returns:
+- `connect.mode = "relay"` and `features.ssh = false`, `features.relay = true`.
+- `widgets["compute-terminal"] = "degraded"` — no VM/SSH in a browser tab; the SAME
+  `generic-control-plane` fallback renders the `degrade_notes["compute-terminal"]`
+  CTA ("open a Codespace to SSH").
+- `widgets["serverless-invoke"] = "partial"` — invoke runs in Pyodide, but there is
+  no container deploy; `degrade_notes` carries that copy.
+- **Every data-plane widget stays `full`** (object / sql[PGlite] / nosql / queue /
+  kv / kms / generic) — their WASM equivalents exist (§14.9).
+- AWS is the rich lens on Nano; GCP/Azure fall back to the generic control-plane
+  (console-CRUD), consistent with today. Lens switch is unchanged (still a manifest
+  re-fetch).
+
+The substrate is chosen by `?substrate=` (or env `VYOMI_CONSOLE_SUBSTRATE` /
+`VYOMI_SUBSTRATE`); unknown values fall back to `local`. The status-bar shows a small
+`· nano` / `· local` / `· codespaces` tag read straight from the manifest.
+
+### Snapshot / fork on Nano
+`core/console_snapshots.py` runs **unchanged** on Nano: it walks a table of
+`store()` accessors that resolve to the in-WASM stores in the tab; their in-process
+state is the identical JSON-serialisable dict shape, so capture/restore/fork need no
+browser and no substrate branch. Nano is actually the *lighter* snapshot substrate
+(§14.9). The one known gap is substrate-independent: the SQL **data plane** (live
+rows in sqlite3/PGlite) is a later fidelity slice — only the control-plane metadata
+is captured today (documented in `_dump_sql`); on Nano the full-data capture would be
+a PGlite dump.
+
+### Remaining live-stack integration work (needs the live Nano stack)
+Scaffolded + specified here; **not runnable in this environment** (needs the browser
+SW bundle + Pyodide + PGlite). These are the P-Nano deliverables that must run on the
+live stack:
+- **Wire the console-next bundle into the Nano SW bundle** under the `/nano/` base
+  path — serve `static/console-next/` from the Nano SW alongside the relay endpoint;
+  confirm the fetch shim rewrites the console's root-absolute `/api/*` to
+  `BASE + /api/*` (guarded to not double-prefix already-mounted `/nano/` paths), and
+  retire the old per-service Nano consoles.
+- **SW-side glass-box interceptor** — a Service-Worker/router tap that emits the
+  **identical §12.2 event schema** as the FastAPI `GlassBoxCaptureMiddleware`, so the
+  Inspector Calls tab is byte-for-byte the same across substrates (§15.1 guarantee
+  #5). Nano is the easier capture seam (one in-tab router) — §14.9.
+- **Real-browser render** of the SPA served by the Nano SW: shell / rail / Connect
+  card (relay variant) / Inspector SSE / ⌘K, plus the degrade CTA on compute-terminal
+  and serverless-invoke, and object/sql/nosql/queue/kv/kms CRUD through the cores.
+- **Relay-variant Connect proof** — external SDK/CLI hitting the relay endpoint reads
+  the same tab state the console mutates (one shared engine); PGlite (real Postgres)
+  reachable in-tab + via the RDS Data API over the relay.
+- **Cross-substrate parity test in CI** (§15.3) — assert the component tree + glass-box
+  event shape are identical across local / codespaces / nano.

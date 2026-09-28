@@ -37,6 +37,18 @@ HONEST CONSTRAINTS (surfaced in the UI — §12.6, §10, §14.5)
 DESIGN: additive, commonality-first (§15.2) — there is NO if(substrate) branching.
 The registry just walks a table of (store singleton, serialiser, loader) tuples; each
 facade exposes the same `store()` accessor, so the same code runs on every substrate.
+
+NANO (§14.9 "Snapshot/fork is lighter"): on the Nano substrate the SAME `store()`
+accessors resolve to the in-WASM-equivalent stores served by the SW→Pyodide cores
+(ObjectStore / NoSqlStore / KvStore / KmsEngine / MessagingStore / SqlStore) — their
+in-process state is the identical JSON-serialisable dict shape captured here, so this
+module snapshots Nano state UNCHANGED, no browser needed. The only per-substrate
+nuance is the SQL data plane: the control-plane METADATA (db_instances/snapshots) is
+captured here on every substrate, while the live rows live in sqlite3/PGlite behind
+the SqlStore seam and are a later fidelity slice (a PGlite dump on Nano). That gap is
+substrate-independent (it applies to local MySQL/RDS too), so it is expressed as the
+`_dump_sql` scope note below, never as an if(substrate). See docs/console-next-P0-
+README.md "Nano substrate".
 """
 
 from __future__ import annotations
@@ -122,6 +134,9 @@ _StoreSpec = tuple[str, Callable[[], Any], Callable[[Any], dict], Callable[[Any,
 
 
 def _store_specs() -> list[_StoreSpec]:
+    # These accessors return the live console stores on local/codespaces and the
+    # in-WASM-equivalent stores on Nano (SW→Pyodide cores) — same accessor, same
+    # dict shape, so capture/restore run unchanged on every substrate (§14.9).
     from core import console_kms, console_messaging, console_secrets, console_sql
     return [
         ("secrets", console_secrets.store, _dump_secrets, _load_secrets),
