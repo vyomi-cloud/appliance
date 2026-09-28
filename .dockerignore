@@ -1,5 +1,8 @@
 .git
 .gitignore
+.claude
+.DS_Store
+*.jpg
 .venv
 .venv-run
 .pytest_cache
