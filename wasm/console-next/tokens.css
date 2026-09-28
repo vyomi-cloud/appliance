@@ -1,0 +1,94 @@
+/* Vyomi console-next — design tokens (CSS custom properties).
+ *
+ * White-label ready: every color/space/type value is a token. A tenant theme is
+ * a single overriding :root block (or a [theme="acme"] attribute) — no code change
+ * (§16). Components consume ONLY these vars, never hard-coded values. Because the
+ * components use Shadow DOM, these custom properties pierce the boundary (inherited)
+ * while everything else stays encapsulated.
+ */
+:root {
+  /* palette */
+  --vy-bg:            #0d1117;
+  --vy-bg-elev:       #161b22;
+  --vy-bg-elev-2:     #1c2230;
+  --vy-panel:         #11161f;
+  --vy-border:        #2a3140;
+  --vy-border-soft:   #21262d;
+  --vy-fg:            #e6edf3;
+  --vy-fg-muted:      #9aa7b4;
+  --vy-fg-dim:        #6b7683;
+  --vy-accent:        #4c8bf5;
+  --vy-accent-fg:     #ffffff;
+  --vy-ok:            #3fb950;
+  --vy-warn:          #d29922;
+  --vy-err:           #f85149;
+  --vy-info:          #58a6ff;
+  --vy-badge-bg:      #1f2a1f;
+  --vy-badge-fg:      #7ee787;
+
+  /* method colors */
+  --vy-m-get:    #58a6ff;
+  --vy-m-post:   #3fb950;
+  --vy-m-put:    #d29922;
+  --vy-m-delete: #f85149;
+  --vy-m-head:   #a371f7;
+
+  /* type */
+  --vy-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --vy-mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --vy-fs-xs: 11px;
+  --vy-fs-sm: 12px;
+  --vy-fs-md: 13px;
+  --vy-fs-lg: 15px;
+  --vy-fs-xl: 18px;
+
+  /* space */
+  --vy-s1: 4px;
+  --vy-s2: 8px;
+  --vy-s3: 12px;
+  --vy-s4: 16px;
+  --vy-s5: 24px;
+  --vy-s6: 32px;
+
+  /* radius / shadow */
+  --vy-radius: 6px;
+  --vy-radius-lg: 10px;
+  --vy-shadow: 0 8px 24px rgba(0,0,0,.4);
+
+  /* layout */
+  --vy-statusbar-h: 40px;
+  --vy-rail-w: 200px;
+  --vy-inspector-w: 440px;
+}
+
+/* ── Familiar mode (§7 — "recognizable, not cloned") ──────────────────────────
+ * OPTIONAL native-lens theme. This is THEMING ONLY over the one engine — it is NOT
+ * a fork and it changes NO behaviour. Turning on "Familiar" sets a
+ * `data-vy-familiar="<lens>"` attribute on <html>; because design tokens are custom
+ * properties (inherited), overriding them here re-themes every Shadow-DOM component
+ * at once — no component code is touched, nothing is capability-gated differently.
+ *
+ * Each block only nudges the *accent* + a little spacing toward the provider's
+ * recognizable feel (AWS amber, GCP blue, Azure blue). We deliberately do NOT clone
+ * layouts, iconography, or pixels — that is the anti-mimicry line in §7. Removing
+ * the attribute restores the default Vyomi-native identity with zero residue. */
+[data-vy-familiar] {
+  /* Slightly airier, squarer default across every familiar lens. */
+  --vy-radius:    4px;
+  --vy-radius-lg: 8px;
+}
+[data-vy-familiar="aws"] {
+  --vy-accent:    #ff9900;   /* AWS "smile" amber */
+  --vy-accent-fg: #16191f;
+  --vy-info:      #ff9900;
+}
+[data-vy-familiar="gcp"] {
+  --vy-accent:    #4285f4;   /* Google blue */
+  --vy-accent-fg: #ffffff;
+  --vy-info:      #669df6;
+}
+[data-vy-familiar="azure"] {
+  --vy-accent:    #0078d4;   /* Azure blue */
+  --vy-accent-fg: #ffffff;
+  --vy-info:      #50a0e0;
+}

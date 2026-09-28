@@ -526,6 +526,34 @@ self.addEventListener("fetch", (event) => {
   event.respondWith((async () => {
     try {
       const method = event.request.method;
+      // ── console-next SPA (slice 1) ──────────────────────────────────
+      // The new SPA (served at BASE/console-next/) talks ONLY to /api/console/*.
+      // capabilities → the in-browser manifest (dispatched to console_next_adapter
+      // via the "_console" pseudo-provider). Everything ELSE under /api/console/*
+      // is the facade DATA plane, which is slice 2 — return a clear 501 stub so the
+      // SPA loads (empty/degraded) instead of crashing.
+      // TODO slice 2: dispatch /api/console/<svc>/* (gcs, azure-blob, kms, secrets,
+      //   messaging, sql, nosql, object, generic, calls/*, snapshots/*) to the
+      //   console_<svc> facades running on the Pyodide cores (in-browser analogue of
+      //   the appliance's routes/console_next.py facade endpoints).
+      if (apiPath === "/api/console/capabilities" && method === "GET") {
+        const lens = url.searchParams.get("lens") || "aws";
+        const substrate = url.searchParams.get("substrate") || null;
+        // "_console" is not a cloud in the registry — nano-boot routes it straight
+        // to console_next_adapter.handle("capabilities", {...}). It forces
+        // substrate="nano" internally regardless of the query arg.
+        const res = await runInPage(["_console", "capabilities", "GET", { lens, substrate }]);
+        return json(res, 200);
+      }
+      if (apiPath.startsWith("/api/console/")) {
+        // Slice-1 stub for the facade data plane. Clear 501 + a TODO marker so the
+        // SPA's widgets render their empty/degraded state without erroring the shell.
+        return json({
+          ok: false, code: "NotImplementedYet",
+          detail: "console-next facade data plane is slice 2 (not yet wired in Nano)",
+          method, path: url.pathname,
+        }, 501);
+      }
       // ── Spaces (dashboard) ──────────────────────────────────────────
       // The active space is provider-specific (console gate) — derive it from
       // the requesting page so every console opens against a matching space.

@@ -24,6 +24,10 @@ const wasControlledAtStart = !!(navigator.serviceWorker && navigator.serviceWork
 // Which cloud this console is — drives the live resource census we persist for
 // the dashboard's per-cloud footprint pies (null on non-console pages).
 const CONSOLE_PROVIDER = (location.pathname.match(/\/(aws|gcp|azure)-console\.html/) || [])[1] || null;
+// The console-next SPA is served at BASE/console-next/ — detect it so bootBackend
+// imports the SPA after Pyodide + the SW are ready (slice 1). CONSOLE_PROVIDER
+// stays null on this page (its census is provider-scoped, N/A for the SPA shell).
+const IS_CONSOLE_NEXT = /\/console-next(\/|$)/.test(location.pathname);
 
 // Persist one key into the shared "nano-spaces" IndexedDB "meta" store (same DB
 // the SW reads). Mirrors sw.js's idb() open so it works whether the SW created
@@ -54,6 +58,10 @@ const MODULES = [
   "providers/dataplane_adapter.py",   // v2.9.0 — net-new data planes (loaded before aws/azure which import it)
   "providers/aws.py", "providers/gcp.py", "providers/azure.py", "providers/oracle.py",
   "providers/__init__.py",
+  // console-next SPA capability manifest (slice 1): the pure manifest builder +
+  // its Pyodide adapter. console_next_manifest imports `from core import
+  // console_conformance` (vendored under /core, see CORES), NO FastAPI.
+  "console_next_manifest.py", "providers/console_next_adapter.py",
 ];
 // The PROVEN conformance cores (vendored into wasm/core/ by build_cores.py).
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
@@ -75,6 +83,9 @@ const CORES = [
   // iam_store, lambda_core) are already listed above.
   "azure_servicebus_core.py", "eventbridge_core.py", "lambda_core.py",
   "apigateway_core.py", "vpc_core.py", "azure_sql_core.py", "azure_iam_core.py",
+  // console-next capability manifest dependency (slice 1): the pure conformance
+  // signal module (only imports `os` — safe in Pyodide, no FastAPI).
+  "console_conformance.py",
 ];
 
 function banner(text, bad) {
@@ -111,6 +122,7 @@ async function bootBackend() {
 import sys; sys.path.insert(0, "/")
 from wasm.backends.store import Backends
 from wasm import providers as P
+from wasm.providers import console_next_adapter as _CN
 import json
 _B = Backends()
 def _disp(payload_json):
@@ -118,7 +130,13 @@ def _disp(payload_json):
     # objects survive — embedding JSON.stringify(params) as Python source would
     # turn true/false/null into NameErrors. (Same pattern as relay/nano-endpoint.)
     d = json.loads(payload_json)
-    return json.dumps(P.dispatch(_B, d["provider"], d["service"], d["op"],
+    prov = d["provider"]
+    # console-next SPA (slice 1): the "_console" pseudo-provider is NOT a cloud in
+    # the registry — it serves /api/console/* (capabilities now; facade data plane
+    # is slice 2). Route it straight to the console_next adapter.
+    if prov == "_console":
+        return json.dumps(_CN.handle(d["op"], d.get("params") or {}))
+    return json.dumps(P.dispatch(_B, prov, d["service"], d["op"],
                                  params=d.get("params") or {}))
 import builtins; builtins._disp = _disp
 `);
@@ -173,6 +191,16 @@ import builtins; builtins._disp = _disp
   (reg.active || navigator.serviceWorker.controller).postMessage({ type: "pyodide-ready" });
   banner("Nano: in-browser backend ready — this console runs with no server.");
   setTimeout(() => { const b = document.getElementById("nano-banner"); if (b) b.style.display = "none"; }, 4000);
+
+  // console-next SPA (slice 1): this bundle also serves the new SPA at
+  // BASE/console-next/. When THIS page is that SPA, boot it now — the SW is
+  // controlling + Pyodide is up, so its first /api/console/capabilities read is
+  // served in-browser (dispatched to console_next_adapter). The SPA reads its
+  // asset/API base from the __VY_* globals its index.html already set.
+  if (IS_CONSOLE_NEXT && window.__VY_ASSET_BASE) {
+    try { await import(window.__VY_ASSET_BASE + "boot.js"); }
+    catch (e) { banner("Nano: console-next SPA failed to load: " + e, true); }
+  }
 }
 
 (async () => {

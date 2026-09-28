@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vyomi Console (next) — Nano</title>
+  <!-- Nano entry point for the console-next SPA (slice 1).
+       Additive: a stable, discoverable launch URL that redirects into the SPA at
+       BASE/console-next/ — the analogue of how the existing Nano consoles
+       (aws/gcp/azure-console.html) are opened, WITHOUT modifying those pages.
+       Works at the web root AND under a subpath (portal /nano/): the redirect is
+       RELATIVE, so BASE/console-next.html → BASE/console-next/. -->
+  <style>
+    html, body { margin: 0; height: 100%; background: #0d1117; }
+    #msg { position: fixed; inset: 0; display: grid; place-items: center;
+           color: #9aa7b4; font: 13px -apple-system, system-ui, sans-serif; }
+    #msg a { color: #7cc4ff; }
+  </style>
+  <script>
+    // Redirect into the SPA directory (relative → mount-agnostic).
+    location.replace("console-next/");
+  </script>
+</head>
+<body>
+  <div id="msg">Opening Vyomi console… <a href="console-next/">continue →</a></div>
+</body>
+</html>

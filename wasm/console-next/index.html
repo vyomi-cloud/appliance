@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vyomi Console (next) — Nano</title>
+  <!-- NANO variant of static/console-next/index.html (slice 1).
+       Differences from the appliance copy:
+         • Assets are COLOCATED with this HTML (wasm/console-next/) instead of a
+           separate /console-next-assets mount, so ASSET_BASE = this dir.
+         • BASE (the bundle mount) is derived so the SPA works at the web root
+           AND under a subpath like the portal's /nano/. __VY_API_BASE points at
+           the BUNDLE ROOT (not this SPA dir) so /api/* lands in the Nano SW's
+           scope (BASE + "/"), exactly like the other Nano consoles.
+         • The base-path fetch SHIM (rewrites root-absolute /api/* → BASE+/api/*,
+           guarded against double-prefix) + the Nano SW registration are injected,
+           mirroring wasm/make_pages.py::SHIM + nano-boot.js's SW register. -->
+  <style>
+    html, body { margin: 0; height: 100%; background: #0d1117; }
+    #boot-msg {
+      position: fixed; inset: 0; display: grid; place-items: center;
+      color: #9aa7b4; font: 13px -apple-system, system-ui, sans-serif;
+    }
+  </style>
+  <script>
+  // ── Base-path fetch shim (verbatim behaviour from wasm/make_pages.py::SHIM) ──
+  // Rewrites the SPA's root-absolute /api/* (and same-origin absolute URLs) to the
+  // bundle mount so the Nano SW (scoped to BASE + "/") intercepts them. Guarded so
+  // an already-mounted BASE/api/* path is NOT double-prefixed. No-op at web root.
+  (function () {
+    // BASE = the bundle mount = the path up to (but not including) "/console-next".
+    // e.g. "/nano/console-next/" -> "/nano"; "/console-next/" -> "".
+    var p = location.pathname;
+    var i = p.indexOf('/console-next');
+    var base = i >= 0 ? p.slice(0, i) : p.replace(/\/[^\/]*$/, '');
+    window.__NANO_BASE = base;
+    // The SPA (api.js/boot.js) reads these: assets are colocated under the SPA
+    // dir; /api/* is served at the bundle root so the SW sees it in scope.
+    window.__VY_ASSET_BASE = base + '/console-next/';
+    window.__VY_API_BASE = base + '/';
+    if (base) {
+      var of = window.fetch.bind(window);
+      var origin = location.origin;
+      var rw = function (u) {
+        if (typeof u !== 'string') return u;
+        if (u.indexOf(origin + '/') === 0) {                 // same-origin ABSOLUTE url
+          var pth = u.slice(origin.length);
+          return (pth === base || pth.indexOf(base + '/') === 0) ? u : origin + base + pth;
+        }
+        if (u.charAt(0) === '/' && u.charAt(1) !== '/') {     // root-relative path
+          return (u === base || u.indexOf(base + '/') === 0) ? u : base + u;
+        }
+        return u;                                            // relative / cross-origin
+      };
+      window.fetch = function (input, init) {
+        if (typeof input === 'string') return of(rw(input), init);
+        if (input && input.url) return of(new Request(rw(input.url), input), init);
+        return of(input, init);
+      };
+    }
+  })();
+  </script>
+</head>
+<body>
+  <div id="boot-msg">Loading Vyomi console…</div>
+  <vyomi-console></vyomi-console>
+  <!-- Reuse the proven Nano boot loader (SW register + one controlled reload +
+       Pyodide + all cores). It detects the console-next SPA (IS_CONSOLE_NEXT) and,
+       once the SW is controlling + Pyodide is up, imports the SPA's boot.js so the
+       first /api/console/capabilities read is served in-browser (dispatched to the
+       console_next adapter). No duplicated SW/reload logic here — one code path. -->
+  <script type="module" src="./../nano-boot.js"></script>
+</body>
+</html>
