@@ -95,6 +95,22 @@ _CLOUDSQL_CONNECT = {
 }
 
 
+# ── nosql-item-viewer endpoint contract (the `api` block the cloud-agnostic
+#    nosql-item-viewer reads). Path templates use a {table} placeholder the widget
+#    substitutes + URL-encodes. These are the AWS-lens (DynamoDB REST) defaults; the
+#    Firestore lens supplies the SAME shape pointed at the Firestore console-facade
+#    (§15.2 — no if(cloud) branching in the widget). ──
+_DYNAMODB_NOSQL_API = {
+    "listTables": "/api/dynamodb/tables",
+    "createTable": "/api/dynamodb/tables",
+    "getTable": "/api/dynamodb/tables/{table}",
+    "listItems": "/api/dynamodb/tables/{table}/items",
+    "putItem": "/api/dynamodb/tables/{table}/items",
+    "deleteItem": "/api/dynamodb/tables/{table}/items",
+    "queryItems": "/api/dynamodb/tables/{table}/query",
+}
+
+
 def _aws_services(conf) -> list:
     """The AWS-lens service catalog (unchanged from P0/P2 — the rich vertical)."""
     return [
@@ -104,6 +120,7 @@ def _aws_services(conf) -> list:
          "conformance": conf.service_signal("s3")},
         {"id": "dynamodb", "label": "DynamoDB", "icon": "⊞", "widget": "nosql-item-viewer",
          "terminology": "table", "backed_by": "DynamoDB-Local",
+         "api": dict(_DYNAMODB_NOSQL_API),
          "conformance": conf.service_signal("dynamodb")},
         {"id": "rds", "label": "RDS", "icon": "◫", "widget": "sql-console",
          "terminology": "db instance", "backed_by": "PostgreSQL/sqlite",

@@ -1,18 +1,28 @@
-// nosql-item-viewer widget (§13 / §14.3) — DynamoDB item viewer.
+// nosql-item-viewer widget (§13 / §14.3) — NoSQL item viewer.
 //
-// Lists DynamoDB tables, browses items in a selected table, and supports get/put a
-// single item + a simple key query — all against the appliance's existing DynamoDB
-// REST API under /api/dynamodb/* (backed by DynamoDB-Local, write-through). Rendered
-// inside the common Connect contract with the mandatory `⛃ backed by <engine>` badge
-// (§13.1) and a boto3 / CLI snippet.
+// Lists NoSQL tables/collections, browses items in a selected one, and supports
+// get/put a single item + a simple key query. It is CLOUD-AGNOSTIC: it reads its
+// endpoint paths from the selected service descriptor's `api` block (§15.2) — so the
+// SAME widget serves AWS DynamoDB (/api/dynamodb/*, backed by DynamoDB-Local) and GCP
+// Firestore (/api/console/firestore/*) with ZERO branching. When no `api` block is
+// present it falls back to the DynamoDB defaults, so the AWS lens keeps working
+// unchanged.
+//
+// Rendered inside the common Connect contract with the mandatory `⛃ backed by
+// <engine>` badge (§13.1) and a boto3 / CLI snippet (also descriptor-driven via the
+// service's `connect` block, DynamoDB defaults preserved).
 //
 // It talks ONLY to /api/* (§15.1 #2) — no substrate knowledge. It also honors a
 // deepLink (backend.ref {ddb.item, table, key}) pushed from the glass-box Inspector:
 // selecting a PutItem/GetItem call jumps here and selects that table (+ item).
 //
 // Item JSON here is the NATIVE (plain-JSON) form — the REST API takes `item`/`key`
-// as native maps and does the DynamoDB attribute-typing itself, so the console never
+// as native maps and does the attribute-typing itself, so the console never
 // hand-writes {"S": ...} wrappers.
+//
+// API contract (service.api): { listTables, createTable, getTable, listItems,
+// putItem, deleteItem, queryItems } — path templates with a {table} placeholder this
+// widget substitutes + URL-encodes.
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
 import { apiGet, apiSend } from '../api.js';
@@ -90,6 +100,32 @@ class NosqlItemViewer extends LitElement {
       letter-spacing: .06em; margin: var(--vy-s3) 0 var(--vy-s1); }
   `;
 
+  // ── Endpoint resolution (§15.2): read paths from the service descriptor's `api`
+  //    block, falling back to the DynamoDB REST defaults so the AWS lens works
+  //    unchanged. The widget is thereby cloud-agnostic — the GCP lens supplies
+  //    Firestore paths of the same shape and NOTHING below changes. ──
+  static _DDB_DEFAULTS = {
+    listTables: '/api/dynamodb/tables',
+    createTable: '/api/dynamodb/tables',
+    getTable: '/api/dynamodb/tables/{table}',
+    listItems: '/api/dynamodb/tables/{table}/items',
+    putItem: '/api/dynamodb/tables/{table}/items',
+    deleteItem: '/api/dynamodb/tables/{table}/items',
+    queryItems: '/api/dynamodb/tables/{table}/query',
+  };
+
+  _tpl(name) {
+    const api = (this.service && this.service.api) || {};
+    return api[name] || NosqlItemViewer._DDB_DEFAULTS[name];
+  }
+
+  // Substitute + URL-encode the {table} placeholder in a path template.
+  _path(name, { table } = {}) {
+    let p = this._tpl(name);
+    if (table != null) p = p.replace('{table}', encodeURIComponent(table));
+    return p;
+  }
+
   connectedCallback() {
     super.connectedCallback();
     this._loadTables();
@@ -113,7 +149,7 @@ class NosqlItemViewer extends LitElement {
 
   async _loadTables() {
     try {
-      const r = await apiGet('/api/dynamodb/tables');
+      const r = await apiGet(this._path('listTables'));
       this._tables = r.tables || [];
       if (!this._table && this._tables.length) {
         this._selectTable(this._tables[0].table_name);
@@ -127,7 +163,7 @@ class NosqlItemViewer extends LitElement {
     this._viewing = null;
     this._msg = '';
     try {
-      const r = await apiGet(`/api/dynamodb/tables/${encodeURIComponent(name)}`);
+      const r = await apiGet(this._path('getTable', { table: name }));
       this._table = r.table || null;
       this._draft = this._sampleItem(this._table);
       await this._listItems(name);
@@ -139,7 +175,7 @@ class NosqlItemViewer extends LitElement {
 
   async _listItems(name) {
     try {
-      const r = await apiGet(`/api/dynamodb/tables/${encodeURIComponent(name)}/items`);
+      const r = await apiGet(this._path('listItems', { table: name }));
       this._rows = r.items || [];
     } catch (e) {
       this._rows = [];
@@ -162,7 +198,7 @@ class NosqlItemViewer extends LitElement {
     if (!name) return;
     this._busy = true;
     try {
-      await apiSend('POST', '/api/dynamodb/tables', {
+      await apiSend('POST', this._path('createTable'), {
         table_name: name,
         partition_key_name: (nt.pk || 'id').trim() || 'id',
         sort_key_name: (nt.sk || '').trim(),
@@ -195,8 +231,8 @@ class NosqlItemViewer extends LitElement {
     this._busy = true;
     this._msg = '';
     try {
-      await apiSend('POST', `/api/dynamodb/tables/${encodeURIComponent(name)}/items`, { item });
-      this._msg = `Put item → DynamoDB-Local`;
+      await apiSend('POST', this._path('putItem', { table: name }), { item });
+      this._msg = `Put item → ${(this.service && this.service.backed_by) || 'DynamoDB-Local'}`;
       await this._listItems(name);
     } catch (e) {
       this._msg = 'Put failed: ' + e.message;
@@ -210,7 +246,7 @@ class NosqlItemViewer extends LitElement {
     if (!name || !row) return;
     this._busy = true;
     try {
-      await apiSend('DELETE', `/api/dynamodb/tables/${encodeURIComponent(name)}/items`, { key: row.key });
+      await apiSend('DELETE', this._path('deleteItem', { table: name }), { key: row.key });
       if (this._viewing && this._viewing === row) this._viewing = null;
       await this._listItems(name);
     } catch (e) {
@@ -237,7 +273,7 @@ class NosqlItemViewer extends LitElement {
       const body = { partition_key_value: pk };
       const sk = (this._qsort || '').trim();
       if (sk) body.sort_key_begins_with = sk;
-      const r = await apiSend('POST', `/api/dynamodb/tables/${encodeURIComponent(name)}/query`, body);
+      const r = await apiSend('POST', this._path('queryItems', { table: name }), body);
       this._rows = r.items || [];
       this._msg = `Query → ${r.count} item(s) (scanned ${r.scanned_count})`;
     } catch (e) {
@@ -256,17 +292,32 @@ class NosqlItemViewer extends LitElement {
     return (this.caps && this.caps.workspace && this.caps.workspace.endpoint) || location.origin;
   }
 
-  _snippet() {
-    const ep = this._endpoint();
-    const t = this._tableName() || 'my-table';
-    return `import boto3\nddb = boto3.resource("dynamodb", endpoint_url="${ep}",\n    aws_access_key_id="test", aws_secret_access_key="test")\ntable = ddb.Table("${t}")\ntable.put_item(Item={"id": "item-1", "note": "hello"})\ntable.get_item(Key={"id": "item-1"})`;
+  // The connect snippet/CLI/hint are descriptor-driven too (§15.2): a service may
+  // carry a `connect` block { snippet, cli } — templates with {ep} and {table}
+  // placeholders. Absent → the AWS DynamoDB (boto3) defaults, so the AWS lens is
+  // unchanged; the GCP lens supplies a Firestore variant with NO widget branching.
+  static _DDB_CONNECT = {
+    snippet:
+      'import boto3\nddb = boto3.resource("dynamodb", endpoint_url="{ep}",\n' +
+      '    aws_access_key_id="test", aws_secret_access_key="test")\n' +
+      'table = ddb.Table("{table}")\n' +
+      'table.put_item(Item={"id": "item-1", "note": "hello"})\n' +
+      'table.get_item(Key={"id": "item-1"})',
+    cli: 'aws --endpoint-url {ep} dynamodb scan --table-name {table}',
+  };
+
+  _connect(name) {
+    const c = (this.service && this.service.connect) || {};
+    return c[name] || NosqlItemViewer._DDB_CONNECT[name];
   }
 
-  _cli() {
-    const ep = this._endpoint();
-    const t = this._tableName() || 'my-table';
-    return `aws --endpoint-url ${ep} dynamodb scan --table-name ${t}`;
+  _fill(tpl) {
+    return String(tpl).split('{ep}').join(this._endpoint())
+      .split('{table}').join(this._tableName() || 'my-table');
   }
+
+  _snippet() { return this._fill(this._connect('snippet')); }
+  _cli() { return this._fill(this._connect('cli')); }
 
   render() {
     const svc = this.service || {};
@@ -277,8 +328,8 @@ class NosqlItemViewer extends LitElement {
     const v = this._viewing;
     return html`
       <vyomi-connect-contract
-        .resourceId=${this._tableName() || 'DynamoDB'}
-        .resourceKind=${'table'}
+        .resourceId=${this._tableName() || svc.label || 'DynamoDB'}
+        .resourceKind=${svc.terminology || 'table'}
         .backedBy=${svc.backed_by || 'DynamoDB-Local'}
         .connectMode=${mode}
         .endpoint=${this._endpoint()}
