@@ -548,6 +548,40 @@ _GCE_CONNECT = {
 }
 
 
+# The Azure Virtual Machines lens's compute-terminal contract (P4) — the SAME
+# compute-terminal widget renders Azure VMs under lens=azure; only the manifest
+# `api` block differs (§15.2 — no if(cloud) branching). list + exec point at the
+# Azure VM console-facade; connect-info / .pem reuse the existing NATIVE Azure VM
+# endpoints (/api/azure/vm/{id}/*), exactly as the GCE lens reuses the native GCE
+# connect-info / .pem.
+_AZURE_VM_API = {
+    "listInstances": "/api/console/azurevm/instances",
+    "connectInfo": "/api/azure/vm/{instance_id}/connect-info",
+    "keyDownload": "/api/azure/vm/{instance_id}/private-key.pem",
+    "exec": "/api/console/azurevm/instances/{instance_id}/exec",
+}
+
+# The Azure Virtual Machines lens's connect snippet/CLI (§15.2) — the SAME
+# compute-terminal widget renders these; only this descriptor data differs (no
+# widget branching).
+_AZURE_VM_CONNECT = {
+    "snippet": (
+        "from azure.mgmt.compute import ComputeManagementClient\n"
+        "from azure.identity import DefaultAzureCredential\n"
+        "# point the native client at the console endpoint\n"
+        'client = ComputeManagementClient(\n'
+        "    DefaultAzureCredential(), subscription_id='cloudlearn',\n"
+        '    base_url="{ep}")\n'
+        'for vm in client.virtual_machines.list("cloudlearn-rg"):\n'
+        "    print(vm.name)"
+    ),
+    "cli": (
+        "az vm list --resource-group cloudlearn-rg "
+        "--query \"[?name=='{instance_id}']\""
+    ),
+}
+
+
 def _aws_services(conf) -> list:
     """The AWS-lens service catalog (unchanged from P0/P2 — the rich vertical)."""
     return [
@@ -683,6 +717,12 @@ def _azure_services(conf) -> list:
          "api": dict(_AZURE_KV_KEYS_API),
          "connect": dict(_AZURE_KV_KEYS_CONNECT),
          "conformance": conf.service_signal("azure.keyvault_keys")},
+        {"id": "vm", "label": "Virtual Machines", "icon": "🖥",
+         "widget": "compute-terminal", "terminology": "instance",
+         "backed_by": "LXD/multipass",
+         "api": dict(_AZURE_VM_API),
+         "connect": dict(_AZURE_VM_CONNECT),
+         "conformance": conf.service_signal("azure.vm")},
     ]
 
 

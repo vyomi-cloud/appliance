@@ -22660,6 +22660,133 @@ def api_azure_vm_private_key(instance_id: str):
     return _private_key_pem_response("azure", instance_id)
 
 
+# ── Azure Virtual Machines console-facade (P4 — the Azure lens's compute-terminal
+#    data plane). The SAME compute-terminal widget renders Azure VMs under lens=azure;
+#    the ONLY difference is the manifest `api` block pointing here (§15.2 — no
+#    if(cloud) branching in the widget). This mirrors the GCE console-facade: it
+#    returns the SAME flat shapes the widget's AWS EC2 defaults return, over the REAL
+#    azure_arm VM records + the SAME container-exec path (_console_execute) EC2/GCE
+#    use — so an LXD/multipass-backed Azure VM runs commands identically. Connect-info
+#    / .pem reuse the existing native Azure VM endpoints above. Purely additive.
+#
+#    Azure VMs are stored as ARM resource records (Microsoft.Compute/virtualMachines)
+#    with their runtime/SSH fields under properties.runtime, not the flat top-level
+#    shape EC2/GCE instances use. These helpers flatten a record into the flat
+#    instance dict _console_execute + the sync helpers expect, and persist any
+#    console_state/console_log back onto the runtime dict so cwd/history survive.
+def _azure_vm_records() -> list[dict]:
+    """The active space's Azure VM ARM records (Microsoft.Compute/virtualMachines)."""
+    out = []
+    for rec in _azure_state_dict().values():
+        if not isinstance(rec, dict):
+            continue
+        if "virtualmachines" in str(rec.get("_type", "")).lower():
+            out.append(rec)
+    return out
+
+
+def _azure_vm_runtime(rec: dict) -> dict:
+    props = rec.setdefault("properties", {})
+    if not isinstance(props, dict):
+        props = {}; rec["properties"] = props
+    rt = props.setdefault("runtime", {})
+    if not isinstance(rt, dict):
+        rt = {}; props["runtime"] = rt
+    return rt
+
+
+def _azure_vm_flat_instance(rec: dict) -> dict:
+    """Reconstruct the flat instance dict _console_execute + the sync helpers expect
+    from an Azure VM ARM record. console_state / console_log are held on the runtime
+    dict so terminal cwd + history persist across calls."""
+    rt = _azure_vm_runtime(rec)
+    cn = str(rt.get("containerName") or "")
+    iid = cn[len("cloudlearn-"):] if cn.startswith("cloudlearn-") else (rec.get("name") or "")
+    hw = (rec.get("properties") or {}).get("hardwareProfile") or {}
+    vm_size = str(hw.get("vmSize") or "") if isinstance(hw, dict) else ""
+    console_state = rt.setdefault("console_state", {"cwd": str(rt.get("workspace") or "")})
+    if not isinstance(console_state, dict):
+        console_state = {"cwd": str(rt.get("workspace") or "")}; rt["console_state"] = console_state
+    console_log = rt.setdefault("console_log", [])
+    if not isinstance(console_log, list):
+        console_log = []; rt["console_log"] = console_log
+    return {
+        "instance_id": iid,
+        "provider": "azure",
+        "name": rec.get("name") or iid,
+        "instance_type": vm_size,
+        "ami": "",
+        "runtime_backend": str(rt.get("backend") or "").strip().lower(),
+        "container_name": cn,
+        "container_id": rt.get("containerId") or cn,
+        "workspace": str(rt.get("workspace") or ""),
+        "console_state": console_state,
+        "console_log": console_log,
+        "state": rt.get("state") or rt.get("containerStatus") or "pending",
+        "private_ip": rt.get("privateIp") or "",
+    }
+
+
+def _azure_vm_sync(inst: dict, rec: dict) -> None:
+    """Sync live container state into the flat instance + mirror it back onto the ARM
+    record's runtime dict (parity with _gcp_compute_sync_runtime_instances)."""
+    backend = inst.get("runtime_backend")
+    if backend == "docker":
+        _sync_docker_instance(inst)
+    elif backend == "multipass":
+        _sync_multipass_instance(inst)
+    elif backend == "lxd":
+        _sync_lxd_instance(inst)
+    rt = _azure_vm_runtime(rec)
+    rt["state"] = inst.get("state") or rt.get("state")
+    rt["containerStatus"] = inst.get("container_status") or rt.get("containerStatus")
+    if inst.get("private_ip"):
+        rt["privateIp"] = inst["private_ip"]
+
+
+@app.get("/api/console/azurevm/instances", include_in_schema=False)
+def api_console_azurevm_list_instances():
+    """List Azure VMs in the flat {instances:[…]} shape the compute-terminal widget
+    expects (parity with /api/ec2/instances and /api/console/gce/instances). Syncs
+    runtime state first so LXD/multipass-backed VMs report a live state."""
+    instances = []
+    for rec in _azure_vm_records():
+        inst = _azure_vm_flat_instance(rec)
+        _azure_vm_sync(inst, rec)
+        instances.append(inst)
+    _persist_state()
+    return {"instances": instances, "count": len(instances)}
+
+
+@app.post("/api/console/azurevm/instances/{instance_id}/exec", include_in_schema=False)
+async def api_console_azurevm_exec(instance_id: str, request: Request):
+    """In-console terminal for an Azure VM — reuses the SAME container-exec path
+    (_console_execute) as EC2/GCE. SSH (from connect-info) remains the primary
+    access path; this is the in-console convenience terminal."""
+    payload: dict = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    command = str(payload.get("command") or payload.get("data") or "")
+    rec, _ = _find_instance_across_spaces("azure", instance_id)
+    if not isinstance(rec, dict):
+        raise HTTPException(404, detail="NoSuchInstance")
+    inst = _azure_vm_flat_instance(rec)
+    _azure_vm_sync(inst, rec)
+    if str(inst.get("state") or "").strip().lower() != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    result = _console_execute(inst, command)
+    _persist_state()
+    _record_usage("azure.compute.console_command", {
+        "instance_id": instance_id, "command": command,
+        "exit_code": result["exit_code"],
+    })
+    return {"message": "Console command executed", "instance_id": instance_id, **result}
+
+
 # ── v2.4.0 unified wire ingress (opt-in) ────────────────────────────
 # When VYOMI_UNIFIED_INGRESS is set, native cloud-wire requests are served by
 # the ONE aws_wire_router on real backends (MinIO/Postgres/Vault/NATS) — the

@@ -248,6 +248,18 @@ _SIGNAL = {
         "checks": {"passed": 36, "total": 36},
         "note": "Azure Key Vault keys — kms-crypto-view serves Key Vault keys (real kms_core crypto) via the same widget (lens=azure).",
     },
+    # Virtual Machines reuse the SAME compute-terminal widget under lens=azure; only
+    # the manifest `api`/`connect` blocks differ (§15.2). It lists Azure VMs, surfaces
+    # the native SSH connect-info + .pem (the existing /api/azure/vm/... endpoints),
+    # and drives the SAME container-exec path EC2/GCE use for the in-console terminal
+    # over the REAL LXD/multipass-backed VM records, so the list / connect / .pem /
+    # exec flow works unchanged. Backend conformant AND the widget ships, so gate to
+    # "full".
+    "azure.vm": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 34, "total": 34},
+        "note": "Azure Virtual Machines — compute-terminal serves Azure VMs via the same widget (lens=azure).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.
