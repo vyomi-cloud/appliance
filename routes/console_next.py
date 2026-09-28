@@ -305,6 +305,45 @@ _GCE_API = {
     "exec": "/api/console/gce/instances/{instance_id}/exec",
 }
 
+# ── serverless-invoke endpoint contract (the `api` block the cloud-agnostic
+#    serverless-invoke widget reads). The getFunction / invoke paths use a {name}
+#    placeholder the widget substitutes + URL-encodes. These are the AWS-lens (Lambda)
+#    defaults — the SAME paths the widget already used — so the AWS lens is
+#    byte-for-byte unchanged; the GCP Cloud Functions lens supplies the SAME shape
+#    pointed at the GCF console-facade (§15.2 — no if(cloud) branching). ──
+_LAMBDA_API = {
+    "listFunctions": "/api/lambda/functions",
+    "getFunction": "/api/lambda/functions/{name}",
+    "invoke": "/api/lambda/functions/{name}/invoke",
+    "createFunction": "/api/lambda/functions",
+}
+
+_GCF_API = {
+    "listFunctions": "/api/console/gcf/functions",
+    "getFunction": "/api/console/gcf/functions/{name}",
+    "invoke": "/api/console/gcf/functions/{name}/invoke",
+    "createFunction": "/api/console/gcf/functions",
+}
+
+# The GCP Cloud Functions lens's connect snippet/CLI (§15.2) — the SAME
+# serverless-invoke widget renders these; only this descriptor data differs (no
+# widget branching). Cloud Functions are invoked via the Functions Framework HTTP
+# trigger; the console facade runs the SAME sandboxed handler runtime as Lambda.
+_GCF_CONNECT = {
+    "snippet": (
+        "import requests\n"
+        "# call the deployed function's HTTP trigger (via the console endpoint)\n"
+        'resp = requests.post("{ep}/api/console/gcf/functions/{name}/invoke",\n'
+        '    json={"payload": {"hello": "world"}})\n'
+        'print(resp.json()["payload"])'
+    ),
+    "cli": (
+        "gcloud functions call {name} \\\n"
+        "    --data '{\"hello\":\"world\"}'"
+    ),
+}
+
+
 # The GCP Compute Engine lens's connect snippet/CLI (§15.2) — the SAME compute-terminal
 # widget renders these; only this descriptor data differs (no widget branching).
 _GCE_CONNECT = {
@@ -357,6 +396,7 @@ def _aws_services(conf) -> list:
          "conformance": conf.service_signal("ec2")},
         {"id": "lambda", "label": "Lambda", "icon": "ƒ", "widget": "serverless-invoke",
          "terminology": "function", "backed_by": "in-proc runtime",
+         "api": dict(_LAMBDA_API),
          "conformance": conf.service_signal("lambda")},
         {"id": "iam", "label": "IAM", "icon": "◆", "widget": "generic-control-plane",
          "terminology": "policy", "backed_by": "in-proc",
@@ -406,6 +446,12 @@ def _gcp_services(conf) -> list:
          "api": dict(_GCE_API),
          "connect": dict(_GCE_CONNECT),
          "conformance": conf.service_signal("gcp.compute")},
+        {"id": "functions", "label": "Cloud Functions", "icon": "ƒ",
+         "widget": "serverless-invoke", "terminology": "function",
+         "backed_by": "in-proc runtime",
+         "api": dict(_GCF_API),
+         "connect": dict(_GCF_CONNECT),
+         "conformance": conf.service_signal("gcp.functions")},
     ]
 
 
@@ -1312,6 +1358,52 @@ def register(app: FastAPI) -> None:
         from starlette.responses import Response as _Resp
         return _Resp(content=_gcs_object_bytes(obj),
                      media_type=obj.get("contentType", "application/octet-stream"))
+
+    # ── GCP Cloud Functions serverless-invoke (P3 — the GCP lens's serverless data
+    #    plane) ── the SAME serverless-invoke widget renders Cloud Functions under
+    #    lens=gcp; the ONLY difference is the manifest `api` block pointing here
+    #    instead of /api/lambda/* (§15.2 — no if(cloud) branching). This facade
+    #    returns the SAME JSON response shapes the widget consumes (list / get config
+    #    / create / invoke → payload + status + logs) and runs the REAL sandboxed
+    #    handler (core/console_gcf executes the user code in a subprocess, exactly like
+    #    the Lambda runtime). Independent in-memory store so GCP function state is
+    #    isolated from the AWS Lambda facade; purely additive.
+    def _gcf():
+        from core import console_gcf as g
+        return g
+
+    def _gcfguard(fn):
+        from core.console_gcf import GcfError
+        try:
+            return fn()
+        except GcfError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/gcf/functions", include_in_schema=False)
+    def api_console_gcf_list():
+        return _gcfguard(lambda: _gcf().list_functions())
+
+    @app.post("/api/console/gcf/functions", include_in_schema=False)
+    def api_console_gcf_create(payload: dict = Body(default=None)):
+        p = payload or {}
+        name = (p.get("function_name") or p.get("name") or "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError function_name is required")
+        return _gcfguard(lambda: _gcf().create_function(
+            name, p.get("code", ""), (p.get("entry_point") or "").strip()))
+
+    @app.get("/api/console/gcf/functions/{name}", include_in_schema=False)
+    def api_console_gcf_get(name: str):
+        return _gcfguard(lambda: _gcf().get_function(name))
+
+    @app.delete("/api/console/gcf/functions/{name}", include_in_schema=False)
+    def api_console_gcf_delete(name: str):
+        return _gcfguard(lambda: _gcf().delete_function(name))
+
+    @app.post("/api/console/gcf/functions/{name}/invoke", include_in_schema=False)
+    def api_console_gcf_invoke(name: str, payload: dict = Body(default=None)):
+        p = payload or {}
+        return _gcfguard(lambda: _gcf().invoke(name, p.get("payload")))
 
     # ── Snapshots (§12.6): capture / list / restore / FORK of the console's
     #    in-process backend store state. Control-plane-first. No substrate

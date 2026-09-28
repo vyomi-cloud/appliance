@@ -1,18 +1,26 @@
-// serverless-invoke widget (§13) — AWS Lambda function invoke surface.
+// serverless-invoke widget (§13) — cloud-agnostic serverless function invoke surface.
 //
-// Lists Lambda functions (name, runtime, handler, state) and, for a selected
-// function, shows its configuration + an INVOKE panel: a JSON event-payload editor
-// and an Invoke button that POSTs to the appliance's existing Lambda REST API
+// Lists functions (name, runtime, handler, state) and, for a selected function,
+// shows its configuration + an INVOKE panel: a JSON event-payload editor and an
+// Invoke button that POSTs to the runtime. It is CLOUD-AGNOSTIC (§15.2): it reads
+// its endpoint paths (list, get config, invoke, create) AND its connect snippet/CLI
+// from the SELECTED service descriptor's `api` / `connect` blocks — so the SAME
+// widget serves AWS Lambda and GCP Cloud Functions with ZERO branching. When no
+// descriptor block is present it falls back to the AWS Lambda defaults, so the AWS
+// lens keeps working unchanged:
 //   GET  /api/lambda/functions                       (list)
 //   GET  /api/lambda/functions/{name}                (config + invocations)
 //   POST /api/lambda/functions                       (create — optional)
 //   POST /api/lambda/functions/{name}/invoke         (invoke → response payload)
-// so nothing here reinvents the Lambda runtime; the real sandboxed handler runs.
-// Rendered inside the common Connect contract with the mandatory `⛃ backed by
-// <engine>` badge (§13.1) + a boto3 / CLI snippet.
+// so nothing here reinvents the runtime; the real sandboxed handler runs. Rendered
+// inside the common Connect contract with the mandatory `⛃ backed by <engine>` badge
+// (§13.1) + a native SDK / CLI snippet.
 //
 // It talks ONLY to /api/* (§15.1 #2) — no substrate/backend knowledge; the runtime
 // backing is surfaced purely as the `backed_by` DATA from the manifest.
+//
+// API contract (service.api): { listFunctions, getFunction, invoke, createFunction }
+// — path templates with a {name} placeholder this widget substitutes + URL-encodes.
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
 import { apiGet, apiSend } from '../api.js';
@@ -101,6 +109,30 @@ class ServerlessInvoke extends LitElement {
     .err { color: var(--vy-err); font-size: var(--vy-fs-sm); margin-top: var(--vy-s2); font-family: var(--vy-mono); }
   `;
 
+  // ── Endpoint resolution (§15.2): read paths from the service descriptor's `api`
+  //    block, falling back to the AWS Lambda defaults so the AWS lens works
+  //    unchanged. The widget is thereby cloud-agnostic — the GCP lens supplies Cloud
+  //    Functions paths of the same shape and NOTHING below changes. The only
+  //    placeholder is {name} (getFunction / invoke), which the widget URL-encodes. ──
+  static _LAMBDA_DEFAULTS = {
+    listFunctions: '/api/lambda/functions',
+    getFunction: '/api/lambda/functions/{name}',
+    invoke: '/api/lambda/functions/{name}/invoke',
+    createFunction: '/api/lambda/functions',
+  };
+
+  _tpl(name) {
+    const api = (this.service && this.service.api) || {};
+    return api[name] || ServerlessInvoke._LAMBDA_DEFAULTS[name];
+  }
+
+  // Substitute + URL-encode the {name} placeholder in a template.
+  _apiPath(name, { fnName } = {}) {
+    let p = this._tpl(name);
+    if (fnName != null) p = p.replace('{name}', encodeURIComponent(fnName));
+    return p;
+  }
+
   connectedCallback() {
     super.connectedCallback();
     this._payload = '{}';
@@ -120,7 +152,7 @@ class ServerlessInvoke extends LitElement {
 
   async _loadFunctions() {
     try {
-      const r = await apiGet('/api/lambda/functions');
+      const r = await apiGet(this._apiPath('listFunctions'));
       this._functions = r.functions || [];
       if (!this._sel && this._functions.length) this._select(this._fname(this._functions[0]));
     } catch (e) {
@@ -136,7 +168,7 @@ class ServerlessInvoke extends LitElement {
     if (!name) return;
     this._busy = true;
     try {
-      this._fn = await apiGet(`/api/lambda/functions/${encodeURIComponent(name)}`);
+      this._fn = await apiGet(this._apiPath('getFunction', { fnName: name }));
     } catch (e) {
       this._fn = null;
       this._msg = 'Could not load function: ' + e.message;
@@ -156,7 +188,7 @@ class ServerlessInvoke extends LitElement {
       // API supplies a default echo handler — either way the real runtime backs it.
       const body = { function_name: name };
       if ((nf.code || '').trim()) body.code = nf.code;
-      await apiSend('POST', '/api/lambda/functions', body);
+      await apiSend('POST', this._apiPath('createFunction'), body);
       this._newFn = {};
       await this._loadFunctions();
       await this._select(name);
@@ -181,7 +213,7 @@ class ServerlessInvoke extends LitElement {
     this._msg = '';
     this._result = null;
     try {
-      const r = await apiSend('POST', `/api/lambda/functions/${encodeURIComponent(name)}/invoke`,
+      const r = await apiSend('POST', this._apiPath('invoke', { fnName: name }),
         { payload, invocation_type: 'RequestResponse' });
       this._result = r || {};
       // Refresh config so the invocation history / counts update.
@@ -197,17 +229,34 @@ class ServerlessInvoke extends LitElement {
     return (this.caps && this.caps.workspace && this.caps.workspace.endpoint) || location.origin;
   }
 
-  _snippet() {
-    const ep = this._endpoint();
-    const n = this._sel || 'my-function';
-    return `import boto3, json\nlam = boto3.client("lambda", endpoint_url="${ep}",\n    aws_access_key_id="test", aws_secret_access_key="test")\nresp = lam.invoke(FunctionName="${n}",\n    Payload=json.dumps({"hello": "world"}))\nprint(resp["Payload"].read().decode())`;
+  // The connect snippet/CLI are descriptor-driven too (§15.2): a service may carry a
+  // `connect` block { snippet, cli } — templates with {ep} and {name} placeholders.
+  // Absent → the AWS Lambda (boto3) defaults, so the AWS lens is unchanged; the GCP
+  // lens supplies a Cloud Functions variant with NO widget branching.
+  static _LAMBDA_CONNECT = {
+    snippet:
+      'import boto3, json\nlam = boto3.client("lambda", endpoint_url="{ep}",\n' +
+      '    aws_access_key_id="test", aws_secret_access_key="test")\n' +
+      'resp = lam.invoke(FunctionName="{name}",\n' +
+      '    Payload=json.dumps({"hello": "world"}))\n' +
+      'print(resp["Payload"].read().decode())',
+    cli:
+      'aws --endpoint-url {ep} lambda invoke --function-name {name} \\\n' +
+      '    --payload \'{"hello":"world"}\' /dev/stdout',
+  };
+
+  _connectTpl(name) {
+    const c = (this.service && this.service.connect) || {};
+    return c[name] || ServerlessInvoke._LAMBDA_CONNECT[name];
   }
 
-  _cli() {
-    const ep = this._endpoint();
-    const n = this._sel || 'my-function';
-    return `aws --endpoint-url ${ep} lambda invoke --function-name ${n} \\\n    --payload '{"hello":"world"}' /dev/stdout`;
+  _fill(tpl) {
+    return String(tpl).split('{ep}').join(this._endpoint())
+      .split('{name}').join(this._sel || 'my-function');
   }
+
+  _snippet() { return this._fill(this._connectTpl('snippet')); }
+  _cli() { return this._fill(this._connectTpl('cli')); }
 
   _configBlock(f) {
     if (this._busy && !f) return html`<div class="meta">Loading function…</div>`;

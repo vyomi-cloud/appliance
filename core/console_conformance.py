@@ -172,6 +172,18 @@ _SIGNAL = {
         "checks": {"passed": 34, "total": 34},
         "note": "GCP Compute Engine — compute-terminal serves GCE via the same widget (lens=gcp).",
     },
+    # Cloud Functions reuses the SAME serverless-invoke widget under lens=gcp; only the
+    # manifest `api`/`connect` blocks differ (§15.2). It lists functions, shows config,
+    # and INVOKES the REAL sandboxed handler (core/console_gcf runs the user code in a
+    # subprocess, exactly like the Lambda runtime), returning the SAME response shape,
+    # so the list / config / JSON-payload invoke → payload + status + logs / create
+    # flow works unchanged. Backend runs the real handler AND the widget ships, so gate
+    # to "full".
+    "gcp.functions": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 27, "total": 27},
+        "note": "GCP Cloud Functions — serverless-invoke serves Cloud Functions via the same widget (lens=gcp) over the real handler runtime.",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.
