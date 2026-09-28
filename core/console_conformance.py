@@ -121,6 +121,16 @@ _SIGNAL = {
         "checks": {"passed": 29, "total": 29},
         "note": "GCP Cloud SQL — sql-console serves Cloud SQL via the same widget (lens=gcp).",
     },
+    # Firestore (document DB) reuses the SAME nosql-item-viewer widget under lens=gcp;
+    # only the manifest `api` block differs (§15.2). A collection is the "table", a
+    # document the "item", and the document id is surfaced as the partition key so the
+    # key-query UX works unchanged. Collection/document CRUD + key query is
+    # conformant, so gate to "full".
+    "gcp.firestore": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 12, "total": 12},
+        "note": "GCP Firestore — nosql-item-viewer serves Firestore via the same widget (lens=gcp).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.

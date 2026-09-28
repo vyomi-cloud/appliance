@@ -110,6 +110,32 @@ _DYNAMODB_NOSQL_API = {
     "queryItems": "/api/dynamodb/tables/{table}/query",
 }
 
+_FIRESTORE_NOSQL_API = {
+    "listTables": "/api/console/firestore/collections",
+    "createTable": "/api/console/firestore/collections",
+    "getTable": "/api/console/firestore/collections/{table}",
+    "listItems": "/api/console/firestore/collections/{table}/documents",
+    "putItem": "/api/console/firestore/collections/{table}/documents",
+    "deleteItem": "/api/console/firestore/collections/{table}/documents",
+    "queryItems": "/api/console/firestore/collections/{table}/query",
+}
+
+# The GCP Firestore lens's connect snippet/CLI (§15.2) — the SAME nosql-item-viewer
+# widget renders these; only this descriptor data differs (no widget branching).
+# Firestore is a document DB; a "table" is a COLLECTION and the document id plays the
+# role of the partition key.
+_FIRESTORE_CONNECT = {
+    "snippet": (
+        "from google.cloud import firestore\n"
+        "# point the native client at the console endpoint\n"
+        'db = firestore.Client(project="cloudlearn",\n'
+        '    client_options={"api_endpoint": "{ep}"})\n'
+        'db.collection("{table}").document("item-1").set({"note": "hello"})\n'
+        'db.collection("{table}").document("item-1").get().to_dict()'
+    ),
+    "cli": 'gcloud firestore documents list "{table}"',
+}
+
 
 def _aws_services(conf) -> list:
     """The AWS-lens service catalog (unchanged from P0/P2 — the rich vertical)."""
@@ -161,6 +187,11 @@ def _gcp_services(conf) -> list:
          "api": dict(_CLOUDSQL_SQL_CONSOLE_API),
          "connect": dict(_CLOUDSQL_CONNECT),
          "conformance": conf.service_signal("gcp.cloudsql")},
+        {"id": "firestore", "label": "Firestore", "icon": "⊞", "widget": "nosql-item-viewer",
+         "terminology": "collection", "backed_by": "in-proc doc store",
+         "api": dict(_FIRESTORE_NOSQL_API),
+         "connect": dict(_FIRESTORE_CONNECT),
+         "conformance": conf.service_signal("gcp.firestore")},
     ]
 
 
@@ -465,6 +496,68 @@ def register(app: FastAPI) -> None:
     async def api_console_cloudsql_schema(db_id: str):
         from core import console_cloudsql
         return await console_cloudsql.schema(db_id)
+
+    # ── Firestore nosql-item-viewer (P3 — the GCP lens's NoSQL data plane) ── the
+    #    SAME nosql-item-viewer widget renders Firestore under lens=gcp; the ONLY
+    #    difference is the manifest `api` block pointing here (§15.2). This facade
+    #    returns the SAME JSON response shapes as the DynamoDB console REST API so the
+    #    widget is cloud-agnostic. A "table" is a Firestore COLLECTION and an "item"
+    #    is a DOCUMENT (the document id is surfaced as the partition key). Purely
+    #    additive; touches no existing Firestore handler.
+    def _fs():
+        from core import console_firestore as f
+        return f
+
+    def _fsguard(fn):
+        from core.console_firestore import FirestoreError
+        try:
+            return fn()
+        except FirestoreError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/firestore/collections", include_in_schema=False)
+    def api_console_fs_list():
+        return _fsguard(lambda: _fs().list_collections())
+
+    @app.post("/api/console/firestore/collections", include_in_schema=False)
+    def api_console_fs_create(payload: dict = Body(default=None)):
+        p = payload or {}
+        name = (p.get("table_name") or p.get("name") or "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError table_name is required")
+        return _fsguard(lambda: _fs().create_collection(name))
+
+    @app.get("/api/console/firestore/collections/{name}", include_in_schema=False)
+    def api_console_fs_get(name: str):
+        return _fsguard(lambda: _fs().get_collection(name))
+
+    @app.delete("/api/console/firestore/collections/{name}", include_in_schema=False)
+    def api_console_fs_delete(name: str):
+        return _fsguard(lambda: _fs().delete_collection(name))
+
+    @app.get("/api/console/firestore/collections/{name}/documents", include_in_schema=False)
+    def api_console_fs_list_docs(name: str):
+        return _fsguard(lambda: _fs().list_documents(name))
+
+    @app.post("/api/console/firestore/collections/{name}/documents", include_in_schema=False)
+    def api_console_fs_put_doc(name: str, payload: dict = Body(default=None)):
+        item = (payload or {}).get("item")
+        if not isinstance(item, dict):
+            raise HTTPException(400, detail="ValidationError item (object) is required")
+        return _fsguard(lambda: _fs().put_document(name, item))
+
+    @app.delete("/api/console/firestore/collections/{name}/documents", include_in_schema=False)
+    def api_console_fs_delete_doc(name: str, payload: dict = Body(default=None)):
+        key = (payload or {}).get("key")
+        if not isinstance(key, dict):
+            raise HTTPException(400, detail="ValidationError key (object) is required")
+        return _fsguard(lambda: _fs().delete_document(name, key))
+
+    @app.post("/api/console/firestore/collections/{name}/query", include_in_schema=False)
+    def api_console_fs_query(name: str, payload: dict = Body(default=None)):
+        p = payload or {}
+        return _fsguard(lambda: _fs().query_documents(
+            name, p.get("partition_key_value"), p.get("sort_key_begins_with", "")))
 
     # ── SQS + SNS queue/topic-viewer (§13): ONE shared MessagingStore so the widget
     #    can show REAL SNS→SQS fan-out. Drives core/sqs_core + core/sns_core. ──
