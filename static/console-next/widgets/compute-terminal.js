@@ -1,15 +1,25 @@
-// compute-terminal widget (§13) — AWS EC2 compute connect surface.
+// compute-terminal widget (§13) — cloud-agnostic compute connect surface.
 //
-// Lists EC2 instances (id, state, type, IP) and, for a RUNNING instance, surfaces
+// Lists compute instances (id, state, type, IP) and, for a RUNNING instance, surfaces
 // the real native access path: the SSH command, a `.pem` download, and the app URL,
-// all pulled from the appliance's existing connect-info endpoint
-//   GET /api/aws/ec2/instances/{id}/connect-info   (the _docker_connect_info shape)
-//   GET /api/aws/ec2/instances/{id}/private-key.pem (the shared instance key)
+// all pulled from the appliance's existing connect-info endpoints. It is CLOUD-AGNOSTIC
+// (§15.2): it reads its endpoint paths (list, connect-info, key download, exec) AND its
+// connect snippet/CLI from the SELECTED service descriptor's `api` / `connect` blocks —
+// so the SAME widget serves AWS EC2 and GCP Compute Engine (GCE) with ZERO branching.
+// When no descriptor block is present it falls back to the AWS EC2 defaults, so the AWS
+// lens keeps working unchanged:
+//   GET  /api/ec2/instances                              (list — {instances:[…]})
+//   GET  /api/aws/ec2/instances/{id}/connect-info        (the _docker_connect_info shape)
+//   GET  /api/aws/ec2/instances/{id}/private-key.pem     (the shared instance key)
+//   POST /api/ec2/instances/{id}/console/exec            (in-console exec)
 // so nothing here reinvents SSH provisioning. Rendered inside the common Connect
-// contract with the mandatory `⛃ backed by <engine>` badge (§13.1) + boto3/CLI.
+// contract with the mandatory `⛃ backed by <engine>` badge (§13.1) + native SDK/CLI.
 //
 // It talks ONLY to /api/* (§15.1 #2) — no substrate/backend knowledge; the compute
 // backend (Docker / LXD) is surfaced purely as the `backed_by` DATA from the manifest.
+//
+// API contract (service.api): { listInstances, connectInfo, keyDownload, exec } — path
+// templates with an {instance_id} placeholder this widget substitutes + URL-encodes.
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
 import { apiGet, apiSend, apiUrl } from '../api.js';
@@ -22,7 +32,7 @@ class ComputeTerminal extends LitElement {
     deepLink: { attribute: false },
     _instances: { state: true },   // [{ instance_id, state, instance_type, public_ip, private_ip, ... }]
     _sel: { state: true },         // selected instance_id
-    _connect: { state: true },     // connect-info result (ssh/alternatives/lxc)
+    _connInfo: { state: true },    // connect-info result (ssh/alternatives/lxc)
     _busy: { state: true },
     _msg: { state: true },
     _cmd: { state: true },         // terminal command input
@@ -100,6 +110,30 @@ class ComputeTerminal extends LitElement {
     .term-in input:focus { border-color: var(--vy-accent); }
   `;
 
+  // ── Endpoint resolution (§15.2): read paths from the service descriptor's `api`
+  //    block, falling back to the AWS EC2 defaults so the AWS lens works unchanged.
+  //    The widget is thereby cloud-agnostic — the GCP lens supplies GCE paths of the
+  //    same shape and NOTHING below changes. The only placeholder is {instance_id}
+  //    (connect-info / key / exec), which the widget URL-encodes. ──
+  static _EC2_DEFAULTS = {
+    listInstances: '/api/ec2/instances',
+    connectInfo: '/api/aws/ec2/instances/{instance_id}/connect-info',
+    keyDownload: '/api/aws/ec2/instances/{instance_id}/private-key.pem',
+    exec: '/api/ec2/instances/{instance_id}/console/exec',
+  };
+
+  _tpl(name) {
+    const api = (this.service && this.service.api) || {};
+    return api[name] || ComputeTerminal._EC2_DEFAULTS[name];
+  }
+
+  // Substitute + URL-encode the {instance_id} placeholder in a template.
+  _apiPath(name, { instanceId } = {}) {
+    let p = this._tpl(name);
+    if (instanceId != null) p = p.replace('{instance_id}', encodeURIComponent(instanceId));
+    return p;
+  }
+
   connectedCallback() {
     super.connectedCallback();
     this._loadInstances();
@@ -115,7 +149,7 @@ class ComputeTerminal extends LitElement {
 
   async _loadInstances() {
     try {
-      const r = await apiGet('/api/ec2/instances');
+      const r = await apiGet(this._apiPath('listInstances'));
       this._instances = r.instances || [];
       if (!this._sel && this._instances.length) this._select(this._iid(this._instances[0]));
     } catch (e) {
@@ -130,7 +164,7 @@ class ComputeTerminal extends LitElement {
 
   async _select(id) {
     this._sel = id;
-    this._connect = null;
+    this._connInfo = null;
     this._term = [];
     this._cmd = '';
     this._msg = '';
@@ -144,9 +178,9 @@ class ComputeTerminal extends LitElement {
   async _loadConnect(id) {
     this._busy = true;
     try {
-      this._connect = await apiGet(`/api/aws/ec2/instances/${encodeURIComponent(id)}/connect-info`);
+      this._connInfo = await apiGet(this._apiPath('connectInfo', { instanceId: id }));
     } catch (e) {
-      this._connect = null;
+      this._connInfo = null;
       this._msg = 'Connect info unavailable: ' + e.message;
     } finally {
       this._busy = false;
@@ -164,16 +198,32 @@ class ComputeTerminal extends LitElement {
     return `http://${host}/`;
   }
 
-  _snippet() {
-    const ep = this._endpoint();
-    return `import boto3\nec2 = boto3.client("ec2", endpoint_url="${ep}",\n    aws_access_key_id="test", aws_secret_access_key="test")\nec2.describe_instances()\nec2.run_instances(ImageId="ami-ubuntu-24.04", InstanceType="t2.micro",\n    MinCount=1, MaxCount=1)`;
+  // The connect snippet/CLI are descriptor-driven too (§15.2): a service may carry a
+  // `connect` block { snippet, cli } — templates with {ep} and {instance_id}
+  // placeholders. Absent → the AWS EC2 (boto3) defaults, so the AWS lens is unchanged;
+  // the GCP lens supplies a GCE variant with NO widget branching.
+  static _EC2_CONNECT = {
+    snippet:
+      'import boto3\nec2 = boto3.client("ec2", endpoint_url="{ep}",\n' +
+      '    aws_access_key_id="test", aws_secret_access_key="test")\n' +
+      'ec2.describe_instances()\n' +
+      'ec2.run_instances(ImageId="ami-ubuntu-24.04", InstanceType="t2.micro",\n' +
+      '    MinCount=1, MaxCount=1)',
+    cli: 'aws --endpoint-url {ep} ec2 describe-instances --instance-ids {instance_id}',
+  };
+
+  _connectTpl(name) {
+    const c = (this.service && this.service.connect) || {};
+    return c[name] || ComputeTerminal._EC2_CONNECT[name];
   }
 
-  _cli() {
-    const ep = this._endpoint();
-    const id = this._sel || 'i-XXXX';
-    return `aws --endpoint-url ${ep} ec2 describe-instances --instance-ids ${id}`;
+  _fill(tpl) {
+    return String(tpl).split('{ep}').join(this._endpoint())
+      .split('{instance_id}').join(this._sel || 'i-XXXX');
   }
+
+  _snippet() { return this._fill(this._connectTpl('snippet')); }
+  _cli() { return this._fill(this._connectTpl('cli')); }
 
   _connectBlock(inst) {
     const running = this._state(inst) === 'running';
@@ -181,13 +231,17 @@ class ComputeTerminal extends LitElement {
       return html`<div class="meta">Instance is <strong>${this._state(inst) || 'unknown'}</strong> —
         start it to reveal SSH connect info.</div>`;
     }
-    const c = this._connect;
+    const c = this._connInfo;
     if (this._busy && !c) return html`<div class="meta">Fetching connect info…</div>`;
     if (!c || !c.ok) {
       return html`<div class="meta">${(c && (c.reason || c.note)) || 'Connect info unavailable.'}</div>`;
     }
     const ssh = c.ssh || {};
-    const keyUrl = ssh.key_download_url ? apiUrl(ssh.key_download_url) : null;
+    // Prefer the server-supplied key URL; else fall back to the descriptor's
+    // keyDownload template so the .pem link stays cloud-agnostic (§15.2).
+    const keyUrl = ssh.key_download_url
+      ? apiUrl(ssh.key_download_url)
+      : apiUrl(this._apiPath('keyDownload', { instanceId: this._sel }));
     const appUrl = this._appUrl(inst, c);
     return html`
       <div class="sub" style="margin-top:0">SSH</div>
@@ -224,8 +278,9 @@ class ComputeTerminal extends LitElement {
 
   _copy(text) { navigator.clipboard?.writeText(text || '').catch(() => {}); }
 
-  // In-browser terminal: POST the command to the existing console-exec endpoint
-  //   POST /api/ec2/instances/{id}/console/exec  { command }  → { output, exit_code, cwd }
+  // In-browser terminal: POST the command to the descriptor's exec endpoint
+  //   POST {exec}  { command }  → { output, exit_code, cwd }   (default is the AWS EC2
+  //   console-exec path; the GCP lens supplies the GCE exec facade — §15.2)
   // and append it to the scrollback. Kept minimal (no xterm dependency) — a command
   // input + output pane. SSH remains the primary access path (shown above); this is
   // the in-console convenience terminal, exactly what the classic console offers.
@@ -237,7 +292,7 @@ class ComputeTerminal extends LitElement {
     this._cmd = '';
     const cwd = (this._term && this._term.length && this._term[this._term.length - 1].cwd) || '~';
     try {
-      const r = await apiSend('POST', `/api/ec2/instances/${encodeURIComponent(id)}/console/exec`, { command: cmd });
+      const r = await apiSend('POST', this._apiPath('exec', { instanceId: id }), { command: cmd });
       let out = (r && r.output) || '';
       if (out === '\f') { this._term = []; this._running = false; return; }  // clear
       this._term = [...(this._term || []), {

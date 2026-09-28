@@ -285,6 +285,44 @@ _GCP_KMS_CONNECT = {
 }
 
 
+# ── compute-terminal endpoint contract (the `api` block the cloud-agnostic
+#    compute-terminal reads). The connect-info / key / exec paths use an
+#    {instance_id} placeholder the widget substitutes + URL-encodes. These are the
+#    AWS-lens (EC2) defaults — the SAME paths the widget already used — so the AWS
+#    lens is byte-for-byte unchanged; the GCP Compute Engine lens supplies the SAME
+#    shape pointed at the GCE console-facade (§15.2 — no if(cloud) branching). ──
+_EC2_API = {
+    "listInstances": "/api/ec2/instances",
+    "connectInfo": "/api/aws/ec2/instances/{instance_id}/connect-info",
+    "keyDownload": "/api/aws/ec2/instances/{instance_id}/private-key.pem",
+    "exec": "/api/ec2/instances/{instance_id}/console/exec",
+}
+
+_GCE_API = {
+    "listInstances": "/api/console/gce/instances",
+    "connectInfo": "/api/gcp/compute/instances/{instance_id}/connect-info",
+    "keyDownload": "/api/gcp/compute/instances/{instance_id}/private-key.pem",
+    "exec": "/api/console/gce/instances/{instance_id}/exec",
+}
+
+# The GCP Compute Engine lens's connect snippet/CLI (§15.2) — the SAME compute-terminal
+# widget renders these; only this descriptor data differs (no widget branching).
+_GCE_CONNECT = {
+    "snippet": (
+        "from google.cloud import compute_v1\n"
+        "# point the native client at the console endpoint\n"
+        'client = compute_v1.InstancesClient(\n'
+        '    client_options={"api_endpoint": "{ep}"})\n'
+        'for vm in client.list(project="cloudlearn", zone="us-central1-a"):\n'
+        "    print(vm.name, vm.status)"
+    ),
+    "cli": (
+        "gcloud compute instances list --zones=us-central1-a "
+        "--filter=\"name={instance_id}\""
+    ),
+}
+
+
 def _aws_services(conf) -> list:
     """The AWS-lens service catalog (unchanged from P0/P2 — the rich vertical)."""
     return [
@@ -315,6 +353,7 @@ def _aws_services(conf) -> list:
          "conformance": conf.service_signal("kms")},
         {"id": "ec2", "label": "EC2", "icon": "🖥", "widget": "compute-terminal",
          "terminology": "instance", "backed_by": "Docker/LXD",
+         "api": dict(_EC2_API),
          "conformance": conf.service_signal("ec2")},
         {"id": "lambda", "label": "Lambda", "icon": "ƒ", "widget": "serverless-invoke",
          "terminology": "function", "backed_by": "in-proc runtime",
