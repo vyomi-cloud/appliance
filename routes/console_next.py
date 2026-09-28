@@ -380,6 +380,30 @@ def register(app: FastAPI) -> None:
             raise HTTPException(400, detail="ValidationError key_id is required")
         return _kguard(lambda: _kms().generate_data_key(key_id, p.get("key_spec", "AES_256")))
 
+    # ── Snapshots (§12.6, P2 slice 1): capture / list / restore of the console's
+    #    in-process backend store state. Control-plane-first; fork + replay are a
+    #    later slice. No substrate branching — the registry walks a common store
+    #    table (core/console_snapshots.py). ──
+    @app.post("/api/console/snapshots", include_in_schema=False)
+    def api_console_snapshots_capture(payload: dict = Body(default=None)):
+        from core import console_snapshots as snaps
+        p = payload or {}
+        return snaps.capture(name=(p.get("name") or "").strip(),
+                             note=(p.get("note") or "").strip())
+
+    @app.get("/api/console/snapshots", include_in_schema=False)
+    def api_console_snapshots_list():
+        from core import console_snapshots as snaps
+        return {"snapshots": snaps.list_snapshots()}
+
+    @app.post("/api/console/snapshots/{snap_id}/restore", include_in_schema=False)
+    def api_console_snapshots_restore(snap_id: str):
+        from core import console_snapshots as snaps
+        try:
+            return snaps.restore(snap_id)
+        except snaps.SnapshotError as e:
+            raise HTTPException(e.status, detail=e.message)
+
     # ── The SPA shell — serves index.html at /console-next and any sub-path so the
     #    client-side router can own deep-links. Asset refs inside index.html are
     #    relative to /console-next-assets/, base-path-friendly. ──

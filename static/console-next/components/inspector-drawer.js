@@ -1,12 +1,13 @@
 // Glass-box Inspector drawer (§12) — the flagship. Right-hand persistent drawer
 // with four tabs; P0 ships the LIVE Calls tab (SSE stream of the §12.2 events).
-// State / Snapshots / Conformance are present as placeholders (P1/P2).
+// Snapshots is live (P2: capture/list/restore of in-process store state);
+// State / Conformance remain placeholders (P1).
 //
 // The event shape is identical across substrates (§15.1 #5), so this UI is the
 // same whether the FastAPI middleware or the Nano SW/router produced the events.
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
-import { apiUrl } from '../api.js';
+import { apiUrl, apiGet, apiSend } from '../api.js';
 
 const METHOD_VAR = {
   GET: '--vy-m-get', POST: '--vy-m-post', PUT: '--vy-m-put',
@@ -23,6 +24,9 @@ class InspectorDrawer extends LitElement {
     _paused: { state: true },
     _selected: { state: true },
     _connected: { state: true },
+    _snaps: { state: true },
+    _snapBusy: { state: true },
+    _snapErr: { state: true },
   };
 
   static styles = css`
@@ -89,6 +93,23 @@ class InspectorDrawer extends LitElement {
     .actions button.primary { color: var(--vy-accent); border-color: var(--vy-accent); }
     .stub { padding: var(--vy-s5); color: var(--vy-fg-dim); font-size: var(--vy-fs-sm); }
     .empty { padding: var(--vy-s5); color: var(--vy-fg-dim); text-align: center; font-size: var(--vy-fs-sm); }
+    .snaphead { display: flex; align-items: center; gap: var(--vy-s2); padding: var(--vy-s2) var(--vy-s3);
+      border-bottom: 1px solid var(--vy-border-soft); }
+    .snaphead button { background: transparent; color: var(--vy-accent); border: 1px solid var(--vy-accent);
+      border-radius: var(--vy-radius); padding: 1px var(--vy-s2); font-size: var(--vy-fs-xs); cursor: pointer; }
+    .snaphead button[disabled] { opacity: .5; cursor: default; }
+    .snaperr { color: var(--vy-err); font-size: var(--vy-fs-xs); margin-left: auto; }
+    li.snap { padding: var(--vy-s2) var(--vy-s3); border-bottom: 1px solid var(--vy-border-soft);
+      font-size: var(--vy-fs-sm); }
+    .snaprow { display: flex; align-items: center; gap: var(--vy-s2); }
+    .snapname { color: var(--vy-fg); font-family: var(--vy-mono); overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; }
+    .snapmeta { color: var(--vy-fg-dim); font-size: var(--vy-fs-xs); margin-top: 2px; }
+    .snaprestore { margin-left: auto; background: transparent; color: var(--vy-fg-muted);
+      border: 1px solid var(--vy-border); border-radius: var(--vy-radius); padding: 1px var(--vy-s2);
+      font-size: var(--vy-fs-xs); cursor: pointer; }
+    .snapnote { padding: var(--vy-s3); color: var(--vy-fg-dim); font-size: var(--vy-fs-xs);
+      border-top: 1px solid var(--vy-border-soft); line-height: 1.5; }
   `;
 
   constructor() {
@@ -100,6 +121,10 @@ class InspectorDrawer extends LitElement {
     this._selected = null;
     this._connected = false;
     this._es = null;
+    this._snaps = [];
+    this._snapBusy = false;
+    this._snapErr = '';
+    this._snapsLoaded = false;
   }
 
   connectedCallback() {
@@ -158,15 +183,116 @@ class InspectorDrawer extends LitElement {
     this.dispatchEvent(new CustomEvent('deep-link', { detail: { ref }, bubbles: true, composed: true }));
   }
 
+  // ── Snapshots tab (§12.6) — capture / list / restore of the console's
+  //    in-process backend store state. Fork + replay are a later slice. ──
+  _selectTab(t) {
+    this._tab = t;
+    if (t === 'snapshots' && !this._snapsLoaded) this._loadSnapshots();
+  }
+
+  async _loadSnapshots() {
+    this._snapErr = '';
+    try {
+      const r = await apiGet('/api/console/snapshots');
+      this._snaps = r.snapshots || [];
+      this._snapsLoaded = true;
+    } catch (e) {
+      this._snapErr = (e && e.message) || 'failed to load snapshots';
+    }
+  }
+
+  async _snapshotNow() {
+    if (this._snapBusy) return;
+    this._snapBusy = true;
+    this._snapErr = '';
+    try {
+      await apiSend('POST', '/api/console/snapshots', {});
+      await this._loadSnapshots();
+    } catch (e) {
+      this._snapErr = (e && e.message) || 'snapshot failed';
+    } finally {
+      this._snapBusy = false;
+    }
+  }
+
+  async _restoreSnapshot(id) {
+    if (this._snapBusy) return;
+    this._snapBusy = true;
+    this._snapErr = '';
+    try {
+      await apiSend('POST', `/api/console/snapshots/${encodeURIComponent(id)}/restore`);
+      // let widgets know state changed under them so they can refresh
+      this.dispatchEvent(new CustomEvent('state-restored', { detail: { id }, bubbles: true, composed: true }));
+    } catch (e) {
+      this._snapErr = (e && e.message) || 'restore failed';
+    } finally {
+      this._snapBusy = false;
+    }
+  }
+
+  _fmtSize(n) {
+    if (n == null) return '—';
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  _fmtWhen(ts) {
+    if (!ts) return '';
+    try { return new Date(ts * 1000).toLocaleString(); } catch (_) { return ''; }
+  }
+
+  _renderSnapshots() {
+    return html`
+      <div class="snaphead">
+        <button ?disabled=${this._snapBusy} @click=${() => this._snapshotNow()}>
+          ${this._snapBusy ? '…' : 'Snapshot now'}</button>
+        <button @click=${() => this._loadSnapshots()} title="refresh">↻</button>
+        ${this._snapErr ? html`<span class="snaperr">${this._snapErr}</span>` : ''}
+      </div>
+      <ul>
+        ${this._snaps.length === 0
+          ? html`<li class="empty" style="cursor:default">
+              No snapshots yet. "Snapshot now" captures the current console state
+              (secrets, KMS keys, queues/topics, RDS metadata).</li>`
+          : this._snaps.map((s) => this._renderSnapRow(s))}
+      </ul>
+      <div class="snapnote">
+        Captures the console's in-process backend state (control-plane first).
+        Real MinIO objects, live SQL rows and Docker/LXD volumes are a later
+        fidelity slice; fork &amp; replay come later too.
+      </div>
+    `;
+  }
+
+  _renderSnapRow(s) {
+    const stores = (s.stores || []).join(', ');
+    return html`
+      <li class="snap">
+        <div class="snaprow">
+          <span class="snapname">${s.name}</span>
+          <button class="snaprestore" ?disabled=${this._snapBusy}
+            @click=${() => this._restoreSnapshot(s.id)}>restore</button>
+        </div>
+        <div class="snapmeta">${this._fmtWhen(s.created)} · ${this._fmtSize(s.size)}${stores ? ` · ${stores}` : ''}</div>
+        ${s.note ? html`<div class="snapmeta">↳ ${s.note}</div>` : ''}
+      </li>
+    `;
+  }
+
   render() {
     return html`
       <div class="drawer ${this.open ? '' : 'closed'}">
         <div class="tabs">
           ${['calls', 'state', 'snapshots', 'conformance'].map(
-            (t) => html`<button class=${this._tab === t ? 'on' : ''} @click=${() => (this._tab = t)}>${t}</button>`
+            (t) => html`<button class=${this._tab === t ? 'on' : ''} @click=${() => this._selectTab(t)}>${t}</button>`
           )}
         </div>
-        ${this._tab === 'calls' ? this._renderCalls() : this._renderStub()}
+        ${this._tab === 'calls'
+          ? this._renderCalls()
+          : this._tab === 'snapshots'
+            ? this._renderSnapshots()
+            : this._renderStub()}
       </div>
     `;
   }
@@ -174,7 +300,6 @@ class InspectorDrawer extends LitElement {
   _renderStub() {
     const labels = {
       state: 'State — browse the real backend state (objects, rows, containers). Deep-linked from a call in P1.',
-      snapshots: 'Snapshots — snapshot / fork / rollback tree over real state. Lands in P2.',
       conformance: 'Conformance — per-service checks vs the real SDK. Live panel lands with F5/P1.',
     };
     return html`<div class="stub">${labels[this._tab]}</div>`;
