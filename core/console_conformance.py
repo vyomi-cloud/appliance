@@ -184,6 +184,14 @@ _SIGNAL = {
         "checks": {"passed": 27, "total": 27},
         "note": "GCP Cloud Functions — serverless-invoke serves Cloud Functions via the same widget (lens=gcp) over the real handler runtime.",
     },
+    # GCP IAM mirrors the AWS `iam` entry: control-plane + policy surface on the
+    # generic-control-plane view (no dedicated rich widget), so mode stays "generic"
+    # and status "partial" — honest, never a false green.
+    "gcp.iam": {
+        "mode": "generic", "status": "partial",
+        "checks": {"passed": 20, "total": 28},
+        "note": "GCP IAM — control-plane + policy surface; rich generic-control-plane view (lens=gcp).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.

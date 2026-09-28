@@ -452,6 +452,9 @@ def _gcp_services(conf) -> list:
          "api": dict(_GCF_API),
          "connect": dict(_GCF_CONNECT),
          "conformance": conf.service_signal("gcp.functions")},
+        {"id": "iam", "label": "IAM", "icon": "◆", "widget": "generic-control-plane",
+         "terminology": "policy", "backed_by": "in-proc",
+         "conformance": conf.service_signal("gcp.iam")},
     ]
 
 
