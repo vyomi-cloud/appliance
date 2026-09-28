@@ -54,13 +54,31 @@ class ConnectContract extends LitElement {
       text-transform: uppercase; letter-spacing: .06em; margin-bottom: var(--vy-s2);
     }
     .row { display: flex; align-items: center; gap: var(--vy-s2); margin: var(--vy-s1) 0; }
-    code, .snippet {
+    code {
       font-family: var(--vy-mono); font-size: var(--vy-fs-sm);
       background: var(--vy-bg); border: 1px solid var(--vy-border-soft);
       border-radius: var(--vy-radius); padding: var(--vy-s1) var(--vy-s2);
       color: var(--vy-fg); white-space: pre-wrap; word-break: break-all;
     }
-    .snippet { display: block; padding: var(--vy-s2) var(--vy-s3); }
+    /* SDK/CLI snippet as a real code block: preserve newlines AND indentation
+       (white-space: pre), scroll long lines horizontally, NO word-break (it
+       mangles code mid-token). */
+    .snippet-wrap { position: relative; }
+    pre.snippet {
+      margin: 0; display: block;
+      font-family: var(--vy-mono); font-size: var(--vy-fs-sm); line-height: 1.5;
+      background: var(--vy-bg); border: 1px solid var(--vy-border-soft);
+      border-radius: var(--vy-radius); padding: var(--vy-s2) var(--vy-s3);
+      padding-right: calc(var(--vy-s3) + 28px);
+      color: var(--vy-fg); white-space: pre; overflow-x: auto;
+    }
+    .snippet-copy {
+      position: absolute; top: var(--vy-s1); right: var(--vy-s1);
+      cursor: pointer; color: var(--vy-fg-dim); background: var(--vy-bg-elev);
+      border: 1px solid var(--vy-border); border-radius: var(--vy-radius);
+      padding: 1px var(--vy-s2); font-size: var(--vy-fs-xs);
+    }
+    .snippet-copy:hover { color: var(--vy-fg); border-color: var(--vy-accent); }
     .copy {
       cursor: pointer; color: var(--vy-fg-dim); background: transparent;
       border: 1px solid var(--vy-border); border-radius: var(--vy-radius);
@@ -151,9 +169,16 @@ class ConnectContract extends LitElement {
             <button class=${this._tab === 'cli' ? 'on' : ''} @click=${() => (this._tab = 'cli')}>cli</button>
             <button class=${this._tab === 'tf' ? 'on' : ''} @click=${() => (this._tab = 'tf')}>tf</button>
           </div>
-          <code class="snippet">${this._tab === 'cli'
-            ? (this.cliReveal || '(cli snippet)')
-            : (this.snippet || '(sdk snippet)')}</code>
+          ${(() => {
+            const text = this._tab === 'cli'
+              ? (this.cliReveal || '(cli snippet)')
+              : (this.snippet || '(sdk snippet)');
+            return html`<div class="snippet-wrap">
+              <pre class="snippet">${text}</pre>
+              <button class="snippet-copy" title="copy"
+                @click=${() => this._copy(text)}>${this._copied ? '✓' : '⧉'}</button>
+            </div>`;
+          })()}
           ${this.cliReveal
             ? html`<div class="reveal">↳ reveal CLI: ${this.cliReveal}</div>`
             : ''}

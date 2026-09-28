@@ -229,7 +229,7 @@ class ObjectBrowser extends LitElement {
   _snippet() {
     const ep = (this.caps && this.caps.workspace && this.caps.workspace.endpoint) || location.origin;
     const b = this._bucket || 'my-bucket';
-    return `import boto3\ns3 = boto3.client("s3", endpoint_url="${ep}",\n    aws_access_key_id="test", aws_secret_access_key="test")\ns3.list_objects_v2(Bucket="${b}")`;
+    return `import boto3\ns3 = boto3.client("s3", endpoint_url="${ep}",\n    aws_access_key_id="test", aws_secret_access_key="test")\ns3.upload_file("./report.csv", "${b}", "report.csv")\nfor obj in s3.list_objects_v2(Bucket="${b}").get("Contents", []):\n    print(obj["Key"], obj["Size"])`;
   }
 
   _cli() {

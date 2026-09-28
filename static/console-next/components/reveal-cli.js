@@ -31,11 +31,14 @@ class RevealCli extends LitElement {
     .panel {
       margin-top: var(--vy-s1); display: flex; align-items: flex-start; gap: var(--vy-s2);
     }
-    code {
-      font-family: var(--vy-mono); font-size: var(--vy-fs-sm);
+    /* Reveal-CLI output as a real code block: preserve newlines AND indentation
+       (white-space: pre), scroll long lines horizontally, NO word-break. */
+    pre.cmd {
+      margin: 0; flex: 1; min-width: 0;
+      font-family: var(--vy-mono); font-size: var(--vy-fs-sm); line-height: 1.5;
       background: var(--vy-bg); border: 1px solid var(--vy-border-soft);
       border-radius: var(--vy-radius); padding: var(--vy-s1) var(--vy-s2);
-      color: var(--vy-fg); white-space: pre-wrap; word-break: break-all; flex: 1;
+      color: var(--vy-fg); white-space: pre; overflow-x: auto;
     }
     .copy {
       cursor: pointer; color: var(--vy-fg-dim); background: transparent;
@@ -64,7 +67,7 @@ class RevealCli extends LitElement {
         @click=${() => (this._open = !this._open)}>↳ ${tag}</button>
       ${this._open
         ? html`<div class="panel">
-            <code>${this.command}</code>
+            <pre class="cmd">${this.command}</pre>
             <button class="copy" @click=${this._copy}>${this._copied ? '✓' : '⧉'}</button>
           </div>`
         : ''}
