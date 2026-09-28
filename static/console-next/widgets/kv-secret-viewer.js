@@ -1,15 +1,27 @@
-// kv-secret-viewer widget (§13 / §14.3) — AWS Secrets Manager secret viewer.
+// kv-secret-viewer widget (§13 / §14.3) — kv/secret viewer.
 //
 // Lists secrets, views a secret's metadata + versions with the value MASKED by
-// default (reveal on click), and supports create / put-value — all against the
-// appliance's Secrets Manager console REST API under /api/console/secrets/*
-// (backed by the substrate-agnostic secrets_core over a shared KvStore, exactly
-// what the Nano relay drives). Rendered inside the common Connect contract with the
-// mandatory `⛃ backed by <engine>` badge (§13.1) and a boto3 / CLI snippet.
+// default (reveal on click), and supports create / put-value. It is CLOUD-AGNOSTIC:
+// it reads its endpoint paths from the selected service descriptor's `api` block
+// (§15.2) — so the SAME widget serves AWS Secrets Manager (/api/console/secrets/*,
+// driving the substrate-agnostic secrets_core over a shared KvStore, exactly what
+// the Nano relay drives) and GCP Secret Manager (/api/console/gcp-secrets/*) with
+// ZERO branching. When no `api` block is present it falls back to the AWS Secrets
+// Manager defaults, so the AWS lens keeps working unchanged.
 //
-// It talks ONLY to /api/* (§15.1 #2) — no substrate knowledge. Secret VALUES are
-// never shown until a deliberate reveal: the widget fetches the value lazily and
-// masks it (••••) by default, so a casual glance never leaks a credential.
+// All against a console-next facade under /api/* (§15.1 #2 — talks ONLY to /api/*,
+// no substrate knowledge). Rendered inside the common Connect contract with the
+// mandatory `⛃ backed by <engine>` badge (§13.1) and a boto3 / CLI snippet (also
+// descriptor-driven via the service's `connect` block, Secrets Manager defaults
+// preserved).
+//
+// Secret VALUES are never shown until a deliberate reveal: the widget fetches the
+// value lazily and masks it (••••) by default, so a casual glance never leaks a
+// credential — on EVERY lens.
+//
+// API contract (service.api): { listSecrets, createSecret, describeSecret,
+// deleteSecret, getValue, putValue } — path templates with a {name} placeholder this
+// widget substitutes + URL-encodes.
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
 import { apiGet, apiSend } from '../api.js';
@@ -93,6 +105,33 @@ class KvSecretViewer extends LitElement {
       letter-spacing: .06em; margin: var(--vy-s3) 0 var(--vy-s1); }
   `;
 
+  // ── Endpoint resolution (§15.2): read paths from the service descriptor's `api`
+  //    block, falling back to the AWS Secrets Manager REST defaults so the AWS lens
+  //    works unchanged. The widget is thereby cloud-agnostic — the GCP lens supplies
+  //    Secret Manager paths of the same shape and NOTHING below changes. The only
+  //    placeholder is {name} (the secret name), which the widget URL-encodes. The
+  //    value-reveal path may carry a ?version_id= query the widget appends. ──
+  static _SECRET_DEFAULTS = {
+    listSecrets: '/api/console/secrets',
+    createSecret: '/api/console/secrets',
+    describeSecret: '/api/console/secrets/{name}',
+    deleteSecret: '/api/console/secrets/{name}',
+    getValue: '/api/console/secrets/{name}/value',
+    putValue: '/api/console/secrets/{name}/value',
+  };
+
+  _tpl(name) {
+    const api = (this.service && this.service.api) || {};
+    return api[name] || KvSecretViewer._SECRET_DEFAULTS[name];
+  }
+
+  // Substitute + URL-encode the {name} placeholder in a template.
+  _path(name, { secret } = {}) {
+    let p = this._tpl(name);
+    if (secret != null) p = p.replace('{name}', encodeURIComponent(secret));
+    return p;
+  }
+
   connectedCallback() {
     super.connectedCallback();
     this._loadSecrets();
@@ -108,7 +147,7 @@ class KvSecretViewer extends LitElement {
 
   async _loadSecrets() {
     try {
-      const r = await apiGet('/api/console/secrets');
+      const r = await apiGet(this._path('listSecrets'));
       this._secrets = r.secrets || [];
       if (!this._sel && this._secrets.length) this._select(this._secrets[0].name);
     } catch (e) {
@@ -122,7 +161,7 @@ class KvSecretViewer extends LitElement {
     this._revealed = false;
     this._msg = '';
     try {
-      this._detail = await apiGet(`/api/console/secrets/${encodeURIComponent(name)}`);
+      this._detail = await apiGet(this._path('describeSecret', { secret: name }));
     } catch (e) {
       this._detail = null;
       this._msg = 'Could not describe secret: ' + e.message;
@@ -135,7 +174,7 @@ class KvSecretViewer extends LitElement {
     this._busy = true;
     this._msg = '';
     try {
-      let path = `/api/console/secrets/${encodeURIComponent(this._sel)}/value`;
+      let path = this._path('getValue', { secret: this._sel });
       if (versionId) path += `?version_id=${encodeURIComponent(versionId)}`;
       this._value = await apiGet(path);
       this._revealed = true;
@@ -155,7 +194,7 @@ class KvSecretViewer extends LitElement {
     this._busy = true;
     this._msg = '';
     try {
-      await apiSend('POST', '/api/console/secrets', {
+      await apiSend('POST', this._path('createSecret'), {
         name,
         secret_string: ns.value || '',
         description: (ns.description || '').trim(),
@@ -175,7 +214,7 @@ class KvSecretViewer extends LitElement {
     this._busy = true;
     this._msg = '';
     try {
-      const r = await apiSend('POST', `/api/console/secrets/${encodeURIComponent(this._sel)}/value`,
+      const r = await apiSend('POST', this._path('putValue', { secret: this._sel }),
         { secret_string: this._draft || '' });
       this._msg = `Stored new version ${(r.version_id || '').slice(0, 8)}… → AWSCURRENT`;
       this._draft = '';
@@ -191,7 +230,7 @@ class KvSecretViewer extends LitElement {
     if (!this._sel) return;
     this._busy = true;
     try {
-      await apiSend('DELETE', `/api/console/secrets/${encodeURIComponent(this._sel)}`);
+      await apiSend('DELETE', this._path('deleteSecret', { secret: this._sel }));
       this._sel = null; this._detail = null; this._value = null;
       await this._loadSecrets();
     } catch (e) {
@@ -205,17 +244,31 @@ class KvSecretViewer extends LitElement {
     return (this.caps && this.caps.workspace && this.caps.workspace.endpoint) || location.origin;
   }
 
-  _snippet() {
-    const ep = this._endpoint();
-    const n = this._sel || 'my-secret';
-    return `import boto3\nsm = boto3.client("secretsmanager", endpoint_url="${ep}",\n    aws_access_key_id="test", aws_secret_access_key="test")\nsm.create_secret(Name="${n}", SecretString="s3cr3t")\nsm.get_secret_value(SecretId="${n}")["SecretString"]`;
+  // The connect snippet/CLI are descriptor-driven too (§15.2): a service may carry a
+  // `connect` block { snippet, cli } — templates with {ep} and {name} placeholders.
+  // Absent → the AWS Secrets Manager (boto3) defaults, so the AWS lens is unchanged;
+  // the GCP lens supplies a Secret Manager variant with NO widget branching.
+  static _SECRET_CONNECT = {
+    snippet:
+      'import boto3\nsm = boto3.client("secretsmanager", endpoint_url="{ep}",\n' +
+      '    aws_access_key_id="test", aws_secret_access_key="test")\n' +
+      'sm.create_secret(Name="{name}", SecretString="s3cr3t")\n' +
+      'sm.get_secret_value(SecretId="{name}")["SecretString"]',
+    cli: 'aws --endpoint-url {ep} secretsmanager get-secret-value --secret-id {name}',
+  };
+
+  _connect(name) {
+    const c = (this.service && this.service.connect) || {};
+    return c[name] || KvSecretViewer._SECRET_CONNECT[name];
   }
 
-  _cli() {
-    const ep = this._endpoint();
-    const n = this._sel || 'my-secret';
-    return `aws --endpoint-url ${ep} secretsmanager get-secret-value --secret-id ${n}`;
+  _fill(tpl) {
+    return String(tpl).split('{ep}').join(this._endpoint())
+      .split('{name}').join(this._sel || 'my-secret');
   }
+
+  _snippet() { return this._fill(this._connect('snippet')); }
+  _cli() { return this._fill(this._connect('cli')); }
 
   render() {
     const svc = this.service || {};

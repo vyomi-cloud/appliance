@@ -199,6 +199,50 @@ _PUBSUB_CONNECT = {
 _PUBSUB_LABELS = {"queues": "subscriptions", "topics": "Pub/Sub", "subscribe": "pull"}
 
 
+# ── kv-secret-viewer endpoint contract (the `api` block the cloud-agnostic
+#    kv-secret-viewer reads). Path templates use a {name} placeholder the widget
+#    substitutes + URL-encodes. These are the AWS-lens (Secrets Manager) defaults;
+#    the GCP Secret Manager lens supplies the SAME shape pointed at the Secret
+#    Manager console-facade (§15.2 — no if(cloud) branching in the widget). ──
+_SECRETS_API = {
+    "listSecrets": "/api/console/secrets",
+    "createSecret": "/api/console/secrets",
+    "describeSecret": "/api/console/secrets/{name}",
+    "deleteSecret": "/api/console/secrets/{name}",
+    "getValue": "/api/console/secrets/{name}/value",
+    "putValue": "/api/console/secrets/{name}/value",
+}
+
+_GCP_SECRETS_API = {
+    "listSecrets": "/api/console/gcp-secrets/secrets",
+    "createSecret": "/api/console/gcp-secrets/secrets",
+    "describeSecret": "/api/console/gcp-secrets/secrets/{name}",
+    "deleteSecret": "/api/console/gcp-secrets/secrets/{name}",
+    "getValue": "/api/console/gcp-secrets/secrets/{name}/value",
+    "putValue": "/api/console/gcp-secrets/secrets/{name}/value",
+}
+
+# The GCP Secret Manager lens's connect snippet/CLI (§15.2) — the SAME
+# kv-secret-viewer widget renders these; only this descriptor data differs (no widget
+# branching). GCP secrets carry versions too; the value stays masked by default.
+_GCP_SECRETS_CONNECT = {
+    "snippet": (
+        "from google.cloud import secretmanager\n"
+        "# point the native client at the console endpoint\n"
+        'opts = {"api_endpoint": "{ep}"}\n'
+        "client = secretmanager.SecretManagerServiceClient(client_options=opts)\n"
+        'parent = "projects/cloudlearn"\n'
+        'client.create_secret(parent=parent, secret_id="{name}",\n'
+        '    secret={"replication": {"automatic": {}}})\n'
+        'client.add_secret_version(parent=f"{parent}/secrets/{name}",\n'
+        '    payload={"data": b"s3cr3t"})\n'
+        'client.access_secret_version(\n'
+        '    name=f"{parent}/secrets/{name}/versions/latest").payload.data'
+    ),
+    "cli": 'gcloud secrets versions access latest --secret={name}',
+}
+
+
 def _aws_services(conf) -> list:
     """The AWS-lens service catalog (unchanged from P0/P2 — the rich vertical)."""
     return [
@@ -221,6 +265,7 @@ def _aws_services(conf) -> list:
         {"id": "secretsmanager", "label": "Secrets Manager", "icon": "⚿",
          "widget": "kv-secret-viewer", "terminology": "secret",
          "backed_by": "in-proc KvStore",
+         "api": dict(_SECRETS_API),
          "conformance": conf.service_signal("secretsmanager")},
         {"id": "kms", "label": "KMS", "icon": "🔑", "widget": "kms-crypto-view",
          "terminology": "key", "backed_by": "in-proc KmsEngine",
