@@ -121,6 +121,14 @@ class _Ring:
         with self._lock:
             self._dq.clear()
 
+    def find(self, event_id: str) -> Optional[Dict[str, Any]]:
+        """Return the captured event with this id, or None. Used by replay (§12)."""
+        with self._lock:
+            for ev in self._dq:
+                if ev.get("id") == event_id:
+                    return ev
+        return None
+
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=1000)
         with self._sub_lock:
@@ -613,6 +621,11 @@ class GlassBoxCaptureMiddleware:
             "snapshot_id": None,   # populated once snapshot engine lands (P2)
         }
         RING.push(event)
+
+
+def find_event(event_id: str) -> Optional[Dict[str, Any]]:
+    """Module-level accessor for a single captured event (replay seam, §12)."""
+    return RING.find(event_id)
 
 
 # ── SSE stream generator ─────────────────────────────────────────────────────

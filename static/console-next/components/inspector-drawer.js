@@ -28,6 +28,8 @@ class InspectorDrawer extends LitElement {
     _snaps: { state: true },
     _snapBusy: { state: true },
     _snapErr: { state: true },
+    _replay: { state: true },
+    _replayBusy: { state: true },
   };
 
   static styles = css`
@@ -92,6 +94,12 @@ class InspectorDrawer extends LitElement {
       border: 1px solid var(--vy-border); border-radius: var(--vy-radius);
       padding: 1px var(--vy-s2); font-size: var(--vy-fs-xs); cursor: pointer; }
     .actions button.primary { color: var(--vy-accent); border-color: var(--vy-accent); }
+    .actions button[disabled] { opacity: .5; cursor: default; }
+    .replay { margin-top: var(--vy-s2); font-family: var(--vy-mono); font-size: var(--vy-fs-xs);
+      border-radius: var(--vy-radius); padding: var(--vy-s1) var(--vy-s2); }
+    .replay.changed { background: rgba(210,153,34,.08); border: 1px solid var(--vy-warn); color: var(--vy-fg); }
+    .replay.same { background: var(--vy-bg-elev); border: 1px solid var(--vy-border-soft); color: var(--vy-fg-muted); }
+    .replay.err { background: rgba(248,81,73,.08); border: 1px solid var(--vy-err); color: var(--vy-err); }
     .stub { padding: var(--vy-s5); color: var(--vy-fg-dim); font-size: var(--vy-fs-sm); }
     .empty { padding: var(--vy-s5); color: var(--vy-fg-dim); text-align: center; font-size: var(--vy-fs-sm); }
     .snaphead { display: flex; align-items: center; gap: var(--vy-s2); padding: var(--vy-s2) var(--vy-s3);
@@ -131,6 +139,8 @@ class InspectorDrawer extends LitElement {
     this._snapBusy = false;
     this._snapErr = '';
     this._snapsLoaded = false;
+    this._replay = null;      // { id, old_status, new_status, changed, error }
+    this._replayBusy = false;
   }
 
   connectedCallback() {
@@ -187,6 +197,30 @@ class InspectorDrawer extends LitElement {
     const ref = call.backend && call.backend.ref;
     if (!ref) return;
     this.dispatchEvent(new CustomEvent('deep-link', { detail: { ref }, bubbles: true, composed: true }));
+  }
+
+  // ── Replay (§12) — re-issue a captured call against CURRENT state and show a
+  //    before/after (old status → new status) diff. Only /api/console/* facade
+  //    calls are replayable server-side (native signed-wire calls can't be
+  //    re-signed from a redacted capture). ──
+  _replayable(call) {
+    return !!(call && call.http && (call.http.path || '').startsWith('/api/console/'));
+  }
+
+  async _replayCall(call) {
+    if (this._replayBusy || !this._replayable(call)) return;
+    this._replayBusy = true;
+    this._replay = null;
+    try {
+      const r = await apiSend('POST', `/api/console/calls/${encodeURIComponent(call.id)}/replay`, {});
+      this._replay = { id: call.id, ...r };
+      // a replay re-issues the call → state may have changed; let widgets refresh
+      this.dispatchEvent(new CustomEvent('state-restored', { detail: { replay: call.id }, bubbles: true, composed: true }));
+    } catch (e) {
+      this._replay = { id: call.id, error: (e && e.message) || 'replay failed' };
+    } finally {
+      this._replayBusy = false;
+    }
   }
 
   // ── Snapshots tab (§12.6) — capture / list / restore / FORK of the console's
@@ -361,7 +395,7 @@ class InspectorDrawer extends LitElement {
     const mv = METHOD_VAR[c.http.method] || '--vy-fg-muted';
     const sel = this._selected && this._selected.id === c.id;
     return html`
-      <li class="call ${sel ? 'sel' : ''}" @click=${() => (this._selected = sel ? null : c)}>
+      <li class="call ${sel ? 'sel' : ''}" @click=${() => { this._selected = sel ? null : c; this._replay = null; }}>
         <div class="cl">
           <span class="method" style="color:var(${mv})">${c.http.method}</span>
           <span class="status ${this._statusClass(c.http.status)}">${c.http.status}</span>
@@ -400,8 +434,29 @@ class InspectorDrawer extends LitElement {
             @click=${() => this._deepLink(c)}>view in backend ▸</button>
           <button title="reveal CLI (stub)">reveal CLI</button>
           <button disabled title="snapshot — P2">snapshot</button>
-          <button disabled title="replay — P2">replay</button>
+          <button ?disabled=${this._replayBusy || !this._replayable(c)}
+            title=${this._replayable(c)
+              ? 're-issue this call against current state'
+              : 'only /api/console/* facade calls are replayable'}
+            @click=${() => this._replayCall(c)}>${this._replayBusy ? 'replaying…' : 'replay'}</button>
         </div>
+        ${this._replay && this._replay.id === c.id ? this._renderReplay(this._replay, c) : ''}
+      </div>
+    `;
+  }
+
+  _renderReplay(r, c) {
+    if (r.error) {
+      return html`<div class="replay err">replay failed: ${r.error}</div>`;
+    }
+    const oldS = r.old_status;
+    const newS = r.new_status;
+    const cls = r.changed ? 'changed' : 'same';
+    return html`
+      <div class="replay ${cls}">
+        replayed · <span class="${this._statusClass(oldS)}">${oldS}</span>
+        → <span class="${this._statusClass(newS)}">${newS}</span>
+        ${r.changed ? html`<b> (changed)</b>` : ' (same)'}
       </div>
     `;
   }

@@ -167,6 +167,101 @@ def register(app: FastAPI) -> None:
         RING.clear()
         return {"ok": True}
 
+    # ── Glass-box REPLAY (§12): re-issue a captured call against CURRENT state and
+    #    report old→new status. The recorded method/path/body/query come straight
+    #    from the ring-buffer event (core/glassbox.py). Re-dispatched IN-PROCESS
+    #    against this same ASGI app (no network hop) so it exercises the real
+    #    handlers and current backend state. Additive; touches no existing route.
+    #
+    #    HONEST LIMITS (surfaced to the UI):
+    #    - The captured request body is the glass-box SUMMARY (capped, redacted
+    #      headers). Replay reuses that summary as the body when it wasn't truncated;
+    #      truncated/binary bodies can't be replayed faithfully and are refused.
+    #    - Only console-facade JSON endpoints (/api/console/*) are replayable here —
+    #      the native SigV4-signed wire paths can't be re-signed from a redacted
+    #      capture. This keeps replay safe + deterministic. ──
+    @app.post("/api/console/calls/{call_id}/replay", include_in_schema=False)
+    async def api_console_calls_replay(call_id: str):
+        from core.glassbox import find_event
+        ev = find_event(call_id)
+        if ev is None:
+            raise HTTPException(404, detail=f"NotFound call {call_id!r} is not in the buffer")
+
+        http = ev.get("http") or {}
+        method = (http.get("method") or "GET").upper()
+        path = http.get("path") or "/"
+        old_status = int(http.get("status") or 0)
+
+        if not path.startswith("/api/console/"):
+            raise HTTPException(
+                400,
+                detail="ValidationError only /api/console/* facade calls are replayable "
+                       "(native signed-wire calls can't be re-signed from a redacted capture)")
+
+        req = ev.get("request") or {}
+        # Re-encode the captured query (parse_qs shape: {name: [values]}).
+        from urllib.parse import urlencode
+        pairs = []
+        for k, vals in (req.get("query") or {}).items():
+            for v in (vals if isinstance(vals, list) else [vals]):
+                pairs.append((k, v))
+        query_string = urlencode(pairs).encode("latin-1")
+
+        # Reconstruct the body from the (uncapped) summary. Refuse truncated/binary.
+        summary = req.get("body_summary") or ""
+        if summary.startswith("‹binary") or "…(+" in summary:
+            raise HTTPException(
+                422,
+                detail="Unprocessable this call's body was truncated/binary in the "
+                       "capture and can't be replayed faithfully")
+        body = summary.encode("utf-8")
+        req_headers = []
+        if body and method in ("POST", "PUT", "PATCH", "DELETE"):
+            req_headers.append((b"content-type", b"application/json"))
+        req_headers.append((b"accept", b"application/json"))
+
+        # ── minimal in-process ASGI round-trip against THIS app ──
+        scope = {
+            "type": "http", "http_version": "1.1", "method": method,
+            "path": path, "raw_path": path.encode("latin-1"),
+            "query_string": query_string, "headers": req_headers,
+            "scheme": "http", "server": ("127.0.0.1", 80), "client": ("127.0.0.1", 0),
+        }
+        sent = {"status": 0, "body": b""}
+        _delivered = {"done": False}
+
+        async def _receive():
+            if _delivered["done"]:
+                return {"type": "http.disconnect"}
+            _delivered["done"] = True
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        async def _send(message):
+            mt = message.get("type")
+            if mt == "http.response.start":
+                sent["status"] = message.get("status", 0)
+            elif mt == "http.response.body":
+                sent["body"] += message.get("body", b"") or b""
+
+        try:
+            await app(scope, _receive, _send)
+        except Exception as e:  # a handler that raises → report it, don't 500 the replay
+            return {
+                "call_id": call_id, "method": method, "path": path,
+                "old_status": old_status, "new_status": 500,
+                "changed": old_status != 500,
+                "error": f"{type(e).__name__}: {e}",
+            }
+
+        new_status = int(sent["status"] or 0)
+        body_text = sent["body"][:2048].decode("utf-8", errors="replace")
+        return {
+            "call_id": call_id, "method": method, "path": path,
+            "old_status": old_status, "new_status": new_status,
+            "changed": old_status != new_status,
+            "response_summary": body_text,
+        }
+
     # ── Conformance signal (F5 seam) — per-service + workspace rollup. The pill
     #    reads the rollup; the widgets/rail read per-service. Stubbed source today
     #    (core/console_conformance.py), live-runner-ready shape. ──
