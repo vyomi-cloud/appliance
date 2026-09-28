@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import Body, FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -111,6 +111,33 @@ def _lens_services(lens: str, conf) -> list:
     return _aws_services(conf)
 
 
+def _lens_summary(services: list) -> dict:
+    """Workspace conformance summary scoped to the SELECTED lens's services (§4).
+    Same flat shape as console_conformance.summary(); computed over just this lens
+    so the status-bar pill is honest per cloud (the AWS pill is unaffected — the
+    AWS catalog is unchanged). status = worst across the lens's services."""
+    rank = {"conformant": 0, "partial": 1, "unknown": 2}
+    worst = "conformant"
+    services_full = passed = total = 0
+    for svc in services:
+        sig = svc.get("conformance") or {}
+        if sig.get("mode") == "full":
+            services_full += 1
+        st = sig.get("status", "unknown")
+        if rank.get(st, 2) > rank.get(worst, 2):
+            worst = st
+        c = sig.get("checks", {})
+        passed += int(c.get("passed", 0))
+        total += int(c.get("total", 0))
+    return {
+        "services_total": len(services),
+        "services_full": services_full,
+        "checks_passed": passed,
+        "checks_total": total,
+        "status": worst if services else "unknown",
+    }
+
+
 def _capabilities(lens: str = "aws") -> dict:
     """Return the runtime capability manifest for THIS substrate + cloud lens (§15.1).
 
@@ -176,7 +203,8 @@ def _capabilities(lens: str = "aws") -> dict:
         "services": services,
         # Workspace-level conformance summary for the status-bar pill (§4): flat
         # {services_total, services_full, checks_passed, checks_total, status}.
-        "conformance": conf.summary(),
+        # Scoped to the SELECTED lens so each cloud's pill is honest.
+        "conformance": _lens_summary(services),
         "workspace": {
             "name": os.environ.get("VYOMI_WORKSPACE_NAME", "vyomi-dev-01"),
             "endpoint": os.environ.get("VYOMI_S3_ENDPOINT", ""),
@@ -536,6 +564,165 @@ def register(app: FastAPI) -> None:
         if not key_id:
             raise HTTPException(400, detail="ValidationError key_id is required")
         return _kguard(lambda: _kms().generate_data_key(key_id, p.get("key_spec", "AES_256")))
+
+    # ── GCS console-facade (P3 — the GCP lens's object-browser data plane) ──
+    #    The SAME object-browser widget renders GCS under lens=gcp; the ONLY
+    #    difference is the manifest `api` block pointing here (§15.2). This facade
+    #    returns the SAME response shape as the S3 facade (/api/s3/*) so the widget
+    #    is cloud-agnostic. It reads/writes the SAME space-scoped gcp_storage_state
+    #    the native GCP JSON API (`/storage/v1/b/...`) uses — so a bucket/object made
+    #    in the console is visible to an unmodified google-cloud-storage SDK, and
+    #    vice-versa. Purely additive; touches no existing GCS handler.
+    from core.app_context import gcp_storage_state as _gcs_state, now as _gcs_now
+
+    def _gcs_fmt_size(n) -> str:
+        size = float(int(n or 0))
+        for unit in ("B", "KB", "MB", "GB", "TB"):
+            if size < 1024 or unit == "TB":
+                return f"{int(size)} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{int(size)} B"
+
+    def _gcs_buckets() -> dict:
+        b = _gcs_state.get("buckets")
+        if not isinstance(b, dict):
+            b = {}
+            _gcs_state["buckets"] = b
+        return b
+
+    def _gcs_objects(bucket: str) -> dict:
+        objs = _gcs_state.setdefault("objects", {})
+        return objs.setdefault(bucket, {})
+
+    @app.get("/api/console/gcs/buckets", include_in_schema=False)
+    def api_console_gcs_list_buckets():
+        buckets = _gcs_buckets()
+        return {
+            "owner": "cloudlearn-simulator",
+            "buckets": [{"name": n,
+                         "location": (m or {}).get("location", "US"),
+                         "storage_class": (m or {}).get("storageClass", "STANDARD"),
+                         "created": (m or {}).get("timeCreated", "")}
+                        for n, m in sorted(buckets.items())],
+            "count": len(buckets),
+        }
+
+    @app.post("/api/console/gcs/buckets/{name}", include_in_schema=False)
+    def api_console_gcs_create_bucket(name: str):
+        name = (name or "").strip()
+        if not name:
+            raise HTTPException(400, detail="ValidationError bucket name is required")
+        buckets = _gcs_buckets()
+        if name in buckets:
+            raise HTTPException(409, detail="Conflict bucket already exists")
+        buckets[name] = {
+            "name": name, "project": "cloudlearn", "location": "US",
+            "locationType": "multi-region", "storageClass": "STANDARD",
+            "timeCreated": _gcs_now(), "updated": _gcs_now(), "metageneration": "1",
+        }
+        _gcs_state.setdefault("objects", {}).setdefault(name, {})
+        return {"message": f"Bucket '{name}' created", "location": f"/{name}"}
+
+    @app.get("/api/console/gcs/buckets/{bucket}/objects", include_in_schema=False)
+    def api_console_gcs_list_objects(bucket: str, prefix: str = Query(default="")):
+        if bucket not in _gcs_buckets():
+            raise HTTPException(404, detail="NoSuchBucket")
+        result = []
+        for name in sorted(_gcs_objects(bucket)):
+            if prefix and not name.startswith(prefix):
+                continue
+            obj = _gcs_objects(bucket)[name]
+            size = int(obj.get("size", 0) or 0)
+            result.append({
+                "key": name,
+                "size": size,
+                "size_human": _gcs_fmt_size(size),
+                "content_type": obj.get("contentType", "application/octet-stream"),
+                "last_modified": obj.get("updated", obj.get("timeCreated", "")),
+                "etag": obj.get("etag", "") or obj.get("md5Hash", ""),
+                "storage_class": obj.get("storageClass", "STANDARD"),
+            })
+        return {"bucket": bucket, "prefix": prefix, "objects": result, "count": len(result)}
+
+    @app.post("/api/console/gcs/buckets/{bucket}/objects", include_in_schema=False)
+    async def api_console_gcs_upload(bucket: str, request: Request):
+        if bucket not in _gcs_buckets():
+            raise HTTPException(404, detail="NoSuchBucket")
+        ctype = (request.headers.get("content-type") or "").lower()
+        key = "unnamed"
+        data = b""
+        content_type = "application/octet-stream"
+        if ctype.startswith("multipart/form-data"):
+            form = await request.form()
+            upload = form.get("file")
+            if upload is None or not hasattr(upload, "read"):
+                raise HTTPException(422, detail="Unprocessable field 'file' required")
+            data = await upload.read()
+            key = getattr(upload, "filename", None) or "unnamed"
+            content_type = getattr(upload, "content_type", None) or content_type
+        else:
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+            if not isinstance(body, dict):
+                body = {}
+            key = str(body.get("key") or body.get("name") or "console-object")
+            content = body.get("content", body.get("body", ""))
+            data = content.encode() if isinstance(content, str) else bytes(content or b"")
+            content_type = str(body.get("content_type") or "text/plain")
+        import base64 as _b64, hashlib as _hl
+        obj = {
+            "bucket": bucket, "name": key, "contentType": content_type,
+            "size": len(data), "timeCreated": _gcs_now(), "updated": _gcs_now(),
+            "storageClass": "STANDARD", "metadata": {},
+            # Store bytes base64 so binary uploads round-trip via the facade; the
+            # native GCS view ignores extra keys (it never echoes `data`).
+            "data_b64": _b64.b64encode(data).decode("ascii"),
+            "md5Hash": _b64.b64encode(_hl.md5(data).digest()).decode("ascii"),
+            "etag": _hl.md5(data).hexdigest(),
+        }
+        _gcs_objects(bucket)[key] = obj
+        return {"message": f"Object '{key}' uploaded", "etag": obj["etag"],
+                "size": len(data)}
+
+    def _gcs_get_object(bucket: str, key: str) -> dict:
+        if bucket not in _gcs_buckets():
+            raise HTTPException(404, detail="NoSuchBucket")
+        obj = _gcs_objects(bucket).get(key)
+        if obj is None:
+            raise HTTPException(404, detail="NoSuchKey")
+        return obj
+
+    def _gcs_object_bytes(obj: dict) -> bytes:
+        import base64 as _b64
+        if "data_b64" in obj:
+            try:
+                return _b64.b64decode(obj["data_b64"])
+            except Exception:
+                pass
+        d = obj.get("data", "")
+        return d.encode() if isinstance(d, str) else bytes(d or b"")
+
+    @app.get("/api/console/gcs/buckets/{bucket}/objects/{key:path}/meta", include_in_schema=False)
+    def api_console_gcs_object_meta(bucket: str, key: str):
+        obj = _gcs_get_object(bucket, key)
+        size = int(obj.get("size", 0) or 0)
+        return {
+            "key": key, "bucket": bucket,
+            "content_type": obj.get("contentType", "application/octet-stream"),
+            "size": size, "size_human": _gcs_fmt_size(size),
+            "etag": obj.get("etag", "") or obj.get("md5Hash", ""),
+            "last_modified": obj.get("updated", obj.get("timeCreated", "")),
+            "storage_class": obj.get("storageClass", "STANDARD"),
+        }
+
+    @app.get("/api/console/gcs/buckets/{bucket}/objects/{key:path}/download", include_in_schema=False)
+    def api_console_gcs_object_download(bucket: str, key: str):
+        obj = _gcs_get_object(bucket, key)
+        from starlette.responses import Response as _Resp
+        return _Resp(content=_gcs_object_bytes(obj),
+                     media_type=obj.get("contentType", "application/octet-stream"))
 
     # ── Snapshots (§12.6): capture / list / restore / FORK of the console's
     #    in-process backend store state. Control-plane-first. No substrate

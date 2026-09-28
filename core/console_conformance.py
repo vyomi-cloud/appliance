@@ -105,6 +105,14 @@ _SIGNAL = {
         "checks": {"passed": 27, "total": 27},
         "note": "Lambda core conformant; serverless-invoke widget is conformance-gated green.",
     },
+    # ── GCP lens (P3) ── the SAME object-browser widget serves GCS; only the
+    # manifest `api` block differs (§15.2). Cloud Storage object CRUD is
+    # conformant (native google-cloud-storage SDK round-trips), so gate to "full".
+    "gcp.storage": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 12, "total": 12},
+        "note": "GCP Cloud Storage — object-browser serves GCS via the same widget (lens=gcp).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.
