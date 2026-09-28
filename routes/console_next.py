@@ -757,6 +757,10 @@ def _azure_services(conf) -> list:
          "api": dict(_AZURE_FUNCTIONS_API),
          "connect": dict(_AZURE_FUNCTIONS_CONNECT),
          "conformance": conf.service_signal("azure.functions")},
+        {"id": "rbac", "label": "RBAC / Entra", "icon": "◆",
+         "widget": "generic-control-plane", "terminology": "role assignment",
+         "backed_by": "in-proc",
+         "conformance": conf.service_signal("azure.rbac")},
     ]
 
 

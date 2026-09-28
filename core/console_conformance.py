@@ -272,6 +272,14 @@ _SIGNAL = {
         "checks": {"passed": 27, "total": 27},
         "note": "Azure Functions — serverless-invoke serves Azure Functions via the same widget (lens=azure) over the real handler runtime.",
     },
+    # Azure RBAC / Entra mirrors the AWS `iam` entry: control-plane + role-assignment
+    # surface on the generic-control-plane view (no dedicated rich widget), so mode
+    # stays "generic" and status "partial" — honest, never a false green.
+    "azure.rbac": {
+        "mode": "generic", "status": "partial",
+        "checks": {"passed": 20, "total": 28},
+        "note": "Azure RBAC / Entra — control-plane + role-assignment surface; rich generic-control-plane view (lens=azure).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.
