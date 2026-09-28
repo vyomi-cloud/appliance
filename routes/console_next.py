@@ -33,7 +33,7 @@ _INDEX = os.path.join(_ASSETS_DIR, "index.html")
 # The set of cloud lenses this vertical can serve. Each lens has a rich data-plane;
 # the manifest carries a per-lens `services` catalog so widgets stay cloud-agnostic
 # (§15.2): differences between clouds live HERE as data, never as widget branching.
-CLOUD_LENSES = ["aws", "gcp"]
+CLOUD_LENSES = ["aws", "gcp", "azure"]
 
 
 # ── S3 object-browser endpoint contract (the `api` block a cloud-agnostic
@@ -56,6 +56,35 @@ _GCS_OBJECT_BROWSER_API = {
     "uploadObject": "/api/console/gcs/buckets/{bucket}/objects",
     "objectMeta": "/api/console/gcs/buckets/{bucket}/objects/{key}/meta",
     "objectDownload": "/api/console/gcs/buckets/{bucket}/objects/{key}/download",
+}
+
+# The Azure Blob lens supplies the SAME object-browser shape pointed at the Azure
+# Blob console-facade (§15.2). A "bucket" is a CONTAINER and an "object" a BLOB.
+_AZURE_BLOB_OBJECT_BROWSER_API = {
+    "listBuckets": "/api/console/azure-blob/containers",
+    "createBucket": "/api/console/azure-blob/containers/{bucket}",
+    "listObjects": "/api/console/azure-blob/containers/{bucket}/blobs",
+    "uploadObject": "/api/console/azure-blob/containers/{bucket}/blobs",
+    "objectMeta": "/api/console/azure-blob/containers/{bucket}/blobs/{key}/meta",
+    "objectDownload": "/api/console/azure-blob/containers/{bucket}/blobs/{key}/download",
+}
+
+# The Azure Blob lens's connect snippet/CLI (§15.2) — the SAME object-browser widget
+# renders these; only this descriptor data differs (no widget branching).
+_AZURE_BLOB_CONNECT = {
+    "snippet": (
+        "from azure.storage.blob import BlobServiceClient\n"
+        "# point the native client at the console endpoint\n"
+        'svc = BlobServiceClient(account_url="{ep}",\n'
+        '    credential="devstoreaccount1")\n'
+        'container = svc.get_container_client("{bucket}")\n'
+        'container.upload_blob(name="{key}", data=b"hello")\n'
+        'container.download_blob("{key}").readall()'
+    ),
+    "cli": (
+        "az storage blob list --container-name {bucket} \\\n"
+        "  --account-name vyomistorage"
+    ),
 }
 
 
@@ -458,9 +487,24 @@ def _gcp_services(conf) -> list:
     ]
 
 
+def _azure_services(conf) -> list:
+    """The Azure-lens service catalog (P4 — the THIRD cloud). Each service reuses the
+    SAME cloud-agnostic widget as its AWS/GCP peer; the ONLY difference is the `api`
+    block (and optional `connect`) pointing at the Azure console-facade (§15.2)."""
+    return [
+        {"id": "blob", "label": "Blob Storage", "icon": "▤", "widget": "object-browser",
+         "terminology": "container", "backed_by": "in-proc blob store",
+         "api": dict(_AZURE_BLOB_OBJECT_BROWSER_API),
+         "connect": dict(_AZURE_BLOB_CONNECT),
+         "conformance": conf.service_signal("azure.blob")},
+    ]
+
+
 def _lens_services(lens: str, conf) -> list:
     if lens == "gcp":
         return _gcp_services(conf)
+    if lens == "azure":
+        return _azure_services(conf)
     return _aws_services(conf)
 
 
@@ -1361,6 +1405,73 @@ def register(app: FastAPI) -> None:
         from starlette.responses import Response as _Resp
         return _Resp(content=_gcs_object_bytes(obj),
                      media_type=obj.get("contentType", "application/octet-stream"))
+
+    # ── Azure Blob console-facade (P4 — the Azure lens's object-browser data plane) ──
+    #    The SAME object-browser widget renders Azure Blob under lens=azure; the ONLY
+    #    difference is the manifest `api` block pointing here (§15.2 — no if(cloud)
+    #    branching). This facade returns the SAME response shapes as the S3/GCS facades
+    #    so the widget is cloud-agnostic. A "container" is the bucket, a "blob" the
+    #    object. Independent in-memory store (core/console_azure_blob) so Azure object
+    #    state is isolated from the AWS/GCP facades; purely additive.
+    def _ab():
+        from core import console_azure_blob as b
+        return b
+
+    def _abguard(fn):
+        from core.console_azure_blob import AzureBlobError
+        try:
+            return fn()
+        except AzureBlobError as e:
+            raise HTTPException(e.status, detail=e.message)
+
+    @app.get("/api/console/azure-blob/containers", include_in_schema=False)
+    def api_console_azure_blob_list_containers():
+        return _abguard(lambda: _ab().list_buckets())
+
+    @app.post("/api/console/azure-blob/containers/{name}", include_in_schema=False)
+    def api_console_azure_blob_create_container(name: str):
+        return _abguard(lambda: _ab().create_bucket(name))
+
+    @app.get("/api/console/azure-blob/containers/{bucket}/blobs", include_in_schema=False)
+    def api_console_azure_blob_list_blobs(bucket: str, prefix: str = Query(default="")):
+        return _abguard(lambda: _ab().list_objects(bucket, prefix))
+
+    @app.post("/api/console/azure-blob/containers/{bucket}/blobs", include_in_schema=False)
+    async def api_console_azure_blob_upload(bucket: str, request: Request):
+        ctype = (request.headers.get("content-type") or "").lower()
+        key = "unnamed"
+        data = b""
+        content_type = "application/octet-stream"
+        if ctype.startswith("multipart/form-data"):
+            form = await request.form()
+            upload = form.get("file")
+            if upload is None or not hasattr(upload, "read"):
+                raise HTTPException(422, detail="Unprocessable field 'file' required")
+            data = await upload.read()
+            key = getattr(upload, "filename", None) or "unnamed"
+            content_type = getattr(upload, "content_type", None) or content_type
+        else:
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+            if not isinstance(body, dict):
+                body = {}
+            key = str(body.get("key") or body.get("name") or "console-blob")
+            content = body.get("content", body.get("body", ""))
+            data = content.encode() if isinstance(content, str) else bytes(content or b"")
+            content_type = str(body.get("content_type") or "text/plain")
+        return _abguard(lambda: _ab().put_object(bucket, key, data, content_type))
+
+    @app.get("/api/console/azure-blob/containers/{bucket}/blobs/{key:path}/meta", include_in_schema=False)
+    def api_console_azure_blob_blob_meta(bucket: str, key: str):
+        return _abguard(lambda: _ab().object_meta(bucket, key))
+
+    @app.get("/api/console/azure-blob/containers/{bucket}/blobs/{key:path}/download", include_in_schema=False)
+    def api_console_azure_blob_blob_download(bucket: str, key: str):
+        data, media = _abguard(lambda: _ab().object_bytes(bucket, key))
+        from starlette.responses import Response as _Resp
+        return _Resp(content=data, media_type=media)
 
     # ── GCP Cloud Functions serverless-invoke (P3 — the GCP lens's serverless data
     #    plane) ── the SAME serverless-invoke widget renders Cloud Functions under

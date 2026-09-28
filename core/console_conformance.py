@@ -192,6 +192,15 @@ _SIGNAL = {
         "checks": {"passed": 20, "total": 28},
         "note": "GCP IAM — control-plane + policy surface; rich generic-control-plane view (lens=gcp).",
     },
+    # ── Azure lens (P4) ── the SAME object-browser widget serves Azure Blob; only
+    # the manifest `api` block differs (§15.2). A "container" is the bucket and a
+    # "blob" the object. Container/blob CRUD round-trips through the console facade,
+    # so gate to "full".
+    "azure.blob": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 12, "total": 12},
+        "note": "Azure Blob Storage — object-browser serves Azure Blob via the same widget (lens=azure).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.
