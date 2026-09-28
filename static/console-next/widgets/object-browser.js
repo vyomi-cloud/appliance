@@ -16,7 +16,7 @@
 // placeholders this widget substitutes + URL-encodes.
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
-import { apiGet, apiSend, apiUrl } from '../api.js';
+import { apiGet, apiSend, apiUrl, cliForAction } from '../api.js';
 import '../components/connect-contract.js';
 
 class ObjectBrowser extends LitElement {
@@ -238,6 +238,25 @@ class ObjectBrowser extends LitElement {
     return `aws --endpoint-url ${ep} s3 cp ./report.csv s3://${b}/`;
   }
 
+  // Per-action reveal-CLI lines (§12.8) via the shared cliForAction() helper — reuses
+  // the descriptor's connect.cli where present, else these action templates, and fills
+  // in the current bucket/key context. The shared Connect contract renders each as a
+  // uniform "↳ reveal CLI" affordance.
+  _revealActions() {
+    const ep = (this.caps && this.caps.workspace && this.caps.workspace.endpoint) || location.origin;
+    const b = this._bucket || 'my-bucket';
+    return [
+      { label: 'upload object',
+        command: cliForAction(this.service, {
+          command: `aws --endpoint-url {ep} s3 cp ./report.csv s3://{bucket}/`,
+          ctx: { ep, bucket: b } }) },
+      { label: 'create bucket',
+        command: cliForAction(this.service, {
+          command: `aws --endpoint-url {ep} s3 mb s3://{bucket}`,
+          ctx: { ep, bucket: b } }) },
+    ];
+  }
+
   render() {
     const ep = (this.caps && this.caps.workspace && this.caps.workspace.endpoint) || location.origin;
     const mode = (this.caps && this.caps.connect && this.caps.connect.mode) || 'endpoint';
@@ -250,6 +269,7 @@ class ObjectBrowser extends LitElement {
         .endpoint=${ep}
         .snippet=${this._snippet()}
         .cliReveal=${this._cli()}
+        .revealActions=${this._revealActions()}
       >
         <div slot="live">
           <div class="cols">

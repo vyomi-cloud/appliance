@@ -8,6 +8,7 @@
 // only changes the Connect block's copy — never forks into three components (§15.2).
 
 import { LitElement, html, css } from '../vendor/lit-core.min.js';
+import './reveal-cli.js';
 
 class ConnectContract extends LitElement {
   static properties = {
@@ -18,6 +19,11 @@ class ConnectContract extends LitElement {
     endpoint: { type: String },
     snippet: { type: String },      // SDK snippet text
     cliReveal: { type: String },    // exact provider CLI command
+    // Optional per-action reveal-CLI lines (§12.8): [{label, command}]. When a widget
+    // passes its primary actions here, each gets a uniform "↳ reveal CLI" affordance
+    // in the Actions block. When omitted, the Actions block still reveals the
+    // resource-level command (cliReveal) so the affordance is present everywhere.
+    revealActions: { attribute: false },
     _copied: { state: true },
     _tab: { state: true },          // sdk | cli | tf
   };
@@ -79,6 +85,7 @@ class ConnectContract extends LitElement {
       padding: 1px var(--vy-s2); font-size: var(--vy-fs-xs); margin-top: var(--vy-s2);
     }
     .mode-note { color: var(--vy-fg-dim); font-size: var(--vy-fs-xs); margin-top: var(--vy-s1); }
+    .reveal-actions { display: flex; flex-wrap: wrap; gap: var(--vy-s2); margin-top: var(--vy-s2); }
   `;
 
   constructor() {
@@ -108,6 +115,21 @@ class ConnectContract extends LitElement {
     return html`<div class="row"><span>Endpoint</span>
       <code>${this.endpoint || '(endpoint)'}</code>
       <button class="copy" @click=${() => this._copy(this.endpoint || '')}>${this._copied ? '✓' : '⧉'}</button>
+    </div>`;
+  }
+
+  // reveal-CLI affordances for this resource's primary actions (§12.8). Uniform via
+  // the shared <vyomi-reveal-cli> so every widget gets the same control. If a widget
+  // supplied `revealActions`, render one per action; otherwise fall back to the
+  // resource-level command (cliReveal) so the affordance exists everywhere.
+  _revealActions() {
+    const list = (this.revealActions && this.revealActions.length)
+      ? this.revealActions
+      : (this.cliReveal ? [{ label: '', command: this.cliReveal }] : []);
+    if (!list.length) return '';
+    return html`<div class="reveal-actions">
+      ${list.map((a) => html`<vyomi-reveal-cli
+        .label=${a.label || ''} .command=${a.command || ''}></vyomi-reveal-cli>`)}
     </div>`;
   }
 
@@ -146,6 +168,7 @@ class ConnectContract extends LitElement {
         <div class="block">
           <div class="label">Actions</div>
           <slot name="actions"></slot>
+          ${this._revealActions()}
         </div>
       </div>
     `;

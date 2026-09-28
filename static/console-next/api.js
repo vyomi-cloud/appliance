@@ -77,6 +77,30 @@ export function feature(name) {
   return !!(_caps && _caps.features && _caps.features[name]);
 }
 
+// ── reveal-CLI (§12.8 / §13.1) ──
+// One shared helper so any primary action can surface its equivalent CLI/SDK line,
+// uniformly across widgets. It reuses the descriptor's `service.connect.cli` (the
+// SAME data the Connect block already shows) plus the widget's own action context,
+// and does light {placeholder} substitution. It is cloud/substrate-agnostic — the
+// command text comes entirely from data (the manifest + the caller's ctx), never
+// from an if(cloud)/if(substrate) branch (§15.2). Falls back to an explicit
+// per-action command if the caller supplies one and the descriptor has no cli.
+//
+//   cliForAction(service, { command, ctx })
+//     service  — the selected service descriptor (may carry service.connect.cli)
+//     command  — optional widget-supplied CLI line for THIS action (preferred)
+//     ctx      — { bucket, key, db, table, queue, ... } for {placeholder} fill-in
+export function cliForAction(service, opts) {
+  const o = opts || {};
+  const connect = (service && service.connect) || {};
+  // Prefer the action-specific command the widget passes in; else reuse the
+  // descriptor's connect.cli (the same line the Connect block reveals).
+  let cmd = o.command || connect.cli || '';
+  const ctx = o.ctx || {};
+  return String(cmd).replace(/\{(\w+)\}/g, (m, k) =>
+    (ctx[k] != null ? String(ctx[k]) : m));
+}
+
 // ── Familiar mode (§7 — "recognizable, not cloned") ──
 // OPTIONAL native-lens THEME. This is theming only: it sets a `data-vy-familiar`
 // attribute on <html>, which tokens.css uses to override design tokens (accent /
