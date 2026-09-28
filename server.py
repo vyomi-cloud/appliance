@@ -22595,6 +22595,61 @@ def api_gce_private_key(instance_id: str):
     return _private_key_pem_response("gcp", instance_id)
 
 
+# ── GCP Compute Engine console-facade (P3 — the GCP lens's compute-terminal data
+#    plane). The SAME compute-terminal widget renders GCE under lens=gcp; the ONLY
+#    difference is the manifest `api` block pointing here (§15.2 — no if(cloud)
+#    branching in the widget). These return the SAME flat shapes the widget's AWS EC2
+#    defaults return, over the REAL gcp_compute_state + the SAME container-exec path
+#    (_console_execute) EC2 uses — so a Docker-backed GCE instance runs commands
+#    identically. Connect-info / .pem reuse the existing native GCE endpoints above.
+#    Purely additive; touches no existing GCE handler.
+@app.get("/api/console/gce/instances", include_in_schema=False)
+def api_console_gce_list_instances():
+    """List GCE instances in the flat {instances:[…]} shape the compute-terminal
+    widget expects (parity with /api/ec2/instances). Syncs runtime state first so
+    Docker/LXD-backed instances report a live state, exactly like the EC2 list."""
+    _gcp_compute_sync_runtime_instances()
+    instances = [
+        inst for inst in gcp_compute_state.get("instances", {}).values()
+        if isinstance(inst, dict)
+    ]
+    return {"instances": instances, "count": len(instances)}
+
+
+@app.post("/api/console/gce/instances/{instance_id}/exec", include_in_schema=False)
+async def api_console_gce_exec(instance_id: str, request: Request):
+    """In-console terminal for a GCE instance — reuses the SAME container-exec path
+    (_console_execute) as EC2. For Docker-backed instances this runs the command
+    inside the container; for other backends _console_execute serves its backend's
+    terminal. SSH (from connect-info) remains the primary access path."""
+    payload: dict = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    command = str(payload.get("command") or payload.get("data") or "")
+    instance = gcp_compute_state.get("instances", {}).get(instance_id)
+    if not isinstance(instance, dict):
+        raise HTTPException(404, detail="NoSuchInstance")
+    backend = str(instance.get("runtime_backend") or "").strip().lower()
+    if backend == "docker":
+        _sync_docker_instance(instance)
+    elif backend == "multipass":
+        _sync_multipass_instance(instance)
+    elif backend == "lxd":
+        _sync_lxd_instance(instance)
+    if instance.get("state") != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    result = _console_execute(instance, command)
+    _record_usage("gcp.compute.console_command", {
+        "instance_id": instance_id, "command": command,
+        "exit_code": result["exit_code"],
+    })
+    return {"message": "Console command executed", "instance_id": instance_id, **result}
+
+
 @app.get("/api/azure/vm/{instance_id}/connect-info")
 def api_azure_vm_connect_info(instance_id: str):
     return _connect_info_response("azure", instance_id)

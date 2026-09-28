@@ -400,6 +400,12 @@ def _gcp_services(conf) -> list:
          "api": dict(_GCP_KMS_API),
          "connect": dict(_GCP_KMS_CONNECT),
          "conformance": conf.service_signal("gcp.kms")},
+        {"id": "compute", "label": "Compute Engine", "icon": "🖥",
+         "widget": "compute-terminal", "terminology": "instance",
+         "backed_by": "Docker/LXD",
+         "api": dict(_GCE_API),
+         "connect": dict(_GCE_CONNECT),
+         "conformance": conf.service_signal("gcp.compute")},
     ]
 
 

@@ -161,6 +161,17 @@ _SIGNAL = {
         "checks": {"passed": 36, "total": 36},
         "note": "GCP Cloud KMS — kms-crypto-view serves Cloud KMS via the same widget (lens=gcp) over the real kms_core.",
     },
+    # Compute Engine reuses the SAME compute-terminal widget under lens=gcp; only the
+    # manifest `api`/`connect` blocks differ (§15.2). It lists GCE instances, surfaces
+    # the native SSH connect-info + .pem (the existing /api/gcp/compute/... endpoints),
+    # and drives the SAME container-exec path EC2 uses for the in-console terminal, so
+    # the list / connect / .pem / exec flow works unchanged. Backend conformant AND the
+    # widget ships, so gate to "full".
+    "gcp.compute": {
+        "mode": "full", "status": "conformant",
+        "checks": {"passed": 34, "total": 34},
+        "note": "GCP Compute Engine — compute-terminal serves GCE via the same widget (lens=gcp).",
+    },
 }
 
 # The status precedence for the coarse status-bar rollup pill.
