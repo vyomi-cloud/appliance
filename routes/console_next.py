@@ -896,6 +896,43 @@ def _resolve_substrate(substrate: str | None = None) -> str:
     return val if val in ("local", "codespaces", "nano") else "local"
 
 
+def _sandbox_ssh_info() -> dict:
+    """One-time SSH bastion setup for a Codespaces-hosted sandbox.
+
+    When the appliance runs inside a Codespace, a remote dev reaches EVERY instance
+    through the Codespace as a jump host — set up ONCE per laptop, then `ssh -J` to
+    each instance at the private IP shown in the console. No per-instance forwarding.
+    Returns {} off-Codespace so the shell renders no setup banner. Keyed off the
+    GitHub-set CODESPACE_NAME (reliable regardless of the substrate string)."""
+    cs = (os.environ.get("CODESPACE_NAME") or "").strip()
+    if not cs:
+        return {}
+    jump = f"cs.{cs}"
+    return {
+        "codespace_name": cs,
+        "jump_host": jump,
+        "ssh_setup_command": f"gh codespace ssh --config -c {cs} >> ~/.ssh/config",
+        "note": (
+            f"Run once on your laptop. Installs SSH alias '{jump}' — a secure tunnel "
+            f"into this sandbox over your gh auth. Afterwards every instance's SSH "
+            f"command works (ssh -J {jump} …) and reaches it at the private IP shown "
+            f"in the console. One setup covers all instances and all clouds — no "
+            f"per-instance forwarding. If your alias differs, use the Host name the "
+            f"command printed. Databases reuse this same jump — each DB view shows a "
+            f"ready-to-run tunnel + psql/mysql command."
+        ),
+        # Databases reuse the jump via a local port-forward — ONE tunnel per engine
+        # covers every database on it. The exact per-DB command (with creds) rides on
+        # each DB's view (connect_help); these are the generic patterns for the banner.
+        "db": {
+            "note": ("Databases (RDS / Cloud SQL / Azure DB): one tunnel per engine "
+                     "covers every database. Each DB view shows the exact command."),
+            "postgres_tunnel": f"ssh -fN -L 15432:localhost:5432 {jump}",
+            "mysql_tunnel": f"ssh -fN -L 13306:localhost:3306 {jump}",
+        },
+    }
+
+
 def _capabilities(lens: str = "aws", substrate: str | None = None) -> dict:
     """Return the runtime capability manifest for THIS substrate + cloud lens (§15.1).
 
@@ -995,6 +1032,10 @@ def _capabilities(lens: str = "aws", substrate: str | None = None) -> dict:
             "ssh": substrate == "local" and connect_mode == "ssh",
         },
         "connect": {"mode": connect_mode},
+        # One-time SSH bastion setup, present only when hosted in a Codespace (§ SSH).
+        # The shell renders a single dismissible banner from this — the setup is
+        # laptop-wide (covers every instance/cloud), so it lives here, not per-instance.
+        "sandbox": _sandbox_ssh_info(),
         # The service rail is generated from this catalog — the shell renders only
         # these services, each mapped to a widget the manifest above gates. Each
         # carries its per-service conformance signal so the rail + widgets show the

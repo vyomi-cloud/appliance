@@ -261,6 +261,17 @@ def on_create(full_type: str, rec: dict, base: str) -> None:
                                      f"dbname={conn['database']} user={conn['user']} "
                                      f"password={conn['password']}"),
             }
+            # In a Codespace sandbox: laptop-side tunnel + psql command via the jump.
+            try:
+                from core import codespace_conn
+                ch = codespace_conn.db_tunnel("postgres", int(conn.get("port") or 0),
+                                              database=conn.get("database", ""),
+                                              user=conn.get("user", ""),
+                                              password=conn.get("password", ""))
+                if ch:
+                    rec["properties"]["connectionInfo"]["connectHelp"] = ch
+            except Exception:
+                pass
         except Exception as exc:  # never break the control plane
             rec.setdefault("properties", {})["dataPlane"] = f"metadata-only ({exc})"
 

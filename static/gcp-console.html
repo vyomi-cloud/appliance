@@ -1146,6 +1146,21 @@ function renderOverviewTab(host, svc, item){
   svc.columns.forEach(c => { const v = getPath(item, c[0]); if (v != null) rows.push([c[1], String(v)]); });
   rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, v))));
   card.append(g); host.append(card);
+  // Codespaces sandbox: reach this Cloud SQL instance from a remote laptop through
+  // the jump host. Present only when in a Codespace with a real backend connection
+  // (guarded — a no-op everywhere else).
+  if (item && item.connect_help) {
+    const ch = item.connect_help;
+    const mono = "font-family:monospace;font-size:12.5px;word-break:break-all";
+    const c2 = el("div",{class:"kv-card"});
+    c2.append(el("div",{class:"h"}, "Connect from your laptop (Codespaces)"));
+    const g2 = el("div",{class:"kv-grid"});
+    g2.append(el("div",{}, el("div",{class:"k"}, "1 · Tunnel (keep open)"), el("div",{class:"v",style:mono}, ch.tunnel_command)));
+    g2.append(el("div",{}, el("div",{class:"k"}, "2 · Connect"),            el("div",{class:"v",style:mono}, ch.client_command)));
+    c2.append(g2);
+    c2.append(el("div",{style:"font-size:11.5px;color:var(--hint);margin-top:8px"}, ch.note));
+    host.append(c2);
+  }
 }
 function renderLabelsTab(host, svc, item){
   const labels = (item.labels && typeof item.labels === "object") ? item.labels : {};

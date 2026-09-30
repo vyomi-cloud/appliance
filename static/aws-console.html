@@ -2763,6 +2763,21 @@ SUB_RENDERERS.connect = function(svc, full, host){
               "Save to ~/Downloads. Run `chmod 600` on it before connecting."))));
       }
 
+      // Step 0 — one-time Codespaces jump-host setup. Present only when the
+      // appliance runs in a Codespace (ssh.setup_command set by _docker_connect_info).
+      // The SSH command below connects THROUGH this jump, so without this the dev's
+      // `ssh -J …` has no alias to use. Run once; covers every instance + cloud.
+      if (ssh.setup_command) {
+        wrap.append(el("div",{class:"keyblock"},
+          el("div",{class:"k"}, "Step 0 — one-time setup on your laptop (Codespaces)"),
+          el("pre",{class:"keyval"}, ssh.setup_command),
+          el("div",{class:"row"},
+            el("button",{class:"btn",onclick:()=>{navigator.clipboard.writeText(ssh.setup_command); toast("Copied");}},
+              icon("copy"), "Copy"),
+            el("span",{class:"muted", style:"font-size:12px;margin-left:8px"},
+              `Installs SSH alias ${ssh.jump_host || "cs.<codespace>"} (a secure tunnel into this sandbox over your gh auth). Run once — covers every instance and cloud; the SSH command below connects through it.`))));
+      }
+
       // The SSH command itself — same UI for both modes
       const sshCmd = ssh.command || "";
       const stepLabel = sharedKey ? "Paste this into your terminal" : "Step 2 — SSH command";
@@ -3144,6 +3159,19 @@ SUB_RENDERERS.rdsendpoints = function(svc, full, host){
     el("div",{}, el("div",{class:"k"}, "Status"),   el("div",{class:"v"}, full.status || "available")),
     el("div",{}, el("div",{class:"k"}, "Master username"), el("div",{class:"v"}, full.master_username || "postgres"))));
   host.append(card);
+  // Codespaces sandbox: reach this DB from a remote laptop through the jump host.
+  // Present only when the appliance runs in a Codespace AND the DB has a real
+  // backend connection (guarded — a no-op everywhere else).
+  if (full.connect_help) {
+    const ch = full.connect_help;
+    const c2 = el("div",{class:"kv-card"});
+    c2.append(el("div",{class:"h"}, "Connect from your laptop (Codespaces)"));
+    c2.append(el("div",{class:"kv-grid"},
+      el("div",{}, el("div",{class:"k"}, "1 · Tunnel (keep open)"), el("div",{class:"v mono"}, ch.tunnel_command)),
+      el("div",{}, el("div",{class:"k"}, "2 · Connect"),            el("div",{class:"v mono"}, ch.client_command))));
+    c2.append(el("div",{class:"small"}, ch.note));
+    host.append(c2);
+  }
 };
 SUB_RENDERERS.rdssnapshots = function(svc, full, host){
   fetch(ORIGIN+svc.api_paths.snapshots.path).then(r=>r.json()).then(j=>{

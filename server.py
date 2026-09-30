@@ -7402,6 +7402,34 @@ def _ssh_advertise_host() -> str:
     return "127.0.0.1"
 
 
+def _codespace_name() -> str:
+    """The GitHub Codespace name when the appliance runs inside a Codespaces
+    sandbox (platform-set env). Empty otherwise. Drives the gh-port-forward
+    connect flow — a Codespace's ports aren't reachable by a remote dev except
+    via `gh codespace ports forward`, so the Connect tab surfaces that command."""
+    return (os.environ.get("CODESPACE_NAME") or "").strip()
+
+
+def _db_connect_help(conn: dict | None, engine: str = "postgres") -> dict | None:
+    """Codespaces laptop-side DB tunnel + client command for a real backend
+    connection block ({host,port,database,user,password}). None off-Codespace or
+    when the DB is metadata-only (no real engine). Shared across RDS / Cloud SQL /
+    Azure DB — all three carry the same connection shape."""
+    if not conn:
+        return None
+    try:
+        from core import codespace_conn
+        return codespace_conn.db_tunnel(
+            engine or "postgres",
+            int(conn.get("port") or 0),
+            database=str(conn.get("database", "")),
+            user=str(conn.get("user", "")),
+            password=str(conn.get("password", "")),
+        )
+    except Exception:
+        return None
+
+
 def _docker_backed(instance: dict) -> bool:
     """True when this instance record is served by the Docker compute backend
     (vs LXD/Multipass). Docker containers are named vyomi-i-<id>."""
@@ -7435,23 +7463,55 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
 
     primary = None
     alternatives: list[dict] = []
+    setup_cmd = None       # one-time laptop setup (Codespaces jump host)
+    jump_host = None       # the SSH alias the setup command installs
+
+    # In-sandbox options — reachable only from the appliance HOST itself (i.e.
+    # from inside the Codespace): the routable bridge IP and/or 127.0.0.1:host_port.
+    internal: list[dict] = []
     if _routable_ip_enabled() and container_ip:
-        primary = {
-            "label": "Direct (routable IP, :22)",
+        internal.append({
+            "label": "Inside the sandbox — routable IP (:22)",
             "command": f"ssh -i {key_path} {opts} {user}@{container_ip}",
             "user": user, "host": container_ip, "port": 22,
-        }
+        })
     if published_port:
         pub_host = _ssh_advertise_host()
-        pub = {
-            "label": "Port-forward (host:port)",
+        internal.append({
+            "label": "Inside the sandbox — host:port",
             "command": f"ssh -i {key_path} {opts} -p {int(published_port)} {user}@{pub_host}",
             "user": user, "host": pub_host, "port": int(published_port),
-        }
-        if primary is None:
-            primary = pub
+        })
+
+    cs_name = _codespace_name()
+    if cs_name and (container_ip or published_port):
+        # Codespaces sandbox — BASTION / ProxyJump model. The Codespace is a jump
+        # host: the dev runs ONE `gh codespace ssh --config` on their laptop (which
+        # appends an SSH alias that tunnels into this Codespace over their own gh
+        # auth), then reaches EVERY instance through it with `ssh -J`. No per-instance
+        # port forwarding — 1 or 50 instances, same one-time setup. Crucially, this
+        # lets the dev SSH to the exact private IP shown in the cloud console.
+        jump_host = f"cs.{cs_name}"
+        setup_cmd = f"gh codespace ssh --config -c {cs_name} >> ~/.ssh/config"
+        if container_ip:
+            # Reach the instance by its console private IP, via the jump.
+            cmd = f"ssh -J {jump_host} -i {key_path} {opts} {user}@{container_ip}"
+            phost, pport = container_ip, 22
         else:
-            alternatives.append(pub)
+            # No routable IP — hop through the jump to the published host port,
+            # which resolves on the Codespace (localhost is the jump's localhost).
+            lp = int(published_port)
+            cmd = f"ssh -J {jump_host} -i {key_path} {opts} -p {lp} {user}@localhost"
+            phost, pport = "localhost", lp
+        primary = {
+            "label": "From your laptop (Codespaces jump host)",
+            "command": cmd, "user": user, "host": phost, "port": pport,
+            "jump_host": jump_host, "setup_command": setup_cmd,
+        }
+        alternatives = internal
+    else:
+        primary = internal[0] if internal else None
+        alternatives = internal[1:]
 
     if primary is None:
         return {"ok": False, "instance_id": iid,
@@ -7481,6 +7541,12 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
             "user": user,
             "host": primary["host"],
             "port": primary["port"],
+            # Codespaces bastion: the ONE-TIME command the dev runs on their laptop
+            # to install the jump-host SSH alias, and the alias itself. Once set up,
+            # every instance is reachable via `ssh -J <jump_host> …` — no per-instance
+            # forwarding. Both None for the local/Multipass case.
+            "setup_command": setup_cmd,
+            "jump_host": jump_host,
             "key_download_url": key_url,
             "key_local_filename": f"vyomi-{iid}.pem",
             "host_identity_path": key_path,
@@ -7492,10 +7558,21 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
             "command": f"docker exec -it {inst.container_name} bash",
             "note": "Works when you're on the machine running the appliance.",
         },
-        "note": (("Direct SSH to the instance's routable IP on :22. "
-                  if primary["port"] == 22 else
-                  "SSH is port-forwarded from the appliance host. ")
-                 + ("A second host:port option is listed below." if alternatives else "")).strip(),
+        "note": (
+            (f"Sandbox (Codespaces) — one-time setup on YOUR laptop:\n"
+             f"  {setup_cmd}\n"
+             f"(this appends an SSH alias — shown as 'Host {jump_host}' in its output — "
+             f"that tunnels into this sandbox over your gh auth). Then the SSH command "
+             f"above reaches this instance by the same private IP you see in the console, "
+             f"through the jump. The one-time setup covers EVERY instance — no per-instance "
+             f"forwarding. If your alias differs, use the Host name that command printed. "
+             f"The 'inside the sandbox' options below only work from within the Codespace.")
+            if setup_cmd else
+            (("Direct SSH to the instance's routable IP on :22. "
+              if primary["port"] == 22 else
+              "SSH is port-forwarded from the appliance host. ")
+             + ("A second host:port option is listed below." if alternatives else "")).strip()
+        ),
     }
 
 
@@ -16388,6 +16465,9 @@ def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
         # engine was unreachable and the instance is metadata-only).
         "connection": instance.get("_backend"),
         "backendStatus": "live" if instance.get("_backend") else "simulated",
+        # Codespace sandbox: laptop-side tunnel + client command through the jump.
+        "connect_help": _db_connect_help(instance.get("_backend"),
+                                         instance.get("databaseVersion", "postgres")),
     }
 
 
@@ -18257,6 +18337,9 @@ def _rds_db_view(db: dict) -> dict[str, Any]:
         # + the data-plane conformance test must connect with THESE, not the
         # verbatim master_username — parity with Cloud SQL's connectionInfo.
         "connection": db.get("_backend_connection") or None,
+        # In a Codespace sandbox: laptop-side tunnel + psql/mysql command to reach
+        # this DB through the jump host (None off-Codespace / metadata-only).
+        "connect_help": _db_connect_help(db.get("_backend_connection"), db.get("engine")),
         "runtime_backend": db.get("runtime_backend", "lxd"),
         "runtime_image": db.get("runtime_image", ""),
         "container_name": db.get("container_name", ""),

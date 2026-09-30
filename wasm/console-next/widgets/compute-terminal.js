@@ -313,6 +313,9 @@ class ComputeTerminal extends LitElement {
         <span class="txt">${ssh.command || '(no ssh command)'}</span>
         <button class="ghost" title="copy" @click=${() => this._copy(ssh.command || '')}>⧉</button>
       </div>
+      ${ssh.setup_command ? html`
+        <div class="hint">Goes through one-time jump host <code>${ssh.jump_host}</code> — set it up once from the “One-time SSH setup” banner (or run <code>${ssh.setup_command}</code>). Reaches this instance at its console private IP; the same setup covers every instance.</div>
+      ` : ''}
       <div class="kv">
         <span class="k">user@host</span><span class="v">${ssh.user || 'ubuntu'}@${ssh.host || '?'}</span>
         <span class="k">port</span><span class="v">${ssh.port != null ? ssh.port : '22'}</span>

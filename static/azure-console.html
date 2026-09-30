@@ -727,6 +727,15 @@ function openConnectModal(rec){
           _sshSlot.append(el("div",{style:"font-size:12px;color:var(--sub)"}, "SSH not ready: " + reason));
           return;
         }
+        // One-time Codespaces jump-host setup (present only in a Codespace). The
+        // SSH command below connects THROUGH this jump, so surface it first.
+        const setup = (info.ssh || {}).setup_command || "";
+        if (setup) {
+          _sshSlot.append(el("div",{class:"hint",style:"margin-bottom:4px"},
+            "One-time on your laptop (Codespaces) — installs " + ((info.ssh||{}).jump_host || "the jump host") +
+            "; run once, covers every instance:"));
+          _sshSlot.append(makeCmdRow(setup));
+        }
         _sshSlot.append(makeCmdRow(cmd));
         _sshSlot.append(el("div",{class:"hint"}, "Uses your ~/.ssh/vyomi_ed25519 — paste and go."));
       })
@@ -1294,6 +1303,21 @@ SUB_RENDERERS.overview = function(svc, full, host){
       });
       sub.append(g); host.append(sub);
     }
+  }
+
+  // Codespaces sandbox: reach this database from a remote laptop through the jump
+  // host. Present only in a Codespace with a real backend connection (guarded).
+  const _ch = getPath(full, "properties.connectionInfo.connectHelp");
+  if (_ch && _ch.tunnel_command) {
+    const monoS = "font-family:monospace;font-size:12.5px;word-break:break-all";
+    const c2 = el("div",{class:"essentials",style:"margin-top:14px"});
+    c2.append(el("div",{class:"h"},"Connect from your laptop (Codespaces)"));
+    const g2 = el("div",{class:"essentials-grid"});
+    g2.append(el("div",{class:"k"},"1 · Tunnel (keep open)"), el("div",{class:"v",style:monoS}, _ch.tunnel_command));
+    g2.append(el("div",{class:"k"},"2 · Connect"),            el("div",{class:"v",style:monoS}, _ch.client_command));
+    c2.append(g2);
+    c2.append(el("div",{class:"hint",style:"margin-top:8px"}, _ch.note));
+    host.append(c2);
   }
 
   host.append(el("div",{class:"blade-actions"},

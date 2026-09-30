@@ -23,6 +23,7 @@ class VyomiConsole extends LitElement {
     _paletteOpen: { state: true },
     _deepLink: { state: true },        // backend.ref pushed from the Inspector
     _error: { state: true },
+    _sandboxDismissed: { state: true },  // one-time SSH setup banner dismissed?
   };
 
   static styles = css`
@@ -46,6 +47,32 @@ class VyomiConsole extends LitElement {
       min-height: 0;
     }
     .center { min-width: 0; overflow: auto; }
+    /* One-time SSH bastion setup (Codespaces sandbox). Global + dismissible. */
+    .setup-banner {
+      margin: var(--vy-s3) var(--vy-s4) 0;
+      padding: var(--vy-s3) var(--vy-s4);
+      border: 1px solid var(--vy-accent, #3b82f6);
+      border-radius: var(--vy-radius);
+      background: rgba(59,130,246,.08);
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .setup-banner .row { display: flex; align-items: center; gap: 10px; }
+    .setup-banner .title { font-weight: 600; flex: 1; }
+    .setup-banner .cmd {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--vy-bg-elev, rgba(0,0,0,.25));
+      border: 1px solid var(--vy-border, rgba(255,255,255,.1));
+      border-radius: 6px; padding: 6px 10px;
+      font-family: var(--vy-font-mono, ui-monospace, monospace); font-size: var(--vy-fs-sm, 12.5px);
+    }
+    .setup-banner .cmd code { flex: 1; overflow-x: auto; white-space: nowrap; }
+    .setup-banner .note { color: var(--vy-fg-muted); font-size: var(--vy-fs-sm, 12.5px); line-height: 1.5; }
+    .setup-banner button {
+      background: transparent; color: var(--vy-fg); border: 1px solid var(--vy-border, rgba(255,255,255,.15));
+      border-radius: 6px; padding: 3px 8px; cursor: pointer; font: inherit; font-size: 12px;
+    }
+    .setup-banner button:hover { border-color: var(--vy-accent, #3b82f6); }
+    .setup-banner .x { border: 0; font-size: 16px; line-height: 1; color: var(--vy-fg-muted); }
     .err {
       margin: var(--vy-s5); padding: var(--vy-s4);
       border: 1px solid var(--vy-err); border-radius: var(--vy-radius);
@@ -62,6 +89,7 @@ class VyomiConsole extends LitElement {
     this._paletteOpen = false;
     this._deepLink = null;
     this._error = null;
+    this._sandboxDismissed = false;
     this._onKey = this._onKey.bind(this);
   }
 
@@ -73,6 +101,14 @@ class VyomiConsole extends LitElement {
       // Default selection: first service in the catalog.
       const svcs = this._caps.services || [];
       if (svcs.length) this._selected = { serviceId: svcs[0].id };
+      // Restore the "SSH setup banner dismissed" choice for THIS codespace.
+      const sb = this._caps.sandbox;
+      if (sb && sb.codespace_name) {
+        try {
+          this._sandboxDismissed =
+            localStorage.getItem('vy-ssh-setup-dismissed:' + sb.codespace_name) === '1';
+        } catch (_) { /* localStorage may be unavailable */ }
+      }
     } catch (e) {
       this._error = 'Could not load capabilities: ' + e.message;
     }
@@ -138,6 +174,36 @@ class VyomiConsole extends LitElement {
     }
   }
 
+  // One-time SSH bastion setup banner — shown once per Codespace, laptop-wide
+  // (covers every instance and cloud). Absent off-Codespace (manifest.sandbox={}).
+  _renderSandboxBanner(caps) {
+    const sb = caps && caps.sandbox;
+    if (!sb || !sb.ssh_setup_command || this._sandboxDismissed) return '';
+    return html`
+      <div class="setup-banner">
+        <div class="row">
+          <span class="title">One-time SSH setup — run once on your laptop to reach every instance</span>
+          <button class="x" title="dismiss" @click=${() => this._dismissSandbox(sb)}>×</button>
+        </div>
+        <div class="cmd">
+          <code>${sb.ssh_setup_command}</code>
+          <button @click=${() => this._copy(sb.ssh_setup_command)}>Copy</button>
+        </div>
+        <div class="note">${sb.note}</div>
+      </div>
+    `;
+  }
+
+  _dismissSandbox(sb) {
+    this._sandboxDismissed = true;
+    try {
+      if (sb && sb.codespace_name)
+        localStorage.setItem('vy-ssh-setup-dismissed:' + sb.codespace_name, '1');
+    } catch (_) { /* ignore */ }
+  }
+
+  _copy(text) { navigator.clipboard?.writeText(text || '').catch(() => {}); }
+
   render() {
     if (this._error) {
       return html`<div class="err">${this._error}</div>`;
@@ -165,6 +231,7 @@ class VyomiConsole extends LitElement {
           ></vyomi-service-rail>
 
           <div class="center">
+            ${this._renderSandboxBanner(caps)}
             <vyomi-center-canvas
               .caps=${caps}
               .selected=${this._selected}
