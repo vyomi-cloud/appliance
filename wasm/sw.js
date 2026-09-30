@@ -49,6 +49,10 @@ function routes() {
         resourceRe: x.resource
           ? new RegExp("^" + x.resource.replace(/\{name\}/g, "([^/]+)") + "$")
           : null,
+        // Lifecycle sub-paths: <resource>/{start,stop,reboot,terminate}.
+        actionRe: x.resource
+          ? new RegExp("^" + x.resource.replace(/\{name\}/g, "([^/]+)") + "/(start|stop|reboot|terminate)$")
+          : null,
       }))
     );
   }
@@ -83,6 +87,9 @@ function catalogRoutes(provider) {
           createMethod: (s.create_method || "POST").toUpperCase(),
           collectionRe: _tplToRe(s.collection_path),
           resourceRe: s.resource_path ? _tplToRe(s.resource_path) : null,
+          actionRe: s.resource_path
+            ? new RegExp(_tplToRe(s.resource_path).source.replace(/\$$/, "/(start|stop|reboot|terminate)$"))
+            : null,
         })))
         .catch(() => []);
   }
@@ -299,6 +306,15 @@ async function route(method, path, body, query) {
   }
   if (method === "GET" && STUBS[path]) return { response: json(STUBS[path]) };
 
+  // Instance-type catalog for the compute launch wizard (EC2 / GCE / Azure VM).
+  // Static per-cloud data, dumped from core/instance_catalog.py to fixtures.
+  if (method === "GET" && path === "/api/instances/catalog") {
+    const prov = (query && query.provider) || "aws";
+    const cr = await fetch(FIX + "/instances-catalog-" + prov + ".json");
+    if (cr.ok) return { response: new Response(cr.body, { status: 200, headers: { "content-type": "application/json" } }) };
+    return { response: json({ provider: prov, count: 0, instances: [] }) };
+  }
+
   // 1.5 Azure ARM control plane — the Azure console speaks real ARM, not the
   //     generic /api/{cloud}/{service} scheme: /subscriptions/{sub}/resourceGroups/
   //     {rg}/providers/Microsoft.X/{type}/{name}?api-version=, plus the LRO poll at
@@ -486,6 +502,13 @@ async function route(method, path, body, query) {
           return { tuple: ["aws", "_resource", "Update", { service: r.key, name, body: body || {} }] };
       }
     }
+    if (r.actionRe && method === "POST") {
+      const amt = path.match(r.actionRe);
+      if (amt) {
+        const action = amt[2].charAt(0).toUpperCase() + amt[2].slice(1);
+        return { tuple: ["aws", "_resource", action, { service: r.key, name: decodeURIComponent(amt[1]) }] };
+      }
+    }
   }
 
   // 4. provider-aware catalog CRUD (GCP / Azure). Same generic backend, but the
@@ -507,6 +530,13 @@ async function route(method, path, body, query) {
           if (method === "DELETE") return { tuple: [provider, "_resource", "Delete", { service: r.key, name }] };
           if (method === "PUT" || method === "PATCH")
             return { tuple: [provider, "_resource", "Update", { service: r.key, name, body: body || {} }] };
+        }
+      }
+      if (r.actionRe && method === "POST") {
+        const amt = r.actionRe.exec(path);
+        if (amt) {
+          const action = amt[2].charAt(0).toUpperCase() + amt[2].slice(1);
+          return { tuple: [provider, "_resource", action, { service: r.key, name: decodeURIComponent(amt[1]) }] };
         }
       }
     }

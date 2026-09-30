@@ -80,6 +80,25 @@ def _resource_dispatch(backends: Backends, provider: str, operation: str,
     if operation == "Delete":
         ok = r.delete(provider, account, svc, name)
         return {"ok": ok, "code": None if ok else "NotFound", "name": name}
+    # Lifecycle actions for compute-like resources (EC2 instances, GCE VMs, RDS
+    # DBs, …). The console POSTs collection/{name}/{start,stop,reboot,terminate};
+    # flip the in-store record's state/status so the grid reflects it. EC2 reads
+    # `state` (running/stopped); RDS/most others read `status` — patch both.
+    if operation in ("Start", "Stop", "Reboot"):
+        rec = r.get(provider, account, svc, name)
+        if not rec:
+            return {"ok": False, "code": "NotFound", "name": name}
+        st, status = {
+            "Start":  ("running", "available"),
+            "Stop":   ("stopped", "stopped"),
+            "Reboot": ("running", "available"),
+        }[operation]
+        updated = r.update(provider, account, svc, name, {"state": st, "status": status})
+        return {"ok": True, **(updated or {"name": name, "state": st, "status": status})}
+    if operation == "Terminate":
+        # EC2 terminate == remove the instance (console then refetches the list).
+        ok = r.delete(provider, account, svc, name)
+        return {"ok": ok, "code": None if ok else "NotFound", "name": name}
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation}
 
 
