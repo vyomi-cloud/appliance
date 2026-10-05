@@ -60,3 +60,11 @@ build/
 *.tgz
 wasm/relay/.wrangler/
 docker-compose.unified.yml
+
+# Personal / private files sometimes dropped at the repo root (salary slips,
+# certificates, scans, photos). ANCHORED to the root with a leading slash so
+# they never match the legitimate docs/architecture/**/*.pdf diagrams & exports.
+/*.pdf
+/*.jpg
+/*.jpeg
+/*.png
