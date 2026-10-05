@@ -222,7 +222,7 @@ def dispatch(store: KeyStore, method: str, path: str,
             return _json(200, _crypto_key_view(store, name))
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on cryptoKey")
 
-    # ── cryptoKeyVersions: .../cryptoKeys/{k}/cryptoKeyVersions[/{v}] ───────
+    # ── cryptoKeyVersions: .../cryptoKeys/{k}/cryptoKeyVersions[/{v}][:verb] ─
     if len(segs) >= 9 and segs[8] == "cryptoKeyVersions":
         key_name = "/".join(segs[:8])
         if not store.key_exists(key_name):
@@ -230,12 +230,40 @@ def dispatch(store: KeyStore, method: str, path: str,
         meta = store.get_key(key_name) or {}
         versions = meta.get("versions", {})
         if len(segs) == 9 and method == "GET":       # list versions
-            items = [_version_view(key_name, v, versions[v]) for v in sorted(versions)]
+            items = [_version_view(key_name, v, versions[v])
+                     for v in sorted(versions, key=lambda s: int(s) if s.isdigit() else s)]
             return _json(200, {"cryptoKeyVersions": items})
+        if len(segs) == 9 and method == "POST":      # create a new key version
+            nums = [int(v) for v in versions if str(v).isdigit()]
+            nxt = str((max(nums) + 1) if nums else 1)
+            now = _now()
+            versions[nxt] = {"state": "ENABLED", "createTime": now,
+                             "protectionLevel": "SOFTWARE",
+                             "algorithm": meta.get("algorithm", "GOOGLE_SYMMETRIC_ENCRYPTION")}
+            meta["versions"] = versions
+            store.persist()
+            return _json(200, _version_view(key_name, nxt, versions[nxt]))
         if len(segs) == 10 and method == "GET":      # get one version
             ver = segs[9]
             if ver not in versions:
                 return _err(404, "NOT_FOUND", f"CryptoKeyVersion {ver} not found.")
+            return _json(200, _version_view(key_name, ver, versions[ver]))
+        if len(segs) == 10 and verb in ("destroy", "disable", "enable"):
+            ver = segs[9]
+            if ver not in versions:
+                return _err(404, "NOT_FOUND", f"CryptoKeyVersion {ver} not found.")
+            # GCP forbids destroying/disabling the current primary version.
+            if str(meta.get("primary", "1")) == str(ver) and verb in ("destroy", "disable"):
+                return _err(400, "FAILED_PRECONDITION",
+                            f"Cannot {verb} the primary CryptoKeyVersion {ver}.")
+            if verb == "destroy":
+                versions[ver]["state"] = "DESTROY_SCHEDULED"
+            elif verb == "disable":
+                versions[ver]["state"] = "DISABLED"
+            else:
+                versions[ver]["state"] = "ENABLED"
+            meta["versions"] = versions
+            store.persist()
             return _json(200, _version_view(key_name, ver, versions[ver]))
         return _err(400, "INVALID_ARGUMENT", f"Unsupported request on cryptoKeyVersions")
 

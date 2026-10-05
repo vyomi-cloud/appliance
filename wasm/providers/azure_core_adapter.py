@@ -25,6 +25,7 @@ from core import azure_keyvault_keys_core as _kvkeys
 from core.kms_keystore import InMemoryKeyStore
 from core import azure_queue_core as _queue
 from core.azure_queue_core import AzureQueueStore
+from core import azure_subresource_core as _sub
 
 APIV = {"api-version": "7.4"}
 XMS = {"x-ms-version": "2021-12-02"}
@@ -41,6 +42,128 @@ _STORES = {
     "kvkeys":         _R["az_kvkeys"],
     "queues":         _R["az_queue"],
 }
+
+# Generic child-resource (sub-resource) store. Durable: `azure_subresource_core`
+# hangs its state on this ALREADY-registered store's public `nano_sub` dict attr,
+# which nano_persist captures/restores automatically (no registry/persist edit).
+_SUB_STORE = _R["az_cosmos"]
+
+# Detail-view sub-resource blades the console drives via /api/azure/sub/<service>/…
+# Each: console parent service key → {childType: {friendly labels only for docs}}.
+# The adapter serves List/Create/Update/Delete<Child> for exactly these (service,
+# childType) pairs; anything else returns UnsupportedOperation so the console can
+# fall back cleanly. childType is the SINGULAR-ish verb suffix the console uses.
+_SUB_SERVICES = {
+    "sql":        {"Database", "FirewallRule"},
+    "servicebus": {"Queue"},
+    "cosmos":     set(),   # settings-only (GetSettings/UpdateSettings), no child list
+    "keyvault":   set(),   # settings-only
+    "vnet":       set(),   # settings-only
+    "storage":    set(),   # settings-only
+    "vm":         set(),   # settings-only
+}
+
+
+def _sub_op(service, operation, name, body):
+    """Serve a generic child-resource op coming over /api/azure/sub/<service>/…
+
+    operation is "<Verb><Child>" (ListDatabases / CreateFirewallRule / DeleteQueue);
+    `name` is the PARENT resource id for List/Create, or "<parent>/<child>" for
+    Delete/Update (the console encodes the child as the last path segment so it
+    survives the body-less DELETE). Returns the registry envelope the console reads:
+      List → {ok, items:[{name,...},...]};  Create/Update → {ok, name, ...};
+      Delete → {ok, code, name}.
+    """
+    body = body or {}
+
+    # ---- Durable editable SETTINGS (GetSettings / UpdateSettings) ----
+    # A settings blade reads its current value, edits it, PATCHes, reads back. The
+    # settings KEY (which blade) is the first path segment after the resource, so
+    # the console calls:
+    #   GET   /api/azure/sub/<service>/getSettings/<resource>/<settingsKey>
+    #   PATCH /api/azure/sub/<service>/updateSettings/<resource>/<settingsKey>  {<fields>}
+    # Stored as a child of childType "_settings" so it rides the same durable bag.
+    if operation in ("GetSettings", "UpdateSettings"):
+        resource, skey = str(name or ""), ""
+        if "/" in resource:
+            resource, skey = resource.rsplit("/", 1)
+        skey = skey or str(body.get("_key") or "default")
+        if operation == "GetSettings":
+            coll = _sub.list_children(_SUB_STORE, service, resource, "_settings")
+            cur = next((c for c in coll if c.get("name") == skey), None)
+            vals = {k: v for k, v in (cur or {}).items() if k != "name"}
+            return {"ok": True, "key": skey, "settings": vals}
+        # UpdateSettings: upsert the settings record, then read back.
+        attrs = {k: v for k, v in body.items() if k not in ("name", "_key")}
+        existing = next((c for c in _sub.list_children(_SUB_STORE, service, resource, "_settings")
+                         if c.get("name") == skey), None)
+        if existing is None:
+            _sub.create_child(_SUB_STORE, service, resource, "_settings", skey, attrs)
+        else:
+            _sub.update_child(_SUB_STORE, service, resource, "_settings", skey, attrs)
+        try:
+            from core import nano_events
+            nano_events.record(provider="azure", service=service, resource=resource,
+                               action="UpdateSettings", status="ok", detail=skey)
+        except Exception:
+            pass
+        coll = _sub.list_children(_SUB_STORE, service, resource, "_settings")
+        cur = next((c for c in coll if c.get("name") == skey), None)
+        vals = {k: v for k, v in (cur or {}).items() if k != "name"}
+        return {"ok": True, "key": skey, "settings": vals}
+
+    # Split "<Verb><Child>" → verb, childType. Longest known child suffix wins.
+    verb = child_type = None
+    for ct in ("FirewallRule", "Database", "Queue", "Topic", "Subscription"):
+        for v in ("List", "Create", "Update", "Delete"):
+            if operation == v + ct + ("s" if v == "List" else ""):
+                verb, child_type = v, ct
+                break
+        if verb:
+            break
+    if verb is None:
+        # Tolerate non-pluralised List too (ListDatabase) + unknown children.
+        for v in ("List", "Create", "Update", "Delete"):
+            if operation.startswith(v):
+                verb, child_type = v, operation[len(v):].rstrip("s") or "Item"
+                break
+    if verb is None:
+        return {"ok": False, "code": "UnsupportedOperation", "operation": operation}
+
+    parent, child = str(name or ""), ""
+    if verb in ("Delete", "Update") and "/" in parent:
+        parent, child = parent.rsplit("/", 1)
+    child = child or str(body.get("name") or "")
+
+    if verb == "List":
+        return {"ok": True, "items": _sub.list_children(_SUB_STORE, service, parent, child_type)}
+
+    if verb == "Create":
+        attrs = {k: v for k, v in body.items() if k != "name"}
+        out = _sub.create_child(_SUB_STORE, service, parent, child_type, child, attrs)
+    elif verb == "Update":
+        attrs = {k: v for k, v in body.items() if k != "name"}
+        out = _sub.update_child(_SUB_STORE, service, parent, child_type, child, attrs)
+    elif verb == "Delete":
+        out = _sub.delete_child(_SUB_STORE, service, parent, child_type, child)
+    else:
+        return {"ok": False, "code": "UnsupportedOperation", "operation": operation}
+
+    # Record a cloudsim event so the PARENT's Activity/Logs tab reflects child CRUD
+    # (registry._MUTATING_OPS is frozen & doesn't know these composite verbs, so we
+    # emit here — best-effort, mirrors registry._emit_event; NEVER raises).
+    try:
+        from core import nano_events
+        status = "ok" if out.get("ok") else (str(out.get("code")) or "error")
+        action = f"{verb}{child_type}"
+        nano_events.record(provider="azure", service=service, resource=parent,
+                           action=action, status=status)
+        if child:
+            nano_events.record(provider="azure", service=service, resource=child,
+                               action=verb, status=status)
+    except Exception:
+        pass
+    return out
 
 
 def _call(svc_mod, store, method, path, query=None, headers=None, body=b""):
@@ -80,6 +203,13 @@ def resource_op(service, operation, name="", body=None):
     """Console CRUD → Azure data-plane core. Returns the registry envelope."""
     body = body or {}
     rid = str(body.get("name") or name or "").strip()
+
+    # ---- Generic child/sub-resource ops (SQL DBs + firewall rules, SB queues) ----
+    # These arrive as composite ops ("ListDatabases"/"CreateQueue"/…) via the shared
+    # /api/azure/sub/<service>/… route, NOT as the flat List/Create/Get/Delete the
+    # data-plane services below use. Handle them first.
+    if service in _SUB_SERVICES:
+        return _sub_op(service, operation, name, body)
 
     # ---- Blob containers (XML list) ----
     if service == "blobcontainers":
@@ -167,4 +297,4 @@ def resource_op(service, operation, name="", body=None):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": service}
 
 
-AZURE_DP_SERVICES = frozenset(_STORES.keys())
+AZURE_DP_SERVICES = frozenset(_STORES.keys()) | frozenset(_SUB_SERVICES.keys())

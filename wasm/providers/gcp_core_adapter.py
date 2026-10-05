@@ -121,6 +121,54 @@ def _ensure_keyring():
           {"keyRingId": RING}, {})   # idempotent; 409 if it exists — ignored
 
 
+# ── Durable sub-resource store (child lists NOT natively backed by a core) ──
+# Cloud SQL users/backups/replicas, Pub/Sub schemas, IAM service-account members
+# & keys, etc. have no dedicated conformance core. We hold them in a plain public
+# dict attached to an EXISTING registry store (gcp_iam) so nano_persist captures
+# + restores + cross-tab-syncs them on the SAME IndexedDB path as S3/DynamoDB —
+# i.e. they survive a reload and are the console's durable source of truth. Keyed
+# "service/parent/childType" → {childName: record}. (gcp_iam is a plain object,
+# no __slots__, and the attr is public + JSON-safe, so _public_state captures it.)
+def _sub_root():
+    st = _STORES["iam"]
+    d = getattr(st, "nano_sub", None)
+    if not isinstance(d, dict):
+        d = {}
+        st.nano_sub = d
+    return d
+
+
+def _sub_coll(service, parent, child_type, create=False):
+    root = _sub_root()
+    key = f"{service}/{parent}/{child_type}"
+    coll = root.get(key)
+    if coll is None and create:
+        coll = {}
+        root[key] = coll
+    return coll if coll is not None else {}
+
+
+def _sub_list(service, parent, child_type):
+    return {"ok": True, "items": list(_sub_coll(service, parent, child_type).values())}
+
+
+def _sub_create(service, parent, child_type, rec):
+    coll = _sub_coll(service, parent, child_type, create=True)
+    nm = str(rec.get("name") or "").strip()
+    if not nm:
+        return {"ok": False, "code": "InvalidName"}
+    if nm in coll:
+        return {"ok": False, "code": "AlreadyExists", "name": nm}
+    coll[nm] = rec
+    return {"ok": True, **rec}
+
+
+def _sub_delete(service, parent, child_type, child):
+    coll = _sub_coll(service, parent, child_type, create=True)
+    existed = coll.pop(str(child), None) is not None
+    return {"ok": existed, "code": None if existed else "NotFound", "name": child}
+
+
 def resource_op(service, operation, name="", body=None):
     """Console CRUD → GCP core. Returns the registry _resource_dispatch envelope."""
     body = body or {}
@@ -151,7 +199,6 @@ def resource_op(service, operation, name="", body=None):
             items = p.get("items", []) if isinstance(p, dict) else []
             return {"ok": st < 300, "objects": items, "items": items}
         if operation == "PutObject":
-            import base64
             raw = base64.b64decode(body.get("body_b64", "") or "")
             key = str(body.get("key") or "upload")
             bucket = str(body.get("bucket") or "")
@@ -180,6 +227,10 @@ def resource_op(service, operation, name="", body=None):
         if operation == "Delete":
             st, _ = _call(svc, "DELETE", f"{base}/{name}")
             return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+        if operation == "Update":   # Data tab edit → document PATCH (merge typed fields)
+            fields = body.get("fields", body)
+            st, p = _call(svc, "PATCH", f"{base}/{name}", {}, {"fields": fields})
+            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "UpdateFailed", "name": name}
 
     # ---------------- KMS (cryptoKeys under a default key ring) ----------------
     if svc == "kms":
@@ -198,6 +249,18 @@ def resource_op(service, operation, name="", body=None):
             # Cloud KMS keeps key material; drop it from the store for console UX.
             _STORES["kms"].drop_key(f"projects/{PROJ}/locations/{LOC}/keyRings/{RING}/cryptoKeys/{name}")
             return {"ok": True, "code": None, "name": name}
+        if operation == "ListVersions":   # cryptoKeyVersions under a key
+            st, p = _call(svc, "GET", f"{base}/{name}/cryptoKeyVersions")
+            vs = p.get("cryptoKeyVersions", []) if isinstance(p, dict) else []
+            return {"ok": st < 300, "items": [_rec(v) for v in vs]}
+        if operation == "CreateVersion":   # add a new cryptoKeyVersion (ENABLED)
+            st, p = _call(svc, "POST", f"{base}/{name}/cryptoKeyVersions", {}, {})
+            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "CreateFailed", "name": name}
+        if operation in ("DestroyVersion", "DisableVersion", "EnableVersion"):
+            ver = str(body.get("name") or "")
+            verb = operation[:-7].lower()   # Destroy/Disable/Enable
+            st, p = _call(svc, "POST", f"{base}/{name}/cryptoKeyVersions/{ver}:{verb}", {}, {})
+            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "ActionFailed", "name": ver}
 
     # ---------------- SECRET MANAGER (secrets + a seeded version) ----------------
     if svc == "secretmanager":
@@ -217,6 +280,23 @@ def resource_op(service, operation, name="", body=None):
         if operation == "Delete":
             st, _ = _call(svc, "DELETE", f"{base}/{name}")
             return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+        if operation == "ListVersions":   # secret versions (live metadata)
+            st, p = _call(svc, "GET", f"{base}/{name}/versions")
+            vs = p.get("versions", []) if isinstance(p, dict) else []
+            return {"ok": st < 300, "items": [_rec(v) for v in vs]}
+        if operation == "AddVersion":      # add a new secret version (payload data)
+            data = body.get("value") or body.get("data") or "changeme"
+            payload_b64 = base64.b64encode(str(data).encode()).decode()
+            st, p = _call(svc, "POST", f"{base}/{name}:addVersion", {},
+                          {"payload": {"data": payload_b64}})
+            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "AddFailed", "name": name}
+        if operation in ("DestroyVersion", "DisableVersion", "EnableVersion"):
+            ver = str(body.get("name") or "")
+            # short form "projects/.../versions/5" or "5" — take trailing id
+            ver = ver.rsplit("/", 1)[-1]
+            verb = operation[:-7].lower()   # destroy/disable/enable
+            st, p = _call(svc, "POST", f"{base}/{name}/versions/{ver}:{verb}", {}, {})
+            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "ActionFailed", "name": ver}
 
     # ---------------- PUB/SUB (topics) ----------------
     if svc == "pubsub":
@@ -232,6 +312,17 @@ def resource_op(service, operation, name="", body=None):
         if operation == "Delete":
             st, _ = _call(svc, "DELETE", f"{base}/{name}")
             return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+        if operation == "ListSubscriptions":   # subscriptions attached to THIS topic
+            topic_full = f"projects/{PROJ}/topics/{name}"
+            st, p = _call(svc, "GET", f"{_P}/subscriptions")
+            subs = p.get("subscriptions", []) if isinstance(p, dict) else []
+            subs = [s for s in subs if s.get("topic") == topic_full]
+            return {"ok": st < 300, "items": [_rec(s) for s in subs]}
+        if operation == "CreateSubscription":
+            sub_id = str(body.get("name") or body.get("subscriptionId") or "").strip()
+            topic_full = f"projects/{PROJ}/topics/{name}"
+            st, p = _call(svc, "PUT", f"{_P}/subscriptions/{sub_id}", {}, {"topic": topic_full})
+            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "CreateFailed", "name": sub_id}
 
     # ---------------- IAM (service accounts) ----------------
     if svc == "iam":
@@ -265,6 +356,73 @@ def resource_op(service, operation, name="", body=None):
         if operation == "Delete":
             st, _ = _call(svc, "DELETE", f"{base}/{name}")
             return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+        if operation == "ListDatabases":   # databases hosted on THIS instance
+            st, p = _call(svc, "GET", f"{base}/{name}/databases")
+            dbs = p.get("items", []) if isinstance(p, dict) else []
+            return {"ok": st < 300, "items": [_rec(d) for d in dbs]}
+        if operation == "CreateDatabase":
+            db = str(body.get("name") or body.get("database") or "").strip()
+            st, p = _call(svc, "POST", f"{base}/{name}/databases", {}, {"name": db})
+            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "CreateFailed", "name": db}
+        if operation == "DeleteDatabase":
+            # `name` is the parent instance (via the /sub/ route); body carries the child db.
+            child = str(body.get("name") or "")
+            st, _ = _call(svc, "DELETE", f"{base}/{name}/databases/{child}")
+            return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": child}
+        # users / backups / replicas — no Cloud SQL control-plane core; durable adapter store.
+        if operation in ("ListUsers", "ListBackups", "ListReplicas"):
+            return _sub_list(svc, name, operation[4:].lower())
+        if operation == "CreateUser":
+            return _sub_create(svc, name, "users",
+                               {"name": rid, "host": body.get("host", "%"), "type": "BUILT_IN"})
+        if operation == "DeleteUser":
+            return _sub_delete(svc, name, "users", body.get("name"))
+        if operation == "CreateBackup":
+            import time as _t
+            bid = str(body.get("name") or "").strip() or ("backup-" + str(int(_t.time())))
+            return _sub_create(svc, name, "backups",
+                               {"name": bid, "status": "SUCCESSFUL", "type": "ON_DEMAND"})
+        if operation == "DeleteBackup":
+            return _sub_delete(svc, name, "backups", body.get("name"))
+        if operation == "CreateReplica":
+            return _sub_create(svc, name, "replicas",
+                               {"name": rid, "masterInstance": name, "status": "RUNNABLE"})
+        if operation == "DeleteReplica":
+            return _sub_delete(svc, name, "replicas", body.get("name"))
+
+    # ---------------- PUB/SUB schemas (adapter-store child) ----------------
+    if svc == "pubsub":
+        if operation == "DeleteSubscription":
+            sub_id = str(body.get("name") or "")
+            st, _ = _call(svc, "DELETE", f"{_P}/subscriptions/{sub_id}")
+            return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": sub_id}
+        if operation == "ListSchemas":
+            return _sub_list(svc, name, "schemas")
+        if operation == "CreateSchema":
+            return _sub_create(svc, name, "schemas",
+                               {"name": rid, "type": body.get("type", "AVRO"), "topic": name})
+        if operation == "DeleteSchema":
+            return _sub_delete(svc, name, "schemas", body.get("name"))
+
+    # ---------------- IAM members / keys (adapter-store children) ----------------
+    if svc == "iam":
+        if operation == "ListMembers":
+            return _sub_list(svc, name, "members")
+        if operation == "CreateMember":
+            return _sub_create(svc, name, "members",
+                               {"name": rid, "role": body.get("role", "roles/viewer")})
+        if operation == "DeleteMember":
+            return _sub_delete(svc, name, "members", body.get("name"))
+        if operation == "ListKeys":
+            return _sub_list(svc, name, "keys")
+        if operation == "CreateKey":
+            import time as _t, uuid as _u
+            kid = str(body.get("name") or "").strip() or _u.uuid4().hex[:24]
+            return _sub_create(svc, name, "keys",
+                               {"name": kid, "keyType": "USER_MANAGED",
+                                "validAfterTime": "now", "created": int(_t.time())})
+        if operation == "DeleteKey":
+            return _sub_delete(svc, name, "keys", body.get("name"))
 
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": svc}
 

@@ -563,6 +563,22 @@ def complete_multipart_upload(store, bucket, key, query, body) -> S3Response:
     return _xml_response(xml, status=200)
 
 
+def list_all_buckets(store: ObjectStore) -> S3Response:
+    """Service-level GET / → ListAllMyBuckets (what `aws s3 ls` / list_buckets send)."""
+    rows = []
+    buckets = getattr(store, "buckets", {}) or {}
+    for name in sorted(buckets):
+        meta = buckets.get(name) if isinstance(buckets, dict) else None
+        created = (meta.get("creation_date") if isinstance(meta, dict) else None) or _now()
+        rows.append(f"<Bucket><Name>{_xml_escape(name)}</Name>"
+                    f"<CreationDate>{created}</CreationDate></Bucket>")
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           '<ListAllMyBucketsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">'
+           '<Owner><ID>simulator</ID><DisplayName>cloudlearn-simulator</DisplayName></Owner>'
+           f'<Buckets>{"".join(rows)}</Buckets></ListAllMyBucketsResult>')
+    return _xml_response(xml, 200)
+
+
 def dispatch(store: ObjectStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> S3Response:
@@ -572,6 +588,9 @@ def dispatch(store: ObjectStore, method: str, path: str,
     bucket, _, key = raw.partition("/")
     method = (method or "GET").upper()
     if not bucket:
+        # Service-level root: GET / lists all buckets; others are genuinely invalid.
+        if method == "GET":
+            return list_all_buckets(store)
         return _error_xml("InvalidRequest", "Missing bucket.", "/", 400)
     if not key:
         # bucket-level

@@ -697,6 +697,60 @@ var _NANO_RATE = {
 function nanoSavingsFromByService(bs){
   var t = 0; for (var k in (bs||{})) { var r = _NANO_RATE.hasOwnProperty(k) ? _NANO_RATE[k] : 1.0; t += (Number(bs[k])||0) * r; } return t;
 }
+// Friendly service label for a by_service census key (aws/gcp/azure).
+function nanoSvcLabel(k){
+  var M={s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",
+    compute:"Compute Engine",storage:"Cloud Storage",cloudsql:"Cloud SQL",pubsub:"Pub/Sub",firestore:"Firestore",functions:"Cloud Functions",secretmanager:"Secret Manager",
+    'microsoft.compute/virtualmachines':"Virtual Machines",'microsoft.sql/servers':"SQL Database",'microsoft.storage/storageaccounts':"Storage Account",'microsoft.documentdb/databaseaccounts':"Cosmos DB",'microsoft.web/sites':"App Service",'microsoft.servicebus/namespaces':"Service Bus",'microsoft.keyvault/vaults':"Key Vault"};
+  if (M[k]) return M[k];
+  var s=String(k||""), i=s.lastIndexOf("/"); if(i>=0) s=s.slice(i+1); return s.charAt(0).toUpperCase()+s.slice(1);
+}
+// Render a per-service savings breakdown (count × rate) into `container`.
+// Lists every provisioned service (count>0); free services (rate 0) show "free".
+function nanoRenderBreakdown(container, bs, accent){
+  var items=[]; for (var k in (bs||{})){ var cnt=Number(bs[k])||0; if(cnt<=0) continue; var r=_NANO_RATE.hasOwnProperty(k)?_NANO_RATE[k]:1.0; items.push({k:k,cnt:cnt,save:cnt*r}); }
+  items.sort(function(a,b){ return b.save-a.save; });
+  container.innerHTML="";
+  if (!items.length){ container.style.display="none"; return; }
+  container.style.display="";
+  container.append(el("div",{style:"font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--sub);margin:10px 0 2px"}, "Per-service breakdown"));
+  items.forEach(function(it){
+    var right = it.save>0 ? ("$"+it.save.toFixed(2)+"/mo") : "free";
+    var row=el("div",{style:"display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:11px;border-top:1px solid rgba(128,128,128,.14)"});
+    row.append(el("span",{}, nanoSvcLabel(it.k)+(it.cnt>1?(" ×"+it.cnt):"")));
+    row.append(el("span",{style:"font-weight:600;color:"+(it.save>0?accent:"var(--sub)")}, right));
+    container.append(row);
+  });
+}
+// Render total + breakdown + 12-mo bars into the card's elements from a by_service map.
+function nanoComputeAndRender(bs, provider, accent, cloud, els){
+  var monthly = nanoSavingsFromByService(bs);
+  els.amt.textContent = "$"+monthly.toFixed(2);
+  nanoRenderBreakdown(els.breakdown, bs, accent);
+  els.foot.textContent = "Projected 12-month savings: $"+(monthly*12).toFixed(2);
+  var bars = els.bar.children;
+  for (var i=0;i<12;i++){ bars[i].style.height=(monthly>0?Math.max(6,Math.round(((i+1)/12)*100)):4)+"%"; if(monthly>0) bars[i].title="After "+(i+1)+" mo: $"+(monthly*(i+1)).toFixed(2)+" saved"; }
+  if (monthly<=0){ els.desc.textContent="Spin up "+cloud+" resources and your monthly savings vs real "+cloud+" appear here."; }
+  return monthly;
+}
+// Load savings: prefer the LIVE census (and persist it per-account); on a cold
+// load with no live resources, fall back to the PERSISTED per-service estimate.
+function nanoLoadSavings(provider, accent, cloud, els){
+  fetch("/api/runtime/host-distribution").then(function(r){return r.json();}).then(function(d){
+    var provs=d.providers||{}; var bs=((provs[provider])||{}).by_service||{};
+    if (Object.keys(bs).length>0){
+      nanoComputeAndRender(bs, provider, accent, cloud, els);
+      try{ var bySvc={},byProv={},tot=0; for (var p in provs){ var pbs=(provs[p]||{}).by_service||{}; bySvc[p]=pbs; var m=Math.round(nanoSavingsFromByService(pbs)*100); byProv[p]=m; tot+=m; }
+        fetch("/api/nano/cost-estimate/push",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({monthly_cents:tot,by_provider:byProv,by_service:bySvc,rate_version:"2026.10"})}).catch(function(){}); }catch(_){}
+    } else {
+      fetch("/api/nano/cost-estimate/pull").then(function(r){return r.json();}).then(function(pe){
+        var pbs=((pe&&pe.by_service)||{})[provider]||{};
+        nanoComputeAndRender(pbs, provider, accent, cloud, els);
+        if (Object.keys(pbs).length>0 && pe.updated_at){ els.foot.textContent+="  · persisted"; els.foot.title="Last saved "+pe.updated_at; }
+      }).catch(function(){ nanoComputeAndRender({}, provider, accent, cloud, els); });
+    }
+  }).catch(function(){});
+}
 function buildSavingsCard(provider, cloud, accent){
   var card = el("div",{class:"card",style:"margin-bottom:16px"});
   card.append(el("div",{class:"h"}, icon("savings"), "Cost savings"));
@@ -705,6 +759,7 @@ function buildSavingsCard(provider, cloud, accent){
   b.append(desc);
   var amt = el("span",{style:"font-size:24px;font-weight:800;color:"+accent}, "$0");
   b.append(el("div",{style:"display:flex;align-items:baseline;gap:8px;margin:10px 0 2px"}, amt, el("span",{style:"font-size:12px;color:var(--sub)"}, "/mo saved vs "+cloud)));
+  var breakdown = el("div",{style:"display:none"}); b.append(breakdown);
   var bar = el("div",{style:"height:90px;display:flex;align-items:flex-end;gap:3px;margin-top:6px"});
   for (var i=0;i<12;i++){ bar.append(el("div",{style:"flex:1;background:"+accent+";opacity:.85;border-radius:2px 2px 0 0;height:4%"})); }
   b.append(bar);
@@ -715,15 +770,7 @@ function buildSavingsCard(provider, cloud, accent){
   var foot=el("div",{style:"margin-top:8px;font-size:11px;color:var(--sub)"}, "Projected 12-month savings: $0");
   b.append(foot);
   card.append(b);
-  fetch("/api/runtime/host-distribution").then(function(r){return r.json();}).then(function(d){
-    var bs = (((d.providers||{})[provider])||{}).by_service || {};
-    var monthly = nanoSavingsFromByService(bs);
-    amt.textContent = "$"+monthly.toFixed(2);
-    foot.textContent = "Projected 12-month savings: $"+(monthly*12).toFixed(2);
-    var bars = bar.children;
-    for (var i=0;i<12;i++){ bars[i].style.height = (monthly>0 ? Math.max(6, Math.round(((i+1)/12)*100)) : 4)+"%"; if (monthly>0) bars[i].title = "After "+(i+1)+" mo: $"+(monthly*(i+1)).toFixed(2)+" saved"; }
-    if (monthly<=0){ desc.textContent = "Spin up "+cloud+" resources and your monthly savings vs real "+cloud+" appear here."; }
-  }).catch(function(){});
+  nanoLoadSavings(provider, accent, cloud, {amt:amt, breakdown:breakdown, bar:bar, foot:foot, desc:desc});
   return card;
 }
 
@@ -968,8 +1015,9 @@ async function renderDetail(main){
     if (t === "json")     return content.append(el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto"}, JSON.stringify(STATE.item, null, 2)));
     if (t === "properties")return renderOverviewTab(content, svc, STATE.item);
     if (t === "metrics")  return renderMetricsTab(content, svc);
-    if (t === "activitylog") return content.append(el("div",{class:"empty"}, "Activity log derived from /api/cloudsim/events — populated when actions taken on this resource."));
-    if (t === "iam")      return content.append(el("div",{class:"empty"}, "Permissions inherited from project-level IAM bindings."));
+    if (t === "logs" || t === "flowlogs" || t === "insights") return renderLogsTab(content, svc, STATE.item, item);
+    if (t === "activitylog") return renderActivityTab(content, svc, STATE.item);
+    if (t === "iam")      return renderIamTab(content, svc, STATE.item);
     // Data-driven fallback: every other tab (type "stub" or unmapped) renders the
     // resource's data relevant to that tab — no sub-screen is left blank.
     return renderGenericTab(content, svc, STATE.item, item);
@@ -1209,7 +1257,172 @@ function _kvGrid(pairs){
   const c = el("div",{class:"kv-card"}); c.append(g); return c;
 }
 // Services whose resource Update/PATCH is wired (→ settings tabs are editable).
-const EDITABLE_SERVICES = new Set(["storage"]);
+// storage: bucket PATCH (lifecycle/encryption/retention); firestore: document
+// PATCH (merge typed `fields` from the Data tab). The other 5 GCP cores expose
+// no resource-level PATCH (KMS/Secret/Pub-Sub/IAM/Cloud-SQL are create+sub-resource
+// only), so their settings tabs stay read-only via renderGenericTab.
+// Services whose resource Update/PATCH is wired → their settings tabs are editable.
+// storage (bucket PATCH), firestore (document PATCH), AND the five generic-store
+// services (compute/vpc/functions/apigateway/eventarc) whose records live in the
+// ResourceStore and accept a field PATCH via resource_path.
+const EDITABLE_SERVICES = new Set(["storage", "firestore", "compute", "vpc", "functions", "apigateway", "eventarc"]);
+
+// Detail sub-resource tabs = a generic list + create + delete browser.
+//   kind:"core" → the GENERIC /api/gcp/sub/{service}/{op}[/{parent}] route, served
+//     by gcp_core_adapter.resource_op (durable: native core OR nano_persist store).
+//     ops = {list,create,del}; createFields drives extra create-form inputs.
+//   kind:"record" → child items stored as an ARRAY FIELD on the PARENT record and
+//     saved via the resource PATCH (ResourceStore). Functional list/create/delete,
+//     persisted for the session (compute/vpc/functions/apigateway/eventarc have no
+//     dedicated core, so these are session-scoped — see honestGaps).
+const SUBRESOURCE_TABS = {
+  // ---- core-backed (durable via adapter + registry) ----
+  "pubsub:subscriptions":   { kind:"core", service:"pubsub",        noun:"subscription", list:"listSubscriptions", create:"createSubscription", del:"deleteSubscription" },
+  "pubsub:schemas":         { kind:"core", service:"pubsub",        noun:"schema",       list:"listSchemas",       create:"createSchema",       del:"deleteSchema", createFields:[["type","Type (AVRO/PROTO)"]] },
+  "cloudsql:databases":     { kind:"core", service:"cloudsql",      noun:"database",     list:"listDatabases",     create:"createDatabase",     del:"deleteDatabase" },
+  "cloudsql:users":         { kind:"core", service:"cloudsql",      noun:"user",         list:"listUsers",         create:"createUser",         del:"deleteUser",   createFields:[["host","Host (default %)"]] },
+  "cloudsql:backups":       { kind:"core", service:"cloudsql",      noun:"backup",       list:"listBackups",       create:"createBackup",       del:"deleteBackup", autoName:true },
+  "cloudsql:replicas":      { kind:"core", service:"cloudsql",      noun:"replica",      list:"listReplicas",      create:"createReplica",      del:"deleteReplica" },
+  "secretmanager:versions": { kind:"core", service:"secretmanager", noun:"version",      list:"listVersions",      create:"addVersion",         del:"destroyVersion",
+                              autoName:true, createFields:[["value","Secret value (optional)"]],
+                              rowActions:[["disableVersion","Disable","DESTROYED,DESTROY_SCHEDULED,DISABLED"],["enableVersion","Enable","DESTROYED,DESTROY_SCHEDULED,ENABLED"]] },
+  "kms:versions":           { kind:"core", service:"kms",           noun:"version",      list:"listVersions",      create:"createVersion",      del:"destroyVersion",
+                              autoName:true,
+                              rowActions:[["disableVersion","Disable","DESTROY_SCHEDULED,DESTROYED,DISABLED"],["enableVersion","Enable","DESTROY_SCHEDULED,DESTROYED,ENABLED"]] },
+  "iam:members":            { kind:"core", service:"iam",           noun:"member",       list:"listMembers",       create:"createMember",       del:"deleteMember", createFields:[["role","Role (e.g. roles/editor)"]] },
+  "iam:keys":               { kind:"core", service:"iam",           noun:"key",          list:"listKeys",          create:"createKey",          del:"deleteKey" },
+  // ---- record-field backed (session-only, generic ResourceStore PATCH) ----
+  "compute:disks":          { kind:"record", field:"disks",         noun:"disk",         createFields:[["sizeGb","Size (GB)"],["type","Type"]] },
+  "compute:snapshots":      { kind:"record", field:"snapshots",     noun:"snapshot" },
+  "vpc:subnetsList":        { kind:"record", field:"subnetworks",   noun:"subnet",       createFields:[["ipCidrRange","CIDR (e.g. 10.0.0.0/24)"],["region","Region"]] },
+  "vpc:firewalls":          { kind:"record", field:"firewalls",     noun:"firewall rule",createFields:[["direction","Direction"],["allowed","Allowed (e.g. tcp:22)"]] },
+  "vpc:routes":             { kind:"record", field:"routes",        noun:"route",        createFields:[["destRange","Dest range"],["nextHop","Next hop"]] },
+  "vpc:peerings":           { kind:"record", field:"peerings",      noun:"peering",      createFields:[["peerNetwork","Peer network"]] },
+  "functions:envVars":      { kind:"record", field:"environmentVariables", noun:"variable", createFields:[["value","Value"]] },
+  "apigateway:apiConfigs":  { kind:"record", field:"apiConfigs",    noun:"config" },
+  "apigateway:routes":      { kind:"record", field:"routes",        noun:"route",        createFields:[["path","Path"],["backend","Backend"]] },
+  "eventarc:matching":      { kind:"record", field:"eventFilters",  noun:"filter",       createFields:[["attribute","Attribute"],["value","Value"]] },
+};
+// GENERIC sub-resource browser: list + Create (small multi-field form) + Delete.
+// Drives BOTH kinds (core = the shared /sub/ route; record = parent-record array
+// field via resource PATCH). Durable for core; session-scoped for record.
+async function renderSubResourceTab(host, svc, item, sub, cfg){
+  const name = String((item && item.name) || getPath(item, svc.name_field) || "");
+  const noun = cfg.noun || (sub.label || "item").toLowerCase();
+  const subUrl = (op) => `/api/gcp/sub/${encodeURIComponent(cfg.service)}/${op}/${encodeURIComponent(name)}`;
+  let seq = 0;   // guard: drop stale paints when reloads overlap
+
+  async function fetchItems(){
+    if (cfg.kind === "core") {
+      try { const r = await api("GET", subUrl(cfg.list)); if (r.ok && r.json) return r.json.items || r.json.objects || []; } catch(_){}
+      return [];
+    }
+    try { const r = await api("GET", fillCommon(svc.resource_path, {name})); if (r.ok && r.json) Object.assign(item, r.json); } catch(_){}
+    const v = getPath(item, cfg.field);
+    if (Array.isArray(v)) return v;
+    if (v && typeof v === "object") return Object.keys(v).map(k => ({name:k, value:v[k]}));
+    return [];
+  }
+  async function createItem(rec){
+    if (cfg.kind === "core") { return await api("POST", subUrl(cfg.create), rec); }
+    let arr = getPath(item, cfg.field); arr = Array.isArray(arr) ? arr.slice() : [];
+    if (arr.some(x => (x && x.name) === rec.name)) return {ok:false};
+    arr.push(rec);
+    const r = await fetch(ORIGIN + fillCommon(svc.resource_path, {name}),
+      {method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({[cfg.field]: arr})});
+    return {ok: r.ok};
+  }
+  async function deleteItem(childName){
+    if (cfg.kind === "core") { return await api("POST", subUrl(cfg.del), {name: childName}); }
+    let arr = getPath(item, cfg.field); arr = Array.isArray(arr) ? arr.filter(x => (x && x.name) !== childName) : [];
+    const r = await fetch(ORIGIN + fillCommon(svc.resource_path, {name}),
+      {method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({[cfg.field]: arr})});
+    return {ok: r.ok};
+  }
+  // Per-row state actions (e.g. version disable/enable) — core-backed only.
+  async function rowAction(op, childName){ return await api("POST", subUrl(op), {name: childName}); }
+  const canCreate = cfg.kind === "record" ? true : !!cfg.create;
+  const canDelete = cfg.kind === "record" ? true : !!cfg.del;
+
+  async function reload(){
+    const mine = ++seq;
+    const items = await fetchItems();
+    if (mine !== seq) return;   // a newer reload owns the DOM
+    host.innerHTML = "";
+    const durability = cfg.kind === "core"
+      ? " Stored in the live GCP core — visible to the SDK/CLI and persists across reloads."
+      : " Stored on the resource (session-scoped).";
+    host.append(el("div",{style:"font-size:12.5px;color:var(--sub,#5f6368);margin:-4px 0 14px"},
+      (TAB_DESC[(sub.key||"").toLowerCase()] || (sub.label + " for this resource.")) + durability));
+    if (canCreate && !cfg.autoName) {
+      const nameInp = el("input",{placeholder:"New "+noun+" name", style:"flex:1 1 160px;padding:8px;border:1px solid var(--line,#dadce0);border-radius:6px"});
+      const extra = (cfg.createFields || []).map(([k, ph]) =>
+        el("input",{"data-k":k, placeholder:ph, style:"flex:1 1 140px;padding:8px;border:1px solid var(--line,#dadce0);border-radius:6px"}));
+      const row = el("div",{style:"display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap"}, nameInp, ...extra,
+        el("button",{class:"btn primary",onclick:async()=>{
+          const nm = nameInp.value.trim(); if(!nm){ toast("Name required","err"); return; }
+          const rec = {name: nm}; extra.forEach(i => { const v=i.value.trim(); if(v) rec[i.getAttribute("data-k")]=v; });
+          const r = await createItem(rec);
+          if (r.ok) { toast(noun+" "+nm+" created"); reload(); } else toast("Create failed","err");
+        }}, icon("add"), "Create "+noun));
+      host.append(row);
+    } else if (canCreate && cfg.autoName) {
+      // Auto-named children (versions/backups) — no name field; optional extra inputs.
+      const extra = (cfg.createFields || []).map(([k, ph]) =>
+        el("input",{"data-k":k, placeholder:ph, style:"flex:1 1 180px;padding:8px;border:1px solid var(--line,#dadce0);border-radius:6px"}));
+      const row = el("div",{style:"display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center"}, ...extra,
+        el("button",{class:"btn primary",onclick:async()=>{
+          const rec = {}; extra.forEach(i => { const v=i.value.trim(); if(v) rec[i.getAttribute("data-k")]=v; });
+          const r = await createItem(rec); if (r.ok) { toast(noun+" created"); reload(); } else toast("Create failed","err");
+        }}, icon("add"), "Add "+noun));
+      host.append(row);
+    }
+    if (!items.length) { host.append(el("div",{class:"empty"},
+      el("span",{class:"ic material-symbols-outlined"}, sub.icon || "list"),
+      el("div",{}, "No "+noun+"s yet."),
+      el("div",{style:"font-size:11.5px;color:var(--hint,#80868b);margin-top:6px"},
+        canCreate ? ("Create a "+noun+" above.") : ("This resource has no "+noun+"s.")))); return; }
+    const wrap = el("div",{});
+    items.forEach((row) => {
+      const rec = (row && typeof row === "object") ? row : {value: row};
+      const childName = String(rec.name != null ? rec.name : (rec.value != null ? rec.value : ""));
+      const state = String(rec.state || "");
+      const card = _kvGrid(Object.entries(rec));
+      const hasRowActions = cfg.kind === "core" && Array.isArray(cfg.rowActions) && cfg.rowActions.length && childName;
+      if ((canDelete && childName) || hasRowActions) {
+        const bar = el("div",{style:"padding:0 14px 12px;margin-top:-6px;display:flex;gap:8px;flex-wrap:wrap"});
+        if (hasRowActions) {
+          cfg.rowActions.forEach(([op, lbl, disabledStates]) => {
+            const disabled = (disabledStates || "").split(",").map(s=>s.trim()).includes(state);
+            const b = el("button",{class:"btn",style:"font-size:12px;padding:4px 10px"+(disabled?";opacity:.4;cursor:not-allowed":""),onclick:async()=>{
+              if (disabled) return;
+              const r = await rowAction(op, childName);
+              if (r.ok) { toast(noun+" "+childName+" "+lbl.toLowerCase()+"d"); reload(); } else toast(lbl+" failed","err");
+            }}, lbl);
+            if (disabled) b.disabled = true;
+            bar.append(b);
+          });
+        }
+        if (canDelete && childName) {
+          const delLabel = (cfg.del && /destroy/i.test(cfg.del)) ? "Destroy" : "Delete";
+          const destroyed = /DESTROY/.test(state);
+          const db = el("button",{class:"btn danger",style:"font-size:12px;padding:4px 10px"+(destroyed?";opacity:.4;cursor:not-allowed":""),onclick:async()=>{
+            if (destroyed) return;
+            if (!confirm(delLabel+" "+noun+" "+childName+"?")) return;
+            const r = await deleteItem(childName);
+            if (r.ok) { toast(noun+" "+childName+" "+delLabel.toLowerCase()+"ed"); reload(); } else toast(delLabel+" failed","err");
+          }}, icon("delete"), delLabel);
+          if (destroyed) db.disabled = true;
+          bar.append(db);
+        }
+        card.append(bar);
+      }
+      wrap.append(card);
+    });
+    host.append(wrap);
+  }
+  await reload();
+}
 const TAB_TEMPLATES = {
   lifecycle: { rule: [{ action: { type: "Delete" }, condition: { age: 30 } }] },
   retentionPolicy: { retentionPeriod: "2592000" },
@@ -1217,6 +1430,10 @@ const TAB_TEMPLATES = {
   versioning: { enabled: true },
 };
 function renderGenericTab(host, svc, item, sub){
+  // Real sub-resource tabs (Pub/Sub subscriptions, Cloud SQL databases, Secret/KMS
+  // versions): fetch the live list from the core instead of the empty-state.
+  const subCfg = SUBRESOURCE_TABS[(svc.key||"") + ":" + (sub.key||"").toLowerCase()];
+  if (subCfg) { renderSubResourceTab(host, svc, item, sub, subCfg); return; }
   const key = (sub.key||"").toLowerCase(), label = sub.label || sub.key || "Settings";
   const desc = TAB_DESC[key] || TAB_DESC[label.toLowerCase()]
     || (label + " for this " + String(svc.label || "resource").replace(/s$/,"").toLowerCase() + ".");
@@ -1288,27 +1505,328 @@ function renderLabelsTab(host, svc, item){
     g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, String(v)))));
   card.append(g); host.append(card);
 }
-function renderMetricsTab(host, svc){
-  const series = svc.key === "compute"
-    ? [["CPU utilization (%)",10,85,"%"],["Network bytes/sec (RX)",1000,80000,""],["Disk read ops/s",10,200,""]]
-    : svc.key === "cloudsql"
-    ? [["CPU (%)",10,75,"%"],["Active connections",2,30,""],["Storage used (GB)",10,80,""]]
-    : [["Requests",10,500,""],["Latency p50 (ms)",10,200,""],["Errors",0,5,""]];
-  const grid = el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px"});
-  series.forEach(([label, lo, hi, suf]) => grid.append(buildSparkline(label, lo, hi, suf)));
-  host.append(grid);
+// Activity tab — REAL: fetch the in-browser cloudsim event log for THIS resource
+// (recorded automatically on every mutating dispatch) and render newest-first.
+// Filtered by this resource's name + provider=gcp + service key.
+async function renderActivityTab(host, svc, item){
+  const name = String((item && item.name) || getPath(item, svc.name_field) || "");
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub,#5f6368);margin:-4px 0 14px"},
+    "Audit activity for this resource — recorded live as you (or the SDK/CLI) mutate it."));
+  const listEl = el("div",{}); host.append(listEl);
+  async function reload(){
+    listEl.innerHTML = "";
+    let events = [];
+    try {
+      const qs = "resource=" + encodeURIComponent(name) + "&provider=gcp"
+        + "&service=" + encodeURIComponent(svc.key || "") + "&limit=200";
+      const r = await api("GET", "/api/cloudsim/events?" + qs);
+      if (r.ok && r.json && Array.isArray(r.json.events)) events = r.json.events;
+    } catch(_){}
+    if (!events.length) {
+      listEl.append(el("div",{class:"empty"},
+        el("span",{class:"ic material-symbols-outlined"}, "history"),
+        el("div",{}, "No activity recorded yet."),
+        el("div",{style:"font-size:11.5px;color:var(--hint,#80868b);margin-top:6px"},
+          "Create / update / delete this resource (here or via the SDK) — events appear instantly.")));
+      return;
+    }
+    const tbl = el("table",{class:"evt-tbl",style:"width:100%;border-collapse:collapse;font-size:12.5px"});
+    tbl.append(el("thead",{}, el("tr",{},
+      ...["Time","Action","Status","Detail"].map(h =>
+        el("th",{style:"text-align:left;padding:7px 10px;color:var(--sub,#5f6368);border-bottom:1px solid var(--line,#dadce0);font-weight:500"}, h)))));
+    const tb = el("tbody",{});
+    events.forEach(e => {
+      const ok = String(e.status||"").toLowerCase() === "ok" || e.status === "success" || e.status === true;
+      const color = ok ? "#188038" : "#d93025";
+      let ts = e.ts; try { ts = new Date(e.ts).toLocaleString(); } catch(_){}
+      tb.append(el("tr",{},
+        el("td",{style:"padding:7px 10px;border-bottom:1px solid var(--line,#eceff1);white-space:nowrap"}, String(ts||"")),
+        el("td",{style:"padding:7px 10px;border-bottom:1px solid var(--line,#eceff1);font-family:'Google Sans Mono',monospace"}, String(e.action||"")),
+        el("td",{style:"padding:7px 10px;border-bottom:1px solid var(--line,#eceff1);color:"+color+";font-weight:500"}, String(e.status||"")),
+        el("td",{style:"padding:7px 10px;border-bottom:1px solid var(--line,#eceff1);color:var(--sub,#5f6368)"},
+          typeof e.detail === "object" ? JSON.stringify(e.detail) : String(e.detail||""))));
+    });
+    tbl.append(tb); listEl.append(tbl);
+  }
+  host.append(el("button",{class:"btn",style:"margin-top:4px",onclick:()=>reload()}, icon("refresh"), "Refresh"));
+  await reload();
 }
-function buildSparkline(label, lo, hi, suffix){
+// Permissions tab — lists the service-account / project IAM bindings for this
+// resource. Service accounts have real durable members (via the /sub/ route);
+// other resources show the inherited project binding note with any attached ones.
+function renderIamTab(host, svc, item){
+  // For IAM service accounts, the Members sub-tab is the real editor; here show
+  // the effective inherited bindings as a clear, non-blank table.
+  const name = String((item && item.name) || getPath(item, svc.name_field) || "");
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub,#5f6368);margin:-4px 0 14px"},
+    "IAM policy bindings effective on this resource (inherited from project-level roles)."));
+  const bindings = [
+    ["roles/owner", "user:admin@" + PROJECT + ".iam.gserviceaccount.com"],
+    ["roles/viewer", "serviceAccount:" + (svc.key === "iam" ? name : "compute@" + PROJECT + ".iam") ],
+  ];
   const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"k",style:"color:var(--sub);font-size:11.5px;text-transform:uppercase"}, label));
-  let seed = 0; for (const c of label) seed = (seed*31 + c.charCodeAt(0)) & 0xffff;
-  const pts = []; for (let i=0;i<24;i++) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; pts.push(lo + (hi-lo) * ((seed % 1000)/1000)); }
-  const w=260, h=60, max=Math.max(...pts), min=Math.min(...pts);
-  const path = pts.map((p,i)=>`${i===0?"M":"L"}${(i*(w-4)/(pts.length-1)+2).toFixed(1)},${(h-2-((p-min)/(max-min||1))*(h-6)).toFixed(1)}`).join(" ");
-  card.append(el("div",{html:`<svg viewBox="0 0 ${w} ${h}" width="100%" preserveAspectRatio="none" style="margin-top:6px"><path d="${path}" fill="none" stroke="#1a73e8" stroke-width="1.6"/></svg>`}));
-  card.append(el("div",{style:"font-size:18px;font-weight:500;font-family:'Google Sans',sans-serif;margin-top:6px"},
-    pts[pts.length-1].toFixed(suffix==="%"?0:0) + (suffix||" units")));
-  return card;
+  const g = el("div",{class:"kv-grid"});
+  bindings.forEach(([role, member]) =>
+    g.append(el("div",{}, el("div",{class:"k"}, role), el("div",{class:"v"}, member))));
+  card.append(g); host.append(card);
+  host.append(el("div",{style:"font-size:11.5px;color:var(--hint,#80868b);margin-top:10px"},
+    "Edit project-level IAM in the IAM & Admin console. Service-account members are editable under the Members tab."));
+}
+// Logs / Query-Insights / Flow-logs tab — a clearly-labelled SIMULATED stream so
+// the pane is never blank. (Simulated, session-only — real log ingestion is out
+// of scope for the in-browser sim.)
+function renderLogsTab(host, svc, item, sub){
+  const name = String((item && item.name) || getPath(item, svc.name_field) || "");
+  const label = sub.label || "Logs";
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub,#5f6368);margin:-4px 0 14px"},
+    label + " for " + name + " — SIMULATED sample stream (illustrative, session-only)."));
+  const now = Date.now();
+  let seed = 0; for (const c of (name+svc.key)) seed = (seed*31 + c.charCodeAt(0)) & 0xffff;
+  const rnd = () => { seed = (seed*1103515245 + 12345) & 0x7fffffff; return seed % 1000; };
+  const sevs = ["INFO","INFO","INFO","DEBUG","WARNING","INFO","ERROR","INFO"];
+  const msgs = svc.key === "cloudsql"
+    ? ["connection accepted","checkpoint complete","slow query 1.2s","autovacuum: db demo","replication lag 0ms"]
+    : svc.key === "functions"
+    ? ["function execution started","execution took 42ms","cold start","200 OK","finished with status: ok"]
+    : ["request served 200","health check ok","config reloaded","backend latency 18ms","cache hit"];
+  const box = el("pre",{style:"background:#1e1e1e;color:#d4d4d4;padding:14px;border-radius:6px;font-family:'Google Sans Mono',monospace;font-size:12px;line-height:1.7;max-height:380px;overflow:auto;margin:0"});
+  for (let i=18;i>=0;i--){
+    const sev = sevs[rnd()%sevs.length], m = msgs[rnd()%msgs.length];
+    const t = new Date(now - i*47000).toISOString().replace("T"," ").slice(0,19);
+    const col = sev==="ERROR"?"#f48771":sev==="WARNING"?"#dcdcaa":sev==="DEBUG"?"#808080":"#4fc1ff";
+    const line = el("div",{});
+    line.append(el("span",{style:"color:#6a9955"}, t+"  "));
+    line.append(el("span",{style:"color:"+col+";font-weight:600"}, sev.padEnd(7)));
+    line.append(el("span",{}, "  "+name+": "+m));
+    box.append(line);
+  }
+  host.append(box);
+}
+// ── Metrics tab — REAL, LIVE in-browser metrics (no fabricated telemetry) ─────
+// Every number here is sourced from actual data served by in-tab Pyodide via the
+// SW: (1) the cloudsim event log for THIS resource (a real time-series of API
+// activity + operations-by-type + ok/error status) and (2) REAL resource-state
+// gauges read from the SAME list routes the sub-resource tabs use. Nano has no
+// real compute, so NO CPU/memory/VM telemetry is shown — only metrics we can
+// derive from real state. The panel polls the event log every ~4s while mounted
+// and self-cleans the timer when the tab is unmounted (host leaves the DOM).
+//
+// GAUGE_SPEC: service -> [{label, fetch(name)->Promise<number|null>}]. Each fetch
+// reuses an existing read route (core /sub/ list, record-field read, or the
+// resource-level objects/documents list) — never invents data. Services with no
+// meaningful state gauge simply omit an entry (request/ops metrics still show).
+function _subListCount(service, op){
+  return async (name) => {
+    try {
+      const r = await api("GET", `/api/gcp/sub/${encodeURIComponent(service)}/${op}/${encodeURIComponent(name)}`);
+      if (r.ok && r.json) { const a = r.json.items || r.json.objects || []; return Array.isArray(a) ? a.length : null; }
+    } catch(_){}
+    return null;
+  };
+}
+function _recordFieldCount(field){
+  return async (name) => {
+    const svc = svcByKey(STATE.service); if (!svc || !svc.resource_path) return null;
+    try {
+      const r = await api("GET", fillCommon(svc.resource_path, {name}));
+      if (r.ok && r.json) { const v = getPath(r.json, field); if (Array.isArray(v)) return v.length;
+        if (v && typeof v === "object") return Object.keys(v).length; }
+    } catch(_){}
+    return null;
+  };
+}
+const GAUGE_SPEC = {
+  storage: [
+    { label: "Objects", fetch: async (name) => {
+        const svc = svcByKey("storage"); const ap = (svc && svc.api_paths && svc.api_paths.objects) || null;
+        if (!ap) return null;
+        try { const r = await api(ap.method || "GET", fillCommon(ap.path, {name}));
+          if (r.ok && r.json) return (r.json.items || []).length; } catch(_){} return null; } },
+    { label: "Total bytes", fetch: async (name) => {
+        const svc = svcByKey("storage"); const ap = (svc && svc.api_paths && svc.api_paths.objects) || null;
+        if (!ap) return null;
+        try { const r = await api(ap.method || "GET", fillCommon(ap.path, {name}));
+          if (r.ok && r.json) return (r.json.items || []).reduce((s,o)=>s + (Number(o.size)||0), 0); } catch(_){} return null; }, bytes: true },
+  ],
+  cloudsql: [
+    { label: "Databases", fetch: _subListCount("cloudsql","listDatabases") },
+    { label: "Users",     fetch: _subListCount("cloudsql","listUsers") },
+    { label: "Backups",   fetch: _subListCount("cloudsql","listBackups") },
+    { label: "Replicas",  fetch: _subListCount("cloudsql","listReplicas") },
+  ],
+  pubsub: [
+    { label: "Subscriptions", fetch: _subListCount("pubsub","listSubscriptions") },
+    { label: "Schemas",       fetch: _subListCount("pubsub","listSchemas") },
+  ],
+  secretmanager: [ { label: "Versions", fetch: _subListCount("secretmanager","listVersions") } ],
+  kms: [ { label: "Key versions", fetch: _subListCount("kms","listVersions") } ],
+  iam: [
+    { label: "Members", fetch: _subListCount("iam","listMembers") },
+    { label: "Keys",    fetch: _subListCount("iam","listKeys") },
+  ],
+  firestore: [
+    { label: "Documents", fetch: async (name) => {
+        const svc = svcByKey("firestore"); const ap = (svc && svc.api_paths && svc.api_paths.documents) || null;
+        if (!ap) return null;
+        try { const r = await api(ap.method || "GET", fillCommon(ap.path, {name}));
+          if (r.ok && r.json) { const d = r.json.documents || r.json.items || []; return Array.isArray(d) ? d.length : null; } } catch(_){} return null; } },
+  ],
+  // record-field backed (session-only children on the parent record)
+  compute: [ { label: "Disks", fetch: _recordFieldCount("disks") }, { label: "Snapshots", fetch: _recordFieldCount("snapshots") } ],
+  vpc:     [ { label: "Subnets", fetch: _recordFieldCount("subnetworks") }, { label: "Firewall rules", fetch: _recordFieldCount("firewalls") }, { label: "Routes", fetch: _recordFieldCount("routes") } ],
+  functions:  [ { label: "Env variables", fetch: _recordFieldCount("environmentVariables") } ],
+  apigateway: [ { label: "API configs", fetch: _recordFieldCount("apiConfigs") }, { label: "Routes", fetch: _recordFieldCount("routes") } ],
+  eventarc:   [ { label: "Event filters", fetch: _recordFieldCount("eventFilters") } ],
+};
+function _fmtBytes(n){
+  if (n == null) return "—"; n = Number(n) || 0;
+  const u = ["B","KB","MB","GB","TB"]; let i = 0; while (n >= 1024 && i < u.length-1) { n/=1024; i++; }
+  return (i === 0 ? n : n.toFixed(1)) + " " + u[i];
+}
+function renderMetricsTab(host, svc){
+  const item = STATE.item || {};
+  const name = String(item.name || getPath(item, svc.name_field) || "");
+  const gauges = GAUGE_SPEC[svc.key] || [];
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub,#5f6368);margin:-4px 0 6px"},
+    "Live metrics — derived from this tab's real activity on " + (name || "this resource") +
+    ", served in-browser. No fabricated CPU/VM telemetry; Nano has no real compute."));
+  host.append(el("div",{style:"font-size:11.5px;color:var(--hint,#80868b);margin:0 0 14px"},
+    "API-activity series below is built from the last ~200 recorded operations on this resource."));
+
+  // Gauges row (real resource state) — only rendered if this service has gauges.
+  let gaugeRow = null;
+  if (gauges.length) {
+    gaugeRow = el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:16px"});
+    host.append(gaugeRow);
+  }
+
+  // API-activity panel (request time-series + ops-by-type + status) from events.
+  const chartCard = el("div",{class:"kv-card",style:"padding:14px"});
+  chartCard.append(el("div",{class:"k",style:"color:var(--sub);font-size:11.5px;text-transform:uppercase"}, "API requests over time"));
+  const chartBody = el("div",{}); chartCard.append(chartBody);
+  host.append(chartCard);
+
+  const lower = el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:16px"});
+  const opsCard = el("div",{class:"kv-card",style:"padding:14px"});
+  opsCard.append(el("div",{class:"k",style:"color:var(--sub);font-size:11.5px;text-transform:uppercase"}, "Operations by type"));
+  const opsBody = el("div",{}); opsCard.append(opsBody);
+  const statusCard = el("div",{class:"kv-card",style:"padding:14px"});
+  statusCard.append(el("div",{class:"k",style:"color:var(--sub);font-size:11.5px;text-transform:uppercase"}, "Status"));
+  const statusBody = el("div",{}); statusCard.append(statusBody);
+  lower.append(opsCard, statusCard); host.append(lower);
+
+  const refreshRow = el("div",{style:"margin-top:14px;display:flex;align-items:center;gap:10px"});
+  const updated = el("span",{style:"font-size:11.5px;color:var(--hint,#80868b)"}, "");
+  refreshRow.append(el("button",{class:"btn",onclick:()=>reload()}, icon("refresh"), "Refresh"), updated);
+  host.append(refreshRow);
+
+  async function reloadGauges(){
+    if (!gaugeRow) return;
+    const results = await Promise.all(gauges.map(g => g.fetch(name).catch(()=>null)));
+    if (!document.contains(gaugeRow)) return;
+    gaugeRow.innerHTML = "";
+    gauges.forEach((g, i) => {
+      const v = results[i];
+      const card = el("div",{class:"kv-card",style:"padding:14px"});
+      card.append(el("div",{class:"k",style:"color:var(--sub);font-size:11px;text-transform:uppercase"}, g.label));
+      card.append(el("div",{style:"font-size:24px;font-weight:500;font-family:'Google Sans',sans-serif;margin-top:4px"},
+        v == null ? "—" : (g.bytes ? _fmtBytes(v) : String(v))));
+      gaugeRow.append(card);
+    });
+  }
+
+  async function reloadEvents(){
+    let events = [];
+    try {
+      const qs = "resource=" + encodeURIComponent(name) + "&provider=gcp"
+        + "&service=" + encodeURIComponent(svc.key || "") + "&limit=200";
+      const r = await api("GET", "/api/cloudsim/events?" + qs);
+      if (r.ok && r.json && Array.isArray(r.json.events)) events = r.json.events;
+    } catch(_){}
+    if (!document.contains(chartBody)) return;
+    try { updated.textContent = "Updated " + new Date().toLocaleTimeString() + " · " + events.length + " event" + (events.length===1?"":"s"); } catch(_){}
+
+    if (!events.length) {
+      const emptyMsg = () => el("div",{class:"empty",style:"padding:18px 0"},
+        el("div",{}, "No activity yet"),
+        el("div",{style:"font-size:11.5px;color:var(--hint,#80868b);margin-top:6px"},
+          "Operations on this resource will appear here live."));
+      chartBody.innerHTML = ""; chartBody.append(emptyMsg());
+      opsBody.innerHTML = ""; opsBody.append(el("div",{style:"font-size:12.5px;color:var(--hint,#80868b);padding:10px 0"}, "—"));
+      statusBody.innerHTML = ""; statusBody.append(el("div",{style:"font-size:12.5px;color:var(--hint,#80868b);padding:10px 0"}, "—"));
+      return;
+    }
+
+    // --- Time-series: bucket events by time (per-minute if span <2h, else per-hour) ---
+    const times = events.map(e => { const t = Date.parse(e.ts); return isNaN(t) ? null : t; }).filter(t => t != null);
+    const maxT = times.length ? Math.max(...times) : Date.now();
+    const minT = times.length ? Math.min(...times) : maxT;
+    const spanMs = maxT - minT;
+    const perHour = spanMs > 2*3600*1000;
+    const bucketMs = perHour ? 3600*1000 : 60*1000;
+    const nBuckets = Math.max(1, Math.min(60, Math.floor(spanMs / bucketMs) + 1));
+    const counts = new Array(nBuckets).fill(0);
+    times.forEach(t => { let idx = nBuckets - 1 - Math.floor((maxT - t) / bucketMs); if (idx < 0) idx = 0; if (idx > nBuckets-1) idx = nBuckets-1; counts[idx]++; });
+    chartBody.innerHTML = "";
+    const totalReq = events.length;
+    chartBody.append(el("div",{style:"font-size:24px;font-weight:500;font-family:'Google Sans',sans-serif;margin:4px 0 2px"},
+      String(totalReq) + " request" + (totalReq===1?"":"s")));
+    chartBody.append(el("div",{style:"font-size:11px;color:var(--hint,#80868b);margin-bottom:8px"},
+      "per " + (perHour ? "hour" : "minute") + " · " + nBuckets + " bucket" + (nBuckets===1?"":"s")));
+    // REAL series plotted as an SVG line + area (the actual bucketed counts).
+    const w=520, h=70, maxC=Math.max(1, ...counts);
+    const x = i => (nBuckets===1 ? w/2 : (i*(w-4)/(nBuckets-1)+2));
+    const y = c => (h-2-(c/maxC)*(h-8));
+    const path = counts.map((c,i)=>`${i===0?"M":"L"}${x(i).toFixed(1)},${y(c).toFixed(1)}`).join(" ");
+    const area = path + ` L${x(nBuckets-1).toFixed(1)},${(h-1).toFixed(1)} L${x(0).toFixed(1)},${(h-1).toFixed(1)} Z`;
+    chartBody.append(el("div",{html:
+      `<svg viewBox="0 0 ${w} ${h}" width="100%" preserveAspectRatio="none" style="display:block">
+        <path d="${area}" fill="#1a73e833" stroke="none"/>
+        <path d="${path}" fill="none" stroke="#1a73e8" stroke-width="1.8"/>
+      </svg>`}));
+
+    // --- Operations by type (count events grouped by action) ---
+    const byAction = {}; events.forEach(e => { const a = String(e.action || "?"); byAction[a] = (byAction[a]||0)+1; });
+    const actions = Object.entries(byAction).sort((a,b)=>b[1]-a[1]);
+    const maxA = Math.max(1, ...actions.map(a=>a[1]));
+    opsBody.innerHTML = "";
+    const opsTbl = el("div",{style:"margin-top:8px;display:flex;flex-direction:column;gap:6px"});
+    actions.forEach(([a,c]) => {
+      const row = el("div",{style:"display:flex;align-items:center;gap:8px;font-size:12.5px"});
+      row.append(el("div",{style:"width:88px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'Google Sans Mono',monospace"}, a));
+      const barWrap = el("div",{style:"flex:1;background:var(--line,#eceff1);border-radius:3px;height:12px;overflow:hidden"});
+      barWrap.append(el("div",{style:`width:${(c/maxA*100).toFixed(0)}%;height:100%;background:#1a73e8`}));
+      row.append(barWrap, el("div",{style:"width:28px;text-align:right;font-weight:500"}, String(c)));
+      opsTbl.append(row);
+    });
+    opsBody.append(opsTbl);
+
+    // --- Status (ok vs error) ---
+    let ok=0, err=0;
+    events.forEach(e => { const s=String(e.status||"").toLowerCase(); if (s==="ok"||s==="success"||e.status===true) ok++; else err++; });
+    statusBody.innerHTML = "";
+    const sg = el("div",{style:"display:flex;gap:18px;margin-top:10px"});
+    sg.append(el("div",{},
+      el("div",{style:"font-size:24px;font-weight:500;color:#188038;font-family:'Google Sans',sans-serif"}, String(ok)),
+      el("div",{style:"font-size:11px;color:var(--sub,#5f6368)"}, "OK")));
+    sg.append(el("div",{},
+      el("div",{style:"font-size:24px;font-weight:500;color:"+(err?"#d93025":"var(--sub,#5f6368)")+";font-family:'Google Sans',sans-serif"}, String(err)),
+      el("div",{style:"font-size:11px;color:var(--sub,#5f6368)"}, "Errors")));
+    statusBody.append(sg);
+  }
+
+  function reload(){ reloadGauges(); reloadEvents(); }
+
+  // LIVE poll every ~4s; self-clean when the tab is unmounted (host left the DOM).
+  // Clearing any prior metrics interval guards against overlap on fast tab switches.
+  if (window.__gcpMetricsTimer) { clearInterval(window.__gcpMetricsTimer); window.__gcpMetricsTimer = null; }
+  const timer = setInterval(() => {
+    if (!document.contains(host)) { clearInterval(timer); if (window.__gcpMetricsTimer === timer) window.__gcpMetricsTimer = null; return; }
+    reload();
+  }, 4000);
+  window.__gcpMetricsTimer = timer;
+
+  reload();
 }
 
 // ========== CREATE — collapsible-sections form + right summary card =========

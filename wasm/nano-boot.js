@@ -96,6 +96,10 @@ const CORES = [
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_queue_core.py",
+  // Generic child/sub-resource store (SQL databases+firewall rules, SB queues) +
+  // durable editable settings — azure_core_adapter imports it. Pure stdlib; its
+  // state rides az_cosmos's public `nano_sub` attr so nano_persist persists it.
+  "azure_subresource_core.py",
   // v2.5.0–2.8.0 net-new service cores — loaded so the console backend is in
   // lock-step with the relay + build_cores (usable now via the Nano relay;
   // dedicated console UI pages are a follow-up). Deps (messaging_store, sql_store,
@@ -108,7 +112,9 @@ const CORES = [
   // Store persistence + shared registry (Fix #1/#2): aws_core_adapter imports
   // nano_registry, so these MUST load. nano_persist serializes the registry →
   // IndexedDB (survives reload) + powers console↔SDK convergence.
-  "nano_registry.py", "nano_persist.py",
+  // nano_events (per-resource cloudsim activity log) MUST precede nano_registry,
+  // which imports `from core.nano_events import EventStore`.
+  "nano_events.py", "nano_registry.py", "nano_persist.py",
 ];
 
 function banner(text, bad) {
@@ -241,8 +247,11 @@ import builtins; builtins._disp = _disp
       // restore or a BroadcastChannel notification was missed — this is what makes
       // console<->CLI reads consistent regardless of timing. Guarded: skip when a
       // save is pending (_storeTimer) so we never clobber a just-created local
-      // resource before it has been flushed to the shared snapshot.
-      if (!_restoring) {
+      // resource before it has been flushed to the shared snapshot — the stale
+      // snapshot's shallow dict-merge would otherwise REPLACE a parent record
+      // (e.g. a Cloud SQL instance) and drop a sub-resource just added to it
+      // (a database) before the debounced save landed.
+      if (!_restoring && !_storeTimer) {
         _restoring = true;
         try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {} finally { _restoring = false; }
       }

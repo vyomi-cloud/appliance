@@ -114,7 +114,8 @@ const FIXTURES = {
 };
 // Benign empty stubs so polled chrome endpoints don't error the console.
 const STUBS = {
-  "/api/cloudsim/events": { events: [] },
+  // NOTE: /api/cloudsim/events is NO LONGER a stub — it is served dynamically from
+  // the in-browser event store (see the cloudsim-events route in route()).
   "/api/spaces/active/facts": {},
   "/api/runtime/disk-cleanup/suggestions": { items: [] },
   // Metadata-only sub-blades with no Nano data plane yet (renderers read x||[]).
@@ -261,6 +262,40 @@ async function nanoWsPull() {
     return { ok: true, merged: merged };
   } catch (e) { return { ok: false, reason: String(e) }; }
 }
+// ── Nano cost-estimate push: persist the counterfactual real-cloud $/mo of
+//    the user's Nano resources (census × list-price rates, computed in the
+//    tab), keyed by the signed-in user. Auth = the license JWT (Bearer).
+//    No-ops when signed out. Body: {monthly_cents, by_provider, rate_version}.
+async function nanoCostPush(body) {
+  const jwt = await metaGet("license_jwt");
+  if (!jwt) return { ok: false, reason: "not signed in" };
+  try {
+    const r = await fetch(self.location.origin + "/api/nano/cost-estimate", {
+      method: "PUT", headers: { "content-type": "application/json", "authorization": "Bearer " + jwt },
+      body: JSON.stringify({
+        monthly_cents: (body && body.monthly_cents) || 0,
+        by_provider: (body && body.by_provider) || {},
+        by_service: (body && body.by_service) || {},
+        rate_version: (body && body.rate_version) || "",
+      }),
+    });
+    return { ok: r.ok };
+  } catch (e) { return { ok: false, reason: String(e) }; }
+}
+// Pull the persisted estimate (incl. per-service census) so a cold-loaded
+// console can render the breakdown with no live resources in the tab.
+// No-ops to an empty estimate when signed out. Auth = the license JWT (Bearer).
+async function nanoCostPull() {
+  const jwt = await metaGet("license_jwt");
+  if (!jwt) return { ok: false, by_service: {}, by_provider: {} };
+  try {
+    const r = await fetch(self.location.origin + "/api/nano/cost-estimate", { headers: { "authorization": "Bearer " + jwt } });
+    if (!r.ok) return { ok: false, by_service: {}, by_provider: {} };
+    const d = await r.json();
+    return { ok: true, by_service: (d && d.by_service) || {}, by_provider: (d && d.by_provider) || {},
+             monthly_cents: (d && d.monthly_cents) || 0, updated_at: (d && d.updated_at) || null };
+  } catch (e) { return { ok: false, by_service: {}, by_provider: {} }; }
+}
 async function metaGet(k) { const db = await idb(); const r = await _req(db.transaction("meta").objectStore("meta").get(k)); return r && r.v; }
 async function metaPut(k, v) { const db = await idb(); return await _req(db.transaction("meta", "readwrite").objectStore("meta").put({ k, v })); }
 
@@ -307,6 +342,24 @@ async function route(method, path, body, query) {
     return { response: new Response(r.body, { status: 200, headers: { "content-type": "application/json" } }) };
   }
   if (method === "GET" && STUBS[path]) return { response: json(STUBS[path]) };
+
+  // ── Per-resource cloudsim event / activity log (SHARED backbone) ──────
+  // GET /api/cloudsim/events[?resource=<name>&provider=<cloud>&service=<svc>&limit=N]
+  //   → the in-browser event store (core/nano_events via registry._events_query),
+  //     recorded on every mutating dispatch. Returns {ok, events:[…]} newest-first,
+  //     the SAME {events:[…]} shape the old stub returned (the console reads x.events).
+  // The "_events" pseudo-service is provider-neutral in the backend; we pass the
+  // optional provider filter through. No query filters → the global activity feed.
+  if (method === "GET" && path === "/api/cloudsim/events") {
+    const p = {
+      resource: (query && query.resource) || "",
+      provider: (query && query.provider) || "",
+      service: (query && query.service) || "",
+      limit: (query && query.limit) || 200,
+    };
+    // provider slot is cosmetic for a neutral pseudo-service; use the filter (or aws).
+    return { tuple: [p.provider || "aws", "_events", "List", p] };
+  }
 
   // Instance-type catalog for the compute launch wizard (EC2 / GCE / Azure VM).
   // Static per-cloud data, dumped from core/instance_catalog.py to fixtures.
@@ -545,6 +598,19 @@ async function route(method, path, body, query) {
   if (go && method === "GET") return { tuple: ["gcp", "_resource", "ListObjects", { service: "storage", body: { bucket: dec(go[1]) } }] };
   go = path.match(/^\/api\/gcp\/storage\/v1\/b\/([^/]+)\/o\/(.+)$/);
   if (go && method === "DELETE") return { tuple: ["gcp", "_resource", "DeleteObject", { service: "storage", body: { bucket: dec(go[1]), key: dec(go[2]) } }] };
+  // GCP-only sub-resource routes (additive; AWS/Azure untouched). These serve the
+  // detail-view sub-resource tabs (Pub/Sub subscriptions, Cloud SQL databases,
+  // Secret Manager / KMS versions) off the proven GCP cores via the shared dispatch.
+  let gs = path.match(/^\/api\/gcp\/subresource\/pubsub\/([^/]+)\/subscriptions\/?$/);
+  if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListSubscriptions", { service: "pubsub", name: dec(gs[1]) }] };
+  if (gs && method === "POST") return { tuple: ["gcp", "_resource", "CreateSubscription", { service: "pubsub", name: dec(gs[1]), body: body || {} }] };
+  gs = path.match(/^\/api\/gcp\/subresource\/cloudsql\/([^/]+)\/databases\/?$/);
+  if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListDatabases", { service: "cloudsql", name: dec(gs[1]) }] };
+  if (gs && method === "POST") return { tuple: ["gcp", "_resource", "CreateDatabase", { service: "cloudsql", name: dec(gs[1]), body: body || {} }] };
+  gs = path.match(/^\/api\/gcp\/subresource\/secretmanager\/([^/]+)\/versions\/?$/);
+  if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListVersions", { service: "secretmanager", name: dec(gs[1]) }] };
+  gs = path.match(/^\/api\/gcp\/subresource\/kms\/([^/]+)\/versions\/?$/);
+  if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListVersions", { service: "kms", name: dec(gs[1]) }] };
   const pm = path.match(/^\/api\/(gcp|azure)\//);
   if (pm) {
     const provider = pm[1];
@@ -573,6 +639,34 @@ async function route(method, path, body, query) {
       }
     }
   }
+
+  // ── GENERIC SUB-RESOURCE ROUTE FAMILY (SHARED backbone) ───────────────
+  // ONE route so the 3 cloud agents never need to edit sw.js for detail-view
+  // sub-resources (databases / users / backups / subscriptions / versions / rules…).
+  //
+  //   {GET|POST|PUT|PATCH|DELETE} /api/{aws|gcp|azure}/sub/{service}/{op}[/{name}][?k=v…]
+  //      → tuple: [provider, "_resource", <Op>, { service, name?, body?, ...query }]
+  //
+  // where <Op> is the {op} segment with its first letter upper-cased (so the URL
+  // carries e.g. "listDatabases"/"createUser"/"deleteBackup" → ListDatabases /
+  // CreateUser / DeleteBackup). {name}, when present, is the parent/target id and
+  // is passed as `name`. The JSON body (POST/PUT/PATCH) is passed as `body`; any
+  // ?query params are merged into the params object too. Backend dispatch is
+  // provider-agnostic (registry._resource_dispatch), so the cloud's core adapter
+  // just needs to handle (service, Op). Placed LAST so it never shadows an
+  // existing explicit route; additive — AWS/GCP/Azure legacy routes untouched.
+  const sub = path.match(/^\/api\/(aws|gcp|azure)\/sub\/([^/]+)\/([^/]+)(?:\/(.+))?$/);
+  if (sub) {
+    const provider = sub[1];
+    const service = decodeURIComponent(sub[2]);
+    const op = sub[3].charAt(0).toUpperCase() + sub[3].slice(1);
+    const name = sub[4] ? decodeURIComponent(sub[4]) : undefined;
+    const p = { service, ...(query || {}) };
+    if (name !== undefined) p.name = name;
+    if (["POST", "PUT", "PATCH"].includes(method)) p.body = body || {};
+    return { tuple: [provider, "_resource", op, p] };
+  }
+
   return { miss: true };
 }
 
@@ -842,6 +936,16 @@ self.addEventListener("fetch", (event) => {
       // Nano workspace sync — pull (merge remote spaces) / push (upload local).
       if (apiPath === "/api/nano/workspace/pull" && method === "POST") return json(await nanoWsPull());
       if (apiPath === "/api/nano/workspace/push" && method === "POST") return json(await nanoWsPush());
+
+      // Nano cost estimate — persist the counterfactual real-cloud $/mo for this
+      // account (census × list prices, computed in the tab). Authenticated PUT.
+      if (apiPath === "/api/nano/cost-estimate/push" && method === "POST") {
+        let b = {}; try { const t = await event.request.text(); b = t ? JSON.parse(t) : {}; } catch (_) {}
+        return json(await nanoCostPush(b));
+      }
+      if (apiPath === "/api/nano/cost-estimate/pull" && method === "GET") {
+        return json(await nanoCostPull());
+      }
 
       // Create a space → persist it, make it active, return it.
       if (apiPath === "/api/spaces" && method === "POST") {

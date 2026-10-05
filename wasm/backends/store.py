@@ -87,13 +87,24 @@ class ResourceStore:
 
     Namespaced by (provider, account, service) so e.g. aws `ec2` and aws `rds`
     are independent collections. Each item is a free-form dict keyed by a name
-    derived from common id fields (Name/name/id/key/bucket/…)."""
+    derived from common id fields (Name/name/id/key/bucket/…).
+
+    DURABLE: the backing dict is the PUBLIC attr `collections` (no leading
+    underscore) so nano_persist's generic `vars()`-minus-underscore capture
+    serializes it → every resource created through the generic catalog path
+    (AWS /api/aws/sub/* children + editable settings, GCP compute/vpc/functions/
+    apigateway/eventarc parents AND their record-kind children) survives a full
+    page reload and cross-tab syncs, exactly like S3/DynamoDB/events. The store
+    is registered in nano_registry under the key `resources` and listed in
+    nano_persist.STORE_ATTRS. Growth is naturally bounded (user-created
+    resources), so there is no artificial cap."""
     _NAME_FIELDS = ("name", "Name", "id", "Id", "key", "Key", "bucket",
                     "Bucket", "table", "TableName", "queue", "QueueName",
                     "user", "UserName", "function", "FunctionName")
 
     def __init__(self) -> None:
-        self._c: dict[str, dict[str, dict[str, Any]]] = {}
+        # PUBLIC dict (captured by nano_persist). Shape: {ns: {name: record}}.
+        self.collections: dict[str, dict[str, dict[str, Any]]] = {}
 
     @classmethod
     def name_of(cls, item: dict, fallback: str = "") -> str:
@@ -104,10 +115,10 @@ class ResourceStore:
         return fallback
 
     def list(self, provider: str, account: str, service: str) -> list[dict]:
-        return list(self._c.get(_ns(provider, account, service), {}).values())
+        return list(self.collections.get(_ns(provider, account, service), {}).values())
 
     def create(self, provider: str, account: str, service: str, item: dict) -> dict:
-        coll = self._c.setdefault(_ns(provider, account, service), {})
+        coll = self.collections.setdefault(_ns(provider, account, service), {})
         name = self.name_of(item, fallback=f"{service}-{len(coll) + 1}")
         rec = dict(item)
         rec.setdefault("name", name)
@@ -116,10 +127,10 @@ class ResourceStore:
         return rec
 
     def get(self, provider: str, account: str, service: str, name: str) -> dict | None:
-        return self._c.get(_ns(provider, account, service), {}).get(name)
+        return self.collections.get(_ns(provider, account, service), {}).get(name)
 
     def update(self, provider: str, account: str, service: str, name: str, patch: dict) -> dict | None:
-        coll = self._c.get(_ns(provider, account, service), {})
+        coll = self.collections.get(_ns(provider, account, service), {})
         rec = coll.get(name)
         if rec is None:
             return None
@@ -127,7 +138,7 @@ class ResourceStore:
         return rec
 
     def delete(self, provider: str, account: str, service: str, name: str) -> bool:
-        return self._c.get(_ns(provider, account, service), {}).pop(name, None) is not None
+        return self.collections.get(_ns(provider, account, service), {}).pop(name, None) is not None
 
 
 class Backends:
@@ -136,5 +147,20 @@ class Backends:
         self.objects = ObjectStore()
         self.nosql = NoSqlStore()
         self.queues = QueueStore()
-        self.resources = ResourceStore()
+        # The generic catalog store + the Azure ARM control-plane are drawn from
+        # the SHARED registry (nano_registry) — NOT freshly constructed here — so
+        # the SAME instances that back console CRUD are the ones nano_persist
+        # captures/restores. That is what makes generic-path resources (AWS
+        # /sub/* children + settings, GCP compute/vpc/functions/apigateway/
+        # eventarc + children) and Azure ARM resources/children reload-durable
+        # and cross-tab synced. Lazy import avoids a load-order cycle.
+        try:
+            from core import nano_registry as _reg
+            _r = _reg.get()
+            self.resources = _r["resources"]
+            self._azure_arm = _r["az_arm"]
+        except Exception:
+            # Defensive fallback (e.g. registry unavailable in an isolated test):
+            # keep working with local instances. Persistence degrades gracefully.
+            self.resources = ResourceStore()
         # SqlStore / KvStore / SecretStore / KmsEngine slot in here the same way.

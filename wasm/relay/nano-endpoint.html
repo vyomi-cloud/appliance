@@ -68,6 +68,7 @@ const CORES = [
   "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "vpc_core.py",
   "azure_sql_core.py", "azure_iam_core.py",
   "aws_wire_router.py",
+  "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (Fix #1/#2)
 ];
 async function boot() {
   const py = await loadPyodide();
@@ -85,11 +86,18 @@ async function boot() {
 import sys, json, base64; sys.path.insert(0, "/")
 from core.aws_wire_router import AwsWireRouter
 from core import rds_core as _rds
+from core import nano_registry as _reg, nano_persist as _persist
+# Route the router through the SHARED registry so nano_persist (which targets the
+# registry) snapshots/restores the SAME live stores the relay serves.
+_STORES = _reg.get()
 if _USE_PGLITE:
     from core.sql_store import PGliteSqlStore
-    _ROUTER = AwsWireRouter(sql_store=PGliteSqlStore())   # RDS = real Postgres
-else:
-    _ROUTER = AwsWireRouter()                              # RDS = sqlite3
+    _STORES["rds"] = PGliteSqlStore()                     # RDS = real Postgres (shared seam)
+_ROUTER = AwsWireRouter(stores=_STORES)
+def _capture(): return json.dumps(_persist.capture_registry())
+def _restore(blob_json):
+    try: _persist.restore_registry(json.loads(blob_json or "{}"))
+    except Exception: pass
 async def _handle(req_json):
     # async so the RDS Data API (boto3 rds-data) can await the SQL engine; every
     # other service resolves synchronously inside ahandle().
@@ -106,6 +114,7 @@ async def _sql(payload_json):
     res = await _rds.aexecute_sql(_ROUTER.rds, p["db"], p["sql"], p.get("params"))
     return json.dumps(res)
 import builtins; builtins._handle = _handle; builtins._sql = _sql
+builtins._capture = _capture; builtins._restore = _restore
 `);
   log('<span class="ok">cores loaded</span> (S3·DynamoDB·KMS·Secrets·SQS·SNS·IAM·RDS — real handlers in Pyodide)');
   log(hasPg ? '<span class="ok">RDS engine: PGlite (real Postgres)</span>' : 'RDS engine: sqlite3 (PGlite unavailable)', hasPg ? "" : "dim");
@@ -115,6 +124,32 @@ import builtins; builtins._handle = _handle; builtins._sql = _sql
   // In-tab async SQL bridge — same single-JSON-arg pattern as _handle/_disp.
   window.__nano.sql = async (db, sql, paramsArr = []) =>
     JSON.parse(await py.runPythonAsync(`await _sql(${JSON.stringify(JSON.stringify({ db, sql, params: paramsArr }))})`));
+
+  // ── Store persistence + cross-context sync (Fix #1 persistence / #2 parity) ──
+  // Snapshot the shared registry → nano-spaces IndexedDB after each served request,
+  // rehydrate on boot, and reload when the console page broadcasts a change. All
+  // guarded — persistence never breaks serving.
+  const _SK = "nano:stores";
+  function _idb(mode, fn) {
+    return new Promise((res) => {
+      const r = indexedDB.open("nano-spaces", 1);
+      r.onupgradeneeded = () => { const d = r.result;
+        if (!d.objectStoreNames.contains("spaces")) d.createObjectStore("spaces", { keyPath: "space_id" });
+        if (!d.objectStoreNames.contains("meta"))   d.createObjectStore("meta",   { keyPath: "k" }); };
+      r.onsuccess = () => { try { fn(r.result.transaction("meta", mode).objectStore("meta"), res); } catch (_) { res(null); } };
+      r.onerror = () => res(null);
+    });
+  }
+  const idbGet = (k) => _idb("readonly",  (s, res) => { const g = s.get(k); g.onsuccess = () => res(g.result ? g.result.v : null); g.onerror = () => res(null); });
+  const idbPut = (k, v) => _idb("readwrite", (s, res) => { s.put({ k, v }); res(null); });
+  let _bc = null; try { _bc = new BroadcastChannel("nano-stores"); } catch (_) {}
+  let _restoring = false, _timer = null;
+  const capStores = () => { try { return py.runPython("_capture()"); } catch (_) { return null; } };
+  const resStores = (j) => { if (!j) return; try { py.globals.set("_vy_blob", j); py.runPython("_restore(_vy_blob)"); } catch (_) {} };
+  async function saveStores(notify) { try { const j = capStores(); if (!j) return; await idbPut(_SK, j); if (notify && _bc) { try { _bc.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
+  const scheduleStoresSave = () => { if (_timer) return; _timer = setTimeout(() => { _timer = null; saveStores(true); }, 400); };
+  if (_bc) _bc.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } finally { _restoring = false; } };
+  try { resStores(await idbGet(_SK)); } catch (_) {}   // boot: rehydrate before serving
 
   function connect() {
     _announce();
@@ -130,6 +165,7 @@ import builtins; builtins._handle = _handle; builtins._sql = _sql
         const resp = JSON.parse(respJson);
         ws.send(JSON.stringify({ id: req.id, ...resp }));
         window.__nano.served++; _announce();
+        scheduleStoresSave();   // persist + notify the console (Fix #1/#2)
       } catch (e) {
         ws.send(JSON.stringify({ id: req.id, status: 500,
           headers: {"content-type":"text/plain"},

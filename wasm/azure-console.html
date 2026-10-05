@@ -917,6 +917,60 @@ var _NANO_RATE = {
 function nanoSavingsFromByService(bs){
   var t = 0; for (var k in (bs||{})) { var r = _NANO_RATE.hasOwnProperty(k) ? _NANO_RATE[k] : 1.0; t += (Number(bs[k])||0) * r; } return t;
 }
+// Friendly service label for a by_service census key (aws/gcp/azure).
+function nanoSvcLabel(k){
+  var M={s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",
+    compute:"Compute Engine",storage:"Cloud Storage",cloudsql:"Cloud SQL",pubsub:"Pub/Sub",firestore:"Firestore",functions:"Cloud Functions",secretmanager:"Secret Manager",
+    'microsoft.compute/virtualmachines':"Virtual Machines",'microsoft.sql/servers':"SQL Database",'microsoft.storage/storageaccounts':"Storage Account",'microsoft.documentdb/databaseaccounts':"Cosmos DB",'microsoft.web/sites':"App Service",'microsoft.servicebus/namespaces':"Service Bus",'microsoft.keyvault/vaults':"Key Vault"};
+  if (M[k]) return M[k];
+  var s=String(k||""), i=s.lastIndexOf("/"); if(i>=0) s=s.slice(i+1); return s.charAt(0).toUpperCase()+s.slice(1);
+}
+// Render a per-service savings breakdown (count × rate) into `container`.
+// Lists every provisioned service (count>0); free services (rate 0) show "free".
+function nanoRenderBreakdown(container, bs, accent){
+  var items=[]; for (var k in (bs||{})){ var cnt=Number(bs[k])||0; if(cnt<=0) continue; var r=_NANO_RATE.hasOwnProperty(k)?_NANO_RATE[k]:1.0; items.push({k:k,cnt:cnt,save:cnt*r}); }
+  items.sort(function(a,b){ return b.save-a.save; });
+  container.innerHTML="";
+  if (!items.length){ container.style.display="none"; return; }
+  container.style.display="";
+  container.append(el("div",{style:"font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--sub);margin:10px 0 2px"}, "Per-service breakdown"));
+  items.forEach(function(it){
+    var right = it.save>0 ? ("$"+it.save.toFixed(2)+"/mo") : "free";
+    var row=el("div",{style:"display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:11px;border-top:1px solid rgba(128,128,128,.14)"});
+    row.append(el("span",{}, nanoSvcLabel(it.k)+(it.cnt>1?(" ×"+it.cnt):"")));
+    row.append(el("span",{style:"font-weight:600;color:"+(it.save>0?accent:"var(--sub)")}, right));
+    container.append(row);
+  });
+}
+// Render total + breakdown + 12-mo bars into the card's elements from a by_service map.
+function nanoComputeAndRender(bs, provider, accent, cloud, els){
+  var monthly = nanoSavingsFromByService(bs);
+  els.amt.textContent = "$"+monthly.toFixed(2);
+  nanoRenderBreakdown(els.breakdown, bs, accent);
+  els.foot.textContent = "Projected 12-month savings: $"+(monthly*12).toFixed(2);
+  var bars = els.bar.children;
+  for (var i=0;i<12;i++){ bars[i].style.height=(monthly>0?Math.max(6,Math.round(((i+1)/12)*100)):4)+"%"; if(monthly>0) bars[i].title="After "+(i+1)+" mo: $"+(monthly*(i+1)).toFixed(2)+" saved"; }
+  if (monthly<=0){ els.desc.textContent="Spin up "+cloud+" resources and your monthly savings vs real "+cloud+" appear here."; }
+  return monthly;
+}
+// Load savings: prefer the LIVE census (and persist it per-account); on a cold
+// load with no live resources, fall back to the PERSISTED per-service estimate.
+function nanoLoadSavings(provider, accent, cloud, els){
+  fetch("/api/runtime/host-distribution").then(function(r){return r.json();}).then(function(d){
+    var provs=d.providers||{}; var bs=((provs[provider])||{}).by_service||{};
+    if (Object.keys(bs).length>0){
+      nanoComputeAndRender(bs, provider, accent, cloud, els);
+      try{ var bySvc={},byProv={},tot=0; for (var p in provs){ var pbs=(provs[p]||{}).by_service||{}; bySvc[p]=pbs; var m=Math.round(nanoSavingsFromByService(pbs)*100); byProv[p]=m; tot+=m; }
+        fetch("/api/nano/cost-estimate/push",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({monthly_cents:tot,by_provider:byProv,by_service:bySvc,rate_version:"2026.10"})}).catch(function(){}); }catch(_){}
+    } else {
+      fetch("/api/nano/cost-estimate/pull").then(function(r){return r.json();}).then(function(pe){
+        var pbs=((pe&&pe.by_service)||{})[provider]||{};
+        nanoComputeAndRender(pbs, provider, accent, cloud, els);
+        if (Object.keys(pbs).length>0 && pe.updated_at){ els.foot.textContent+="  · persisted"; els.foot.title="Last saved "+pe.updated_at; }
+      }).catch(function(){ nanoComputeAndRender({}, provider, accent, cloud, els); });
+    }
+  }).catch(function(){});
+}
 function buildSavingsCard(provider, cloud, accent){
   var card = el("div",{class:"card",style:"margin-bottom:16px"});
   card.append(el("div",{class:"h"}, icon("savings"), "Cost savings"));
@@ -925,6 +979,7 @@ function buildSavingsCard(provider, cloud, accent){
   b.append(desc);
   var amt = el("span",{style:"font-size:24px;font-weight:800;color:"+accent}, "$0");
   b.append(el("div",{style:"display:flex;align-items:baseline;gap:8px;margin:10px 0 2px"}, amt, el("span",{style:"font-size:12px;color:var(--sub)"}, "/mo saved vs "+cloud)));
+  var breakdown = el("div",{style:"display:none"}); b.append(breakdown);
   var bar = el("div",{style:"height:90px;display:flex;align-items:flex-end;gap:3px;margin-top:6px"});
   for (var i=0;i<12;i++){ bar.append(el("div",{style:"flex:1;background:"+accent+";opacity:.85;border-radius:2px 2px 0 0;height:4%"})); }
   b.append(bar);
@@ -935,15 +990,7 @@ function buildSavingsCard(provider, cloud, accent){
   var foot=el("div",{style:"margin-top:8px;font-size:11px;color:var(--sub)"}, "Projected 12-month savings: $0");
   b.append(foot);
   card.append(b);
-  fetch("/api/runtime/host-distribution").then(function(r){return r.json();}).then(function(d){
-    var bs = (((d.providers||{})[provider])||{}).by_service || {};
-    var monthly = nanoSavingsFromByService(bs);
-    amt.textContent = "$"+monthly.toFixed(2);
-    foot.textContent = "Projected 12-month savings: $"+(monthly*12).toFixed(2);
-    var bars = bar.children;
-    for (var i=0;i<12;i++){ bars[i].style.height = (monthly>0 ? Math.max(6, Math.round(((i+1)/12)*100)) : 4)+"%"; if (monthly>0) bars[i].title = "After "+(i+1)+" mo: $"+(monthly*(i+1)).toFixed(2)+" saved"; }
-    if (monthly<=0){ desc.textContent = "Spin up "+cloud+" resources and your monthly savings vs real "+cloud+" appear here."; }
-  }).catch(function(){});
+  nanoLoadSavings(provider, accent, cloud, {amt:amt, breakdown:breakdown, bar:bar, foot:foot, desc:desc});
   return card;
 }
 
@@ -1253,18 +1300,150 @@ function buildSubBlade(svc, full, item){
   const inner = el("div",{});
   wrap.append(inner);
   const t = (item.type||"").toLowerCase();
-  const R = SUB_RENDERERS[t];
+  const k = (item.key||"").toLowerCase();
+  // Prefer a type renderer; else (notably for catalog type:"stub") fall back to a
+  // KEY renderer when one exists — this lets us attach a genuinely functional blade
+  // (e.g. editable "identity"/"consistency"/"dnsServers" settings) to a stub-typed
+  // catalog entry WITHOUT editing the shared catalog fixture. Only then → generic.
+  const R = SUB_RENDERERS[t] || ((t === "stub") ? SUB_RENDERERS[k] : null);
   if (R) { try { R(svc, full, inner, item); } catch (e) {
     inner.append(el("div",{class:"sub-stub"},"Renderer error: "+e.message)); } }
-  else inner.append(stubPane(item));
+  // Data-driven fallback: every unmapped / "stub" sub-blade renders the resource's
+  // data relevant to that tab (via a field-alias map + dotted getPath) — arrays as a
+  // table, objects as a key/value grid, scalars as a row, and an INFORMATIVE empty
+  // state when unset. No detail sub-screen is ever left blank. (Mirrors the GCP
+  // console's renderGenericTab.)
+  else { try { renderGenericSub(svc, full, inner, item); } catch (e) {
+    inner.append(el("div",{class:"sub-stub"},"Renderer error: "+e.message)); } }
   return wrap;
 }
 
-function stubPane(item){
-  return el("div",{class:"sub-stub"},
-    icon("construction"),
-    el("div",{},"This pane mirrors the Azure portal's "+item.label+" experience."),
-    el("div",{class:"hint"},"Not yet wired to a backend — placeholder for parity. Open an issue if you need it sooner."));
+// Field-alias map: a stub sub-blade's ``key`` (or label) → the resource field(s)
+// (dotted paths into the ARM resource) whose data the pane should surface. First
+// non-empty alias wins. Keys are matched case-insensitively.
+const SUB_ALIASES = {
+  identity:            ["identity","properties.identity"],
+  backup:              ["properties.backupPolicy","properties.retentionPolicy","properties.backup"],
+  backups:             ["properties.backupPolicy","properties.retentionPolicy"],
+  extensions:          ["properties.extensions","resources"],
+  alerts:              ["properties.alerts"],
+  runcommand:          ["properties.runCommands"],
+  fileshares:          ["properties.fileShares"],
+  tables:              ["properties.tables"],
+  sas:                 ["properties.sasPolicy","keys"],
+  replication:         ["properties.geoReplication","properties.secondaryLocation","properties.statusOfSecondary"],
+  deleteddb:           ["properties.deletedDatabases"],
+  failover:            ["properties.failoverGroups","properties.replicationRole"],
+  tde:                 ["properties.transparentDataEncryption","properties.encryption"],
+  auditing:            ["properties.auditingPolicy","properties.auditing"],
+  defender:            ["properties.securityAlertPolicy","properties.defender"],
+  georecovery:         ["properties.geoDataReplication","properties.disasterRecoveryConfig"],
+  consistency:         ["properties.consistencyPolicy"],
+  functions:           ["properties.functions"],
+  appkeys:             ["properties.functionKeys","properties.appKeys"],
+  tls:                 ["properties.minimumTlsVersion","properties.minTlsVersion","properties.clientCertEnabled"],
+  scaleup:             ["properties.sku","sku","properties.serverFarm"],
+  logstream:           ["properties.logStream"],
+  namedvalues:         ["properties.namedValues"],
+  customdomains:       ["properties.hostnameConfigurations","properties.customDomains"],
+  dnsservers:          ["properties.dhcpOptions.dnsServers","properties.dnsServers"],
+  ddos:                ["properties.ddosProtectionPlan","properties.enableDdosProtection"],
+  diagnostic:          ["properties.diagnosticSettings"],
+  topictypes:          ["properties.topicTypes","properties.inputSchema"],
+  certificates:        ["properties.certificates"],
+  accessconfig:        ["properties.enableRbacAuthorization","properties.accessPolicies","properties.networkAcls"],
+  conditions:          ["properties.condition","properties.conditions"],
+  diagnose:            [],  // intentionally empty → renders the informative empty-state
+};
+// One-line description shown at the top of each generic pane (portal-style).
+const SUB_DESC = {
+  identity:      "Managed identities (system- or user-assigned) this resource uses to authenticate to other Azure services.",
+  backup:        "Backup and retention policy for this resource.",
+  backups:       "Backup and retention policy for this resource.",
+  extensions:    "Extensions and applications installed on this resource.",
+  alerts:        "Metric and activity-log alert rules targeting this resource.",
+  runcommand:    "Run shell/PowerShell commands on this resource.",
+  fileshares:    "Azure Files shares hosted on this storage account.",
+  tables:        "Azure Table storage tables in this account.",
+  sas:           "Shared access signature policy and key configuration.",
+  replication:   "Geo-replication status and secondary region.",
+  deleteddb:     "Soft-deleted databases available for point-in-time restore.",
+  failover:      "Auto-failover groups for high availability across regions.",
+  tde:           "Transparent Data Encryption — encryption at rest for this database.",
+  auditing:      "Auditing policy — tracks database events to a log destination.",
+  defender:      "Microsoft Defender for Cloud — advanced threat protection.",
+  georecovery:   "Geo-disaster recovery pairing for this namespace.",
+  consistency:   "Default consistency level for this Cosmos DB account.",
+  functions:     "Functions hosted in this function app.",
+  appkeys:       "Host and function keys used to invoke this app.",
+  tls:           "TLS/SSL and client-certificate settings.",
+  scaleup:       "App Service plan tier / SKU backing this app.",
+  logstream:     "Live application and web-server log stream.",
+  namedvalues:   "Named values — reusable properties referenced by API Management policies.",
+  customdomains: "Custom hostnames and certificates bound to this resource.",
+  dnsservers:    "DNS servers used by resources in this virtual network.",
+  ddos:          "DDoS protection plan associated with this network.",
+  diagnostic:    "Diagnostic settings — where platform logs and metrics are routed.",
+  topictypes:    "Topic types and input schema supported by this Event Grid resource.",
+  certificates:  "Certificates managed in this key vault.",
+  accessconfig:  "Access configuration — RBAC vs. vault access policies and network ACLs.",
+  conditions:    "ABAC conditions constraining this role assignment.",
+  diagnose:      "Interactive troubleshooting is cloud-only; this simulated resource is healthy by construction.",
+};
+// Build a key/value grid card (reuses the .kv + .essentials look).
+function _subKvGrid(pairs){
+  const kv = el("div",{class:"kv prop-kv"});
+  pairs.forEach(([k,v]) => {
+    kv.append(el("div",{class:"k"}, String(k)),
+      el("div",{class:"v"}, (v && typeof v === "object") ? JSON.stringify(v) : String(v)));
+  });
+  return kv;
+}
+function renderGenericSub(svc, full, host, item){
+  const key   = String(item.key || "").toLowerCase();
+  const label = item.label || item.key || "Settings";
+  const desc  = SUB_DESC[key]
+    || (label + " for this " + String(svc.label || "resource").replace(/s$/,"").toLowerCase() + ".");
+  host.append(el("div",{class:"sub-info"}, desc));
+
+  const aliases = SUB_ALIASES[key] || SUB_ALIASES[label.toLowerCase()] || [key, "properties."+key];
+  let data = null;
+  for (const a of aliases) {
+    const v = getPath(full, a);
+    const empty = v == null || (Array.isArray(v) && !v.length)
+      || (typeof v === "object" && !Array.isArray(v) && v && !Object.keys(v).length);
+    if (!empty) { data = v; break; }
+  }
+
+  if (Array.isArray(data)) {
+    // Render array rows as a table (object rows) or a simple list (scalars).
+    const objRows = data.filter(r => r && typeof r === "object" && !Array.isArray(r));
+    if (objRows.length === data.length && data.length) {
+      const cols = Array.from(data.reduce((s,r)=>{Object.keys(r).forEach(k=>s.add(k));return s;}, new Set()));
+      const tbl = el("table",{class:"sub-table"});
+      const hr = el("tr",{}); cols.forEach(c=>hr.append(el("th",{}, c))); tbl.append(hr);
+      data.forEach(r => {
+        const tr = el("tr",{});
+        cols.forEach(c => { const v=r[c]; tr.append(el("td",{class:"small"}, v==null?"—":(typeof v==="object"?JSON.stringify(v):String(v)))); });
+        tbl.append(tr);
+      });
+      host.append(el("div",{class:"sub-table-wrap"}, tbl));
+    } else {
+      host.append(_subKvGrid(data.map((v,i)=>[String(i), v])));
+    }
+  } else if (data && typeof data === "object") {
+    host.append(_subKvGrid(Object.entries(data)));
+  } else if (data != null) {
+    host.append(_subKvGrid([[label, data]]));
+  } else {
+    // Informative empty-state — says WHAT the pane is and WHY it's empty (defaults).
+    host.append(el("div",{class:"sub-empty"},
+      icon(item.icon || "tune"),
+      el("div",{}, "No " + label.toLowerCase() + " configured for this " +
+        String(svc.label||"resource").replace(/s$/,"").toLowerCase() + "."),
+      el("div",{style:"font-size:11.5px;color:#a19f9d;margin-top:4px;max-width:420px"},
+        "This pane reads live from the resource — currently at Azure defaults. " + desc)));
+  }
 }
 
 // ---- Universal sub-blade renderers (PC4) -----------------------------------
@@ -1336,39 +1515,55 @@ SUB_RENDERERS.overview = function(svc, full, host){
 
 SUB_RENDERERS.activitylog = async function(svc, full, host){
   host.append(el("div",{class:"sub-info"},
-    "Operations recorded against this resource in the current session."));
+    "Operations recorded against ", el("strong",{}, full.name||"this resource"),
+    " — create / update / delete and sub-resource (database, queue, rule…) ops, newest first."));
   const tableWrap = el("div",{}); host.append(tableWrap);
-  const events = await fetchActivity(full.id);
-  if (!events.length) { tableWrap.append(emptyState("No activity yet for this resource.")); return; }
-  const t = el("table",{class:"sub-table"});
-  t.append(el("tr",{},el("th",{},"Time"), el("th",{},"Operation"), el("th",{},"Status"), el("th",{},"Detail")));
-  events.slice(0,50).forEach(ev => {
-    const op  = String(ev.event || "");
-    const det = ev.detail || {};
-    const tone = op.includes("delete") ? "err" : op.includes("vm.") ? "info" : "ok";
-    const detStr = Object.entries(det).filter(([k,_])=>k!=="resource_id").map(([k,v])=>`${k}=${typeof v==='object'?JSON.stringify(v):v}`).join(", ");
-    t.append(el("tr",{},
-      el("td",{class:"mono"}, ev.ts || ev.timestamp || "—"),
-      el("td",{}, el("span",{class:"status-dot "+tone}), document.createTextNode(" "+op)),
-      el("td",{}, "Succeeded"),
-      el("td",{class:"mono small"}, detStr || "—")));
-  });
-  tableWrap.append(t);
+  host.append(el("div",{class:"blade-actions"},
+    el("button",{class:"btn sec",onclick:async()=>{ tableWrap.innerHTML=""; await fill(); }}, icon("refresh"), "Refresh")));
+  async function fill(){
+    const events = await fetchActivity(full.name);
+    if (!events.length) { tableWrap.append(emptyState("No activity yet for this resource. Create/modify it or a child to see events here.")); return; }
+    const t = el("table",{class:"sub-table"});
+    t.append(el("tr",{},el("th",{},"Time"), el("th",{},"Operation"), el("th",{},"Status"), el("th",{},"Detail")));
+    events.slice(0,200).forEach(ev => {
+      // Live cloudsim shape: {id,seq,ts,provider,service,resource,action,status,detail}
+      const op  = String(ev.action || ev.event || "");
+      const st  = String(ev.status || "ok");
+      const tone = /delete/i.test(op) ? "err" : (st !== "ok" ? "err" : "ok");
+      t.append(el("tr",{},
+        el("td",{class:"mono"}, ev.ts || ev.timestamp || "—"),
+        el("td",{}, el("span",{class:"status-dot "+tone}), document.createTextNode(" "+op)),
+        el("td",{}, st === "ok" ? "Succeeded" : st),
+        el("td",{class:"mono small"}, ev.detail || ev.resource || "—")));
+    });
+    tableWrap.append(t);
+  }
+  await fill();
 };
 
-async function fetchActivity(resourceId){
+// Fetch this resource's cloudsim events via the SERVER-SIDE resource filter
+// (matches on the resource NAME across services) — GET /api/cloudsim/events?
+// resource=<name>&provider=azure. Falls back to an unfiltered fetch + client-side
+// match (resource_id / name suffix) for robustness against older event shapes.
+async function fetchActivity(resourceName){
+  const rn = String(resourceName||"").trim();
   try {
-    const r = await fetch(ORIGIN+"/api/cloudsim/events");
+    const q = rn ? ("?resource="+encodeURIComponent(rn)+"&provider=azure&limit=200") : "";
+    const r = await fetch(ORIGIN+"/api/cloudsim/events"+q);
     const j = await r.json();
-    const all = Array.isArray(j) ? j : (j.events || []);
-    if (!resourceId) return all;
-    const target = String(resourceId).toLowerCase();
-    return all.filter(ev => {
-      const rid = (ev.detail || {}).resource_id;
-      if (rid && String(rid).toLowerCase() === target) return true;
-      // Fallback: match on type+name when resource_id absent (older events).
-      const det = ev.detail || {};
-      if (det.name && target.endsWith("/" + String(det.name).toLowerCase())) return true;
+    let all = Array.isArray(j) ? j : (j.events || []);
+    if (!rn) return all;
+    if (all.length) return all;   // server-side filter already scoped to this name
+    // Fallback: unfiltered fetch + client-side match on name / resource / id.
+    const r2 = await fetch(ORIGIN+"/api/cloudsim/events");
+    const j2 = await r2.json();
+    const all2 = Array.isArray(j2) ? j2 : (j2.events || []);
+    const target = rn.toLowerCase();
+    return all2.filter(ev => {
+      const res = String(ev.resource||"").toLowerCase();
+      if (res === target) return true;
+      const rid = (ev.detail && typeof ev.detail==="object") ? ev.detail.resource_id : null;
+      if (rid && String(rid).toLowerCase().endsWith("/"+target)) return true;
       return false;
     });
   } catch(_) { return []; }
@@ -1916,6 +2111,146 @@ SUB_RENDERERS.encryption = function(svc, full, host){
 };
 
 // ---- Service-list renderers (PC6) ------------------------------------------
+// ---- Reusable FUNCTIONAL sub-resource engine (list + Create + Delete) -------
+// Drives a child collection via the shared generic route the SW serves:
+//   GET    /api/azure/sub/<service>/list<Child>/<parent>
+//   POST   /api/azure/sub/<service>/create<Child>/<parent>   {name, ...attrs}
+//   DELETE /api/azure/sub/<service>/delete<Child>/<parent>/<child>
+// Backed by azure_core_adapter.resource_op → azure_subresource_core (registry-
+// backed, nano_persist-durable: survives reload + is cross-context visible). ONE
+// engine backs every child list (SQL databases/firewall rules, SB queues, …);
+// callers pass a small config instead of hand-coding a blade.
+//   cfg = { service, child, columns:[["attrKey","Header"],…], fields:[{key,label,
+//           placeholder?,type?,default?}], emptyMsg, title? }
+// `name` column is always shown first; `columns` add attribute columns.
+function subResourceCrud(svc, full, host, cfg){
+  const parent = full.name;
+  const base = ORIGIN + "/api/azure/sub/" + encodeURIComponent(cfg.service) + "/";
+  const listUrl   = base + "list"   + cfg.child + "s/" + encodeURIComponent(parent);
+  const createUrl = base + "create" + cfg.child + "/" + encodeURIComponent(parent);
+  const delUrl    = n => base + "delete" + cfg.child + "/" + encodeURIComponent(parent) + "/" + encodeURIComponent(n);
+  const cols = cfg.columns || [];
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    if (cfg.title) wrap.append(el("div",{class:"sub-info"}, cfg.title));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center;flex-wrap:wrap"});
+    bar.append(
+      el("button",{class:"btn",onclick:showForm}, icon("add"), "New "+cfg.child.toLowerCase()),
+      el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(listUrl).then(r=>r.json()).then(j=>{
+      const items = (j && j.items) || [];
+      if (!items.length){ listHost.append(emptyState(cfg.emptyMsg || ("No "+cfg.child.toLowerCase()+"s yet — click New to add one."))); return; }
+      const t = el("table",{class:"sub-table"});
+      const hr = el("tr",{}, el("th",{},"Name")); cols.forEach(c=>hr.append(el("th",{},c[1]))); hr.append(el("th",{},"")); t.append(hr);
+      items.forEach(it=>{
+        const tr = el("tr",{}, el("td",{}, it.name));
+        cols.forEach(c=>tr.append(el("td",{class:"small"}, it[c[0]]==null?"—":String(it[c[0]]))));
+        tr.append(el("td",{style:"text-align:right"},
+          el("button",{class:"btn del",title:"Delete",onclick:()=>del(it.name)}, icon("delete"), "Delete")));
+        t.append(tr);
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load "+cfg.child.toLowerCase()+"s.")));
+  }
+  function showForm(){
+    const form = el("div",{class:"essentials",style:"margin-top:14px"});
+    form.append(el("div",{class:"h"}, "New "+cfg.child.toLowerCase()));
+    const grid = el("div",{class:"essentials-grid"});
+    const nameInp = el("input",{class:"sub-select",style:"min-width:260px",placeholder:cfg.child+" name"});
+    grid.append(el("div",{class:"k"},"Name"), el("div",{class:"v"}, nameInp));
+    const inputs = {};
+    (cfg.fields||[]).forEach(f=>{
+      const inp = el("input",{class:"sub-select",style:"min-width:200px",type:f.type||"text",
+        placeholder:f.placeholder||"", value:f.default!=null?String(f.default):""});
+      inputs[f.key]=inp;
+      grid.append(el("div",{class:"k"}, f.label||f.key), el("div",{class:"v"}, inp));
+    });
+    form.append(grid);
+    form.append(el("div",{class:"blade-actions"},
+      el("button",{class:"btn",onclick:async()=>{
+        const nm = nameInp.value.trim(); if (!nm){ toast("Name is required","err"); return; }
+        const body = {name:nm};
+        (cfg.fields||[]).forEach(f=>{ const v=inputs[f.key].value; if (v!=="") body[f.key] = (f.type==="number")?Number(v):v; });
+        const r = await fetch(createUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+        const j = await r.json().catch(()=>({}));
+        if (r.ok && j.ok!==false){ toast(cfg.child+" created: "+nm); recordNotif("ok",cfg.child+" created",nm); form.remove(); render(); }
+        else toast("Create failed"+(j.code?" ("+j.code+")":""),"err");
+      }}, "Create"),
+      el("button",{class:"btn sec",onclick:()=>form.remove()}, "Cancel")));
+    wrap.append(form);
+  }
+  async function del(name){
+    if (!confirm("Delete "+cfg.child.toLowerCase()+" '"+name+"'?")) return;
+    const r = await fetch(delUrl(name),{method:"DELETE"});
+    const j = await r.json().catch(()=>({}));
+    if (r.ok && j.ok!==false){ toast("Deleted "+name); recordNotif("info",cfg.child+" deleted",name); render(); }
+    else toast("Delete failed","err");
+  }
+  render();
+}
+
+// ---- Reusable FUNCTIONAL editable-settings engine (read → edit → PATCH → readback)
+// Durable: values live in azure_subresource_core (registry-backed, persisted). The
+// console reads GET /api/azure/sub/<service>/getSettings/<resource>/<key>, edits a
+// small form, saves via PATCH updateSettings, then reads the value back from the
+// store (proves the write landed). cfg = { service, settingsKey, title,
+//   fields:[{key,label,type?,options?,default?,help?}] }.
+function subSettingsEditor(svc, full, host, cfg){
+  const resource = full.name;
+  const base = ORIGIN + "/api/azure/sub/" + encodeURIComponent(cfg.service) + "/";
+  const getUrl = base + "getSettings/" + encodeURIComponent(resource) + "/" + encodeURIComponent(cfg.settingsKey);
+  const setUrl = base + "updateSettings/" + encodeURIComponent(resource) + "/" + encodeURIComponent(cfg.settingsKey);
+  const wrap = el("div",{}); host.append(wrap);
+  async function load(){
+    wrap.innerHTML = "";
+    if (cfg.title) wrap.append(el("div",{class:"sub-info"}, cfg.title));
+    let cur = {};
+    try { const r = await fetch(getUrl); const j = await r.json(); cur = (j && j.settings) || {}; } catch(_){}
+    const sec = el("div",{class:"essentials"});
+    sec.append(el("div",{class:"h"}, cfg.heading || "Configuration"));
+    const g = el("div",{class:"essentials-grid"});
+    const inputs = {};
+    cfg.fields.forEach(f=>{
+      let inp;
+      const val = (cur[f.key]!=null) ? cur[f.key] : (f.default!=null?f.default:"");
+      if (f.type === "select"){
+        inp = el("select",{class:"sub-select"});
+        (f.options||[]).forEach(o=>{ const op=el("option",{value:String(o)}, String(o)); if (String(o)===String(val)) op.selected=true; inp.append(op); });
+      } else if (f.type === "bool"){
+        inp = el("select",{class:"sub-select"});
+        ["false","true"].forEach(o=>{ const op=el("option",{value:o}, o==="true"?"Enabled":"Disabled"); if (String(val)===o) op.selected=true; inp.append(op); });
+      } else {
+        inp = el("input",{class:"sub-select",style:"min-width:260px",type:f.type||"text",value:String(val)});
+      }
+      inputs[f.key]=inp;
+      g.append(el("div",{class:"k"}, f.label||f.key), el("div",{class:"v"}, inp));
+      if (f.help) g.append(el("div",{class:"k"},""), el("div",{class:"v",style:"font-size:11.5px;color:#a19f9d"}, f.help));
+    });
+    sec.append(g); wrap.append(sec);
+    const status = el("div",{class:"sub-info",style:"margin-top:8px"});
+    wrap.append(el("div",{class:"blade-actions"},
+      el("button",{class:"btn",onclick:save},"Save"),
+      el("button",{class:"btn sec",onclick:load},"Reload")));
+    wrap.append(status);
+    async function save(){
+      const body = {};
+      cfg.fields.forEach(f=>{ let v=inputs[f.key].value; if (f.type==="number") v=Number(v); body[f.key]=v; });
+      const r = await fetch(setUrl,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      const j = await r.json().catch(()=>({}));
+      if (r.ok && j.ok!==false){
+        toast("Settings saved"); recordNotif("ok",(cfg.heading||"Settings")+" updated",resource);
+        // Read back from the store to prove persistence, then re-render with it.
+        await load();
+        status.textContent = "Saved and read back from store: " + JSON.stringify(j.settings||{});
+      } else toast("Save failed","err");
+    }
+  }
+  load();
+}
+
 function listChildResources(svc, full, host, childTypeKey, columns, emptyMsg){
   // Children of a parent resource (queues under a SB namespace, databases under
   // a SQL server, subnets under a VNet, etc.) live one level deeper in ARM:
@@ -1936,28 +2271,35 @@ function listChildResources(svc, full, host, childTypeKey, columns, emptyMsg){
 }
 
 SUB_RENDERERS.databases = function(svc, full, host){
-  host.append(el("div",{class:"sub-info"},"Databases under this SQL server."));
-  listChildResources(svc, full, host, "databases",
-    [["name","Name"],["properties.status","Status"],["sku.name","SKU"]],
-    "No databases yet. Create one via the Databases child collection.");
+  subResourceCrud(svc, full, host, {
+    service: "sql", child: "Database",
+    title: "Databases under SQL server " + (full.name||"") + ". Created databases persist across reloads (registry-backed).",
+    columns: [["sku","SKU"],["status","Status"]],
+    fields: [{key:"sku",label:"SKU",default:"S0"},{key:"status",label:"Status",default:"Online"}],
+    emptyMsg: "No databases yet — click New database to create one.",
+  });
 };
+// Legacy alias: the catalog drives Cosmos data via `cosmosExplorer` (full CRUD
+// drill-down: databases → containers via ARM, durable). Delegate so this key is
+// never a GET-only dead-end if anything resolves to it.
 SUB_RENDERERS.cosmosdatabases = function(svc, full, host){
-  host.append(el("div",{class:"sub-info"},"Databases and containers under this Cosmos account."));
-  listChildResources(svc, full, host, "sqlDatabases",
-    [["name","Database"],["properties.resource.id","Resource id"]],
-    "No databases yet. Use the SDK or POST sqlDatabases to create one.");
+  return SUB_RENDERERS.cosmosexplorer(svc, full, host);
 };
 SUB_RENDERERS.queueslist = function(svc, full, host){
-  host.append(el("div",{class:"sub-info"},"Queues in this Service Bus namespace."));
-  listChildResources(svc, full, host, "queues",
-    [["name","Name"],["properties.status","Status"],["properties.maxSizeInMegabytes","Max size (MB)"]],
-    "No queues. Create via SDK or POST queues.");
+  subResourceCrud(svc, full, host, {
+    service: "servicebus", child: "Queue",
+    title: "Queues in Service Bus namespace " + (full.name||"") + ". Persist across reloads (registry-backed).",
+    columns: [["maxSizeInMegabytes","Max size (MB)"],["status","Status"]],
+    fields: [{key:"maxSizeInMegabytes",label:"Max size (MB)",type:"number",default:1024},
+             {key:"status",label:"Status",default:"Active"}],
+    emptyMsg: "No queues yet — click New queue to create one.",
+  });
 };
+// Legacy alias: the catalog drives SB topics via `topicsDrillDown` (full CRUD:
+// topics → subscriptions → filter rules via ARM, durable). Delegate so this key
+// is never a GET-only dead-end if anything resolves to it.
 SUB_RENDERERS.topicslist = function(svc, full, host){
-  host.append(el("div",{class:"sub-info"},"Topics in this Service Bus namespace."));
-  listChildResources(svc, full, host, "topics",
-    [["name","Name"],["properties.status","Status"],["properties.subscriptionCount","Subscriptions"]],
-    "No topics.");
+  return SUB_RENDERERS.topicsdrilldown(svc, full, host);
 };
 SUB_RENDERERS.sharedaccess = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Shared access policies (SAS) for this namespace."));
@@ -1968,29 +2310,140 @@ SUB_RENDERERS.sharedaccess = function(svc, full, host){
     el("td",{class:"mono small"}, `Endpoint=sb://${full.name}.servicebus.windows.net/;SharedAccessKeyName=${p};SharedAccessKey=••••••••`))));
   host.append(t);
 };
+// Reusable full-CRUD engine for an ARM CHILD collection under a parent resource
+// (APIM apis/products/subscriptions, and any other nested ARM type). Backed by the
+// AzureArm core via PUT/GET/DELETE on <parent.id>/<childTypeKey>/<name>, so created
+// children land in AzureArm.state → captured by nano_persist → survive a full
+// reload AND cross-tab sync. Each create emits a cloudsim event (AzureArm._log_
+// mutation) so the parent's Activity tab reflects the child CRUD.
+//   cfg = { childTypeKey, child(singular label), title, emptyMsg,
+//           columns:[[dotPath,label],...],
+//           fields:[{key,label,type?,default?,placeholder?,options?,prop?}] }
+// A field with prop:true (default) is written under properties.<key>; prop:false
+// writes it at the record root. name → ARM resource name (last path segment).
+function armChildCrud(svc, full, host, cfg){
+  const apiv = svc.apiVersion;
+  const collId = full.id + "/" + cfg.childTypeKey;
+  const cols = cfg.columns || [];
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    if (cfg.title) wrap.append(el("div",{class:"sub-info"}, cfg.title));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center;flex-wrap:wrap"});
+    bar.append(
+      el("button",{class:"btn",onclick:showForm}, icon("add"), "New "+cfg.child.toLowerCase()),
+      el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(ORIGIN + collId + "?api-version=" + apiv).then(r=>r.json()).then(j=>{
+      const items = (j && j.value) || [];
+      if (!Array.isArray(items) || !items.length){ listHost.append(emptyState(cfg.emptyMsg || ("No "+cfg.child.toLowerCase()+"s yet — click New to add one."))); return; }
+      const t = el("table",{class:"sub-table"});
+      const hr = el("tr",{}, el("th",{},"Name")); cols.forEach(c=>hr.append(el("th",{},c[1]))); hr.append(el("th",{},"")); t.append(hr);
+      items.forEach(it=>{
+        const tr = el("tr",{}, el("td",{}, it.name));
+        cols.forEach(c=>{ const v=getPath(it,c[0]); tr.append(el("td",{class:"small"}, v==null?"—":String(v))); });
+        tr.append(el("td",{style:"text-align:right"},
+          el("button",{class:"btn del",title:"Delete",onclick:()=>del(it.name, it.id)}, icon("delete"), "Delete")));
+        t.append(tr);
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load "+cfg.child.toLowerCase()+"s.")));
+  }
+  function showForm(){
+    const form = el("div",{class:"essentials",style:"margin-top:14px"});
+    form.append(el("div",{class:"h"}, "New "+cfg.child.toLowerCase()));
+    const grid = el("div",{class:"essentials-grid"});
+    const nameInp = el("input",{class:"sub-select",style:"min-width:260px",placeholder:cfg.child+" name"});
+    grid.append(el("div",{class:"k"},"Name"), el("div",{class:"v"}, nameInp));
+    const inputs = {};
+    (cfg.fields||[]).forEach(f=>{
+      let inp;
+      if (f.type === "select"){
+        inp = el("select",{class:"sub-select"});
+        (f.options||[]).forEach(o=>{ const op=el("option",{value:String(o)}, String(o)); if (String(o)===String(f.default)) op.selected=true; inp.append(op); });
+      } else {
+        inp = el("input",{class:"sub-select",style:"min-width:220px",type:f.type||"text",
+          placeholder:f.placeholder||"", value:f.default!=null?String(f.default):""});
+      }
+      inputs[f.key]=inp;
+      grid.append(el("div",{class:"k"}, f.label||f.key), el("div",{class:"v"}, inp));
+    });
+    form.append(grid);
+    form.append(el("div",{class:"blade-actions"},
+      el("button",{class:"btn",onclick:async()=>{
+        const nm = nameInp.value.trim(); if (!nm){ toast("Name is required","err"); return; }
+        const props = {}; const root = {};
+        (cfg.fields||[]).forEach(f=>{ let v=inputs[f.key].value; if (v==="") return;
+          if (f.type==="number") v=Number(v);
+          if (f.prop===false) root[f.key]=v; else props[f.key]=v; });
+        const body = Object.assign({properties: props}, root);
+        const r = await arm("PUT", collId + "/" + encodeURIComponent(nm), body, apiv);
+        if (r.ok){ toast(cfg.child+" created: "+nm); recordNotif("ok",cfg.child+" created",nm); form.remove(); render(); }
+        else toast("Create failed"+(r.status?" ("+r.status+")":""),"err");
+      }}, "Create"),
+      el("button",{class:"btn sec",onclick:()=>form.remove()}, "Cancel")));
+    wrap.append(form);
+  }
+  async function del(name, rid){
+    if (!confirm("Delete "+cfg.child.toLowerCase()+" '"+name+"'?")) return;
+    const r = await arm("DELETE", rid ? ("/"+rid.replace(/^\//,"")) : (collId+"/"+encodeURIComponent(name)), undefined, apiv);
+    if (r.ok || r.status===204){ toast("Deleted "+name); recordNotif("info",cfg.child+" deleted",name); render(); }
+    else toast("Delete failed","err");
+  }
+  render();
+}
+
 SUB_RENDERERS.apislist = function(svc, full, host){
-  host.append(el("div",{class:"sub-info"},"APIs published through this API Management instance."));
-  listChildResources(svc, full, host, "apis",
-    [["name","Name"],["properties.displayName","Display name"],["properties.path","Path"]],
-    "No APIs. Use the SDK or POST apis to import one.");
+  armChildCrud(svc, full, host, {
+    childTypeKey: "apis", child: "API",
+    title: "APIs published through API Management instance " + (full.name||"") + ". Created APIs persist across reloads (ARM-backed).",
+    columns: [["properties.displayName","Display name"],["properties.path","Path"],["properties.serviceUrl","Backend URL"]],
+    fields: [
+      {key:"displayName", label:"Display name", default:"My API"},
+      {key:"path", label:"API URL suffix", placeholder:"e.g. orders", default:"api"},
+      {key:"serviceUrl", label:"Backend service URL", placeholder:"https://backend.example.com", default:"https://httpbin.org"},
+      {key:"protocols", label:"Protocols", type:"select", options:["https","http"], default:"https"},
+    ],
+    emptyMsg: "No APIs yet — click New API to import one.",
+  });
 };
 SUB_RENDERERS.productslist = function(svc, full, host){
-  host.append(el("div",{class:"sub-info"},"Products group APIs for subscribers."));
-  listChildResources(svc, full, host, "products",
-    [["name","Name"],["properties.displayName","Display name"],["properties.state","State"]],
-    "No products.");
+  armChildCrud(svc, full, host, {
+    childTypeKey: "products", child: "Product",
+    title: "Products group APIs for subscribers under " + (full.name||"") + ". Persist across reloads (ARM-backed).",
+    columns: [["properties.displayName","Display name"],["properties.state","State"],["properties.subscriptionRequired","Subscription required"]],
+    fields: [
+      {key:"displayName", label:"Display name", default:"Starter"},
+      {key:"state", label:"State", type:"select", options:["published","notPublished"], default:"published"},
+      {key:"subscriptionRequired", label:"Subscription required", type:"select", options:["true","false"], default:"true"},
+      {key:"approvalRequired", label:"Approval required", type:"select", options:["false","true"], default:"false"},
+    ],
+    emptyMsg: "No products yet — click New product to add one.",
+  });
 };
 SUB_RENDERERS.subscriptionslist = function(svc, full, host){
-  host.append(el("div",{class:"sub-info"},"Subscriptions grant developers access to one or more APIs."));
-  listChildResources(svc, full, host, "subscriptions",
-    [["name","Name"],["properties.displayName","Display name"],["properties.state","State"]],
-    "No subscriptions.");
+  armChildCrud(svc, full, host, {
+    childTypeKey: "subscriptions", child: "Subscription",
+    title: "Subscriptions grant developers access to products/APIs under " + (full.name||"") + ". Persist across reloads (ARM-backed).",
+    columns: [["properties.displayName","Display name"],["properties.state","State"],["properties.scope","Scope"]],
+    fields: [
+      {key:"displayName", label:"Display name", default:"My subscription"},
+      {key:"scope", label:"Scope", placeholder:"/products/starter or /apis/my-api", default:"/products/starter"},
+      {key:"state", label:"State", type:"select", options:["active","suspended","submitted"], default:"active"},
+    ],
+    emptyMsg: "No subscriptions yet — click New subscription to add one.",
+  });
 };
 SUB_RENDERERS.firewalls = function(svc, full, host){
-  host.append(el("div",{class:"sub-info"},"Public-network firewall rules for this SQL server."));
-  listChildResources(svc, full, host, "firewallRules",
-    [["name","Rule name"],["properties.startIpAddress","Start IP"],["properties.endIpAddress","End IP"]],
-    "No firewall rules — server is unreachable from the internet.");
+  subResourceCrud(svc, full, host, {
+    service: "sql", child: "FirewallRule",
+    title: "Public-network firewall rules for SQL server " + (full.name||"") + ". Persist across reloads (registry-backed).",
+    columns: [["startIpAddress","Start IP"],["endIpAddress","End IP"]],
+    fields: [{key:"startIpAddress",label:"Start IP",placeholder:"0.0.0.0",default:"0.0.0.0"},
+             {key:"endIpAddress",label:"End IP",placeholder:"255.255.255.255",default:"0.0.0.0"}],
+    emptyMsg: "No firewall rules — server is unreachable from the internet. Click New firewall rule to add one.",
+  });
 };
 SUB_RENDERERS.connstrings = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Connection strings for this SQL server. Replace {your_password} with the admin password set at create time."));
@@ -2058,15 +2511,57 @@ SUB_RENDERERS.authentication = function(svc, full, host){
   g.append(el("div",{class:"k"},"Google"),    el("div",{class:"v"},"Not configured"));
   sec.append(g); host.append(sec);
 };
+// Managed identity — now a DURABLE editable settings tab (read → edit → PATCH →
+// readback via the generic sub route). Covers vm/sql/servicebus/cosmos/keyvault.
 SUB_RENDERERS.identity = function(svc, full, host){
-  host.append(el("div",{class:"sub-info"},"Managed identities for this resource."));
-  const sec = el("div",{class:"essentials"});
-  sec.append(el("div",{class:"h"},"System assigned"));
-  const g = el("div",{class:"essentials-grid"});
-  g.append(el("div",{class:"k"},"Status"),      el("div",{class:"v"},"Off"));
-  g.append(el("div",{class:"k"},"Object ID"),   el("div",{class:"v"},"—"));
-  g.append(el("div",{class:"k"},"Tenant ID"),   el("div",{class:"v"},"—"));
-  sec.append(g); host.append(sec);
+  const SUBSVC = {vm:"vm",sql:"sql",servicebus:"servicebus",cosmos:"cosmos",
+                  keyvault:"keyvault",storage:"storage",vnet:"vnet"};
+  const service = SUBSVC[svc.key];
+  if (!service){
+    host.append(el("div",{class:"sub-info"},"Managed identities for this resource."));
+    const sec = el("div",{class:"essentials"});
+    sec.append(el("div",{class:"h"},"System assigned"));
+    const g = el("div",{class:"essentials-grid"});
+    g.append(el("div",{class:"k"},"Status"), el("div",{class:"v"},"Off"));
+    sec.append(g); host.append(sec); return;
+  }
+  subSettingsEditor(svc, full, host, {
+    service, settingsKey: "identity", heading: "Managed identity",
+    title: "Managed identities for " + (full.name||"this resource") + ". Changes persist across reloads (registry-backed).",
+    fields: [
+      {key:"systemAssigned", label:"System assigned", type:"bool", default:"false",
+       help:"Azure creates a service principal tied to this resource's lifecycle."},
+      {key:"userAssigned", label:"User-assigned identities", type:"text", default:"",
+       help:"Comma-separated identity resource names (simulated)."},
+    ],
+  });
+};
+// Cosmos default consistency — durable editable settings (stub-typed in catalog,
+// resolved by key). Read → edit → PATCH → readback via the generic sub route.
+SUB_RENDERERS.consistency = function(svc, full, host){
+  subSettingsEditor(svc, full, host, {
+    service: "cosmos", settingsKey: "consistency", heading: "Default consistency",
+    title: "Default consistency level for Cosmos account " + (full.name||"") + ". Persists across reloads.",
+    fields: [
+      {key:"defaultConsistencyLevel", label:"Consistency level", type:"select", default:"Session",
+       options:["Strong","BoundedStaleness","Session","ConsistentPrefix","Eventual"]},
+      {key:"maxStalenessPrefix", label:"Max staleness (ops)", type:"number", default:100,
+       help:"Only applies to Bounded staleness."},
+      {key:"maxIntervalInSeconds", label:"Max staleness (seconds)", type:"number", default:5},
+    ],
+  });
+};
+// VNet DNS servers — durable editable settings (stub-typed, resolved by key).
+SUB_RENDERERS.dnsservers = function(svc, full, host){
+  subSettingsEditor(svc, full, host, {
+    service: "vnet", settingsKey: "dnsServers", heading: "DNS servers",
+    title: "DNS servers for virtual network " + (full.name||"") + ". Persists across reloads.",
+    fields: [
+      {key:"mode", label:"DNS", type:"select", default:"Default", options:["Default","Custom"]},
+      {key:"servers", label:"Custom DNS servers", type:"text", default:"",
+       help:"Comma-separated IPs; used when DNS = Custom."},
+    ],
+  });
 };
 SUB_RENDERERS.addressspace = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"The IPv4 and IPv6 address space for this virtual network."));

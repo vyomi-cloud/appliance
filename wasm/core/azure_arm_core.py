@@ -43,6 +43,27 @@ def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
+# ── cloudsim event emission (DURABLE, best-effort) ──────────────────────────
+# ARM ops are NOT auto-logged by providers/registry (the generic recorder skips
+# the `_arm` service — see the Infra contract). But the Azure console's detail
+# Activity tab reads GET /api/cloudsim/events?resource=<name>&provider=azure, so
+# EACH mutating ARM op (resource + sub-resource CRUD, VM power actions) records
+# ONE event into the SAME registry-owned, nano_persist-captured EventStore that
+# S3/DynamoDB ride. Keyed by resource NAME so the events API's name filter finds
+# it. NEVER raises — a telemetry failure must not break an ARM request.
+def _emit_event(service: str, resource: str, action: str,
+                status: str = "ok", detail: str = "") -> None:
+    try:
+        try:
+            from core import nano_events as _ev
+        except ImportError:                       # Pyodide: cores flat on sys.path
+            import nano_events as _ev              # type: ignore
+        _ev.record("azure", str(service or "").lower(), str(resource or ""),
+                   str(action or ""), str(status or "ok"), str(detail or ""))
+    except Exception:
+        pass
+
+
 # ── pure helpers (ported verbatim from azure_services) ─────────────────────
 def _set_path(obj: dict, dotted: str, value):
     parts = dotted.split(".")
@@ -148,8 +169,13 @@ class AzureArm:
     """In-memory Azure Resource Manager control plane (one per Nano instance)."""
 
     def __init__(self, base: str = ""):
-        self._state: dict = {}
-        self._operations: dict = {}
+        # PUBLIC dict (no leading underscore) so nano_persist captures it →
+        # top-level ARM resources + ARM-core children (servicebus topics/subs,
+        # vnet peerings, deployment slots) survive a full page reload and
+        # cross-tab sync. Keyed by the lower-cased resource id. Registered in
+        # nano_registry under `az_arm` and listed in nano_persist.STORE_ATTRS.
+        self.state: dict = {}
+        self._operations: dict = {}             # ephemeral LRO polls — NOT persisted
         self._base = base                       # endpoint/LRO URL prefix (relative by default)
 
     # ── public entry ──────────────────────────────────────────────────────
@@ -248,12 +274,16 @@ class AzureArm:
         lro = (len(type_chain) == 2 and namespace.lower() != "microsoft.authorization")
 
         if method == "GET":
-            rec = self._state.get(key)
+            rec = self.state.get(key)
             if not rec:
                 return _err(404, "ResourceNotFound", f"Resource '{rid}' not found.")
             return _ok(_view(rec))
         if method in ("PUT", "PATCH"):
+            existed = key in self.state
             resp = self._upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
+            if resp.get("status", 500) < 400:
+                self._log_mutation(method, type_chain, names, leaf_name,
+                                   created=(not existed and method != "PATCH"))
             if lro:
                 resp["status"] = 200
                 op_id = self._make_operation(rid, method)
@@ -261,15 +291,44 @@ class AzureArm:
                 resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
             return resp
         if method == "DELETE":
-            rec = self._state.pop(key, None)
+            rec = self.state.pop(key, None)
+            if rec is not None:
+                self._log_mutation("DELETE", type_chain, names, leaf_name)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+    def _log_mutation(self, method, type_chain, names, leaf_name, created=False):
+        """Record a cloudsim event for a top-level or sub-resource ARM mutation.
+        A sub-resource op (type_chain deeper than ns/type, e.g. .../servers/{s}/
+        databases/{d}) is logged against BOTH the child (its own activity) AND the
+        parent, with a verb like CreateDatabase/DeleteTopic — so a parent's Activity
+        tab shows child CRUD the way the Azure portal's does."""
+        # child type = last type segment ("databases","topics","subscriptions",…);
+        # singularize for the verb (databases→Database, topics→Topic, keys→Key).
+        child_type = type_chain[-1] if type_chain else ""
+        verb = {"PUT": "Create", "PATCH": "Update", "DELETE": "Delete"}.get(method, method.title())
+        full_type = "/".join(type_chain)
+        if len(names) >= 2:
+            # sub-resource: parent is the second-to-last name.
+            parent = names[-2]
+            singular = child_type[:-1] if child_type.endswith("s") else child_type
+            action = verb + singular[:1].upper() + singular[1:]
+            self._emit(full_type, parent, action, f"{child_type}/{leaf_name}")
+            self._emit(full_type, leaf_name, verb, f"{full_type}/{leaf_name}")
+        else:
+            action = verb + ("Resource" if method != "DELETE" else "Resource")
+            # Use a clean verb for the top-level resource itself.
+            self._emit(full_type, leaf_name, verb, full_type)
+
+    @staticmethod
+    def _emit(service, resource, action, detail=""):
+        _emit_event(service, resource, action, "ok", detail)
 
     # ── CRUD primitives ───────────────────────────────────────────────────
     def _list(self, sub, rg, full_type):
         ft = full_type.lower()
         items = []
-        for rec in self._state.values():
+        for rec in self.state.values():
             if rec.get("_type", "").lower() != ft:
                 continue
             if rec.get("_sub") != sub:
@@ -280,13 +339,13 @@ class AzureArm:
         return _ok({"value": items})
 
     def _upsert(self, rid, key, full_type, name, catalog, payload, base, patch=False):
-        existed = key in self._state
+        existed = key in self.state
         is_top = full_type.lower() == (catalog["namespace"] + "/" + catalog["type"]).lower()
         defaults = _expand_tokens(catalog.get("defaults", {}), name, base) if is_top else {"properties": {"provisioningState": "Succeeded"}}
         endpoints = catalog.get("endpoints", {}) if is_top else {}
 
         if patch and existed:
-            rec = self._state[key]
+            rec = self.state[key]
         else:
             rec = {"id": rid, "name": name, "type": full_type,
                    "location": payload.get("location") or DEFAULT_LOCATION,
@@ -312,7 +371,7 @@ class AzureArm:
             if _get_path(rec, path_expr) in (None, ""):
                 _set_path(rec, path_expr, base + suffix.replace("__NAME__", name))
 
-        self._state[key] = rec
+        self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)
 
     def _arm_action(self, action, type_chain, resource_name, parent_rid=""):
@@ -322,7 +381,7 @@ class AzureArm:
             if ns != "microsoft.compute" or typ != "virtualmachines":
                 return _err(400, "ActionNotSupported",
                             f"Action '{action}' is only supported on Microsoft.Compute/virtualMachines.")
-            rec = self._state.get(parent_rid.lower()) if parent_rid else None
+            rec = self.state.get(parent_rid.lower()) if parent_rid else None
             if not rec:
                 return _err(404, "ResourceNotFound", f"Virtual machine '{resource_name}' not found.")
             new_status = {"start": "running", "restart": "running",
@@ -351,7 +410,7 @@ class AzureArm:
 
     def _list_resource_groups(self, sub):
         names = {DEFAULT_RG: True}
-        for rec in self._state.values():
+        for rec in self.state.values():
             if rec.get("_sub") == sub and rec.get("_rg"):
                 names[rec["_rg"]] = True
         return [{"id": f"/subscriptions/{sub}/resourceGroups/{n}", "name": n,

@@ -35,6 +35,49 @@ class CloudProvider:
 
 _REGISTRY: dict[str, CloudProvider] = {}
 
+# ── Per-resource cloudsim event/activity log ────────────────────────────────
+# Which operations count as "mutating" → recorded in the activity log. Keyed by
+# the operation name the console dispatches (catalog CRUD + lifecycle + the few
+# native sub-resource ops GCP/Azure funnel through _resource_dispatch). Reads
+# (List/Get/Query/Scan/…) are intentionally NOT logged — only state changes.
+_MUTATING_OPS = {
+    "Create", "Update", "Delete", "Terminate", "Start", "Stop", "Reboot", "Modify",
+    # native sub-resource ops seen on the _resource path (GCP cores)
+    "CreateSubscription", "CreateDatabase", "DeleteObject", "PutObject",
+}
+
+
+def _emit_event(provider: str, service: str, resource: str, action: str,
+                result: dict | None = None) -> None:
+    """Best-effort: append one cloudsim event for a mutating op. NEVER raises —
+    event logging must not break a request (that's a hard rule of the boundary)."""
+    try:
+        from core import nano_events
+        ok = True
+        if isinstance(result, dict) and result.get("ok") is False:
+            ok = False
+        status = "ok" if ok else (str(result.get("code")) if isinstance(result, dict) and result.get("code") else "error")
+        nano_events.record(provider=provider, service=service, resource=resource or "",
+                           action=action, status=status)
+    except Exception:
+        pass
+
+
+def _events_query(params: dict) -> dict:
+    """Serve the console's resource-events fetch. params may carry
+    {resource, provider, service, limit}. Returns {ok, events:[…]} newest-first."""
+    try:
+        from core import nano_events
+        evs = nano_events.list_events(
+            resource=params.get("resource") or None,
+            provider=params.get("provider") or None,
+            service=params.get("service") or None,
+            limit=int(params.get("limit") or 200),
+        )
+        return {"ok": True, "events": evs}
+    except Exception as e:
+        return {"ok": True, "events": [], "error": str(e)}
+
 
 def register(provider: CloudProvider) -> None:
     if not provider.id:
@@ -55,6 +98,18 @@ def _resource_dispatch(backends: Backends, provider: str, operation: str,
     svc = params.get("service", "")
     name = params.get("name", "")
     body = params.get("body") or {}
+    out = _resource_dispatch_inner(backends, provider, operation, account, svc, name, body)
+    # cloudsim event: record mutating ops (best-effort). For a sub-resource op the
+    # "resource" is the CHILD's name (body.name) when present, else the parent name.
+    if operation in _MUTATING_OPS:
+        res_name = str(body.get("name") or name or "") if operation in (
+            "CreateSubscription", "CreateDatabase") else str(name or body.get("name") or "")
+        _emit_event(provider, svc, res_name, operation, out)
+    return out
+
+
+def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
+                             account: str, svc: str, name: str, body: dict) -> dict:
     # GCP: the 7 conformance-core services are served by the proven cores (the
     # same ones the relay serves over native google-cloud-* wire), not the
     # generic store. Lazy import to avoid load-order coupling (like _arm_dispatch).
@@ -113,8 +168,17 @@ def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
     ARM status code, headers (Azure-AsyncOperation/Location) and body."""
     arm = getattr(backends, "_azure_arm", None)
     if arm is None:
-        from core.azure_arm_core import AzureArm
-        arm = AzureArm()
+        # Prefer the SHARED registry instance (the one nano_persist captures/
+        # restores) so ARM resources + children are reload-durable; only build a
+        # standalone one if the registry is unavailable (isolated tests).
+        try:
+            from core import nano_registry
+            arm = nano_registry.get().get("az_arm")
+        except Exception:
+            arm = None
+        if arm is None:
+            from core.azure_arm_core import AzureArm
+            arm = AzureArm()
         backends._azure_arm = arm
     resp = arm.handle(method, params.get("path", ""),
                       params.get("query") or {}, params.get("body"))
@@ -178,7 +242,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
         # live in the shared ResourceStore, namespaced "provider/account/service".
         vm_svcs = _VM_SERVICES.get(provider, set())
         prefix = provider + "/"
-        for key, coll in getattr(backends.resources, "_c", {}).items():
+        for key, coll in getattr(backends.resources, "collections", {}).items():
             if not key.startswith(prefix):
                 continue
             svc = key.rsplit("/", 1)[-1]
@@ -192,7 +256,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
         # Azure resources live in the ARM core's flat state, keyed by resource id.
         if provider == "azure":
             arm = getattr(backends, "_azure_arm", None)
-            for rid in getattr(arm, "_state", {}) or {}:
+            for rid in getattr(arm, "state", {}) or {}:
                 i = rid.find("/providers/")
                 if i < 0:
                     continue  # resource groups etc. have no /providers/ segment
@@ -212,9 +276,31 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
             "by_service": by_service, **_weigh(resources, vms)}
 
 
+# Verbs that begin a mutating per-cloud handler op (CreateBucket, DeleteTable,
+# PutObject, PutItem, Invoke, …). Used to decide whether to log a handler-path op.
+_MUTATING_PREFIXES = ("Create", "Delete", "Put", "Update", "Modify", "Start",
+                      "Stop", "Reboot", "Terminate", "Invoke", "Send", "Purge",
+                      "Authorize", "PutEvent")
+# Common param keys that carry a resource name, in priority order.
+_NAME_KEYS = ("name", "bucket", "table", "queue", "key", "id", "function", "topic")
+
+
+def _handler_resource_name(params: dict) -> str:
+    for k in _NAME_KEYS:
+        v = params.get(k)
+        if v:
+            return str(v)
+    return ""
+
+
 def dispatch(backends: Backends, provider: str, service: str, operation: str,
              account: str = "default", params: dict | None = None) -> dict:
     """Route one call to the right cloud plugin's handler."""
+    # Per-resource cloudsim event/activity log query — provider-neutral pseudo
+    # service (the console fetches a resource's events through this). Handled
+    # BEFORE the provider lookup so it works even for a neutral provider id.
+    if service == "_events":
+        return _events_query(params or {})
     p = _REGISTRY.get(provider)
     if p is None:
         return {"ok": False, "code": "UnknownProvider", "provider": provider,
@@ -235,4 +321,8 @@ def dispatch(backends: Backends, provider: str, service: str, operation: str,
                 "provider": provider, "service": service, "operation": operation}
     out = h(backends, account, params or {})
     out.setdefault("ok", True)
+    # cloudsim event: record mutating per-cloud handler ops (CreateBucket, PutItem,
+    # DeleteQueue, …). Best-effort — never breaks the request.
+    if operation.startswith(_MUTATING_PREFIXES):
+        _emit_event(provider, service, _handler_resource_name(params or {}), operation, out)
     return out

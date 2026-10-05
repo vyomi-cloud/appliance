@@ -45,13 +45,18 @@ from core import iam_core as iam
 from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
 
-OBJ = InMemoryObjectStore()
-DDB = InMemoryNoSqlStore()
-KMS = InMemoryKeyStore()
-SEC = InMemoryKvStore()
-RDB = InMemorySqlStore()
-IAM = InMemoryIamStore()
-MSG = InMemoryMessagingStore()
+# Shared registry (Fix #2): the console adapter and the native-wire relay
+# (AwsWireRouter via stores=) draw from ONE store set, so console-created resources
+# are visible to the SDK/relay in the same context (and vice-versa).
+from core import nano_registry as _reg
+_R = _reg.get()
+OBJ = _R["s3"]
+DDB = _R["ddb"]
+KMS = _R["kms"]
+SEC = _R["sec"]
+RDB = _R["rds"]
+IAM = _R["iam"]
+MSG = _R["msg"]
 REGION = "us-east-1"
 
 _CODE_RE = re.compile(rb"<Code>([^<]+)</Code>")

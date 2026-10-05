@@ -55,6 +55,9 @@ CORES = [
     "aws_wire_router.py",                            # native-wire front door (relay/bridge)
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
     "console_conformance.py",                       # console-next capability manifest: per-service conformance signal (pure, `os` only)
+    "nano_events.py",                               # per-resource cloudsim event/activity log (recorded on every mutating dispatch; MUST precede nano_registry which imports it)
+    "nano_registry.py",                             # shared in-context store registry (console adapter + relay router draw from ONE set)
+    "nano_persist.py",                              # store serialize/restore + cross-context sync (persistence + console↔SDK parity)
 ]
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"

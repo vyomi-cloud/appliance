@@ -377,6 +377,7 @@
 #disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
 </style>
   <script type="module" src="./nano-boot.js?v=4"></script>
+<style>#acctBtn{display:none!important;}</style>
 </head>
 <body>
 
@@ -912,6 +913,59 @@ function renderHome(main){
   function nanoSavingsFromByService(bs){
     var t = 0; for (var k in (bs||{})) { var r = _NANO_RATE.hasOwnProperty(k) ? _NANO_RATE[k] : 1.0; t += (Number(bs[k])||0) * r; } return t;
   }
+  // Friendly service label for a by_service census key.
+  function nanoSvcLabel(k){
+    var M={s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",
+      compute:"Compute Engine",storage:"Cloud Storage",cloudsql:"Cloud SQL",pubsub:"Pub/Sub",firestore:"Firestore",functions:"Cloud Functions",secretmanager:"Secret Manager"};
+    if (M[k]) return M[k];
+    var s=String(k||""), i=s.lastIndexOf("/"); if(i>=0) s=s.slice(i+1); return s.charAt(0).toUpperCase()+s.slice(1);
+  }
+  // Render a per-service savings breakdown (count × rate) into `container`.
+  // Lists every provisioned service (count>0); free services (rate 0) show "free".
+  function nanoRenderBreakdown(container, bs, accent){
+    var items=[]; for (var k in (bs||{})){ var cnt=Number(bs[k])||0; if(cnt<=0) continue; var r=_NANO_RATE.hasOwnProperty(k)?_NANO_RATE[k]:1.0; items.push({k:k,cnt:cnt,save:cnt*r}); }
+    items.sort(function(a,b){ return b.save-a.save; });
+    container.innerHTML="";
+    if (!items.length){ container.style.display="none"; return; }
+    container.style.display="";
+    container.append(el("div",{style:"font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--sub);margin:10px 0 2px"}, "Per-service breakdown"));
+    items.forEach(function(it){
+      var right = it.save>0 ? ("$"+it.save.toFixed(2)+"/mo") : "free";
+      var row=el("div",{style:"display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:11px;border-top:1px solid rgba(128,128,128,.14)"});
+      row.append(el("span",{}, nanoSvcLabel(it.k)+(it.cnt>1?(" ×"+it.cnt):"")));
+      row.append(el("span",{style:"font-weight:600;color:"+(it.save>0?accent:"var(--sub)")}, right));
+      container.append(row);
+    });
+  }
+  // Render total + breakdown + 12-mo bars into the card's elements from a by_service map.
+  function nanoComputeAndRender(bs, provider, accent, cloud, els){
+    var monthly = nanoSavingsFromByService(bs);
+    els.amt.textContent = "$"+monthly.toFixed(2);
+    nanoRenderBreakdown(els.breakdown, bs, accent);
+    els.foot.textContent = "Projected 12-month savings: $"+(monthly*12).toFixed(2);
+    var bars = els.bar.children;
+    for (var i=0;i<12;i++){ bars[i].style.height=(monthly>0?Math.max(6,Math.round(((i+1)/12)*100)):4)+"%"; if(monthly>0) bars[i].title="After "+(i+1)+" mo: $"+(monthly*(i+1)).toFixed(2)+" saved"; }
+    if (monthly<=0){ els.desc.textContent="Spin up "+cloud+" services and your monthly savings vs real "+cloud+" appear here."; }
+    return monthly;
+  }
+  // Load savings: prefer the LIVE census (and persist it per-account); on a cold
+  // load with no live resources, fall back to the PERSISTED per-service estimate.
+  function nanoLoadSavings(provider, accent, cloud, els){
+    fetch("/api/runtime/host-distribution").then(function(r){return r.json();}).then(function(d){
+      var provs=d.providers||{}; var bs=((provs[provider])||{}).by_service||{};
+      if (Object.keys(bs).length>0){
+        nanoComputeAndRender(bs, provider, accent, cloud, els);
+        try{ var bySvc={},byProv={},tot=0; for (var p in provs){ var pbs=(provs[p]||{}).by_service||{}; bySvc[p]=pbs; var m=Math.round(nanoSavingsFromByService(pbs)*100); byProv[p]=m; tot+=m; }
+          fetch("/api/nano/cost-estimate/push",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({monthly_cents:tot,by_provider:byProv,by_service:bySvc,rate_version:"2026.10"})}).catch(function(){}); }catch(_){}
+      } else {
+        fetch("/api/nano/cost-estimate/pull").then(function(r){return r.json();}).then(function(pe){
+          var pbs=((pe&&pe.by_service)||{})[provider]||{};
+          nanoComputeAndRender(pbs, provider, accent, cloud, els);
+          if (Object.keys(pbs).length>0 && pe.updated_at){ els.foot.textContent+="  · persisted"; els.foot.title="Last saved "+pe.updated_at; }
+        }).catch(function(){ nanoComputeAndRender({}, provider, accent, cloud, els); });
+      }
+    }).catch(function(){});
+  }
   const cost = el("div",{class:"widget"});
   cost.append(el("div",{class:"wh"}, icon("savings"), "Cost savings",
     el("a",{class:"info"}, "Info")));
@@ -922,6 +976,7 @@ function renderHome(main){
   const costAmt = el("span",{style:"font-size:24px;font-weight:800;color:var(--orange,#ec7211)"}, "$0");
   costBody.append(el("div",{style:"display:flex;align-items:baseline;gap:8px;margin:10px 0 2px"},
     costAmt, el("span",{style:"font-size:12px;color:var(--sub)"}, "/mo saved vs AWS")));
+  const costBreakdown = el("div",{style:"display:none"}); costBody.append(costBreakdown);
   const bar = el("div",{class:"cost-bar"});
   for (let i=0;i<12;i++){ bar.append(el("div",{style:"height:4%"})); }
   costBody.append(bar);
@@ -934,15 +989,7 @@ function renderHome(main){
   costBody.append(costFoot);
   cost.append(costBody);
   grid.append(cost);
-  fetch("/api/runtime/host-distribution").then(function(r){return r.json();}).then(function(d){
-    var bs = (((d.providers||{}).aws)||{}).by_service || {};
-    var monthly = nanoSavingsFromByService(bs);
-    costAmt.textContent = "$"+monthly.toFixed(2);
-    costFoot.textContent = "Projected 12-month savings: $"+(monthly*12).toFixed(2);
-    var bars = bar.children;
-    for (var i=0;i<12;i++){ bars[i].style.height = (monthly>0 ? Math.max(6, Math.round(((i+1)/12)*100)) : 4)+"%"; if (monthly>0) bars[i].title = "After "+(i+1)+" mo: $"+(monthly*(i+1)).toFixed(2)+" saved"; }
-    if (monthly<=0){ costDesc.textContent = "Spin up AWS services (EC2, S3, RDS…) and your monthly savings vs real AWS appear here."; }
-  }).catch(function(){});
+  nanoLoadSavings("aws", "var(--orange,#ec7211)", "AWS", {amt:costAmt, breakdown:costBreakdown, bar:bar, foot:costFoot, desc:costDesc});
 
   // 4) Build a solution (col-6)
   const build = el("div",{class:"widget"});
@@ -1732,15 +1779,11 @@ async function renderDetail(main){
   const content = el("div",{}); main.append(content);
   const activeTab = tabs[STATE.detailTab] || tabs[0];
   const renderer = SUB_RENDERERS[(activeTab.type || "").toLowerCase()];
-  if (renderer) {
-    try { renderer(svc, full, content, activeTab); }
-    catch (e) { content.append(el("div",{class:"alert err"}, "Renderer error: " + e.message)); }
-  } else {
-    content.append(el("div",{class:"empty"},
-      el("span",{class:"ic material-symbols-outlined"}, "construction"),
-      el("div",{}, "This pane mirrors the AWS console's "+activeTab.label+" experience."),
-      el("div",{class:"small",style:"font-size:11.5px;color:#a19f9d"}, "Not yet wired — placeholder for portal parity.")));
-  }
+  // Dispatch to the dedicated renderer when one exists; otherwise fall back to
+  // the generic data-driven renderer so NO detail tab is ever left blank.
+  const render = renderer || renderGenericTab;
+  try { render(svc, full, content, activeTab); }
+  catch (e) { content.append(el("div",{class:"alert err"}, "Renderer error: " + e.message)); }
 }
 function flattenTabs(subBlades){
   const out = [];
@@ -2613,39 +2656,88 @@ SUB_RENDERERS.overview = function(svc, full, host){
   card.append(grid); host.append(card);
 };
 SUB_RENDERERS.activitylog = async function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("info"),
-    el("div",{}, "Operations recorded against this resource in the current simulator session.")));
   const name = itemKey(svc, full);
-  try {
-    const r = await fetch(ORIGIN + "/api/cloudsim/events");
-    const j = await r.json();
-    const all = Array.isArray(j) ? j : (j.events || []);
-    const t = name.toLowerCase();
-    const filtered = all.filter(ev => {
-      const d = ev.detail || {};
-      if (d.resource_id && String(d.resource_id).toLowerCase().includes(t)) return true;
-      if (d.name && String(d.name).toLowerCase() === t) return true;
-      if (d.instance_id && String(d.instance_id).toLowerCase() === t) return true;
-      return false;
-    });
-    if (!filtered.length) { host.append(el("div",{class:"empty"}, "No activity yet for this resource.")); return; }
+  host.append(el("div",{class:"alert info"}, icon("history"),
+    el("div",{}, "CloudSim activity recorded against ", el("strong",{}, name || "this resource"),
+      " — every create / update / delete / sub-resource op flows through here.")));
+  const panel = el("div",{}); host.append(panel);
+  // Fetch is SERVER-SIDE filtered by this resource's name + provider (the
+  // in-browser event store supports ?resource=&provider=&service=&limit=).
+  async function load(){
+    panel.innerHTML = "";
+    panel.append(el("div",{style:"display:flex;gap:8px;margin-bottom:12px;align-items:center"},
+      el("button",{class:"btn",onclick:load}, icon("refresh"), "Refresh")));
+    let events = [];
+    try {
+      const qs = "resource=" + encodeURIComponent(name) + "&provider=aws&limit=200";
+      const r = await fetch(ORIGIN + "/api/cloudsim/events?" + qs);
+      const j = await r.json();
+      events = Array.isArray(j) ? j : (j.events || []);
+      // Sub-resource / settings ops (detail-tab Create/Delete/Save) are recorded
+      // under a synthetic service id "<svcKey>~<parent>~<tabKey>" with the CHILD
+      // as the event resource — so they don't match the parent `resource=` filter
+      // above. Merge them in here by scanning the global feed for this parent's
+      // namespace prefix, so the Activity tab shows the WHOLE history of this
+      // resource (top-level ops + sub-resource/settings ops), newest-first.
+      try {
+        const gr = await fetch(ORIGIN + "/api/cloudsim/events?provider=aws&limit=200");
+        const gj = await gr.json();
+        const feed = Array.isArray(gj) ? gj : (gj.events || []);
+        const prefix = (svc.key || "") + "~" + (name || "") + "~";
+        const seen = new Set(events.map(e => e.id ?? e.seq));
+        feed.forEach(ev => {
+          if (String(ev.service || "").startsWith(prefix) && !seen.has(ev.id ?? ev.seq)) {
+            events.push(ev);
+          }
+        });
+        events.sort((a,b) => (b.seq||0) - (a.seq||0));
+      } catch(_){}
+    } catch(e) { panel.append(el("div",{class:"empty"}, "Unable to load events.")); return; }
+    if (!events.length) {
+      panel.append(el("div",{class:"empty"},
+        el("span",{class:"ic material-symbols-outlined"}, "history_toggle_off"),
+        el("div",{}, "No activity recorded yet for " + (name || "this resource") + "."),
+        el("div",{style:"font-size:11.5px;color:#a19f9d;margin-top:6px"},
+          "Mutating operations (create/update/delete, sub-resource changes) will appear here.")));
+      return;
+    }
     const tbl = el("table",{class:"aws"});
     tbl.append(el("tr",{}, el("th",{}, "Event time"), el("th",{}, "Operation"),
-      el("th",{}, "Status"), el("th",{}, "Detail")));
-    filtered.slice(0, 50).forEach(ev => {
+      el("th",{}, "Service"), el("th",{}, "Status"), el("th",{}, "Detail")));
+    events.forEach(ev => {
+      const st = String(ev.status || "ok");
+      // Synthetic sub-resource service ids look like "ec2~i-123~console" — show
+      // the human tab segment (last part) rather than the raw namespace.
+      let svcLabel = String(ev.service || "");
+      if (svcLabel.includes("~")) {
+        const segs = svcLabel.split("~");
+        svcLabel = (svc.key || segs[0]) + " · " + segs[segs.length - 1];
+      }
       tbl.append(el("tr",{},
-        el("td",{class:"mono small"}, ev.at || ev.ts || "—"),
-        el("td",{}, String(ev.event||"")),
-        el("td",{}, stateBadge("Succeeded")),
-        el("td",{class:"small mono"}, Object.entries(ev.detail||{}).filter(([k,_])=>k!=="resource_id").map(([k,v])=>`${k}=${typeof v==="object"?JSON.stringify(v):v}`).join(", "))));
+        el("td",{class:"mono small"}, ev.ts || "—"),
+        el("td",{}, String(ev.action || ev.event || "")),
+        el("td",{class:"small"}, svcLabel),
+        el("td",{}, stateBadge(st === "ok" ? "active" : "failed")),
+        el("td",{class:"small mono"}, typeof ev.detail === "object"
+          ? JSON.stringify(ev.detail) : String(ev.detail || ""))));
     });
-    host.append(tbl);
-  } catch(e) { host.append(el("div",{class:"empty"}, "Unable to load events.")); }
+    panel.append(tbl);
+  }
+  load();
 };
 SUB_RENDERERS.iam = function(svc, full, host){
   host.append(el("div",{class:"alert info"}, icon("admin_panel_settings"),
     el("div",{}, "IAM permissions and resource-based policies attached to this resource.")));
-  host.append(el("div",{class:"empty"}, "No policies attached."));
+  // FUNCTIONAL: attach/list/detach policy statements for this resource, persisted
+  // via the generic sub-resource store (durable across reload + cross-tab).
+  renderSubResourceTab(svc, full, host, {key:"perms", type:"iam", icon:"admin_panel_settings"}, {
+    kind:"list", title:"Attached policies", singular:"policy",
+    fields:[{k:"name",label:"Policy name",ph:"AllowReadAccess"},
+            {k:"policy_arn",label:"Policy ARN (managed) — optional",ph:"arn:aws:iam::aws:policy/ReadOnlyAccess"},
+            {k:"effect",label:"Effect",ph:"Allow | Deny"},
+            {k:"actions",label:"Actions",ph:"s3:GetObject,s3:ListBucket"}],
+    columns:[["name","Policy"],["effect","Effect"],["actions","Actions"],["status","Status"]],
+  });
 };
 SUB_RENDERERS.tags = function(svc, full, host){
   const tags = (full.tags && typeof full.tags === "object") ? full.tags : {};
@@ -3047,7 +3139,16 @@ SUB_RENDERERS.bucketversioning = function(svc, full, host){
 SUB_RENDERERS.bucketnotifications = function(svc, full, host){
   host.append(el("div",{class:"alert info"}, icon("notifications"),
     el("div",{}, "Notify EventBridge, SNS, SQS, or Lambda on object events.")));
-  host.append(el("div",{class:"empty"}, "No notifications configured."));
+  // FUNCTIONAL: create/list/delete notification configurations, persisted via the
+  // generic sub-resource store (durable across reload + cross-tab).
+  renderSubResourceTab(svc, full, host, {key:"notifications", type:"bucketnotifications", icon:"notifications"}, {
+    kind:"list", title:"Event notifications", singular:"notification",
+    fields:[{k:"name",label:"Name",ph:"on-object-created"},
+            {k:"destination_type",label:"Destination type",ph:"SQS | SNS | Lambda | EventBridge"},
+            {k:"destination_arn",label:"Destination ARN",ph:"arn:aws:sqs:…"},
+            {k:"events",label:"Events",ph:"s3:ObjectCreated:*"}],
+    columns:[["name","Name"],["destination_type","Destination"],["events","Events"],["status","Status"]],
+  });
 };
 
 // Lambda specific
@@ -3084,7 +3185,17 @@ SUB_RENDERERS.lambdainvoke = function(svc, full, host){
   host.append(out);
 };
 SUB_RENDERERS.lambdaperms = function(svc, full, host){
-  host.append(el("div",{class:"empty"}, "No resource-based policy statements."));
+  host.append(el("div",{class:"alert info"}, icon("policy"),
+    el("div",{}, "Resource-based policy statements granting other services/accounts permission to invoke this function.")));
+  // FUNCTIONAL: add/list/remove permission statements, persisted (durable).
+  renderSubResourceTab(svc, full, host, {key:"perms", type:"lambdaperms", icon:"policy"}, {
+    kind:"list", title:"Resource-based policy statements", singular:"statement",
+    fields:[{k:"name",label:"Statement ID",ph:"AllowS3Invoke"},
+            {k:"principal",label:"Principal",ph:"s3.amazonaws.com"},
+            {k:"action",label:"Action",ph:"lambda:InvokeFunction"},
+            {k:"source_arn",label:"Source ARN (optional)",ph:"arn:aws:s3:::my-bucket"}],
+    columns:[["name","Statement ID"],["principal","Principal"],["action","Action"],["status","Status"]],
+  });
 };
 
 // SQS
@@ -3221,6 +3332,575 @@ SUB_RENDERERS.apistages = function(svc, full, host){
     host.append(tbl);
   });
 };
+
+// =====================================================================
+// Generic data-driven detail-tab fallback (AWS)
+// -----------------------------------------------------------------
+// Every detail tab whose "type" has no dedicated SUB_RENDERER (type "stub"
+// or any unmapped type) used to render a blank "construction" placeholder.
+// This fallback reads the resource's data relevant to the tab (via a
+// label/key→field-alias map that understands dotted paths) and renders it:
+//   array  → list of key/value cards
+//   object → key/value grid
+//   scalar → single row
+//   unset  → an INFORMATIVE empty-state (never blank).
+// Mirrors the GCP console's renderGenericTab approach.
+// =====================================================================
+const TAB_ALIASES = {
+  // keyed by lower-cased tab label (preferred) — falls back to the tab key/type.
+  "ec2 serial console":["serial_console","serial_console_output","console_output"],
+  "user data":["user_data","userData","metadata.user_data"],
+  "iam role":["iam_instance_profile","iam_role","instance_profile","iam.role"],
+  "versions":["versions","version_ids","version","versioning.versions"],
+  "lifecycle rules":["lifecycle","lifecycle.rule","lifecycle_rules","lifecycle_configuration"],
+  "default encryption":["encryption","server_side_encryption","sse","encryption_configuration"],
+  "block public access":["public_access_block","block_public_access","publicAccessBlock"],
+  "cross-origin resource sharing (cors)":["cors","cors_rules","cors_configuration"],
+  "identity providers":["identity_providers","providers","saml_providers","oidc_providers"],
+  "password policy":["password_policy","passwordPolicy"],
+  "access analyzer":["access_analyzer","analyzers","findings"],
+  "modify":["pending_modified_values","pending_modifications","modify"],
+  "automated backups":["automated_backups","backups","backup_retention_period"],
+  "maintenance":["maintenance","maintenance_window","preferred_maintenance_window","pending_maintenance_actions"],
+  "logs & events":["logs","events","enabled_cloudwatch_logs_exports","log_exports"],
+  "performance insights":["performance_insights","performance_insights_enabled","perf_insights"],
+  "indexes":["indexes","global_secondary_indexes","local_secondary_indexes","gsi","lsi"],
+  "streams and triggers":["streams","stream_specification","triggers","stream_arn"],
+  "read/write capacity":["provisioned_throughput","billing_mode","capacity","read_capacity","write_capacity"],
+  "encryption at rest":["sse_description","encryption","encryption_at_rest","sse"],
+  "time to live":["ttl","time_to_live","ttl_specification"],
+  "backups":["backups","on_demand_backups","continuous_backups"],
+  "point-in-time recovery":["point_in_time_recovery","pitr","continuous_backups"],
+  "insights":["insights","contributor_insights"],
+  "purge messages":["approximate_number_of_messages","messages_available","purge"],
+  "encryption":["encryption","kms_master_key_id","sse","sqs_managed_sse_enabled"],
+  "environment variables":["environment","environment.variables","env","environment_variables"],
+  "aliases":["aliases","alias","function_aliases"],
+  "authorizers":["authorizers","authorizer"],
+  "models":["models","model"],
+  "deployments":["deployments","deployment"],
+  "logs/tracing":["tracing","access_log_settings","logging","tracing_enabled"],
+  "nat gateways":["nat_gateways","natGateways","nat"],
+  "endpoints":["endpoints","vpc_endpoints","endpoint"],
+  "network acls":["network_acls","nacls","acls"],
+  "flow logs":["flow_logs","flowLogs","enable_flow_logs"],
+  "targets":["targets","target"],
+  "event pattern":["event_pattern","eventPattern","pattern"],
+  "dead-letter queue":["dead_letter_config","dlq","dead_letter_queue","redrive_policy"],
+  "trace logs":["trace","traces","trace_logs"],
+  "rotation":["rotation","rotation_enabled","rotation_rules","rotation_lambda_arn"],
+  "replication":["replication","replica_regions","replication_status"],
+  "encryption key":["kms_key_id","encryption_key","kms_key_arn"],
+  "key rotation":["key_rotation","rotation_enabled","key_rotation_status"],
+  "key users":["key_users","users"],
+  "key administrators":["key_administrators","administrators","admins"],
+  "grants":["grants","grant"],
+};
+const TAB_DESC = {
+  "ec2 serial console":"Text-based access to the instance's serial port for low-level troubleshooting.",
+  "user data":"Boot-time script/metadata passed to the instance at launch.",
+  "iam role":"IAM instance profile/role granting the instance AWS permissions.",
+  "versions":"Versions/revisions tracked for this resource.",
+  "lifecycle rules":"Rules that transition or expire objects by age/prefix.",
+  "default encryption":"Server-side encryption applied to new objects by default.",
+  "block public access":"Account/bucket-level settings that block public access.",
+  "cross-origin resource sharing (cors)":"CORS rules allowing cross-origin browser requests.",
+  "identity providers":"Federated SAML/OIDC identity providers.",
+  "password policy":"Account password complexity and rotation policy.",
+  "access analyzer":"Findings about resources shared outside your zone of trust.",
+  "modify":"Pending modifications queued for the next maintenance window.",
+  "automated backups":"Retention and schedule for automated backups.",
+  "maintenance":"Preferred maintenance window and pending actions.",
+  "indexes":"Secondary indexes defined on this table.",
+  "streams and triggers":"Change-data stream and attached triggers.",
+  "time to live":"Attribute that auto-expires items after a timestamp.",
+  "encryption":"Encryption applied to data at rest for this resource.",
+  "environment variables":"Key/value environment variables passed to the function.",
+  "aliases":"Named pointers to specific function versions.",
+  "targets":"Destinations this rule routes matching events to.",
+  "event pattern":"The event pattern this rule matches against.",
+  "rotation":"Automatic rotation schedule for this secret.",
+  "grants":"KMS grants delegating key usage to principals.",
+};
+function _kvGrid(pairs){
+  const card = el("div",{class:"kv-card"});
+  const g = el("div",{class:"kv-grid"});
+  pairs.forEach(([k,v]) => g.append(el("div",{},
+    el("div",{class:"k"}, String(k)),
+    el("div",{class:"v"+(/id|arn|key|url|endpoint/i.test(String(k))?" mono":"")},
+      (v && typeof v === "object") ? JSON.stringify(v) : String(v)))));
+  card.append(g); return card;
+}
+// =====================================================================
+// FUNCTIONAL detail-tab engine (catalog-driven — NOT a read-only fallback).
+//
+// Two reusable backends power every applicable "stub" tab:
+//   • SUB-RESOURCE LISTS  → list + Create (small form) + Delete, persisted via
+//       the generic sub-resource route /api/aws/sub/{ns}/{list|create|delete}
+//       (→ registry _resource List/Create/Delete on an isolated namespace).
+//   • SETTINGS / CONFIG   → an editable form whose current value is loaded from
+//       a single "_settings" record in that resource's config namespace and
+//       saved back (Create = upsert on a fixed name), then re-read.
+//
+// Both ride the SAME in-browser store the console already uses; mutating ops are
+// auto-recorded to the cloudsim activity log (Create/Delete are mutating ops).
+// DURABLE: these sub-resource/settings records live in the generic ResourceStore,
+// which is now registry-backed (nano_registry key "resources", public dict
+// `collections`) and captured by nano_persist's STORE_ATTRS — so they survive a
+// FULL PAGE RELOAD and cross-tab sync via IndexedDB/BroadcastChannel, exactly
+// like the proven cores (S3/DDB/RDS/…) and the activity log.
+// =====================================================================
+// A stable per-(resource, tab) namespace. "~" can't appear in a resource name
+// used by these services, so it safely separates the segments.
+function subNs(svcKey, parentName, tabKey){
+  return [svcKey, parentName || "_", tabKey].join("~");
+}
+async function subApi(method, ns, op, name, body){
+  let path = "/api/aws/sub/" + encodeURIComponent(ns) + "/" + op;
+  if (name !== undefined && name !== null && name !== "") path += "/" + encodeURIComponent(name);
+  return api(method, path, body);
+}
+
+// Catalog of FUNCTIONAL tabs, keyed "<svc.key>:<tab.key>".
+//   kind:"list"     — columns + create-form fields (each {k,label,ph?})
+//   kind:"settings" — fields (each {k,label,type?:text|number|toggle|select,
+//                     options?,ph?,default?})
+const SUBRES_CATALOG = {
+  // ── Secrets Manager ──
+  "secretsmanager:versions": {kind:"list", title:"Secret versions", singular:"version",
+    fields:[{k:"name",label:"Version label",ph:"AWSCURRENT"},{k:"description",label:"Description"}],
+    columns:[["name","Version label"],["description","Description"],["status","Status"]]},
+  "secretsmanager:rotation": {kind:"settings", title:"Rotation configuration",
+    fields:[{k:"rotation_enabled",label:"Automatic rotation",type:"toggle",default:false},
+            {k:"rotation_days",label:"Rotate every (days)",type:"number",default:30},
+            {k:"rotation_lambda_arn",label:"Rotation Lambda ARN",ph:"arn:aws:lambda:…"}]},
+  "secretsmanager:replication": {kind:"list", title:"Replica Regions", singular:"replica",
+    fields:[{k:"name",label:"Region",ph:"us-west-2"},{k:"kms_key_id",label:"KMS key",ph:"alias/aws/secretsmanager"}],
+    columns:[["name","Region"],["kms_key_id","KMS key"],["status","Status"]]},
+  "secretsmanager:kmsKey": {kind:"settings", title:"Encryption key",
+    fields:[{k:"kms_key_id",label:"KMS key ID",default:"alias/aws/secretsmanager"}]},
+  // ── KMS ──
+  "kms:aliases": {kind:"list", title:"Aliases", singular:"alias",
+    fields:[{k:"name",label:"Alias name",ph:"alias/my-key"}],
+    columns:[["name","Alias"],["status","Status"]]},
+  "kms:rotation": {kind:"settings", title:"Key rotation",
+    fields:[{k:"rotation_enabled",label:"Automatic key rotation",type:"toggle",default:false},
+            {k:"rotation_days",label:"Rotation period (days)",type:"number",default:365}]},
+  "kms:keyUsers": {kind:"list", title:"Key users", singular:"key user",
+    fields:[{k:"name",label:"IAM principal",ph:"arn:aws:iam::…:user/dev"}],
+    columns:[["name","Principal"],["status","Status"]]},
+  "kms:keyAdmins": {kind:"list", title:"Key administrators", singular:"administrator",
+    fields:[{k:"name",label:"IAM principal",ph:"arn:aws:iam::…:role/admin"}],
+    columns:[["name","Principal"],["status","Status"]]},
+  "kms:grants": {kind:"list", title:"Grants", singular:"grant",
+    fields:[{k:"name",label:"Grantee principal",ph:"arn:aws:iam::…:role/app"},
+            {k:"operations",label:"Operations",ph:"Encrypt,Decrypt"}],
+    columns:[["name","Grantee"],["operations","Operations"],["status","Status"]]},
+  // ── RDS ──
+  "rds:modify": {kind:"settings", title:"Modify DB instance", saveToResource:"modify",
+    fields:[{k:"instance_class",label:"DB instance class",type:"select",
+             options:["db.t3.micro","db.t3.small","db.t3.medium","db.m5.large","db.m5.xlarge"]},
+            {k:"allocated_storage",label:"Allocated storage (GiB)",type:"number",default:20}]},
+  "rds:backups": {kind:"settings", title:"Automated backups",
+    fields:[{k:"backup_retention_period",label:"Retention period (days)",type:"number",default:7},
+            {k:"preferred_backup_window",label:"Backup window (UTC)",ph:"03:00-04:00"},
+            {k:"copy_tags_to_snapshot",label:"Copy tags to snapshots",type:"toggle",default:true}]},
+  "rds:maintenance": {kind:"settings", title:"Maintenance",
+    fields:[{k:"preferred_maintenance_window",label:"Maintenance window (UTC)",ph:"sun:05:00-sun:06:00"},
+            {k:"auto_minor_version_upgrade",label:"Auto minor version upgrade",type:"toggle",default:true}]},
+  "rds:logs": {kind:"settings", title:"Log exports",
+    fields:[{k:"export_postgresql",label:"Export PostgreSQL log",type:"toggle",default:false},
+            {k:"export_upgrade",label:"Export upgrade log",type:"toggle",default:false}]},
+  "rds:queryInsights": {kind:"settings", title:"Performance Insights",
+    fields:[{k:"performance_insights_enabled",label:"Enable Performance Insights",type:"toggle",default:false},
+            {k:"retention_days",label:"Retention (days)",type:"number",default:7}]},
+  // ── DynamoDB ──
+  "dynamodb:capacity": {kind:"settings", title:"Read/write capacity",
+    fields:[{k:"billing_mode",label:"Capacity mode",type:"select",options:["PAY_PER_REQUEST","PROVISIONED"]},
+            {k:"read_capacity",label:"Read capacity units",type:"number",default:5},
+            {k:"write_capacity",label:"Write capacity units",type:"number",default:5}]},
+  "dynamodb:encryption": {kind:"settings", title:"Encryption at rest",
+    fields:[{k:"sse_type",label:"Encryption type",type:"select",options:["AWS_OWNED","KMS"]},
+            {k:"kms_key_id",label:"KMS key ID",ph:"alias/aws/dynamodb"}]},
+  "dynamodb:ttl": {kind:"settings", title:"Time to live (TTL)",
+    fields:[{k:"ttl_enabled",label:"Enable TTL",type:"toggle",default:false},
+            {k:"ttl_attribute",label:"TTL attribute name",ph:"expiresAt"}]},
+  "dynamodb:streams": {kind:"settings", title:"DynamoDB streams",
+    fields:[{k:"stream_enabled",label:"Enable stream",type:"toggle",default:false},
+            {k:"stream_view_type",label:"View type",type:"select",
+             options:["NEW_IMAGE","OLD_IMAGE","NEW_AND_OLD_IMAGES","KEYS_ONLY"]}]},
+  "dynamodb:indexes": {kind:"list", title:"Global secondary indexes", singular:"index",
+    fields:[{k:"name",label:"Index name",ph:"gsi-email"},{k:"partition_key",label:"Partition key",ph:"email"},
+            {k:"sort_key",label:"Sort key (optional)"}],
+    columns:[["name","Index"],["partition_key","Partition key"],["sort_key","Sort key"],["status","Status"]]},
+  "dynamodb:backups": {kind:"list", title:"On-demand backups", singular:"backup",
+    fields:[{k:"name",label:"Backup name",ph:"backup-2024-01"}],
+    columns:[["name","Backup"],["status","Status"]]},
+  "dynamodb:pitr": {kind:"settings", title:"Point-in-time recovery",
+    fields:[{k:"pitr_enabled",label:"Enable PITR",type:"toggle",default:false}]},
+  "dynamodb:insights": {kind:"settings", title:"Contributor Insights",
+    fields:[{k:"insights_enabled",label:"Enable Contributor Insights",type:"toggle",default:false}]},
+  // ── SQS ──
+  "sqs:encryption": {kind:"settings", title:"Encryption",
+    fields:[{k:"sqs_managed_sse",label:"Amazon SQS managed SSE",type:"toggle",default:true},
+            {k:"kms_master_key_id",label:"KMS key (if using KMS)",ph:"alias/aws/sqs"}]},
+  // ── Lambda ──
+  "lambda:envVars": {kind:"list", title:"Environment variables", singular:"variable",
+    fields:[{k:"name",label:"Key",ph:"LOG_LEVEL"},{k:"value",label:"Value",ph:"info"}],
+    columns:[["name","Key"],["value","Value"]]},
+  "lambda:versions": {kind:"list", title:"Versions", singular:"version",
+    fields:[{k:"name",label:"Version",ph:"1"},{k:"description",label:"Description"}],
+    columns:[["name","Version"],["description","Description"],["status","Status"]]},
+  "lambda:aliases": {kind:"list", title:"Aliases", singular:"alias",
+    fields:[{k:"name",label:"Alias name",ph:"prod"},{k:"version",label:"Target version",ph:"1"}],
+    columns:[["name","Alias"],["version","Version"],["status","Status"]]},
+  // ── IAM ──
+  "iam:providers": {kind:"list", title:"Identity providers", singular:"provider",
+    fields:[{k:"name",label:"Provider name",ph:"MyOIDC"},
+            {k:"type",label:"Type",ph:"OIDC"},{k:"url",label:"Provider URL",ph:"https://…"}],
+    columns:[["name","Provider"],["type","Type"],["url","URL"],["status","Status"]]},
+  "iam:passwordPolicy": {kind:"settings", title:"Password policy",
+    fields:[{k:"min_length",label:"Minimum length",type:"number",default:8},
+            {k:"require_symbols",label:"Require symbols",type:"toggle",default:true},
+            {k:"require_numbers",label:"Require numbers",type:"toggle",default:true},
+            {k:"require_uppercase",label:"Require uppercase",type:"toggle",default:true},
+            {k:"max_age_days",label:"Max password age (days)",type:"number",default:90}]},
+  "iam:accessAdvisor": {kind:"settings", title:"Access Analyzer",
+    fields:[{k:"analyzer_enabled",label:"Enable analyzer",type:"toggle",default:false},
+            {k:"analyzer_name",label:"Analyzer name",ph:"default-analyzer"}]},
+  // ── S3 ──
+  "s3:lifecycle": {kind:"list", title:"Lifecycle rules", singular:"rule",
+    fields:[{k:"name",label:"Rule name",ph:"expire-logs"},{k:"prefix",label:"Prefix",ph:"logs/"},
+            {k:"expiration_days",label:"Expire after (days)",ph:"90"}],
+    columns:[["name","Rule"],["prefix","Prefix"],["expiration_days","Expire (days)"],["status","Status"]]},
+  "s3:encryption": {kind:"settings", title:"Default encryption",
+    fields:[{k:"sse_algorithm",label:"Encryption type",type:"select",options:["AES256","aws:kms"]},
+            {k:"kms_key_id",label:"KMS key (if aws:kms)",ph:"alias/aws/s3"},
+            {k:"bucket_key_enabled",label:"Bucket key",type:"toggle",default:true}]},
+  "s3:blockPublic": {kind:"settings", title:"Block Public Access",
+    fields:[{k:"block_public_acls",label:"Block public ACLs",type:"toggle",default:true},
+            {k:"ignore_public_acls",label:"Ignore public ACLs",type:"toggle",default:true},
+            {k:"block_public_policy",label:"Block public bucket policies",type:"toggle",default:true},
+            {k:"restrict_public_buckets",label:"Restrict public buckets",type:"toggle",default:true}]},
+  "s3:cors": {kind:"list", title:"Cross-origin resource sharing (CORS)", singular:"rule",
+    fields:[{k:"name",label:"Rule ID",ph:"allow-get"},{k:"allowed_origins",label:"Allowed origins",ph:"*"},
+            {k:"allowed_methods",label:"Allowed methods",ph:"GET,PUT"}],
+    columns:[["name","Rule"],["allowed_origins","Origins"],["allowed_methods","Methods"]]},
+  // ── VPC ──
+  "vpc:natGateways": {kind:"list", title:"NAT gateways", singular:"NAT gateway",
+    fields:[{k:"name",label:"Name",ph:"nat-1"},{k:"subnet_id",label:"Subnet",ph:"subnet-abc"}],
+    columns:[["name","Name"],["subnet_id","Subnet"],["status","Status"]]},
+  "vpc:endpoints": {kind:"list", title:"VPC endpoints", singular:"endpoint",
+    fields:[{k:"name",label:"Name",ph:"s3-endpoint"},{k:"service",label:"Service",ph:"com.amazonaws.us-east-1.s3"}],
+    columns:[["name","Name"],["service","Service"],["status","Status"]]},
+  "vpc:nacls": {kind:"list", title:"Network ACLs", singular:"network ACL",
+    fields:[{k:"name",label:"Name",ph:"nacl-1"}],
+    columns:[["name","Name"],["status","Status"]]},
+  "vpc:flowLogs": {kind:"list", title:"Flow logs", singular:"flow log",
+    fields:[{k:"name",label:"Name",ph:"flow-1"},{k:"destination",label:"Destination",ph:"cloud-watch-logs"},
+            {k:"traffic_type",label:"Traffic type",ph:"ALL"}],
+    columns:[["name","Name"],["destination","Destination"],["traffic_type","Traffic"],["status","Status"]]},
+  // ── S3 (versions) ──
+  "s3:versions": {kind:"list", title:"Object versions", singular:"version",
+    fields:[{k:"name",label:"Version ID",ph:"v1"},{k:"key",label:"Object key",ph:"file.txt"}],
+    columns:[["name","Version ID"],["key","Object key"],["status","Status"]]},
+  // ── SQS (purge = a single toggle-style confirmation setting) ──
+  "sqs:purge": {kind:"settings", title:"Purge messages",
+    fields:[{k:"confirm_purge",label:"Mark queue for purge",type:"toggle",default:false}]},
+  // ── API Gateway sub-resources ──
+  "apigateway:authorizers": {kind:"list", title:"Authorizers", singular:"authorizer",
+    fields:[{k:"name",label:"Name",ph:"jwt-auth"},{k:"type",label:"Type",ph:"JWT"}],
+    columns:[["name","Name"],["type","Type"],["status","Status"]]},
+  "apigateway:models": {kind:"list", title:"Models", singular:"model",
+    fields:[{k:"name",label:"Model name",ph:"Pet"},{k:"content_type",label:"Content type",ph:"application/json"}],
+    columns:[["name","Model"],["content_type","Content type"]]},
+  "apigateway:deployments": {kind:"list", title:"Deployments", singular:"deployment",
+    fields:[{k:"name",label:"Stage",ph:"prod"},{k:"description",label:"Description"}],
+    columns:[["name","Stage"],["description","Description"],["status","Status"]]},
+  "apigateway:logs": {kind:"settings", title:"Logging / tracing",
+    fields:[{k:"access_logging",label:"Access logging",type:"toggle",default:false},
+            {k:"xray_tracing",label:"X-Ray tracing",type:"toggle",default:false},
+            {k:"log_level",label:"Log level",type:"select",options:["OFF","ERROR","INFO"]}]},
+  // ── EventBridge sub-resources ──
+  "eventbridge:targets": {kind:"list", title:"Targets", singular:"target",
+    fields:[{k:"name",label:"Target ID",ph:"target-1"},{k:"arn",label:"Target ARN",ph:"arn:aws:sqs:…"}],
+    columns:[["name","Target"],["arn","ARN"],["status","Status"]]},
+  "eventbridge:eventPattern": {kind:"settings", title:"Event pattern",
+    fields:[{k:"source",label:"Event source",ph:"aws.ec2"},
+            {k:"detail_type",label:"Detail type",ph:"EC2 Instance State-change"}]},
+  "eventbridge:deadletter": {kind:"settings", title:"Dead-letter queue",
+    fields:[{k:"dlq_enabled",label:"Enable DLQ",type:"toggle",default:false},
+            {k:"dlq_arn",label:"DLQ ARN",ph:"arn:aws:sqs:…"},
+            {k:"max_retry_attempts",label:"Max retry attempts",type:"number",default:185}]},
+  "eventbridge:logs": {kind:"settings", title:"Trace logs",
+    fields:[{k:"trace_enabled",label:"Enable trace logging",type:"toggle",default:false}]},
+  // ── EC2 (user data = editable settings) ──
+  "ec2:userData": {kind:"settings", title:"User data",
+    fields:[{k:"user_data",label:"User data script",ph:"#!/bin/bash\n..."}]},
+  // ── EC2 IAM role (instance profile association = editable settings) ──
+  // In AWS you associate/replace an IAM instance profile on a running instance;
+  // modeled here as an editable setting (role ARN + profile name) that persists.
+  "ec2:iam": {kind:"settings", title:"IAM role (instance profile)",
+    fields:[{k:"iam_instance_profile",label:"Instance profile ARN",ph:"arn:aws:iam::123456789012:instance-profile/my-role"},
+            {k:"role_name",label:"Role name",ph:"my-ec2-role"}]},
+  // ── EC2 serial console (account-level access toggle = editable settings).
+  //    The serial OUTPUT itself is a derived read-only stream — rendered by a
+  //    dedicated renderer below the settings form (see renderSerialConsoleTab).
+  "ec2:console": {kind:"serialConsole", title:"EC2 serial console",
+    fields:[{k:"serial_console_access",label:"Serial console access",type:"toggle",default:false}]},
+};
+
+function subresCfg(svc, tab){
+  const key = (svc && svc.key) + ":" + (tab && (tab.key || tab.type));
+  return SUBRES_CATALOG[key] || null;
+}
+
+// ── FUNCTIONAL sub-resource list: list + Create + Delete ──
+async function renderSubResourceTab(svc, full, host, tab, cfg){
+  const parent = itemKey(svc, full);
+  const ns = subNs(svc.key, parent, tab.key || tab.type);
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin:-2px 0 14px"},
+    cfg.title + " for " + (parent || "this resource") + "."));
+  const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap"});
+  const createBtn = el("button",{class:"btn primary"}, icon("add"), "Create " + (cfg.singular || "item"));
+  bar.append(createBtn, el("button",{class:"btn",onclick:paint}, icon("refresh"), "Refresh"));
+  host.append(bar);
+  const formHost = el("div",{}); host.append(formHost);
+  const listHost = el("div",{}); host.append(listHost);
+
+  createBtn.onclick = () => {
+    if (formHost.firstChild) { formHost.innerHTML = ""; return; }
+    const card = el("div",{class:"panel",style:"padding:16px;margin-bottom:14px"});
+    card.append(el("div",{class:"panel-h"}, icon("add"), "New " + (cfg.singular || "item")));
+    const inputs = {};
+    cfg.fields.forEach(f => {
+      const row = el("div",{style:"margin:8px 0;display:grid;grid-template-columns:200px 1fr;gap:10px;align-items:center;max-width:620px"});
+      row.append(el("label",{style:"font-size:13px;color:#16191f"}, f.label));
+      const inp = el("input",{placeholder:f.ph||"",style:"padding:7px;border:1px solid #aab7b8;border-radius:4px"});
+      inputs[f.k] = inp; row.append(inp); card.append(row);
+    });
+    const act = el("div",{style:"margin-top:12px;display:flex;gap:8px"});
+    act.append(el("button",{class:"btn primary",onclick:async()=>{
+      const body = {}; cfg.fields.forEach(f => { const v = inputs[f.k].value.trim(); if (v) body[f.k] = v; });
+      if (!body.name) { toast("Name is required","err"); return; }
+      body.status = "active";
+      const r = await subApi("POST", ns, "create", undefined, body);
+      if (r.ok || [200,201].includes(r.status)) { toast("Created "+body.name); recordNotif("ok","Created "+body.name); formHost.innerHTML=""; paint(); }
+      else toast("Create failed ("+r.status+")","err");
+    }}, "Create"));
+    act.append(el("button",{class:"btn",onclick:()=>{formHost.innerHTML="";}}, "Cancel"));
+    card.append(act); formHost.append(card);
+  };
+
+  async function paint(){
+    listHost.innerHTML = "";
+    const r = await subApi("GET", ns, "list");
+    const items = (r.json && (r.json.items || r.json.value)) || [];
+    if (!items.length) {
+      listHost.append(el("div",{class:"empty"},
+        el("span",{class:"ic material-symbols-outlined"}, (tab && tab.icon) || "list"),
+        el("div",{}, "No " + (cfg.singular || "item") + "s yet."),
+        el("div",{style:"font-size:11.5px;color:#a19f9d;margin-top:6px"},
+          "Use Create " + (cfg.singular || "item") + " to add one.")));
+      return;
+    }
+    const tbl = el("table",{class:"aws",style:"width:100%"});
+    const hr = el("tr",{}); (cfg.columns||[["name","Name"]]).forEach(c => hr.append(el("th",{}, c[1])));
+    hr.append(el("th",{style:"width:70px"}, "")); tbl.append(hr);
+    items.forEach(it => {
+      const tr = el("tr",{});
+      (cfg.columns||[["name","Name"]]).forEach(c => {
+        const v = getPath(it, c[0]);
+        tr.append(el("td",{class:/id|arn/i.test(c[0])?"mono small":""},
+          c[0]==="status" ? stateBadge(v||"active") : String(v ?? "—")));
+      });
+      tr.append(el("td",{}, el("button",{class:"btn del",title:"Delete",onclick:async()=>{
+        if (!confirm("Delete "+it.name+"?")) return;
+        const dr = await subApi("DELETE", ns, "delete", it.name);
+        if (dr.ok || [200,204].includes(dr.status)) { toast("Deleted "+it.name); recordNotif("ok","Deleted "+it.name); paint(); }
+        else toast("Delete failed","err");
+      }}, icon("delete"))));
+      tbl.append(tr);
+    });
+    listHost.append(tbl);
+  }
+  paint();
+}
+
+// ── FUNCTIONAL settings editor: load → edit → save (upsert) → readback ──
+async function renderSettingsTab(svc, full, host, tab, cfg){
+  const parent = itemKey(svc, full);
+  const ns = subNs(svc.key, parent, tab.key || tab.type);
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin:-2px 0 14px"},
+    cfg.title + " for " + (parent || "this resource") + "."));
+  const panel = el("div",{class:"panel"}); host.append(panel);
+
+  // Load current settings: a single "_settings" record in this resource's config
+  // namespace. Absent → fall back to each field's default.
+  async function current(){
+    try {
+      const r = await subApi("GET", ns, "get", "_settings");
+      if (r.ok && r.json && (r.json.ok !== false)) return r.json;
+    } catch(_){}
+    return null;
+  }
+  async function render(){
+    panel.innerHTML = "";
+    panel.append(el("div",{class:"panel-h"}, icon("tune"), cfg.title));
+    const body = el("div",{style:"padding:16px"}); panel.append(body);
+    const cur = (await current()) || {};
+    const inputs = {};
+    cfg.fields.forEach(f => {
+      const row = el("div",{style:"margin:10px 0;display:grid;grid-template-columns:230px 1fr;gap:12px;align-items:center;max-width:640px"});
+      row.append(el("label",{style:"font-size:13px;color:#16191f"}, f.label));
+      let valNow = (cur[f.k] !== undefined) ? cur[f.k] : f.default;
+      if (f.type === "toggle") {
+        const cb = el("input",{type:"checkbox"});
+        cb.checked = (valNow === true || valNow === "true" || valNow === "on");
+        inputs[f.k] = () => cb.checked; row.append(cb);
+      } else if (f.type === "select") {
+        const sel = el("select",{style:"padding:7px;border:1px solid #aab7b8;border-radius:4px"});
+        (f.options||[]).forEach(o => { const opt = el("option",{value:o}, o); if (String(valNow)===o) opt.selected = true; sel.append(opt); });
+        inputs[f.k] = () => sel.value; row.append(sel);
+      } else {
+        const inp = el("input",{type:f.type==="number"?"number":"text",placeholder:f.ph||"",
+          value: valNow!=null ? String(valNow) : "", style:"padding:7px;border:1px solid #aab7b8;border-radius:4px"});
+        inputs[f.k] = () => f.type==="number" ? (inp.value===""?null:Number(inp.value)) : inp.value;
+        row.append(inp);
+      }
+      body.append(row);
+    });
+    const act = el("div",{style:"margin-top:16px;display:flex;gap:8px"});
+    act.append(el("button",{class:"btn primary",onclick:async()=>{
+      const patch = {name:"_settings"};
+      cfg.fields.forEach(f => { patch[f.k] = inputs[f.k](); });
+      // Persist as a single upsert record in the config namespace.
+      const r = await subApi("POST", ns, "create", undefined, patch);
+      // Optionally ALSO push to the resource's real modify op (e.g. RDS Modify).
+      if (cfg.saveToResource && (svc.api_paths||{})[cfg.saveToResource]) {
+        const ap = svc.api_paths[cfg.saveToResource];
+        try { await api(ap.method, fillPath(ap.path,{name:parent}), patch); } catch(_){}
+      }
+      if (r.ok || [200,201].includes(r.status)) { toast(cfg.title + " saved"); recordNotif("ok", cfg.title + " updated"); render(); }
+      else toast("Save failed ("+r.status+")","err");
+    }}, icon("save"), "Save changes"));
+    act.append(el("button",{class:"btn",onclick:render}, "Reset"));
+    body.append(act);
+  }
+  render();
+}
+
+// ── FUNCTIONAL EC2 serial console: editable access setting + derived output ──
+// AWS splits this into (a) an editable account/instance-level "serial console
+// access" toggle (persisted, real), and (b) a derived read-only serial-port
+// OUTPUT stream (the boot log — not user-editable, as in the real cloud). We
+// render BOTH: the toggle rides the standard settings machinery (durable via the
+// generic ResourceStore), and the output is a simulated-but-non-empty boot log
+// seeded from the instance's real attributes.
+async function renderSerialConsoleTab(svc, full, host, tab, cfg){
+  const parent = itemKey(svc, full);
+  const ns = subNs(svc.key, parent, tab.key || tab.type);
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin:-2px 0 14px"},
+    cfg.title + " for " + (parent || "this instance") + "."));
+
+  // (a) Editable access toggle — load → edit → save(upsert) → readback (durable).
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  async function current(){
+    try { const r = await subApi("GET", ns, "get", "_settings");
+          if (r.ok && r.json && (r.json.ok !== false)) return r.json; } catch(_){}
+    return null;
+  }
+  async function renderAccess(){
+    panel.innerHTML = "";
+    panel.append(el("div",{class:"panel-h"}, icon("tune"), "Serial console access"));
+    const b = el("div",{style:"padding:16px"}); panel.append(b);
+    const cur = (await current()) || {};
+    const valNow = cur.serial_console_access;
+    const on = (valNow === true || valNow === "true" || valNow === "on");
+    const row = el("div",{style:"margin:10px 0;display:grid;grid-template-columns:230px 1fr;gap:12px;align-items:center;max-width:640px"});
+    row.append(el("label",{style:"font-size:13px;color:#16191f"}, "Serial console access"));
+    const cb = el("input",{type:"checkbox"}); cb.checked = on; row.append(cb); b.append(row);
+    const act = el("div",{style:"margin-top:16px;display:flex;gap:8px"});
+    act.append(el("button",{class:"btn primary",onclick:async()=>{
+      const r = await subApi("POST", ns, "create", undefined,
+        {name:"_settings", serial_console_access: cb.checked});
+      if (r.ok || [200,201].includes(r.status)) {
+        toast("Serial console access " + (cb.checked?"enabled":"disabled"));
+        recordNotif("ok","Serial console access " + (cb.checked?"enabled":"disabled") + " for " + parent);
+        renderAccess();
+      } else toast("Save failed ("+r.status+")","err");
+    }}, icon("save"), "Save changes"));
+    act.append(el("button",{class:"btn",onclick:renderAccess}, "Reset"));
+    b.append(act);
+  }
+  await renderAccess();
+
+  // (b) Derived read-only serial OUTPUT stream (the boot log). Non-empty,
+  // seeded from the instance's real attributes. Read-only — matches AWS, where
+  // GetConsoleOutput returns a system-produced log you cannot edit.
+  const out = el("div",{class:"panel",style:"margin-top:16px"}); host.append(out);
+  out.append(el("div",{class:"panel-h"}, icon("terminal"), "Serial port output",
+    el("span",{style:"margin-left:auto;font-size:11px;color:#a19f9d;font-weight:400"}, "Read-only (system-generated)")));
+  const amiLine = full.image_id || full.ami || "ami-0abcdef1234567890";
+  const itype = full.instance_type || "t3.micro";
+  const ip = full.private_ip || "10.0.0.10";
+  const host4 = (full.public_dns || ("ip-" + ip.replace(/\./g,"-"))) ;
+  const lines = [
+    "[    0.000000] Booting " + (parent || "instance") + " (" + itype + ")",
+    "[    0.004211] Linux version 6.1.0-aws (buildd@aws) ",
+    "[    0.512004] Loading AMI " + amiLine,
+    "[    1.204551] cloud-init: Cloud-init v. 23.4 running 'init-local'",
+    "[    2.880113] cloud-init: Network configured: " + ip + " (" + host4 + ")",
+    "[    3.410229] systemd[1]: Reached target Multi-User System.",
+    "[    4.001872] " + (parent || "instance") + " login: ",
+  ];
+  out.append(el("pre",{class:"json",style:"background:#0f1b2d;color:#d6e2f0;max-height:320px;overflow:auto"},
+    lines.join("\n")));
+}
+
+function renderGenericTab(svc, full, host, tab){
+  // FUNCTIONAL engine first: a catalog-matched tab becomes a working sub-resource
+  // browser or an editable settings form (never a read-only empty state).
+  const cfg = subresCfg(svc, tab);
+  if (cfg) {
+    const fn = cfg.kind === "list" ? renderSubResourceTab
+             : cfg.kind === "serialConsole" ? renderSerialConsoleTab
+             : renderSettingsTab;
+    Promise.resolve(fn(svc, full, host, tab, cfg)).catch(e =>
+      host.append(el("div",{class:"alert err"}, "Tab error: " + e.message)));
+    return;
+  }
+  const label = (tab && (tab.label || tab.key)) || "Settings";
+  const lk = label.toLowerCase();
+  const key = (tab && (tab.key || tab.type) || "").toLowerCase();
+  const desc = TAB_DESC[lk] || TAB_DESC[key]
+    || (label + " for this " + String(svc.label || "resource").replace(/s$/,"").toLowerCase() + ".");
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin:-2px 0 14px"}, desc));
+  const aliases = TAB_ALIASES[lk] || TAB_ALIASES[key] || [key || lk];
+  let data = null;
+  for (const a of aliases) {
+    const v = getPath(full, a);
+    const empty = v == null || (Array.isArray(v) && !v.length)
+      || (typeof v === "object" && !Array.isArray(v) && v && !Object.keys(v).length);
+    if (!empty) { data = v; break; }
+  }
+  if (Array.isArray(data)) {
+    const wrap = el("div",{});
+    data.forEach((row) => wrap.append(_kvGrid(Object.entries(
+      (row && typeof row === "object") ? row : {value: row}))));
+    host.append(wrap);
+  } else if (data && typeof data === "object") {
+    host.append(_kvGrid(Object.entries(data)));
+  } else if (data != null) {
+    host.append(_kvGrid([[label, String(data)]]));
+  } else {
+    host.append(el("div",{class:"empty"},
+      el("span",{class:"ic material-symbols-outlined"}, (tab && tab.icon) || "tune"),
+      el("div",{}, "No " + label.toLowerCase() + " configured."),
+      el("div",{style:"font-size:11.5px;color:#a19f9d;margin-top:6px"},
+        "Currently at defaults. " + desc)));
+  }
+}
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──
 // Renders into #disk-widget-slot above the breadcrumb. Auto-refreshes

@@ -32,7 +32,7 @@ const CORES = [
   "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "vpc_core.py",
   "azure_sql_core.py", "azure_iam_core.py",
   "aws_wire_router.py",
-  "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)
+  "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)
 ];
 
 const bc = new BroadcastChannel("nano-relay");

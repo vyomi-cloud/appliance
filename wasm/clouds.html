@@ -2367,15 +2367,23 @@
         // live census savings (fresh only while a console is open), else $0.00.
         const _NANO_RATE = {s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,'microsoft.compute/virtualmachines':30.37,'microsoft.sql/servers':4.99,'microsoft.storage/storageaccounts':0.50,'microsoft.documentdb/databaseaccounts':24.48,'microsoft.web/sites':0.20,'microsoft.servicebus/namespaces':9.81,'microsoft.keyvault/vaults':0.03};
         const _savingsByProvider = { aws: 0, gcp: 0, azure: 0 };
+        const _byServiceByProvider = {};
         try {
           const hd = await (await fetch('/api/runtime/host-distribution')).json();
           const provs = hd.providers || {};
           for (const p of ['aws','gcp','azure']) {
             const bs = (provs[p] || {}).by_service || {};
+            if (bs && Object.keys(bs).length) _byServiceByProvider[p] = bs;
             let m = 0; for (const k in bs) { m += (Number(bs[k])||0) * (_NANO_RATE.hasOwnProperty(k) ? _NANO_RATE[k] : 1.0); }
             _savingsByProvider[p] = m;
           }
         } catch (_) {}
+        // Persist the counterfactual real-cloud $/mo + per-service census for this
+        // account so the savings cards (per-service breakdown included) survive a
+        // cold load with no console open. The SW reads the license JWT and PUTs it
+        // authenticated; best-effort. Only push when we actually have a census, so
+        // an empty Spaces load doesn't clobber a previously-persisted estimate.
+        try{ if(Object.keys(_byServiceByProvider).length){ var _bp={aws:Math.round((_savingsByProvider.aws||0)*100),gcp:Math.round((_savingsByProvider.gcp||0)*100),azure:Math.round((_savingsByProvider.azure||0)*100)}; var _tot=_bp.aws+_bp.gcp+_bp.azure; fetch('/api/nano/cost-estimate/push',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({monthly_cents:_tot,by_provider:_bp,by_service:_byServiceByProvider,rate_version:'2026.10'})}).catch(function(){}); } }catch(_){}
         grid.innerHTML = spaces.map(s => {
           const provider = (s.provider || 'aws').toLowerCase();
           const isActive = s.space_id === active;

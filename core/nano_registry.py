@@ -1,5 +1,3 @@
-# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
-# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
 """Single in-context store registry (Fix #2, Python half).
 
 ONE source of truth both the console adapter (providers/aws_core_adapter) and the
@@ -28,6 +26,7 @@ from core.gcp_firestore_core import FirestoreStore
 from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
+from core.nano_events import EventStore
 
 _REG: dict | None = None
 
@@ -62,5 +61,9 @@ def get() -> dict:
             "az_kvkeys": InMemoryKeyStore(),
             "az_queue":  AzureQueueStore(),
             "az_sb":     InMemoryMessagingStore(),   # Service Bus (router-only today)
+            # ── cross-cloud ── per-resource cloudsim event / activity log. DURABLE
+            # + bounded: recorded on every mutating dispatch; persisted + cross-tab
+            # synced via nano_persist (public dict attr `by_resource`, union-merge).
+            "events": EventStore(),
         }
     return _REG
