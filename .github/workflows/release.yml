@@ -4,7 +4,8 @@ name: Release
 #   1. Build the source tarball + .deb + .rpm
 #   2. Publish a GitHub Release with all artifacts attached
 #   3. Fan out to downstream package managers (Brew tap, Snap Store,
-#      winget, Scoop) — each one is OPT-IN via its secret being set
+#      Scoop) — each one is OPT-IN via its secret being set
+#      (winget dropped 2026-10-06 — see the "Winget PR submission — REMOVED" note)
 #
 # Release Candidate tags (v*-rc*, v*-beta*, v*-alpha*) are handled by
 # the separate release-candidate.yml workflow, which builds the SAME
@@ -19,7 +20,6 @@ name: Release
 #
 #   HOMEBREW_TAP_TOKEN        — PAT (contents:write) on the homebrew-tap repo
 #   SNAPCRAFT_STORE_CREDENTIALS — output of `snapcraft export-login`
-#   WINGET_TOKEN              — PAT (public_repo) for opening PRs to microsoft/winget-pkgs
 #   SCOOP_BUCKET_TOKEN        — PAT (contents:write) on the scoop-bucket repo
 #
 # Note: Chocolatey was dropped 2026-06-11. The community-feed review
@@ -64,28 +64,24 @@ jobs:
     outputs:
       has_brew:   ${{ steps.check.outputs.has_brew }}
       has_snap:   ${{ steps.check.outputs.has_snap }}
-      has_winget: ${{ steps.check.outputs.has_winget }}
       has_scoop:  ${{ steps.check.outputs.has_scoop }}
     steps:
       - id: check
         env:
           BREW:   ${{ secrets.HOMEBREW_TAP_TOKEN }}
           SNAP:   ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-          WINGET: ${{ secrets.WINGET_TOKEN || secrets.SCOOP_BUCKET_TOKEN }}
           SCOOP:  ${{ secrets.SCOOP_BUCKET_TOKEN }}
         run: |
           mask() { [ -n "$1" ] && echo true || echo false; }
           {
             echo "has_brew=$(mask "$BREW")"
             echo "has_snap=$(mask "$SNAP")"
-            echo "has_winget=$(mask "$WINGET")"
             echo "has_scoop=$(mask "$SCOOP")"
           } >> "$GITHUB_OUTPUT"
           {
             echo "## Downstream targets"
             echo "- Homebrew tap : $(mask "$BREW")"
             echo "- Snap Store   : $(mask "$SNAP")"
-            echo "- Winget       : $(mask "$WINGET")"
             echo "- Scoop bucket : $(mask "$SCOOP")"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -397,23 +393,14 @@ jobs:
           snap: ${{ steps.build-snap.outputs.snap }}
           release: stable
 
-  # ── Winget PR submission ────────────────────────────────────────────────
-  # As of v2.1.0 the release ships a real MSI (see windows-msi + github-release),
-  # so winget-releaser can generate the manifest (it auto-computes the MSI
-  # sha256 + ProductCode from the attached release asset). Gated behind
-  # WINGET_TOKEN; runs only after the MSI is attached to the Release.
-  winget-submit:
-    needs: [preflight, build, github-release]
-    if: needs.preflight.outputs.has_winget == 'true'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: vedantmgoyal2009/winget-releaser@v2
-        with:
-          identifier: Vyomi.Vyomi
-          version: ${{ needs.build.outputs.version }}
-          installers-regex: '\.msi$'
-          token: ${{ secrets.WINGET_TOKEN || secrets.SCOOP_BUCKET_TOKEN }}
+  # ── Winget PR submission — REMOVED ──────────────────────────────────────
+  # Dropped: submissions to the official microsoft/winget-pkgs catalog require a
+  # manual moderator review + CLA + installation-validation pass, and the headless
+  # CLI MSI reliably trips automated executable-validation. Not worth gating/
+  # red-badging every release. Windows distribution is served by Scoop (our own
+  # bucket, auto-published below — no review) + the direct MSI on the GitHub
+  # Release. Revisit winget later via our own account/PAT + a one-time manual
+  # submission; the packaging/winget/ manifests are kept for that.
 
   # ── Scoop bucket auto-bump ──────────────────────────────────────────────
   # Updates cloud-learn.json in the vyomi-cloud/scoop-bucket repo with

@@ -121,7 +121,7 @@ fetches the same Docker images.
 | Fedora / RHEL | `sudo dnf install cloud-learn && cloud-learn up` |
 | Ubuntu (Snap) | `sudo snap install cloud-learn --classic` |
 | Windows (Scoop) | `scoop bucket add cloudlearn https://github.com/vyomi-cloud/scoop-bucket && scoop install cloud-learn` |
-| Windows (winget) | `winget install Vyomi.Vyomi` _(awaiting MSI)_ |
+| Windows (MSI) | Download `cloud-learn-<ver>-x64.msi` from the [GitHub Release](https://github.com/vyomi-cloud/appliance/releases/latest) and run it |
 
 Use these if you need the Multipass-VM isolation. The `curl-bash` path
 above is simpler if you already have Docker.
