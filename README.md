@@ -67,9 +67,19 @@ First-time browsers land on `/pricing` to pick a tier. After that, the URL you a
 ```python
 # Python (boto3) — AWS
 import boto3
-s3 = boto3.client("s3", endpoint_url="http://localhost:9000")
+s3 = boto3.client("s3", endpoint_url="http://localhost:9000",
+                  aws_access_key_id="test", aws_secret_access_key="test",
+                  region_name="us-east-1")
 s3.create_bucket(Bucket="my-bucket")
 s3.put_object(Bucket="my-bucket", Key="hello.txt", Body=b"world")
+```
+
+```bash
+# AWS CLI — dummy creds + region are required; AWS_PAGER="" stops CLI v2's
+# pager from swallowing short output
+export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=""
+aws --endpoint-url http://localhost:9000 s3 ls
+aws --endpoint-url http://localhost:9000 rds describe-db-instances
 ```
 
 ```java

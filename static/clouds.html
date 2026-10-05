@@ -1243,7 +1243,7 @@
         var urlEl = document.getElementById('cx-url'), exEl = document.getElementById('cx-ex'), copyBtn = document.getElementById('cx-copy');
         var _url = null, _k = 'cli';
         function ex(u){ return {
-          cli: 'aws --endpoint-url ' + u + ' s3 ls\naws --endpoint-url ' + u + ' dynamodb list-tables',
+          cli: 'export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=""\naws --endpoint-url ' + u + ' s3 ls\naws --endpoint-url ' + u + ' dynamodb list-tables',
           sdk: 'import boto3\ns3 = boto3.client(\n  "s3", endpoint_url="' + u + '",\n  aws_access_key_id="test", aws_secret_access_key="test",\n  region_name="us-east-1")\nprint(s3.list_buckets())',
           curl: 'curl ' + u + '/            # S3 ListBuckets'
         }; }
@@ -1589,7 +1589,7 @@
     // Curated (not exhaustive) — the "Full per-service reference" link covers all.
     var CLOUDS = [
       { id:'aws', name:'AWS', icon:'cloud', color:'#ff9900',
-        setup:'Any region + dummy creds (aws_access_key_id=test, secret=test).' },
+        setup:'Dummy creds + any region, and disable the CLI pager: export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=""' },
       { id:'gcp', name:'Google Cloud', icon:'cloud_queue', color:'#4285f4',
         setup:'First: gcloud config set auth/disable_credentials true && gcloud config set core/project gcp-dev',
         nanoNote:'On Nano, GCP runs inside the in-browser console — it is NOT exposed over the AWS relay tunnel. These external examples apply to the appliance (Lite/Pro/Max).' },
@@ -1687,7 +1687,12 @@
       }
       var endpoint = isNano ? (ls('nano_relay_external') || derived()) : location.origin;
       function sub(str){ return String(str).replace(/\{EPHOST\}/g, endpoint.replace(/^https?:\/\//,'')).replace(/\{EP\}/g, endpoint); }
-      function snip(s){ return sub(s[tool]); }
+      // AWS CLI snippets must be paste-and-run: the CLI refuses to sign without
+      // creds + region, and CLI v2's pager can swallow short output (LESS=-F
+      // without -X), which looked like "rds describe-db-instances prints nothing".
+      var AWS_CLI_ENV = 'export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=""\n';
+      function code(s, k){ var c = sub(s[k]); return (s.cloud==='aws' && k==='cli') ? AWS_CLI_ENV + c : c; }
+      function snip(s){ return code(s, tool); }
 
       // ── Full-instructions dialog (every transport for one service) ──────
       var modal = document.getElementById('usage-modal');
@@ -1701,11 +1706,11 @@
         body.innerHTML = TRANSPORTS.map(function(t){
           return '<div class="um-sec"><div class="um-sec-head"><span class="material-icons">'+t.icon+'</span>'+t.label
             + '<button class="um-copy" type="button" data-k="'+t.k+'">Copy</button></div>'
-            + '<pre class="u-code"><code>'+esc(sub(s[t.k]))+'</code></pre></div>';
+            + '<pre class="u-code"><code>'+esc(code(s, t.k))+'</code></pre></div>';
         }).join('');
         body.querySelectorAll('.um-copy').forEach(function(b){
           b.onclick = function(){
-            var txt = sub(s[b.dataset.k]);
+            var txt = code(s, b.dataset.k);
             if(navigator.clipboard) navigator.clipboard.writeText(txt).then(function(){ b.textContent='Copied'; setTimeout(function(){ b.textContent='Copy'; },1200); });
           };
         });
