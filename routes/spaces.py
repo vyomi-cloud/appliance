@@ -141,6 +141,13 @@ def _space_payload(space: dict) -> dict:
     payload.setdefault("rds_count", 0)
     payload.setdefault("sqs_count", 0)
     payload.setdefault("dynamodb_count", 0)
+    # ── Per-space TTL (computed server-side so the UI has a reliable anchor) ──
+    from core import vyomi_platform as _vp
+    payload.setdefault("created_at", "")
+    payload.setdefault("ttl_seconds", 0)
+    payload.setdefault("expires_at", None)
+    payload["ttl_remaining_seconds"] = _vp.ttl_remaining_seconds(payload)
+    payload["ttl_expired"] = _vp.ttl_is_expired(payload)
     cloudsim = payload.get("cloudsim")
     if isinstance(cloudsim, dict):
         cloudsim.pop("policy", None)
@@ -189,6 +196,16 @@ def register(app: FastAPI) -> None:
         # TENANT FILTER: a tenant can only see its own spaces.
         tid = _active_tenant_id()
         spaces = [s for s in all_spaces if (s.get("tenant_id") or DEFAULT_TENANT_ID) == tid]
+        # LAZY TTL ENFORCEMENT: shut down + mark expired any lapsed space so
+        # TTL bites without a background reaper. Best-effort — never 500 the list.
+        for _s in spaces:
+            try:
+                _updated = PLATFORM.expire_if_due(_s.get("space_id", ""))
+                if isinstance(_updated, dict):
+                    _s.clear()
+                    _s.update(_updated)
+            except Exception:
+                pass
         ss = _spaces_state()
         active_id = ss.get("active_space_id", "")
         active_space_dict = ss.get("spaces", {}).get(active_id, {}) if active_id else {}
@@ -229,6 +246,12 @@ def register(app: FastAPI) -> None:
     def api_get_space(space_id: str):
         _srv()._refresh_cloudsim_gcp_summary()
         space = _require_tenant_space(space_id)
+        # LAZY TTL ENFORCEMENT (best-effort — never 500 the fetch).
+        try:
+            PLATFORM.expire_if_due(space_id)
+            space = _require_tenant_space(space_id)
+        except Exception:
+            pass
         return {"space": _space_payload(space)}
 
     @app.post("/api/spaces")
@@ -326,6 +349,49 @@ def register(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="SimulationSpaceNotFound")
         _record_usage("space.archive", {"space_id": space_id})
         return {"message": "Simulation space archived", "space": _space_payload(space)}
+
+    @app.post("/api/spaces/{space_id}/renew")
+    def api_renew_space(space_id: str, payload: dict[str, Any] | None = None):
+        """Admin: reset a space's TTL. Body {"ttl_seconds": <int>} (default 8h)."""
+        _require_tenant_space(space_id)
+        # ADMIN GATE: TTL renewal is an admin/enterprise capability. We gate on
+        # the enterprise tier (the only admin-grade tier the appliance knows).
+        # TODO: swap for a dedicated is_admin/role check if/when the appliance
+        # grows a real RBAC model beyond tier-based gating.
+        from core import vyomi_platform as _vp
+        try:
+            tier = str(_active_tier() or "").strip().lower()
+        except Exception:
+            tier = ""
+        if tier not in ("enterprise", "max"):
+            raise HTTPException(status_code=403, detail={
+                "ok": False, "code": "ttl_renew_admin_only",
+                "reason": "renewing a space TTL requires an admin (enterprise) tier",
+                "active_tier": tier or "unknown",
+            })
+        ttl_seconds = _vp.DEFAULT_TTL_SECONDS
+        if isinstance(payload, dict) and payload.get("ttl_seconds") is not None:
+            try:
+                ttl_seconds = int(payload.get("ttl_seconds"))
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="ttl_seconds must be an integer")
+        try:
+            space = PLATFORM.renew_ttl(space_id, ttl_seconds)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="SimulationSpaceNotFound")
+        _record_usage("space.renew", {"space_id": space_id, "ttl_seconds": ttl_seconds})
+        return {"message": "Simulation space TTL renewed", "space": _space_payload(space)}
+
+    @app.post("/api/spaces/{space_id}/shutdown")
+    def api_shutdown_space(space_id: str):
+        """Force-shut-down a space (stop runtimes) and mark status=shutdown."""
+        _require_tenant_space(space_id)
+        try:
+            space = PLATFORM.force_shutdown(space_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="SimulationSpaceNotFound")
+        _record_usage("space.shutdown", {"space_id": space_id})
+        return {"message": "Simulation space shut down", "space": _space_payload(space)}
 
     @app.delete("/api/spaces/{space_id}")
     def api_delete_space(space_id: str):

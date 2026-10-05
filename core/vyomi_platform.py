@@ -17,7 +17,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Optional
 
 from core.pack_catalog import CORE_PACK_IDS
@@ -26,6 +26,67 @@ from core import state_integrity
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+# ── Per-space TTL ────────────────────────────────────────────────────────────
+# Default 8h. ttl_seconds == 0 (or missing) means "no expiry / unlimited" so
+# existing persistent spaces are never auto-shut-down.
+DEFAULT_TTL_SECONDS = 28800  # 8 hours
+
+
+def _parse_iso(ts: str | None) -> datetime | None:
+    """Parse an ISO-8601 UTC timestamp (…Z or +00:00) to an aware datetime."""
+    if not ts:
+        return None
+    try:
+        raw = str(ts).strip().replace("Z", "+00:00")
+        dt = datetime.fromisoformat(raw)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def _ttl_from_seconds(created_at: str, ttl_seconds: int) -> str | None:
+    """expires_at = created_at + ttl_seconds, or None when ttl<=0."""
+    if not ttl_seconds or ttl_seconds <= 0:
+        return None
+    base = _parse_iso(created_at) or datetime.now(timezone.utc)
+    return (base + timedelta(seconds=int(ttl_seconds))).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def ttl_is_expired(space: dict) -> bool:
+    """True iff the space has a positive TTL and its deadline has passed."""
+    if not isinstance(space, dict):
+        return False
+    try:
+        ttl_seconds = int(space.get("ttl_seconds") or 0)
+    except Exception:
+        ttl_seconds = 0
+    if ttl_seconds <= 0:
+        return False
+    expires = _parse_iso(space.get("expires_at"))
+    if expires is None:
+        return False
+    return datetime.now(timezone.utc) > expires
+
+
+def ttl_remaining_seconds(space: dict) -> int | None:
+    """Seconds until expiry (>=0), or None when the space has no TTL."""
+    if not isinstance(space, dict):
+        return None
+    try:
+        ttl_seconds = int(space.get("ttl_seconds") or 0)
+    except Exception:
+        ttl_seconds = 0
+    if ttl_seconds <= 0:
+        return None
+    expires = _parse_iso(space.get("expires_at"))
+    if expires is None:
+        return None
+    delta = (expires - datetime.now(timezone.utc)).total_seconds()
+    return max(0, int(delta))
 
 
 def _appliance_mode_enabled() -> bool:
@@ -849,6 +910,14 @@ class FirestoreEngine:
         region = str(spec.get("region") or settings.get("default_region", "us-east-1")).strip() or "us-east-1"
         space_id = str(spec.get("space_id") or f"space-{uuid.uuid4().hex[:12]}")
         now = _now()
+        # Per-space TTL. Default 8h; ttl_seconds==0/missing => no expiry.
+        try:
+            ttl_seconds = int(spec.get("ttl_seconds", DEFAULT_TTL_SECONDS))
+        except (TypeError, ValueError):
+            ttl_seconds = DEFAULT_TTL_SECONDS
+        if ttl_seconds < 0:
+            ttl_seconds = 0
+        expires_at = _ttl_from_seconds(now, ttl_seconds)
         estimate = self.estimate_space_cost(
             {
                 "provider": provider,
@@ -873,6 +942,8 @@ class FirestoreEngine:
             "owner_id": spec.get("owner_id") or "local-user",
             "created_at": now,
             "updated_at": now,
+            "ttl_seconds": ttl_seconds,
+            "expires_at": expires_at,
             "cloudsim_runtime_id": f"cloudsim-{space_id}",
             "lxd_project_name": f"cl-{space_id}",
             "active_region": region,
@@ -1980,6 +2051,81 @@ class VyomiPlatform:
             self.cloudsim.delete_space(space_id)
         except Exception:
             pass
+
+    # ── Per-space TTL ────────────────────────────────────────────────────────
+
+    def _space_ref(self, space_id: str) -> dict:
+        """Live (mutable) space dict from kernel state; raises KeyError if absent."""
+        space = self.kernel._spaces_state().get("spaces", {}).get(space_id)
+        if not isinstance(space, dict):
+            raise KeyError(space_id)
+        return space
+
+    @staticmethod
+    def is_expired(space: dict) -> bool:
+        return ttl_is_expired(space)
+
+    def renew_ttl(self, space_id: str, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> dict:
+        """Reset the TTL: expires_at = now + ttl_seconds, clear expired/shutdown
+        status back to running, and persist. ttl_seconds<=0 => no expiry."""
+        space = self._space_ref(space_id)
+        try:
+            ttl_seconds = int(ttl_seconds)
+        except (TypeError, ValueError):
+            ttl_seconds = DEFAULT_TTL_SECONDS
+        if ttl_seconds < 0:
+            ttl_seconds = 0
+        now = _now()
+        space["ttl_seconds"] = ttl_seconds
+        space["expires_at"] = _ttl_from_seconds(now, ttl_seconds)
+        # A renew revives a space that TTL (or a manual shutdown) had stopped.
+        if str(space.get("status", "")).lower() in ("expired", "shutdown", "paused"):
+            space["status"] = "running"
+            try:
+                self.cloudsim.resume_space(space_id)
+            except Exception:
+                pass
+        space["updated_at"] = now
+        self.persist()
+        return copy.deepcopy(space)
+
+    def force_shutdown(self, space_id: str) -> dict:
+        """Stop the space's runtimes (reuse the pause path) and mark it shutdown."""
+        space = self._space_ref(space_id)
+        # Reuse the existing stop path so runtimes/engine are halted.
+        try:
+            self.cloudsim.pause_space(space_id)
+        except Exception:
+            pass
+        space["status"] = "shutdown"
+        space["updated_at"] = _now()
+        self.persist()
+        return copy.deepcopy(space)
+
+    def expire_if_due(self, space_id: str) -> dict | None:
+        """Best-effort lazy enforcement: if a space's TTL has lapsed and it is
+        still active, force-shut it down and mark status='expired'. Returns the
+        updated space dict when it acted, else None. Never raises."""
+        try:
+            space = self._space_ref(space_id)
+        except KeyError:
+            return None
+        try:
+            if not ttl_is_expired(space):
+                return None
+            status = str(space.get("status", "")).lower()
+            if status in ("expired", "shutdown", "archived"):
+                return None
+            try:
+                self.cloudsim.pause_space(space_id)
+            except Exception:
+                pass
+            space["status"] = "expired"
+            space["updated_at"] = _now()
+            self.persist()
+            return copy.deepcopy(space)
+        except Exception:
+            return None
 
     def cloudsim_current(self) -> dict:
         try:

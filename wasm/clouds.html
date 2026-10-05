@@ -151,6 +151,26 @@
     }
     .space-savings-track i { display: block; height: 100%; background: linear-gradient(90deg,#16a34a,#22c55e); border-radius: 999px; }
 
+    .space-ttl {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+      margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0,0,0,0.06);
+    }
+    .ttl-timer { font-size: 12px; font-weight: 600; color: #475569; white-space: nowrap; }
+    .ttl-timer.ttl-amber { color: #b45309; }
+    .ttl-timer.ttl-red { color: #dc2626; }
+    .ttl-timer.ttl-expired { color: #991b1b; font-weight: 700; }
+    .space-ttl-actions { margin-left: auto; display: flex; gap: 6px; }
+    .ttl-btn {
+      font-size: 11px; font-weight: 600; cursor: pointer; padding: 3px 8px;
+      border-radius: 6px; border: 1px solid #d1d5db; background: #fff; color: #374151;
+    }
+    .ttl-btn:hover { background: #f3f4f6; }
+    .ttl-btn-shutdown { border-color: #fca5a5; color: #b91c1c; }
+    .ttl-btn-shutdown:hover { background: #fef2f2; }
+    .ttl-btn-renew { border-color: #93c5fd; color: #1d4ed8; }
+    .ttl-btn-renew:hover { background: #eff6ff; }
+    .ttl-admin-tag { font-weight: 500; font-size: 10px; opacity: 0.75; }
+
     .empty-spaces {
       text-align: center; padding: 24px;
       background: #f7f8fc; border: 1px dashed #cbd5e1; border-radius: 12px;
@@ -2331,8 +2351,84 @@
     })();
 
     // ── Fetch + render existing spaces ───────────────────────────────
+    // ── Per-space TTL (live countdown) ──────────────────────────────────────
+    // A SINGLE interval ticks every TTL badge on the grid; cleared+restarted on
+    // each render so no timers leak when the grid re-renders.
+    let _ttlTimer = null;
+    function _fmtDuration(secs) {
+      secs = Math.max(0, Math.floor(secs));
+      const d = Math.floor(secs / 86400); secs -= d * 86400;
+      const h = Math.floor(secs / 3600);  secs -= h * 3600;
+      const m = Math.floor(secs / 60);    const s = secs - m * 60;
+      if (d > 0) return d + 'd ' + h + 'h';
+      if (h > 0) return h + 'h ' + m + 'm';
+      if (m > 0) return m + 'm ' + s + 's';
+      return s + 's';
+    }
+    function _tickTtlBadges() {
+      const badges = document.querySelectorAll('.ttl-timer[data-expires]');
+      badges.forEach(function(el) {
+        const expires = el.getAttribute('data-expires');
+        if (!expires) { el.textContent = '∞ No expiry'; el.className = 'ttl-timer'; return; }
+        const remain = Math.floor((Date.parse(expires) - Date.now()) / 1000);
+        if (remain <= 0) {
+          el.textContent = '⛔ Expired / shut down';
+          el.className = 'ttl-timer ttl-expired';
+          return;
+        }
+        let cls = 'ttl-timer';
+        if (remain < 600) cls += ' ttl-red';          // < 10m
+        else if (remain < 3600) cls += ' ttl-amber';   // < 1h
+        el.className = cls;
+        el.textContent = '⏳ Expires in ' + _fmtDuration(remain);
+      });
+    }
+    function _startTtlTimer() {
+      if (_ttlTimer) { clearInterval(_ttlTimer); _ttlTimer = null; }
+      _tickTtlBadges();
+      _ttlTimer = setInterval(_tickTtlBadges, 1000);
+    }
+    function ttlBadgeHtml(s) {
+      const ttl = Number(s.ttl_seconds || 0);
+      if (!ttl || ttl <= 0) return '<span class="ttl-timer">∞ No expiry</span>';
+      const exp = s.expires_at || '';
+      if ((s.ttl_expired === true) || (s.status === 'expired') || (s.status === 'shutdown')) {
+        return '<span class="ttl-timer ttl-expired">⛔ Expired / shut down</span>';
+      }
+      return '<span class="ttl-timer" data-expires="' + exp + '"></span>';
+    }
+    async function forceShutdownSpace(spaceId, ev) {
+      if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+      if (!confirm('Force shutdown this space? Running runtimes will be stopped.')) return;
+      try {
+        const r = await fetch('/api/spaces/' + spaceId + '/shutdown', { method: 'POST' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+      } catch (e) { alert("Couldn't shut down space: " + e.message); }
+      if (window.loadSpaces) loadSpaces();
+    }
+    async function renewSpaceTtl(spaceId, ev) {
+      if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+      const hrs = prompt('Renew TTL — hours from now (blank = 8h default):', '8');
+      if (hrs === null) return;
+      const body = {};
+      const n = parseFloat(hrs);
+      if (hrs.trim() !== '' && !isNaN(n) && n > 0) body.ttl_seconds = Math.round(n * 3600);
+      try {
+        const r = await fetch('/api/spaces/' + spaceId + '/renew', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+          let detail = ''; try { detail = (await r.json()).detail; } catch (_) {}
+          if (r.status === 403) throw new Error('Admin (enterprise) tier required to renew TTL.');
+          throw new Error((detail && (detail.reason || detail)) || ('HTTP ' + r.status));
+        }
+      } catch (e) { alert("Couldn't renew TTL: " + e.message); }
+      if (window.loadSpaces) loadSpaces();
+    }
+
     async function loadSpaces() {
       const grid = document.getElementById('spaces-grid');
+      if (_ttlTimer) { clearInterval(_ttlTimer); _ttlTimer = null; }  // no leaked timers on re-render
       try {
         const r = await fetch('/api/spaces');
         const d = await r.json();
@@ -2416,9 +2512,21 @@
                 ${ savings > 0 ? `<span class="space-savings-yr">~$${ (savings * 12).toFixed(0) }/yr</span>` : '' }
                 <span class="space-savings-track"><i style="width:${ savingsBar }%"></i></span>
               </div>
+              <div class="space-ttl">
+                ${ ttlBadgeHtml(s) }
+                <span class="space-ttl-actions">
+                  <button type="button" class="ttl-btn ttl-btn-shutdown"
+                          onclick="forceShutdownSpace('${ s.space_id }', event)"
+                          title="Force shutdown — stop this space's runtimes now">Force shutdown</button>
+                  <button type="button" class="ttl-btn ttl-btn-renew"
+                          onclick="renewSpaceTtl('${ s.space_id }', event)"
+                          title="Renew TTL (admin)">Renew TTL <span class="ttl-admin-tag">(admin)</span></button>
+                </span>
+              </div>
             </a>
           `;
         }).join('');
+        _startTtlTimer();
       } catch (e) {
         grid.innerHTML = `<div class="empty-spaces">Couldn't load spaces: ${ e.message }</div>`;
         grid.style.gridTemplateColumns = '1fr';
