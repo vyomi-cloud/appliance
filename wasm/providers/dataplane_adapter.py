@@ -145,6 +145,16 @@ def vpc_list(p=None):
                                 "ingressRules": len(g["ingress"])} for g in m.get("sgs", {}).values()]}
 
 
+def vpc_list_sgs(p=None):
+    """Security-groups list for the EC2/VPC console SG page (GET /api/vpc/security-groups).
+    Shape matches the console's snake_case `security_groups` array + id/name/description/vpc_id columns."""
+    m = getattr(_VPC, "_vpc_model", {"sgs": {}})
+    return {"ok": True, "security_groups": [
+        {"id": g["id"], "name": g.get("name", ""), "description": g.get("description", ""),
+         "vpc_id": g.get("vpc_id", ""), "ingress_rules": len(g.get("ingress", []))}
+        for g in m.get("sgs", {}).values()]}
+
+
 def vpc_create(p):
     import re
     body = _vpc_q("CreateVpc", {"CidrBlock": str(p.get("cidr") or "10.0.0.0/16")}).body
@@ -338,3 +348,49 @@ def rbac_check(p):
     body = json.loads(r.body.decode("utf-8", "ignore") or "{}")
     v = (body.get("value") or [{}])[0]
     return {"ok": True, "decision": v.get("accessDecision"), "roles": v.get("roles", [])}
+
+
+# ── AWS console "extras" — EC2/VPC sub-resources (volumes, snapshots, launch
+# templates, spot requests, endpoint services, …). ONE generic in-memory CRUD
+# keyed by the console's fullKey ("ec2/volumes"), returning the {value:[...]}
+# envelope the console expects. Console-only (not native-wire); session-scoped
+# (reload-persistence is a follow-up — would live in nano_registry).
+import itertools as _xit
+_EXTRAS = {}
+_EXTRAS_CFG = {}
+_EXTRAS_SEQ = _xit.count(1)
+
+
+def _extras_vals(p):
+    return {k: v for k, v in (p or {}).items() if k not in ("key", "name")}
+
+
+def extras_list(p):
+    return {"ok": True, "value": list(_EXTRAS.get(p.get("key", ""), {}).values())}
+
+
+def extras_create(p):
+    key = p.get("key", "")
+    vals = _extras_vals(p)
+    leaf = key.split("/")[-1].rstrip("s") or "resource"
+    name = str(vals.get("name") or vals.get("Name")
+               or f"{leaf}-{format(next(_EXTRAS_SEQ), '08x')}")
+    item = {"name": name, "id": vals.get("id") or name, "state": vals.get("state", "available"), **vals}
+    item["name"] = name
+    _EXTRAS.setdefault(key, {})[name] = item
+    return {"ok": True, **item}
+
+
+def extras_delete(p):
+    key, name = p.get("key", ""), p.get("name", "")
+    existed = _EXTRAS.get(key, {}).pop(name, None) is not None
+    return {"ok": existed, "name": name, "code": None if existed else "NotFound"}
+
+
+def extras_config_get(p):
+    return {"ok": True, "value": _EXTRAS_CFG.get(p.get("key", ""), {})}
+
+
+def extras_config_put(p):
+    _EXTRAS_CFG[p.get("key", "")] = _extras_vals(p)
+    return {"ok": True}

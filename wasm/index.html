@@ -2626,7 +2626,7 @@
   // The shared worker hosts the endpoint; the port carries start/stop/query.
   var worker=null, port=null, ok=false;
   try {
-    worker = new SharedWorker(base + "/relay/relay-shared-worker.js", { type:"module", name:"nano-relay" });
+    worker = new SharedWorker(base + "/relay/relay-shared-worker.js?v=3", { type:"module", name:"nano-relay-v3" });
     port = worker.port; port.start();
     port.onmessage = function(ev){ var m=ev.data||{}; if(m.type==="logs") renderLogs(m.lines); else if(m.type==="status"){ if(m.mode!==undefined) mode=m.mode; if(m.external!==undefined) external=m.external; if(m.note!==undefined) noteText=m.note; render(m.state,m.served); } };
     ok = true;

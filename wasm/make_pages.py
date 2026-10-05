@@ -32,7 +32,7 @@ LINKS = {
 }
 
 # Relative src so the boot loader resolves under any mount point.
-BOOT = '  <script type="module" src="./nano-boot.js"></script>\n</head>'  # consoles: Pyodide + SW
+BOOT = '  <script type="module" src="./nano-boot.js?v=4"></script>\n</head>'  # consoles: Pyodide + SW
 # Dashboard: SW only + hide the appliance host-health panel (CPU/RAM/Disk are
 # the host VM's stats — there is no VM in a browser tab, so it's N/A for Nano).
 # Nano shows the full UI (sidebar + Dashboard + Spaces + Knowledge Center, dark
@@ -272,7 +272,7 @@ def _footer_widget():
   // The shared worker hosts the endpoint; the port carries start/stop/query.
   var worker=null, port=null, ok=false;
   try {
-    worker = new SharedWorker(base + "/relay/relay-shared-worker.js", { type:"module", name:"nano-relay" });
+    worker = new SharedWorker(base + "/relay/relay-shared-worker.js?v=3", { type:"module", name:"nano-relay-v3" });
     port = worker.port; port.start();
     port.onmessage = function(ev){ var m=ev.data||{}; if(m.type==="logs") renderLogs(m.lines); else if(m.type==="status"){ if(m.mode!==undefined) mode=m.mode; if(m.external!==undefined) external=m.external; if(m.note!==undefined) noteText=m.note; render(m.state,m.served); } };
     ok = true;

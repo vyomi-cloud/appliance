@@ -97,8 +97,16 @@ class Aws(CloudProvider):
             ("vpc", "CreateVpc"):         lambda b, a, p: D.vpc_create(p),
             ("vpc", "CreateSubnet"):      lambda b, a, p: D.vpc_create_subnet(p),
             ("vpc", "CreateSecurityGroup"): lambda b, a, p: D.vpc_create_sg(p),
+            ("vpc", "ListSecurityGroups"): lambda b, a, p: D.vpc_list_sgs(p),
             ("vpc", "Authorize"):         lambda b, a, p: D.vpc_authorize(p),
             ("vpc", "Analyze"):           lambda b, a, p: D.vpc_analyze(p),
+            # Console "extras" — EC2/VPC sub-resources (volumes, snapshots, launch
+            # templates, spot requests, endpoint services): one generic CRUD.
+            ("extras", "List"):      lambda b, a, p: D.extras_list(p),
+            ("extras", "Create"):    lambda b, a, p: D.extras_create(p),
+            ("extras", "Delete"):    lambda b, a, p: D.extras_delete(p),
+            ("extras", "ConfigGet"): lambda b, a, p: D.extras_config_get(p),
+            ("extras", "ConfigPut"): lambda b, a, p: D.extras_config_put(p),
             # EventBridge — rules → SQS delivery, via core/eventbridge_core.py
             ("eventbridge", "ListRules"): lambda b, a, p: D.eb_list(p),
             ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),

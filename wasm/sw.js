@@ -180,17 +180,19 @@ function b64FromBuf(buf) {
 // S3 object upload is multipart/form-data (the same endpoint boto3 / `aws s3 cp`
 // hit). Read the file(s) here, base64 the bytes, and PUT each through the S3
 // core — one core PutObject per file, so ETag/versioning are conformance-real.
-async function handleUpload(request, bucket) {
+async function handleUpload(request, bucket, provider = "aws") {
   const fd = await request.formData();
   const files = fd.getAll("file").filter((f) => f && typeof f.arrayBuffer === "function");
   if (!files.length) return json({ ok: false, code: "NoFile" }, 400);
   const results = [];
   for (const file of files) {
     const b64 = b64FromBuf(await file.arrayBuffer());
-    results.push(await runInPage(["aws", "s3", "PutObject", {
-      bucket, key: file.name || "upload",
-      body_b64: b64, content_type: file.type || "application/octet-stream",
-    }]));
+    const p = { bucket, key: file.name || "upload", body_b64: b64, content_type: file.type || "application/octet-stream" };
+    // S3 → s3 core PutObject; GCS → gcp_storage_core via the shared resource dispatch.
+    const tuple = provider === "gcp"
+      ? ["gcp", "_resource", "PutObject", { service: "storage", body: p }]
+      : ["aws", "s3", "PutObject", p];
+    results.push(await runInPage(tuple));
   }
   const ok = results.every((r) => r && r.ok !== false);
   return json({ ok, uploaded: results.length, results }, ok ? 200 : 400);
@@ -382,6 +384,9 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/s3\/buckets\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "s3", "GetBucket", { bucket: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "s3", "DeleteBucket", { bucket: dec(m[1]) }] };
+  // Console-next creates a bucket with the name in the PATH (/api/s3/buckets/{bucket}),
+  // not the collection path — route that POST to CreateBucket (was falling through → 501).
+  if (m && method === "POST")   return { tuple: ["aws", "s3", "CreateBucket", { bucket: dec(m[1]) }] };
   // ── DynamoDB ────────────────────────────────────────────────────────
   if (path === "/api/dynamodb/tables") {
     if (method === "GET")  return { tuple: ["aws", "dynamodb", "ListTables", {}] };
@@ -475,8 +480,28 @@ async function route(method, path, body, query) {
   if (path === "/api/vpc/vpcs" && method === "POST") return { tuple: ["aws", "vpc", "CreateVpc", body || {}] };
   if (path === "/api/vpc/subnets" && method === "POST") return { tuple: ["aws", "vpc", "CreateSubnet", body || {}] };
   if (path === "/api/vpc/security-groups" && method === "POST") return { tuple: ["aws", "vpc", "CreateSecurityGroup", body || {}] };
+  if (path === "/api/vpc/security-groups" && method === "GET")  return { tuple: ["aws", "vpc", "ListSecurityGroups", {}] };
   if (path === "/api/vpc/authorize" && method === "POST") return { tuple: ["aws", "vpc", "Authorize", body || {}] };
   if (path === "/api/vpc/analyze" && method === "POST") return { tuple: ["aws", "vpc", "Analyze", body || {}] };
+  // EC2 AMIs — a fresh account owns no custom images (CreateImage not modeled in
+  // Nano yet); return an empty owned-AMIs list so the page renders instead of 501.
+  if (path === "/api/ec2/amis" && method === "GET") return { response: json({ ok: true, amis: [] }) };
+  // Console "extras" — generic EC2/VPC sub-resource CRUD (volumes, snapshots,
+  // launch templates, spot requests, endpoint services). Specific extras + fixtures
+  // (kms/aliases, secretsmanager/*) are matched earlier, so only the unrouted ones
+  // fall here. fullKey = "{category}/{resource}". Was 501; now a real in-memory CRUD.
+  let _ex = path.match(/^\/api\/aws\/extras\/(.+?)\/([^/]+)\/([^/]+)$/);
+  if (_ex && method === "DELETE") return { tuple: ["aws", "extras", "Delete", { key: _ex[1] + "/" + _ex[2], name: dec(_ex[3]) }] };
+  _ex = path.match(/^\/api\/aws\/extras-config\/(.+)$/);
+  if (_ex) {
+    if (method === "GET") return { tuple: ["aws", "extras", "ConfigGet", { key: _ex[1] }] };
+    if (method === "PUT") return { tuple: ["aws", "extras", "ConfigPut", { key: _ex[1], ...(body || {}) }] };
+  }
+  _ex = path.match(/^\/api\/aws\/extras\/(.+)$/);
+  if (_ex) {
+    if (method === "GET")  return { tuple: ["aws", "extras", "List",   { key: _ex[1] }] };
+    if (method === "POST") return { tuple: ["aws", "extras", "Create", { key: _ex[1], ...(body || {}) }] };
+  }
   // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
   if (path === "/api/eventbridge/rules") {
     if (method === "GET")  return { tuple: ["aws", "eventbridge", "ListRules", {}] };
@@ -513,6 +538,13 @@ async function route(method, path, body, query) {
 
   // 4. provider-aware catalog CRUD (GCP / Azure). Same generic backend, but the
   //    paths are templated so we match via per-cloud regexes from the catalog.
+  // GCS object browser — objects live under /b/{bucket}/o (upload is intercepted as
+  // multipart earlier). These have extra path segments the catalog resourceRe won't
+  // match, so route them explicitly to gcp_storage_core via the shared dispatch.
+  let go = path.match(/^\/api\/gcp\/storage\/v1\/b\/([^/]+)\/o\/?$/);
+  if (go && method === "GET") return { tuple: ["gcp", "_resource", "ListObjects", { service: "storage", body: { bucket: dec(go[1]) } }] };
+  go = path.match(/^\/api\/gcp\/storage\/v1\/b\/([^/]+)\/o\/(.+)$/);
+  if (go && method === "DELETE") return { tuple: ["gcp", "_resource", "DeleteObject", { service: "storage", body: { bucket: dec(go[1]), key: dec(go[2]) } }] };
   const pm = path.match(/^\/api\/(gcp|azure)\//);
   if (pm) {
     const provider = pm[1];
@@ -840,6 +872,9 @@ self.addEventListener("fetch", (event) => {
       // S3 object upload is multipart — read the file body here (not as JSON).
       const up = method === "POST" && apiPath.match(/^\/api\/s3\/buckets\/([^/]+)\/objects\/?$/);
       if (up) return await handleUpload(event.request, decodeURIComponent(up[1]));
+      // GCS object upload — same multipart form, routed to gcp_storage_core.
+      const gup = method === "POST" && apiPath.match(/^\/api\/gcp\/storage\/v1\/b\/([^/]+)\/upload$/);
+      if (gup) return await handleUpload(event.request, decodeURIComponent(gup[1]), "gcp");
 
       let body = null;
       if (["PUT", "POST", "PATCH"].includes(method)) {

@@ -32,6 +32,7 @@ const CORES = [
   "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "vpc_core.py",
   "azure_sql_core.py", "azure_iam_core.py",
   "aws_wire_router.py",
+  "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)
 ];
 
 const bc = new BroadcastChannel("nano-relay");
@@ -74,6 +75,7 @@ setInterval(announce, 3000);
 
 let py = null, handle = null, booting = null, ws = null;
 let monitorTimer = null, localFails = 0, cloudFailStreak = 0;
+let scheduleStoresSave = () => {};   // real impl installed once Pyodide is up (store-sync in bootPyodide)
 
 // ── Tunnel selection: prefer the LOCAL relay when present, else CLOUD ─────────
 // A loopback fetch from an https tab is allowed (localhost is exempt from mixed
@@ -113,11 +115,21 @@ async function bootPyodide() {
 import sys, json, base64; sys.path.insert(0, "/")
 from core.aws_wire_router import AwsWireRouter
 from core import rds_core as _rds
+from core import nano_registry as _reg, nano_persist as _persist
+# Build the router from the SHARED registry so the console adapter (aws_core_adapter,
+# which also draws from nano_registry) and this relay serve ONE store set, and so
+# nano_persist snapshots/restores the SAME live stores across contexts. Previously
+# this worker built a fresh AwsWireRouter() → a private, unsynced store, so a bucket
+# created in the console UI was invisible to the SDK/CLI here.
+_STORES = _reg.get()
 if _USE_PGLITE:
     from core.sql_store import PGliteSqlStore
-    _ROUTER = AwsWireRouter(sql_store=PGliteSqlStore())
-else:
-    _ROUTER = AwsWireRouter()
+    _STORES["rds"] = PGliteSqlStore()                     # RDS = real Postgres (shared seam)
+_ROUTER = AwsWireRouter(stores=_STORES)
+def _capture(): return json.dumps(_persist.capture_registry())
+def _restore(blob_json):
+    try: _persist.restore_registry(json.loads(blob_json or "{}"))
+    except Exception: pass
 async def _handle(req_json):
     r = json.loads(req_json)
     body = base64.b64decode(r.get("body") or "")
@@ -126,10 +138,38 @@ async def _handle(req_json):
     return json.dumps({"status": resp["status"], "headers": resp["headers"],
                        "body": base64.b64encode(resp["body"] or b"").decode()})
 import builtins; builtins._handle = _handle
+builtins._capture = _capture; builtins._restore = _restore
 `);
     handle = (reqJson) => py.runPythonAsync(`await _handle(${JSON.stringify(reqJson)})`);
     log("cores loaded (S3·DynamoDB·KMS·Secrets·SQS·SNS·IAM·RDS — real handlers in Pyodide)", "ok");
     log(hasPg ? "RDS engine: PGlite (real Postgres)" : "RDS engine: sqlite3 (PGlite unavailable)", hasPg ? "ok" : "dim");
+
+    // ── Store persistence + cross-context sync (console ↔ SDK/CLI parity) ──
+    // Snapshot the shared registry → nano-spaces IndexedDB after each served
+    // request, rehydrate on boot, and reload when the console broadcasts a change —
+    // so a bucket created in the console UI is visible via the SDK/CLI through this
+    // relay, and vice-versa. Same DB/store/key/channel the console (nano-boot.js)
+    // uses. All guarded — persistence NEVER blocks serving. Workers have indexedDB
+    // + BroadcastChannel, so this runs in the SharedWorker just as in the tab.
+    const _SK = "nano:stores";
+    const _idb = (mode, fn) => new Promise((res) => {
+      const r = indexedDB.open("nano-spaces", 1);
+      r.onupgradeneeded = () => { const d = r.result;
+        if (!d.objectStoreNames.contains("spaces")) d.createObjectStore("spaces", { keyPath: "space_id" });
+        if (!d.objectStoreNames.contains("meta"))   d.createObjectStore("meta",   { keyPath: "k" }); };
+      r.onsuccess = () => { try { fn(r.result.transaction("meta", mode).objectStore("meta"), res); } catch (_) { res(null); } };
+      r.onerror = () => res(null);
+    });
+    const idbGet = (k) => _idb("readonly",  (s, res) => { const g = s.get(k); g.onsuccess = () => res(g.result ? g.result.v : null); g.onerror = () => res(null); });
+    const idbPut = (k, v) => _idb("readwrite", (s, res) => { s.put({ k, v }); res(null); });
+    let _storesBC = null; try { _storesBC = new BroadcastChannel("nano-stores"); } catch (_) {}
+    let _restoring = false, _storeTimer = null;
+    const capStores = () => { try { return py.runPython("_capture()"); } catch (_) { return null; } };
+    const resStores = (j) => { if (!j) return; try { py.globals.set("_vy_blob", j); py.runPython("_restore(_vy_blob)"); } catch (_) {} };
+    async function saveStores(notify) { try { const j = capStores(); if (!j) return; await idbPut(_SK, j); if (notify && _storesBC) { try { _storesBC.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
+    scheduleStoresSave = () => { if (_storeTimer) return; _storeTimer = setTimeout(() => { _storeTimer = null; saveStores(true); }, 400); };
+    if (_storesBC) _storesBC.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } finally { _restoring = false; } };
+    try { resStores(await idbGet(_SK)); } catch (_) {}   // boot: rehydrate before serving
   })();
   return booting;
 }
@@ -174,6 +214,7 @@ function connect() {
       const resp = JSON.parse(await handle(JSON.stringify(req)));
       ws.send(JSON.stringify({ id: req.id, ...resp }));
       state.served++; state.lastActivity = Date.now(); announce();
+      scheduleStoresSave();   // persist the shared registry + notify the console (parity)
     } catch (e) {
       ws.send(JSON.stringify({ id: req.id, status: 500,
         headers: { "content-type": "text/plain" }, body: btoa("nano endpoint error: " + e) }));

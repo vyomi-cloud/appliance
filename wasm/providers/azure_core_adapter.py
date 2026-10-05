@@ -29,12 +29,17 @@ from core.azure_queue_core import AzureQueueStore
 APIV = {"api-version": "7.4"}
 XMS = {"x-ms-version": "2021-12-02"}
 
+# Draw every store from the SHARED nano_registry (keyed az_* there) so the Azure
+# console (UI) and the native-wire relay (CLI/SDK/curl via AwsWireRouter) read/write
+# ONE store per service — and nano_persist captures them for reload/cross-context sync.
+from core import nano_registry as _reg
+_R = _reg.get()
 _STORES = {
-    "blobcontainers": AzureBlobStore(),
-    "cosmosdbs": CosmosStore(),
-    "kvsecrets": InMemoryKvStore(),
-    "kvkeys": InMemoryKeyStore(),
-    "queues": AzureQueueStore(),
+    "blobcontainers": _R["az_blob"],
+    "cosmosdbs":      _R["az_cosmos"],
+    "kvsecrets":      _R["az_kvsec"],
+    "kvkeys":         _R["az_kvkeys"],
+    "queues":         _R["az_queue"],
 }
 
 

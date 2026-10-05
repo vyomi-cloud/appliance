@@ -349,7 +349,8 @@
 }
 #disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
 </style>
-  <script type="module" src="./nano-boot.js"></script>
+  <script type="module" src="./nano-boot.js?v=4"></script>
+<style>#avatarBtn{display:none!important;}</style>
 </head>
 <body>
 
@@ -969,6 +970,9 @@ async function renderDetail(main){
     if (t === "metrics")  return renderMetricsTab(content, svc);
     if (t === "activitylog") return content.append(el("div",{class:"empty"}, "Activity log derived from /api/cloudsim/events — populated when actions taken on this resource."));
     if (t === "iam")      return content.append(el("div",{class:"empty"}, "Permissions inherited from project-level IAM bindings."));
+    // Data-driven fallback: every other tab (type "stub" or unmapped) renders the
+    // resource's data relevant to that tab — no sub-screen is left blank.
+    return renderGenericTab(content, svc, STATE.item, item);
     // Stub — wired in GCP-C
     content.append(el("div",{class:"empty"},
       el("span",{class:"ic material-symbols-outlined"}, "construction"),
@@ -1167,6 +1171,99 @@ async function renderObjectsTab(host, svc, item){
   listHost.append(t);
 }
 
+// ── Data-driven generic tab renderer ─────────────────────────────────────────
+// Backs every detail sub-screen without a bespoke view (type "stub" or unmapped),
+// so NO tab is blank: shows the resource's data relevant to that tab (arrays → a
+// list, objects → a grid, scalars → a row), with an informative empty state.
+const TAB_ALIASES = {
+  lifecycle:["lifecycle.rule","lifecycle"], encryption:["encryption","encryptionConfig"], retention:["retentionPolicy"],
+  versions:["versions","version"], rotation:["rotation","rotationSchedule"], replication:["replication","replicationStatus"],
+  subscriptions:["subscriptions"], schema:["schemaSettings","schema"], messages:["messages"],
+  databases:["databases"], users:["users"], backups:["backups"], replicas:["replicaNames","replicas","failoverReplica"],
+  connectivity:["ipAddresses","settings.ipConfiguration"], flags:["settings.databaseFlags"],
+  logging:["logConfig","settings.insightsConfig"], "query insights":["settings.insightsConfig"],
+  disks:["disks"], snapshots:["snapshots"], networking:["networkInterfaces"], scheduling:["scheduling"],
+  metadata:["metadata.items","metadata"], "startup script":["metadata.items"], "machine size":["machineType"],
+  subnets:["subnetworks","subnets"], "firewall rules":["firewalls","firewallRules"], routes:["routes"],
+  "vpc peering":["peerings"], "flow logs":["enableFlowLogs","logConfig"],
+  source:["buildConfig","sourceArchiveUrl"], trigger:["eventTrigger","httpsTrigger","trigger"],
+  variables:["serviceConfig.environmentVariables","environmentVariables"], testing:["serviceConfig"],
+  members:["bindings","members"], permissions:["bindings"], keys:["keys"],
+  configs:["apiConfig","configs","gatewayConfig"], "event matching":["eventFilters","transport"],
+  destination:["destination"], "security rules":["rules"], indexes:["indexes"],
+  "import / export":["operations"], "import jobs":["importJobs"], "key policy":["bindings"], data:["fields"],
+};
+const TAB_DESC = {
+  lifecycle:"Object lifecycle rules — auto-delete or transition objects by age/condition.",
+  encryption:"Default encryption for data in this resource (Google-managed unless a CMEK is set).",
+  retention:"Retention policy — the minimum time data must be kept before it can be deleted.",
+  versions:"Versions/revisions of this resource.", subscriptions:"Subscriptions attached to this topic.",
+  databases:"Databases hosted on this instance.", users:"User accounts on this instance.",
+  backups:"Automated and on-demand backups.", disks:"Disks attached to this instance.",
+  snapshots:"Point-in-time snapshots.", networking:"Network interfaces and connectivity.",
+};
+function _kvGrid(pairs){
+  const g = el("div",{class:"kv-grid"});
+  pairs.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k),
+    el("div",{class:"v"}, (v && typeof v === "object") ? JSON.stringify(v) : String(v)))));
+  const c = el("div",{class:"kv-card"}); c.append(g); return c;
+}
+// Services whose resource Update/PATCH is wired (→ settings tabs are editable).
+const EDITABLE_SERVICES = new Set(["storage"]);
+const TAB_TEMPLATES = {
+  lifecycle: { rule: [{ action: { type: "Delete" }, condition: { age: 30 } }] },
+  retentionPolicy: { retentionPeriod: "2592000" },
+  encryption: { defaultKmsKeyName: "projects/demo/locations/global/keyRings/demo/cryptoKeys/key1" },
+  versioning: { enabled: true },
+};
+function renderGenericTab(host, svc, item, sub){
+  const key = (sub.key||"").toLowerCase(), label = sub.label || sub.key || "Settings";
+  const desc = TAB_DESC[key] || TAB_DESC[label.toLowerCase()]
+    || (label + " for this " + String(svc.label || "resource").replace(/s$/,"").toLowerCase() + ".");
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub,#5f6368);margin:-4px 0 14px"}, desc));
+  const aliases = TAB_ALIASES[key] || TAB_ALIASES[label.toLowerCase()] || [key];
+  const topField = String(aliases[0] || key).split(".")[0];
+  let data = null;
+  for (const a of aliases) {
+    const v = getPath(item, a);
+    const empty = v == null || (Array.isArray(v) && !v.length)
+      || (typeof v === "object" && !Array.isArray(v) && v && !Object.keys(v).length);
+    if (!empty) { data = v; break; }
+  }
+  if (Array.isArray(data)) {
+    const wrap = el("div",{});
+    data.forEach((row) => wrap.append(_kvGrid(Object.entries((row && typeof row === "object") ? row : {value: row}))));
+    host.append(wrap);
+  } else if (data && typeof data === "object") host.append(_kvGrid(Object.entries(data)));
+  else if (data != null) host.append(_kvGrid([[label, String(data)]]));
+  else host.append(el("div",{class:"empty"},
+    el("span",{class:"ic material-symbols-outlined"}, sub.icon || "tune"),
+    el("div",{}, "No " + label.toLowerCase() + " configured."),
+    el("div",{style:"font-size:11.5px;color:var(--hint,#80868b);margin-top:6px"},
+      "Currently at defaults. " + desc)));
+  // Editable settings (services with a wired Update/PATCH): edit as JSON → save via
+  // the resource PATCH → re-render with the saved value. Makes the settings tabs real.
+  if (EDITABLE_SERVICES.has(svc.key) && svc.resource_path && item && item.name) {
+    const editBtn = el("button",{class:"btn",style:"margin-top:14px"}, icon("edit"), "Edit " + label);
+    editBtn.onclick = () => {
+      editBtn.style.display = "none";
+      const cur = getPath(item, topField);
+      const seed = cur != null ? cur : (TAB_TEMPLATES[topField] || TAB_TEMPLATES[key] || {});
+      const ta = el("textarea",{style:"width:100%;min-height:150px;font-family:monospace;font-size:12.5px;padding:10px;border:1px solid var(--line,#dadce0);border-radius:6px;margin-top:10px"}, JSON.stringify(seed, null, 2));
+      const bar = el("div",{style:"display:flex;gap:8px;margin-top:10px"},
+        el("button",{class:"btn primary",onclick:async()=>{
+          let val; try { val = JSON.parse(ta.value); } catch(e){ toast("Invalid JSON","err"); return; }
+          const url = ORIGIN + fillCommon(svc.resource_path, {name: item.name});
+          const r = await fetch(url, {method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({[topField]: val})});
+          if (r.ok) { const j = await r.json().catch(()=>({})); Object.assign(item, j); toast(label + " saved"); host.innerHTML=""; renderGenericTab(host, svc, item, sub); }
+          else toast("Save failed","err");
+        }}, "Save"),
+        el("button",{class:"btn sec",onclick:()=>{ ta.remove(); bar.remove(); editBtn.style.display=""; }}, "Cancel"));
+      host.append(ta, bar);
+    };
+    host.append(editBtn);
+  }
+}
 function renderOverviewTab(host, svc, item){
   const card = el("div",{class:"kv-card"});
   const g = el("div",{class:"kv-grid"});
@@ -1751,7 +1848,7 @@ setInterval(fetchDiskHealth, 30000);
   // The shared worker hosts the endpoint; the port carries start/stop/query.
   var worker=null, port=null, ok=false;
   try {
-    worker = new SharedWorker(base + "/relay/relay-shared-worker.js", { type:"module", name:"nano-relay" });
+    worker = new SharedWorker(base + "/relay/relay-shared-worker.js?v=3", { type:"module", name:"nano-relay-v3" });
     port = worker.port; port.start();
     port.onmessage = function(ev){ var m=ev.data||{}; if(m.type==="logs") renderLogs(m.lines); else if(m.type==="status"){ if(m.mode!==undefined) mode=m.mode; if(m.external!==undefined) external=m.external; if(m.note!==undefined) noteText=m.note; render(m.state,m.served); } };
     ok = true;

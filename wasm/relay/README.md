@@ -26,6 +26,130 @@ relay → tab : {id, method, path, query, headers, body(base64)}
 tab → relay : {id, status, headers, body(base64)}
 ```
 
+## Connect an external CLI / SDK / curl
+
+Point any AWS tool at the relay endpoint — nothing about your app changes except the
+endpoint URL. A Nano tab must be open and registered (`GET /health` → `{"tab":true}`).
+
+| | Endpoint URL |
+|---|---|
+| Local tunnel | `http://127.0.0.1:8090` |
+| Cloud tunnel | `https://relay.vyomi.cloud/<session>` |
+
+### 1. Set credentials (required once per shell)
+The sim never verifies the SigV4 signature, but the AWS CLI/SDK refuse to *sign* a
+request with no credentials (`Unable to locate credentials`). Any non-empty values work.
+S3 bucket ops also need **path-style** addressing (there's no `*.127.0.0.1` vhost DNS):
+
+```sh
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_S3_ADDRESSING_STYLE=path          # or: aws configure set default.s3.addressing_style path
+```
+One-off inline (no persistent export):
+```sh
+AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 \
+  aws --endpoint-url http://127.0.0.1:8090 s3 ls
+```
+
+### 2. aws CLI (native, unchanged except `--endpoint-url`)
+```sh
+EP=http://127.0.0.1:8090
+aws --endpoint-url $EP s3 mb s3://my-bucket
+aws --endpoint-url $EP s3 ls
+aws --endpoint-url $EP s3 cp ./file.txt s3://my-bucket/
+aws --endpoint-url $EP dynamodb list-tables
+aws --endpoint-url $EP sqs create-queue --queue-name jobs
+aws --endpoint-url $EP kms create-key
+```
+
+### 3. boto3 / native SDK
+```python
+import boto3
+from botocore.config import Config
+
+s3 = boto3.client(
+    "s3", endpoint_url="http://127.0.0.1:8090",
+    aws_access_key_id="test", aws_secret_access_key="test", region_name="us-east-1",
+    config=Config(s3={"addressing_style": "path"}),
+)
+s3.create_bucket(Bucket="my-bucket")
+print([b["Name"] for b in s3.list_buckets()["Buckets"]])
+
+# RDS Data API → real SQL on the in-browser engine (PGlite/sqlite3)
+rds = boto3.client("rds-data", endpoint_url="http://127.0.0.1:8090",
+                   aws_access_key_id="test", aws_secret_access_key="test",
+                   region_name="us-east-1")
+rds.execute_statement(resourceArn="arn:aws:rds:us-east-1:0:cluster:nano",
+                      secretArn="arn:aws:secretsmanager:us-east-1:0:secret:nano",
+                      database="app", sql="select 1 as n")
+```
+
+### 4. curl (no signing — the sim ignores it; S3 is path-style)
+```sh
+EP=http://127.0.0.1:8090
+curl $EP/                                   # S3 ListAllMyBuckets (XML)
+curl -X PUT $EP/my-bucket                    # create bucket
+curl -X PUT --data-binary @file.txt $EP/my-bucket/file.txt   # put object
+curl $EP/my-bucket/file.txt                  # get object
+curl -X DELETE $EP/my-bucket                 # delete bucket
+```
+
+### 5. GCP — gcloud CLI (no `auth login`)
+gcloud refuses to run without an account and would otherwise phone home to real Google.
+**Disable credentials** and **override the storage endpoint** instead — this is gcloud's
+equivalent of the dummy AWS creds:
+```sh
+export CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true
+export CLOUDSDK_CORE_PROJECT=demo                 # matches the Nano GCP console project
+export CLOUDSDK_API_ENDPOINT_OVERRIDES_STORAGE=http://127.0.0.1:8090/storage/v1/
+
+gcloud storage buckets create gs://my-bucket
+gcloud storage ls
+gcloud storage cp ./file.txt gs://my-bucket/
+```
+Persistent equivalent (writes `~/.config/gcloud`, so you don't repeat it):
+```sh
+gcloud config set auth/disable_credentials true
+gcloud config set project demo
+gcloud config set api_endpoint_overrides/storage http://127.0.0.1:8090/storage/v1/
+```
+Notes:
+- The storage override **must end in `/storage/v1/`** (the path the relay routes to the GCS core).
+- `gcloud storage rm --recursive` isn't supported yet (it calls a `/storageLayout` endpoint
+  the core doesn't implement); create / list / cp / objects work.
+- Other GCP services follow the same pattern — `CLOUDSDK_API_ENDPOINT_OVERRIDES_<SERVICE>`
+  (e.g. `_FIRESTORE`, `_PUBSUB`, `_SECRETMANAGER`, `_CLOUDKMS`, `_SQLADMIN`) → `http://127.0.0.1:8090/`.
+
+### 6. Azure — az CLI (no `az login`)
+Point `az storage` at the relay with the **well-known Azurite connection string**, overriding
+`BlobEndpoint` — no `az login`, and the sim ignores the Shared-Key signature (tested live):
+```sh
+export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:8090/devstoreaccount1;"
+
+az storage container create --name my-container
+az storage container list -o table
+az storage blob upload --container-name my-container --name hi.txt --file ./hi.txt --overwrite
+az storage blob list   --container-name my-container -o table
+az storage blob download --container-name my-container --name hi.txt --file ./out.txt
+```
+Notes:
+- The `AccountKey` is the fixed public Azurite dev key — any value works (the sim doesn't
+  verify the signature); keep it so `az` accepts the connection string.
+- `BlobEndpoint` **must include the `/devstoreaccount1` account segment** (the relay strips it).
+- Azure Blob is a **data-plane** API (what `az storage` uses) — distinct from ARM account
+  management (the console's control plane). Queue works the same way with `QueueEndpoint=…;`
+  + `az storage queue`; Cosmos / Key Vault are reachable over the relay via their own endpoints.
+
+### Shared state — UI, cmd, curl, and SDK are one store
+Resources you create in **any** Nano console UI (AWS/GCP/Azure) are visible to the CLI/SDK/
+curl, and vice-versa — **every service of every cloud** draws from one shared store set
+(`nano_registry`), and that set syncs across the console tab and the relay worker via
+IndexedDB + a BroadcastChannel (so it also survives reload). Create and list through the
+same relay during a session. Note: a SharedWorker endpoint only picks up code changes after
+its version bumps or you close **all** same-origin tabs and reopen.
+
 ## Files
 ```
 nano-endpoint.html      tab side (standalone) — boots Pyodide, loads all vendored cores +

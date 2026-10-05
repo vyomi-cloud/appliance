@@ -51,6 +51,25 @@ function nbMetaPut(k, v) {
     r.onerror = () => rej(r.error);
   });
 }
+// Read one key from the shared "nano-spaces" IndexedDB "meta" store (→ value or null).
+function nbMetaGet(k) {
+  return new Promise((res) => {
+    const r = indexedDB.open("nano-spaces", 1);
+    r.onupgradeneeded = () => {
+      const db = r.result;
+      if (!db.objectStoreNames.contains("spaces")) db.createObjectStore("spaces", { keyPath: "space_id" });
+      if (!db.objectStoreNames.contains("meta"))   db.createObjectStore("meta",   { keyPath: "k" });
+    };
+    r.onsuccess = () => {
+      try {
+        const g = r.result.transaction("meta", "readonly").objectStore("meta").get(k);
+        g.onsuccess = () => res(g.result ? g.result.v : null);
+        g.onerror = () => res(null);
+      } catch (_) { res(null); }
+    };
+    r.onerror = () => res(null);
+  });
+}
 const MODULES = [
   "backends/store.py",
   "providers/registry.py", "providers/aws_core_adapter.py",
@@ -86,6 +105,10 @@ const CORES = [
   // console-next capability manifest dependency (slice 1): the pure conformance
   // signal module (only imports `os` — safe in Pyodide, no FastAPI).
   "console_conformance.py",
+  // Store persistence + shared registry (Fix #1/#2): aws_core_adapter imports
+  // nano_registry, so these MUST load. nano_persist serializes the registry →
+  // IndexedDB (survives reload) + powers console↔SDK convergence.
+  "nano_registry.py", "nano_persist.py",
 ];
 
 function banner(text, bad) {
@@ -169,14 +192,64 @@ import builtins; builtins._disp = _disp
     _censusTimer = setTimeout(() => { _censusTimer = null; writeCensus(); }, 400);
   };
 
+  // ── Store persistence + cross-context sync (Fix #1 persistence / #2 parity) ──
+  // The shared registry is snapshotted to IndexedDB after each mutation and
+  // rehydrated on boot (survives logout/login), and a BroadcastChannel tells the
+  // other context (console ↔ relay page) to reload so an SDK/console create shows
+  // up on the other side. All guarded — persistence NEVER blocks the console.
+  const STORE_KEY = "nano:stores";
+  let _bc = null; try { _bc = new BroadcastChannel("nano-stores"); } catch (_) {}
+  let _restoring = false, _storeTimer = null;
+  function captureStores() {
+    try { return py.runPython("import json; from core import nano_persist; json.dumps(nano_persist.capture_registry())"); }
+    catch (_) { return null; }
+  }
+  function restoreStores(blobJson) {
+    if (!blobJson) return;
+    try {
+      py.globals.set("_vy_blob", blobJson);
+      py.runPython("import json; from core import nano_persist; nano_persist.restore_registry(json.loads(_vy_blob))");
+    } catch (_) {}
+  }
+  async function writeStores(notify) {
+    try {
+      const j = captureStores(); if (!j) return;
+      await nbMetaPut(STORE_KEY, j);
+      if (notify && _bc) { try { _bc.postMessage({ k: STORE_KEY, t: Date.now() }); } catch (_) {} }
+    } catch (_) { /* best-effort */ }
+  }
+  const scheduleStoresSave = () => {
+    if (_storeTimer) return;
+    _storeTimer = setTimeout(() => { _storeTimer = null; writeStores(true); }, 400);
+  };
+  if (_bc) _bc.onmessage = async (e) => {
+    if (!e.data || e.data.k !== STORE_KEY || _restoring) return;
+    _restoring = true;
+    try { restoreStores(await nbMetaGet(STORE_KEY)); } finally { _restoring = false; }
+  };
+  // Boot: rehydrate the persisted dataset into the shared registry BEFORE releasing
+  // /api/* requests, so the console opens with its previous resources intact.
+  try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {}
+
   // Bridge: SW -> page dispatch -> SW
-  navigator.serviceWorker.addEventListener("message", (ev) => {
+  navigator.serviceWorker.addEventListener("message", async (ev) => {
     if (!ev.data || ev.data.type !== "vyomi-dispatch") return;
     const port = ev.ports[0];
     try {
+      // Rehydrate from the SHARED snapshot before serving, so this op sees resources
+      // created in the OTHER context (the SDK/relay worker) even if a boot-time
+      // restore or a BroadcastChannel notification was missed — this is what makes
+      // console<->CLI reads consistent regardless of timing. Guarded: skip when a
+      // save is pending (_storeTimer) so we never clobber a just-created local
+      // resource before it has been flushed to the shared snapshot.
+      if (!_restoring) {
+        _restoring = true;
+        try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {} finally { _restoring = false; }
+      }
       const [prov, svc, op, params] = ev.data.tuple;
       port.postMessage(dispatch(prov, svc, op, params || {}));
-      scheduleCensus();  // any op may have mutated state — refresh the footprint
+      scheduleCensus();       // any op may have mutated state — refresh the footprint
+      scheduleStoresSave();   // …and persist + notify the other context (Fix #1/#2)
     } catch (e) {
       port.postMessage({ ok: false, error: String(e) });
     }

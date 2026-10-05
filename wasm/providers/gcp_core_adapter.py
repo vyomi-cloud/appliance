@@ -35,14 +35,19 @@ LOC = "global"         # default KMS location
 RING = "demo"          # default KMS key ring
 COLL = "console"       # default Firestore collection
 
+# Draw every store from the SHARED nano_registry (keyed gcs/gcp_* there) so the GCP
+# console (UI) and the native-wire relay (CLI/SDK/curl via AwsWireRouter) read/write
+# ONE store per service — and nano_persist captures them for reload/cross-context sync.
+from core import nano_registry as _reg
+_R = _reg.get()
 _STORES = {
-    "storage": InMemoryObjectStore(),
-    "firestore": FirestoreStore(),
-    "kms": InMemoryKeyStore(),
-    "secretmanager": InMemoryKvStore(),
-    "pubsub": InMemoryMessagingStore(),
-    "iam": InMemoryIamStore(),
-    "cloudsql": InMemorySqlStore(),
+    "storage":       _R["gcs"],
+    "firestore":     _R["gcp_fs"],
+    "kms":           _R["gcp_kms"],
+    "secretmanager": _R["gcp_sec"],
+    "pubsub":        _R["gcp_msg"],
+    "iam":           _R["gcp_iam"],
+    "cloudsql":      _R["gcp_sql"],
 }
 
 _MOD = {
@@ -136,6 +141,30 @@ def resource_op(service, operation, name="", body=None):
         if operation == "Delete":
             st, _ = _call(svc, "DELETE", f"/storage/v1/b/{name}")
             return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+        if operation == "Update":   # settings edits (lifecycle/encryption/retention/…) → bucket PATCH
+            st, p = _call(svc, "PATCH", f"/storage/v1/b/{name}", {}, body)
+            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "UpdateFailed", "name": name}
+        # Objects inside a bucket (the GCS Objects browser: upload/list/delete) —
+        # served by the SAME gcp_storage_core as the native google-cloud-storage SDK.
+        if operation == "ListObjects":
+            st, p = _call(svc, "GET", f"/storage/v1/b/{body.get('bucket','')}/o")
+            items = p.get("items", []) if isinstance(p, dict) else []
+            return {"ok": st < 300, "objects": items, "items": items}
+        if operation == "PutObject":
+            import base64
+            raw = base64.b64decode(body.get("body_b64", "") or "")
+            key = str(body.get("key") or "upload")
+            bucket = str(body.get("bucket") or "")
+            r = _MOD["storage"].dispatch(_STORES["storage"], "POST",
+                f"/upload/storage/v1/b/{bucket}/o", {"uploadType": "media", "name": key},
+                {"content-type": body.get("content_type", "application/octet-stream")}, raw)
+            return {"ok": r.status < 300, "key": key, "size": len(raw)} if r.status < 300 \
+                else {"ok": False, "code": "UploadFailed", "key": key, "status": r.status}
+        if operation == "DeleteObject":
+            from urllib.parse import quote
+            st, _ = _call(svc, "DELETE",
+                          f"/storage/v1/b/{body.get('bucket','')}/o/{quote(str(body.get('key','')), safe='')}")
+            return {"ok": st < 300, "key": body.get("key"), "code": None if st < 300 else "NotFound"}
 
     # ---------------- FIRESTORE (documents in a default collection) ----------------
     if svc == "firestore":

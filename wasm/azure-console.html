@@ -434,7 +434,7 @@
 }
 #disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
 </style>
-  <script type="module" src="./nano-boot.js"></script>
+  <script type="module" src="./nano-boot.js?v=4"></script>
 </head>
 <body>
 <header>
@@ -991,7 +991,10 @@ async function selectService(key){
   markActive(key);
   const svc=svcByKey(key);
   const main=document.getElementById("main"); main.innerHTML="";
-  main.append(crumb(["Home",svc.label]), pageHead(svc.icon, svc.label, svc.namespace+"/"+svc.type+" · api-version "+svc.apiVersion));
+  const _sub = svc.dataPlane
+    ? ("Data plane · " + (svc.dpLabel || ("GET /api/azure/" + svc.key)))
+    : (svc.namespace + "/" + svc.type + " · api-version " + svc.apiVersion);
+  main.append(crumb(["Home",svc.label]), pageHead(svc.icon, svc.label, _sub));
   const tb=el("div",{class:"toolbar"});
   tb.append(
     el("button",{class:"tbtn",onclick:()=>openCreate(svc)}, icon("add_circle"),"Create"),
@@ -4151,7 +4154,7 @@ boot();
   // The shared worker hosts the endpoint; the port carries start/stop/query.
   var worker=null, port=null, ok=false;
   try {
-    worker = new SharedWorker(base + "/relay/relay-shared-worker.js", { type:"module", name:"nano-relay" });
+    worker = new SharedWorker(base + "/relay/relay-shared-worker.js?v=3", { type:"module", name:"nano-relay-v3" });
     port = worker.port; port.start();
     port.onmessage = function(ev){ var m=ev.data||{}; if(m.type==="logs") renderLogs(m.lines); else if(m.type==="status"){ if(m.mode!==undefined) mode=m.mode; if(m.external!==undefined) external=m.external; if(m.note!==undefined) noteText=m.note; render(m.state,m.served); } };
     ok = true;
