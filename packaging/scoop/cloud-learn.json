@@ -1,11 +1,11 @@
 {
-  "version": "0.2.0",
+  "version": "3.0.3",
   "description": "[Deprecated] Local multi-cloud simulator (AWS/GCP/Azure) with real backends — full SDK + CLI parity for boto3, aws-cli, google-cloud-*, azure-sdk-*, Terraform. — install 'vyomi' instead. The 'cloud-learn' Scoop alias will be removed in v3.0.",
   "homepage": "https://vyomi.cloud",
   "license": "Business Source License 1.1",
-  "url": "https://github.com/vyomi-cloud/appliance/releases/download/v0.2.0/cloud-learn-0.2.0.tar.gz",
+  "url": "https://github.com/vyomi-cloud/appliance/releases/download/v3.0.3/cloud-learn-3.0.3.tar.gz",
   "hash": "REPLACED_BY_RELEASE_WORKFLOW",
-  "extract_dir": "cloud-learn-0.2.0",
+  "extract_dir": "cloud-learn-3.0.3",
   "bin": [
     [
       "scripts\\cloud-learn.ps1",

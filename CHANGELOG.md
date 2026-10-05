@@ -4,6 +4,37 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.3] — 2026-10-05
+
+**Patch: S3 `aws s3 ls` fix + Nano in-browser console depth.**
+
+### Fixed — S3 ListAllMyBuckets at the service root
+- A service-level `GET /` (what `aws s3 ls` / `list_buckets` send) returned
+  `400 InvalidRequest "Missing bucket."` instead of the bucket list. `dispatch()`
+  now serves `ListAllMyBucketsResult` for the service root (`core/s3_object_core.py`).
+
+### Added — Nano (in-browser) consoles
+- Real second-level (detail-tab) functionality across AWS/GCP/Azure: sub-resource
+  CRUD, editable settings, per-resource cloudsim Activity log, and live metrics
+  derived from real in-browser activity (no fabricated series).
+- Durable in-browser state via `nano_persist` → IndexedDB (events, generic
+  ResourceStore, Azure ARM) so detail-tab data survives a full reload.
+- Per-service cost-savings breakdown in the console cards.
+
+### Added — sandbox / compute
+- Remote SSH + DB access from a dev laptop via the Codespaces jump host.
+- Nano compute lifecycle actions + instance-type catalog wired in the WASM bundle.
+
+### Docs
+- Reorganised `docs/architecture/` into per-release/topic folders with MD+PDF pairs.
+
+## [3.0.2] — 2026-09-29
+
+**Patch: console polish + backend warm-up.**
+- Gray Nano/console sidebar (collapsed-by-default), Home→Spaces, dark Create-Space
+  modal, per-cloud + per-space cost-savings cards; background backend warm-up;
+  retire the standalone pricing landing (redirect to /clouds).
+
 ## [3.0.1] — 2026-09-28
 
 **Patch: real SSH into compute + honest install-globe geo.**
