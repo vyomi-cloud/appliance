@@ -4,6 +4,23 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.4] — 2026-10-06
+
+**Patch: per-space TTL (enterprise/shared) + winget channel dropped.**
+
+### Added — per-space TTL on the spaces page
+- Spaces can carry a TTL (`ttl_seconds` / `expires_at`): a **live countdown** on
+  each space card, a **Force-shutdown** action, and an **admin Renew-TTL** action;
+  lazy enforcement shuts an expired space down on next access
+  (`core/vyomi_platform.py`, `routes/spaces.py`, `static/clouds.html`).
+- **Gated to spaces that actually have a TTL** (enterprise / shared / sandbox).
+  Solo offline spaces default to **no expiry** and show no TTL UI — preserving the
+  local-first persistence contract (offline spaces are meant to persist).
+
+### Changed — distribution
+- Dropped the `winget-submit` release job and de-winget'd the install docs; Windows
+  ships via **Scoop** (own bucket, auto-published) + the direct **MSI**.
+
 ## [3.0.3] — 2026-10-05
 
 **Patch: S3 `aws s3 ls` fix + Nano in-browser console depth.**
