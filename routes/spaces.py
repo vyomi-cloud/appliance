@@ -192,6 +192,13 @@ def register(app: FastAPI) -> None:
     @app.get("/api/spaces")
     def api_list_spaces():
         _srv()._refresh_cloudsim_gcp_summary()
+        # SANDBOX TTL: in a cloud sandbox, make sure every space carries the
+        # default TTL so the countdown shows (incl. the bootstrap default spaces).
+        # No-op offline. Best-effort — never 500 the list.
+        try:
+            PLATFORM.ensure_sandbox_ttls()
+        except Exception:
+            pass
         all_spaces = PLATFORM.list_spaces()
         # TENANT FILTER: a tenant can only see its own spaces.
         tid = _active_tenant_id()

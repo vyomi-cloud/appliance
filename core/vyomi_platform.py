@@ -34,6 +34,27 @@ def _now() -> str:
 DEFAULT_TTL_SECONDS = 28800  # 8 hours
 
 
+def _default_ttl_seconds() -> int:
+    """MODE-AWARE default per-space TTL.
+
+    - Cloud sandbox (running inside a Codespace — CODESPACE_NAME set — or an
+      explicit VYOMI_SANDBOX_TTL) → a real TTL so spaces are time-boxed and the
+      countdown shows. Honors VYOMI_SANDBOX_TTL (seconds) if set, else 8h.
+    - Offline / local simulator → 0 (no expiry): the local-first persistence
+      contract. New spaces don't expire and show no TTL UI.
+    """
+    env = (os.environ.get("VYOMI_SANDBOX_TTL") or "").strip()
+    if env:
+        try:
+            v = int(env)
+            return v if v > 0 else 0
+        except ValueError:
+            pass
+    if (os.environ.get("CODESPACE_NAME") or "").strip():
+        return DEFAULT_TTL_SECONDS
+    return 0
+
+
 def _parse_iso(ts: str | None) -> datetime | None:
     """Parse an ISO-8601 UTC timestamp (…Z or +00:00) to an aware datetime."""
     if not ts:
@@ -910,11 +931,12 @@ class FirestoreEngine:
         region = str(spec.get("region") or settings.get("default_region", "us-east-1")).strip() or "us-east-1"
         space_id = str(spec.get("space_id") or f"space-{uuid.uuid4().hex[:12]}")
         now = _now()
-        # Per-space TTL. Default 8h; ttl_seconds==0/missing => no expiry.
+        # Per-space TTL — MODE-AWARE default: 8h in a cloud sandbox, 0 (no expiry)
+        # offline. An explicit ttl_seconds in the spec always wins.
         try:
-            ttl_seconds = int(spec.get("ttl_seconds", DEFAULT_TTL_SECONDS))
+            ttl_seconds = int(spec.get("ttl_seconds", _default_ttl_seconds()))
         except (TypeError, ValueError):
-            ttl_seconds = DEFAULT_TTL_SECONDS
+            ttl_seconds = _default_ttl_seconds()
         if ttl_seconds < 0:
             ttl_seconds = 0
         expires_at = _ttl_from_seconds(now, ttl_seconds)
@@ -2088,6 +2110,39 @@ class VyomiPlatform:
         space["updated_at"] = now
         self.persist()
         return copy.deepcopy(space)
+
+    def ensure_sandbox_ttls(self) -> bool:
+        """In a cloud sandbox, make sure every space carries the default TTL so
+        the countdown shows and spaces are time-boxed. Idempotent, best-effort.
+        No-op offline (default ttl == 0) — preserves the persistence contract.
+        Returns True if anything was stamped (and persisted)."""
+        default = _default_ttl_seconds()
+        if default <= 0:
+            return False
+        spaces_state = self.kernel.state.setdefault(
+            "spaces", {"spaces": {}, "active_space_id": "", "settings": {}})
+        spaces = spaces_state.get("spaces", {})
+        changed = False
+        for s in spaces.values():
+            if not isinstance(s, dict):
+                continue
+            try:
+                cur = int(s.get("ttl_seconds") or 0)
+            except (TypeError, ValueError):
+                cur = 0
+            if cur <= 0:
+                s["ttl_seconds"] = default
+                # Anchor expiry to the space's creation (≈ sandbox boot) so the
+                # countdown reflects real age — but if that window has already
+                # elapsed (retrofitting a long-lived/pre-existing space), start
+                # the clock from now so the space isn't instantly expired.
+                now = _now()
+                from_created = _ttl_from_seconds(s.get("created_at") or now, default)
+                s["expires_at"] = from_created if from_created > now else _ttl_from_seconds(now, default)
+                changed = True
+        if changed:
+            self.persist()
+        return changed
 
     def force_shutdown(self, space_id: str) -> dict:
         """Stop the space's runtimes (reuse the pause path) and mark it shutdown."""
