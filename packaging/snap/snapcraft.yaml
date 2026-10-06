@@ -63,7 +63,7 @@ parts:
     # we fetch the tarball using the same string.
     plugin: nil
     build-environment:
-      - CL_VERSION: "3.0.4"
+      - CL_VERSION: "3.0.5"
     override-pull: |
       VER="${CL_VERSION}"
       echo "Fetching cloud-learn ${VER} source tarball..."

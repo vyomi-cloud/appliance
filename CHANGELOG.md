@@ -4,6 +4,28 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.5] — 2026-10-07
+
+**Patch: sandbox TTL timer now actually shows.**
+
+### Fixed — per-space TTL countdown on launched sandboxes
+- A launched cloud sandbox showed **no TTL timer**: the bootstrap default spaces
+  (`space-legacy`, `space-azure-default`, `space-gcp-default`) are created with
+  `ttl_seconds=0`, and nothing retrofitted them, so the UI (gated on
+  `ttl_seconds>0`) rendered nothing. The first retrofit attempt also silently
+  failed — it called a method that doesn't exist on the live platform object.
+- **Mode-aware default TTL** (`_default_ttl_seconds`): 8h inside a Codespace
+  (`CODESPACE_NAME`) or when `VYOMI_SANDBOX_TTL` is set; **0 (no expiry) offline**,
+  preserving the local-first persistence contract (offline spaces don't sprout
+  timers).
+- `VyomiPlatform.ensure_sandbox_ttls()` idempotently stamps the default TTL onto
+  any space missing one (incl. the bootstrap spaces), using the correct kernel
+  state accessor; `GET /api/spaces` runs it before listing. Expiry anchors to
+  creation but falls back to *now* so retrofitted long-lived spaces aren't
+  instantly expired (`core/vyomi_platform.py`, `routes/spaces.py`).
+- Admin **Renew-TTL** auto-reset (shipped in 3.0.4) is unchanged and still resets
+  the countdown.
+
 ## [3.0.4] — 2026-10-06
 
 **Patch: per-space TTL (enterprise/shared) + winget channel dropped.**
