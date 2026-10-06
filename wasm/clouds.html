@@ -2512,6 +2512,7 @@
                 ${ savings > 0 ? `<span class="space-savings-yr">~$${ (savings * 12).toFixed(0) }/yr</span>` : '' }
                 <span class="space-savings-track"><i style="width:${ savingsBar }%"></i></span>
               </div>
+              ${ (Number(s.ttl_seconds) > 0) ? `
               <div class="space-ttl">
                 ${ ttlBadgeHtml(s) }
                 <span class="space-ttl-actions">
@@ -2522,7 +2523,7 @@
                           onclick="renewSpaceTtl('${ s.space_id }', event)"
                           title="Renew TTL (admin)">Renew TTL <span class="ttl-admin-tag">(admin)</span></button>
                 </span>
-              </div>
+              </div>` : '' }
             </a>
           `;
         }).join('');
