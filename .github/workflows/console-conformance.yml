@@ -29,6 +29,14 @@ jobs:
   console-actions:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # sticky-pull-request-comment needs write access to post/update the
+    # conformance report comment on the PR; the default token is read-only
+    # unless granted explicitly (repos with "read" as the default workflow
+    # permission otherwise fail this step with "Resource not accessible by
+    # integration" on every run, pass or fail).
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
@@ -51,9 +59,9 @@ jobs:
           # expects (the multipass-specific paths aren't relevant in CI).
           CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:ci \
             docker compose -f docker-compose.yml up -d \
-              simulator cloudlearn-pubsub cloudlearn-firestore \
-              cloudlearn-sql-postgres cloudlearn-minio cloudlearn-nats \
-              cloudlearn-dynamodb cloudlearn-elasticmq cloudlearn-vault
+              simulator vyomi-pubsub vyomi-firestore \
+              vyomi-sql-postgres vyomi-minio vyomi-nats \
+              vyomi-dynamodb vyomi-elasticmq vyomi-vault
 
       - name: Wait for /healthz
         run: |
