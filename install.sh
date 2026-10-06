@@ -61,12 +61,45 @@ done
 
 # ─── prereqs ────────────────────────────────────────────────────────────
 step "Checking prerequisites"
-if ! command -v docker >/dev/null 2>&1; then
-  err "docker not found in PATH"
-  echo "    Install Docker Desktop: https://docs.docker.com/get-docker/"
-  exit 1
+
+# On macOS, auto-install Docker Desktop via Homebrew if it's missing and brew
+# is available — avoids a dead-end "go install it yourself, then re-run" for
+# the common case. Without brew, fall back to the old manual-link behavior
+# rather than curl|bash-ing an installer with no checksum of our own.
+if ! command -v docker >/dev/null 2>&1 && [ "$(uname -s)" = "Darwin" ] && [ "$DRY_RUN" != "1" ]; then
+  if command -v brew >/dev/null 2>&1; then
+    warn "docker not found — installing Docker Desktop via Homebrew"
+    echo "    ${D}brew install --cask docker${R}"
+    if brew install --cask docker; then
+      ok "Docker Desktop installed"
+      echo "    ${D}launching it once to finish setup (creates the docker CLI symlink;"
+      echo "    ${D}macOS may prompt for your password to install Docker's network helper)${R}"
+      open -a Docker >/dev/null 2>&1 || true
+      for i in $(seq 1 60); do
+        command -v docker >/dev/null 2>&1 && break
+        sleep 2
+      done
+    else
+      err "brew install --cask docker failed"
+    fi
+  else
+    warn "docker not found, and Homebrew isn't installed to auto-install it"
+    echo "    Install Homebrew (https://brew.sh) and re-run this script for automatic"
+    echo "    setup, or install Docker Desktop manually: https://docs.docker.com/get-docker/"
+  fi
 fi
-ok "docker: $(docker --version | awk '{print $3}' | tr -d ,)"
+
+if ! command -v docker >/dev/null 2>&1; then
+  if [ "$DRY_RUN" = "1" ]; then
+    echo "    (dry-run) docker not found — would install it (Homebrew cask on macOS) and re-check"
+  else
+    err "docker not found in PATH"
+    echo "    Install Docker Desktop: https://docs.docker.com/get-docker/"
+    exit 1
+  fi
+else
+  ok "docker: $(docker --version | awk '{print $3}' | tr -d ,)"
+fi
 
 if ! docker compose version >/dev/null 2>&1; then
   err "Docker Compose v2 not available (need 'docker compose', not 'docker-compose')"
