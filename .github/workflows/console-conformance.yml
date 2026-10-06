@@ -13,6 +13,7 @@ name: Console actions conformance
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     paths:
       - 'providers/**'
@@ -23,8 +24,6 @@ on:
       - 'tests/conformance/console_actions/**'
       - 'docker-compose*.yml'
       - '.github/workflows/console-conformance.yml'
-  push:
-    tags: ['v*']
 
 jobs:
   console-actions:
