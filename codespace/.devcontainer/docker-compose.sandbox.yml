@@ -44,6 +44,11 @@ services:
       CLOUDLEARN_PUBLIC_URL: ${CLOUDLEARN_PUBLIC_URL:-}
       VYOMI_LICENSE_JWT: ${VYOMI_LICENSE_JWT:-}
       VYOMI_INSTALL_ID: ${CODESPACE_NAME:-vyomi-sandbox}
+      # Let the appliance detect it's a cloud sandbox so spaces get a default
+      # TTL and the countdown timer shows (0/no-expiry stays the offline default).
+      # CODESPACE_NAME → 8h default; VYOMI_SANDBOX_TTL (seconds or 8h/1d/1w) wins.
+      CODESPACE_NAME: ${CODESPACE_NAME:-}
+      VYOMI_SANDBOX_TTL: ${VYOMI_SANDBOX_TTL:-}
       VYOMI_PROFILE: ${VYOMI_PROFILE:-all-clouds}
       # Real compute (EC2/GCE/VM) as sibling Docker containers.
       VYOMI_COMPUTE_BACKEND: ${VYOMI_COMPUTE_BACKEND:-docker}

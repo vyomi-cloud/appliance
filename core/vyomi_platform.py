@@ -43,13 +43,20 @@ def _default_ttl_seconds() -> int:
     - Offline / local simulator → 0 (no expiry): the local-first persistence
       contract. New spaces don't expire and show no TTL UI.
     """
-    env = (os.environ.get("VYOMI_SANDBOX_TTL") or "").strip()
+    env = (os.environ.get("VYOMI_SANDBOX_TTL") or "").strip().lower()
     if env:
+        # Accept plain seconds ("28800") OR a unit-suffixed form ("8h", "90m",
+        # "1d", "1w") — the latter is what codespace/boot.sh passes.
         try:
-            v = int(env)
-            return v if v > 0 else 0
+            return max(0, int(env))
         except ValueError:
             pass
+        mult = {"m": 60, "h": 3600, "d": 86400, "w": 604800}.get(env[-1])
+        if mult is not None:
+            try:
+                return max(0, int(env[:-1]) * mult)
+            except ValueError:
+                pass
     if (os.environ.get("CODESPACE_NAME") or "").strip():
         return DEFAULT_TTL_SECONDS
     return 0
