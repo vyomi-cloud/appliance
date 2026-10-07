@@ -61,12 +61,45 @@ done
 
 # ─── prereqs ────────────────────────────────────────────────────────────
 step "Checking prerequisites"
-if ! command -v docker >/dev/null 2>&1; then
-  err "docker not found in PATH"
-  echo "    Install Docker Desktop: https://docs.docker.com/get-docker/"
-  exit 1
+
+# On macOS, auto-install Docker Desktop via Homebrew if it's missing and brew
+# is available — avoids a dead-end "go install it yourself, then re-run" for
+# the common case. Without brew, fall back to the old manual-link behavior
+# rather than curl|bash-ing an installer with no checksum of our own.
+if ! command -v docker >/dev/null 2>&1 && [ "$(uname -s)" = "Darwin" ] && [ "$DRY_RUN" != "1" ]; then
+  if command -v brew >/dev/null 2>&1; then
+    warn "docker not found — installing Docker Desktop via Homebrew"
+    echo "    ${D}brew install --cask docker${R}"
+    if brew install --cask docker; then
+      ok "Docker Desktop installed"
+      echo "    ${D}launching it once to finish setup (creates the docker CLI symlink;"
+      echo "    ${D}macOS may prompt for your password to install Docker's network helper)${R}"
+      open -a Docker >/dev/null 2>&1 || true
+      for i in $(seq 1 60); do
+        command -v docker >/dev/null 2>&1 && break
+        sleep 2
+      done
+    else
+      err "brew install --cask docker failed"
+    fi
+  else
+    warn "docker not found, and Homebrew isn't installed to auto-install it"
+    echo "    Install Homebrew (https://brew.sh) and re-run this script for automatic"
+    echo "    setup, or install Docker Desktop manually: https://docs.docker.com/get-docker/"
+  fi
 fi
-ok "docker: $(docker --version | awk '{print $3}' | tr -d ,)"
+
+if ! command -v docker >/dev/null 2>&1; then
+  if [ "$DRY_RUN" = "1" ]; then
+    echo "    (dry-run) docker not found — would install it (Homebrew cask on macOS) and re-check"
+  else
+    err "docker not found in PATH"
+    echo "    Install Docker Desktop: https://docs.docker.com/get-docker/"
+    exit 1
+  fi
+else
+  ok "docker: $(docker --version | awk '{print $3}' | tr -d ,)"
+fi
 
 if ! docker compose version >/dev/null 2>&1; then
   err "Docker Compose v2 not available (need 'docker compose', not 'docker-compose')"
@@ -75,10 +108,71 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 ok "docker compose: $(docker compose version --short)"
 
+# On macOS the engine runs inside Docker Desktop's VM (Apple Virtualization
+# framework) — it's frequently installed but not running. Start it and wait
+# instead of bailing. Same idea for OrbStack / Colima if that's the provider.
+#
+# Prefer `docker desktop start` (the Docker Desktop CLI plugin) over `open -a
+# Docker`: it manages the whole app/VM lifecycle itself instead of sending an
+# Apple Events activation at whatever process macOS finds for that bundle id —
+# which, right after quitting Docker, can be a still-dying instance instead of
+# a fresh one, leaving the engine's VM networking wedged indefinitely. And if
+# Desktop already reports itself "running" (true even mid-wedge — that status
+# reflects the app/VM process existing, not the engine answering), `start`
+# no-ops; `restart` is what actually recovers that case.
+start_docker_engine() {
+  case "$(uname -s)" in
+    Darwin)
+      if command -v docker >/dev/null 2>&1 && docker desktop start --help >/dev/null 2>&1; then
+        if docker desktop status 2>/dev/null | grep -qi running; then
+          echo "    ${D}Docker Desktop is running but the engine isn't answering, restarting it (docker desktop restart)${R}"
+          docker desktop restart >/dev/null 2>&1 || true
+        else
+          echo "    ${D}starting Docker Desktop (docker desktop start)${R}"
+          docker desktop start >/dev/null 2>&1 || true
+        fi
+      elif open -a Docker >/dev/null 2>&1; then
+        echo "    ${D}launched Docker Desktop — waiting for the engine (first start can take ~1 min)${R}"
+      elif open -a OrbStack >/dev/null 2>&1; then
+        echo "    ${D}launched OrbStack — waiting for the engine${R}"
+      elif command -v colima >/dev/null 2>&1; then
+        echo "    ${D}starting Colima${R}"
+        colima start >/dev/null 2>&1 || true
+      else
+        return 1
+      fi ;;
+    Linux)
+      systemctl --user start docker-desktop >/dev/null 2>&1 \
+        || sudo -n systemctl start docker >/dev/null 2>&1 \
+        || return 1 ;;
+    *) return 1 ;;
+  esac
+}
+
 if ! docker info >/dev/null 2>&1; then
-  err "Docker daemon isn't running"
-  echo "    Start Docker Desktop and re-run this script."
-  exit 1
+  warn "Docker daemon isn't running — trying to start it"
+  if [ "$DRY_RUN" = "1" ]; then
+    echo "    (dry-run) would start the Docker engine and wait up to 150s"
+  elif start_docker_engine; then
+    retried=0
+    for i in $(seq 1 50); do
+      docker info >/dev/null 2>&1 && break
+      # Halfway through the wait, if the engine is still down, retry the
+      # launch once — covers a launch that raced a half-dead Docker Desktop.
+      if [ "$retried" = "0" ] && [ "$i" -ge 25 ]; then
+        retried=1
+        echo "    ${D}engine still not up halfway through the wait, retrying the launch${R}"
+        start_docker_engine || true
+      fi
+      sleep 3
+    done
+  fi
+  if [ "$DRY_RUN" != "1" ] && ! docker info >/dev/null 2>&1; then
+    err "Docker daemon still isn't reachable"
+    echo "    Start Docker Desktop (or OrbStack/Colima), wait until it shows"
+    echo "    \"Engine running\", then re-run this script. Verify with: docker info"
+    exit 1
+  fi
 fi
 ok "docker daemon reachable"
 
