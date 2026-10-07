@@ -20,7 +20,7 @@
   "homepage": "https://vyomi.cloud",
   "repository": {
     "type": "git",
-    "url": "https://github.com/vyomi-cloud/appliance.git",
+    "url": "git+https://github.com/vyomi-cloud/appliance.git",
     "directory": "packaging/tunnel"
   }
 }
