@@ -1,7 +1,8 @@
 """AMQP 1.0 Connection and Session State Machine.
 
 Handles SASL negotiation, AMQP 1.0 handshake, framing reassembly,
-channel multiplexing, and heartbeat keepalive management.
+channel multiplexing, CBS authentication ($cbs), entity address resolution,
+sender links with batch unpacking (0x80013700), and keepalive management.
 """
 
 from __future__ import annotations
@@ -9,7 +10,10 @@ from __future__ import annotations
 import enum
 import os
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
+
+from core.azure_servicebus_core import sb_send
+from core.azure_servicebus_runtime import get_store
 
 from .codec import (
     AMQP_HEADER,
@@ -25,20 +29,36 @@ from .codec import (
     decode_frame,
     encode_frame,
 )
+from .message import (
+    SERVICE_BUS_BATCH_FORMAT,
+    Header,
+    Message,
+    Properties,
+)
 from .performatives import (
+    Accepted,
     Attach,
     Begin,
     Close,
     Detach,
+    Disposition,
     End,
     Error,
     Flow,
+    Modified,
     Open,
+    Rejected,
+    Released,
     SaslInit,
     SaslMechanisms,
     SaslOutcome,
+    Source,
+    Target,
+    Transfer,
     parse_performative,
 )
+
+MAX_MESSAGE_SIZE = 262144  # 256 KB
 
 
 class ConnectionState(enum.Enum):
@@ -51,6 +71,30 @@ class ConnectionState(enum.Enum):
     CLOSED = "CLOSED"
 
 
+class Link:
+    """Represents a Sender or Receiver Link on an AMQP session."""
+
+    def __init__(
+        self,
+        handle: int,
+        name: str,
+        role: bool,  # False = remote sender / local receiver, True = remote receiver / local sender
+        address: str,
+        source: Source | None = None,
+        target: Target | None = None,
+    ):
+        self.handle = handle
+        self.name = name
+        self.role = role
+        self.address = address
+        self.source = source
+        self.target = target
+        self.delivery_count = 0
+        self.link_credit = 0
+        self.drain = False
+        self.rx_transfer_buffers: dict[int, bytearray] = {}  # delivery_id -> bytes
+
+
 class Session:
     """Represents an active AMQP 1.0 session on a channel."""
 
@@ -61,7 +105,9 @@ class Session:
         self.next_outgoing_id = 1
         self.incoming_window = 5000
         self.outgoing_window = 5000
-        self.links: dict[int, Any] = {}  # handle -> link state
+        self.links: dict[int, Link] = {}  # remote handle -> Link
+        self.cbs_reply_handle: int | None = None
+        self.cbs_request_handle: int | None = None
 
 
 class AmqpConnection:
@@ -237,6 +283,10 @@ class AmqpConnection:
             self._on_detach(channel, perf)
         elif isinstance(perf, Flow):
             self._on_flow(channel, perf)
+        elif isinstance(perf, Transfer):
+            self._on_transfer(channel, perf, payload)
+        elif isinstance(perf, Disposition):
+            self._on_disposition(channel, perf)
 
     def _on_sasl_init(self, init: SaslInit) -> None:
         # In developer emulator mode, accept any mechanism/credential
@@ -267,7 +317,6 @@ class AmqpConnection:
         self.state = ConnectionState.OPENED
 
     def _on_begin(self, remote_channel: int, begin: Begin) -> None:
-        # Use remote_channel as the local channel for 1:1 mapping
         session = Session(channel=remote_channel, remote_channel=remote_channel)
         self.sessions[remote_channel] = session
 
@@ -292,15 +341,128 @@ class AmqpConnection:
         self.send_frame(FRAME_TYPE_AMQP, 0, reply_close)
         self.state = ConnectionState.CLOSED
 
+    # --- Address Resolution ---
+
+    @staticmethod
+    def resolve_address(addr: str) -> tuple[str, str | None, bool] | None:
+        """Resolve an AMQP target/source address against the Service Bus store.
+
+        Returns:
+            (topic_name, sub_name, is_dlq) or None if not found.
+        """
+        if not addr:
+            return None
+        clean_addr = addr.strip().strip("/")
+        store = get_store()
+
+        is_dlq = False
+        if clean_addr.lower().endswith("/$deadletterqueue"):
+            is_dlq = True
+            clean_addr = clean_addr[: -len("/$deadletterqueue")].strip("/")
+
+        # Check for <topic>/Subscriptions/<sub>
+        if "/subscriptions/" in clean_addr.lower():
+            idx = clean_addr.lower().find("/subscriptions/")
+            t_part = clean_addr[:idx].strip("/")
+            s_part = clean_addr[idx + len("/subscriptions/") :].strip("/")
+
+            # Find topic case-insensitively
+            matched_topic = None
+            for t in store.topics:
+                if t.lower() == t_part.lower():
+                    matched_topic = t
+                    break
+            if not matched_topic:
+                return None
+
+            # Find subscription case-insensitively
+            matched_sub = None
+            subs = store.topics[matched_topic].get("subscriptions", {})
+            for s in subs:
+                if s.lower() == s_part.lower():
+                    matched_sub = s
+                    break
+            if not matched_sub:
+                return None
+
+            return (matched_topic, matched_sub, is_dlq)
+
+        # Plain topic
+        matched_topic = None
+        for t in store.topics:
+            if t.lower() == clean_addr.lower():
+                matched_topic = t
+                break
+
+        if matched_topic:
+            return (matched_topic, None, is_dlq)
+        return None
+
     def _on_attach(self, channel: int, attach: Attach) -> None:
-        # Default Layer 2 echo (Layer 3 & 4 provide full link attachment logic)
         session = self.sessions.get(channel)
-        if session:
-            session.links[int(attach.handle)] = attach
+        if not session:
+            return
+
+        handle = int(attach.handle)
+        is_sender = not attach.role  # False = client is sender, True = client is receiver
+        address = ""
+
+        if is_sender:
+            address = attach.target.address if attach.target and attach.target.address else ""
+        else:
+            address = attach.source.address if attach.source and attach.source.address else ""
+
+        # 1. Claims-Based Security ($cbs) node
+        if address == "$cbs":
+            link = Link(handle=handle, name=attach.name, role=attach.role, address="$cbs")
+            session.links[handle] = link
+            if is_sender:
+                session.cbs_request_handle = handle
+            else:
+                session.cbs_reply_handle = handle
+
+            reply_attach = Attach(
+                name=attach.name,
+                handle=attach.handle,
+                role=not attach.role,
+                source=attach.source,
+                target=attach.target,
+                initial_delivery_count=0 if not attach.role else None,
+            )
+            self.send_frame(FRAME_TYPE_AMQP, channel, reply_attach)
+
+            if is_sender:
+                # Grant credit to client sender
+                flow = Flow(handle=attach.handle, link_credit=1000, next_incoming_id=1, next_outgoing_id=1)
+                self.send_frame(FRAME_TYPE_AMQP, channel, flow)
+            return
+
+        # 2. Entity Address Resolution
+        if address:
+            resolution = self.resolve_address(address)
+            if resolution is None and address != "$management":
+                # Entity not found
+                self._trace("ERR", f"Entity not found: {address!r}")
+                err = Error(Symbol("amqp:not-found"), f"The messaging entity '{address}' could not be found.")
+                reply_detach = Detach(handle=attach.handle, closed=True, error=err)
+                self.send_frame(FRAME_TYPE_AMQP, channel, reply_detach)
+                return
+
+        # Record link
+        link = Link(
+            handle=handle,
+            name=attach.name,
+            role=attach.role,
+            address=address,
+            source=attach.source,
+            target=attach.target,
+        )
+        session.links[handle] = link
+
         reply_attach = Attach(
             name=attach.name,
             handle=attach.handle,
-            role=not attach.role,  # Opposite role
+            role=not attach.role,
             source=attach.source,
             target=attach.target,
             # initial-delivery-count is mandatory when OUR reply role is
@@ -311,6 +473,11 @@ class AmqpConnection:
         )
         self.send_frame(FRAME_TYPE_AMQP, channel, reply_attach)
 
+        if is_sender:
+            # Grant credit to client sender so it can transfer messages
+            flow = Flow(handle=attach.handle, link_credit=1000, next_incoming_id=1, next_outgoing_id=1)
+            self.send_frame(FRAME_TYPE_AMQP, channel, flow)
+
     def _on_detach(self, channel: int, detach: Detach) -> None:
         session = self.sessions.get(channel)
         if session and int(detach.handle) in session.links:
@@ -319,7 +486,119 @@ class AmqpConnection:
         self.send_frame(FRAME_TYPE_AMQP, channel, reply_detach)
 
     def _on_flow(self, channel: int, flow: Flow) -> None:
-        # In Layer 2, echo or accept flow
+        session = self.sessions.get(channel)
+        if not session or flow.handle is None:
+            return
+        link = session.links.get(int(flow.handle))
+        if link:
+            link.link_credit = int(flow.link_credit) if flow.link_credit is not None else 0
+            link.drain = bool(flow.drain)
+
+    def _on_transfer(self, channel: int, transfer: Transfer, payload: bytes) -> None:
+        session = self.sessions.get(channel)
+        if not session:
+            return
+        link = session.links.get(int(transfer.handle))
+        if not link:
+            return
+
+        delivery_id = int(transfer.delivery_id) if transfer.delivery_id is not None else 0
+
+        # Multi-frame reassembly
+        if transfer.more:
+            if delivery_id not in link.rx_transfer_buffers:
+                link.rx_transfer_buffers[delivery_id] = bytearray()
+            link.rx_transfer_buffers[delivery_id].extend(payload)
+            return
+
+        if delivery_id in link.rx_transfer_buffers:
+            full_payload = bytes(link.rx_transfer_buffers.pop(delivery_id)) + payload
+        else:
+            full_payload = payload
+
+        # Check max message size (256 KB)
+        if len(full_payload) > MAX_MESSAGE_SIZE:
+            err = Error(
+                Symbol("amqp:link:message-size-exceeded"),
+                f"The received message (size: {len(full_payload)} bytes) exceeds the 256 KB limit.",
+            )
+            detach = Detach(handle=transfer.handle, closed=True, error=err)
+            self.send_frame(FRAME_TYPE_AMQP, channel, detach)
+            return
+
+        # 1. Claims-Based Security ($cbs) Handler
+        if link.address == "$cbs":
+            msg = Message.decode(full_payload)
+            op = msg.application_properties.get("operation")
+            corr_id = msg.properties.message_id if msg.properties else None
+
+            # Settle incoming transfer
+            disp = Disposition(
+                role=True,  # Server acts as receiver settling
+                first=delivery_id,
+                last=delivery_id,
+                settled=True,
+                state=Accepted(),
+            )
+            self.send_frame(FRAME_TYPE_AMQP, channel, disp)
+
+            # Send CBS reply on cbs_reply_handle
+            if session.cbs_reply_handle is not None:
+                reply_props = Properties(correlation_id=corr_id)
+                reply_msg = Message(
+                    body=b"",
+                    properties=reply_props,
+                    application_properties={"statusCode": 202, "statusDescription": "Accepted"},
+                )
+                cbs_transfer = Transfer(
+                    handle=session.cbs_reply_handle,
+                    delivery_id=session.next_outgoing_id,
+                    delivery_tag=b"cbs-reply",
+                    settled=True,
+                )
+                session.next_outgoing_id += 1
+                self.send_frame(FRAME_TYPE_AMQP, channel, cbs_transfer, reply_msg.encode())
+            return
+
+        # 2. Entity Sender Handler (Topic Send)
+        resolution = self.resolve_address(link.address)
+        if resolution:
+            topic_name, _, _ = resolution
+            # Decode single or batched messages
+            if transfer.message_format == SERVICE_BUS_BATCH_FORMAT:
+                msgs = Message.decode_batch(full_payload)
+            else:
+                msgs = [Message.decode(full_payload)]
+
+            store = get_store()
+            for m in msgs:
+                body_bytes = (
+                    m.body if isinstance(m.body, (bytes, bytearray)) else str(m.body).encode("utf-8")
+                )
+                sb_send(
+                    store=store,
+                    topic_name=topic_name,
+                    body=body_bytes,
+                    message_id=str(m.properties.message_id) if m.properties and m.properties.message_id else None,
+                    correlation_id=str(m.properties.correlation_id) if m.properties and m.properties.correlation_id else None,
+                    subject=m.properties.subject if m.properties else None,
+                    reply_to=m.properties.reply_to if m.properties else None,
+                    content_type=str(m.properties.content_type) if m.properties and m.properties.content_type else None,
+                    application_properties=m.application_properties,
+                )
+
+            # Acknowledge transfer
+            disp = Disposition(
+                role=True,
+                first=delivery_id,
+                last=delivery_id,
+                settled=True,
+                state=Accepted(),
+            )
+            self.send_frame(FRAME_TYPE_AMQP, channel, disp)
+
+    def _on_disposition(self, channel: int, disposition: Disposition) -> None:
+        # Handling client dispositions (disposition handling for receivers in Layer 4)
         pass
 
     def check_idle_keepalive(self, now: float | None = None) -> None:
@@ -328,8 +607,6 @@ class AmqpConnection:
             return
 
         current_time = now if now is not None else time.time()
-        # If remote peer requested an idle timeout, heartbeat at half that interval
-        # Otherwise heartbeat at half server idle timeout
         target_timeout_ms = self.remote_idle_timeout_ms or self.server_idle_timeout_ms
         heartbeat_interval_sec = (target_timeout_ms / 1000.0) / 2.0
 

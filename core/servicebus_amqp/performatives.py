@@ -613,12 +613,230 @@ class SaslOutcome:
         return f"SaslOutcome(code={self.code})"
 
 
+class Transfer:
+    """AMQP 1.0 Transfer performative (descriptor 0x14)."""
+
+    DESCRIPTOR = Ulong(0x14)
+
+    def __init__(
+        self,
+        handle: int,
+        delivery_id: int | None = None,
+        delivery_tag: bytes | None = None,
+        message_format: int | None = 0,
+        settled: bool | None = None,
+        more: bool = False,
+        rcv_settle_mode: int | None = None,
+        state: Any = None,
+        resume: bool = False,
+        aborted: bool = False,
+        batchable: bool = False,
+    ):
+        self.handle = Uint(handle)
+        self.delivery_id = Uint(delivery_id) if delivery_id is not None else None
+        self.delivery_tag = delivery_tag
+        self.message_format = Uint(message_format) if message_format is not None else None
+        self.settled = settled
+        self.more = more
+        self.rcv_settle_mode = Ubyte(rcv_settle_mode) if rcv_settle_mode is not None else None
+        self.state = state
+        self.resume = resume
+        self.aborted = aborted
+        self.batchable = batchable
+
+    def to_described_type(self) -> DescribedType:
+        state_dt = self.state.to_described_type() if hasattr(self.state, "to_described_type") else self.state
+        fields = [
+            self.handle,
+            self.delivery_id,
+            self.delivery_tag,
+            self.message_format,
+            self.settled,
+            self.more if self.more else None,
+            self.rcv_settle_mode,
+            state_dt,
+            self.resume if self.resume else None,
+            self.aborted if self.aborted else None,
+            self.batchable if self.batchable else None,
+        ]
+        return DescribedType(self.DESCRIPTOR, _truncate_trailing_nulls(fields))
+
+    @classmethod
+    def from_described_type(cls, dt: DescribedType) -> Transfer:
+        f = dt.value if isinstance(dt.value, list) else []
+        state_raw = f[7] if len(f) > 7 else None
+        state = parse_performative(state_raw) if isinstance(state_raw, DescribedType) else state_raw
+        return cls(
+            handle=f[0] if len(f) > 0 and f[0] is not None else 0,
+            delivery_id=f[1] if len(f) > 1 else None,
+            delivery_tag=f[2] if len(f) > 2 else None,
+            message_format=f[3] if len(f) > 3 and f[3] is not None else 0,
+            settled=bool(f[4]) if len(f) > 4 and f[4] is not None else None,
+            more=bool(f[5]) if len(f) > 5 and f[5] is not None else False,
+            rcv_settle_mode=f[6] if len(f) > 6 else None,
+            state=state,
+            resume=bool(f[8]) if len(f) > 8 and f[8] is not None else False,
+            aborted=bool(f[9]) if len(f) > 9 and f[9] is not None else False,
+            batchable=bool(f[10]) if len(f) > 10 and f[10] is not None else False,
+        )
+
+    def __repr__(self) -> str:
+        return f"Transfer(handle={self.handle}, id={self.delivery_id}, format={self.message_format}, more={self.more})"
+
+
+class Disposition:
+    """AMQP 1.0 Disposition performative (descriptor 0x15)."""
+
+    DESCRIPTOR = Ulong(0x15)
+
+    def __init__(
+        self,
+        role: bool,  # False = sender, True = receiver
+        first: int,
+        last: int | None = None,
+        settled: bool = False,
+        state: Any = None,
+        batchable: bool = False,
+    ):
+        self.role = role
+        self.first = Uint(first)
+        self.last = Uint(last) if last is not None else None
+        self.settled = settled
+        self.state = state
+        self.batchable = batchable
+
+    def to_described_type(self) -> DescribedType:
+        state_dt = self.state.to_described_type() if hasattr(self.state, "to_described_type") else self.state
+        fields = [
+            self.role,
+            self.first,
+            self.last,
+            self.settled,
+            state_dt,
+            self.batchable if self.batchable else None,
+        ]
+        return DescribedType(self.DESCRIPTOR, _truncate_trailing_nulls(fields))
+
+    @classmethod
+    def from_described_type(cls, dt: DescribedType) -> Disposition:
+        f = dt.value if isinstance(dt.value, list) else []
+        state_raw = f[4] if len(f) > 4 else None
+        state = parse_performative(state_raw) if isinstance(state_raw, DescribedType) else state_raw
+        return cls(
+            role=bool(f[0]) if len(f) > 0 and f[0] is not None else False,
+            first=f[1] if len(f) > 1 and f[1] is not None else 0,
+            last=f[2] if len(f) > 2 else None,
+            settled=bool(f[3]) if len(f) > 3 and f[3] is not None else False,
+            state=state,
+            batchable=bool(f[5]) if len(f) > 5 and f[5] is not None else False,
+        )
+
+    def __repr__(self) -> str:
+        return f"Disposition(role={self.role}, first={self.first}, last={self.last}, settled={self.settled}, state={self.state!r})"
+
+
+# --- Delivery Outcomes ---
+
+
+class Accepted:
+    """AMQP 1.0 Accepted outcome (descriptor 0x24)."""
+
+    DESCRIPTOR = Ulong(0x24)
+
+    def to_described_type(self) -> DescribedType:
+        return DescribedType(self.DESCRIPTOR, [])
+
+    @classmethod
+    def from_described_type(cls, dt: DescribedType) -> Accepted:
+        return cls()
+
+    def __repr__(self) -> str:
+        return "Accepted()"
+
+
+class Released:
+    """AMQP 1.0 Released outcome (descriptor 0x26)."""
+
+    DESCRIPTOR = Ulong(0x26)
+
+    def to_described_type(self) -> DescribedType:
+        return DescribedType(self.DESCRIPTOR, [])
+
+    @classmethod
+    def from_described_type(cls, dt: DescribedType) -> Released:
+        return cls()
+
+    def __repr__(self) -> str:
+        return "Released()"
+
+
+class Rejected:
+    """AMQP 1.0 Rejected outcome (descriptor 0x25)."""
+
+    DESCRIPTOR = Ulong(0x25)
+
+    def __init__(self, error: Error | None = None):
+        self.error = error
+
+    def to_described_type(self) -> DescribedType:
+        err_dt = self.error.to_described_type() if self.error else None
+        fields = [err_dt]
+        return DescribedType(self.DESCRIPTOR, _truncate_trailing_nulls(fields))
+
+    @classmethod
+    def from_described_type(cls, dt: DescribedType) -> Rejected:
+        f = dt.value if isinstance(dt.value, list) else []
+        err = Error.from_described_type(f[0]) if len(f) > 0 and isinstance(f[0], DescribedType) else None
+        return cls(error=err)
+
+    def __repr__(self) -> str:
+        return f"Rejected(error={self.error!r})"
+
+
+class Modified:
+    """AMQP 1.0 Modified outcome (descriptor 0x27)."""
+
+    DESCRIPTOR = Ulong(0x27)
+
+    def __init__(
+        self,
+        delivery_failed: bool = False,
+        undeliverable_here: bool = False,
+        message_annotations: dict[Any, Any] | None = None,
+    ):
+        self.delivery_failed = delivery_failed
+        self.undeliverable_here = undeliverable_here
+        self.message_annotations = message_annotations or {}
+
+    def to_described_type(self) -> DescribedType:
+        fields = [
+            self.delivery_failed if self.delivery_failed else None,
+            self.undeliverable_here if self.undeliverable_here else None,
+            self.message_annotations if self.message_annotations else None,
+        ]
+        return DescribedType(self.DESCRIPTOR, _truncate_trailing_nulls(fields))
+
+    @classmethod
+    def from_described_type(cls, dt: DescribedType) -> Modified:
+        f = dt.value if isinstance(dt.value, list) else []
+        return cls(
+            delivery_failed=bool(f[0]) if len(f) > 0 and f[0] is not None else False,
+            undeliverable_here=bool(f[1]) if len(f) > 1 and f[1] is not None else False,
+            message_annotations=f[2] if len(f) > 2 and isinstance(f[2], dict) else {},
+        )
+
+    def __repr__(self) -> str:
+        return f"Modified(delivery_failed={self.delivery_failed})"
+
+
 # Dispatch table for parsing incoming DescribedTypes into performative objects
 PERFORMATIVE_DISPATCH = {
     Open.DESCRIPTOR: Open.from_described_type,
     Begin.DESCRIPTOR: Begin.from_described_type,
     Attach.DESCRIPTOR: Attach.from_described_type,
     Flow.DESCRIPTOR: Flow.from_described_type,
+    Transfer.DESCRIPTOR: Transfer.from_described_type,
+    Disposition.DESCRIPTOR: Disposition.from_described_type,
     Detach.DESCRIPTOR: Detach.from_described_type,
     End.DESCRIPTOR: End.from_described_type,
     Close.DESCRIPTOR: Close.from_described_type,
@@ -626,6 +844,10 @@ PERFORMATIVE_DISPATCH = {
     SaslInit.DESCRIPTOR: SaslInit.from_described_type,
     SaslOutcome.DESCRIPTOR: SaslOutcome.from_described_type,
     Error.DESCRIPTOR: Error.from_described_type,
+    Accepted.DESCRIPTOR: Accepted.from_described_type,
+    Released.DESCRIPTOR: Released.from_described_type,
+    Rejected.DESCRIPTOR: Rejected.from_described_type,
+    Modified.DESCRIPTOR: Modified.from_described_type,
 }
 
 
