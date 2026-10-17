@@ -425,6 +425,7 @@ def register(app, h) -> None:
         ("DELETE", "/api/gcp/firestore/v1/projects/{project}/databases/{database}", "api_gcp_firestore_delete_database", "(project: str, database: str)"),
         # Firestore documents
         ("GET", "/firestore/v1/projects/{project}/databases/{database}/documents", "api_gcp_firestore_list_root_documents", "(project: str, database: str)"),
+        ("GET", "/api/gcp/firestore/v1/projects/{project}/databases/{database}/documents", "api_gcp_firestore_list_root_documents", "(project: str, database: str)"),
         ("GET", "/api/gcp/dynamodb/tables", "api_gcp_firestore_list_root_documents", "(project: str, database: str)"),
         # Native Firestore document API uses path-segment parity to distinguish a
         # collection (odd) from a document (even) — enables nested subcollections.
@@ -433,6 +434,11 @@ def register(app, h) -> None:
         ("DELETE", "/firestore/v1/projects/{project}/databases/{database}/documents/{fs_path:path}", "api_gcp_firestore_doc_delete", "(project: str, database: str, fs_path: str)"),
         ("PUT", "/firestore/v1/projects/{project}/databases/{database}/documents/{fs_path:path}", "api_gcp_firestore_doc_put", "(project: str, database: str, fs_path: str, request: Request)"),
         ("PATCH", "/firestore/v1/projects/{project}/databases/{database}/documents/{fs_path:path}", "api_gcp_firestore_doc_put", "(project: str, database: str, fs_path: str, request: Request)"),
+        ("GET", "/api/gcp/firestore/v1/projects/{project}/databases/{database}/documents/{fs_path:path}", "api_gcp_firestore_doc_get", "(project: str, database: str, fs_path: str)"),
+        ("POST", "/api/gcp/firestore/v1/projects/{project}/databases/{database}/documents/{fs_path:path}", "api_gcp_firestore_doc_post", "(project: str, database: str, fs_path: str, request: Request)"),
+        ("DELETE", "/api/gcp/firestore/v1/projects/{project}/databases/{database}/documents/{fs_path:path}", "api_gcp_firestore_doc_delete", "(project: str, database: str, fs_path: str)"),
+        ("PUT", "/api/gcp/firestore/v1/projects/{project}/databases/{database}/documents/{fs_path:path}", "api_gcp_firestore_doc_put", "(project: str, database: str, fs_path: str, request: Request)"),
+        ("PATCH", "/api/gcp/firestore/v1/projects/{project}/databases/{database}/documents/{fs_path:path}", "api_gcp_firestore_doc_put", "(project: str, database: str, fs_path: str, request: Request)"),
         # DynamoDB-style flat aliases (single collection, no nesting).
         ("GET", "/api/gcp/dynamodb/tables/{collection}/items", "api_gcp_firestore_list_documents", "(project: str, database: str, collection: str)"),
         ("POST", "/api/gcp/dynamodb/tables/{collection}/items", "api_gcp_firestore_create_document", "(project: str, database: str, collection: str, request: Request)"),
@@ -442,10 +448,13 @@ def register(app, h) -> None:
         ("POST", "/firestore/v1/projects/{project}/databases/{database}/documents:runQuery", "api_gcp_firestore_run_query", "(project: str, database: str, request: Request, collection: str = \"\")"),
         ("POST", "/api/gcp/dynamodb/tables/{collection}/query", "api_gcp_firestore_run_query", "(project: str, database: str, request: Request, collection: str = \"\")"),
         ("GET", "/firestore/v1/projects/{project}/databases/{database}/collectionGroups/{collection}/indexes", "api_gcp_firestore_list_indexes", "(project: str, database: str, collection: str = \"\")"),
+        ("GET", "/api/gcp/firestore/v1/projects/{project}/databases/{database}/collectionGroups/{collection}/indexes", "api_gcp_firestore_list_indexes", "(project: str, database: str, collection: str = \"\")"),
         ("GET", "/api/gcp/firestore/indexes", "api_gcp_firestore_list_indexes", "(project: str, database: str, collection: str = \"\")"),
         ("POST", "/firestore/v1/projects/{project}/databases/{database}/collectionGroups/{collection}/indexes", "api_gcp_firestore_create_index", "(project: str, database: str, collection: str, request: Request)"),
+        ("POST", "/api/gcp/firestore/v1/projects/{project}/databases/{database}/collectionGroups/{collection}/indexes", "api_gcp_firestore_create_index", "(project: str, database: str, collection: str, request: Request)"),
         ("POST", "/api/gcp/firestore/indexes", "api_gcp_firestore_create_index", "(project: str, database: str, collection: str, request: Request)"),
         ("DELETE", "/firestore/v1/projects/{project}/databases/{database}/collectionGroups/{collection}/indexes/{index_name}", "api_gcp_firestore_delete_index", "(project: str, database: str, collection: str, index_name: str)"),
+        ("DELETE", "/api/gcp/firestore/v1/projects/{project}/databases/{database}/collectionGroups/{collection}/indexes/{index_name}", "api_gcp_firestore_delete_index", "(project: str, database: str, collection: str, index_name: str)"),
         ("DELETE", "/api/gcp/firestore/indexes/{index_name}", "api_gcp_firestore_delete_index", "(project: str, database: str, collection: str, index_name: str)"),
         # Functions
         ("GET", "/v1/projects/{project}/locations/{location}/functions", "api_gcp_functions_list", "(project: str, location: str = \"us-central1\")"),

@@ -251,8 +251,11 @@ async def api_gcp_storage_create_object(bucket: str, request: Request):
     if gcs_ok and is_sdk_upload:
         # Real SDK / gsutil upload: proxy the raw bytes to the byte store, which
         # handles media/multipart and returns the GCS object metadata.
+        query = str(request.url.query) if request is not None else ""
+        if "uploadType" not in query:
+            query = "uploadType=media" + ("&" + query if query else "")
         try:
-            _status, body = gcs.upload(s._tenant_scoped_bucket(bucket), str(request.url.query), raw, ctype)
+            _status, body = gcs.upload(s._tenant_scoped_bucket(bucket), query, raw, ctype)
             meta = json.loads(body.decode("utf-8")) if body else {}
             name = str(meta.get("name") or qp.get("name") or "")
         except Exception as exc:
@@ -1084,7 +1087,10 @@ def api_gcp_firestore_list_root_documents(project: str, database: str):
     project = _gcp_project_name(project)
     database = str(database or "(default)")
     if _fs_emu.available():
-        return {"documents": _fs_emu.list_root(project, database), "nextPageToken": "", "kind": "firestore#documents"}
+        try:
+            return {"documents": _fs_emu.list_root(project, database), "nextPageToken": "", "kind": "firestore#documents"}
+        except Exception:
+            pass
     docs = s._gcp_firestore_engine().list_root_documents(project, database)
     return {"documents": docs, "nextPageToken": "", "kind": "firestore#documents"}
 
@@ -1094,7 +1100,10 @@ def api_gcp_firestore_list_documents(project: str, database: str, collection: st
     project = _gcp_project_name(project)
     database = str(database or "(default)")
     if _fs_emu.available():
-        return {"documents": _fs_emu.list_collection(project, database, collection), "nextPageToken": "", "kind": "firestore#documents"}
+        try:
+            return {"documents": _fs_emu.list_collection(project, database, collection), "nextPageToken": "", "kind": "firestore#documents"}
+        except Exception:
+            pass
     docs = s._gcp_firestore_engine().list_documents(project, database, collection)
     return {"documents": docs, "nextPageToken": "", "kind": "firestore#documents"}
 

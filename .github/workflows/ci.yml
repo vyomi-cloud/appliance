@@ -42,7 +42,7 @@ jobs:
         run: |
           # DEV_MODE=1 keeps /api/license/signup available in CI (production
           # mode disables that endpoint by design — see core/license_remote).
-          CLOUDLEARN_DEV_MODE=1 docker compose -f docker-compose.yml up -d --build
+          CLOUDLEARN_DEV_MODE=1 docker compose -f docker-compose.yml --profile full up -d --build
           # Wait for /healthz
           for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:9000/healthz > /dev/null; then
