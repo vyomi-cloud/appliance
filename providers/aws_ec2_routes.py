@@ -178,6 +178,14 @@ def register(app, h) -> None:
             host_os_hint=request.headers.get("x-cloudlearn-host-os", ""),
         )
 
+    @app.get("/api/ec2/instances/{instance_id}")
+    def api_ec2_get_instance(instance_id: str):
+        return _server().api_ec2_get_instance(instance_id)
+
+    @app.delete("/api/ec2/instances/{instance_id}")
+    def api_ec2_delete_instance(instance_id: str):
+        return _server().api_ec2_terminate_instance(instance_id)
+
     @app.post("/api/ec2/instances/{instance_id}/start")
     def api_ec2_start_instance(instance_id: str):
         return _server().api_ec2_start_instance(instance_id)
