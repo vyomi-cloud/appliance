@@ -28,7 +28,7 @@ class AmqpConnectionHandler:
         self.reader = reader
         self.writer = writer
         self.server = server
-        self.conn = AmqpConnection(container_id=container_id)
+        self.conn = AmqpConnection(container_id=container_id, store=getattr(server, "store", None))
         self.closed = False
         self._heartbeat_task: asyncio.Task[None] | None = None
 
@@ -97,10 +97,12 @@ class AmqpServer:
         host: str = "0.0.0.0",
         port: int = 5672,
         container_id: str = "vyomi-servicebus-emulator",
+        store: Any = None,
     ):
         self.host = host
         self.port = port
         self.container_id = container_id
+        self.store = store
         self._server: asyncio.Server | None = None
         self._connections: Set[AmqpConnectionHandler] = set()
         self._is_running = False

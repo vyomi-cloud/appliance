@@ -94,6 +94,16 @@ class Ubyte(int):
     pass
 
 
+class Long(int):
+    """AMQP 1.0 Signed 64-bit integer."""
+    pass
+
+
+class Int(int):
+    """AMQP 1.0 Signed 32-bit integer."""
+    pass
+
+
 class Timestamp(int):
     """AMQP 1.0 Timestamp (milliseconds since Unix epoch)."""
     pass
@@ -173,7 +183,17 @@ def encode(val: Any) -> bytes:
             return bytes([FORMAT_ULONG0])
         if 0 <= v <= 255:
             return bytes([FORMAT_SMALLULONG, v])
-        return bytes([FORMAT_ULONG]) + struct.pack(">Q", v)
+    if isinstance(val, Long):
+        v = int(val)
+        if -128 <= v <= 127:
+            return bytes([FORMAT_SMALLLONG, v & 0xFF])
+        return bytes([FORMAT_LONG]) + struct.pack(">q", v)
+
+    if isinstance(val, Int):
+        v = int(val)
+        if -128 <= v <= 127:
+            return bytes([FORMAT_SMALLINT, v & 0xFF])
+        return bytes([FORMAT_INT]) + struct.pack(">i", v)
 
     if isinstance(val, int):
         # Default integer encoding: compact where possible

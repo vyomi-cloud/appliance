@@ -405,14 +405,14 @@ def sb_peek_lock(store: MessagingStore, topic_name: str, sub_name: str, is_dlq: 
     return None, None
 
 
-def sb_complete(store: MessagingStore, topic_name: str, sub_name: str, seq: str | int, lock: str, is_dlq: bool = False) -> None:
+def sb_complete(store: MessagingStore, topic_name: str, sub_name: str, seq: str | int | None = None, lock: str = "", is_dlq: bool = False) -> None:
     topic = _require_topic(store, topic_name)
     sub = _require_subscription(topic, sub_name)
     now = store.now()
     backlog = _get_target_backlog(sub, is_dlq)
 
     for i, msg in enumerate(backlog):
-        if str(msg["SequenceNumber"]) == str(seq) and (msg.get("lease_token") == lock or msg.get("_locked") == lock):
+        if (seq is None or str(msg["SequenceNumber"]) == str(seq)) and (msg.get("lease_token") == lock or msg.get("_locked") == lock):
             try:
                 lease.settle(msg, msg.get("lease_token") or lock, now, strict=True)
                 backlog.pop(i)
@@ -424,7 +424,7 @@ def sb_complete(store: MessagingStore, topic_name: str, sub_name: str, seq: str 
     raise ServiceBusError("MessageLockLost", "The lock supplied is invalid or has expired.", 410)
 
 
-def sb_abandon(store: MessagingStore, topic_name: str, sub_name: str, seq: str | int, lock: str, is_dlq: bool = False) -> None:
+def sb_abandon(store: MessagingStore, topic_name: str, sub_name: str, seq: str | int | None = None, lock: str = "", is_dlq: bool = False) -> None:
     topic = _require_topic(store, topic_name)
     sub = _require_subscription(topic, sub_name)
     now = store.now()
@@ -432,7 +432,7 @@ def sb_abandon(store: MessagingStore, topic_name: str, sub_name: str, seq: str |
     max_d = int(sub.get("max_delivery_count", DEFAULT_MAX_DELIVERY_COUNT))
 
     for i, msg in enumerate(backlog):
-        if str(msg["SequenceNumber"]) == str(seq) and (msg.get("lease_token") == lock or msg.get("_locked") == lock):
+        if (seq is None or str(msg["SequenceNumber"]) == str(seq)) and (msg.get("lease_token") == lock or msg.get("_locked") == lock):
             try:
                 lease.release(msg, msg.get("lease_token") or lock, now, strict=True)
                 if not is_dlq and int(msg.get("delivery_count", 0)) >= max_d:
@@ -448,7 +448,7 @@ def sb_abandon(store: MessagingStore, topic_name: str, sub_name: str, seq: str |
     raise ServiceBusError("MessageLockLost", "The lock supplied is invalid or has expired.", 410)
 
 
-def sb_renew_lock(store: MessagingStore, topic_name: str, sub_name: str, seq: str | int, lock: str, is_dlq: bool = False) -> float:
+def sb_renew_lock(store: MessagingStore, topic_name: str, sub_name: str, seq: str | int | None = None, lock: str = "", is_dlq: bool = False) -> float:
     topic = _require_topic(store, topic_name)
     sub = _require_subscription(topic, sub_name)
     now = store.now()
@@ -456,7 +456,7 @@ def sb_renew_lock(store: MessagingStore, topic_name: str, sub_name: str, seq: st
     backlog = _get_target_backlog(sub, is_dlq)
 
     for msg in backlog:
-        if str(msg["SequenceNumber"]) == str(seq) and (msg.get("lease_token") == lock or msg.get("_locked") == lock):
+        if (seq is None or str(msg["SequenceNumber"]) == str(seq)) and (msg.get("lease_token") == lock or msg.get("_locked") == lock):
             try:
                 new_vis = lease.extend(msg, msg.get("lease_token") or lock, now, lock_duration, strict=True)
                 store.persist()
@@ -467,7 +467,7 @@ def sb_renew_lock(store: MessagingStore, topic_name: str, sub_name: str, seq: st
     raise ServiceBusError("MessageLockLost", "The lock supplied is invalid or has expired.", 410)
 
 
-def sb_dead_letter(store: MessagingStore, topic_name: str, sub_name: str, seq: str | int, lock: str,
+def sb_dead_letter(store: MessagingStore, topic_name: str, sub_name: str, seq: str | int | None = None, lock: str = "",
                    reason: str | None = None, description: str | None = None) -> None:
     topic = _require_topic(store, topic_name)
     sub = _require_subscription(topic, sub_name)
@@ -475,7 +475,7 @@ def sb_dead_letter(store: MessagingStore, topic_name: str, sub_name: str, seq: s
     messages = sub.setdefault("messages", [])
 
     for i, msg in enumerate(messages):
-        if str(msg["SequenceNumber"]) == str(seq) and (msg.get("lease_token") == lock or msg.get("_locked") == lock):
+        if (seq is None or str(msg["SequenceNumber"]) == str(seq)) and (msg.get("lease_token") == lock or msg.get("_locked") == lock):
             try:
                 lease.dead_letter(msg, msg.get("lease_token") or lock, now, strict=True, reason=reason, description=description)
                 dead = messages.pop(i)
