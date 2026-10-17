@@ -34,6 +34,7 @@ def build_backed_router() -> AwsWireRouter:
                                         PersistentCosmosStore, PersistentAzureQueueStore,
                                         PersistentMessagingStore)
     from core.nats_backed_store import NatsBackedMessagingStore
+    from core.azure_servicebus_runtime import get_store as get_sb_store
 
     minio = dict(
         endpoint=_cfg("VYOMI_MINIO_ENDPOINT", "http://localhost:9100"),
@@ -75,10 +76,8 @@ def build_backed_router() -> AwsWireRouter:
         # Azure Queue (v2.5.0) — durable via the file-backed substrate (Message-aware)
         "az_queue": PersistentAzureQueueStore(
             SqliteStateBackend(_cfg("VYOMI_AZQUEUE_DB", "/tmp/vyomi-azqueue.sqlite"))),
-        # Azure Service Bus topics (v2.5.0) — durable via the file-backed substrate
-        # (topics+subscriptions, bytes-aware codec handles message bodies)
-        "az_sb": PersistentMessagingStore(
-            SqliteStateBackend(_cfg("VYOMI_AZSB_DB", "/tmp/vyomi-azsb.sqlite")), store_id="azsb"),
+        # Azure Service Bus topics (v2.5.0) — shared runtime store with Siftly topology bootstrap
+        "az_sb": get_sb_store(_cfg("VYOMI_AZSB_DB", "/tmp/vyomi-azsb.sqlite")),
         # messaging — SQS/SNS + Pub/Sub on NATS JetStream (separate KV buckets)
         "msg": NatsBackedMessagingStore(servers=nats_servers, bucket="aws_msg"),
         "gcp_msg": NatsBackedMessagingStore(servers=nats_servers, bucket="gcp_msg"),
