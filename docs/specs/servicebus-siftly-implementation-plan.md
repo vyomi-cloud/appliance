@@ -1,16 +1,15 @@
 ---
-title: Azure Service Bus for Siftly — specification & implementation plan
+title: Azure Service Bus for Siftly — implementation plan
 status: draft (revision 2 — review findings applied)
 updated: 2026-10-17
 owner: Rohith
-related:
-  - siftly-integration-gaps.md
+spec: servicebus-siftly-plan.md
 repo: ~/Documents/appliance (Vyomi v3.0.6)
 ---
 
-# Azure Service Bus for Siftly — specification & implementation plan
+# Azure Service Bus for Siftly — implementation plan
 
-This document defines the specification and pull-request implementation plan to support Azure Service Bus in Vyomi for Siftly. It is based on reading `core/messaging_store.py`, `core/sqs_core.py`, `core/azure_servicebus_core.py`, `core/gcp_pubsub_core.py`, `core/aws_wire_router.py`, `core/wire_ingress.py`, `core/persistent_store.py`, `core/console_azure_servicebus.py` and the messaging conformance scripts.
+This plan turns `servicebus-siftly-plan.md` (the spec) into pull requests. It is based on reading `core/messaging_store.py`, `core/sqs_core.py`, `core/azure_servicebus_core.py`, `core/gcp_pubsub_core.py`, `core/aws_wire_router.py`, `core/wire_ingress.py`, `core/persistent_store.py`, `core/console_azure_servicebus.py` and the messaging conformance scripts.
 
 **Done means:** Siftly's backend workers (`azure-servicebus` 7.14.3, Python) and `traffic-ingest-service` (`@azure/service-bus` 7.9, JavaScript) run against Vyomi with only a connection-string change and `ENVIRONMENT=local`, and Siftly acceptance tests A1–A9 pass in CI.
 
