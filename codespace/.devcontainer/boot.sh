@@ -56,18 +56,28 @@ ttl_seconds() {  # 8h | 90m | 1d | 1w → seconds
 }
 
 make_port_public() {
-  # Land developers on the CONSOLE without a GitHub auth wall: mark the forwarded
-  # port 9000 public. Best-effort (needs gh + a codespace token that allows it;
-  # org policy may forbid public ports — then set it in the Ports tab).
+  # Mark the forwarded console port 9000 ORG-visible so a developer who ISN'T the
+  # Codespace owner (the turnkey model: the box runs in the org/PAT-owner account,
+  # the dev just opens the URL) can still reach it. A default forward is `private`
+  # = owner-only → a non-owner dev hitting it gets a proxy error (the 502).
+  #
+  # ORG (not public) — SOC/InfoSec: the console must not be an anonymous
+  # internet-reachable endpoint; only authenticated org members reach it.
+  #
+  # MUST run AFTER port 9000 is actually forwarded (i.e. after the simulator is
+  # listening) — calling it while 9000 isn't forwarded yet silently no-ops and the
+  # port stays `private`. That ordering bug is why launches 502'd. Retry to ride
+  # out the forward settling.
   if command -v gh >/dev/null 2>&1 && [ -n "${CODESPACE_NAME:-}" ]; then
-    # ORG visibility (NOT public) — SOC/InfoSec: the console must not be an
-    # anonymous internet-reachable endpoint. Only authenticated org members reach it.
-    # (The portal is the primary authority on visibility; this is a best-effort echo.)
-    if gh codespace ports visibility 9000:org -c "$CODESPACE_NAME" >/dev/null 2>&1; then
-      log "console port 9000 → org-visible."
-    else
-      log "note: couldn't set port 9000 org-visible — the portal will set it, or use the Ports tab."
-    fi
+    local i
+    for i in 1 2 3 4 5; do
+      if gh codespace ports visibility 9000:org -c "$CODESPACE_NAME" >/dev/null 2>&1; then
+        log "console port 9000 → org-visible."
+        return 0
+      fi
+      sleep 2
+    done
+    log "note: couldn't set port 9000 org-visible after retries — set it in the Ports tab or via the portal."
   fi
 }
 
@@ -84,11 +94,11 @@ start_stack() {
   log "pulling + starting stack (profile=$PROFILE · clouds=$COMPOSE_PROFILES)…"
   install_clis
   docker compose -f "$COMPOSE" up -d
-  make_port_public
   log "waiting for the simulator (http://localhost:9000/healthz)…"
   for i in $(seq 1 60); do
     if curl -fsS -m 3 http://localhost:9000/healthz >/dev/null 2>&1; then
       log "simulator is up."
+      make_port_public               # NOW that 9000 is forwarded, set visibility (was called too early)
       post_status ready 100          # PRIMARY readiness webhook → the launch modal opens off this
       if [ -n "${CLOUDLEARN_PUBLIC_URL:-}" ]; then
         log "console → ${CLOUDLEARN_PUBLIC_URL}"
@@ -99,6 +109,7 @@ start_stack() {
     sleep 3
   done
   log "WARNING: simulator did not report healthy in time (continuing)."
+  make_port_public                   # best-effort even if health timed out
 }
 
 provision() {
@@ -151,6 +162,12 @@ case "${1:-up}" in
     log "ready. Open the forwarded port 9000 to reach the console."
     ;;
   heartbeat)
+    # Runs on every Codespace RESTART (postStartCommand). The stack does NOT
+    # reliably survive an idle-stop under docker-in-docker, so bring it back up
+    # (idempotent: `docker compose up -d` is a no-op if already running) and
+    # re-assert port visibility BEFORE re-arming — otherwise port 9000 is dead
+    # and the console 502s after a restart. (Does not re-provision the cost meter.)
+    start_stack
     start_heartbeat
     arm_reaper
     ;;
