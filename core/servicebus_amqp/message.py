@@ -271,6 +271,11 @@ class Message:
         )
 
     @classmethod
+    def encode_batch(cls, messages: Sequence[Message]) -> bytes:
+        """Encode a sequence of messages into a Service Bus batch payload (format 0x80013700)."""
+        return b"".join(encode(DescribedType(DESCRIPTOR_DATA, m.encode())) for m in messages)
+
+    @classmethod
     def decode_batch(cls, data: bytes) -> list[Message]:
         """Decode a batch of AMQP messages (format 0x80013700).
 
