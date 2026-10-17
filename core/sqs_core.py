@@ -29,6 +29,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from core.messaging_store import MessagingStore, REGION
+try:
+    from core import lease
+except ImportError:
+    import lease  # type: ignore
 
 _DEFAULT_VISIBILITY = 30
 
@@ -191,7 +195,7 @@ def _set_queue_attributes(store, body):
 
 # ── messages ─────────────────────────────────────────────────────────────
 def _available(msg: dict, now: float) -> bool:
-    return not msg.get("deleted") and msg.get("visible_at", 0) <= now
+    return lease.available(msg, now)
 
 
 def _send_message(store, body):
@@ -247,23 +251,17 @@ def _redrive_expired(store, q, now):
     dlq = store.get_queue_by_arn(str(policy.get("deadLetterTargetArn", "")))
     if dlq is None:
         return
-    survivors = []
-    moved = False
-    for msg in q["messages"]:
-        if msg.get("deleted"):
-            continue
-        # A message that has already been received max_recv times and is available
-        # again (its lease lapsed without a delete) is dead-lettered.
-        if _available(msg, now) and msg.get("receive_count", 0) >= max_recv:
-            dead = dict(msg)
-            dead.update({"receive_count": 0, "receipt_handle": "", "in_flight": False,
-                         "visible_at": now})
-            dlq.setdefault("messages", []).append(dead)
-            moved = True
-            continue
-        survivors.append(msg)
-    if moved:
-        q["messages"] = survivors
+    dead_messages = lease.take_dead(q.get("messages", []), now, max_recv)
+    for dead in dead_messages:
+        dead.update({
+            "visible_at": now,
+            "delivery_count": 0,
+            "lease_token": None,
+            "receive_count": 0,
+            "receipt_handle": "",
+            "in_flight": False,
+        })
+        dlq.setdefault("messages", []).append(dead)
 
 
 def _receive_message(store, body):
@@ -288,10 +286,10 @@ def _receive_message(store, body):
         grp = msg.get("message_group_id")
         if q.get("fifo") and grp in locked_groups:
             continue   # preserve per-group ordering
+        token = lease.lease(msg, now, vis)
         msg["in_flight"] = True
-        msg["receipt_handle"] = "rhdl-" + uuid.uuid4().hex
-        msg["visible_at"] = now + vis
-        msg["receive_count"] += 1
+        msg["receipt_handle"] = token
+        msg["receive_count"] = msg["delivery_count"]
         if q.get("fifo") and grp:
             locked_groups.add(grp)   # lock the group for the rest of this batch
         attrs = {"ApproximateReceiveCount": str(msg["receive_count"])}
@@ -313,12 +311,17 @@ def _receive_message(store, body):
 def _delete_message(store, body):
     q = _require_queue(store, body.get("QueueUrl", ""))
     handle = str(body.get("ReceiptHandle", ""))
+    now = store.now()
     for msg in q["messages"]:
-        if msg.get("receipt_handle") == handle and not msg["deleted"]:
-            msg["deleted"] = True
-            q["messages"] = [m for m in q["messages"] if not m["deleted"]]
-            store.persist()
-            return SqsResponse(body={})
+        if msg.get("receipt_handle") == handle or msg.get("lease_token") == handle:
+            tok = msg.get("lease_token") or handle
+            try:
+                lease.settle(msg, tok, now, strict=False)
+                q["messages"] = [m for m in q["messages"] if not m.get("deleted")]
+                store.persist()
+                return SqsResponse(body={})
+            except lease.LeaseLost:
+                break
     raise SqsError("com.amazonaws.sqs#ReceiptHandleIsInvalid",
                    "The receipt handle is not valid.", 400)
 
@@ -327,11 +330,19 @@ def _change_message_visibility(store, body):
     q = _require_queue(store, body.get("QueueUrl", ""))
     handle = str(body.get("ReceiptHandle", ""))
     vis = int(body.get("VisibilityTimeout", 0))
+    now = store.now()
     for msg in q["messages"]:
-        if msg.get("receipt_handle") == handle and not msg["deleted"]:
-            msg["visible_at"] = store.now() + max(0, vis)
-            store.persist()
-            return SqsResponse(body={})
+        if msg.get("receipt_handle") == handle or msg.get("lease_token") == handle:
+            tok = msg.get("lease_token") or handle
+            try:
+                if vis == 0:
+                    lease.release(msg, tok, now, strict=False)
+                else:
+                    lease.extend(msg, tok, now, vis, strict=False)
+                store.persist()
+                return SqsResponse(body={})
+            except lease.LeaseLost:
+                break
     raise SqsError("com.amazonaws.sqs#ReceiptHandleIsInvalid",
                    "The receipt handle is not valid.", 400)
 
