@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Set
+import ssl
+from typing import Any, Set
 
 from .connection import AmqpConnection, ConnectionState
 
@@ -98,11 +99,13 @@ class AmqpServer:
         port: int = 5672,
         container_id: str = "vyomi-servicebus-emulator",
         store: Any = None,
+        ssl_context: ssl.SSLContext | None = None,
     ):
         self.host = host
         self.port = port
         self.container_id = container_id
         self.store = store
+        self.ssl_context = ssl_context
         self._server: asyncio.Server | None = None
         self._connections: Set[AmqpConnectionHandler] = set()
         self._is_running = False
@@ -122,9 +125,11 @@ class AmqpServer:
             self._on_client_connected,
             self.host,
             self.port,
+            ssl=self.ssl_context,
         )
         self._is_running = True
-        logger.info("AMQP 1.0 listener started on %s:%d", self.host, self.actual_port)
+        proto = "AMQPS (TLS)" if self.ssl_context else "AMQP 1.0"
+        logger.info("%s listener started on %s:%d", proto, self.host, self.actual_port)
 
     def _on_client_connected(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
