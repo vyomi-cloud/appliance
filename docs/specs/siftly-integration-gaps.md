@@ -7,9 +7,7 @@ compared:
   - Siftly: ~/Downloads/generative-engine-optimization
   - Vyomi: ~/Documents/appliance (v3.0.6)
 related:
-  - messaging-core-spec.md
-  - document-store-spec.md
-  - Service Bus emulator spec (Docs): https://claude.ai/code/artifact/34441afa-1058-4193-acf7-deb6f318486b
+  - servicebus-siftly-spec.md
 ---
 
 # Siftly on Vyomi — integration gaps
