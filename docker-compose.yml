@@ -225,6 +225,11 @@ services:
       CLOUDLEARN_HOST_SIZING_FILE: /config/cloudlearn-host-sizing.json
       CLOUDLEARN_PARENT_OS: ${VYOMI_PARENT_OS:-${CLOUDLEARN_PARENT_OS:-linux}}
       CLOUDLEARN_DISTRIBUTION_MODE: ${VYOMI_DISTRIBUTION_MODE:-${CLOUDLEARN_DISTRIBUTION_MODE:-developer}}
+      # Dev-mode signup (POST /api/license/signup) is 403'd unless this is
+      # "1"/"true"/"yes" — off by default (prod safety). CI sets it so the
+      # conformance harness can lift the tenant off the free-tier rate limit
+      # (10 rps) before hammering every catalog action back-to-back.
+      CLOUDLEARN_DEV_MODE: ${VYOMI_DEV_MODE:-${CLOUDLEARN_DEV_MODE:-0}}
       CLOUDLEARN_RUNTIME_BRIDGE_URL: ${VYOMI_RUNTIME_BRIDGE_URL:-${CLOUDLEARN_RUNTIME_BRIDGE_URL:-http://host.docker.internal:9171}}
       # CloudLite+ : EC2/GCP/Azure compute instances run as sibling Docker
       # containers via the core/compute Docker backend (instead of LXD/Multipass).
