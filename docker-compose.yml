@@ -184,6 +184,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "${VYOMI_SIMULATOR_PORT:-${CLOUDLEARN_SIMULATOR_PORT:-9000}}:9000"
+      - "${VYOMI_AMQP_PORT:-5672}:5672"
+      - "${VYOMI_AMQPS_PORT:-5671}:5671"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # The simulator runs as the non-root `cloudlearn` user, but the bind-mounted

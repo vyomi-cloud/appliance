@@ -205,6 +205,8 @@ services:
     build: .
     ports:
       - "9000:9000"
+      - "5672:5672"
+      - "5671:5671"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # No depends_on the backend containers: the simulator serves the console +

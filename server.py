@@ -23425,6 +23425,14 @@ else:
     from core.wire_ingress import mount as _mount_unified_ingress
     _mount_unified_ingress(app)
 
+# ── AMQP 1.0 listener for Azure Service Bus emulation (Phase B) ─────
+try:
+    from core.servicebus_amqp import mount as _mount_amqp_servicebus
+    _mount_amqp_servicebus(app)
+except Exception as _e:
+    print(f"[servicebus_amqp] AMQP mount skipped: {_e}")
+
+
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host="0.0.0.0", port=9000, reload=False)
