@@ -17,6 +17,7 @@ from .codec import (
     FRAME_TYPE_AMQP,
     FRAME_TYPE_SASL,
     SASL_HEADER,
+    FrameError,
     Symbol,
     Uint,
     Ulong,
@@ -172,7 +173,13 @@ class AmqpConnection:
                     return
 
             # 2. Decode standard AMQP or SASL frame
-            frame = decode_frame(bytes(self._rx_buffer))
+            try:
+                frame = decode_frame(bytes(self._rx_buffer))
+            except FrameError as e:
+                self._trace("ERR", f"Malformed frame header: {e}")
+                self.send_frame(FRAME_TYPE_AMQP, 0, Close(error=Error("amqp:framing-error", str(e))))
+                self.state = ConnectionState.CLOSED
+                return
             if frame is None:
                 # Need more bytes
                 return
@@ -296,7 +303,11 @@ class AmqpConnection:
             role=not attach.role,  # Opposite role
             source=attach.source,
             target=attach.target,
-            initial_delivery_count=0 if not attach.role else None,
+            # initial-delivery-count is mandatory when OUR reply role is
+            # sender (reply role = not attach.role), i.e. when the peer
+            # attached as receiver (attach.role is True) — and must be
+            # omitted when our reply role is receiver.
+            initial_delivery_count=0 if attach.role else None,
         )
         self.send_frame(FRAME_TYPE_AMQP, channel, reply_attach)
 
