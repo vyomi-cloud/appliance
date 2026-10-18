@@ -22,10 +22,9 @@ REPORT="${1:-tests/conformance/console_actions/REPORT.md}"
 # so every run drowned in HTTP 429s and these 9 real failures were never
 # visible on their own. Floor dropped to the now-visible real baseline
 # (aws 114/115, gcp 81/89, azure 52/52) so the stack isn't blocked.
-# Tracked in https://github.com/vyomi-cloud/appliance/issues/41 — bump
-# back to 100 once those 9 are fixed.
-AWS_MIN="${AWS_MIN:-99}"      # current LIVE: 99.1% (114/115) — issue #41
-GCP_MIN="${GCP_MIN:-91}"      # current LIVE: 91.0% (81/89) — issue #41
+# RESTORED 2026-10-18: issue #41 resolved — AWS and GCP pass rates back to 100%.
+AWS_MIN="${AWS_MIN:-100}"     # current LIVE: 100.0%
+GCP_MIN="${GCP_MIN:-100}"     # current LIVE: 100.0%
 AZURE_MIN="${AZURE_MIN:-100}" # current LIVE: 100.0%
 
 if [ ! -f "$REPORT" ]; then

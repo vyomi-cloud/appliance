@@ -43,6 +43,7 @@ import sys
 import threading
 import time
 import socket
+import tempfile
 import uuid
 import textwrap
 import traceback
@@ -1566,6 +1567,8 @@ def _iam_route_action_resource(request: Request) -> tuple[str, str] | None:
             if not tail:
                 if method == "GET":
                     return ("ec2:DescribeInstances", resource)
+                if method == "DELETE":
+                    return ("ec2:TerminateInstances", resource)
             elif tail == ["start"] and method == "POST":
                 return ("ec2:StartInstances", resource)
             elif tail == ["stop"] and method == "POST":
@@ -6675,13 +6678,30 @@ def _allocate_host_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _instance_work_root() -> Path:
+    root = INSTANCE_WORK_ROOT
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        probe = root / f".probe_{os.getpid()}"
+        probe.touch()
+        probe.unlink()
+        return root
+    except (PermissionError, OSError):
+        fallback = Path(tempfile.gettempdir()) / "cloudlearn" / "deployments"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
 def _instance_workspace(instance_id: str) -> Path:
-    return (INSTANCE_WORK_ROOT / instance_id).resolve()
+    return (_instance_work_root() / instance_id).resolve()
 
 
 def _ensure_instance_workspace(instance: dict) -> Path:
     workspace = _instance_workspace(instance["instance_id"])
-    workspace.mkdir(parents=True, exist_ok=True)
+    try:
+        workspace.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        pass
     instance["workspace"] = str(workspace)
     instance["deployment_path"] = str(workspace)
     return workspace
@@ -12033,6 +12053,13 @@ def api_ec2_list_instances():
     return {"instances": instances, "count": len(instances)}
 
 
+def api_ec2_get_instance(instance_id: str):
+    instance = ec2_state["instances"].get(instance_id)
+    if not instance:
+        raise HTTPException(404, detail="NoSuchInstance")
+    return instance
+
+
 def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True, host_os_hint: str = ""):
     # Host-budget gate (clamp 30%-50% of host CPU+RAM): reject upfront if the
     # chosen instance_type would push the simulator past its share of the host.
@@ -12072,7 +12099,10 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
     _cloudsim_validate_ec2_launch_policy(_cloudsim_active_space_ref(), req, profile, runtime_backend)
     host_port = _allocate_host_port()
     workspace = _instance_workspace(instance_id)
-    workspace.mkdir(parents=True, exist_ok=True)
+    try:
+        workspace.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        pass
     runtime_image = profile.get("runtime_image") or (LXD_RUNTIME_IMAGE if _appliance_mode_enabled() else MULTIPASS_RUNTIME_IMAGE if runtime_backend == "multipass" else LXD_RUNTIME_IMAGE)
     runtime_backend_requested = "lxd" if _appliance_mode_enabled() else (req.runtime_backend or "").strip().lower()
     instance = {
@@ -12674,21 +12704,28 @@ def _gcp_compute_instance_bucket() -> dict[str, dict]:
 
 
 def _gcp_compute_find_instance(project: str, zone: str, instance_ref: str) -> dict | None:
-    instance = _gcp_compute_instance_bucket().get(instance_ref)
+    bucket = _gcp_compute_instance_bucket()
+    instance = bucket.get(instance_ref)
     if not isinstance(instance, dict):
-        for candidate in _gcp_compute_instance_bucket().values():
+        for candidate in list(bucket.values()) + list(gcp_compute_state.get("instances", {}).values()):
             if not isinstance(candidate, dict):
                 continue
-            if str(candidate.get("name") or "").strip() == str(instance_ref or "").strip():
+            cand_name = str(candidate.get("name") or "").strip()
+            cand_id = str(candidate.get("instance_id") or candidate.get("id") or "").strip()
+            target = str(instance_ref or "").strip()
+            if cand_name == target or cand_id == target:
                 instance = candidate
                 break
     if not isinstance(instance, dict):
         return None
-    if str(instance.get("project") or "").strip() != str(project or "").strip():
+    cand_proj = str(instance.get("project") or "cloudlearn").strip()
+    req_proj = str(project or "cloudlearn").strip()
+    if cand_proj != req_proj:
         return None
-    requested_zone = str(zone or "").strip().lower()
+    requested_zone = str(zone or "").strip().lower().rstrip("/").split("/")[-1]
     if requested_zone and requested_zone not in {"-", "*", "_all", "all"}:
-        if str(instance.get("zone") or instance.get("az") or "").strip() != zone:
+        instance_zone = str(instance.get("zone") or instance.get("az") or "us-central1-a").rstrip("/").split("/")[-1].lower()
+        if instance_zone != requested_zone:
             return None
     return instance
 
@@ -13078,7 +13115,10 @@ def _gcp_compute_create_instance_instance(project: str, zone: str, payload: dict
         # the instance and defer provisioning rather than failing the control-plane call.
         runtime_backend = "simulated"
     workspace = _instance_workspace(instance_id)
-    workspace.mkdir(parents=True, exist_ok=True)
+    try:
+        workspace.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        pass
     runtime_image = profile.get("runtime_image") or (
         MULTIPASS_RUNTIME_IMAGE if runtime_backend == "multipass" else LXD_RUNTIME_IMAGE
     )
@@ -13583,9 +13623,11 @@ def api_gcp_compute_reset_instance(project: str, zone: str, instance: str):
     if not instance:
         raise HTTPException(404, detail="NoSuchInstance")
     previous_state = instance.get("state", "running")
-    if previous_state != "running":
-        raise HTTPException(409, detail="InstanceNotRunning")
-    _reboot_runtime_process(instance)
+    if previous_state == "running":
+        _reboot_runtime_process(instance)
+    else:
+        _start_runtime_process(instance)
+        instance["state"] = "running"
     instance["launch_status"] = "ready"
     _gcp_compute_sync_resource_links()
     _cloudsim_sync_gcp_compute_resource(instance, "upsert")
@@ -15073,6 +15115,25 @@ async def api_gcp_pubsub_put_subscription(project: str, subscription: str, reque
     sub_id = str(subscription or payload.get("name") or "").split("/")[-1].strip()
     if not sub_id:
         raise HTTPException(400, detail="Subscription id is required")
+    from core import gcp_pubsub_emulator as _ps_emu
+    if _ps_emu.available():
+        topic_id = str(payload.get("topic") or "").split("/")[-1].strip()
+        if not topic_id:
+            raise HTTPException(400, detail="Topic is required")
+        from google.api_core import exceptions as _gax
+        try:
+            sub = await asyncio.to_thread(
+                _ps_emu.create_subscription, project, sub_id, topic_id,
+                int(payload.get("ackDeadlineSeconds") or 10),
+                str(payload.get("messageRetentionDuration") or ""),
+                payload.get("labels") if isinstance(payload.get("labels"), dict) else None,
+                bool(payload.get("enableMessageOrdering", False)),
+            )
+            return _gcp_pubsub_subscription_view(project, sub)
+        except _gax.AlreadyExists:
+            raise HTTPException(409, detail="Subscription already exists")
+        except _gax.NotFound:
+            raise HTTPException(404, detail="Topic not found")
     rec = _gcp_pubsub_subscription_record(project, sub_id, payload)
     if not rec.get("topic"):
         raise HTTPException(400, detail="Topic is required")
@@ -16497,8 +16558,10 @@ def _gcp_pubsub_topic_view(project: str, topic: dict) -> dict:
 
 def _gcp_pubsub_subscription_view(project: str, subscription: dict) -> dict:
     name = str(subscription.get("name") or "")
+    if not name.startswith("projects/"):
+        name = f"projects/{project}/subscriptions/{name}"
     return {
-        "name": f"projects/{project}/subscriptions/{name}",
+        "name": name,
         "topic": subscription.get("topic", ""),
         "ackDeadlineSeconds": subscription.get("ackDeadlineSeconds", 10),
         "retainAckedMessages": subscription.get("retainAckedMessages", False),
