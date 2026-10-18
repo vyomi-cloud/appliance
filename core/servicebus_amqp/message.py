@@ -282,6 +282,9 @@ class Message:
         A Service Bus batch transfer payload contains multiple Data sections (0x75),
         each wrapping an individually encoded AMQP message.
         """
+        if not data:
+            return []
+
         messages: list[Message] = []
         offset = 0
         while offset < len(data):

@@ -28,11 +28,8 @@ from core.servicebus_amqp.codec import (
     AMQP_HEADER,
     FRAME_TYPE_AMQP,
     DescribedType,
-    Long,
     Symbol,
     Timestamp,
-    Uint,
-    Ulong,
     decode_frame,
     encode_frame,
 )
@@ -605,6 +602,23 @@ def test_gate_a9_message_size_limit_rejection():
     print("  ok  [A9] oversize message rejected with amqp:link:message-size-exceeded")
 
 
+def _read_frame(s: socket.socket, buf: bytes) -> tuple[Any, bytes]:
+    """Read one complete AMQP frame from `s`, appending to `buf` as needed.
+
+    Returns (decoded_frame_tuple, remaining_buf). Raises ConnectionError if
+    the peer closes the connection before a full frame arrives — recv()
+    returns b"" immediately on a graceful close, so without this check the
+    read loop busy-spins forever instead of failing fast.
+    """
+    while len(buf) < 8 or len(buf) < struct.unpack_from(">I", buf, 0)[0]:
+        chunk = s.recv(4096)
+        if not chunk:
+            raise ConnectionError("Connection closed while waiting for a frame")
+        buf += chunk
+    frame = decode_frame(buf)
+    return frame, frame[6]
+
+
 # ── Live TCP Socket Integration (End-to-End Gate) ──────────────────────────────────
 def test_live_tcp_siftly_end_to_end_gate():
     print("  [E2E] testing live TCP socket end-to-end (send -> receive -> complete)...")
@@ -613,102 +627,92 @@ def test_live_tcp_siftly_end_to_end_gate():
         store = setup_fresh_store()
         server = AmqpServer(host="127.0.0.1", port=0, store=store)
         await server.start()
-        port = server.actual_port
+        try:
+            port = server.actual_port
 
-        def _client_talk():
-            s = socket.create_connection(("127.0.0.1", port), timeout=5.0)
-            try:
-                # 1. Handshake
-                s.sendall(AMQP_HEADER)
-                assert_eq(s.recv(8), AMQP_HEADER)
+            def _client_talk():
+                s = socket.create_connection(("127.0.0.1", port), timeout=5.0)
+                try:
+                    # 1. Handshake
+                    s.sendall(AMQP_HEADER)
+                    assert_eq(s.recv(8), AMQP_HEADER)
 
-                s.sendall(
-                    encode_frame(FRAME_TYPE_AMQP, 0, Open(container_id="e2e-client"))
-                    + encode_frame(FRAME_TYPE_AMQP, 1, Begin())
-                )
-                buf = b""
-                for _ in range(2):
-                    while len(buf) < 8 or len(buf) < struct.unpack_from(">I", buf, 0)[0]:
-                        buf += s.recv(4096)
-                    buf = decode_frame(buf)[6]
-
-                # 2. Attach sender to traffic-ingest
-                s.sendall(
-                    encode_frame(
-                        FRAME_TYPE_AMQP,
-                        1,
-                        Attach(name="s-e2e", handle=0, role=False, target=Target(address="traffic-ingest")),
+                    s.sendall(
+                        encode_frame(FRAME_TYPE_AMQP, 0, Open(container_id="e2e-client"))
+                        + encode_frame(FRAME_TYPE_AMQP, 1, Begin())
                     )
-                )
-                # Read Attach reply + initial flow
-                for _ in range(2):
-                    while len(buf) < 8 or len(buf) < struct.unpack_from(">I", buf, 0)[0]:
-                        buf += s.recv(4096)
-                    buf = decode_frame(buf)[6]
+                    buf = b""
+                    for _ in range(2):
+                        _, buf = _read_frame(s, buf)
 
-                # 3. Send message
-                out_msg = Message(
-                    body=b"live-traffic-event-data",
-                    properties=Properties(message_id="e2e-m1"),
-                )
-                s.sendall(
-                    encode_frame(
-                        FRAME_TYPE_AMQP,
-                        1,
-                        Transfer(handle=0, delivery_id=1, delivery_tag=b"tag-e2e-1"),
-                        out_msg.encode(),
+                    # 2. Attach sender to traffic-ingest
+                    s.sendall(
+                        encode_frame(
+                            FRAME_TYPE_AMQP,
+                            1,
+                            Attach(name="s-e2e", handle=0, role=False, target=Target(address="traffic-ingest")),
+                        )
                     )
-                )
-                # Read Disposition
-                while len(buf) < 8 or len(buf) < struct.unpack_from(">I", buf, 0)[0]:
-                    buf += s.recv(4096)
-                f_disp = decode_frame(buf)
-                assert isinstance(parse_performative(f_disp[4]).state, Accepted)
-                buf = f_disp[6]
+                    # Read Attach reply + initial flow
+                    for _ in range(2):
+                        _, buf = _read_frame(s, buf)
 
-                # 4. Attach receiver to traffic-ingest subscription
-                sub_addr = "traffic-ingest/Subscriptions/traffic-ingest"
-                s.sendall(
-                    encode_frame(
-                        FRAME_TYPE_AMQP,
-                        1,
-                        Attach(name="r-e2e", handle=1, role=True, source=Source(address=sub_addr)),
+                    # 3. Send message
+                    out_msg = Message(
+                        body=b"live-traffic-event-data",
+                        properties=Properties(message_id="e2e-m1"),
                     )
-                )
-                while len(buf) < 8 or len(buf) < struct.unpack_from(">I", buf, 0)[0]:
-                    buf += s.recv(4096)
-                buf = decode_frame(buf)[6]
-
-                # 5. Receive message via Flow credit 1
-                s.sendall(encode_frame(FRAME_TYPE_AMQP, 1, Flow(handle=1, link_credit=1)))
-                while len(buf) < 8 or len(buf) < struct.unpack_from(">I", buf, 0)[0]:
-                    buf += s.recv(4096)
-                f_rx = decode_frame(buf)
-                p_rx = parse_performative(f_rx[4])
-                deliv_id = p_rx.delivery_id
-                buf = f_rx[6]
-
-                rx_msg = Message.decode(f_rx[5])
-                assert_eq(rx_msg.body, b"live-traffic-event-data")
-                assert_eq(rx_msg.properties.message_id, "e2e-m1")
-
-                # 6. Settle with Accepted (Complete)
-                s.sendall(
-                    encode_frame(
-                        FRAME_TYPE_AMQP,
-                        1,
-                        Disposition(role=False, first=deliv_id, last=deliv_id, settled=True, state=Accepted()),
+                    s.sendall(
+                        encode_frame(
+                            FRAME_TYPE_AMQP,
+                            1,
+                            Transfer(handle=0, delivery_id=1, delivery_tag=b"tag-e2e-1"),
+                            out_msg.encode(),
+                        )
                     )
-                )
+                    # Read Disposition
+                    f_disp, buf = _read_frame(s, buf)
+                    assert isinstance(parse_performative(f_disp[4]).state, Accepted)
 
-                # 7. Close cleanly
-                s.sendall(encode_frame(FRAME_TYPE_AMQP, 0, Close()))
-            finally:
-                s.close()
+                    # 4. Attach receiver to traffic-ingest subscription
+                    sub_addr = "traffic-ingest/Subscriptions/traffic-ingest"
+                    s.sendall(
+                        encode_frame(
+                            FRAME_TYPE_AMQP,
+                            1,
+                            Attach(name="r-e2e", handle=1, role=True, source=Source(address=sub_addr)),
+                        )
+                    )
+                    _, buf = _read_frame(s, buf)
 
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, _client_talk)
-        await server.stop()
+                    # 5. Receive message via Flow credit 1
+                    s.sendall(encode_frame(FRAME_TYPE_AMQP, 1, Flow(handle=1, link_credit=1)))
+                    f_rx, buf = _read_frame(s, buf)
+                    p_rx = parse_performative(f_rx[4])
+                    deliv_id = p_rx.delivery_id
+
+                    rx_msg = Message.decode(f_rx[5])
+                    assert_eq(rx_msg.body, b"live-traffic-event-data")
+                    assert_eq(rx_msg.properties.message_id, "e2e-m1")
+
+                    # 6. Settle with Accepted (Complete)
+                    s.sendall(
+                        encode_frame(
+                            FRAME_TYPE_AMQP,
+                            1,
+                            Disposition(role=False, first=deliv_id, last=deliv_id, settled=True, state=Accepted()),
+                        )
+                    )
+
+                    # 7. Close cleanly
+                    s.sendall(encode_frame(FRAME_TYPE_AMQP, 0, Close()))
+                finally:
+                    s.close()
+
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, _client_talk)
+        finally:
+            await server.stop()
 
     asyncio.run(_run())
     print("  ok  [E2E] live TCP socket send, receive, and complete verified")
