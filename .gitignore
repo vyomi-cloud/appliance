@@ -6,6 +6,8 @@
 .cloudlearn_state.sqlite3
 *.sqlite3-journal
 host-sizing-report.json
+.cloudlearn_admin_key
+.vyomi_servicebus_sas_key
 
 # Python
 __pycache__/
