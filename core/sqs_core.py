@@ -314,7 +314,10 @@ def _delete_message(store, body):
     now = store.now()
     for msg in q["messages"]:
         if msg.get("receipt_handle") == handle or msg.get("lease_token") == handle:
-            tok = msg.get("lease_token") or handle
+            # lease_token is None after ChangeMessageVisibility(0) released it;
+            # pass None (not the stale handle) so settle() takes its
+            # unconditional-ack path instead of failing lease_token != handle.
+            tok = msg.get("lease_token")
             try:
                 lease.settle(msg, tok, now, strict=False)
                 q["messages"] = [m for m in q["messages"] if not m.get("deleted")]
