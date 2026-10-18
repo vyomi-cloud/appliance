@@ -183,6 +183,8 @@ def encode(val: Any) -> bytes:
             return bytes([FORMAT_ULONG0])
         if 0 <= v <= 255:
             return bytes([FORMAT_SMALLULONG, v])
+        return bytes([FORMAT_ULONG]) + struct.pack(">Q", v)
+
     if isinstance(val, Long):
         v = int(val)
         if -128 <= v <= 127:
