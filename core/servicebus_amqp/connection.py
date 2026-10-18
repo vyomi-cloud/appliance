@@ -10,7 +10,7 @@ from __future__ import annotations
 import enum
 import os
 import time
-from typing import Any, Callable, Sequence
+from typing import Any, Callable
 
 from core.azure_servicebus_core import sb_send
 from core.azure_servicebus_runtime import get_store
@@ -93,6 +93,8 @@ class Link:
         self.link_credit = 0
         self.drain = False
         self.rx_transfer_buffers: dict[int, bytearray] = {}  # delivery_id -> bytes
+        self.rx_last_delivery_id: int | None = None  # for continuation frames that omit delivery-id
+        self.resolution: tuple[str, str | None, bool] | None = None  # cached from Attach-time resolve_address
 
 
 class Session:
@@ -438,6 +440,7 @@ class AmqpConnection:
             return
 
         # 2. Entity Address Resolution
+        resolution = None
         if address:
             resolution = self.resolve_address(address)
             if resolution is None and address != "$management":
@@ -457,6 +460,9 @@ class AmqpConnection:
             source=attach.source,
             target=attach.target,
         )
+        # Cache the Attach-time resolution so _on_transfer doesn't re-scan
+        # the store's topics/subscriptions on every single Transfer frame.
+        link.resolution = resolution
         session.links[handle] = link
 
         reply_attach = Attach(
@@ -502,13 +508,29 @@ class AmqpConnection:
         if not link:
             return
 
-        delivery_id = int(transfer.delivery_id) if transfer.delivery_id is not None else 0
+        # delivery-id MAY be omitted on a continuation frame, in which case it
+        # implicitly continues the most recently seen delivery-id on this link.
+        if transfer.delivery_id is not None:
+            delivery_id = int(transfer.delivery_id)
+            link.rx_last_delivery_id = delivery_id
+        else:
+            delivery_id = link.rx_last_delivery_id if link.rx_last_delivery_id is not None else 0
+
+        def _reject_oversized(size: int) -> None:
+            err = Error(
+                Symbol("amqp:link:message-size-exceeded"),
+                f"The received message (size: {size} bytes) exceeds the 256 KB limit.",
+            )
+            detach = Detach(handle=transfer.handle, closed=True, error=err)
+            self.send_frame(FRAME_TYPE_AMQP, channel, detach)
 
         # Multi-frame reassembly
         if transfer.more:
-            if delivery_id not in link.rx_transfer_buffers:
-                link.rx_transfer_buffers[delivery_id] = bytearray()
-            link.rx_transfer_buffers[delivery_id].extend(payload)
+            buf = link.rx_transfer_buffers.setdefault(delivery_id, bytearray())
+            buf.extend(payload)
+            if len(buf) > MAX_MESSAGE_SIZE:
+                link.rx_transfer_buffers.pop(delivery_id, None)
+                _reject_oversized(len(buf))
             return
 
         if delivery_id in link.rx_transfer_buffers:
@@ -518,12 +540,7 @@ class AmqpConnection:
 
         # Check max message size (256 KB)
         if len(full_payload) > MAX_MESSAGE_SIZE:
-            err = Error(
-                Symbol("amqp:link:message-size-exceeded"),
-                f"The received message (size: {len(full_payload)} bytes) exceeds the 256 KB limit.",
-            )
-            detach = Detach(handle=transfer.handle, closed=True, error=err)
-            self.send_frame(FRAME_TYPE_AMQP, channel, detach)
+            _reject_oversized(len(full_payload))
             return
 
         # 1. Claims-Based Security ($cbs) Handler
@@ -561,7 +578,16 @@ class AmqpConnection:
             return
 
         # 2. Entity Sender Handler (Topic Send)
-        resolution = self.resolve_address(link.address)
+        resolution = link.resolution
+        if resolution is None:
+            # The entity was renamed/removed after Attach (or this link was
+            # exempted from resolution, e.g. $management) — reject instead
+            # of silently dropping the transfer with no ack/nack/detach.
+            err = Error(Symbol("amqp:not-found"), f"The messaging entity '{link.address}' could not be found.")
+            detach = Detach(handle=transfer.handle, closed=True, error=err)
+            self.send_frame(FRAME_TYPE_AMQP, channel, detach)
+            return
+
         if resolution:
             topic_name, _, _ = resolution
             # Decode single or batched messages
