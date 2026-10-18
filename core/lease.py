@@ -35,7 +35,7 @@ def normalize(msg: dict[str, Any]) -> dict[str, Any]:
             msg["lease_token"] = msg.pop("receipt_handle")
         elif "_locked" in msg and msg["_locked"]:
             msg["lease_token"] = msg.pop("_locked")
-        elif "_pending" in msg and msg.get("ack_id"):
+        elif msg.get("ack_id"):
             msg["lease_token"] = msg.pop("ack_id")
         else:
             msg["lease_token"] = None

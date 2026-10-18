@@ -133,6 +133,7 @@ def _sync_with_runtime_store():
             q = _QUEUES.setdefault(s_name, {"topic": t_name, "created": sub.get("created", _now_iso()), "messages": []})
             q["topic"] = t_name
             existing_ids = {m.get("message_id") for m in q["messages"]}
+            live_ids = {sm.get("MessageId") or sm.get("_id") for sm in sub.get("messages", [])}
             for sm in sub.get("messages", []):
                 mid = sm.get("MessageId") or sm.get("_id")
                 if mid not in existing_ids:
@@ -153,6 +154,12 @@ def _sync_with_runtime_store():
                         "deleted": sm.get("deleted", False),
                         "is_notification": _looks_like_fanout(body_str),
                     })
+            # Messages no longer present in the live backlog have been
+            # completed, received-and-deleted, or dead-lettered — mark them
+            # deleted so approximate_messages/total_messages stop overcounting.
+            for m in q["messages"]:
+                if m.get("message_id") not in live_ids:
+                    m["deleted"] = True
 
 
 # ── queues (the widget's "queue" column) ────────────────────────────────────
