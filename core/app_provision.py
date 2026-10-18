@@ -272,6 +272,7 @@ def provision_app_resources(app_name: str, resources: dict[str, Any],
                     _bp.provision_async("redis")
                 redis_results[r_name] = {"status": "ready"}
             except Exception as exc:
+                log.warning("Redis provision failed for %s: %s", r_name, exc)
                 redis_results[r_name] = {"status": "error", "error": str(exc)}
         res_status["redis"] = redis_results
 
@@ -281,27 +282,40 @@ def provision_app_resources(app_name: str, resources: dict[str, Any],
         for ns_name, sb_cfg in resources["servicebus"].items():
             topics = sb_cfg.get("topics", [])
             try:
+                from core import azure_servicebus_core as _sbcore
                 from core import azure_servicebus_runtime as _sbr
                 st_sb = _sbr.get_store()
                 for t in topics:
                     t_name = t["name"]
-                    st_sb.create_topic(t_name)
+                    resp = _sbcore.dispatch(st_sb, "PUT", f"/{t_name}")
+                    if resp.status >= 400:
+                        raise RuntimeError(f"failed to create topic {t_name!r} (HTTP {resp.status})")
                     for sub in t.get("subscriptions", []):
-                        st_sb.create_subscription(t_name, sub["name"])
+                        sub_name = sub["name"]
+                        sub_resp = _sbcore.dispatch(st_sb, "PUT", f"/{t_name}/subscriptions/{sub_name}")
+                        if sub_resp.status >= 400:
+                            raise RuntimeError(
+                                f"failed to create subscription {sub_name!r} on topic {t_name!r} "
+                                f"(HTTP {sub_resp.status})"
+                            )
+                st_sb.persist()
                 sb_results[ns_name] = {"status": "ready"}
             except Exception as exc:
-                log.info("Service Bus provision deferred/warning for %s: %s", ns_name, exc)
-                sb_results[ns_name] = {
-                    "status": "warning",
-                    "warning": f"Service Bus runtime not available: {exc}",
-                }
+                log.warning("Service Bus provision failed for %s: %s", ns_name, exc)
+                sb_results[ns_name] = {"status": "error", "error": str(exc)}
         res_status["servicebus"] = sb_results
 
     # Save state
     st.save_resources(app_name, resources)
 
+    ok = not any(
+        entry.get("status") == "error"
+        for category in res_status.values()
+        for entry in category.values()
+    )
+
     return {
-        "ok": True,
+        "ok": ok,
         "app": app_name,
         "resources": res_status,
     }
@@ -368,11 +382,15 @@ def resolve_app_outputs(app_name: str, outputs: dict[str, Any],
 
     # 3. Redis variables
     redis_resources = resources.get("redis", {})
+    redis_avail = eps.get("redis", {}).get("running", False)
     redis_pwd = os.environ.get("VYOMI_REDIS_PASSWORD", "")
     redis_host = eps["redis"]["network"]["host"] if target == "docker" else eps["redis"]["published"]["host"]
     redis_port = eps["redis"]["network"]["port"] if target == "docker" else eps["redis"]["published"]["port"]
 
     for r_name in redis_resources.keys():
+        if not redis_avail:
+            warnings.append(f"redis instance {r_name!r} is not yet available; skipping its fields")
+            continue
         pool[f"redis.{r_name}.host"] = str(redis_host)
         pool[f"redis.{r_name}.port"] = str(redis_port)
         pool[f"redis.{r_name}.password"] = str(redis_pwd)
@@ -427,6 +445,9 @@ def resolve_app_outputs(app_name: str, outputs: dict[str, Any],
                 elif ref in pool:
                     escaped_expr = escaped_expr.replace(f"${{{ref}}}", pool[ref])
                 elif ref.startswith("servicebus.") and not sb_avail:
+                    skip_key = True
+                    break
+                elif ref.startswith("redis.") and not redis_avail:
                     skip_key = True
                     break
                 else:

@@ -22,10 +22,11 @@ type DotenvLine struct {
 
 // DotenvFile represents a parsed, line-preserving .env document.
 type DotenvFile struct {
-	Lines       []*DotenvLine
-	LineEnding  string // "\n" or "\r\n"
-	KeyIndex    map[string]int
-	ManagedMark int
+	Lines           []*DotenvLine
+	LineEnding      string // "\n" or "\r\n"
+	KeyIndex        map[string]int
+	ManagedMark     int
+	TrailingNewline bool // whether the parsed source ended in a line ending
 }
 
 // ParseDotenv parses raw bytes into a line-preserving DotenvFile.
@@ -43,10 +44,11 @@ func ParseDotenv(content []byte) *DotenvFile {
 	}
 
 	df := &DotenvFile{
-		Lines:       make([]*DotenvLine, 0, len(rawLines)),
-		LineEnding:  lineEnding,
-		KeyIndex:    make(map[string]int),
-		ManagedMark: -1,
+		Lines:           make([]*DotenvLine, 0, len(rawLines)),
+		LineEnding:      lineEnding,
+		KeyIndex:        make(map[string]int),
+		ManagedMark:     -1,
+		TrailingNewline: len(text) > 0 && strings.HasSuffix(text, "\n"),
 	}
 
 	for idx, raw := range rawLines {
@@ -168,7 +170,7 @@ func (df *DotenvFile) Bytes() []byte {
 	var buf bytes.Buffer
 	for i, l := range df.Lines {
 		buf.WriteString(l.Raw)
-		if i < len(df.Lines)-1 || len(df.Lines) > 0 {
+		if i < len(df.Lines)-1 || df.TrailingNewline {
 			buf.WriteString(df.LineEnding)
 		}
 	}
@@ -212,9 +214,10 @@ func CheckGitTracked(repoDir, relPath string) (bool, error) {
 
 // WriteDotenv updates a dotenv file atomically.
 func WriteDotenv(repoDir, relPath, appName string, updates map[string]string, allowTracked bool) (map[string]string, error) {
-	// 1. Path safety check
-	cleanRel := filepath.FromSlash(relPath)
-	if filepath.IsAbs(cleanRel) || strings.HasPrefix(cleanRel, "..") {
+	// 1. Path safety check (clean first so an embedded "../" can't hide
+	// before the prefix check runs).
+	cleanRel := filepath.Clean(filepath.FromSlash(relPath))
+	if filepath.IsAbs(relPath) || cleanRel == ".." || strings.HasPrefix(cleanRel, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("unsafe output path %q: must be relative to repository root", relPath)
 	}
 
@@ -247,6 +250,10 @@ func WriteDotenv(repoDir, relPath, appName string, updates map[string]string, al
 	}
 
 	df := ParseDotenv(content)
+	if !exists {
+		// Brand new file: end it with a conventional trailing newline.
+		df.TrailingNewline = true
+	}
 	changed := df.ApplyUpdates(appName, updates)
 	if len(changed) == 0 && exists {
 		return changed, nil // No changes needed
