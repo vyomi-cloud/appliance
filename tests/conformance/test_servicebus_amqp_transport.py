@@ -491,15 +491,17 @@ def test_live_tcp_server():
                     + encode_frame(FRAME_TYPE_AMQP, 0, Close())
                 )
 
-                # Receive End
-                while len(buf) < 8 or len(buf) < struct.unpack_from(">I", buf, 0)[0]:
-                    chunk = s.recv(4096)
-                    assert chunk, "Unexpected EOF reading End"
-                    buf += chunk
-                frame = decode_frame(buf)
-                assert frame is not None
-                assert isinstance(parse_performative(frame[4]), End)
-                buf = frame[6]
+                # Receive frames until End
+                perf = None
+                while not isinstance(perf, End):
+                    while len(buf) < 8 or len(buf) < struct.unpack_from(">I", buf, 0)[0]:
+                        chunk = s.recv(4096)
+                        assert chunk, "Unexpected EOF reading End"
+                        buf += chunk
+                    frame = decode_frame(buf)
+                    assert frame is not None
+                    perf = parse_performative(frame[4])
+                    buf = frame[6]
 
                 # Receive Close
                 while len(buf) < 8 or len(buf) < struct.unpack_from(">I", buf, 0)[0]:
