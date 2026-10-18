@@ -419,7 +419,7 @@ def _register_gcp(app: FastAPI) -> None:
             body = await request.json()
         except Exception:
             body = {}
-        name = (body.get("name") or "").strip()
+        name = (body.get("name") or body.get("secretId") or body.get("secret_id") or "").strip()
         if not name:
             return JSONResponse(status_code=400, content={"ok": False, "error": "missing 'name'"})
         if vc.kv_put("gcp", space, name, body.get("value", "changeme")) is None:
@@ -477,7 +477,7 @@ def _register_gcp(app: FastAPI) -> None:
             body = await request.json()
         except Exception:
             body = {}
-        name = (body.get("name") or "").strip()
+        name = (body.get("name") or body.get("keyRingId") or body.get("keyId") or "").strip()
         ring = (body.get("keyring") or "default-ring").strip()
         if not name:
             return JSONResponse(status_code=400, content={"ok": False, "error": "missing 'name'"})

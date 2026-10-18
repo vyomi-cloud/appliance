@@ -484,7 +484,7 @@ def check_azure(endpoint: str) -> None:
     )
     if not azure_space:
         st, resp = call("POST", "/api/spaces", {"name": f"conf-azure-{uuid.uuid4().hex[:6]}", "provider": "azure"})
-        azure_space = resp.get("space_id", "")
+        azure_space = (resp.get("space") or {}).get("space_id") or resp.get("space_id", "")
     grade("azure.spaces", "ensure-azure-space", 200 if azure_space else 0, bool(azure_space), f"space_id={azure_space!r}")
     if azure_space:
         st, _ = call("POST", f"/api/spaces/{azure_space}/switch")
@@ -1073,7 +1073,7 @@ def check_minio_mirror(endpoint: str) -> None:
           f"status={st} bytes={len(body)}")
 
     # Read back via MinIO direct (boto3 against :9100 from host).
-    minio_url = os.environ.get("CLOUDLEARN_MINIO_URL_HOST", "http://192.168.252.7:9100")
+    minio_url = os.environ.get("CLOUDLEARN_MINIO_URL_HOST", "http://127.0.0.1:9100")
     try:
         if boto3 is None:
             grade("aws.s3.minio", "object.get.via-minio-direct", 0, False, "boto3 not installed locally")
@@ -1178,6 +1178,8 @@ def check_iam_eval_all(endpoint: str) -> None:
     })
     grade("azure.rbac", "evaluate.explicit-allow", st, st == 200 and r.get("allowed") is True,
           f"status={st} reason={r.get('reason')!r}")
+    # Reset policies so default-deny doesn't bleed into subsequent checks
+    call("POST", "/api/iam/policies", {})
 
 
 # Per-check provider mapping for isolated space creation. Each CloudLearn
@@ -1218,7 +1220,7 @@ def _isolate_for_check(endpoint: str, check_name: str) -> None:
         return  # multi-provider check; don't override the active space
     space_name = f"conformance-{check_name}-{int(_time.time() * 1000) % 10_000_000}"
     try:
-        r = _req.post(f"{endpoint}/api/spaces/create",
+        r = _req.post(f"{endpoint}/api/spaces",
                       json={"name": space_name, "provider": provider}, timeout=5)
         if r.status_code in (200, 201):
             body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}

@@ -57,7 +57,12 @@ jobs:
         run: |
           # Use the dev compose; mounts host paths the appliance compose
           # expects (the multipass-specific paths aren't relevant in CI).
+          # CLOUDLEARN_DEV_MODE=1 keeps POST /api/license/signup callable so
+          # the conftest fixture can lift the tenant off the free-tier rate
+          # limit (10 rps) — without it every test runs at full free-tier
+          # throttle and the suite drowns in HTTP 429s.
           CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:ci \
+          CLOUDLEARN_DEV_MODE=1 \
             docker compose -f docker-compose.yml up -d \
               simulator vyomi-pubsub vyomi-firestore \
               vyomi-sql-postgres vyomi-minio vyomi-nats \

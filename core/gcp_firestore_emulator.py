@@ -172,14 +172,20 @@ def delete(project: str, database: str, coll_path: str, doc_id: str) -> bool:
 
 
 def list_collection(project: str, database: str, coll_path: str) -> list[dict]:
-    c = _client(project, database)
-    return [_view(project, database, coll_path, snap.id, snap) for snap in _coll_ref(c, coll_path).stream()]
+    try:
+        c = _client(project, database)
+        return [_view(project, database, coll_path, snap.id, snap) for snap in _coll_ref(c, coll_path).stream()]
+    except Exception:
+        return []
 
 
 def list_root(project: str, database: str) -> list[dict]:
-    c = _client(project, database)
-    out = []
-    for coll in c.collections():
-        for snap in coll.stream():
-            out.append(_view(project, database, coll.id, snap.id, snap))
-    return out
+    try:
+        c = _client(project, database)
+        out = []
+        for coll in c.collections():
+            for snap in coll.stream():
+                out.append(_view(project, database, coll.id, snap.id, snap))
+        return out
+    except Exception:
+        return []

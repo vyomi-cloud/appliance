@@ -9,7 +9,7 @@ import pytest
 
 from .catalog_reader import enumerate_actions
 from .conftest import record_result
-from .sample_payloads import current_run_suffix
+from .sample_payloads import current_run_suffix, sub_action_payload
 
 
 _SPECS = [s for s in enumerate_actions(["gcp"])]
@@ -35,6 +35,7 @@ _ENV_PATTERNS = (
     (507, "insufficient_disk"),
     (503, "error: the remote"),
     (503, "lxdunavailable"),
+    (503, "dockerunavailable"),
 )
 
 
@@ -68,6 +69,8 @@ def test_gcp_action(spec, http_session, base_url):
         else:
             placeholder = _CREATED_IDS.get(spec.service) or f"vyomi-conf-{spec.service}"
         path = path.replace("{name}", placeholder)
+    if "{object}" in path:
+        path = path.replace("{object}", "conformance/hello.txt")
     path = (path.replace("{project}", "cloudlearn")
                 .replace("{region}", "us-central1")
                 .replace("{zone}", "us-central1-a")
@@ -75,8 +78,24 @@ def test_gcp_action(spec, http_session, base_url):
                 .replace("{database}", "(default)"))
     url = f"{base_url}{path}"
     kwargs = {"timeout": 30}
-    if spec.method in {"POST", "PUT", "PATCH"} and spec.payload is not None:
-        kwargs["json"] = spec.payload
+    body_to_send = spec.payload
+    sub_payload = sub_action_payload("gcp", spec.service, spec.action)
+    if sub_payload is not None:
+        body_to_send = sub_payload
+    if spec.method in {"POST", "PUT", "PATCH"} and body_to_send is not None:
+        kwargs["json"] = body_to_send
+    if spec.service == "storage" and spec.action == "deleteObject":
+        bucket = _CREATED_IDS.get("storage")
+        if bucket:
+            try:
+                http_session.post(
+                    f"{base_url}/api/gcp/storage/v1/b/{bucket}/upload",
+                    json={"name": "conformance/hello.txt", "content": "hello"},
+                    timeout=10,
+                )
+            except Exception:
+                pass
+
     try:
         r = http_session.request(spec.method, url, **kwargs)
     except Exception as e:
@@ -141,6 +160,11 @@ def test_gcp_action(spec, http_session, base_url):
                     and data.get("kind") == "sql#operation"
                     and data.get("targetId")):
                 data = {"name": data["targetId"]}
+            if (spec.service == "compute"
+                    and isinstance(data, dict)
+                    and data.get("kind") == "compute#operation"
+                    and data.get("targetLink")):
+                data = {"name": data["targetLink"].rstrip("/").split("/")[-1]}
             if isinstance(data, dict) and spec.name_field:
                 val = data.get(spec.name_field)
                 if val:
