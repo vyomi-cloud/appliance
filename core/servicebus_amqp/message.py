@@ -175,13 +175,16 @@ class Message:
         body_type: str = "data",  # "data", "value", or "sequence"
     ):
         self.body = body
+        if body_type == "data" and not isinstance(body, (bytes, bytearray)):
+            self.body_type = "value"
+        else:
+            self.body_type = body_type
         self.properties = properties or Properties()
         self.application_properties = application_properties or {}
         self.message_annotations = message_annotations or {}
         self.delivery_annotations = delivery_annotations or {}
         self.header = header
         self.footer = footer or {}
-        self.body_type = body_type
 
     def encode(self) -> bytes:
         """Serialize this Message into AMQP 1.0 byte sections."""
