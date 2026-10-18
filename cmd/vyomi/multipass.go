@@ -315,21 +315,22 @@ func (c *Config) invokeApplianceLauncher() error {
 	return run(multipassBin(), "exec", c.ApplianceName, "--", "/bin/bash", "-lc", remote)
 }
 
-// testApplianceHealth polls :9000/healthz on the VM IP (or 127.0.0.1 via the NAT
-// forward), never failing hard on a slow first boot (Test-ApplianceHealth).
+// testApplianceHealth polls :{simulatorPort}/healthz on the VM IP (or 127.0.0.1
+// via the NAT forward), never failing hard on a slow first boot (Test-ApplianceHealth).
 func (c *Config) testApplianceHealth() string {
 	timeout := atoiDefault(envAny("600", "VYOMI_HEALTH_TIMEOUT", "CLOUD_LEARN_HEALTH_TIMEOUT"), 600)
+	port := c.simulatorPort()
 	vmIp := c.applianceIp()
 	probe := vmIp
 	if vmIp == "" {
-		progress("==> No routable VM IP (VirtualBox NAT) - bridging localhost:9000 to the appliance.")
+		progress(fmt.Sprintf("==> No routable VM IP (VirtualBox NAT) - bridging localhost:%d to the appliance.", port))
 		c.setVBoxNatPortForward("")
 		probe = "127.0.0.1"
 	}
-	progress(fmt.Sprintf("==> [6/6] Waiting for the simulator at %s:9000 (first boot can take 10-20 min on a slow VM)", probe))
+	progress(fmt.Sprintf("==> [6/6] Waiting for the simulator at %s:%d (first boot can take 10-20 min on a slow VM)", probe, port))
 	waited := 0
 	for waited < timeout {
-		if httpOK(fmt.Sprintf("http://%s:9000/healthz", probe), 3*time.Second) {
+		if httpOK(fmt.Sprintf("http://%s:%d/healthz", probe, port), 3*time.Second) {
 			return vmIp
 		}
 		time.Sleep(5 * time.Second)
@@ -353,7 +354,7 @@ func (c *Config) invokeUpgrade() error {
 	}
 	vmIp := c.applianceIp()
 	progress("==> Checking for updates...")
-	body, ok := httpGet(fmt.Sprintf("http://%s:9000/api/runtime/update-check", vmIp), 5*time.Second)
+	body, ok := httpGet(fmt.Sprintf("http://%s:%d/api/runtime/update-check", vmIp, c.simulatorPort()), 5*time.Second)
 	if !ok {
 		return fmt.Errorf("could not reach the appliance update-check endpoint. Is the appliance running (`vyomi status`)?")
 	}

@@ -118,8 +118,8 @@ func (c *Config) backendCopyIn(serviceName, srcHostPath, dstContainerPath string
 		_ = exec.Command(multipassBin(), "exec", c.ApplianceName, "--", "rm", "-f", vmTmp).Run()
 	}()
 
-	cpCmd := fmt.Sprintf("sudo docker cp %s %s:%s", vmTmp, containerID, dstContainerPath)
-	cmd := exec.Command(multipassBin(), "exec", c.ApplianceName, "--", "/bin/bash", "-c", cpCmd)
+	cmd := exec.Command(multipassBin(), "exec", c.ApplianceName, "--",
+		"sudo", "docker", "cp", vmTmp, fmt.Sprintf("%s:%s", containerID, dstContainerPath))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("in-vm docker cp failed: %w (output: %s)", err, string(out))
@@ -145,13 +145,12 @@ func (c *Config) getAdminKey() (string, error) {
 		"from core.admin_auth import get_or_create_admin_key; print(get_or_create_admin_key())",
 	}
 
+	// Note: "cloudsim" is a separate Java service with no Python/core
+	// package, so it is not a usable fallback here — only "simulator" can
+	// ever serve this request.
 	out, err := c.backendExec("simulator", pyCmd, nil)
 	if err != nil {
-		// Fallback for compose service name variations
-		out, err = c.backendExec("cloudsim", pyCmd, nil)
-		if err != nil {
-			return "", fmt.Errorf("could not retrieve admin key from simulator: %w", err)
-		}
+		return "", fmt.Errorf("could not retrieve admin key from simulator: %w", err)
 	}
 
 	lines := strings.Split(strings.TrimSpace(out), "\n")

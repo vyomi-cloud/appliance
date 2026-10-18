@@ -99,7 +99,8 @@ func ValidateProfile(profile *AppProfile) error {
 
 	// Validate output expressions
 	for outFile, varMap := range profile.Outputs {
-		if filepath.IsAbs(outFile) || strings.HasPrefix(filepath.FromSlash(outFile), "..") {
+		cleanOut := filepath.Clean(filepath.FromSlash(outFile))
+		if filepath.IsAbs(outFile) || cleanOut == ".." || strings.HasPrefix(cleanOut, ".."+string(filepath.Separator)) {
 			return fmt.Errorf("invalid output path %q: must be relative to repo root", outFile)
 		}
 		for varName, expr := range varMap {
@@ -349,21 +350,40 @@ func (c *Config) appProvision(args []string) int {
 	}
 	_ = json.Unmarshal(respBytes, &result)
 
-	fmt.Printf("==> Successfully provisioned resources for %q:\n", profile.Name)
+	if result.Ok {
+		fmt.Printf("==> Successfully provisioned resources for %q:\n", profile.Name)
+	} else {
+		fmt.Printf("==> Provisioning completed with errors for %q:\n", profile.Name)
+	}
 	for resType, val := range result.Resources {
-		fmt.Printf("  • %-12s: ok\n", resType)
+		typeOk := true
+		var lines []string
 		if subMap, ok := val.(map[string]any); ok {
 			for subName, subDetail := range subMap {
 				if detailMap, ok := subDetail.(map[string]any); ok {
-					status := detailMap["status"]
-					if status == "warning" {
-						fmt.Printf("      - %s: warning (%v)\n", subName, detailMap["warning"])
-					} else {
-						fmt.Printf("      - %s: %v\n", subName, status)
+					switch detailMap["status"] {
+					case "warning":
+						lines = append(lines, fmt.Sprintf("      - %s: warning (%v)", subName, detailMap["warning"]))
+					case "error":
+						typeOk = false
+						lines = append(lines, fmt.Sprintf("      - %s: error (%v)", subName, detailMap["error"]))
+					default:
+						lines = append(lines, fmt.Sprintf("      - %s: %v", subName, detailMap["status"]))
 					}
 				}
 			}
 		}
+		if typeOk {
+			fmt.Printf("  • %-12s: ok\n", resType)
+		} else {
+			fmt.Printf("  • %-12s: error\n", resType)
+		}
+		for _, l := range lines {
+			fmt.Println(l)
+		}
+	}
+	if !result.Ok {
+		return 1
 	}
 	return 0
 }
