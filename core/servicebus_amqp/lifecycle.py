@@ -21,7 +21,43 @@ logger = logging.getLogger("servicebus_amqp.lifecycle")
 DEFAULT_AMQP_PORT = 5672
 DEFAULT_AMQPS_PORT = 5671
 DEFAULT_SAS_KEY_NAME = "RootManageSharedAccessKey"
-DEFAULT_SAS_KEY = "vyomi-servicebus-dev-shared-access-key-secret="
+
+_SAS_KEY_PATH = Path(os.environ.get("CLOUDLEARN_SERVICEBUS_SAS_KEY_FILE", "/data/.vyomi_servicebus_sas_key"))
+_SAS_KEY_PATH_LOCAL = Path(__file__).parent.parent.parent / ".vyomi_servicebus_sas_key"
+_cached_sas_key: str = ""
+
+
+def _sas_key_path() -> Path:
+    if _SAS_KEY_PATH.parent.exists():
+        return _SAS_KEY_PATH
+    return _SAS_KEY_PATH_LOCAL
+
+
+def get_or_create_sas_key() -> str:
+    """Return this install's Service Bus SAS key, generated on first boot and
+    persisted so it stays stable across restarts (same pattern as
+    core.admin_auth.get_or_create_admin_key)."""
+    global _cached_sas_key
+    if _cached_sas_key:
+        return _cached_sas_key
+    path = _sas_key_path()
+    if path.exists():
+        try:
+            key = path.read_text().strip()
+            if key:
+                _cached_sas_key = key
+                return _cached_sas_key
+        except Exception:
+            pass
+    key = secrets.token_urlsafe(32)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(key)
+        os.chmod(str(path), 0o600)
+    except Exception:
+        pass
+    _cached_sas_key = key
+    return key
 
 
 def get_connection_string(
@@ -36,7 +72,7 @@ def get_connection_string(
     Format:
         Endpoint=sb://<host>[:<port>];SharedAccessKeyName=<name>;SharedAccessKey=<key>;UseDevelopmentEmulator=true;
     """
-    key = shared_access_key or DEFAULT_SAS_KEY
+    key = shared_access_key or get_or_create_sas_key()
     endpoint = f"sb://{host}"
     if port != DEFAULT_AMQP_PORT and port != DEFAULT_AMQPS_PORT:
         endpoint = f"sb://{host}:{port}"
@@ -158,6 +194,14 @@ class AmqpLifecycleManager:
                     logger.warning("Could not bind AMQP TLS on %s:%d: %s", host, tls_port, ex)
                     self.server_tls = None
 
+        if self.server_plain is None and self.server_tls is None:
+            logger.error(
+                "AMQP Service Bus listener failed to bind on both %s:%d and TLS %s — "
+                "not marking lifecycle as started so a later retry isn't blocked.",
+                host, port, tls_port,
+            )
+            return
+
         self._is_started = True
 
     async def stop(self) -> None:
@@ -195,12 +239,27 @@ def mount(app: Any) -> None:
         if not enabled:
             return
 
-        host = os.environ.get("VYOMI_AMQP_HOST", "0.0.0.0")
-        port = int(os.environ.get("VYOMI_AMQP_PORT", str(DEFAULT_AMQP_PORT)))
-        tls_port_env = os.environ.get("VYOMI_AMQPS_PORT", str(DEFAULT_AMQPS_PORT))
-        tls_port = int(tls_port_env) if tls_port_env and tls_port_env != "0" else None
+        # A single backend's failure to start (bad env var, port conflict)
+        # must never prevent the simulator itself from booting — same
+        # convention as core/backend_rehydrate.py.
+        try:
+            host = os.environ.get("VYOMI_AMQP_HOST", "0.0.0.0")
+            # NOTE: "0" means something different for each of these two vars.
+            # VYOMI_AMQP_PORT=0 -> bind an OS-assigned ephemeral port (asyncio
+            # socket convention). VYOMI_AMQPS_PORT=0 -> disable TLS entirely
+            # (there is no "ephemeral TLS port" use case here). Intentional,
+            # but easy to mix up — don't assume the two are symmetric.
+            port = int(os.environ.get("VYOMI_AMQP_PORT", str(DEFAULT_AMQP_PORT)))
+            tls_port_env = os.environ.get("VYOMI_AMQPS_PORT", str(DEFAULT_AMQPS_PORT))
+            tls_port = int(tls_port_env) if tls_port_env and tls_port_env != "0" else None
 
-        await _lifecycle_manager.start(host=host, port=port, tls_port=tls_port)
+            await _lifecycle_manager.start(host=host, port=port, tls_port=tls_port)
+
+            env = get_servicebus_env(host=host if host != "0.0.0.0" else "localhost", port=port)
+            for key, value in env.items():
+                os.environ.setdefault(key, value)
+        except Exception as ex:
+            logger.warning("AMQP Service Bus startup failed, continuing without it: %s", ex)
 
     @app.on_event("shutdown")
     async def _amqp_shutdown():
