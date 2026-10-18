@@ -35,6 +35,7 @@ _ENV_PATTERNS = (
     (507, "insufficient_disk"),
     (503, "error: the remote"),
     (503, "lxdunavailable"),
+    (503, "dockerunavailable"),
 )
 
 
