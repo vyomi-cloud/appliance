@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// bridgePorts are host ports forwarded to the appliance VM (9443/HTTPS is opt-in).
-var bridgePorts = []int{9000}
 
 // startLocalhostBridge maps 127.0.0.1:<port> → <vmIp>:<port> via netsh portproxy
 // (Start-LocalhostBridge). Windows-only; a no-op elsewhere.
@@ -21,32 +19,32 @@ func (c *Config) startLocalhostBridge(vmIp string) {
 	if vmIp == "" || runtime.GOOS != "windows" || !have("netsh") {
 		return
 	}
-	for _, port := range bridgePorts {
-		p := strconv.Itoa(port)
-		_ = exec.Command("netsh", "interface", "portproxy", "delete", "v4tov4",
-			"listenaddress=127.0.0.1", "listenport="+p).Run()
-		if err := exec.Command("netsh", "interface", "portproxy", "add", "v4tov4",
-			"listenaddress=127.0.0.1", "listenport="+p, "connectaddress="+vmIp, "connectport="+p).Run(); err != nil {
-			progress(fmt.Sprintf("==> Note: could not bridge localhost:%d (needs an elevated shell). Use http://%s:%d/ instead.", port, vmIp, port))
-		}
+	port := c.simulatorPort()
+	p := strconv.Itoa(port)
+	_ = exec.Command("netsh", "interface", "portproxy", "delete", "v4tov4",
+		"listenaddress=127.0.0.1", "listenport="+p).Run()
+	if err := exec.Command("netsh", "interface", "portproxy", "add", "v4tov4",
+		"listenaddress=127.0.0.1", "listenport="+p, "connectaddress="+vmIp, "connectport="+p).Run(); err != nil {
+		progress(fmt.Sprintf("==> Note: could not bridge localhost:%d (needs an elevated shell). Use http://%s:%d/ instead.", port, vmIp, port))
 	}
 }
 
 // showUrlBanner prints the READY banner and opens the browser (Show-UrlBanner).
 func (c *Config) showUrlBanner(vmIp string) {
-	url := "http://localhost:9000/"
+	port := c.simulatorPort()
+	url := fmt.Sprintf("http://localhost:%d/", port)
 	if vmIp != "" {
-		url = fmt.Sprintf("http://%s:9000/", vmIp)
+		url = fmt.Sprintf("http://%s:%d/", vmIp, port)
 	}
-	if httpOK("http://127.0.0.1:9000/healthz", 2*time.Second) {
-		url = "http://localhost:9000/"
+	if httpOK(fmt.Sprintf("http://127.0.0.1:%d/healthz", port), 2*time.Second) {
+		url = fmt.Sprintf("http://localhost:%d/", port)
 	}
 	progress("")
 	progress("  ============================================================")
 	progress("   Vyomi appliance is READY")
 	progress("   Console : " + url)
 	if vmIp != "" {
-		progress(fmt.Sprintf("   Direct  : http://%s:9000/   (VM IP, no bridge needed)", vmIp))
+		progress(fmt.Sprintf("   Direct  : http://%s:%d/   (VM IP, no bridge needed)", vmIp, port))
 	}
 	progress("  ============================================================")
 	progress("")
@@ -73,7 +71,8 @@ var reVBoxVM = regexp.MustCompile(`"([^"]*)"`)
 // SYSTEM-owned VM (the multipass-service case) prints the proven manual commands.
 // No-op on non-Windows or non-VirtualBox hosts.
 func (c *Config) setVBoxNatPortForward(vmIp string) {
-	if httpOK("http://127.0.0.1:9000/healthz", 2*time.Second) {
+	port := c.simulatorPort()
+	if httpOK(fmt.Sprintf("http://127.0.0.1:%d/healthz", port), 2*time.Second) {
 		return // already reachable (Hyper-V / netsh bridge worked)
 	}
 	if runtime.GOOS != "windows" {
@@ -96,15 +95,13 @@ func (c *Config) setVBoxNatPortForward(vmIp string) {
 		}
 	}
 	if vmName != "" {
-		for _, p := range bridgePorts {
-			rule := fmt.Sprintf("vyomi%d", p)
-			_ = exec.Command(vbox, "controlvm", vmName, "natpf1", "delete", rule).Run()
-			_ = exec.Command(vbox, "controlvm", vmName, "natpf1",
-				fmt.Sprintf("%s,tcp,127.0.0.1,%d,,%d", rule, p, p)).Run()
-		}
+		rule := fmt.Sprintf("vyomi%d", port)
+		_ = exec.Command(vbox, "controlvm", vmName, "natpf1", "delete", rule).Run()
+		_ = exec.Command(vbox, "controlvm", vmName, "natpf1",
+			fmt.Sprintf("%s,tcp,127.0.0.1,%d,,%d", rule, port, port)).Run()
 		time.Sleep(time.Second)
-		if httpOK("http://127.0.0.1:9000/healthz", 3*time.Second) {
-			progress("==> VirtualBox NAT port-forward added (localhost:9000 -> VM).")
+		if httpOK(fmt.Sprintf("http://127.0.0.1:%d/healthz", port), 3*time.Second) {
+			progress(fmt.Sprintf("==> VirtualBox NAT port-forward added (localhost:%d -> VM).", port))
 			return
 		}
 	}
@@ -114,6 +111,7 @@ func (c *Config) setVBoxNatPortForward(vmIp string) {
 }
 
 func (c *Config) printVBoxManualFallback(vbox string) {
+	port := c.simulatorPort()
 	progress("")
 	progress("  ------------------------------------------------------------")
 	progress("   Windows + VirtualBox NAT: manual fallback for browser access")
@@ -125,9 +123,9 @@ func (c *Config) printVBoxManualFallback(vbox string) {
 	progress("     winget install Microsoft.Sysinternals.PsExec   # if not installed")
 	progress(fmt.Sprintf(`     $vb = "%s"`, vbox))
 	progress("     psexec -s -nobanner -accepteula $vb list runningvms      # note the \"name\"")
-	progress(`     psexec -s -nobanner -accepteula $vb controlvm "<name>" natpf1 "vyomi9000,tcp,127.0.0.1,9000,,9000"`)
+	progress(fmt.Sprintf(`     psexec -s -nobanner -accepteula $vb controlvm "<name>" natpf1 "vyomi%d,tcp,127.0.0.1,%d,,%d"`, port, port, port))
 	progress("")
-	progress("   Then open http://localhost:9000/")
+	progress(fmt.Sprintf("   Then open http://localhost:%d/", port))
 	progress("  ------------------------------------------------------------")
 }
 
