@@ -151,9 +151,10 @@ class AmqpServer:
             await self._server.wait_closed()
             self._server = None
 
-        # Close all active connections
+        # Close all active connections concurrently so shutdown time doesn't
+        # scale linearly with the number of open connections.
         active_handlers = list(self._connections)
-        for handler in active_handlers:
-            await handler.close()
+        if active_handlers:
+            await asyncio.gather(*(h.close() for h in active_handlers), return_exceptions=True)
         self._connections.clear()
         logger.info("AMQP 1.0 listener stopped")

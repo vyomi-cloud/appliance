@@ -13,7 +13,8 @@ import enum
 import os
 import time
 import uuid
-from typing import Any, Callable, Sequence
+from datetime import datetime, timezone
+from typing import Any, Callable
 
 from core.azure_servicebus_core import (
     ServiceBusError,
@@ -32,6 +33,7 @@ from .codec import (
     FRAME_TYPE_AMQP,
     FRAME_TYPE_SASL,
     SASL_HEADER,
+    FrameError,
     Long,
     Symbol,
     Timestamp,
@@ -73,6 +75,30 @@ from .performatives import (
 MAX_MESSAGE_SIZE = 262144  # 256 KB
 
 
+def _enqueued_time_ms(msg: dict, now_ms: int) -> int:
+    """Parse the message's real EnqueuedTimeUtc (ISO-8601 'Z' string) into
+    epoch milliseconds, falling back to `now_ms` if missing/unparseable."""
+    raw = msg.get("EnqueuedTimeUtc")
+    if not raw:
+        return now_ms
+    try:
+        dt = datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        return int(dt.timestamp() * 1000)
+    except (ValueError, TypeError):
+        return now_ms
+
+
+def _is_lock_lost(e: ServiceBusError) -> bool:
+    return getattr(e, "status", None) == 410 or "LockLost" in getattr(e, "code", "") or "LockLost" in str(e)
+
+
+def _is_management_address(address: str) -> bool:
+    """True iff `address` IS the $management node, not merely contains the
+    substring (e.g. a real entity named "orders-management-queue" must not
+    be misrouted into the management-node code path)."""
+    return address == "$management" or address.endswith("/$management")
+
+
 class ConnectionState(enum.Enum):
     START = "START"
     SASL_NEGOTIATING = "SASL_NEGOTIATING"
@@ -112,6 +138,8 @@ class Link:
         self.drain = False
         self.rx_transfer_buffers: dict[int, bytearray] = {}  # delivery_id -> bytes
         self.deliveries: dict[int, dict[str, Any]] = {}  # delivery_id -> dict
+        self.rx_last_delivery_id: int | None = None  # for continuation frames that omit delivery-id
+        self.resolution: tuple[str, str | None, bool] | None = None  # cached from Attach-time resolve_address
 
 
 class Session:
@@ -244,7 +272,13 @@ class AmqpConnection:
                     return
 
             # 2. Decode standard AMQP or SASL frame
-            frame = decode_frame(bytes(self._rx_buffer))
+            try:
+                frame = decode_frame(bytes(self._rx_buffer))
+            except FrameError as e:
+                self._trace("ERR", f"Malformed frame header: {e}")
+                self.send_frame(FRAME_TYPE_AMQP, 0, Close(error=Error("amqp:framing-error", str(e))))
+                self.state = ConnectionState.CLOSED
+                return
             if frame is None:
                 # Need more bytes
                 return
@@ -366,7 +400,7 @@ class AmqpConnection:
     # --- Address Resolution ---
 
     def resolve_address(
-        self_or_cls, addr: str, store: Any = None
+        self, addr: str, store: Any = None
     ) -> tuple[str, str | None, bool] | None:
         """Resolve an AMQP target/source address against the Service Bus store.
 
@@ -376,12 +410,8 @@ class AmqpConnection:
         if not addr:
             return None
         clean_addr = addr.strip().strip("/")
-        if store is not None:
-            pass
-        elif isinstance(self_or_cls, AmqpConnection):
-            store = self_or_cls._get_store()
-        else:
-            store = get_store()
+        if store is None:
+            store = self._get_store()
 
         is_dlq = False
         if clean_addr.lower().endswith("/$deadletterqueue"):
@@ -453,7 +483,7 @@ class AmqpConnection:
                 role=not attach.role,
                 source=attach.source,
                 target=attach.target,
-                initial_delivery_count=0 if not attach.role else None,
+                initial_delivery_count=0 if attach.role else None,
             )
             self.send_frame(FRAME_TYPE_AMQP, channel, reply_attach)
 
@@ -463,13 +493,14 @@ class AmqpConnection:
             return
 
         # 2. Management ($management) node
-        if "$management" in address:
+        if _is_management_address(address):
             link = Link(handle=handle, name=attach.name, role=attach.role, address=address)
             # Parse topic and sub from address e.g. <topic>/Subscriptions/<sub>/$management
             base_addr = address.replace("/$management", "").strip("/")
             resolution = self.resolve_address(base_addr)
             if resolution:
                 link.topic_name, link.sub_name, link.is_dlq = resolution
+                link.resolution = resolution
                 session.mgmt_topic = link.topic_name
                 session.mgmt_sub = link.sub_name
 
@@ -485,7 +516,7 @@ class AmqpConnection:
                 role=not attach.role,
                 source=attach.source,
                 target=attach.target,
-                initial_delivery_count=0 if not attach.role else None,
+                initial_delivery_count=0 if attach.role else None,
             )
             self.send_frame(FRAME_TYPE_AMQP, channel, reply_attach)
             if is_sender:
@@ -497,6 +528,7 @@ class AmqpConnection:
         topic_name = None
         sub_name = None
         is_dlq = False
+        resolution = None
         if address:
             resolution = self.resolve_address(address)
             if resolution is None:
@@ -519,6 +551,9 @@ class AmqpConnection:
             sub_name=sub_name,
             is_dlq=is_dlq,
         )
+        # Cache the Attach-time resolution so _on_transfer doesn't re-scan
+        # the store's topics/subscriptions on every single Transfer frame.
+        link.resolution = resolution
         session.links[handle] = link
 
         reply_attach = Attach(
@@ -527,7 +562,11 @@ class AmqpConnection:
             role=not attach.role,
             source=attach.source,
             target=attach.target,
-            initial_delivery_count=0 if not attach.role else None,
+            # initial-delivery-count is mandatory when OUR reply role is
+            # sender (reply role = not attach.role), i.e. when the peer
+            # attached as receiver (attach.role is True) — and must be
+            # omitted when our reply role is receiver.
+            initial_delivery_count=0 if attach.role else None,
         )
         self.send_frame(FRAME_TYPE_AMQP, channel, reply_attach)
 
@@ -595,7 +634,7 @@ class AmqpConnection:
             vis_ms = int(msg.get("visible_at", store.now() + 60.0) * 1000)
             annotations = {
                 Symbol("x-opt-sequence-number"): Long(int(msg.get("SequenceNumber", 1))),
-                Symbol("x-opt-enqueued-time"): Timestamp(now_ms),
+                Symbol("x-opt-enqueued-time"): Timestamp(_enqueued_time_ms(msg, now_ms)),
                 Symbol("x-opt-locked-until"): Timestamp(vis_ms),
                 Symbol("x-opt-delivery-count"): Uint(int(msg.get("delivery_count", 1))),
             }
@@ -652,13 +691,29 @@ class AmqpConnection:
         if not link:
             return
 
-        delivery_id = int(transfer.delivery_id) if transfer.delivery_id is not None else 0
+        # delivery-id MAY be omitted on a continuation frame, in which case it
+        # implicitly continues the most recently seen delivery-id on this link.
+        if transfer.delivery_id is not None:
+            delivery_id = int(transfer.delivery_id)
+            link.rx_last_delivery_id = delivery_id
+        else:
+            delivery_id = link.rx_last_delivery_id if link.rx_last_delivery_id is not None else 0
+
+        def _reject_oversized(size: int) -> None:
+            err = Error(
+                Symbol("amqp:link:message-size-exceeded"),
+                f"The received message (size: {size} bytes) exceeds the 256 KB limit.",
+            )
+            detach = Detach(handle=transfer.handle, closed=True, error=err)
+            self.send_frame(FRAME_TYPE_AMQP, channel, detach)
 
         # Multi-frame reassembly
         if transfer.more:
-            if delivery_id not in link.rx_transfer_buffers:
-                link.rx_transfer_buffers[delivery_id] = bytearray()
-            link.rx_transfer_buffers[delivery_id].extend(payload)
+            buf = link.rx_transfer_buffers.setdefault(delivery_id, bytearray())
+            buf.extend(payload)
+            if len(buf) > MAX_MESSAGE_SIZE:
+                link.rx_transfer_buffers.pop(delivery_id, None)
+                _reject_oversized(len(buf))
             return
 
         if delivery_id in link.rx_transfer_buffers:
@@ -668,12 +723,7 @@ class AmqpConnection:
 
         # Check max message size (256 KB)
         if len(full_payload) > MAX_MESSAGE_SIZE:
-            err = Error(
-                Symbol("amqp:link:message-size-exceeded"),
-                f"The received message (size: {len(full_payload)} bytes) exceeds the 256 KB limit.",
-            )
-            detach = Detach(handle=transfer.handle, closed=True, error=err)
-            self.send_frame(FRAME_TYPE_AMQP, channel, detach)
+            _reject_oversized(len(full_payload))
             return
 
         # 1. Claims-Based Security ($cbs) Handler
@@ -702,7 +752,7 @@ class AmqpConnection:
             return
 
         # 2. Management ($management) renew-lock node
-        if "$management" in link.address:
+        if _is_management_address(link.address):
             msg = Message.decode(full_payload)
             op = msg.application_properties.get("operation") if msg.application_properties else None
             corr_id = msg.properties.message_id if msg.properties else None
@@ -725,10 +775,10 @@ class AmqpConnection:
                     if isinstance(tok, bytes) and len(tok) == 16:
                         tok_str = str(uuid.UUID(bytes=tok))
                     try:
-                        new_vis = sb_renew_lock(store, topic, sub, lock=tok_str)
+                        new_vis = sb_renew_lock(store, topic, sub, lock=tok_str, is_dlq=link.is_dlq)
                         expirations.append(Timestamp(int(new_vis * 1000)))
                     except ServiceBusError as e:
-                        if getattr(e, "status", None) == 410 or "LockLost" in getattr(e, "code", "") or "LockLost" in str(e):
+                        if _is_lock_lost(e):
                             lock_lost = True
                             break
 
@@ -763,7 +813,15 @@ class AmqpConnection:
             return
 
         # 3. Entity Sender Handler (Topic Send)
-        resolution = self.resolve_address(link.address)
+        resolution = link.resolution
+        if resolution is None:
+            # The entity was renamed/removed after Attach — reject instead
+            # of silently dropping the transfer with no ack/nack/detach.
+            err = Error(Symbol("amqp:not-found"), f"The messaging entity '{link.address}' could not be found.")
+            detach = Detach(handle=transfer.handle, closed=True, error=err)
+            self.send_frame(FRAME_TYPE_AMQP, channel, detach)
+            return
+
         if resolution:
             topic_name, _, _ = resolution
             if transfer.message_format == SERVICE_BUS_BATCH_FORMAT:
@@ -826,7 +884,7 @@ class AmqpConnection:
                 try:
                     sb_complete(store, topic, sub, seq=seq, lock=lock_token, is_dlq=is_dlq)
                 except ServiceBusError as e:
-                    if getattr(e, "status", None) == 410 or "LockLost" in getattr(e, "code", "") or "LockLost" in str(e):
+                    if _is_lock_lost(e):
                         err = Error(Symbol("com.microsoft:message-lock-lost"), "The lock supplied has expired.")
                         self.send_frame(
                             FRAME_TYPE_AMQP,
@@ -837,7 +895,7 @@ class AmqpConnection:
                 try:
                     sb_abandon(store, topic, sub, seq=seq, lock=lock_token, is_dlq=is_dlq)
                 except ServiceBusError as e:
-                    if getattr(e, "status", None) == 410 or "LockLost" in getattr(e, "code", "") or "LockLost" in str(e):
+                    if _is_lock_lost(e):
                         err = Error(Symbol("com.microsoft:message-lock-lost"), "The lock supplied has expired.")
                         self.send_frame(
                             FRAME_TYPE_AMQP,
@@ -855,8 +913,14 @@ class AmqpConnection:
                         desc = state.error.info.get("DeadLetterErrorDescription", desc)
                 try:
                     sb_dead_letter(store, topic, sub, seq=seq, lock=lock_token, reason=reason, description=desc)
-                except ServiceBusError:
-                    pass
+                except ServiceBusError as e:
+                    if _is_lock_lost(e):
+                        err = Error(Symbol("com.microsoft:message-lock-lost"), "The lock supplied has expired.")
+                        self.send_frame(
+                            FRAME_TYPE_AMQP,
+                            channel,
+                            Disposition(role=True, first=deliv_id, last=deliv_id, settled=True, state=Rejected(err)),
+                        )
 
     def check_idle_keepalive(self, now: float | None = None) -> None:
         """Check if an idle heartbeat (empty frame) is due to be sent."""

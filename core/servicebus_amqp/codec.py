@@ -183,6 +183,8 @@ def encode(val: Any) -> bytes:
             return bytes([FORMAT_ULONG0])
         if 0 <= v <= 255:
             return bytes([FORMAT_SMALLULONG, v])
+        return bytes([FORMAT_ULONG]) + struct.pack(">Q", v)
+
     if isinstance(val, Long):
         v = int(val)
         if -128 <= v <= 127:
@@ -415,29 +417,40 @@ def decode(data: bytes, offset: int = 0) -> tuple[Any, int]:
         offset += 2
         if count == 0:
             return [], offset
-        elem_code = data[offset]
-        offset += 1
-        items = []
-        for _ in range(count):
-            # Decode single element without its constructor tag
-            item, offset = _decode_raw_primitive(elem_code, data, offset)
-            items.append(item)
-        return items, offset
+        return _decode_array_elements(data, offset, count)
 
     if code == FORMAT_ARRAY32:
         size, count = struct.unpack_from(">II", data, offset)
         offset += 8
         if count == 0:
             return [], offset
-        elem_code = data[offset]
-        offset += 1
-        items = []
-        for _ in range(count):
-            item, offset = _decode_raw_primitive(elem_code, data, offset)
-            items.append(item)
-        return items, offset
+        return _decode_array_elements(data, offset, count)
 
     raise ValueError(f"Unknown AMQP format code 0x{code:02x} at offset {offset - 1}")
+
+
+def _decode_array_elements(data: bytes, offset: int, count: int) -> tuple[list, int]:
+    """Decode `count` AMQP array elements sharing one constructor at `offset`.
+
+    Per the AMQP 1.0 array encoding, the constructor (format code, or
+    0x00 + descriptor + format code for a described type) appears ONCE
+    before the elements, not once per element.
+    """
+    elem_code = data[offset]
+    offset += 1
+    descriptor = None
+    if elem_code == FORMAT_DESCRIBED:
+        descriptor, offset = decode(data, offset)
+        elem_code = data[offset]
+        offset += 1
+
+    items = []
+    for _ in range(count):
+        item, offset = _decode_raw_primitive(elem_code, data, offset)
+        if descriptor is not None:
+            item = DescribedType(descriptor, item)
+        items.append(item)
+    return items, offset
 
 
 def _decode_raw_primitive(code: int, data: bytes, offset: int) -> tuple[Any, int]:
@@ -515,6 +528,11 @@ def encode_frame(
     return header + body
 
 
+class FrameError(ValueError):
+    """Raised when a frame header declares an invalid size/data-offset."""
+    pass
+
+
 def decode_frame(
     buf: bytes,
 ) -> tuple[int, int, int, int, Any, bytes, bytes] | None:
@@ -523,15 +541,25 @@ def decode_frame(
     Returns:
         (size, doff, frame_type, channel, performative, payload, remaining_buf)
         or None if buffer has fewer bytes than the complete frame.
+
+    Raises:
+        FrameError: the frame header declares a size/doff that can't
+            describe a valid frame (size < 8, or doff*4 > size).
     """
     if len(buf) < 8:
         return None
 
     size, doff, frame_type, channel = struct.unpack_from(">IBBH", buf, 0)
+    if size < 8:
+        raise FrameError(f"Frame declares size={size}, which is smaller than the minimum 8-byte header")
+
+    offset = doff * 4
+    if offset > size:
+        raise FrameError(f"Frame data offset {offset} exceeds declared frame size {size}")
+
     if len(buf) < size:
         return None
 
-    offset = doff * 4
     if size == 8:
         # Empty heartbeat frame
         return (size, doff, frame_type, channel, None, b"", buf[size:])
