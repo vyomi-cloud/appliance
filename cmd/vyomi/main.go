@@ -28,6 +28,10 @@ Usage:
   vyomi logs        Tail service logs (Docker tiers)
   vyomi update      Pull the latest images and recreate (Docker tiers)
   vyomi upgrade     Pull the latest appliance image (Max)
+  vyomi app         Manage app profiles (add, list, remove, provision, status)
+  vyomi env         Generate or verify .env files from app profile
+  vyomi db          Database operations (dump, restore, refresh)
+  vyomi redis       Redis operations (flush)
   vyomi doctor      Print diagnostics
   vyomi help        This help
 
@@ -36,6 +40,7 @@ Substrate: --docker or --multipass (remembered for next time)
 Environment (VYOMI_* preferred; CLOUD_LEARN_* still honored):
   VYOMI_HOME              Root dir containing the vyomi sources
   VYOMI_COMPOSE_FILE      Override the compose file
+  VYOMI_SIMULATOR_PORT    Appliance/simulator port (default: 9000)
   VYOMI_SUBSTRATE         docker | multipass
   VYOMI_APPLIANCE_NAME    Multipass VM name (default: cloudlearn-appliance)
   VYOMI_APPLIANCE_CPUS/MEMORY/DISK   VM sizing overrides

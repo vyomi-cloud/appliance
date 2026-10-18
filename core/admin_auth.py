@@ -6,12 +6,21 @@ once in startup logs. All protected endpoints check for the
 X-CloudLearn-Admin-Key header.
 """
 from __future__ import annotations
+import logging
 import os
 import secrets
 import time
-import logging
 from pathlib import Path
-from fastapi import Request, HTTPException
+from typing import Any
+
+try:
+    from fastapi import Request, HTTPException
+except ImportError:  # pragma: no cover — host test fallback
+    Request = Any  # type: ignore
+    class HTTPException(Exception):  # type: ignore
+        def __init__(self, status_code: int, detail: Any = None):
+            self.status_code = status_code
+            self.detail = detail
 
 logger = logging.getLogger("cloudlearn.admin_auth")
 
@@ -68,6 +77,11 @@ def get_or_create_admin_key() -> str:
 def verify_admin_key(request: Request) -> bool:
     """Check if the request carries a valid admin key. Returns True if valid."""
     provided = request.headers.get(_HEADER_NAME, "").strip()
+    if not provided:
+        for k, v in getattr(request, "headers", {}).items():
+            if k.lower() in ("x-cloudlearn-admin-key", "x-vyomi-admin-key"):
+                provided = str(v).strip()
+                break
     if not provided:
         return False
     expected = get_or_create_admin_key()
