@@ -49,6 +49,30 @@ class Response:
     media_type: str | None = "application/xml"
 
 
+def blob_content_headers(headers: dict | None) -> dict[str, str]:
+    """Shared header model (BL1, R1, R2). Returns content_type with precedence:
+    x-ms-blob-content-type > Content-Type > application/octet-stream,
+    along with any present cache_control, content_disposition, content_encoding,
+    and content_language properties.
+    Pure and Pyodide-safe."""
+    lh = {(k or "").lower(): str(v) for k, v in (headers or {}).items() if v is not None}
+    ct = lh.get("x-ms-blob-content-type") or lh.get("content-type") or "application/octet-stream"
+    out: dict[str, str] = {"content_type": ct}
+    for src_hdr, prop_name in [
+        ("x-ms-blob-cache-control", "cache_control"),
+        ("cache-control", "cache_control"),
+        ("x-ms-blob-content-disposition", "content_disposition"),
+        ("content-disposition", "content_disposition"),
+        ("x-ms-blob-content-encoding", "content_encoding"),
+        ("content-encoding", "content_encoding"),
+        ("x-ms-blob-content-language", "content_language"),
+        ("content-language", "content_language"),
+    ]:
+        if src_hdr in lh and prop_name not in out:
+            out[prop_name] = lh[src_hdr]
+    return out
+
+
 # ── self-contained in-memory store ─────────────────────────────────────────
 class AzureBlobStore:
     """In-memory Azure Blob namespace. containers: name -> {meta}. blobs:
@@ -61,8 +85,11 @@ class AzureBlobStore:
     def container_exists(self, name: str) -> bool:
         return name in self.containers
 
-    def create_container(self, name: str) -> None:
-        self.containers[name] = {"created": _now_http()}
+    def create_container(self, name: str, public_access: str | None = None) -> None:
+        rec = {"created": _now_http()}
+        if public_access:
+            rec["public_access"] = public_access
+        self.containers[name] = rec
         self.blobs.setdefault(name, {})
 
     def delete_container(self, name: str) -> None:
@@ -162,7 +189,8 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                 if store.container_exists(container):
                     return _err(409, "ContainerAlreadyExists",
                                 "The specified container already exists.")
-                store.create_container(container)
+                public_access = headers.get("x-ms-blob-public-access")
+                store.create_container(container, public_access=public_access)
                 h = _base_headers()
                 h["etag"] = _etag()
                 h["last-modified"] = _now_http()
@@ -184,8 +212,11 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                     return _err(404, "ContainerNotFound",
                                 "The specified container does not exist.")
                 h = _base_headers()
-                h["last-modified"] = store.containers[container].get("created", _now_http())
+                c_meta = store.containers[container]
+                h["last-modified"] = c_meta.get("created", _now_http())
                 h["etag"] = _etag()
+                if c_meta.get("public_access"):
+                    h["x-ms-blob-public-access"] = c_meta["public_access"]
                 return Response(status=200, headers=h, body=b"", media_type=None)
         return _err(400, "InvalidQueryParameterValue",
                     f"Unsupported container operation {method}")
@@ -198,11 +229,13 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
             return _err(404, "ContainerNotFound",
                         "The specified container does not exist.")
         blob_type = headers.get("x-ms-blob-type", "BlockBlob")
-        content_type = headers.get("content-type", "application/octet-stream")
+        props = blob_content_headers(headers)
+        content_type = props["content_type"]
         entry = {
             "data": body,
             "size": len(body),
             "content_type": content_type,
+            "props": props,
             "blob_type": blob_type,
             "etag": _etag(),
             "last_modified": _now_http(),
@@ -228,11 +261,21 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                         "The specified container does not exist.")
         if entry is None:
             return _err(404, "BlobNotFound", "The specified blob does not exist.")
+        props = entry.get("props") or {"content_type": entry.get("content_type", "application/octet-stream")}
+        ct = props.get("content_type", entry.get("content_type", "application/octet-stream"))
         h = _base_headers()
         h["etag"] = entry["etag"]
         h["last-modified"] = entry["last_modified"]
         h["content-length"] = str(entry["size"])
-        h["content-type"] = entry["content_type"]
+        h["content-type"] = ct
+        if props.get("cache_control"):
+            h["cache-control"] = props["cache_control"]
+        if props.get("content_disposition"):
+            h["content-disposition"] = props["content_disposition"]
+        if props.get("content_encoding"):
+            h["content-encoding"] = props["content_encoding"]
+        if props.get("content_language"):
+            h["content-language"] = props["content_language"]
         h["content-md5"] = entry["md5"]
         h["x-ms-blob-type"] = entry["blob_type"]
         h["accept-ranges"] = "bytes"
@@ -258,8 +301,8 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
             sl = data[start:end + 1]
             h["content-length"] = str(len(sl))
             h["content-range"] = f"bytes {start}-{end}/{total}"
-            return Response(status=206, headers=h, body=sl, media_type=entry["content_type"])
-        return Response(status=200, headers=h, body=data, media_type=entry["content_type"])
+            return Response(status=206, headers=h, body=sl, media_type=ct)
+        return Response(status=200, headers=h, body=data, media_type=ct)
 
     if method == "DELETE":                             # delete blob
         if not store.container_exists(container):
@@ -304,6 +347,17 @@ def _list_blobs(store: AzureBlobStore, container: str, query: dict) -> Response:
         if not name.startswith(prefix):
             continue
         e = blobs[name]
+        p = e.get("props") or {}
+        extra = []
+        if p.get("cache_control"):
+            extra.append(f"<Cache-Control>{escape(p['cache_control'])}</Cache-Control>")
+        if p.get("content_disposition"):
+            extra.append(f"<Content-Disposition>{escape(p['content_disposition'])}</Content-Disposition>")
+        if p.get("content_encoding"):
+            extra.append(f"<Content-Encoding>{escape(p['content_encoding'])}</Content-Encoding>")
+        if p.get("content_language"):
+            extra.append(f"<Content-Language>{escape(p['content_language'])}</Content-Language>")
+        extra_str = "".join(extra)
         parts.append(
             "<Blob>"
             f"<Name>{escape(name)}</Name>"
@@ -313,6 +367,7 @@ def _list_blobs(store: AzureBlobStore, container: str, query: dict) -> Response:
             f"<Content-Length>{e['size']}</Content-Length>"
             f"<Content-Type>{escape(e['content_type'])}</Content-Type>"
             f"<Content-MD5>{escape(e['md5'])}</Content-MD5>"
+            f"{extra_str}"
             f"<BlobType>{escape(e['blob_type'])}</BlobType>"
             "</Properties>"
             "</Blob>"
