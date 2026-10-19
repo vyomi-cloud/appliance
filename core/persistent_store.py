@@ -180,8 +180,8 @@ class PersistentAzureBlobStore(_PersistentMixin, AzureBlobStore):
         AzureBlobStore.__init__(self)
         self._pinit(backend, store_id)
 
-    def create_container(self, name: str) -> None:
-        super().create_container(name)
+    def create_container(self, name: str, public_access: str | None = None) -> None:
+        super().create_container(name, public_access=public_access)
         self._save()
 
     def delete_container(self, name: str) -> None:
