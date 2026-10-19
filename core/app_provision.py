@@ -280,9 +280,10 @@ def provision_app_resources(app_name: str, resources: dict[str, Any],
                         "profile or mount /var/run/docker.sock"
                     )
                 _bp.provision_async("redis")
-                # Wait for the real outcome instead of reporting "ready" while the
+                # Wait (briefly: the CLI request times out at 30 s) for the real
+                # outcome instead of reporting "ready" while the
                 # image is still pulling (or after the pull failed).
-                deadline = time.time() + float(os.environ.get("VYOMI_APP_REDIS_WAIT_S", "120"))
+                deadline = time.time() + float(os.environ.get("VYOMI_APP_REDIS_WAIT_S", "20"))
                 st_r = _bp.status("redis") or {}
                 while st_r.get("state") not in ("ready", "failed") and time.time() < deadline:
                     time.sleep(1)
