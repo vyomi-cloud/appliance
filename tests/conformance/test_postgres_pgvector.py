@@ -98,13 +98,17 @@ def run():
         closest_halfvec = cur.fetchone()[0]
         _check("halfvec distance operator works", closest_halfvec == 3)
 
-        # Create a materialized view and table with sequence for refresh testing
+        # Create dependent materialized views (mv_parent and mv_child) for refresh ordering testing
         cur.execute("""
-            CREATE MATERIALIZED VIEW mv_test AS
+            CREATE MATERIALIZED VIEW mv_parent AS
             SELECT id, vec FROM test_embeddings;
+            CREATE MATERIALIZED VIEW mv_child AS
+            SELECT id FROM mv_parent;
         """)
-        cur.execute("SELECT count(*) FROM mv_test;")
-        _check("materialized view created and populated", cur.fetchone()[0] == 3)
+        cur.execute("SELECT count(*) FROM mv_parent;")
+        _check("parent materialized view created and populated", cur.fetchone()[0] == 3)
+        cur.execute("SELECT count(*) FROM mv_child;")
+        _check("child materialized view created and populated", cur.fetchone()[0] == 3)
 
     # 4. Test vyomi db dump
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -162,12 +166,16 @@ GRANT MAINTAIN ON TABLE test_embeddings TO azure_pg_admin;
         _check("vyomi db restore live exited 0", res_restore.returncode == 0)
         _check("restore reported success", "restored successfully" in res_restore.stdout)
 
-        # Verify data and view in restored database
+        # Verify data and views in restored database
         with rest_conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM test_embeddings;")
             _check("restored table contains 3 vector rows", cur.fetchone()[0] == 3)
+            cur.execute("SELECT count(*) FROM mv_parent;")
+            _check("restored parent view populated", cur.fetchone()[0] == 3)
+            cur.execute("SELECT count(*) FROM mv_child;")
+            _check("restored child view populated", cur.fetchone()[0] == 3)
 
-        # 6. Test vyomi db refresh
+        # 6. Test vyomi db refresh (refreshes dependent views in two passes)
         refresh_cmd = [VYOMI_BIN, "db", "refresh", "--db", RESTORE_DB]
         res_refresh = subprocess.run(refresh_cmd, capture_output=True, text=True)
         _check("vyomi db refresh exited 0", res_refresh.returncode == 0)

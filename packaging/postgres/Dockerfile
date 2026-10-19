@@ -2,7 +2,8 @@
 # Multi-arch (linux/amd64, linux/arm64) PostgreSQL 16 image with pgvector compiled in.
 # Uses the same Alpine base as postgres:16-alpine to ensure full binary & collation compatibility
 # without requiring data directory migration.
-FROM postgres:16-alpine
+# Pinned official multi-arch digest for postgres:16-alpine (16.15-alpine3.24)
+FROM postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
 
 LABEL org.opencontainers.image.title="Vyomi PostgreSQL with pgvector" \
       org.opencontainers.image.description="PostgreSQL 16 Alpine with pgvector extension compiled from source" \
