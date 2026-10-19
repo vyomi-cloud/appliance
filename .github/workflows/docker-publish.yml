@@ -92,10 +92,13 @@ jobs:
           # base OS, NOT the app version — it's rebuilt only when the Ubuntu base
           # changes, so it keeps a stable ubuntu-24.04 + latest tag set.
           ITAGS="vyomi/instance:ubuntu-24.04,vyomi/instance:latest,ghcr.io/vyomi-cloud/instance:ubuntu-24.04,ghcr.io/vyomi-cloud/instance:latest"
+          # vyomi/postgres:16-alpine-pgvector (PostgreSQL 16 Alpine with pgvector compiled in)
+          PGTAGS="vyomi/postgres:16-alpine-pgvector,ghcr.io/vyomi-cloud/postgres:16-alpine-pgvector"
           echo "version=${VER}"           >> "$GITHUB_OUTPUT"
           echo "tags=${TAGS}"             >> "$GITHUB_OUTPUT"
           echo "cloudsim_tags=${CTAGS}"   >> "$GITHUB_OUTPUT"
           echo "instance_tags=${ITAGS}"   >> "$GITHUB_OUTPUT"
+          echo "postgres_tags=${PGTAGS}"   >> "$GITHUB_OUTPUT"
           echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
           {
             echo "## Will publish"
@@ -179,6 +182,23 @@ jobs:
             org.opencontainers.image.created=${{ github.event.repository.updated_at }}
           cache-from: type=gha,scope=instance
           cache-to: type=gha,mode=max,scope=instance
+
+      - name: Build + push postgres-pgvector image (PostgreSQL 16 Alpine + pgvector, multi-arch)
+        # PostgreSQL 16 Alpine base with pgvector extension compiled from source.
+        # Published so docker-compose and app environments can pull pgvector
+        # without requiring host-side compilation or data migration.
+        uses: docker/build-push-action@v6
+        with:
+          context: ./packaging/postgres
+          file: ./packaging/postgres/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.postgres_tags }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+          cache-from: type=gha,scope=postgres
+          cache-to: type=gha,mode=max,scope=postgres
 
       - name: Update Docker Hub description (stable tag only)
         # Pre-release tags don't update the Hub README — the README should

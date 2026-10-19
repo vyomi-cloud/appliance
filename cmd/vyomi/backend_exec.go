@@ -15,33 +15,50 @@ import (
 func (c *Config) resolveContainer(serviceName string) (string, error) {
 	substrate := c.resolveSubstrate()
 
-	var out string
-	var ok bool
-
-	// 1. Try label filter first
-	labelFilter := fmt.Sprintf("label=com.docker.compose.service=%s", serviceName)
-	if substrate == "docker" {
-		out, ok = capture("docker", "ps", "--filter", labelFilter, "--format", "{{.ID}}")
-	} else {
-		out, ok = capture(multipassBin(), "exec", c.ApplianceName, "--", "sudo", "docker", "ps", "--filter", labelFilter, "--format", "{{.ID}}")
+	var candidates []string
+	switch serviceName {
+	case "postgres":
+		candidates = []string{"cloudlearn-sql-postgres", "vyomi-sql-postgres", "postgres"}
+	case "redis":
+		candidates = []string{"vyomi-redis", "redis"}
+	case "simulator":
+		candidates = []string{"simulator", "cloudsim"}
+	default:
+		candidates = []string{serviceName}
 	}
 
-	lines := strings.Fields(strings.TrimSpace(out))
-	if ok && len(lines) > 0 {
-		return lines[0], nil
+	// 1. Try label filter for each candidate
+	for _, cand := range candidates {
+		labelFilter := fmt.Sprintf("label=com.docker.compose.service=%s", cand)
+		var out string
+		var ok bool
+		if substrate == "docker" {
+			out, ok = capture("docker", "ps", "--filter", labelFilter, "--format", "{{.ID}}")
+		} else {
+			out, ok = capture(multipassBin(), "exec", c.ApplianceName, "--", "sudo", "docker", "ps", "--filter", labelFilter, "--format", "{{.ID}}")
+		}
+
+		lines := strings.Fields(strings.TrimSpace(out))
+		if ok && len(lines) > 0 {
+			return lines[0], nil
+		}
 	}
 
-	// 2. Try by name pattern (e.g. serviceName in container name)
-	nameFilter := fmt.Sprintf("name=%s", serviceName)
-	if substrate == "docker" {
-		out, ok = capture("docker", "ps", "--filter", nameFilter, "--format", "{{.ID}}")
-	} else {
-		out, ok = capture(multipassBin(), "exec", c.ApplianceName, "--", "sudo", "docker", "ps", "--filter", nameFilter, "--format", "{{.ID}}")
-	}
+	// 2. Try by name pattern for each candidate
+	for _, cand := range candidates {
+		nameFilter := fmt.Sprintf("name=%s", cand)
+		var out string
+		var ok bool
+		if substrate == "docker" {
+			out, ok = capture("docker", "ps", "--filter", nameFilter, "--format", "{{.ID}}")
+		} else {
+			out, ok = capture(multipassBin(), "exec", c.ApplianceName, "--", "sudo", "docker", "ps", "--filter", nameFilter, "--format", "{{.ID}}")
+		}
 
-	lines = strings.Fields(strings.TrimSpace(out))
-	if ok && len(lines) > 0 {
-		return lines[0], nil
+		lines := strings.Fields(strings.TrimSpace(out))
+		if ok && len(lines) > 0 {
+			return lines[0], nil
+		}
 	}
 
 	return "", fmt.Errorf("container for service %q not found (is the appliance running?)", serviceName)
@@ -123,6 +140,44 @@ func (c *Config) backendCopyIn(serviceName, srcHostPath, dstContainerPath string
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("in-vm docker cp failed: %w (output: %s)", err, string(out))
+	}
+	return nil
+}
+
+// backendCopyOut copies a file from inside the container to a host destination.
+// On Docker: docker cp <containerID>:<srcContainerPath> <dstHostPath>
+// On Multipass: docker cp into VM /tmp, then multipass transfer out to host.
+func (c *Config) backendCopyOut(serviceName, srcContainerPath, dstHostPath string) error {
+	containerID, err := c.resolveContainer(serviceName)
+	if err != nil {
+		return err
+	}
+
+	substrate := c.resolveSubstrate()
+	if substrate == "docker" {
+		src := fmt.Sprintf("%s:%s", containerID, srcContainerPath)
+		cmd := exec.Command("docker", "cp", src, dstHostPath)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("docker cp out failed: %w (output: %s)", err, string(out))
+		}
+		return nil
+	}
+
+	// Multipass substrate
+	vmTmp := fmt.Sprintf("/tmp/vyomi-transfer-out-%d.tmp", os.Getpid())
+	cmd := exec.Command(multipassBin(), "exec", c.ApplianceName, "--",
+		"sudo", "docker", "cp", fmt.Sprintf("%s:%s", containerID, srcContainerPath), vmTmp)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("in-vm docker cp out failed: %w (output: %s)", err, string(out))
+	}
+	defer func() {
+		_ = exec.Command(multipassBin(), "exec", c.ApplianceName, "--", "rm", "-f", vmTmp).Run()
+	}()
+
+	if err := run(multipassBin(), "transfer", fmt.Sprintf("%s:%s", c.ApplianceName, vmTmp), dstHostPath); err != nil {
+		return fmt.Errorf("multipass transfer out failed: %w", err)
 	}
 	return nil
 }
