@@ -106,21 +106,42 @@ def discover_endpoints() -> dict[str, Any]:
     redis_pub_port = int(os.environ.get("VYOMI_REDIS_PORT", "36379"))
     redis_pub_bind = os.environ.get("VYOMI_REDIS_BIND", "127.0.0.1")
 
-    # Check if Docker client is available to detect dynamic port bindings
+    # Read the real published ports from Docker when the socket is mounted.
+    # Only containers of THIS appliance count: other Vyomi stacks on the same
+    # machine (another checkout, an override file on :9200, ...) also have a
+    # "simulator" service, and picking theirs writes the wrong port into the
+    # app's .env. Our own container is found by its hostname (= container id).
     try:
         from core import backend_provisioner as _bp
         if _bp.available():
+            import socket as _socket
             client = _bp._client()
+            self_c = None
+            try:
+                self_c = client.containers.get(_socket.gethostname())
+            except Exception:
+                self_c = None
+            project = ((getattr(self_c, "labels", {}) or {}).get("com.docker.compose.project")
+                       if self_c is not None else None)
+
+            def _host_port(c: Any, key: str, default: int) -> int:
+                ports = getattr(c, "ports", {}) or {}
+                if ports.get(key):
+                    return int(ports[key][0].get("HostPort", default))
+                return default
+
+            if self_c is not None:
+                sim_pub_port = _host_port(self_c, "9000/tcp", sim_pub_port)
             for c in client.containers.list():
                 labels = getattr(c, "labels", {}) or {}
-                svc = labels.get("com.docker.compose.service") or c.name
-                ports = getattr(c, "ports", {}) or {}
-                if "postgres" in svc and "5432/tcp" in ports and ports["5432/tcp"]:
-                    pg_pub_port = int(ports["5432/tcp"][0].get("HostPort", pg_pub_port))
-                if "redis" in svc and "6379/tcp" in ports and ports["6379/tcp"]:
-                    redis_pub_port = int(ports["6379/tcp"][0].get("HostPort", redis_pub_port))
-                if ("simulator" in svc or "cloudsim" in svc) and "9000/tcp" in ports and ports["9000/tcp"]:
-                    sim_pub_port = int(ports["9000/tcp"][0].get("HostPort", sim_pub_port))
+                svc = labels.get("com.docker.compose.service") or ""
+                same_project = project is not None and labels.get("com.docker.compose.project") == project
+                # Postgres: our compose project's service only.
+                if same_project and (svc == pg_net_host or "postgres" in svc):
+                    pg_pub_port = _host_port(c, "5432/tcp", pg_pub_port)
+                # Redis: the provisioner's container (no compose labels) or ours.
+                if c.name == redis_net_host or (same_project and "redis" in svc):
+                    redis_pub_port = _host_port(c, "6379/tcp", redis_pub_port)
     except Exception:
         pass
 
