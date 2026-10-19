@@ -25,7 +25,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: cloudlearn
     ports:
-      - "5432:5432"
+      - "${VYOMI_POSTGRES_PORT:-5432}:5432"
     volumes:
       - vyomi-sql-pg:/var/lib/postgresql/data
     restart: unless-stopped

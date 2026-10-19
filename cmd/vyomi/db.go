@@ -301,16 +301,21 @@ DO $$
 DECLARE
     r RECORD;
 BEGIN
-    -- Pass 1: refresh all non-system materialized views
+    -- Pass 1: best-effort refresh (catch errors so dependent views can retry in pass 2)
     FOR r IN (
         SELECT schemaname, matviewname
         FROM pg_matviews
         WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
     ) LOOP
-        EXECUTE format('REFRESH MATERIALIZED VIEW %I.%I', r.schemaname, r.matviewname);
+        BEGIN
+            EXECUTE format('REFRESH MATERIALIZED VIEW %I.%I', r.schemaname, r.matviewname);
+        EXCEPTION WHEN OTHERS THEN
+            -- Ignored in pass 1: will be retried in pass 2 after dependencies are refreshed
+            NULL;
+        END;
     END LOOP;
 
-    -- Pass 2: resolve inter-view dependencies
+    -- Pass 2: resolve inter-view dependencies (strict: any error here will raise)
     FOR r IN (
         SELECT schemaname, matviewname
         FROM pg_matviews
