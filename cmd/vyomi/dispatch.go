@@ -95,21 +95,6 @@ func (c *Config) dispatchOuter(cmd string, args []string) int {
 	return c.dispatchMultipass(cmd, args)
 }
 
-func (c *Config) dispatchDB(args []string) int {
-	if len(args) == 0 {
-		fmt.Println("Usage: vyomi db dump | restore <file> | refresh")
-		return 2
-	}
-	sub := args[0]
-	switch sub {
-	case "dump", "restore", "refresh":
-		fmt.Printf("vyomi db %s: database operation\n", sub)
-		return 0
-	default:
-		fmt.Printf("vyomi db: unknown subcommand %q\n", sub)
-		return 2
-	}
-}
 
 func (c *Config) dispatchRedis(args []string) int {
 	if len(args) == 0 {

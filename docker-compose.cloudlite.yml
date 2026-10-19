@@ -118,7 +118,7 @@ services:
     restart: unless-stopped
 
   vyomi-sql-postgres:
-    image: postgres:16-alpine
+    image: ${VYOMI_POSTGRES_IMAGE:-vyomi/postgres:16-alpine-pgvector}
     networks: [vyomi-net]
     environment:
       POSTGRES_USER: postgres
