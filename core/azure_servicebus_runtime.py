@@ -33,13 +33,22 @@ def get_lock() -> threading.RLock:
     return _STORE_LOCK
 
 
+def default_azsb_db_path() -> str:
+    """Service Bus state lives on the persistent /data volume when present, so
+    queued messages survive `vyomi up` (which recreates containers); /tmp is
+    the fallback for host runs and tests."""
+    if os.path.isdir("/data") and os.access("/data", os.W_OK):
+        return "/data/vyomi-azsb.sqlite"
+    return "/tmp/vyomi-azsb.sqlite"
+
+
 def get_store(backend_path: str | None = None) -> Any:
     """Return the shared PersistentMessagingStore singleton for Azure Service Bus."""
     global _STORE
     with _STORE_LOCK:
         if _STORE is None:
             from core.persistent_store import SqliteStateBackend, PersistentMessagingStore
-            db_path = backend_path or os.environ.get("VYOMI_AZSB_DB", "/tmp/vyomi-azsb.sqlite")
+            db_path = backend_path or os.environ.get("VYOMI_AZSB_DB") or default_azsb_db_path()
             backend = SqliteStateBackend(db_path)
             _STORE = PersistentMessagingStore(backend, store_id="azsb")
             bootstrap_siftly_topology(_STORE)

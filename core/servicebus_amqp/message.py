@@ -67,7 +67,9 @@ class Header:
             self.priority if self.priority != 4 else None,
             self.ttl,
             self.first_acquirer if self.first_acquirer else None,
-            self.delivery_count if self.delivery_count != 0 else None,
+            # Always explicit: the Azure SDKs read header.delivery_count
+            # as-is, and a null would surface as delivery_count=None.
+            self.delivery_count,
         ]
         return DescribedType(self.DESCRIPTOR, _truncate_trailing_nulls(fields))
 
@@ -285,21 +287,19 @@ class Message:
         if not data:
             return []
 
+        # The Azure SDKs wrap a batch in an envelope message: optional header /
+        # annotations / properties sections (copied from the first message),
+        # followed by one Data section per inner, individually encoded message.
+        # Envelope sections are skipped; every Data section is one message.
         messages: list[Message] = []
         offset = 0
         while offset < len(data):
             sec, offset = decode(data, offset)
-            if isinstance(sec, DescribedType):
-                desc_val = int(sec.descriptor) if isinstance(sec.descriptor, (int, Ulong)) else None
-                if desc_val == int(DESCRIPTOR_DATA) and isinstance(sec.value, (bytes, bytearray)):
-                    # Inner message encoded as bytes in the Data payload
-                    messages.append(cls.decode(bytes(sec.value)))
-                else:
-                    # Single message or non-data section
-                    messages.append(cls.decode(data))
-                    break
-            else:
+            if not isinstance(sec, DescribedType):
                 break
+            desc_val = int(sec.descriptor) if isinstance(sec.descriptor, (int, Ulong)) else None
+            if desc_val == int(DESCRIPTOR_DATA) and isinstance(sec.value, (bytes, bytearray)):
+                messages.append(cls.decode(bytes(sec.value)))
         return messages if messages else [cls.decode(data)]
 
     def to_store_dict(self) -> dict[str, Any]:
