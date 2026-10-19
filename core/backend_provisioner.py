@@ -275,6 +275,27 @@ _RECIPES: dict[str, Recipe] = {
                      "and Azure Database for MySQL."),
     ),
 
+    # ─ Redis (app profile redis resources) ──────────────────────────────
+    "redis": Recipe(
+        name="redis",
+        image=os.environ.get("VYOMI_REDIS_IMAGE", "redis:7-alpine"),
+        container_name=_host_from_env("CLOUDLEARN_REDIS_URL", default="vyomi-redis"),
+        command=(
+            ["redis-server", "--appendonly", "yes", "--requirepass",
+             os.environ["VYOMI_REDIS_PASSWORD"]]
+            if os.environ.get("VYOMI_REDIS_PASSWORD")
+            else ["redis-server", "--appendonly", "yes"]
+        ),
+        ports={"6379/tcp": os.environ.get("VYOMI_REDIS_PORT", "36379")},
+        volume_name="vyomi-redis",
+        volume_mount="/data",
+        # Redis speaks RESP, not HTTP. Empty template → skip HTTP probe (same
+        # pattern as mysql above); ready means "container is running".
+        health_url_template="",
+        health_timeout_s=30,
+        description="Redis — in-memory cache/store. Backs app profile redis resources.",
+    ),
+
     # ─ GCP Pub/Sub emulator (gcloud) ────────────────────────────────────
     # Counted by core/appliance_readiness.py but was previously missing here,
     # so the progressive/lazy path could never start it → readiness stalled
