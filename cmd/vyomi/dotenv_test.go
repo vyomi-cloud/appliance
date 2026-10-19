@@ -122,3 +122,59 @@ func TestUnsafePathRejection(t *testing.T) {
 		t.Fatal("expected absolute path to be rejected")
 	}
 }
+
+func TestMaskEnvValueAndURLSecrets(t *testing.T) {
+	cases := []struct {
+		key      string
+		val      string
+		expected string
+	}{
+		{
+			key:      "DB_PASSWORD",
+			val:      "supersecret123",
+			expected: "su********23",
+		},
+		{
+			key:      "DATABASE_URL",
+			val:      "postgresql://siftly:supersecret123@localhost:35432/siftly",
+			expected: "postgresql://siftly:su********23@localhost:35432/siftly",
+		},
+		{
+			key:      "REDIS_URL",
+			val:      "redis://:authpass@127.0.0.1:6379/0",
+			expected: "redis://:au********ss@127.0.0.1:6379/0",
+		},
+		{
+			key:      "SHORT_PASS",
+			val:      "123",
+			expected: "123", // Non-secret key name, non-URL
+		},
+		{
+			key:      "SECRET_KEY",
+			val:      "123",
+			expected: "********", // Secret key with <= 4 chars
+		},
+		{
+			key:      "DATABASE_URL_SHORT",
+			val:      "postgresql://siftly:123@localhost:35432/siftly",
+			expected: "postgresql://siftly:********@localhost:35432/siftly", // URL with short pass
+		},
+		{
+			key:      "API_ENDPOINT",
+			val:      "http://localhost:9000/api/v1",
+			expected: "http://localhost:9000/api/v1", // No credentials
+		},
+		{
+			key:      "DB_PORT",
+			val:      "35432",
+			expected: "35432", // Normal port
+		},
+	}
+
+	for _, tc := range cases {
+		got := MaskEnvValue(tc.key, tc.val)
+		if got != tc.expected {
+			t.Errorf("MaskEnvValue(%q, %q) = %q, want %q", tc.key, tc.val, got, tc.expected)
+		}
+	}
+}

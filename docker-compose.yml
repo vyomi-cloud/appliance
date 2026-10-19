@@ -17,12 +17,15 @@ services:
     restart: unless-stopped
 
   vyomi-sql-postgres:
-    image: postgres:16-alpine
+    image: ${VYOMI_POSTGRES_IMAGE:-vyomi/postgres:16-alpine-pgvector}
+    build:
+      context: ./packaging/postgres
+      dockerfile: Dockerfile
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: cloudlearn
     ports:
-      - "5432:5432"
+      - "${VYOMI_POSTGRES_PORT:-5432}:5432"
     volumes:
       - vyomi-sql-pg:/var/lib/postgresql/data
     restart: unless-stopped
