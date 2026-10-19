@@ -12,6 +12,7 @@ Verifies the 9 mandatory Siftly worker & traffic-ingest scenarios over AMQP 1.0:
 - A9: 256 KB message size limit rejection (amqp:link:message-size-exceeded)
 """
 
+import uuid
 import asyncio
 import socket
 import struct
@@ -516,7 +517,9 @@ def test_gate_a8_auto_lock_renewer_loop():
     f_rx = decode_frame(conn.outbox[0])
     p_rx = parse_performative(f_rx[4])
     deliv_id = p_rx.delivery_id
-    lock_token = p_rx.delivery_tag.decode("ascii")
+    # Delivery tag is the lock token as a little-endian GUID (what the Azure
+    # SDKs read); renew-lock sends it back as an AMQP uuid.
+    lock_token = uuid.UUID(bytes_le=p_rx.delivery_tag)
     conn.outbox.clear()
 
     # Perform 3 successive renewal cycles, advancing the clock by 40s each time (before 60s timeout)

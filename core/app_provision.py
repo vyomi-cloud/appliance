@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 import re
 import urllib.parse
 from typing import Any
@@ -138,7 +139,11 @@ def discover_endpoints() -> dict[str, Any]:
     redis_running = False
     try:
         from core import appliance_readiness as _ar
-        redis_running = _ar._probe_one("127.0.0.1", redis_pub_port, timeout=0.1)
+        # From inside the simulator container, 127.0.0.1 is the simulator itself,
+        # so probe Redis on the Docker network first; the published port covers
+        # a simulator running directly on the host.
+        redis_running = _ar._probe_one(redis_net_host, redis_net_port, timeout=0.25) or \
+            _ar._probe_one("127.0.0.1", redis_pub_port, timeout=0.1)
     except Exception:
         pass
 
@@ -268,9 +273,26 @@ def provision_app_resources(app_name: str, resources: dict[str, Any],
         for r_name in resources["redis"].keys():
             try:
                 from core import backend_provisioner as _bp
-                if _bp.available():
-                    _bp.provision_async("redis")
-                redis_results[r_name] = {"status": "ready"}
+                if not _bp.available():
+                    raise RuntimeError(
+                        "backend provisioner unavailable (no Docker socket in the "
+                        "simulator container); start Redis with the compose 'app' "
+                        "profile or mount /var/run/docker.sock"
+                    )
+                _bp.provision_async("redis")
+                # Wait for the real outcome instead of reporting "ready" while the
+                # image is still pulling (or after the pull failed).
+                deadline = time.time() + float(os.environ.get("VYOMI_APP_REDIS_WAIT_S", "120"))
+                st_r = _bp.status("redis") or {}
+                while st_r.get("state") not in ("ready", "failed") and time.time() < deadline:
+                    time.sleep(1)
+                    st_r = _bp.status("redis") or {}
+                if st_r.get("state") == "ready":
+                    redis_results[r_name] = {"status": "ready"}
+                elif st_r.get("state") == "failed":
+                    raise RuntimeError(f"Redis failed to start: {st_r.get('error')}")
+                else:
+                    redis_results[r_name] = {"status": "pending", "state": st_r.get("state")}
             except Exception as exc:
                 log.warning("Redis provision failed for %s: %s", r_name, exc)
                 redis_results[r_name] = {"status": "error", "error": str(exc)}

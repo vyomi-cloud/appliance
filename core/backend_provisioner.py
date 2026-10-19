@@ -286,7 +286,10 @@ _RECIPES: dict[str, Recipe] = {
             if os.environ.get("VYOMI_REDIS_PASSWORD")
             else ["redis-server", "--appendonly", "yes"]
         ),
-        ports={"6379/tcp": os.environ.get("VYOMI_REDIS_PORT", "36379")},
+        # Loopback-only by default: an unauthenticated Redis must not be
+        # reachable from the LAN. Multipass sets VYOMI_REDIS_BIND to the VM IP.
+        ports={"6379/tcp": (os.environ.get("VYOMI_REDIS_BIND", "127.0.0.1"),
+                            int(os.environ.get("VYOMI_REDIS_PORT", "36379")))},
         volume_name="vyomi-redis",
         volume_mount="/data",
         # Redis speaks RESP, not HTTP. Empty template → skip HTTP probe (same

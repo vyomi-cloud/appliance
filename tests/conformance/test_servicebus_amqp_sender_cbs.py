@@ -232,8 +232,13 @@ def test_address_resolution_and_not_found():
             Attach(name="s2", handle=2, role=False, target=Target(address="non_existent_topic")),
         )
     )
-    assert len(conn.outbox) == 1
-    f_err = decode_frame(conn.outbox[0])
+    # AMQP 1.0 §2.6.3: the refusal is an Attach with no terminus, then a Detach
+    # carrying the error (a bare Detach is an unattached handle to the client).
+    assert len(conn.outbox) == 2
+    refusal = parse_performative(decode_frame(conn.outbox[0])[4])
+    assert isinstance(refusal, Attach)
+    assert refusal.target is None and refusal.source is None
+    f_err = decode_frame(conn.outbox[1])
     detach_perf = parse_performative(f_err[4])
     assert isinstance(detach_perf, Detach)
     assert detach_perf.closed == True
