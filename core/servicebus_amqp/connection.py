@@ -92,6 +92,35 @@ def _is_lock_lost(e: ServiceBusError) -> bool:
     return getattr(e, "status", None) == 410 or "LockLost" in getattr(e, "code", "") or "LockLost" in str(e)
 
 
+
+def _delivery_tag_for_lock(lock_token: str) -> bytes:
+    """Delivery tag for a leased message.
+
+    The Azure SDKs read the lock token from the delivery tag as a 16-byte
+    little-endian GUID (``uuid.UUID(bytes_le=tag)``) and send it back in
+    renew-lock requests as an AMQP uuid. Lease tokens are "rhdl-<32 hex>", so
+    the hex part maps one-to-one onto a GUID.
+    """
+    if lock_token.startswith("rhdl-") and len(lock_token) == 37:
+        try:
+            return uuid.UUID(hex=lock_token[5:]).bytes_le
+        except ValueError:
+            pass
+    return lock_token.encode("ascii")
+
+
+def _lock_from_client_token(tok: Any) -> str:
+    """Inverse of _delivery_tag_for_lock for tokens the client sends back."""
+    if isinstance(tok, uuid.UUID):
+        return "rhdl-" + tok.hex
+    if isinstance(tok, (bytes, bytearray)) and len(tok) == 16:
+        return "rhdl-" + uuid.UUID(bytes=bytes(tok)).hex
+    tok_str = tok.decode("ascii", "replace") if isinstance(tok, (bytes, bytearray)) else str(tok)
+    try:
+        return "rhdl-" + uuid.UUID(tok_str).hex
+    except ValueError:
+        return tok_str
+
 def _is_management_address(address: str) -> bool:
     """True iff `address` IS the $management node, not merely contains the
     substring (e.g. a real entity named "orders-management-queue" must not
@@ -409,7 +438,13 @@ class AmqpConnection:
         """
         if not addr:
             return None
-        clean_addr = addr.strip().strip("/")
+        clean_addr = addr.strip()
+        # The Azure SDKs send absolute addresses for entity links, e.g.
+        # "amqps://<host>:5672/<topic>" or ".../<topic>/Subscriptions/<sub>".
+        if "://" in clean_addr:
+            clean_addr = clean_addr.split("://", 1)[1]
+            clean_addr = clean_addr.split("/", 1)[1] if "/" in clean_addr else ""
+        clean_addr = clean_addr.strip("/")
         if store is None:
             store = self._get_store()
 
@@ -488,7 +523,7 @@ class AmqpConnection:
             self.send_frame(FRAME_TYPE_AMQP, channel, reply_attach)
 
             if is_sender:
-                flow = Flow(handle=attach.handle, link_credit=1000, next_incoming_id=1, next_outgoing_id=1)
+                flow = Flow(handle=attach.handle, delivery_count=0, link_credit=1000, next_incoming_id=1, next_outgoing_id=1)
                 self.send_frame(FRAME_TYPE_AMQP, channel, flow)
             return
 
@@ -520,7 +555,7 @@ class AmqpConnection:
             )
             self.send_frame(FRAME_TYPE_AMQP, channel, reply_attach)
             if is_sender:
-                flow = Flow(handle=attach.handle, link_credit=1000, next_incoming_id=1, next_outgoing_id=1)
+                flow = Flow(handle=attach.handle, delivery_count=0, link_credit=1000, next_incoming_id=1, next_outgoing_id=1)
                 self.send_frame(FRAME_TYPE_AMQP, channel, flow)
             return
 
@@ -534,6 +569,22 @@ class AmqpConnection:
             if resolution is None:
                 self._trace("ERR", f"Entity not found: {address!r}")
                 err = Error(Symbol("amqp:not-found"), f"The messaging entity '{address}' could not be found.")
+                # A link must be attached before it can be detached (AMQP 1.0
+                # §2.6.3): reply with an Attach that has no terminus, then the
+                # error Detach. A bare Detach is an "unattached handle" to the
+                # client and tears down the whole session.
+                self.send_frame(
+                    FRAME_TYPE_AMQP,
+                    channel,
+                    Attach(
+                        name=attach.name,
+                        handle=attach.handle,
+                        role=not attach.role,
+                        source=None,
+                        target=None,
+                        initial_delivery_count=0 if attach.role else None,
+                    ),
+                )
                 reply_detach = Detach(handle=attach.handle, closed=True, error=err)
                 self.send_frame(FRAME_TYPE_AMQP, channel, reply_detach)
                 return
@@ -571,7 +622,7 @@ class AmqpConnection:
         self.send_frame(FRAME_TYPE_AMQP, channel, reply_attach)
 
         if is_sender:
-            flow = Flow(handle=attach.handle, link_credit=1000, next_incoming_id=1, next_outgoing_id=1)
+            flow = Flow(handle=attach.handle, delivery_count=0, link_credit=1000, next_incoming_id=1, next_outgoing_id=1)
             self.send_frame(FRAME_TYPE_AMQP, channel, flow)
 
     def _on_detach(self, channel: int, detach: Detach) -> None:
@@ -654,14 +705,20 @@ class AmqpConnection:
             body_val = msg.get("body", b"")
             body_bytes = body_val if isinstance(body_val, (bytes, bytearray)) else str(body_val).encode("utf-8")
 
+            # header.delivery-count is the number of PRIOR failed deliveries
+            # (0 on first delivery); the store counts this delivery too.
             out_msg = Message(
                 body=body_bytes,
+                header=Header(
+                    durable=True,
+                    delivery_count=max(0, int(msg.get("delivery_count", 1)) - 1),
+                ),
                 properties=props,
                 application_properties=msg.get("application_properties", {}),
                 message_annotations=annotations,
             )
 
-            deliv_tag = lock_token.encode("ascii")
+            deliv_tag = _delivery_tag_for_lock(lock_token)
             transfer = Transfer(
                 handle=link.handle,
                 delivery_id=deliv_id,
@@ -739,7 +796,15 @@ class AmqpConnection:
                 reply_msg = Message(
                     body=b"",
                     properties=reply_props,
-                    application_properties={"statusCode": 202, "statusDescription": "Accepted"},
+                    # CBS put-token replies use "status-code"/"status-description"
+                    # (azure-servicebus _pyamqp/cbs.py, @azure/core-amqp cbs);
+                    # $management replies use "statusCode". Send both.
+                    application_properties={
+                        "status-code": 202,
+                        "status-description": "Accepted",
+                        "statusCode": 202,
+                        "statusDescription": "Accepted",
+                    },
                 )
                 cbs_transfer = Transfer(
                     handle=session.cbs_reply_handle,
@@ -771,9 +836,7 @@ class AmqpConnection:
                 store = self._get_store()
 
                 for tok in lock_tokens:
-                    tok_str = str(tok)
-                    if isinstance(tok, bytes) and len(tok) == 16:
-                        tok_str = str(uuid.UUID(bytes=tok))
+                    tok_str = _lock_from_client_token(tok)
                     try:
                         new_vis = sb_renew_lock(store, topic, sub, lock=tok_str, is_dlq=link.is_dlq)
                         expirations.append(Timestamp(int(new_vis * 1000)))
@@ -864,6 +927,12 @@ class AmqpConnection:
         first = int(disposition.first)
         last = int(disposition.last) if disposition.last is not None else first
 
+        # Clients that send an unsettled disposition (e.g. @azure/service-bus
+        # for abandon/complete/dead-letter) wait for the peer to settle it.
+        # Settle every delivery we did not already settle with an error.
+        settle_ok: list[int] = []
+        failed: set[int] = set()
+
         for deliv_id in range(first, last + 1):
             info = None
             for link in session.links.values():
@@ -889,8 +958,9 @@ class AmqpConnection:
                         self.send_frame(
                             FRAME_TYPE_AMQP,
                             channel,
-                            Disposition(role=True, first=deliv_id, last=deliv_id, settled=True, state=Rejected(err)),
+                            Disposition(role=False, first=deliv_id, last=deliv_id, settled=True, state=Rejected(err)),
                         )
+                        failed.add(deliv_id)
             elif isinstance(state, Modified):
                 try:
                     sb_abandon(store, topic, sub, seq=seq, lock=lock_token, is_dlq=is_dlq)
@@ -900,8 +970,9 @@ class AmqpConnection:
                         self.send_frame(
                             FRAME_TYPE_AMQP,
                             channel,
-                            Disposition(role=True, first=deliv_id, last=deliv_id, settled=True, state=Rejected(err)),
+                            Disposition(role=False, first=deliv_id, last=deliv_id, settled=True, state=Rejected(err)),
                         )
+                        failed.add(deliv_id)
             elif isinstance(state, Rejected):
                 reason = "ExplicitDeadLetter"
                 desc = None
@@ -919,8 +990,24 @@ class AmqpConnection:
                         self.send_frame(
                             FRAME_TYPE_AMQP,
                             channel,
-                            Disposition(role=True, first=deliv_id, last=deliv_id, settled=True, state=Rejected(err)),
+                            Disposition(role=False, first=deliv_id, last=deliv_id, settled=True, state=Rejected(err)),
                         )
+                        failed.add(deliv_id)
+            if deliv_id not in failed:
+                settle_ok.append(deliv_id)
+
+        if not disposition.settled and settle_ok:
+            self.send_frame(
+                FRAME_TYPE_AMQP,
+                channel,
+                Disposition(
+                    role=False,
+                    first=settle_ok[0],
+                    last=settle_ok[-1],
+                    settled=True,
+                    state=disposition.state,
+                ),
+            )
 
     def check_idle_keepalive(self, now: float | None = None) -> None:
         """Check if an idle heartbeat (empty frame) is due to be sent."""

@@ -12,9 +12,16 @@ from .codec import DescribedType, Symbol, Ubyte, Uint, Ulong, Ushort
 
 
 def _truncate_trailing_nulls(lst: list[Any]) -> list[Any]:
-    """Trim trailing None values from an AMQP described list."""
-    while lst and lst[-1] is None:
-        lst.pop()
+    """Return the field list unchanged (no trailing-null trimming).
+
+    AMQP 1.0 allows trailing null fields to be omitted, but the Azure SDKs'
+    pure-Python AMQP stack (azure-servicebus >= 7.9, `_pyamqp`) indexes
+    performative fields positionally without bounds checks — e.g.
+    `_incoming_open` reads `frame[9]` and `_incoming_attach` reads `frame[13]` —
+    so a trimmed Open/Attach raises IndexError ("Handler failed: list index out
+    of range"). Azure Service Bus itself sends every field, so we do too: an
+    explicit null is equally valid AMQP and every client accepts it.
+    """
     return lst
 
 
