@@ -220,20 +220,18 @@ async def _blob_handle(account: str, rest: str, request: Request) -> Response:
 
         data = g["data"]
         rng = request.headers.get("x-ms-range") or request.headers.get("range") or ""
-        import re
-        m = re.match(r"bytes=(\d*)-(\d*)", rng.strip()) if rng else None
-        if m and (m.group(1) or m.group(2)):
-            total = len(data)
-            start = int(m.group(1)) if m.group(1) else 0
-            end = int(m.group(2)) if m.group(2) else total - 1
-            end = min(end, total - 1)
-            if start > end or start >= total:
-                err_hdrs = _blob_headers({"x-ms-error-code": "InvalidRange", "Content-Range": f"bytes */{total}"})
-                return Response(status_code=416, headers=err_hdrs, media_type="application/xml",
-                                content='<?xml version="1.0" encoding="utf-8"?>\n<Error><Code>InvalidRange</Code><Message>The range specified is invalid.</Message></Error>')
+        from core.azure_blob_core import parse_byte_range
+        try:
+            rr = parse_byte_range(rng, len(data))
+        except ValueError:
+            err_hdrs = _blob_headers({"x-ms-error-code": "InvalidRange", "Content-Range": f"bytes */{len(data)}"})
+            return Response(status_code=416, headers=err_hdrs, media_type="application/xml",
+                            content='<?xml version="1.0" encoding="utf-8"?>\n<Error><Code>InvalidRange</Code><Message>The range specified is invalid.</Message></Error>')
+        if rr:
+            start, end = rr
             sl = data[start:end + 1]
             hdrs["Content-Length"] = str(len(sl))
-            hdrs["Content-Range"] = f"bytes {start}-{end}/{total}"
+            hdrs["Content-Range"] = f"bytes {start}-{end}/{len(data)}"
             return Response(status_code=206, content=sl, media_type=g["ct"], headers=hdrs)
 
         return Response(content=data, media_type=g["ct"], headers=hdrs)
@@ -916,8 +914,6 @@ def put_blob_bytes(account: str, container: str, blob: str, data: bytes,
     from core.azure_blob_core import blob_content_headers
     if props is None:
         props = blob_content_headers({"content-type": content_type} if content_type else {})
-    elif content_type and "content_type" not in props:
-        props["content_type"] = content_type
 
     st = _store()
     if st:

@@ -73,6 +73,26 @@ def blob_content_headers(headers: dict | None) -> dict[str, str]:
     return out
 
 
+def parse_byte_range(rng: str | None, total: int) -> tuple[int, int] | None:
+    """Parse a `bytes=start-end` Range / x-ms-range header value (shared by
+    core/azure_blob_core.py and core/azure_dataplane.py so the two blob
+    handlers don't drift). Returns the inclusive (start, end) pair, or None
+    when `rng` is absent/not a byte-range. Raises ValueError when the range
+    is out of bounds (start > end or start >= total) — callers should answer
+    with a 416 InvalidRange in that case."""
+    if not rng:
+        return None
+    m = re.match(r"bytes=(\d*)-(\d*)", rng.strip())
+    if not m or not (m.group(1) or m.group(2)):
+        return None
+    start = int(m.group(1)) if m.group(1) else 0
+    end = int(m.group(2)) if m.group(2) else total - 1
+    end = min(end, total - 1)
+    if start > end or start >= total:
+        raise ValueError("invalid range")
+    return start, end
+
+
 # ── self-contained in-memory store ─────────────────────────────────────────
 class AzureBlobStore:
     """In-memory Azure Blob namespace. containers: name -> {meta}. blobs:
@@ -288,19 +308,17 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         # (Range / x-ms-range: bytes=start-end) and requires 206 + Content-Range.
         data = entry["data"]
         rng = headers.get("x-ms-range") or headers.get("range") or ""
-        m = re.match(r"bytes=(\d*)-(\d*)", rng.strip()) if rng else None
-        if m and (m.group(1) or m.group(2)):
-            total = len(data)
-            start = int(m.group(1)) if m.group(1) else 0
-            end = int(m.group(2)) if m.group(2) else total - 1
-            end = min(end, total - 1)
-            if start > end or start >= total:
-                er = _err(416, "InvalidRange", "The range specified is invalid.")
-                er.headers["content-range"] = f"bytes */{total}"
-                return er
+        try:
+            rr = parse_byte_range(rng, len(data))
+        except ValueError:
+            er = _err(416, "InvalidRange", "The range specified is invalid.")
+            er.headers["content-range"] = f"bytes */{len(data)}"
+            return er
+        if rr:
+            start, end = rr
             sl = data[start:end + 1]
             h["content-length"] = str(len(sl))
-            h["content-range"] = f"bytes {start}-{end}/{total}"
+            h["content-range"] = f"bytes {start}-{end}/{len(data)}"
             return Response(status=206, headers=h, body=sl, media_type=ct)
         return Response(status=200, headers=h, body=data, media_type=ct)
 
