@@ -3,9 +3,9 @@ name: Release
 # On every STABLE v*.*.* tag (no -rc/-beta/-alpha suffix) or manual dispatch:
 #   1. Build the source tarball + .deb + .rpm
 #   2. Publish a GitHub Release with all artifacts attached
-#   3. Fan out to downstream package managers (Brew tap, Snap Store,
-#      Scoop) — each one is OPT-IN via its secret being set
-#      (winget dropped 2026-10-06 — see the "Winget PR submission — REMOVED" note)
+#   3. Fan out to downstream package managers (Brew tap, Scoop) — each one
+#      is OPT-IN via its secret being set (winget dropped 2026-10-06, Snap
+#      dropped 2026-10-23 — see the "REMOVED" notes where their jobs were)
 #
 # Release Candidate tags (v*-rc*, v*-beta*, v*-alpha*) are handled by
 # the separate release-candidate.yml workflow, which builds the SAME
@@ -19,7 +19,6 @@ name: Release
 # own secret being present. Adding a secret turns that PM's job on:
 #
 #   HOMEBREW_TAP_TOKEN        — PAT (contents:write) on the homebrew-tap repo
-#   SNAPCRAFT_STORE_CREDENTIALS — output of `snapcraft export-login`
 #   SCOOP_BUCKET_TOKEN        — PAT (contents:write) on the scoop-bucket repo
 #
 # Note: Chocolatey was dropped 2026-06-11. The community-feed review
@@ -63,25 +62,21 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       has_brew:   ${{ steps.check.outputs.has_brew }}
-      has_snap:   ${{ steps.check.outputs.has_snap }}
       has_scoop:  ${{ steps.check.outputs.has_scoop }}
     steps:
       - id: check
         env:
           BREW:   ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          SNAP:   ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
           SCOOP:  ${{ secrets.SCOOP_BUCKET_TOKEN }}
         run: |
           mask() { [ -n "$1" ] && echo true || echo false; }
           {
             echo "has_brew=$(mask "$BREW")"
-            echo "has_snap=$(mask "$SNAP")"
             echo "has_scoop=$(mask "$SCOOP")"
           } >> "$GITHUB_OUTPUT"
           {
             echo "## Downstream targets"
             echo "- Homebrew tap : $(mask "$BREW")"
-            echo "- Snap Store   : $(mask "$SNAP")"
             echo "- Scoop bucket : $(mask "$SCOOP")"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -376,22 +371,11 @@ jobs:
           git commit -m "vyomi ${VER} (cloud-learn + vyomi-docker)"
           git push
 
-  # ── Snap Store publish ──────────────────────────────────────────────────
-  snap-publish:
-    needs: [preflight, build]
-    if: needs.preflight.outputs.has_snap == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: snapcore/action-build@v1
-        id: build-snap
-        with: {path: packaging/snap}
-      - uses: snapcore/action-publish@v1
-        env:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-        with:
-          snap: ${{ steps.build-snap.outputs.snap }}
-          release: stable
+  # ── Snap Store publish — REMOVED ────────────────────────────────────────
+  # Dropped 2026-10-23: the snap-publish job failed on every release (v3.0.x),
+  # turning each otherwise-green release red for a channel nobody installs from.
+  # Linux is served by the .deb/.rpm on the GitHub Release + Homebrew. The
+  # packaging/snap/ manifest is kept in case the Snap Store is revisited.
 
   # ── Winget PR submission — REMOVED ──────────────────────────────────────
   # Dropped: submissions to the official microsoft/winget-pkgs catalog require a
