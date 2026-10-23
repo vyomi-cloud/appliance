@@ -646,6 +646,15 @@ async def _tier_enforcement_middleware(request: Request, call_next):
     tier = str(tenant.get("license_tier")
                or (STATE.get("license") or {}).get("tier")
                or "free")
+    # Same cutoff as server._active_tier: a lapsed subscription / ended trial
+    # reads as Free immediately, offline, before the next refresh lands.
+    if tier != "free":
+        try:
+            from core import license_remote as _lr
+            if _lr.is_sub_expired(STATE.get("license_claims") or {}):
+                tier = "free"
+        except Exception:
+            pass
     primary_cloud = str(tenant.get("primary_cloud") or "")
 
     # -- SSO Bearer-token validation (Enterprise tier, when configured) -----

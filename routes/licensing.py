@@ -400,6 +400,22 @@ def register(app: FastAPI) -> None:
         sub_expires_at = claims.get("sub_expires_at")
         days_until_sub_expiry = _lr.days_until_sub_expiry(claims)
         sub_expired = _lr.is_sub_expired(claims)
+        if sub_expired:
+            active_tier = "free"   # match the enforcement path (server._active_tier)
+        # 14-day reverse trial (portal-signed): the countdown the space cards show.
+        # trial_ends_at is normalised to UTC "Z" so the browser parses it as UTC.
+        trial_on = bool(claims.get("trial"))
+        trial_ends_at = None
+        if trial_on and sub_expires_at:
+            trial_ends_at = str(sub_expires_at).rstrip("Z").split("+")[0].split(".")[0] + "Z"
+        _backend = (os.environ.get("CLOUDLEARN_LICENSE_BACKEND_URL") or _lr.DEFAULT_BACKEND_URL).rstrip("/")
+        trial = {
+            "activated":   bool(ctx.STATE.get("license_jwt")),
+            "active":      trial_on and not sub_expired,
+            "ends_at":     trial_ends_at,
+            "ended":       bool(claims.get("trial_ended")) or (trial_on and sub_expired),
+            "upgrade_url": _backend + "/pricing",
+        }
         cancel_at_period_end = bool(claims.get("cancel_at_period_end"))
         refresh_status = {
             "last_refresh_at":          ctx.STATE.get("license_last_refresh_at"),
@@ -423,6 +439,7 @@ def register(app: FastAPI) -> None:
             "sub_expired":            sub_expired,
             "cancel_at_period_end":   cancel_at_period_end,
             "refresh_status":         refresh_status,
+            "trial":                  trial,
             "price_inr_monthly":      policy.get("price_inr_monthly"),
             "price_inr_annual":       policy.get("price_inr_annual"),
             "currency":               "INR",

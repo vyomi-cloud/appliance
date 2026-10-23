@@ -4,6 +4,37 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.7] — 2026-10-23
+
+**Minor: 14-day appliance trial, redesigned space cards, Nano tunnel fix.**
+
+### Added — 14-day trial on "Activate appliance"
+- Activating an offline appliance now starts a free 14-day Pro trial (one per
+  account, granted by the portal and signed into the license). The trial lives
+  on the Spaces "Activate appliance" button: a "14-day Pro trial" badge before
+  activation → a live "PRO trial 13d 04:12:09 · Upgrade" countdown → "Trial
+  ended · Upgrade" (back on Free) → "Activated · PRO" when paid. The activation
+  modal says so ("No card needed").
+- `/api/license/status` returns a `trial` block (activated / active / ends_at /
+  ended / upgrade_url); the `trial` / `trial_ended` JWT claims are carried into
+  the stored license.
+
+### Changed — space cards
+- One top-right status pill: "ACTIVE · 01:47:57" (green, ticking) for a space
+  with a running TTL, or "EXPIRED" — never both; flips live when the countdown
+  hits zero.
+- Renew TTL / Force shutdown are icon buttons with hover tooltips; the footer
+  pins to the card bottom. No divider rules; the cost-savings block sits
+  directly on the card.
+
+### Fixed
+- Tier enforcement kept treating a lapsed subscription (or ended trial) as paid
+  until the next portal refresh; it now reads Free the moment `sub_expires_at`
+  passes, offline included (`core/middleware.py`, `/api/license/status`).
+- Nano "Start tunnel" failed with `ModuleNotFoundError: No module named
+  'core.azure_arm_core'` — the relay's core list was missing the Azure ARM
+  modules that `nano_registry` imports (served by the portal).
+
 ## [3.0.6] — 2026-10-08
 
 **Patch: console-conformance CI fixes + Docker Desktop auto-start/install on macOS.**

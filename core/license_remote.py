@@ -427,6 +427,9 @@ def claims_to_tier_payload(claims: dict) -> dict:
         "install_id": claims.get("install_id"),
         "sub_expires_at": claims.get("sub_expires_at"),
         "cancel_at_period_end": bool(claims.get("cancel_at_period_end")),
+        # Portal reverse trial: sub_expires_at is the TRIAL end when trial=True.
+        "trial": bool(claims.get("trial")),
+        "trial_ended": bool(claims.get("trial_ended")),
         "issued_via": "license_remote_jwt",
     }
 

@@ -31,6 +31,7 @@ const CORES = [
   "azure_keyvault_keys_core.py", "azure_queue_core.py", "azure_servicebus_core.py",
   "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "vpc_core.py",
   "azure_sql_core.py", "azure_iam_core.py",
+  "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it
   "aws_wire_router.py",
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)
 ];
