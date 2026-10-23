@@ -4,6 +4,36 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.6] — 2026-10-08
+
+**Patch: console-conformance CI fixes + Docker Desktop auto-start/install on macOS.**
+
+### Fixed — console-conformance CI workflow
+- The `on:` trigger block had a duplicate `push:` key (invalid YAML) that made
+  GitHub Actions reject the whole workflow file outright with a generic
+  "workflow file issue" error before any job even started — broken on every
+  push, to every branch, since this file was last touched. Merged into a
+  single `push:` key with both `branches: [main]` and `tags: ['v*']`.
+- Once the trigger was fixed and the workflow could actually run, it hit two
+  more pre-existing bugs: the "Boot appliance stack" step referenced
+  pre-rebrand `cloudlearn-*` compose service names (now `vyomi-*`), and the
+  PR-comment step had no `pull-requests: write` permission, so it failed with
+  "Resource not accessible by integration" on every run regardless of
+  outcome. Fixed both.
+
+### Fixed — Docker Desktop auto-start/install on macOS
+- `vyomi up` could fail to auto-start the engine after quitting Docker
+  Desktop and immediately re-running: `docker desktop start` no-ops when
+  Desktop still reports itself "running" — true even mid-wedge, right after a
+  quit that didn't fully land. `startDockerHost`/`ensureDockerEngine` now
+  detect that case via `docker desktop status` and use `docker desktop
+  restart` instead; retry once halfway through the wait; bound the `docker
+  info` health check so a hung daemon can't blow past the stated timeout
+  (`cmd/vyomi/docker.go`, `cmd/vyomi/exec.go`).
+- `install.sh` mirrors the same engine-start logic, and now auto-installs
+  Docker Desktop via Homebrew (`brew install --cask docker`) when `docker`
+  isn't on PATH at all, instead of just printing a link and exiting.
+
 ## [3.0.5] — 2026-10-07
 
 **Patch: sandbox TTL timer now actually shows.**
