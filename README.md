@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-26 17:38 UTC · refreshes after every pipeline run_
+_Updated 2026-10-26 17:47 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -8,17 +8,17 @@ _Updated 2026-10-26 17:38 UTC · refreshes after every pipeline run_
 - **Building now:** Amazon CloudWatch (AWS, no manifest yet checks)
 - **In the gate / releasing:** AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS)
 - **Queued:** 78 services (P1 first, then P2)
-- **Consoles really implemented:** offline not measured yet · Nano not measured yet
-- **Hourly tests:** 13 of 22 suites passing (run 16:30 UTC)
+- **Consoles really implemented:** offline 35% · Nano 43%
+- **Hourly tests:** 13 of 22 suites passing (run 17:45 UTC)
 - **Upstream watch:** 2 open changes from the real clouds to adopt
 
 ## By cloud
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 12 | 1 | 2 | 30 | not measured yet · not measured yet |
-| GCP | 12 | 0 | 0 | 24 | not measured yet · not measured yet |
-| Azure | 12 | 0 | 0 | 24 | not measured yet · not measured yet |
+| AWS | 12 | 1 | 2 | 30 | 34% · 46% |
+| GCP | 12 | 0 | 0 | 24 | 38% · 47% |
+| Azure | 12 | 0 | 0 | 24 | 18% · 9% |
 
 ## In progress
 
@@ -37,52 +37,52 @@ _Updated 2026-10-26 17:38 UTC · refreshes after every pipeline run_
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| EC2 | — | 2 · 9 | ✅ watched | before gate |
-| S3 | — | 2 · 2 | ✅ watched | before gate |
-| IAM | — | 2 · 2 | ✅ watched | before gate |
-| RDS | — | 0 · 2 | ✅ watched | before gate |
-| DynamoDB | — | 2 · 4 | ✅ watched | before gate |
-| SQS | — | 1 · 2 | ✅ watched | before gate |
-| Lambda | — | 0 · 2 | ✅ watched | before gate |
-| API Gateway | — | 0 · 2 | ✅ watched | before gate |
-| VPC | — | 1 · 2 | ✅ watched | before gate |
-| EventBridge | — | 6 · 2 | ✅ watched | before gate |
-| Secrets Manager | — | 8 · 6 | ✅ watched | before gate |
-| KMS | — | 2 · 2 | ✅ watched | before gate |
+| EC2 | 🧩 1/13 · 🧩 3/13 | 20 · 15 | ✅ watched | before gate |
+| S3 | 🧩 5/13 · 🧩 8/13 | 1 · 4 | ✅ watched | before gate |
+| IAM | 🧩 7/11 · 🧩 2/11 | 3 · 12 | ✅ watched | before gate |
+| RDS | 🧩 8/13 · 🧩 8/13 | 6 · 9 | ✅ watched | before gate |
+| DynamoDB | 🧩 1/13 · 🧩 5/13 | 13 · 7 | ✅ watched | before gate |
+| SQS | 🧩 2/13 · 🧩 5/13 | 12 · 5 | ✅ watched | before gate |
+| Lambda | 🧩 6/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
+| API Gateway | 🧩 6/13 · 🧩 1/2 | 2 · 1 | ✅ watched | before gate |
+| VPC | 🧩 7/13 · 🧩 1/2 | 4 · 1 | ✅ watched | before gate |
+| EventBridge | 🧩 1/13 · 🧩 1/2 | 28 · 1 | ✅ watched | before gate |
+| Secrets Manager | 🧩 4/13 · 🧩 6/13 | 5 · 6 | ✅ watched | before gate |
+| KMS | 🧩 5/13 · 🧩 10/13 | 2 · 2 | ✅ watched | before gate |
 
 ### GCP
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| Compute Engine | — | 0 · 3 | ✅ watched | before gate |
-| Cloud Storage | — | 2 · 1 | ✅ watched | before gate |
-| Cloud SQL | — | 1 · 1 | ⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
-| Pub/Sub | — | 5 · 7 | ✅ watched | before gate |
-| Firestore | — | 3 · 7 | ✅ watched | before gate |
-| Cloud Functions | — | 4 · 5 | ✅ watched | before gate |
-| API Gateway | — | 1 · 1 | ✅ watched | before gate |
-| VPC Network | — | 4 · 7 | ✅ watched | before gate |
-| IAM & Admin | — | 2 · 1 | ✅ watched | before gate |
-| Eventarc | — | 4 · 3 | ✅ watched | before gate |
-| Secret Manager | — | 1 · 1 | ✅ watched | before gate |
-| Cloud KMS | — | 2 · 9 | ✅ watched | before gate |
+| Compute Engine | 🧩 5/13 · 🧩 7/13 | 0 · 3 | ✅ watched | before gate |
+| Cloud Storage | 🧩 7/13 · 🧩 8/13 | 2 · 2 | ✅ watched | before gate |
+| Cloud SQL | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
+| Pub/Sub | 🧩 4/13 · 🧩 7/13 | 5 · 5 | ✅ watched | before gate |
+| Firestore | 🧩 4/13 · 🧩 1/13 | 3 · 5 | ✅ watched | before gate |
+| Cloud Functions | 🧩 4/13 · 🧩 5/13 | 3 · 4 | ✅ watched | before gate |
+| API Gateway | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
+| VPC Network | 🧩 3/13 · 🧩 4/13 | 3 · 8 | ✅ watched | before gate |
+| IAM & Admin | 🧩 4/9 · 🧩 8/9 | 2 · 1 | ✅ watched | before gate |
+| Eventarc | 🧩 5/12 · 🧩 6/12 | 4 · 5 | ✅ watched | before gate |
+| Secret Manager | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
+| Cloud KMS | 🧩 6/13 · 🧩 7/13 | 2 · 6 | ✅ watched | before gate |
 
 ### Azure
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| Virtual Machines | — | 1 · 1 | ✅ watched | before gate |
-| Storage accounts | — | 1 · 1 | ✅ watched | before gate |
-| SQL servers | — | 1 · 1 | ✅ watched | before gate |
-| Service Bus | — | 1 · 1 | ✅ watched | before gate |
-| Cosmos DB | — | 1 · 1 | ✅ watched | before gate |
-| Function apps | — | 1 · 1 | ✅ watched | before gate |
-| API Management | — | 1 · 1 | ✅ watched | before gate |
-| Virtual networks | — | 1 · 1 | ✅ watched | before gate |
-| Network Security Group | — | 1 · 1 | ✅ watched | before gate |
-| Event Grid topics | — | 1 · 1 | ✅ watched | before gate |
-| Key vaults | — | 1 · 1 | ✅ watched | before gate |
-| Entra ID / RBAC | — | 1 · 1 | ✅ watched | before gate |
+| Virtual Machines | 🧩 1/2 · 🧩 0/2 | 1 · 1 | ✅ watched | before gate |
+| Storage accounts | 🧩 0/1 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
+| SQL servers | 🧩 0/1 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
+| Service Bus | 🧩 0/1 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
+| Cosmos DB | 🧩 0/1 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
+| Function apps | 🧩 0/1 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
+| API Management | 🧩 0/1 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
+| Virtual networks | 🧩 0/1 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
+| Network Security Group | 🧩 0/1 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
+| Event Grid topics | 🧩 0/1 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
+| Key vaults | 🧩 0/1 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
+| Entra ID / RBAC | 🧩 0/1 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
 
 - **Nano ↔ offline gaps:** Blob containers (Nano-only), Cosmos databases (Nano-only), Key Vault keys (Nano-only), Key Vault secrets (Nano-only), Storage queues (Nano-only), azure_subresource_core (Nano-only)
 
@@ -242,11 +242,359 @@ _Updated 2026-10-26 17:38 UTC · refreshes after every pipeline run_
 
 </details>
 
+<details><summary>Console parts not live yet — AWS (160)</summary>
+
+| Service | Console | Part | State |
+|---|---|---|---|
+| EC2 | offline | create: create with defaults | partial |
+| EC2 | offline | detail: resource detail | unimplemented |
+| EC2 | offline | tab: Overview | unimplemented |
+| EC2 | offline | tab: Activity | unimplemented |
+| EC2 | offline | tab: Tags | unimplemented |
+| EC2 | offline | tab: Details | unimplemented |
+| EC2 | offline | tab: Status and alarms | unimplemented |
+| EC2 | offline | tab: Monitoring | unimplemented |
+| EC2 | offline | tab: Networking | unimplemented |
+| EC2 | offline | tab: Security | unimplemented |
+| EC2 | offline | tab: Storage | unimplemented |
+| EC2 | offline | tab: Connect | unimplemented |
+| Lambda | offline | tab: Tags | static |
+| Lambda | offline | tab: Code | static |
+| Lambda | offline | tab: Test | static |
+| Lambda | offline | tab: Environment variables | static |
+| Lambda | offline | tab: Versions | static |
+| Lambda | offline | tab: Aliases | static |
+| Lambda | offline | tab: Resource-based policy | static |
+| S3 | offline | create: create with defaults | partial |
+| S3 | offline | tab: Tags | static |
+| S3 | offline | tab: Versions | static |
+| S3 | offline | tab: Bucket Versioning | static |
+| S3 | offline | tab: Event notifications | static |
+| S3 | offline | tab: Lifecycle rules | static |
+| S3 | offline | tab: Default encryption | static |
+| S3 | offline | tab: Block Public Access | static |
+| RDS | offline | tab: Tags | static |
+| RDS | offline | tab: Endpoints | partial |
+| RDS | offline | tab: Networking | partial |
+| RDS | offline | tab: Permissions | static |
+| RDS | offline | tab: Modify | static |
+| DynamoDB | offline | create: create with defaults | partial |
+| DynamoDB | offline | detail: resource detail | unimplemented |
+| DynamoDB | offline | tab: Overview | unimplemented |
+| DynamoDB | offline | tab: Activity | unimplemented |
+| DynamoDB | offline | tab: Tags | unimplemented |
+| DynamoDB | offline | tab: Explore items | unimplemented |
+| DynamoDB | offline | tab: Query/Scan | unimplemented |
+| DynamoDB | offline | tab: Indexes | unimplemented |
+| DynamoDB | offline | tab: Streams and triggers | unimplemented |
+| DynamoDB | offline | tab: Read/write capacity | unimplemented |
+| DynamoDB | offline | tab: Encryption at rest | unimplemented |
+| DynamoDB | offline | tab: Time to live | unimplemented |
+| SQS | offline | detail: resource detail | unimplemented |
+| SQS | offline | tab: Overview | unimplemented |
+| SQS | offline | tab: Activity | unimplemented |
+| SQS | offline | tab: Tags | unimplemented |
+| SQS | offline | tab: Send and receive messages | unimplemented |
+| SQS | offline | tab: Purge messages | unimplemented |
+| SQS | offline | tab: Configuration | unimplemented |
+| SQS | offline | tab: Dead-letter queue | unimplemented |
+| SQS | offline | tab: Encryption | unimplemented |
+| SQS | offline | tab: Access policy | unimplemented |
+| SQS | offline | tab: Monitoring | unimplemented |
+| API Gateway | offline | tab: Tags | static |
+| API Gateway | offline | tab: Resources | unimplemented |
+| API Gateway | offline | tab: Authorizers | static |
+| API Gateway | offline | tab: Models | static |
+| API Gateway | offline | tab: Stages | unimplemented |
+| API Gateway | offline | tab: Deployments | static |
+| API Gateway | offline | tab: Resource policy | static |
+| EventBridge | offline | create: create with defaults | partial |
+| EventBridge | offline | detail: resource detail | partial |
+| EventBridge | offline | tab: Overview | partial |
+| EventBridge | offline | tab: Activity | partial |
+| EventBridge | offline | tab: Tags | partial |
+| EventBridge | offline | tab: Rule details | partial |
+| EventBridge | offline | tab: Targets | partial |
+| EventBridge | offline | tab: Event pattern | partial |
+| EventBridge | offline | tab: Invocations | partial |
+| EventBridge | offline | tab: Dead-letter queue | partial |
+| EventBridge | offline | tab: Properties | partial |
+| EventBridge | offline | tab: Permissions | partial |
+| VPC | offline | tab: VPC details | unimplemented |
+| VPC | offline | tab: NAT gateways | static |
+| VPC | offline | tab: Endpoints | static |
+| VPC | offline | tab: Security groups | partial |
+| VPC | offline | tab: Network ACLs | static |
+| VPC | offline | tab: Flow logs | static |
+| IAM | offline | tab: Users | partial |
+| IAM | offline | tab: Identity providers | static |
+| IAM | offline | tab: Password policy | static |
+| IAM | offline | tab: Access Analyzer | static |
+| Secrets Manager | offline | create: create with defaults | partial |
+| Secrets Manager | offline | tab: Tags | static |
+| Secrets Manager | offline | tab: Secret value | static |
+| Secrets Manager | offline | tab: Versions | static |
+| Secrets Manager | offline | tab: Rotation | static |
+| Secrets Manager | offline | tab: Replication | static |
+| Secrets Manager | offline | tab: Resource policy | static |
+| Secrets Manager | offline | tab: Encryption key | static |
+| Secrets Manager | offline | tab: Properties | static |
+| KMS | offline | tab: Tags | static |
+| KMS | offline | tab: General configuration | static |
+| KMS | offline | tab: Key policy | static |
+| KMS | offline | tab: Aliases | static |
+| KMS | offline | tab: Key rotation | static |
+| KMS | offline | tab: Key users | static |
+| KMS | offline | tab: Key administrators | static |
+| KMS | offline | tab: Grants | static |
+| EC2 | nano | create: create with defaults | partial |
+| EC2 | nano | tab: Activity | partial |
+| EC2 | nano | tab: Tags | static |
+| EC2 | nano | tab: Details | static |
+| EC2 | nano | tab: Status and alarms | static |
+| EC2 | nano | tab: Monitoring | unimplemented |
+| EC2 | nano | tab: Networking | partial |
+| EC2 | nano | tab: Security | partial |
+| EC2 | nano | tab: Storage | static |
+| EC2 | nano | tab: Connect | static |
+| Lambda | nano | create: create with defaults | unimplemented |
+| S3 | nano | tab: Activity | partial |
+| S3 | nano | tab: Tags | static |
+| S3 | nano | tab: Bucket Versioning | static |
+| S3 | nano | tab: Default encryption | unimplemented |
+| S3 | nano | tab: Block Public Access | unimplemented |
+| RDS | nano | tab: Activity | partial |
+| RDS | nano | tab: Tags | static |
+| RDS | nano | tab: Endpoints | partial |
+| RDS | nano | tab: Networking | partial |
+| RDS | nano | tab: Modify | unimplemented |
+| DynamoDB | nano | create: create with defaults | partial |
+| DynamoDB | nano | tab: Activity | partial |
+| DynamoDB | nano | tab: Tags | static |
+| DynamoDB | nano | tab: Query/Scan | static |
+| DynamoDB | nano | tab: Streams and triggers | unimplemented |
+| DynamoDB | nano | tab: Read/write capacity | unimplemented |
+| DynamoDB | nano | tab: Encryption at rest | unimplemented |
+| DynamoDB | nano | tab: Time to live | unimplemented |
+| SQS | nano | tab: Activity | partial |
+| SQS | nano | tab: Tags | static |
+| SQS | nano | tab: Send and receive messages | static |
+| SQS | nano | tab: Purge messages | unimplemented |
+| SQS | nano | tab: Configuration | static |
+| SQS | nano | tab: Dead-letter queue | partial |
+| SQS | nano | tab: Encryption | unimplemented |
+| SQS | nano | tab: Monitoring | static |
+| API Gateway | nano | create: create with defaults | unimplemented |
+| EventBridge | nano | create: create with defaults | unimplemented |
+| VPC | nano | create: create with defaults | unimplemented |
+| IAM | nano | detail: resource detail | unimplemented |
+| IAM | nano | tab: Overview | unimplemented |
+| IAM | nano | tab: Users | unimplemented |
+| IAM | nano | tab: User groups | unimplemented |
+| IAM | nano | tab: Roles | unimplemented |
+| IAM | nano | tab: Policies | unimplemented |
+| IAM | nano | tab: Identity providers | unimplemented |
+| IAM | nano | tab: Password policy | unimplemented |
+| IAM | nano | tab: Access Analyzer | unimplemented |
+| Secrets Manager | nano | create: create with defaults | partial |
+| Secrets Manager | nano | tab: Activity | partial |
+| Secrets Manager | nano | tab: Tags | static |
+| Secrets Manager | nano | tab: Secret value | static |
+| Secrets Manager | nano | tab: Rotation | unimplemented |
+| Secrets Manager | nano | tab: Encryption key | unimplemented |
+| Secrets Manager | nano | tab: Properties | static |
+| KMS | nano | tab: Tags | static |
+| KMS | nano | tab: General configuration | static |
+| KMS | nano | tab: Key rotation | unimplemented |
+
+</details>
+
+<details><summary>Console parts not live yet — GCP (135)</summary>
+
+| Service | Console | Part | State |
+|---|---|---|---|
+| Compute Engine | offline | tab: Activity | static |
+| Compute Engine | offline | tab: Permissions | static |
+| Compute Engine | offline | tab: Labels | static |
+| Compute Engine | offline | tab: Networking | static |
+| Compute Engine | offline | tab: Disks | static |
+| Compute Engine | offline | tab: Machine size | static |
+| Compute Engine | offline | tab: Metadata | static |
+| Compute Engine | offline | tab: Startup script | static |
+| Cloud Functions | offline | create: create with defaults | partial |
+| Cloud Functions | offline | tab: Activity | static |
+| Cloud Functions | offline | tab: Permissions | static |
+| Cloud Functions | offline | tab: Labels | static |
+| Cloud Functions | offline | tab: Source | static |
+| Cloud Functions | offline | tab: Trigger | static |
+| Cloud Functions | offline | tab: Variables | static |
+| Cloud Functions | offline | tab: Testing | static |
+| Cloud Functions | offline | tab: Networking | static |
+| Cloud Storage | offline | tab: Activity | static |
+| Cloud Storage | offline | tab: Permissions | static |
+| Cloud Storage | offline | tab: Labels | static |
+| Cloud Storage | offline | tab: Lifecycle | static |
+| Cloud Storage | offline | tab: Encryption | static |
+| Cloud Storage | offline | tab: Retention | static |
+| Cloud SQL | offline | create: create with defaults | unimplemented |
+| Firestore | offline | create: create with defaults | partial |
+| Firestore | offline | tab: Activity | static |
+| Firestore | offline | tab: Permissions | static |
+| Firestore | offline | tab: Labels | static |
+| Firestore | offline | tab: Data | static |
+| Firestore | offline | tab: Query builder | static |
+| Firestore | offline | tab: Indexes | static |
+| Firestore | offline | tab: Security rules | static |
+| Firestore | offline | tab: Import / Export | static |
+| VPC Network | offline | create: create with defaults | partial |
+| VPC Network | offline | tab: Activity | static |
+| VPC Network | offline | tab: Permissions | static |
+| VPC Network | offline | tab: Labels | static |
+| VPC Network | offline | tab: Subnets | static |
+| VPC Network | offline | tab: Firewall rules | static |
+| VPC Network | offline | tab: Routes | static |
+| VPC Network | offline | tab: VPC peering | static |
+| VPC Network | offline | tab: Properties | static |
+| VPC Network | offline | tab: Network metrics | static |
+| Pub/Sub | offline | create: create with defaults | partial |
+| Pub/Sub | offline | tab: Activity | static |
+| Pub/Sub | offline | tab: Permissions | static |
+| Pub/Sub | offline | tab: Labels | static |
+| Pub/Sub | offline | tab: Schema | static |
+| Pub/Sub | offline | tab: Messages | static |
+| Pub/Sub | offline | tab: Encryption | static |
+| Pub/Sub | offline | tab: Properties | static |
+| Pub/Sub | offline | tab: Metrics | static |
+| API Gateway | offline | create: create with defaults | unimplemented |
+| Eventarc | offline | create: create with defaults | partial |
+| Eventarc | offline | tab: Activity | static |
+| Eventarc | offline | tab: Permissions | static |
+| Eventarc | offline | tab: Labels | static |
+| Eventarc | offline | tab: Event matching | static |
+| Eventarc | offline | tab: Destination | static |
+| Eventarc | offline | tab: Logs | static |
+| Secret Manager | offline | create: create with defaults | unimplemented |
+| Cloud KMS | offline | tab: Activity | static |
+| Cloud KMS | offline | tab: Permissions | static |
+| Cloud KMS | offline | tab: Labels | static |
+| Cloud KMS | offline | tab: Versions | static |
+| Cloud KMS | offline | tab: Key policy | static |
+| Cloud KMS | offline | tab: Import jobs | static |
+| Cloud KMS | offline | tab: Metrics | static |
+| IAM & Admin | offline | tab: Members | static |
+| IAM & Admin | offline | tab: Permissions | static |
+| IAM & Admin | offline | tab: Keys | static |
+| IAM & Admin | offline | tab: Properties | static |
+| IAM & Admin | offline | tab: Activity log | static |
+| Compute Engine | nano | create: create with defaults | partial |
+| Compute Engine | nano | tab: Activity | partial |
+| Compute Engine | nano | tab: Permissions | static |
+| Compute Engine | nano | tab: Labels | static |
+| Compute Engine | nano | tab: Networking | static |
+| Compute Engine | nano | tab: Startup script | static |
+| Cloud Functions | nano | create: create with defaults | partial |
+| Cloud Functions | nano | tab: Activity | partial |
+| Cloud Functions | nano | tab: Permissions | static |
+| Cloud Functions | nano | tab: Labels | static |
+| Cloud Functions | nano | tab: Source | static |
+| Cloud Functions | nano | tab: Trigger | static |
+| Cloud Functions | nano | tab: Variables | static |
+| Cloud Functions | nano | tab: Testing | static |
+| Cloud Storage | nano | tab: Activity | partial |
+| Cloud Storage | nano | tab: Permissions | static |
+| Cloud Storage | nano | tab: Labels | static |
+| Cloud Storage | nano | tab: Lifecycle | static |
+| Cloud Storage | nano | tab: Encryption | static |
+| Cloud SQL | nano | create: create with defaults | unimplemented |
+| Firestore | nano | create: create with defaults | partial |
+| Firestore | nano | detail: resource detail | static |
+| Firestore | nano | tab: Overview | static |
+| Firestore | nano | tab: Activity | partial |
+| Firestore | nano | tab: Permissions | static |
+| Firestore | nano | tab: Labels | static |
+| Firestore | nano | tab: Data | static |
+| Firestore | nano | tab: Query builder | static |
+| Firestore | nano | tab: Indexes | static |
+| Firestore | nano | tab: Security rules | static |
+| Firestore | nano | tab: Import / Export | static |
+| Firestore | nano | tab: Properties | static |
+| VPC Network | nano | create: create with defaults | partial |
+| VPC Network | nano | tab: Activity | partial |
+| VPC Network | nano | tab: Permissions | static |
+| VPC Network | nano | tab: Labels | static |
+| VPC Network | nano | tab: Subnets | static |
+| VPC Network | nano | tab: Routes | static |
+| VPC Network | nano | tab: VPC peering | static |
+| VPC Network | nano | tab: Properties | static |
+| VPC Network | nano | tab: Network metrics | partial |
+| Pub/Sub | nano | create: create with defaults | partial |
+| Pub/Sub | nano | tab: Activity | partial |
+| Pub/Sub | nano | tab: Labels | static |
+| Pub/Sub | nano | tab: Messages | static |
+| Pub/Sub | nano | tab: Encryption | static |
+| Pub/Sub | nano | tab: Properties | static |
+| API Gateway | nano | create: create with defaults | unimplemented |
+| Eventarc | nano | create: create with defaults | partial |
+| Eventarc | nano | tab: Activity | partial |
+| Eventarc | nano | tab: Permissions | static |
+| Eventarc | nano | tab: Labels | static |
+| Eventarc | nano | tab: Metrics | partial |
+| Eventarc | nano | tab: Logs | static |
+| Secret Manager | nano | create: create with defaults | unimplemented |
+| Cloud KMS | nano | create: create with defaults | partial |
+| Cloud KMS | nano | tab: Activity | partial |
+| Cloud KMS | nano | tab: Permissions | static |
+| Cloud KMS | nano | tab: Labels | static |
+| Cloud KMS | nano | tab: Key policy | static |
+| Cloud KMS | nano | tab: Import jobs | static |
+| IAM & Admin | nano | tab: Permissions | static |
+
+</details>
+
+<details><summary>Console parts not live yet — Azure (32)</summary>
+
+| Service | Console | Part | State |
+|---|---|---|---|
+| Virtual Machines | offline | create: create with defaults | unimplemented |
+| Storage accounts | offline | page: Storage accounts (crawl error) | unimplemented |
+| SQL servers | offline | page: SQL servers (crawl error) | unimplemented |
+| Service Bus | offline | page: Service Bus (crawl error) | unimplemented |
+| Cosmos DB | offline | page: Cosmos DB (crawl error) | unimplemented |
+| Function apps | offline | page: Function apps (crawl error) | unimplemented |
+| API Management | offline | page: API Management (crawl error) | unimplemented |
+| Virtual networks | offline | page: Virtual networks (crawl error) | unimplemented |
+| Network Security Group | offline | page: Network Security Group (crawl error) | unimplemented |
+| Event Grid topics | offline | page: Event Grid topics (crawl error) | unimplemented |
+| Key vaults | offline | page: Key vaults (crawl error) | unimplemented |
+| Role Definition | offline | page: Role Definition (crawl error) | unimplemented |
+| Entra ID / RBAC | offline | page: Entra ID / RBAC (crawl error) | unimplemented |
+| Virtual Machines | nano | page: Virtual Machines | static |
+| Virtual Machines | nano | create: create with defaults | unimplemented |
+| Storage accounts | nano | page: Storage accounts (crawl error) | unimplemented |
+| SQL servers | nano | page: SQL servers (crawl error) | unimplemented |
+| Service Bus | nano | page: Service Bus (crawl error) | unimplemented |
+| Cosmos DB | nano | page: Cosmos DB (crawl error) | unimplemented |
+| Function apps | nano | page: Function apps (crawl error) | unimplemented |
+| API Management | nano | page: API Management (crawl error) | unimplemented |
+| Virtual networks | nano | page: Virtual networks (crawl error) | unimplemented |
+| Network Security Group | nano | page: Network Security Group (crawl error) | unimplemented |
+| Event Grid topics | nano | page: Event Grid topics (crawl error) | unimplemented |
+| Key vaults | nano | page: Key vaults (crawl error) | unimplemented |
+| Role Definition | nano | page: Role Definition (crawl error) | unimplemented |
+| Entra ID / RBAC | nano | page: Entra ID / RBAC (crawl error) | unimplemented |
+| Blob containers | nano | page: Blob containers (crawl error) | unimplemented |
+| Cosmos databases | nano | page: Cosmos databases (crawl error) | unimplemented |
+| Key Vault secrets | nano | page: Key Vault secrets (crawl error) | unimplemented |
+| Key Vault keys | nano | page: Key Vault keys (crawl error) | unimplemented |
+| Storage queues | nano | page: Storage queues (crawl error) | unimplemented |
+
+</details>
+
 <details><summary>Latest hourly test results</summary>
 
 | Suite | Result | Checks |
 |---|---|---|
-| offline-ui-crawl | ❌ | 5/38 |
+| offline-ui-crawl | ❌ | 3/38 |
 | offline-console-actions | ❌ | 231/246 |
 | offline-sdk-python-aws | ❌ | 87/88 |
 | offline-sdk-go-aws | ✅ | 14/14 |
