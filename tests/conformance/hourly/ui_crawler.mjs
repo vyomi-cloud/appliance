@@ -204,8 +204,16 @@ async function createWithDefaults(page, drain, cloud, backToList) {
     await btn.click({ timeout: 3000 });
     await sleep(1200);
     await dismissPopups(page);
-    const dialog = page.locator("[role=dialog]:visible, .modal:visible, .drawer:visible").last();
+    // Azure's create flow is a multi-step blade (#blade.open): accept the
+    // defaults on every step (Next / Review + create) before the final Create.
+    const dialog = page.locator("[role=dialog]:visible, .modal:visible, .drawer:visible, #blade.open").last();
     const scope = (await dialog.count()) ? dialog : page.locator("#main");
+    for (let step = 0; step < 12; step++) {
+      const next = scope.locator("button").filter({ hasText: /^(next|review \+ create)$/i }).last();
+      if (!(await next.count())) break;
+      await next.click({ timeout: 3000 });
+      await sleep(300);
+    }
     const submit = scope.locator("button, [type=submit]").filter({ hasText: SUBMIT_BTN }).filter({ hasNotText: NOT_SUBMIT }).last();
     if (!(await submit.count())) { f.push({ type: "CREATE_NO_SUBMIT", detail: "create form has no submit button" }); return f; }
     await submit.click({ timeout: 3000 });
