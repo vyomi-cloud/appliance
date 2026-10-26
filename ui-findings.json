@@ -1,588 +1,10 @@
 {
  "nano": {
-  "target": "nano",
-  "at": "2026-10-26T08:23:48.642Z",
-  "services": [
-   {
-    "target": "nano",
-    "cloud": "aws",
-    "service": "EC2",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "aws",
-    "service": "Lambda",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_FAILED",
-      "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "aws",
-    "service": "S3",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "aws",
-    "service": "RDS",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "aws",
-    "service": "DynamoDB",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "aws",
-    "service": "SQS",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "aws",
-    "service": "API Gateway",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "aws",
-    "service": "EventBridge",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "aws",
-    "service": "VPC",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "aws",
-    "service": "IAM",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "aws",
-    "service": "Secrets Manager",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "aws",
-    "service": "KMS",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "gcp",
-    "service": "Compute Engine",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "gcp",
-    "service": "Cloud Functions",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "gcp",
-    "service": "Cloud Storage",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "gcp",
-    "service": "Cloud SQL",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "gcp",
-    "service": "Firestore",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "gcp",
-    "service": "VPC Network",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "gcp",
-    "service": "Pub/Sub",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "gcp",
-    "service": "API Gateway",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "gcp",
-    "service": "Eventarc",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "gcp",
-    "service": "Secret Manager",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "gcp",
-    "service": "Cloud KMS",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "gcp",
-    "service": "IAM & Admin",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Resource groups",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "HTTP_404",
-      "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined?api-version=2023-01-01 \u2192 404"
-     },
-     {
-      "type": "HTTP_404",
-      "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined?api-version=2023-01-01 \u2192 404"
-     },
-     {
-      "type": "HTTP_404",
-      "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined?api-version=2023-01-01 \u2192 404"
-     },
-     {
-      "type": "HTTP_404",
-      "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined?api-version=2023-01-01 \u2192 404"
-     },
-     {
-      "type": "HTTP_404",
-      "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined?api-version=2023-01-01 \u2192 404"
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Virtual Machines",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_FAILED",
-      "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Storage accounts",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "SQL servers",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Service Bus",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Cosmos DB",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Function apps",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "API Management",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Virtual networks",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Network Security Group",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Event Grid topics",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Key vaults",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Role Definition",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Entra ID / RBAC",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Blob containers",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Cosmos databases",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Key Vault secrets",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Key Vault keys",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Storage queues",
-    "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
-   }
-  ]
+  "services": []
  },
  "offline": {
   "target": "offline",
-  "at": "2026-10-26T08:11:50.229Z",
+  "at": "2026-10-26T12:14:57.243Z",
   "services": [
    {
     "target": "offline",
@@ -591,12 +13,12 @@
     "tabs": [],
     "findings": [
      {
-      "type": "HTTP_5XX",
-      "detail": "during create: /api/ec2/instances \u2192 500"
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"Public IPv4\" shows \"-\"/blank in 1 row(s)"
      },
      {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
+      "type": "HTTP_404",
+      "detail": "resource detail: /api/ec2/instances/i-def4dfb3de62 \u2192 404"
      }
     ],
     "status": "broken"
@@ -606,13 +28,8 @@
     "cloud": "aws",
     "service": "Lambda",
     "tabs": [],
-    "findings": [
-     {
-      "type": "CREATE_FAILED",
-      "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
-     }
-    ],
-    "status": "broken"
+    "findings": [],
+    "status": "ok"
    },
    {
     "target": "offline",
@@ -621,8 +38,12 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"Creation date\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "resource detail: column \"Creation date\" shows \"-\"/blank in 1 row(s)"
      }
     ],
     "status": "broken"
@@ -632,13 +53,8 @@
     "cloud": "aws",
     "service": "RDS",
     "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
+    "findings": [],
+    "status": "ok"
    },
    {
     "target": "offline",
@@ -647,8 +63,16 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
+      "type": "HTTP_5XX",
+      "detail": "/api/dynamodb/tables \u2192 500"
+     },
+     {
+      "type": "HTTP_5XX",
+      "detail": "during create: /api/dynamodb/tables \u2192 500"
+     },
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
      }
     ],
     "status": "broken"
@@ -660,8 +84,8 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
+      "type": "HTTP_404",
+      "detail": "resource detail: /api/sqs/queues/ \u2192 404"
      }
     ],
     "status": "broken"
@@ -671,13 +95,8 @@
     "cloud": "aws",
     "service": "API Gateway",
     "tabs": [],
-    "findings": [
-     {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
-     }
-    ],
-    "status": "broken"
+    "findings": [],
+    "status": "ok"
    },
    {
     "target": "offline",
@@ -686,8 +105,28 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"Status\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"Targets\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: resource_count stayed 8 after creating a resource"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: aws savings stayed $98.48 (real aws would bill this resource)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "resource detail: column \"Status\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "resource detail: column \"Targets\" shows \"-\"/blank in 1 row(s)"
      }
     ],
     "status": "broken"
@@ -699,8 +138,8 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: aws savings stayed $98.48 (real aws would bill this resource)"
      }
     ],
     "status": "broken"
@@ -712,8 +151,12 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: resource_count stayed 11 after creating a resource"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: aws savings stayed $98.48 (real aws would bill this resource)"
      }
     ],
     "status": "broken"
@@ -725,8 +168,36 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"Last rotated\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"Next rotation\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"Encryption key\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: resource_count stayed 11 after creating a resource"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: aws savings stayed $98.48 (real aws would bill this resource)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "resource detail: column \"Last rotated\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "resource detail: column \"Next rotation\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "resource detail: column \"Encryption key\" shows \"-\"/blank in 1 row(s)"
      }
     ],
     "status": "broken"
@@ -738,8 +209,12 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CRAWL_ERROR",
-      "detail": "locator.click: Timeout 5000ms exceeded."
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: resource_count stayed 11 after creating a resource"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: aws savings stayed $98.48 (real aws would bill this resource)"
      }
     ],
     "status": "broken"
@@ -749,17 +224,8 @@
     "cloud": "gcp",
     "service": "Compute Engine",
     "tabs": [],
-    "findings": [
-     {
-      "type": "HTTP_5XX",
-      "detail": "during create: /api/gcp/compute/v1/projects/123456789012/zones/us-central1-a/instances \u2192 500"
-     },
-     {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
-     }
-    ],
-    "status": "broken"
+    "findings": [],
+    "status": "ok"
    },
    {
     "target": "offline",
@@ -768,8 +234,20 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"STATUS\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: resource_count stayed 1 after creating a resource"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "resource detail: column \"STATUS\" shows \"-\"/blank in 1 row(s)"
      }
     ],
     "status": "broken"
@@ -781,8 +259,12 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: resource_count stayed 1 after creating a resource"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
      }
     ],
     "status": "broken"
@@ -807,8 +289,16 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"STATE\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: resource_count stayed 1 after creating a resource"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
      }
     ],
     "status": "broken"
@@ -820,8 +310,20 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"IPV4 RANGE\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: resource_count stayed 1 after creating a resource"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "resource detail: column \"IPV4 RANGE\" shows \"-\"/blank in 1 row(s)"
      }
     ],
     "status": "broken"
@@ -833,8 +335,24 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"RETENTION\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"ENCRYPTION\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"SUBSCRIPTIONS\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: resource_count stayed 1 after creating a resource"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
      }
     ],
     "status": "broken"
@@ -859,8 +377,20 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"REGION\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"STATE\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: resource_count stayed 1 after creating a resource"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
      }
     ],
     "status": "broken"
@@ -885,8 +415,12 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: resource_count stayed 1 after creating a resource"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
      }
     ],
     "status": "broken"
@@ -898,8 +432,12 @@
     "tabs": [],
     "findings": [
      {
-      "type": "CREATE_NO_ROW",
-      "detail": "create with defaults added no resource to the list"
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: resource_count stayed 1 after creating a resource"
+     },
+     {
+      "type": "SAVINGS_NOT_UPDATED",
+      "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
      }
     ],
     "status": "broken"

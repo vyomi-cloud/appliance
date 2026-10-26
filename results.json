@@ -1,30 +1,5 @@
 {
- "at": "2026-10-26T08:41:08+00:00",
- "commit": "14aa93bb1cd7ddffcfe462dbdfdecd3f27170eee",
- "suites": [
-  {
-   "id": "offline-cli-aws",
-   "target": "offline",
-   "cloud": "aws",
-   "kind": "cli",
-   "duration_s": 25.6,
-   "exit_code": 0,
-   "passed": 15,
-   "failed": 0,
-   "status": "pass",
-   "tail": "== aws-cli against http://localhost:9000 ==\naws-cli/2.37.13 Python/3.14.6 Linux/6.17.0-1022-azure exe/x86_64.ubuntu.24\nswitched to AWS space: space-legacy\nPASS s3 mb (create bucket)\nPASS s3 ls (list buckets shows new one)\nPASS s3 cp (upload)\nPASS s3 cp (download to stdout)\nPASS s3 rm\nPASS s3 rb (delete bucket)\nPASS iam create-user\nPASS iam list-users contains new user\nPASS iam delete-user\nPASS ec2 describe-instances\nPASS dynamodb create-table (via DDB Local proxy)\nPASS dynamodb put-item\nPASS dynamodb get-item round-trip\nPASS sqs create-queue\nPASS sqs list-queues\nRESULT pass=15 fail=0"
-  },
-  {
-   "id": "offline-cli-azure",
-   "target": "offline",
-   "cloud": "azure",
-   "kind": "cli",
-   "duration_s": 22.1,
-   "exit_code": 1,
-   "passed": 5,
-   "failed": 1,
-   "status": "fail",
-   "tail": "== az against http://localhost:9000 subscription=sub-001 ==\nazure-cli                         2.91.0\nswitched to Azure space: space-azure-default\nFAIL az rest PUT Microsoft.Compute/virtualMachines :: ERROR: Forbidden({\"detail\":{\"ok\":false,\"code\":\"tier_size_limit\",\"reason\":\"free tier caps vm size at 'small'; requested 'Standard_D2s_v5' is 'medium'\",\"active_tier\":\"free\",\"resource_kind\":\"vm\",\"requested_type\":\"Standard_D2s_v5\",\"requested_size\":\"medium\",\"max_size\":\"small\",\"upgrade_to\":\"pro\",\"docs\":\"https://cloudlearn.io/docs/tiers\"}})\nPASS az rest GET VM round-trip\nPASS az rest PUT Microsoft.Storage/storageAccounts\nPASS az rest PUT Microsoft.Sql/servers\nPASS az rest PUT Microsoft.Sql/.../databases (real Postgres)\nPASS az SQL DB connectionInfo surfaces real Postgres engine\nRESULT pass=5 fail=1"
-  }
- ]
+ "suites": [],
+ "at": "",
+ "commit": ""
 }
