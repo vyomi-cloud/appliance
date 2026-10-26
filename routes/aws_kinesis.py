@@ -58,22 +58,20 @@ def _usage(op: str, name: str) -> None:
 
 
 async def handle_wire(request: Request) -> Response:
-    """X-Amz-Target `Kinesis_20131202.<Op>` (JSON 1.1) — what boto3 / Java v2 / Go v2 / aws-cli send."""
+    """X-Amz-Target `Kinesis_20131202.<Op>` — JSON 1.1 (boto3, Go v2, aws-cli) or CBOR
+    (Java SDK v2), chosen by the request's Content-Type, as the real service does."""
     target = request.headers.get("x-amz-target", "")
     raw = await request.body()
-    try:
-        payload = json.loads(raw or b"{}")
-    except Exception:
-        payload = {}
-    r = kinesis_core.dispatch(STORE, target, payload)
+    status, headers, out = kinesis_core.handle_wire(STORE, target, raw, request.headers.get("content-type", ""))
     op = target.rsplit(".", 1)[-1]
-    if r.status < 400 and op in _INVENTORY_OPS:
-        _usage(op, str(payload.get("StreamName") or str(payload.get("StreamARN") or "").rsplit("/", 1)[-1]))
-    headers = {}
-    if r.status >= 400 and isinstance(r.body, dict) and r.body.get("__type"):
-        headers["x-amzn-ErrorType"] = r.body["__type"]
-    return Response(content=json.dumps(r.body), status_code=r.status,
-                    media_type="application/x-amz-json-1.1", headers=headers)
+    if status < 400 and op in _INVENTORY_OPS:
+        try:
+            p = json.loads(raw) if "cbor" not in headers["content-type"] else kinesis_core.cbor_loads(raw)
+        except Exception:
+            p = {}
+        _usage(op, str(p.get("StreamName") or str(p.get("StreamARN") or "").rsplit("/", 1)[-1]))
+    ct = headers.pop("content-type")
+    return Response(content=out, status_code=status, media_type=ct, headers=headers)
 
 
 def _fail(r: dict) -> JSONResponse:

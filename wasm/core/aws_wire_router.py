@@ -163,7 +163,7 @@ _TARGET_PREFIX = {
 _JSON_CT = {
     "dynamodb": "application/x-amz-json-1.0", "kms": "application/x-amz-json-1.1",
     "secretsmanager": "application/x-amz-json-1.1", "sqs": "application/x-amz-json-1.0",
-    "events": "application/x-amz-json-1.1", "kinesis": "application/x-amz-json-1.1",
+    "events": "application/x-amz-json-1.1",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -420,6 +420,11 @@ class AwsWireRouter:
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "kinesis":   # JSON 1.1 (boto3/Go/CLI) or CBOR (Java SDK) by Content-Type
+            status, hdrs, out = kinesis.handle_wire(self.kinesis, lheaders.get("x-amz-target", "") or "",
+                                                    bytes(body), lheaders.get("content-type", ""))
+            return {"status": status, "headers": hdrs, "body": out}
 
         if svc in _JSON_CT:
             target = lheaders.get("x-amz-target", "") or ""

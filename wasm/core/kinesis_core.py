@@ -1,5 +1,3 @@
-# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
-# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
 """Kinesis Data Streams core — substrate-independent stream data plane.
 
 Speaks the native **Kinesis JSON 1.1 protocol** (X-Amz-Target `Kinesis_20131202.<Op>`,
@@ -747,6 +745,162 @@ def dispatch(store, target: str, payload: dict | None = None) -> KinesisResponse
         return KinesisResponse(body=op(store, body))
     except _E as e:
         return KinesisResponse(status=e.status, body={"__type": e.code, "message": e.message})
+
+
+# ── CBOR wire (AWS SDK for Java v2 / v1 talk Kinesis as application/x-amz-cbor-1.1) ──
+# A minimal RFC 8949 codec: maps, arrays, text, byte strings (the `Data` blob), ints, floats,
+# bool/null, tags (skipped) and indefinite-length containers (what Jackson's streaming CBOR
+# generator emits). Blobs are byte strings on the CBOR wire but base64 text inside the engine
+# (the JSON wire's representation), so the wire layer converts at the edge.
+import struct
+
+
+def cbor_loads(data: bytes):
+    pos = 0
+
+    def head():
+        nonlocal pos
+        b = data[pos]; pos += 1
+        major, info = b >> 5, b & 0x1F
+        if info < 24:
+            return major, info
+        if info in (24, 25, 26, 27):
+            n = 1 << (info - 24)
+            v = int.from_bytes(data[pos:pos + n], "big"); pos += n
+            return major, v
+        if info == 31:
+            return major, None            # indefinite length
+        raise ValueError("bad CBOR additional info")
+
+    def item():
+        nonlocal pos
+        first = data[pos]
+        major, arg = head()
+        if major == 0:
+            return arg
+        if major == 1:
+            return -1 - arg
+        if major in (2, 3):
+            if arg is None:
+                out = b""
+                while data[pos] != 0xFF:
+                    _, n = head(); out += data[pos:pos + n]; pos += n
+                pos += 1
+            else:
+                out = data[pos:pos + arg]; pos += arg
+            return out if major == 2 else out.decode("utf-8")
+        if major == 4:
+            out = []
+            if arg is None:
+                while data[pos] != 0xFF:
+                    out.append(item())
+                pos += 1
+            else:
+                out = [item() for _ in range(arg)]
+            return out
+        if major == 5:
+            out = {}
+            if arg is None:
+                while data[pos] != 0xFF:
+                    k = item(); out[k] = item()
+                pos += 1
+            else:
+                for _ in range(arg):
+                    k = item(); out[k] = item()
+            return out
+        if major == 6:
+            return item()                 # tag (e.g. 1 = epoch time): the value itself
+        if first == 0xF4:
+            return False
+        if first == 0xF5:
+            return True
+        if first in (0xF6, 0xF7):
+            return None
+        if first == 0xF9:
+            return struct.unpack(">e", data[pos - 2:pos])[0]
+        if first == 0xFA:
+            return struct.unpack(">f", data[pos - 4:pos])[0]
+        if first == 0xFB:
+            return struct.unpack(">d", data[pos - 8:pos])[0]
+        raise ValueError("unsupported CBOR item")
+
+    return item() if data else {}
+
+
+def cbor_dumps(obj) -> bytes:
+    def hd(major, n):
+        if n < 24:
+            return bytes([major << 5 | n])
+        for info, size in ((24, 1), (25, 2), (26, 4), (27, 8)):
+            if n < 1 << (8 * size):
+                return bytes([major << 5 | info]) + n.to_bytes(size, "big")
+        raise ValueError("integer too large")
+
+    def enc(o):
+        if o is None:
+            return b"\xf6"
+        if o is True:
+            return b"\xf5"
+        if o is False:
+            return b"\xf4"
+        if isinstance(o, int):
+            return hd(0, o) if o >= 0 else hd(1, -1 - o)
+        if isinstance(o, float):
+            return b"\xfb" + struct.pack(">d", o)
+        if isinstance(o, (bytes, bytearray)):
+            return hd(2, len(o)) + bytes(o)
+        if isinstance(o, str):
+            b = o.encode("utf-8")
+            return hd(3, len(b)) + b
+        if isinstance(o, (list, tuple)):
+            return hd(4, len(o)) + b"".join(enc(x) for x in o)
+        if isinstance(o, dict):
+            return hd(5, len(o)) + b"".join(enc(str(k)) + enc(v) for k, v in o.items())
+        raise TypeError(f"cannot CBOR-encode {type(o).__name__}")
+
+    return enc(obj)
+
+
+def _blobs_in(o):
+    """Request side: byte strings → the base64 text the engine stores."""
+    if isinstance(o, (bytes, bytearray)):
+        return base64.b64encode(bytes(o)).decode()
+    if isinstance(o, list):
+        return [_blobs_in(x) for x in o]
+    if isinstance(o, dict):
+        return {k: _blobs_in(v) for k, v in o.items()}
+    return o
+
+
+def _blobs_out(o, key=None):
+    """Response side: the `Data` member is a blob (byte string) on the CBOR wire."""
+    if key == "Data" and isinstance(o, str):
+        return base64.b64decode(o)
+    if isinstance(o, float):
+        # Timestamps are epoch seconds. The Java SDK's CBOR reader parses a number's text with
+        # no exponent form, and Double.toString(1.79e9) is "1.79E9" — whole seconds always parse.
+        return int(o)
+    if isinstance(o, list):
+        return [_blobs_out(x) for x in o]
+    if isinstance(o, dict):
+        return {k: _blobs_out(v, k) for k, v in o.items()}
+    return o
+
+
+def handle_wire(store, target: str, body: bytes, content_type: str = ""):
+    """One native wire request → (status, headers, body bytes). JSON 1.1 or CBOR by
+    the request's Content-Type; the reply uses the same encoding, like the real service."""
+    cbor = "cbor" in (content_type or "").lower()
+    try:
+        payload = (_blobs_in(cbor_loads(body)) if cbor else json.loads(body or b"{}"))
+    except Exception:
+        payload = {}
+    r = dispatch(store, target, payload if isinstance(payload, dict) else {})
+    headers = {"content-type": "application/x-amz-cbor-1.1" if cbor else "application/x-amz-json-1.1"}
+    if r.status >= 400 and r.body.get("__type"):
+        headers["x-amzn-ErrorType"] = r.body["__type"]
+    out = cbor_dumps(_blobs_out(r.body)) if cbor else json.dumps(r.body).encode()
+    return r.status, headers, out
 
 
 # ── console facade (friendly JSON for the console grid; same store, same core) ──

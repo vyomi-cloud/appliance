@@ -129,6 +129,20 @@ def run(store=None):
     call("DeleteResourcePolicy", {"ResourceARN": d["StreamARN"]})
     _check("DeleteResourcePolicy", call("GetResourcePolicy", {"ResourceARN": d["StreamARN"]}).body["Policy"] == "{}")
 
+    # CBOR wire (what the Java SDK sends): same engine, blob Data as a CBOR byte string
+    st, hd, out = k.handle_wire(s, T + "CreateStream", k.cbor_dumps({"StreamName": "cb", "ShardCount": 1}), "application/x-amz-cbor-1.1")
+    _check("CBOR CreateStream", st == 200 and hd["content-type"] == "application/x-amz-cbor-1.1")
+    st, hd, out = k.handle_wire(s, T + "PutRecord", k.cbor_dumps({"StreamName": "cb", "PartitionKey": "p", "Data": b"\x00blob\xff"}), "application/x-amz-cbor-1.1")
+    put = k.cbor_loads(out)
+    _check("CBOR PutRecord", st == 200 and len(put["SequenceNumber"]) == 56)
+    it = k.cbor_loads(k.handle_wire(s, T + "GetShardIterator", k.cbor_dumps({"StreamName": "cb", "ShardId": put["ShardId"], "ShardIteratorType": "TRIM_HORIZON"}), "application/x-amz-cbor-1.1")[2])["ShardIterator"]
+    rec = k.cbor_loads(k.handle_wire(s, T + "GetRecords", k.cbor_dumps({"ShardIterator": it}), "application/x-amz-cbor-1.1")[2])["Records"][0]
+    _check("CBOR GetRecords returns Data as a byte string", rec["Data"] == b"\x00blob\xff")
+    st, hd, out = k.handle_wire(s, T + "DescribeStream", k.cbor_dumps({"StreamName": "missing"}), "application/x-amz-cbor-1.1")
+    _check("CBOR error carries __type + x-amzn-ErrorType", st == 400 and hd["x-amzn-ErrorType"] == "ResourceNotFoundException" and k.cbor_loads(out)["__type"] == "ResourceNotFoundException")
+    _check("CBOR indefinite-length containers", k.cbor_loads(bytes.fromhex("bf61619f0102ffff")) == {"a": [1, 2]})
+    k.dispatch(s, T + "DeleteStream", {"StreamName": "cb"})
+
     # console facade
     cc = k.console_create(s, {"name": "ui-stream", "shard_count": 2, "retention_hours": 48})
     _check("console_create fills every grid column", all(cc.get(c) not in (None, "", "-") for c in ("name", "status", "capacity_mode", "open_shards", "retention", "encryption", "consumers", "created", "arn")))
