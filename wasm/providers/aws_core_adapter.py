@@ -44,6 +44,7 @@ from core.iam_store import InMemoryIamStore
 from core import iam_core as iam
 from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
+from core import console_ecs as _ecs_console
 
 # Shared registry (Fix #2): the console adapter and the native-wire relay
 # (AwsWireRouter via stores=) draw from ONE store set, so console-created resources
@@ -57,6 +58,7 @@ SEC = _R["sec"]
 RDB = _R["rds"]
 IAM = _R["iam"]
 MSG = _R["msg"]
+ECS = _R["ecs"]
 REGION = "us-east-1"
 
 _CODE_RE = re.compile(rb"<Code>([^<]+)</Code>")
@@ -442,6 +444,15 @@ def sqs_purge(p):
         return {"ok": False, "code": "QueueDoesNotExist"}
     sqs.dispatch(MSG, "AmazonSQS.PurgeQueue", {"QueueUrl": url})
     return {"ok": True}
+
+
+# ── Amazon ECS (console REST facade over core/ecs_core.py) ──────────────────
+def ecs_api(p):
+    """The console's /api/ecs/* REST, served by the SAME facade the offline
+    appliance uses; the native SDK/CLI wire (aws_wire_router) shares ECS."""
+    status, body = _ecs_console.handle(ECS, str(p.get("method") or "GET"), str(p.get("path") or "/"),
+                                       p.get("query") or {}, p.get("body") or {})
+    return {"__http": {"status": status, "headers": {}, "body": body}}
 
 
 # ── IAM (XML wire — dispatch writes, read store for views) ──────────────────

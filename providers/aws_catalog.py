@@ -597,6 +597,46 @@ RESOURCE_CATALOG_AWS = [
             {"name": "key_spec", "label": "Key spec", "default": "SYMMETRIC_DEFAULT"},
         ],
         "endpoints": {},
+    },    # ========================================================================
+    # Amazon ECS (clusters) — engine core/ecs_core.py; the console REST facade is
+    # core/console_ecs.py (same code offline and in Nano). Tasks run on the Docker
+    # substrate on Pro/Max; below that the service is a control plane only.
+    # ========================================================================
+    {
+        "key": "ecs", "label": "ECS", "icon": "deployed_code",
+        "namespace": "AWS/ECS", "service": "ecs",
+        "collection_path": "/api/ecs/clusters",
+        "resource_path":   "/api/ecs/clusters/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "rail_items": [
+            {"group": "Amazon Elastic Container Service"},
+            {"key": "clusters", "label": "Clusters", "icon": "deployed_code", "type": "primary"},
+        ],
+        "api_paths": {
+            "services":  {"method": "GET",    "path": "/api/ecs/clusters/{name}/services"},
+            "tasks":     {"method": "GET",    "path": "/api/ecs/clusters/{name}/tasks"},
+            "taskdefs":  {"method": "GET",    "path": "/api/ecs/task-definitions"},
+            "instances": {"method": "GET",    "path": "/api/ecs/clusters/{name}/instances"},
+            "providers": {"method": "GET",    "path": "/api/ecs/clusters/{name}/capacity-providers"},
+            "delete":    {"method": "DELETE", "path": "/api/ecs/clusters/{name}"},
+        },
+        "columns": [
+            ["name",               "Cluster"],
+            ["status",             "Status"],
+            ["services",           "Services"],
+            ["tasks",              "Running tasks"],
+            ["instances",          "Container instances"],
+            ["container_insights", "Container Insights"],
+            ["capacity_providers", "Capacity providers"],
+            ["created",            "Created time"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Cluster name", "default": "my-cluster"},
+            {"name": "capacity_providers", "label": "Capacity providers (comma-separated)", "default": "FARGATE,FARGATE_SPOT"},
+            {"name": "container_insights", "label": "Container Insights (disabled, enabled or enhanced)", "default": "disabled"},
+        ],
+        "endpoints": {},
     },
 ]
 

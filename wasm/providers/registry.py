@@ -57,8 +57,10 @@ def _emit_event(provider: str, service: str, resource: str, action: str,
         if isinstance(result, dict) and result.get("ok") is False:
             ok = False
         status = "ok" if ok else (str(result.get("code")) if isinstance(result, dict) and result.get("code") else "error")
+        # A non-empty detail keeps the console's Activity grid free of blank cells.
+        detail = f"{action} {resource}".strip() + ("" if status == "ok" else f" → {status}")
         nano_events.record(provider=provider, service=service, resource=resource or "",
-                           action=action, status=status)
+                           action=action, status=status, detail=detail)
     except Exception:
         pass
 
@@ -232,6 +234,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                         len(A.iam_list_policies().get("policies", [])) +
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
+                "ecs":            sum(1 for c in A.ECS.clusters.values() if c.get("status") != "INACTIVE"),
             }
             for svc, n in aws_counts.items():
                 if n:

@@ -342,6 +342,63 @@ _KMS_SUB = [
 ]
 
 
+# ===========================================================================
+# ECS — cluster detail (data-driven `subgrid` tabs: list + create + row actions)
+# ===========================================================================
+_EC = "/api/ecs/clusters/{name}"
+_ECS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Cluster", "items": [
+        {"key": "services", "label": "Services", "icon": "dns", "type": "subgrid",
+         "path": _EC + "/services", "arrayKey": "services", "idField": "name", "empty": "No services in this cluster yet.",
+         "columns": [["name", "Service name"], ["status", "Status"], ["task_definition", "Task definition"], ["desired", "Desired tasks"],
+                     ["running", "Running tasks"], ["launch_type", "Launch type"], ["deployment", "Deployment status"], ["created", "Created time"]],
+         "create": {"label": "Create service", "path": _EC + "/services", "fields": [
+             {"name": "service_name", "label": "Service name", "default": "web-service"},
+             {"name": "task_definition", "label": "Task definition family", "default": "web"},
+             {"name": "desired_count", "label": "Desired tasks", "default": "1"}]},
+         "rowActions": [
+             {"label": "Scale up", "method": "POST", "path": _EC + "/services/{id}/scale-up"},
+             {"label": "Scale down", "method": "POST", "path": _EC + "/services/{id}/scale-down"},
+             {"label": "Force deploy", "method": "POST", "path": _EC + "/services/{id}/restart"},
+             {"label": "Delete", "method": "DELETE", "path": _EC + "/services/{id}", "danger": True}]},
+        {"key": "tasks", "label": "Tasks", "icon": "memory", "type": "subgrid",
+         "path": _EC + "/tasks", "arrayKey": "tasks", "idField": "id", "empty": "No running tasks in this cluster yet.",
+         "columns": [["task_id", "Task"], ["status", "Last status"], ["desired_status", "Desired status"], ["task_definition", "Task definition"],
+                     ["launch_type", "Launch type"], ["group", "Group"], ["private_ip", "Private IP"], ["started", "Started at"]],
+         "create": {"label": "Run new task", "path": _EC + "/tasks", "fields": [
+             {"name": "task_definition", "label": "Task definition family", "default": "web"},
+             {"name": "count", "label": "Number of tasks", "default": "1"}]},
+         "rowActions": [{"label": "Stop", "method": "POST", "path": _EC + "/tasks/{id}/stop", "danger": True}]},
+        {"key": "taskdefs", "label": "Task definitions", "icon": "description", "type": "subgrid",
+         "path": "/api/ecs/task-definitions", "arrayKey": "task_definitions", "idField": "id", "empty": "No task definitions yet.",
+         "columns": [["id", "Task definition"], ["status", "Status"], ["cpu", "Task CPU"], ["memory", "Task memory"], ["network_mode", "Network mode"],
+                     ["compatibility", "Compatibility"], ["image", "Image"], ["registered", "Registered at"]],
+         "create": {"label": "Create task definition", "path": "/api/ecs/task-definitions", "fields": [
+             {"name": "family", "label": "Task definition family", "default": "web"},
+             {"name": "image", "label": "Container image", "default": "nginx:latest"},
+             {"name": "container_port", "label": "Container port", "default": "80"},
+             {"name": "cpu", "label": "CPU units (256, 512, 1024...)", "default": "256"},
+             {"name": "memory", "label": "Memory (MiB)", "default": "512"}]},
+         "rowActions": [{"label": "Deregister", "method": "POST", "path": "/api/ecs/task-definitions/{id}/deregister"},
+                        {"label": "Delete", "method": "DELETE", "path": "/api/ecs/task-definitions/{id}", "danger": True}]},
+        {"key": "instances", "label": "Infrastructure", "icon": "developer_board", "type": "subgrid",
+         "path": _EC + "/instances", "arrayKey": "instances", "idField": "id", "empty": "No container instances registered (Fargate capacity needs none).",
+         "columns": [["id", "Container instance"], ["ec2_instance", "EC2 instance"], ["status", "Status"], ["agent_connected", "Agent connected"],
+                     ["running_tasks", "Running tasks"], ["cpu_available", "CPU available"], ["memory_available", "Memory available"],
+                     ["registered", "Registered at"]],
+         "create": {"label": "Register container instance", "path": _EC + "/instances", "fields": []},
+         "rowActions": [{"label": "Drain", "method": "POST", "path": _EC + "/instances/{id}/drain"},
+                        {"label": "Activate", "method": "POST", "path": _EC + "/instances/{id}/activate"},
+                        {"label": "Deregister", "method": "DELETE", "path": _EC + "/instances/{id}", "danger": True}]},
+        {"key": "providers", "label": "Capacity providers", "icon": "tune", "type": "subgrid",
+         "path": _EC + "/capacity-providers", "arrayKey": "capacity_providers", "idField": "id", "empty": "No capacity providers on this cluster.",
+         "columns": [["name", "Capacity provider"], ["status", "Status"], ["type", "Type"], ["arn", "ARN"]]},
+    ]},
+    *_settings_props_locks(),
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -358,4 +415,5 @@ SUB_BLADES: dict[str, list] = {
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
     "kms":            _KMS_SUB,
+    "ecs":            _ECS_SUB,
 }

@@ -31,6 +31,7 @@ CORES = [
     "sql_store.py", "rds_core.py",                  # RDS
     "iam_store.py", "iam_core.py",                  # IAM
     "messaging_store.py", "sqs_core.py", "sns_core.py",  # SQS + SNS (eventing)
+    "ecs_core.py", "console_ecs.py",                # Amazon ECS (engine, byte-identical; console REST facade)
     "rds_data_core.py",                             # RDS Data API (HTTP SQL over the relay)
     "gcp_storage_core.py",                          # GCP: GCS JSON API (native google-cloud-storage wire)
     "gcp_firestore_core.py",                        # GCP: Firestore REST (native google-cloud-firestore)
@@ -59,6 +60,10 @@ CORES = [
     "nano_registry.py",                             # shared in-context store registry (console adapter + relay router draw from ONE set)
     "nano_persist.py",                              # store serialize/restore + cross-context sync (persistence + console↔SDK parity)
 ]
+
+# Cores vendored WITHOUT the generated-file banner: byte-identical to core/ (the
+# service gate compares the engine's bytes).
+BYTE_IDENTICAL = {"ecs_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
@@ -128,7 +133,7 @@ def main():
         with open(os.path.join(SRC, name)) as f:
             src = f.read()
         with open(os.path.join(OUT, name), "w") as f:
-            f.write(HEADER + src)
+            f.write(src if name in BYTE_IDENTICAL else HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
     check_relay_cores()   # fail loudly if a relay loader lags the cores
 

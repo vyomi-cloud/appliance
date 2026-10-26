@@ -209,6 +209,27 @@ function nanoSpace(provider) {
            status: "running", active_region: region, active_account: acct };
 }
 
+// ── Per-space cost savings (what the real cloud would bill for the live census) ──
+// Rates mirror core/cost_model.py / the console's cost card; unknown services
+// count $1/mo each. Uses the last census a console wrote (any age) so the
+// number survives a closed console, like the persisted estimate.
+const NANO_RATE = {
+  s3: 0.50, dynamodb: 1.25, ecs: 9.01, kms: 1.00, secretsmanager: 0.40, sqs: 0.40, iam: 0, rds: 25.55,
+  ec2: 30.37, lambda: 0.20, apigateway: 3.50, vpc: 0,
+};
+async function nanoCostSavings(provider) {
+  let c = null; try { c = await metaGet("census:" + provider); } catch (_) {}
+  const bs = (c && c.by_service) || {};
+  let usd = 0, count = 0;
+  for (const k of Object.keys(bs)) {
+    const n = Number(bs[k]) || 0; count += n;
+    usd += n * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+  }
+  usd = Math.round(usd * 100) / 100;
+  return { real_cloud_cost_usd: usd, simulator_cost_usd: 0, savings_usd: usd, savings_pct: usd > 0 ? 100 : 0,
+           by_provider: { [provider]: usd }, by_service: bs, resource_count: count };
+}
+
 // ── User-created spaces (persisted) ───────────────────────────────────
 // Nano's default spaces come from the fixture (read-only); spaces the user
 // creates are persisted in IndexedDB so they survive reloads AND show up in the
@@ -378,6 +399,12 @@ async function route(method, path, body, query) {
   //     is returned verbatim (see the __http handling in the fetch listener).
   if (path.startsWith("/subscriptions/") || path.startsWith("/api/azure/operations/")) {
     return { tuple: ["azure", "_arm", method, { path, query: query || {}, body: body || null }] };
+  }
+
+  // Amazon ECS (core/ecs_core.py via console_ecs) — one generic passthrough: the
+  // facade owns the whole /api/ecs/* REST surface.
+  if (path.startsWith("/api/ecs/")) {
+    return { tuple: ["aws", "ecs", "Api", { method, path: path.slice("/api/ecs".length), query: query || {}, body: body || {} }] };
   }
 
   // ── v2.9.0 Azure net-new data planes → real cores (dataplane_adapter) ──
@@ -725,7 +752,8 @@ self.addEventListener("fetch", (event) => {
           match = created.find((s) => s.space_id === activeId && s.provider === prov)
                || created.filter((s) => s.provider === prov).pop();
         } catch (_) {}
-        return json({ space: match || nanoSpace(prov) });
+        const sp = match || nanoSpace(prov);
+        return json({ space: { ...sp, cost_savings: await nanoCostSavings(prov) } });
       }
       // Spaces list = fixture defaults + persisted user-created (deduped).
       if (apiPath === "/api/spaces" && method === "GET") {
@@ -734,6 +762,7 @@ self.addEventListener("fetch", (event) => {
         const seen = new Set(), spaces = [];
         for (const s of [...(fx.spaces || []), ...created])
           if (!seen.has(s.space_id)) { seen.add(s.space_id); spaces.push(s); }
+        for (const s of spaces) if (s.provider) s.cost_savings = await nanoCostSavings(s.provider);
         let active = fx.active_space_id; try { active = (await metaGet("active")) || active; } catch (_) {}
         return json({ spaces, active_space_id: active });
       }

@@ -28,6 +28,7 @@ from core.nosql_store import InMemoryNoSqlStore
 from core.kms_keystore import InMemoryKeyStore
 from core.messaging_store import InMemoryMessagingStore
 from core.iam_store import InMemoryIamStore
+from core.ecs_core import InMemoryEcsStore
 from core.azure_blob_core import AzureBlobStore
 from core.gcp_firestore_core import FirestoreStore
 from core.azure_cosmos_core import CosmosStore
@@ -135,6 +136,15 @@ class PersistentKeyStore(_PersistentMixin, InMemoryKeyStore):
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "kms"):
         InMemoryKeyStore.__init__(self)
+        self._pinit(backend, store_id)
+
+
+class PersistentEcsStore(_PersistentMixin, InMemoryEcsStore):
+    """Amazon ECS clusters/services/tasks durable across restarts (offline appliance)."""
+    _STATE_ATTRS = ("clusters", "taskdefs", "services", "tasks", "instances", "providers", "tags", "settings", "attributes", "meta")
+
+    def __init__(self, backend: SqliteStateBackend, store_id: str = "ecs"):
+        InMemoryEcsStore.__init__(self)
         self._pinit(backend, store_id)
 
 
