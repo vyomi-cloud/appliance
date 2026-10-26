@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/vyomi-cloud/appliance/actions/workflows/ci.yml/badge.svg)](https://github.com/vyomi-cloud/appliance/actions/workflows/ci.yml)
 [![License: BSL 1.1](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.0.8-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.0.8-green.svg)](CHANGELOG.md)
 [![Docker](https://img.shields.io/badge/docker-vyomi%2Fappliance-blue.svg)](https://hub.docker.com/r/vyomi/appliance)
 
 **Build for the cloud, without the cloud.** Vyomi is a **multi-cloud digital twin runtime** — a faithful, *running* replica of your AWS, GCP, and Azure environment on your own machine. Real services, real SDKs, real backends; no cloud account, no cloud bill, no network required.
@@ -17,22 +17,79 @@ LocalStack mocks AWS; Moto, [Azurite](https://github.com/Azure/Azurite), and the
 
 > The CLI is `vyomi` (with a `cloud-learn` deprecation shim through v2.x), the Docker image is `vyomi/appliance`, and the brew tap is `vyomi-cloud/tap`. **Upgrading from v1.x?** Read [`docs/MIGRATION-v2.md`](docs/MIGRATION-v2.md) first.
 
-## What's in v1.0
+## What's in v3.0.8
 
-| Pillar | Status |
+Everything below is cumulative — every capability shipped from v1.0 through v3.0.8.
+
+| Area | What you get |
 |---|---|
-| **3 cloud providers** — AWS, GCP, Azure | ✅ 29 services total (9+9+11), real-backed where it matters |
-| **8 real backend integrations** — Vault, NATS, MinIO, DynamoDB Local, ElasticMQ, Cedar, Postgres, MySQL | ✅ |
-| **Standard SDKs work natively** — boto3, aws-sdk-java/go, google-cloud-*, azure-sdk-for-* | ✅ |
-| **Standard CLIs work natively** — `aws`, `gcloud`, `gsutil`, `bq`, `az`, `terraform` | ✅ |
-| **3 native cloud consoles** — `/console/aws`, `/console/gcp`, `/console/azure` | ✅ |
-| **4-tier licensing** — Free (₹0) · Pro (₹299/mo) · Max (₹599/mo) · Enterprise (₹99/dev/mo, min 10) | ✅ |
-| **Multi-tenant + cross-tenant RBAC** — viewer/operator/admin roles, per-tenant isolation | ✅ |
-| **Terraform export + import** — round-trip your simulator state to real HCL | ✅ |
-| **3 reference apps** — Java Spring Boot (AWS), Go+chi (GCP), Go+chi (Azure) | ✅ |
-| **Enterprise extras** — SSO (OIDC), Helm chart + air-gapped install, audit sinks, custom domain, branding, notifications | ✅ |
+| **Three clouds, real backends** | AWS, GCP and Azure — 35+ services backed by real engines: Postgres, MySQL, MinIO (S3/GCS), DynamoDB Local, ElasticMQ (SQS), Vault (KMS + secrets), NATS (eventing), Azurite, fake-gcs, the Pub/Sub and Firestore emulators |
+| **Native SDKs and CLIs, unchanged** | boto3, aws-sdk-java/go, google-cloud-\*, azure-sdk-for-\*; `aws`, `gcloud`, `gsutil`, `az`, `terraform` — only the endpoint changes |
+| **Operation depth** | S3 multipart + CopyObject, DynamoDB transactions + GSIs, SQS FIFO + DLQ redrive, KMS rotation, API Gateway (MOCK + Lambda proxy), VPC with a reachability analyzer, Azure Service Bus topics + Azure SQL, Cosmos queries |
+| **Real compute** | EC2 / GCE / Azure VM instances as SSH-able Docker containers (Pro) or LXD VMs (Max), with cloud CLIs pre-installed and working SSH + `.pem` connect info |
+| **Native consoles** | `/console/aws`, `/console/gcp`, `/console/azure` with second-level detail tabs, per-resource events, and per-service **cost savings** (what the same resources would cost on real cloud) |
+| **Spaces** | Isolated per-cloud workspaces (`/clouds`) with live host telemetry, per-space TTL countdowns, Renew/Force-shutdown, and enterprise/shared sandbox modes |
+| **Vyomi Nano** | The whole simulator in the browser (no install) at [vyomi.cloud](https://vyomi.cloud) — Pyodide + PGlite + IndexedDB persistence, with a local (`vyomi-tunnel`) or cloud relay so external SDKs/CLIs reach it |
+| **One launcher, two substrates** | `vyomi up` runs Docker for Free/Lite/Pro and Multipass for Max; compiled `vyomi` binary on Windows |
+| **Install anywhere** | Homebrew (`vyomi`, `vyomi-docker`), `.deb` / `.rpm` (`cloud-learn`, `vyomi-docker`), Windows MSI, Docker Compose, source |
+| **Licensing and trial** | Free · Lite · Pro · Max · Enterprise, activated from the portal; offline appliances get a **14-day Pro trial**, then drop to Free |
+| **Enterprise** | Multi-tenant RBAC, shared cohort sandboxes, cloud sandboxes on GitHub Codespaces, SSO, Helm + air-gapped install, audit sinks |
+| **Terraform** | Export simulator state to HCL and import it back |
+| **Verified every release** | Hourly conformance agent across Nano + offline (UI, SDK, CLI, API, cost savings), plus per-release install checks for MSI / DEB / RPM / Homebrew, a full startup + UI-status check, and a Windows end-to-end run — results on each `release/vX.Y.Z` branch |
+| **Privacy** | Anonymous install counting only; opt out with `VYOMI_NO_TELEMETRY=1` |
 
-See [`docs/RELEASE_NOTES_v1.0.md`](docs/RELEASE_NOTES_v1.0.md) for the full feature list.
+### Release history
+
+<details open><summary><b>3.0.x</b> — trial, sandboxes, Nano depth</summary>
+
+- **3.0.8** — `/api/spaces` no longer 500s on binary S3 objects; EC2/GCE create no longer 500s on an unwritable deploy dir; Nano Azure home fixed; `VYOMI_NO_TELEMETRY` opt-out; release checks published per release.
+- **3.0.7** — 14-day Pro trial on "Activate appliance"; redesigned space cards (single status pill, icon actions); Nano tunnel fix.
+- **3.0.6** — Docker Desktop auto-start/install on macOS; console-conformance CI fixes.
+- **3.0.5** — Per-space TTL timer shows on launched cloud sandboxes.
+- **3.0.4** — Per-space TTL for enterprise/shared spaces; winget channel dropped.
+- **3.0.3** — `aws s3 ls` at the service root fixed; Nano second-level consoles, durable in-browser state, per-service cost savings; remote SSH/DB via Codespaces.
+- **3.0.2** — Console polish and backend warm-up.
+- **3.0.1** — Real SSH into simulated compute; honest install-globe geography.
+</details>
+
+<details><summary><b>2.x</b> — real backends, Nano, parity, launcher</summary>
+
+- **2.9.0** — Compiled `vyomi` launcher (Go) for Windows; console data-plane integration.
+- **2.8.1** — All parity work reachable on every tier; Azure SQL + Azure IAM live.
+- **2.8.0** — VPC data plane with a reachability analyzer.
+- **2.7.0** — API Gateway data plane (MOCK + Lambda proxy).
+- **2.6.0** — Parity finish: S3 multipart, DynamoDB GSIs, SQS FIFO + DLQ, KMS rotation, Azure SQL.
+- **2.5.0** — Parity close-out: Azure Service Bus topics, S3 CopyObject, DynamoDB transactions, richer Cosmos queries.
+- **2.4.0** — Tri-cloud on every tier: anti-drift conformance gate; MinIO/Postgres/Vault-backed stores.
+- **2.3.2** — Nano sign-in to save; stable relay URL; install analytics once per machine.
+- **2.3.1** — In-app Swagger and SDK/CLI usage views.
+- **2.3.0** — Free tier = Vyomi Nano in the browser; Cloudflare + local relay tunnels.
+- **2.2.2** — Tier-aware launcher: Docker for Free/Lite/Pro, Multipass for Max.
+- **2.2.1** — `vyomi-docker` packages (.deb / .rpm / brew).
+- **2.2.0** — Pro Docker compute (SSH-able containers); Lite/Nano/Micro tiers; cloudlite compose.
+- **2.1.0.2 / 2.1.0.1 / 2.1.0** — Windows MSI, VirtualBox NAT port-forward, readiness fixes.
+- **2.0.9.2 / 2.0.9.1 / 2.0.9** — Compose as a front door; native-SDK Secrets/KMS/Messaging conformance; Azure Storage Queue.
+- **2.0.8** — Progressive startup (console usable in ~30–60 s); Azure/GCP object stores in the consoles.
+- **2.0.7** — Fresh-install regression fixed; disk cleanup; launch progress.
+- **2.0.6** — Real-SPA conformance 35/35; install funnel from every package manager; version + update check.
+- **2.0.5** — Cloud CLIs bundled into every compute instance.
+- **2.0.4.1 / 2.0.4** — `/clouds` workspaces dashboard, live host telemetry, Docker inside Vyomi EC2.
+- **2.0.1** — Zero-config first launch (localhost bridge, auto browser open).
+- **2.0.0** — The Vyomi rebrand (CLI, image, tap, license BSL 1.1); HTTPS via mkcert + Caddy.
+</details>
+
+<details><summary><b>1.x</b> — launch and launcher hardening</summary>
+
+- **1.2.5** — Default spaces `aws-default` / `gcp-default` / `azure-default`.
+- **1.2.4 / 1.2.3** — Every install path reachable at `vyomi.local:9000` (mDNS).
+- **1.2.2 / 1.2.1** — Launcher installs Multipass when missing (macOS, Linux, Windows).
+- **1.2.0** — Activation and EC2 state-refresh fixes.
+- **1.1.11 → 1.1.1** — Launcher hardening: health probes, bundle verification, tar+transfer sync, phase counters, failure banners, logs.
+- **1.1.0** — Console-actions conformance 100% (253/253) across AWS/GCP/Azure.
+- **1.0.0** — First GA: 29 services across AWS/GCP/Azure, 8 real backends, native SDKs/CLIs, consoles, tiers, Terraform export, reference apps.
+</details>
+
+Full details: [`CHANGELOG.md`](CHANGELOG.md) · per-release checks: the `release/vX.Y.Z` branches.
 
 ## Quick start
 
@@ -46,7 +103,7 @@ vyomi up
 ```bash
 git clone https://github.com/vyomi-cloud/appliance && cd appliance
 docker compose up -d
-open http://localhost:9000/pricing
+open http://localhost:9000/clouds
 ```
 
 ### From source
@@ -56,7 +113,7 @@ pip install -r requirements.txt
 uvicorn server:app --host 0.0.0.0 --port 9000
 ```
 
-First-time browsers land on `/pricing` to pick a tier. After that, the URL you actually want is one of:
+Open `http://localhost:9000/clouds` (your spaces). From there:
 - `/console/aws` · `/console/gcp` · `/console/azure` — native cloud consoles
 - `/api/runtime/tier` — current tier policy
 - `/api/runtime/backends` — health of all 8 real backends
@@ -143,17 +200,13 @@ Each has its own `api_pass_test.go` / `ApiPassTest.java` that round-trips agains
 Full design: [`docs/architecture/CLOUDLEARN_FULL_ARCHITECTURE.md`](docs/architecture/CLOUDLEARN_FULL_ARCHITECTURE.md)
 Production deployment: [`docs/PRODUCTION_DEPLOYMENT.md`](docs/PRODUCTION_DEPLOYMENT.md)
 
-## Tier system
+## Tiers
 
-`/pricing` shows the 4 tiers side-by-side; tier middleware enforces the gates server-side. Standard SDKs work natively on every tier (the "Standard capability" bar at the bottom of `/pricing`).
+Tier middleware enforces the gates server-side; standard SDKs work natively on every tier. Current pricing: [vyomi.cloud/pricing](https://vyomi.cloud/pricing) (USD, billed in INR).
 
-Tier escalation:
-- **Free** (₹0/mo) — 10 service categories × 3 clouds (locks NoSQL + eventing). Tight quantity caps (1 of each resource per space). Community support.
-- **Pro** (₹299/mo) — pick **one** primary cloud, all 12 services on it (other two visible but locked). 5 spaces, medium VM size, 10 GB storage, Cloud Shell, CloudSim Power model.
-- **Max** (₹599/mo) — all 35 services × all 3 clouds. 25 spaces, large VM size, 100 GB storage, Cedar IAM enforcement, full CloudSim + cost simulation, CI integration.
-- **Enterprise** (from ₹99/dev/mo, 10-dev min) — everything in Max plus multi-tenant, SSO, audit-log sinks, Helm + air-gapped install, custom domain, 24/7 support.
-
-Switch tiers any time via `POST /api/license/signup`. *(Pro/Max were named Student/Developer before 2026-06-17; the old names still work as aliases.)*
+- **Free** — Vyomi Nano in your browser, no install, plus the self-hosted appliance on the Free tier.
+- **Lite** ($9/mo), **Pro** ($19/mo), **Max** ($29/mo) — self-hosted appliance tiers: more services, spaces and storage; Pro adds Docker compute, Max adds VM compute (Multipass) and every service on all three clouds. New offline activations start with a **14-day Pro trial**.
+- **Enterprise** — cloud sandboxes for teams on GitHub Codespaces, pay per use; multi-tenant RBAC, SSO, audit sinks, air-gapped install.
 
 ## Conformance & testing
 
@@ -168,6 +221,8 @@ python tests/conformance/run_conformance.py \
 CI workflows in `.github/workflows/`:
 - `ci.yml` — lint + conformance (≥85% gate) + tier-middleware smoke + 3-cloud refapp build matrix on every PR
 - `release.yml` — tag-triggered release artifact build
+- `conformance-hourly.yml` — hourly conformance agent (UI + SDK/CLI/API, Nano + offline); report on the `conformance-report` branch
+- `msi-validate.yml`, `release-startup-validate.yml`, `release-checks.yml` — per-release MSI / startup / DEB·RPM·Homebrew checks → `RELEASE-CHECKS.md` on `release/vX.Y.Z`
 
 ## Contributing
 
