@@ -1,8 +1,8 @@
 {
   "_comment": "Upstream sources for the services Vyomi simulates. The watcher diffs these hourly; add a service here when Vyomi starts simulating it.",
   "aws": {
-    "botocore": ["s3", "dynamodb", "sqs", "sns", "iam", "kms", "secretsmanager", "rds", "rds-data", "lambda", "ec2", "apigateway", "events"],
-    "keywords": ["Amazon S3", "DynamoDB", "Amazon SQS", "Amazon SNS", "AWS IAM", "Identity and Access Management", "AWS KMS", "Key Management Service", "Secrets Manager", "Amazon RDS", "Aurora", "AWS Lambda", "Amazon EC2", "Amazon VPC", "API Gateway", "EventBridge"]
+    "botocore": ["s3", "dynamodb", "sqs", "sns", "iam", "kms", "secretsmanager", "rds", "rds-data", "lambda", "ec2", "apigateway", "events", "cognito-idp"],
+    "keywords": ["Amazon S3", "DynamoDB", "Amazon SQS", "Amazon SNS", "AWS IAM", "Identity and Access Management", "AWS KMS", "Key Management Service", "Secrets Manager", "Amazon RDS", "Aurora", "AWS Lambda", "Amazon EC2", "Amazon VPC", "API Gateway", "EventBridge", "Amazon Cognito"]
   },
   "gcp": {
     "discovery": ["storage/v1", "pubsub/v1", "compute/v1", "sqladmin/v1beta4", "firestore/v1", "cloudfunctions/v2", "secretmanager/v1", "cloudkms/v1", "iam/v1", "apigateway/v1", "eventarc/v1"],
@@ -14,8 +14,8 @@
   },
   "sdks": {
     "pypi": ["boto3", "botocore", "awscli", "google-cloud-storage", "google-cloud-pubsub", "google-cloud-firestore", "google-cloud-secret-manager", "google-cloud-kms", "azure-storage-blob", "azure-cosmos", "azure-keyvault-secrets", "azure-keyvault-keys", "azure-servicebus", "azure-storage-queue", "azure-mgmt-resource", "azure-identity"],
-    "maven": ["software.amazon.awssdk:s3", "software.amazon.awssdk:dynamodb", "software.amazon.awssdk:sqs", "com.google.cloud:google-cloud-storage", "com.google.cloud:google-cloud-pubsub", "com.google.cloud:google-cloud-firestore", "com.azure:azure-storage-blob", "com.azure:azure-cosmos", "com.azure:azure-security-keyvault-secrets"],
-    "go": ["github.com/aws/aws-sdk-go-v2/service/s3", "github.com/aws/aws-sdk-go-v2/service/dynamodb", "github.com/aws/aws-sdk-go-v2/service/sqs", "cloud.google.com/go/storage", "cloud.google.com/go/pubsub", "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob", "github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos"]
+    "maven": ["software.amazon.awssdk:s3", "software.amazon.awssdk:dynamodb", "software.amazon.awssdk:sqs", "software.amazon.awssdk:cognitoidentityprovider", "com.google.cloud:google-cloud-storage", "com.google.cloud:google-cloud-pubsub", "com.google.cloud:google-cloud-firestore", "com.azure:azure-storage-blob", "com.azure:azure-cosmos", "com.azure:azure-security-keyvault-secrets"],
+    "go": ["github.com/aws/aws-sdk-go-v2/service/s3", "github.com/aws/aws-sdk-go-v2/service/dynamodb", "github.com/aws/aws-sdk-go-v2/service/sqs", "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider", "cloud.google.com/go/storage", "cloud.google.com/go/pubsub", "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob", "github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos"]
   },
   "clis": {
     "aws": "github:aws/aws-cli",
