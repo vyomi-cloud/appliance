@@ -396,6 +396,11 @@ def main():
     shutil.copyfile(os.path.join(STATIC, "readiness-strip.js"),
                     os.path.join(HERE, "readiness-strip.js"))
     print(f"{'readiness-strip.js':24} <- static/readiness-strip.js (copied)")
+    # The consoles load assets/lazy_backends.js (rewritten from /assets/); ship it so it doesn't 404.
+    os.makedirs(os.path.join(HERE, "assets"), exist_ok=True)
+    shutil.copyfile(os.path.join(STATIC, "lazy_backends.js"),
+                    os.path.join(HERE, "assets", "lazy_backends.js"))
+    print(f"{'assets/lazy_backends.js':24} <- static/lazy_backends.js (copied)")
 
 
 if __name__ == "__main__":
