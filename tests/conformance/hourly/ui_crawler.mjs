@@ -251,9 +251,13 @@ async function crawlConsole(browser, base, con, needsSW) {
   const page = await ctx.newPage();
   const net = [];          // failing responses since the last drain
   const errs = [];         // uncaught page errors since the last drain
-  page.on("response", (r) => {
+  page.on("response", async (r) => {
     const s = r.status(), u = r.url();
-    if (s >= 400 && !/favicon|\.map$|hot-update/.test(u)) net.push({ status: s, url: u.replace(base, "").slice(0, 200) });
+    if (s >= 400 && !/favicon|\.map$|hot-update/.test(u)) {
+      // 5xx: keep the start of the body so the finding says why, not just that it failed.
+      const body = s >= 500 ? (await r.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 200) : "";
+      net.push({ status: s, url: u.replace(base, "").slice(0, 200), body });
+    }
   });
   page.on("pageerror", (e) => errs.push(String(e.message).split("\n")[0].slice(0, 300)));
   // Successful data calls (the console's /api/* fetches, served by the
@@ -283,7 +287,7 @@ async function crawlConsole(browser, base, con, needsSW) {
     const f = [];
     for (const n of net.splice(0)) {
       if (n.status === 501) f.push({ type: "HTTP_501", detail: `${n.url} → 501` });
-      else if (n.status >= 500) f.push({ type: "HTTP_5XX", detail: `${n.url} → ${n.status}` });
+      else if (n.status >= 500) f.push({ type: "HTTP_5XX", detail: `${n.url} → ${n.status}${n.body ? " " + n.body : ""}` });
       else if (n.status === 404) f.push({ type: "HTTP_404", detail: `${n.url} → 404` });
     }
     for (const e of errs.splice(0)) f.push({ type: "PAGE_ERROR", detail: e });
