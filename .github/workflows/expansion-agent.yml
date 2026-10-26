@@ -123,9 +123,7 @@ jobs:
           docker build -t cloudlearn/simulator:ci .
           CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:ci \
             docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml up -d \
-              simulator vyomi-pubsub vyomi-firestore \
-              vyomi-sql-postgres vyomi-minio vyomi-nats \
-              vyomi-dynamodb vyomi-elasticmq vyomi-vault vyomi-azurite
+              $(grep -v '^#' tests/conformance/hourly/ci-services.txt)
           for i in $(seq 1 90); do curl -fs "$VYOMI_BASE_URL/healthz" >/dev/null && break; sleep 2; done
           curl -f "$VYOMI_BASE_URL/healthz"
           nohup node wasm/relay/local-relay.mjs > relay.log 2>&1 &

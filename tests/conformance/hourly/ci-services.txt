@@ -1,0 +1,12 @@
+# Compose services CI, the service gate and the hourly run start (one per line).
+# A new service's container backend is added here (gate-checked).
+simulator
+vyomi-pubsub
+vyomi-firestore
+vyomi-sql-postgres
+vyomi-minio
+vyomi-nats
+vyomi-dynamodb
+vyomi-elasticmq
+vyomi-vault
+vyomi-azurite

@@ -40,7 +40,32 @@ the upstream id and the checklist.
    create fields and actions. The gate checks both, and the service's Nano
    changes must apply cleanly to the portal's copy (`portal/app/nano`), because
    the portal ships them in the same release.
-5. **Conformance test beds**, using the **official SDKs/CLIs** with only the
+5. **Offline backend — cheap, real, permissively licensed** (rules + default
+   picks: `tests/conformance/expansion/backends.json`). The engine is always the
+   API; add a backend only where the behaviour needs a real data plane (a
+   registry `docker push` works against, DNS `dig` resolves, a cache `redis-cli`
+   talks to). In order of preference:
+   - **in-process** — state in the engine (SQLite where it must persist). Zero
+     containers, and it's exactly what Nano runs.
+   - **shared container** — reuse the one backend that already serves that
+     capability for another cloud (one Valkey for ElastiCache, Memorystore and
+     Azure Cache; one registry for ECR, Artifact Registry and ACR; one CoreDNS for
+     Route 53, Cloud DNS and Azure DNS).
+   - **new container** — small single binary first; JVM or multi-process servers
+     only for Max.
+   A container backend must be: Apache/MIT/BSD/MPL/ISC/PostgreSQL licensed (GPL
+   only as an unmodified separate container; never SSPL, BSL/BUSL, RSAL, Elastic,
+   AGPL or proprietary — so Valkey not Redis 7.4+, OpenSearch not Elasticsearch,
+   Apache Kafka not Redpanda, OpenBao not Vault 1.15+); amd64 + arm64; pinned to a
+   version (prefer a `vyomi/<name>` mirror); in `docker-compose.yml` and
+   `docker-compose.cloudlite.yml` under profile `full` with a healthcheck and a
+   mem limit within the tier budget (idle ≤ 64 MB Free, 128 MB Lite, 512 MB Pro,
+   2 GB Max); and listed in `tests/conformance/hourly/ci-services.txt`. The gate
+   checks all of it and measures idle memory. Heavy backends (k3s, Kafka,
+   OpenSearch) are Max-only: below Max the service runs control-plane only and
+   says so in the console. Deviating from the default pick needs
+   `backend.reason` in the manifest.
+6. **Conformance test beds**, using the **official SDKs/CLIs** with only the
    endpoint changed, each printing one `[PASS]`/`[FAIL]` line per check and
    exiting non-zero on failure:
    - Java: a class under `tests/conformance/<cloud>-sdk-java/` (AWS SDK v2 /
@@ -52,20 +77,24 @@ the upstream id and the checklist.
      `$VYOMI_BASE_URL/console/<cloud>`): open the service, create with defaults,
      every column filled, detail tabs render, delete.
    - Console, Nano: `wasm/ui-tests/validate-<cloud>-<key>.mjs` (same flows, Nano).
-6. **Hand-over to the hourly pipeline** — register every test bed above in
+7. **Hand-over to the hourly pipeline** — register every test bed above in
    `tests/conformance/hourly/suites.json`, and add the upstream id to
    `tests/conformance/upstream/tracked.json` (AWS botocore list / GCP discovery
    list / Azure specs list) so real-cloud changes to it are watched hourly.
-7. **Registry + manifest** — add the service to `services/registry.json` with
+8. **Registry + manifest** — add the service to `services/registry.json` with
    `"status": "pending-release"` (the release flips it to `released` and stamps the
    version), and write `services/manifests/<cloud>-<key>.json`:
    ```json
    {"cloud": "aws", "key": "ecs", "name": "Amazon ECS", "upstream": "ecs", "issue": 123,
     "core": "core/ecs_core.py", "operations": ["CreateCluster", "..."],
+    "backend": {"kind": "substrate", "name": "docker", "tier": "pro"},
     "suites": ["offline-sdk-java-aws-ecs", "offline-sdk-go-aws-ecs", "offline-cli-aws-ecs",
                "offline-ui-aws-ecs", "nano-ui-aws-ecs"],
     "status": "building"}
    ```
+   A container backend looks like `{"kind": "container", "name": "valkey",
+   "image": "valkey/valkey:8.0.1-alpine", "license": "BSD-3-Clause", "tier": "lite",
+   "compose_service": "vyomi-valkey"}`; an in-process one is `{"kind": "in-process"}`.
    Set `"status": "ready"` only when you believe every item above passes locally.
 
 ## How to work
