@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-Updated **2026-10-26 15:54 UTC** · **36 services released** (AWS 12 / GCP 12 / Azure 12) · **81 in the pipeline** (P1 + P2) · covering all **1068 services** AWS, GCP and Azure publish (catalog of 2026-10-26).
+Updated **2026-10-26 15:55 UTC** · **36 services released** (AWS 12 / GCP 12 / Azure 12) · **81 in the pipeline** (P1 + P2) · covering all **1068 services** AWS, GCP and Azure publish (catalog of 2026-10-26).
 
 A new service goes live only when the service gate passes: engine, native SDK/CLI wire, console UI offline + Nano, Java + Go + CLI test beds, Playwright console tests offline + Nano, registered with the hourly conformance run and the upstream watcher. Then it is released (patch version) and handed off to both hourly jobs.
 
@@ -498,7 +498,7 @@ Released: **12** · 📋 Queued: **12** · · Not filed: **12**
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | **Compute Engine** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 30/30 | baseline (pre-gate) | <=3.0.8 | UI offline ✅ · UI nano ⚠️ 3 | 👁 watched (1018 ops) |
 | **Cloud Storage** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 23/23 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 2 · UI nano ⚠️ 1 | 👁 watched (87 ops) |
-| **Cloud SQL** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 28/28 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched (85 ops) · [⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) |
+| **Cloud SQL** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 28/28 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched (85 ops) · [⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) |
 | **Pub/Sub** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 19/19 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 5 · UI nano ⚠️ 7 | 👁 watched (46 ops) |
 | **Firestore** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 20/20 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 3 · UI nano ⚠️ 7 | 👁 watched (60 ops) |
 | **Cloud Functions** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 24/24 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 4 · UI nano ⚠️ 5 | 👁 watched (21 ops) |
