@@ -1,20 +1,31 @@
 {
- "at": "2026-10-26T16:30:13+00:00",
- "commit": "346499f8028e2a945841f3d3f698846fdff8137d",
+ "at": "2026-10-26T17:45:15+00:00",
+ "commit": "d044b33fa2e2a04dbae8b765b1b861ef0c5e02c7",
  "suites": [
   {
    "id": "offline-ui-crawl",
    "target": "offline",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 588.2,
+   "duration_s": 775.4,
    "exit_code": 0,
    "broken_services": [
     {
      "target": "offline",
      "cloud": "aws",
      "service": "EC2",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Details",
+      "Status and alarms",
+      "Monitoring",
+      "Networking",
+      "Security",
+      "Storage",
+      "Connect"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -22,7 +33,177 @@
       },
       {
        "type": "HTTP_404",
-       "detail": "resource detail: /api/ec2/instances/i-f0c995cd604e \u2192 404"
+       "detail": "resource detail: /api/ec2/instances/i-8e774bcaf2db \u2192 404"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/ec2/instances/i-8e774bcaf2db \u2192 404",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/ec2/instances/i-8e774bcaf2db \u2192 404",
+       "tab": "Activity"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/ec2/instances/i-8e774bcaf2db \u2192 404",
+       "tab": "Tags"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/ec2/instances/i-8e774bcaf2db \u2192 404",
+       "tab": "Details"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/ec2/instances/i-8e774bcaf2db \u2192 404",
+       "tab": "Status and alarms"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/ec2/instances/i-8e774bcaf2db \u2192 404",
+       "tab": "Monitoring"
+      },
+      {
+       "type": "DEAD_TAB",
+       "tab": "Monitoring",
+       "detail": "clicking the tab changes nothing"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/ec2/instances/i-8e774bcaf2db \u2192 404",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PUBLIC IPV4 ADDRESS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PUBLIC IPV4 DNS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SUBNET ID\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SECURITY GROUPS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/ec2/instances/i-8e774bcaf2db \u2192 404",
+       "tab": "Security"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Security: column \"IAM ROLE\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Security"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Security: column \"LAUNCH TIME\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Security"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Security: column \"STATE TRANSITION REASON\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Security"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/ec2/instances/i-8e774bcaf2db \u2192 404",
+       "tab": "Storage"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/ec2/instances/i-8e774bcaf2db \u2192 404",
+       "tab": "Connect"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "EC2",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Details",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Status and alarms",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Monitoring",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Security",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Storage",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Connect",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -31,15 +212,232 @@
      "target": "offline",
      "cloud": "aws",
      "service": "S3",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Objects",
+      "Versions",
+      "Bucket Versioning",
+      "Event notifications",
+      "Lifecycle rules",
+      "Default encryption",
+      "Block Public Access"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "after create: column \"Creation date\" shows \"-\"/blank in 1 row(s)"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "S3",
+       "state": "live",
+       "calls": 7
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Objects",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Versions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Bucket Versioning",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Event notifications",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Lifecycle rules",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Default encryption",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Block Public Access",
+       "state": "static",
+       "calls": 0
+      }
+     ],
+     "status": "broken"
+    },
+    {
+     "target": "offline",
+     "cloud": "aws",
+     "service": "RDS",
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Endpoints",
+      "Networking",
+      "Permissions",
+      "Configuration",
+      "Modify",
+      "Parameter groups",
+      "Snapshots"
+     ],
+     "findings": [
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Endpoints: column \"ENDPOINT\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Endpoints"
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"Creation date\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Networking: column \"PRIVATE IPV4 ADDRESS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PUBLIC IPV4 ADDRESS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PUBLIC IPV4 DNS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SUBNET ID\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SECURITY GROUPS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "RDS",
+       "state": "live",
+       "calls": 7
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Endpoints",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Configuration",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Modify",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Parameter groups",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Snapshots",
+       "state": "live",
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -48,15 +446,161 @@
      "target": "offline",
      "cloud": "aws",
      "service": "DynamoDB",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Explore items",
+      "Query/Scan",
+      "Indexes",
+      "Streams and triggers",
+      "Read/write capacity",
+      "Encryption at rest",
+      "Time to live"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "after create: column \"Sort key\" shows \"-\"/blank in 1 row(s)"
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"Sort key\" shows \"-\"/blank in 1 row(s)"
+       "type": "HTTP_404",
+       "detail": "resource detail: /api/dynamodb/tables/ \u2192 404"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Activity"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Tags"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Explore items"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables//items \u2192 404",
+       "tab": "Explore items"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Query/Scan"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Indexes"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Streams and triggers"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Read/write capacity"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Encryption at rest"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Time to live"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "DynamoDB",
+       "state": "live",
+       "calls": 7
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Explore items",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Query/Scan",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Indexes",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Streams and triggers",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Read/write capacity",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Encryption at rest",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Time to live",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -65,11 +609,267 @@
      "target": "offline",
      "cloud": "aws",
      "service": "SQS",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Send and receive messages",
+      "Purge messages",
+      "Configuration",
+      "Dead-letter queue",
+      "Encryption",
+      "Access policy",
+      "Monitoring"
+     ],
      "findings": [
       {
        "type": "HTTP_404",
        "detail": "resource detail: /api/sqs/queues/ \u2192 404"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Activity"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Tags"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Send and receive messages"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Purge messages"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Configuration"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Dead-letter queue"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Dead-letter queue: column \"MAXIMUM RECEIVES\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Dead-letter queue"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Encryption"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Access policy"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Monitoring"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "SQS",
+       "state": "live",
+       "calls": 7
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Send and receive messages",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Purge messages",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Configuration",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Dead-letter queue",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Encryption",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Access policy",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Monitoring",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
+     "status": "broken"
+    },
+    {
+     "target": "offline",
+     "cloud": "aws",
+     "service": "API Gateway",
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Resources",
+      "Authorizers",
+      "Models",
+      "Stages",
+      "Deployments",
+      "Settings",
+      "Resource policy"
+     ],
+     "findings": [
+      {
+       "type": "HTTP_404",
+       "detail": "/api/apigateway/apis/MyApi/resources \u2192 404",
+       "tab": "Resources"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/apigateway/apis/MyApi/stages \u2192 404",
+       "tab": "Stages"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "API Gateway",
+       "state": "live",
+       "calls": 7
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Resources",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Authorizers",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Models",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Stages",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Deployments",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Settings",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Resource policy",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -78,7 +878,18 @@
      "target": "offline",
      "cloud": "aws",
      "service": "EventBridge",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Rule details",
+      "Targets",
+      "Event pattern",
+      "Invocations",
+      "Dead-letter queue",
+      "Properties",
+      "Permissions"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -98,11 +909,201 @@
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"Status\" shows \"-\"/blank in 1 row(s)"
+       "detail": "resource detail: column \"STATUS\" shows \"-\"/blank in 2 row(s)"
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"Targets\" shows \"-\"/blank in 1 row(s)"
+       "detail": "resource detail: column \"TARGETS\" shows \"-\"/blank in 2 row(s)"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Overview: column \"STATUS\" shows \"-\"/blank in 2 row(s)",
+       "tab": "Overview"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Overview: column \"TARGETS\" shows \"-\"/blank in 2 row(s)",
+       "tab": "Overview"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Tags: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Tags"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Tags: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Tags"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Rule details: column \"STATUS\" shows \"-\"/blank in 2 row(s)",
+       "tab": "Rule details"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Rule details: column \"TARGETS\" shows \"-\"/blank in 2 row(s)",
+       "tab": "Rule details"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Targets: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Targets"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Targets: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Targets"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Event pattern: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Event pattern"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Event pattern: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Event pattern"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Invocations: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Invocations"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Invocations: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Invocations"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Dead-letter queue: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Dead-letter queue"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Dead-letter queue: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Dead-letter queue"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Properties: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Properties"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Properties: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Properties"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Properties: column \"state\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Properties"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Properties: column \"target_count\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Properties"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Permissions: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Permissions"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Permissions: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Permissions"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "EventBridge",
+       "state": "live",
+       "calls": 7
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Rule details",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Targets",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Event pattern",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Invocations",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Dead-letter queue",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "partial",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -111,11 +1112,117 @@
      "target": "offline",
      "cloud": "aws",
      "service": "VPC",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "VPC details",
+      "Subnets",
+      "Route tables",
+      "Internet gateways",
+      "NAT gateways",
+      "Endpoints",
+      "Security groups",
+      "Network ACLs",
+      "Flow logs"
+     ],
      "findings": [
       {
        "type": "SAVINGS_NOT_UPDATED",
        "detail": "create: aws savings stayed $99.73 (real aws would bill this resource)"
+      },
+      {
+       "type": "DEAD_TAB",
+       "tab": "VPC details",
+       "detail": "clicking the tab changes nothing"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Security groups: column \"Security group ID\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Security groups"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Security groups: column \"Name\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Security groups"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "VPC",
+       "state": "live",
+       "calls": 7
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "VPC details",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Subnets",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Route tables",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Internet gateways",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "NAT gateways",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Endpoints",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Security groups",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Network ACLs",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Flow logs",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -124,7 +1231,16 @@
      "target": "offline",
      "cloud": "aws",
      "service": "IAM",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Users",
+      "User groups",
+      "Roles",
+      "Policies",
+      "Identity providers",
+      "Password policy",
+      "Access Analyzer"
+     ],
      "findings": [
       {
        "type": "SAVINGS_NOT_UPDATED",
@@ -133,6 +1249,79 @@
       {
        "type": "SAVINGS_NOT_UPDATED",
        "detail": "create: aws savings stayed $99.73 (real aws would bill this resource)"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Users: column \"ARN\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Users"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "IAM",
+       "state": "live",
+       "calls": 7
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Users",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "User groups",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Roles",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Policies",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Identity providers",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Password policy",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Access Analyzer",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -141,7 +1330,18 @@
      "target": "offline",
      "cloud": "aws",
      "service": "Secrets Manager",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Secret value",
+      "Versions",
+      "Rotation",
+      "Replication",
+      "Resource policy",
+      "Encryption key",
+      "Properties"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -162,18 +1362,86 @@
       {
        "type": "SAVINGS_NOT_UPDATED",
        "detail": "create: aws savings stayed $99.73 (real aws would bill this resource)"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Secrets Manager",
+       "state": "live",
+       "calls": 7
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"Last rotated\" shows \"-\"/blank in 1 row(s)"
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"Next rotation\" shows \"-\"/blank in 1 row(s)"
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"Encryption key\" shows \"-\"/blank in 1 row(s)"
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Secret value",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Versions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Rotation",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Replication",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Resource policy",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Encryption key",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -182,7 +1450,18 @@
      "target": "offline",
      "cloud": "aws",
      "service": "KMS",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "General configuration",
+      "Key policy",
+      "Aliases",
+      "Key rotation",
+      "Key users",
+      "Key administrators",
+      "Grants"
+     ],
      "findings": [
       {
        "type": "SAVINGS_NOT_UPDATED",
@@ -193,13 +1472,104 @@
        "detail": "create: aws savings stayed $99.73 (real aws would bill this resource)"
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "KMS",
+       "state": "live",
+       "calls": 7
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "General configuration",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Key policy",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Aliases",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Key rotation",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Key users",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Key administrators",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Grants",
+       "state": "static",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
      "target": "offline",
      "cloud": "gcp",
      "service": "Cloud Functions",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Source",
+      "Trigger",
+      "Variables",
+      "Testing",
+      "Networking",
+      "Properties"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -212,10 +1582,86 @@
       {
        "type": "SAVINGS_NOT_UPDATED",
        "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Cloud Functions",
+       "state": "live",
+       "calls": 1
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"STATUS\" shows \"-\"/blank in 1 row(s)"
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Source",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Trigger",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Variables",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Testing",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "live",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -224,7 +1670,18 @@
      "target": "offline",
      "cloud": "gcp",
      "service": "Cloud Storage",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Objects",
+      "Lifecycle",
+      "Configuration",
+      "Encryption",
+      "Retention",
+      "Properties"
+     ],
      "findings": [
       {
        "type": "SAVINGS_NOT_UPDATED",
@@ -233,6 +1690,86 @@
       {
        "type": "SAVINGS_NOT_UPDATED",
        "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Cloud Storage",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Objects",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Lifecycle",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Configuration",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Encryption",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Retention",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "live",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -248,13 +1785,38 @@
        "detail": "create with defaults added no resource to the list"
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Cloud SQL",
+       "state": "live",
+       "calls": 2
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "unimplemented",
+       "calls": 1
+      }
+     ],
      "status": "broken"
     },
     {
      "target": "offline",
      "cloud": "gcp",
      "service": "Firestore",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Data",
+      "Query builder",
+      "Indexes",
+      "Security rules",
+      "Import / Export",
+      "Properties"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -269,13 +1831,104 @@
        "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Firestore",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Data",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Query builder",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Indexes",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Security rules",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Import / Export",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "live",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
      "target": "offline",
      "cloud": "gcp",
      "service": "VPC Network",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Subnets",
+      "Firewall rules",
+      "Routes",
+      "VPC peering",
+      "Properties",
+      "Network metrics"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -288,10 +1941,86 @@
       {
        "type": "SAVINGS_NOT_UPDATED",
        "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "VPC Network",
+       "state": "live",
+       "calls": 1
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"IPV4 RANGE\" shows \"-\"/blank in 1 row(s)"
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Subnets",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Firewall rules",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Routes",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "VPC peering",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Network metrics",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -300,7 +2029,18 @@
      "target": "offline",
      "cloud": "gcp",
      "service": "Pub/Sub",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Subscriptions",
+      "Schema",
+      "Messages",
+      "Encryption",
+      "Properties",
+      "Metrics"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -323,6 +2063,86 @@
        "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Pub/Sub",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Subscriptions",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Schema",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Messages",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Encryption",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Metrics",
+       "state": "static",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -336,13 +2156,37 @@
        "detail": "create with defaults added no resource to the list"
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "API Gateway",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "unimplemented",
+       "calls": 1
+      }
+     ],
      "status": "broken"
     },
     {
      "target": "offline",
      "cloud": "gcp",
      "service": "Eventarc",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Event matching",
+      "Destination",
+      "Properties",
+      "Metrics",
+      "Logs"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -361,6 +2205,80 @@
        "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Eventarc",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Event matching",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Destination",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Metrics",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Logs",
+       "state": "static",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -374,13 +2292,38 @@
        "detail": "create with defaults added no resource to the list"
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Secret Manager",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "unimplemented",
+       "calls": 1
+      }
+     ],
      "status": "broken"
     },
     {
      "target": "offline",
      "cloud": "gcp",
      "service": "Cloud KMS",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Versions",
+      "Rotation & labels",
+      "Key policy",
+      "Import jobs",
+      "Properties",
+      "Metrics"
+     ],
      "findings": [
       {
        "type": "SAVINGS_NOT_UPDATED",
@@ -391,13 +2334,100 @@
        "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Cloud KMS",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Versions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Rotation & labels",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Key policy",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Import jobs",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Metrics",
+       "state": "static",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
      "target": "offline",
      "cloud": "gcp",
      "service": "IAM & Admin",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Members",
+      "Permissions",
+      "Keys",
+      "Properties",
+      "Activity log"
+     ],
      "findings": [
       {
        "type": "SAVINGS_NOT_UPDATED",
@@ -406,6 +2436,62 @@
       {
        "type": "SAVINGS_NOT_UPDATED",
        "detail": "create: gcp savings stayed $24.53 (real gcp would bill this resource)"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "IAM & Admin",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Members",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Keys",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -421,6 +2507,20 @@
        "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Virtual Machines",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "unimplemented",
+       "calls": 1
+      }
+     ],
      "status": "broken"
     },
     {
@@ -432,6 +2532,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Storage accounts (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -447,6 +2555,14 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "SQL servers (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -458,6 +2574,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Service Bus (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -473,6 +2597,14 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Cosmos DB (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -484,6 +2616,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Function apps (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -499,6 +2639,14 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "API Management (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -510,6 +2658,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Virtual networks (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -525,6 +2681,14 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Network Security Group (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -536,6 +2700,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Event Grid topics (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -551,6 +2723,14 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Key vaults (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -562,6 +2742,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Role Definition (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -577,32 +2765,40 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Entra ID / RBAC (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     }
    ],
-   "passed": 5,
-   "failed": 33,
+   "passed": 3,
+   "failed": 35,
    "status": "fail",
-   "tail": "[offline/aws] 12 services crawled, 9 with findings\n[offline/gcp] 12 services crawled, 11 with findings\n[offline/azure] 14 services crawled, 13 with findings\nUI crawl offline: 5/38 services clean \u2192 tests/conformance/hourly/out/ui-offline.json"
+   "tail": "[offline/aws] 12 services crawled, 11 with findings\n[offline/gcp] 12 services crawled, 11 with findings\n[offline/azure] 14 services crawled, 13 with findings\nUI crawl offline: 3/38 services clean \u2192 tests/conformance/hourly/out/ui-offline.json\nConsole surfaces offline: {\"live\":101,\"partial\":25,\"unimplemented\":52,\"static\":110}"
   },
   {
    "id": "offline-console-actions",
    "target": "offline",
    "cloud": "all",
    "kind": "api",
-   "duration_s": 8.4,
+   "duration_s": 7.1,
    "exit_code": 1,
    "passed": 231,
    "failed": 15,
    "status": "fail",
-   "tail": "conf-test-vm-b68ca89e/start \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b68ca89e/stop \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b68ca89e/reset \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b68ca89e \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b68ca89e/documents \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b68ca89e/collectionGroups/-/indexes \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.kms.create] - AssertionError: GCP kms.create POST /api/gcp/kms/keys \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.create] - AssertionError: GCP secretmanager.create POST /api/gcp/secrets \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-b68ca89e/o/{object} \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Object not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-b68ca89e/upload \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"missing 'file' field\"}\nassert False\n15 failed, 231 passed, 10 skipped in 7.49s"
+   "tail": "conf-test-vm-062a0ad7/start \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-062a0ad7/stop \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-062a0ad7/reset \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-062a0ad7 \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-062a0ad7/documents \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-062a0ad7/collectionGroups/-/indexes \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.kms.create] - AssertionError: GCP kms.create POST /api/gcp/kms/keys \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.create] - AssertionError: GCP secretmanager.create POST /api/gcp/secrets \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-062a0ad7/o/{object} \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Object not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-062a0ad7/upload \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"missing 'file' field\"}\nassert False\n15 failed, 231 passed, 10 skipped in 6.83s"
   },
   {
    "id": "offline-sdk-python-aws",
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-python",
-   "duration_s": 311.5,
+   "duration_s": 307.5,
    "exit_code": 1,
    "passed": 87,
    "failed": 1,
@@ -614,31 +2810,31 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-go",
-   "duration_s": 41.9,
+   "duration_s": 41.2,
    "exit_code": 0,
    "passed": 14,
    "failed": 0,
    "status": "pass",
-   "tail": "PASS sqs ListQueues\nRESULT pass=14 fail=0\ngo: downloading github.com/aws/aws-sdk-go-v2 v1.30.0\ngo: downloading github.com/aws/aws-sdk-go-v2/config v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/credentials v1.17.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/dynamodb v1.32.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ec2 v1.160.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/iam v1.34.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/s3 v1.55.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sqs v1.32.0\ngo: downloading github.com/aws/smithy-go v1.20.2\ngo: downloading github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.15.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sso v1.19.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ssooidc v1.22.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sts v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.12\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.2\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.6\ngo: downloading github.com/jmespath/go-jmespath v0.4.0\ngo: downloading github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.8\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.8\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.12\nSDK 2026/10/26 16:15:18 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 16:15:18 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 16:15:18 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 16:15:18 WARN failed to close HTTP response body, this may affect connection reuse"
+   "tail": "PASS sqs ListQueues\nRESULT pass=14 fail=0\ngo: downloading github.com/aws/aws-sdk-go-v2 v1.30.0\ngo: downloading github.com/aws/aws-sdk-go-v2/config v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/credentials v1.17.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/dynamodb v1.32.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ec2 v1.160.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/iam v1.34.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/s3 v1.55.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sqs v1.32.0\ngo: downloading github.com/aws/smithy-go v1.20.2\ngo: downloading github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.15.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sso v1.19.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ssooidc v1.22.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sts v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.12\ngo: downloading github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.8\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.2\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.8\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.6\ngo: downloading github.com/jmespath/go-jmespath v0.4.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.12\nSDK 2026/10/26 17:27:51 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 17:27:51 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 17:27:51 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 17:27:51 WARN failed to close HTTP response body, this may affect connection reuse"
   },
   {
    "id": "offline-sdk-go-gcp",
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-go",
-   "duration_s": 15.8,
+   "duration_s": 14.3,
    "exit_code": 0,
    "passed": 5,
    "failed": 0,
    "status": "pass",
-   "tail": "go: downloading github.com/google/uuid v1.6.0\ngo: downloading github.com/googleapis/gax-go/v2 v2.12.5\ngo: downloading golang.org/x/oauth2 v0.21.0\ngo: downloading google.golang.org/api v0.187.0\ngo: downloading google.golang.org/genproto v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/grpc v1.64.0\ngo: downloading google.golang.org/protobuf v1.34.2\ngo: downloading go.opencensus.io v0.24.0\ngo: downloading go.opentelemetry.io/otel v1.24.0\ngo: downloading go.opentelemetry.io/otel/trace v1.24.0\ngo: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/genproto/googleapis/api v0.0.0-20240617180043-68d350f18fd4\ngo: downloading cloud.google.com/go/auth v0.6.1\ngo: downloading cloud.google.com/go/auth/oauth2adapt v0.2.2\ngo: downloading go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0\ngo: downloading golang.org/x/net v0.26.0\ngo: downloading github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da\ngo: downloading github.com/go-logr/logr v1.4.1\ngo: downloading go.opentelemetry.io/otel/metric v1.24.0\ngo: downloading go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0\ngo: downloading golang.org/x/time v0.5.0\ngo: downloading github.com/google/s2a-go v0.1.7\ngo: downloading github.com/googleapis/enterprise-certificate-proxy v0.3.2\ngo: downloading github.com/felixge/httpsnoop v1.0.4\ngo: downloading golang.org/x/sys v0.21.0\ngo: downloading github.com/go-logr/stdr v1.2.2\ngo: downloading github.com/golang/protobuf v1.5.4\ngo: downloading golang.org/x/text v0.16.0\ngo: downloading golang.org/x/sync v0.7.0\ngo: downloading golang.org/x/crypto v0.24.0"
+   "tail": "go: downloading github.com/google/uuid v1.6.0\ngo: downloading github.com/googleapis/gax-go/v2 v2.12.5\ngo: downloading golang.org/x/oauth2 v0.21.0\ngo: downloading google.golang.org/api v0.187.0\ngo: downloading google.golang.org/genproto v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/grpc v1.64.0\ngo: downloading google.golang.org/protobuf v1.34.2\ngo: downloading google.golang.org/genproto/googleapis/api v0.0.0-20240617180043-68d350f18fd4\ngo: downloading go.opencensus.io v0.24.0\ngo: downloading go.opentelemetry.io/otel v1.24.0\ngo: downloading go.opentelemetry.io/otel/trace v1.24.0\ngo: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading cloud.google.com/go/auth v0.6.1\ngo: downloading cloud.google.com/go/auth/oauth2adapt v0.2.2\ngo: downloading go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0\ngo: downloading golang.org/x/net v0.26.0\ngo: downloading go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0\ngo: downloading golang.org/x/time v0.5.0\ngo: downloading github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da\ngo: downloading github.com/go-logr/logr v1.4.1\ngo: downloading go.opentelemetry.io/otel/metric v1.24.0\ngo: downloading github.com/google/s2a-go v0.1.7\ngo: downloading github.com/googleapis/enterprise-certificate-proxy v0.3.2\ngo: downloading golang.org/x/sys v0.21.0\ngo: downloading github.com/felixge/httpsnoop v1.0.4\ngo: downloading github.com/go-logr/stdr v1.2.2\ngo: downloading github.com/golang/protobuf v1.5.4\ngo: downloading golang.org/x/text v0.16.0\ngo: downloading golang.org/x/sync v0.7.0\ngo: downloading golang.org/x/crypto v0.24.0"
   },
   {
    "id": "offline-sdk-go-azure",
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-go",
-   "duration_s": 9.4,
+   "duration_s": 9.8,
    "exit_code": 0,
    "passed": 14,
    "failed": 0,
@@ -650,7 +2846,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-java",
-   "duration_s": 11.7,
+   "duration_s": 8.4,
    "exit_code": 0,
    "passed": 13,
    "failed": 0,
@@ -662,12 +2858,12 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-java",
-   "duration_s": 4.7,
+   "duration_s": 4.9,
    "exit_code": 0,
    "passed": 6,
    "failed": 0,
    "status": "pass",
-   "tail": "== google-cloud-storage (Java) against http://localhost:9000 project=gcp-dev ==\nPASS buckets.insert :: java-sdk-test-1793031360296\nPASS buckets.list contains new bucket\nPASS objects.insert (upload) :: greeting.txt\nPASS objects.get (download byte-exact) :: hello-from-java-sdk\nPASS objects.delete :: true\nPASS buckets.delete :: true\nRESULT pass=6 fail=0"
+   "tail": "== google-cloud-storage (Java) against http://localhost:9000 project=gcp-dev ==\nPASS buckets.insert :: java-sdk-test-1793035708700\nPASS buckets.list contains new bucket\nPASS objects.insert (upload) :: greeting.txt\nPASS objects.get (download byte-exact) :: hello-from-java-sdk\nPASS objects.delete :: true\nPASS buckets.delete :: true\nRESULT pass=6 fail=0"
   },
   {
    "id": "offline-sdk-java-azure",
@@ -686,7 +2882,7 @@
    "target": "offline",
    "cloud": "all",
    "kind": "api",
-   "duration_s": 68.8,
+   "duration_s": 68.1,
    "exit_code": 1,
    "passed": 2,
    "failed": 7,
@@ -698,7 +2894,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "cli",
-   "duration_s": 18.0,
+   "duration_s": 20.4,
    "exit_code": 0,
    "passed": 15,
    "failed": 0,
@@ -722,7 +2918,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "cli",
-   "duration_s": 13.7,
+   "duration_s": 15.4,
    "exit_code": 1,
    "passed": 5,
    "failed": 1,
@@ -734,7 +2930,7 @@
    "target": "offline",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 22.5,
+   "duration_s": 22.6,
    "exit_code": 0,
    "passed": 9,
    "failed": 0,
@@ -746,14 +2942,25 @@
    "target": "nano",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 637.5,
+   "duration_s": 786.7,
    "exit_code": 0,
    "broken_services": [
     {
      "target": "nano",
      "cloud": "aws",
      "service": "EC2",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Details",
+      "Status and alarms",
+      "Monitoring",
+      "Networking",
+      "Security",
+      "Storage",
+      "Connect"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -777,19 +2984,133 @@
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"Instance ID\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "DEAD_TAB",
+       "tab": "Monitoring",
+       "detail": "clicking the tab changes nothing"
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"State\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Networking: column \"PRIVATE IPV4 ADDRESS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"Public IPv4\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Networking: column \"PUBLIC IPV4 ADDRESS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"Private IPv4\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Networking: column \"PUBLIC IPV4 DNS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SUBNET ID\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SECURITY GROUPS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Security: column \"IAM ROLE\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Security"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Security: column \"LAUNCH TIME\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Security"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Security: column \"STATE TRANSITION REASON\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Security"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "EC2",
+       "state": "live",
+       "calls": 48
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Details",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Status and alarms",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Monitoring",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Security",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Storage",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Connect",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -801,12 +3122,22 @@
      "tabs": [],
      "findings": [
       {
-       "type": "HTTP_404",
-       "detail": "/assets/lazy_backends.js \u2192 404"
-      },
-      {
        "type": "CREATE_NO_ROW",
        "detail": "create with defaults added no resource to the list"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Lambda",
+       "state": "live",
+       "calls": 64
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "unimplemented",
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -815,15 +3146,117 @@
      "target": "nano",
      "cloud": "aws",
      "service": "S3",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Objects",
+      "Versions",
+      "Bucket Versioning",
+      "Event notifications",
+      "Lifecycle rules",
+      "Default encryption",
+      "Block Public Access"
+     ],
      "findings": [
-      {
-       "type": "HTTP_404",
-       "detail": "/assets/lazy_backends.js \u2192 404"
-      },
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/s3~my-bucket-cloudlearn~encryption/get/_settings \u2192 404",
+       "tab": "Default encryption"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/s3~my-bucket-cloudlearn~blockPublic/get/_settings \u2192 404",
+       "tab": "Block Public Access"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "S3",
+       "state": "live",
+       "calls": 22
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Objects",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Versions",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Bucket Versioning",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Event notifications",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Lifecycle rules",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Default encryption",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Block Public Access",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -832,15 +3265,142 @@
      "target": "nano",
      "cloud": "aws",
      "service": "RDS",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Endpoints",
+      "Networking",
+      "Permissions",
+      "Configuration",
+      "Modify",
+      "Parameter groups",
+      "Snapshots"
+     ],
      "findings": [
-      {
-       "type": "HTTP_404",
-       "detail": "/assets/lazy_backends.js \u2192 404"
-      },
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Endpoints: column \"ENDPOINT\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Endpoints"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PRIVATE IPV4 ADDRESS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PUBLIC IPV4 ADDRESS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PUBLIC IPV4 DNS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SUBNET ID\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SECURITY GROUPS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/rds~database-1~modify/get/_settings \u2192 404",
+       "tab": "Modify"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "RDS",
+       "state": "live",
+       "calls": 64
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Endpoints",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Configuration",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Modify",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Parameter groups",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Snapshots",
+       "state": "live",
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -849,12 +3409,19 @@
      "target": "nano",
      "cloud": "aws",
      "service": "DynamoDB",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Explore items",
+      "Query/Scan",
+      "Indexes",
+      "Streams and triggers",
+      "Read/write capacity",
+      "Encryption at rest",
+      "Time to live"
+     ],
      "findings": [
-      {
-       "type": "HTTP_404",
-       "detail": "/assets/lazy_backends.js \u2192 404"
-      },
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "after create: column \"Sort key\" shows \"-\"/blank in 1 row(s)"
@@ -865,7 +3432,108 @@
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"Sort key\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/dynamodb~Music~streams/get/_settings \u2192 404",
+       "tab": "Streams and triggers"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/dynamodb~Music~capacity/get/_settings \u2192 404",
+       "tab": "Read/write capacity"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/dynamodb~Music~encryption/get/_settings \u2192 404",
+       "tab": "Encryption at rest"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/dynamodb~Music~ttl/get/_settings \u2192 404",
+       "tab": "Time to live"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "DynamoDB",
+       "state": "live",
+       "calls": 64
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Explore items",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Query/Scan",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Indexes",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Streams and triggers",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Read/write capacity",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Encryption at rest",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Time to live",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -874,15 +3542,122 @@
      "target": "nano",
      "cloud": "aws",
      "service": "SQS",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Send and receive messages",
+      "Purge messages",
+      "Configuration",
+      "Dead-letter queue",
+      "Encryption",
+      "Access policy",
+      "Monitoring"
+     ],
      "findings": [
-      {
-       "type": "HTTP_404",
-       "detail": "/assets/lazy_backends.js \u2192 404"
-      },
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/sqs~MyQueue~purge/get/_settings \u2192 404",
+       "tab": "Purge messages"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Dead-letter queue: column \"MAXIMUM RECEIVES\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Dead-letter queue"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/sqs~MyQueue~encryption/get/_settings \u2192 404",
+       "tab": "Encryption"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "SQS",
+       "state": "live",
+       "calls": 64
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Send and receive messages",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Purge messages",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Configuration",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Dead-letter queue",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Encryption",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Access policy",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Monitoring",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -894,12 +3669,22 @@
      "tabs": [],
      "findings": [
       {
-       "type": "HTTP_404",
-       "detail": "/assets/lazy_backends.js \u2192 404"
-      },
-      {
        "type": "CREATE_NO_ROW",
        "detail": "create with defaults added no resource to the list"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "API Gateway",
+       "state": "live",
+       "calls": 64
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "unimplemented",
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -911,12 +3696,22 @@
      "tabs": [],
      "findings": [
       {
-       "type": "HTTP_404",
-       "detail": "/assets/lazy_backends.js \u2192 404"
-      },
-      {
        "type": "CREATE_NO_ROW",
        "detail": "create with defaults added no resource to the list"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "EventBridge",
+       "state": "live",
+       "calls": 27
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "unimplemented",
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -928,12 +3723,22 @@
      "tabs": [],
      "findings": [
       {
-       "type": "HTTP_404",
-       "detail": "/assets/lazy_backends.js \u2192 404"
-      },
-      {
        "type": "CREATE_NO_ROW",
        "detail": "create with defaults added no resource to the list"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "VPC",
+       "state": "live",
+       "calls": 29
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "unimplemented",
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -942,15 +3747,142 @@
      "target": "nano",
      "cloud": "aws",
      "service": "IAM",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Users",
+      "User groups",
+      "Roles",
+      "Policies",
+      "Identity providers",
+      "Password policy",
+      "Access Analyzer"
+     ],
      "findings": [
-      {
-       "type": "HTTP_404",
-       "detail": "/assets/lazy_backends.js \u2192 404"
-      },
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "resource detail: /api/iam/users/new-user \u2192 404"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Users"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "User groups"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Roles"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Policies"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Identity providers"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Password policy"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/iam~new-user~passwordPolicy/get/_settings \u2192 404",
+       "tab": "Password policy"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Access Analyzer"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/iam~new-user~accessAdvisor/get/_settings \u2192 404",
+       "tab": "Access Analyzer"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "IAM",
+       "state": "live",
+       "calls": 24
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Users",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "User groups",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Roles",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Policies",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Identity providers",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Password policy",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Access Analyzer",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -959,12 +3891,19 @@
      "target": "nano",
      "cloud": "aws",
      "service": "Secrets Manager",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Secret value",
+      "Versions",
+      "Rotation",
+      "Replication",
+      "Resource policy",
+      "Encryption key",
+      "Properties"
+     ],
      "findings": [
-      {
-       "type": "HTTP_404",
-       "detail": "/assets/lazy_backends.js \u2192 404"
-      },
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "after create: column \"Last rotated\" shows \"-\"/blank in 1 row(s)"
@@ -979,11 +3918,98 @@
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"Last rotated\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"Next rotation\" shows \"-\"/blank in 1 row(s)"
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/secretsmanager~my-secret~rotation/get/_settings \u2192 404",
+       "tab": "Rotation"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/secretsmanager~my-secret~kmsKey/get/_settings \u2192 404",
+       "tab": "Encryption key"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Secrets Manager",
+       "state": "live",
+       "calls": 64
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Secret value",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Versions",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Rotation",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Replication",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Resource policy",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Encryption key",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -992,15 +4018,107 @@
      "target": "nano",
      "cloud": "aws",
      "service": "KMS",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "General configuration",
+      "Key policy",
+      "Aliases",
+      "Key rotation",
+      "Key users",
+      "Key administrators",
+      "Grants"
+     ],
      "findings": [
-      {
-       "type": "HTTP_404",
-       "detail": "/assets/lazy_backends.js \u2192 404"
-      },
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/kms~73fa60eef6724adea09659dd12668631~rotation/get/_settings \u2192 404",
+       "tab": "Key rotation"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "KMS",
+       "state": "live",
+       "calls": 64
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "General configuration",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Key policy",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Aliases",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Key rotation",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Key users",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Key administrators",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Grants",
+       "state": "live",
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -1009,7 +4127,18 @@
      "target": "nano",
      "cloud": "gcp",
      "service": "Compute Engine",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Networking",
+      "Disks",
+      "Machine size",
+      "Metadata",
+      "Startup script",
+      "Properties"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -1021,7 +4150,88 @@
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"ZONE\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Compute Engine",
+       "state": "live",
+       "calls": 55
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Disks",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Machine size",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Metadata",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Startup script",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "live",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1030,7 +4240,18 @@
      "target": "nano",
      "cloud": "gcp",
      "service": "Cloud Functions",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Source",
+      "Trigger",
+      "Variables",
+      "Testing",
+      "Networking",
+      "Properties"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -1046,11 +4267,88 @@
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"STATUS\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Cloud Functions",
+       "state": "live",
+       "calls": 1
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"LAST DEPLOYED\" shows \"-\"/blank in 1 row(s)"
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Source",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Trigger",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Variables",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Testing",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "live",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1059,11 +4357,107 @@
      "target": "nano",
      "cloud": "gcp",
      "service": "Cloud Storage",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Objects",
+      "Lifecycle",
+      "Configuration",
+      "Encryption",
+      "Retention",
+      "Properties"
+     ],
      "findings": [
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Cloud Storage",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Objects",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Lifecycle",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Configuration",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Encryption",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Retention",
+       "state": "live",
+       "calls": 2
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "live",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1079,13 +4473,38 @@
        "detail": "create with defaults added no resource to the list"
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Cloud SQL",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "unimplemented",
+       "calls": 1
+      }
+     ],
      "status": "broken"
     },
     {
      "target": "nano",
      "cloud": "gcp",
      "service": "Firestore",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Data",
+      "Query builder",
+      "Indexes",
+      "Security rules",
+      "Import / Export",
+      "Properties"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -1105,15 +4524,88 @@
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"TYPE\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Firestore",
+       "state": "live",
+       "calls": 1
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"LOCATION\" shows \"-\"/blank in 1 row(s)"
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"STATE\" shows \"-\"/blank in 1 row(s)"
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 2
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Data",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Query builder",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Indexes",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Security rules",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Import / Export",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1122,7 +4614,18 @@
      "target": "nano",
      "cloud": "gcp",
      "service": "VPC Network",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Subnets",
+      "Firewall rules",
+      "Routes",
+      "VPC peering",
+      "Properties",
+      "Network metrics"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -1142,15 +4645,103 @@
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"MODE\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"ROUTING MODE\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Network metrics: column \"SUBNETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Network metrics"
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"IPV4 RANGE\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Network metrics: column \"FIREWALL RULES\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Network metrics"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Network metrics: column \"ROUTES\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Network metrics"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "VPC Network",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 2
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Subnets",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Firewall rules",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Routes",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "VPC peering",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Network metrics",
+       "state": "partial",
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -1159,7 +4750,18 @@
      "target": "nano",
      "cloud": "gcp",
      "service": "Pub/Sub",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Subscriptions",
+      "Schema",
+      "Messages",
+      "Encryption",
+      "Properties",
+      "Metrics"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -1179,15 +4781,88 @@
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"RETENTION\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Pub/Sub",
+       "state": "live",
+       "calls": 1
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"ENCRYPTION\" shows \"-\"/blank in 1 row(s)"
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"SUBSCRIPTIONS\" shows \"-\"/blank in 1 row(s)"
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "live",
+       "calls": 2
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Subscriptions",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Schema",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Messages",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Encryption",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Metrics",
+       "state": "live",
+       "calls": 3
       }
      ],
      "status": "broken"
@@ -1203,13 +4878,37 @@
        "detail": "create with defaults added no resource to the list"
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "API Gateway",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "unimplemented",
+       "calls": 1
+      }
+     ],
      "status": "broken"
     },
     {
      "target": "nano",
      "cloud": "gcp",
      "service": "Eventarc",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Event matching",
+      "Destination",
+      "Properties",
+      "Metrics",
+      "Logs"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -1222,6 +4921,90 @@
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Metrics: column \"EVENT FILTERS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Metrics"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Eventarc",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Event matching",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Destination",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Metrics",
+       "state": "partial",
+       "calls": 2
+      },
+      {
+       "kind": "tab",
+       "name": "Logs",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1237,13 +5020,38 @@
        "detail": "create with defaults added no resource to the list"
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Secret Manager",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "unimplemented",
+       "calls": 1
+      }
+     ],
      "status": "broken"
     },
     {
      "target": "nano",
      "cloud": "gcp",
      "service": "Cloud KMS",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Versions",
+      "Rotation & labels",
+      "Key policy",
+      "Import jobs",
+      "Properties",
+      "Metrics"
+     ],
      "findings": [
       {
        "type": "PLACEHOLDER_CELL",
@@ -1267,19 +5075,88 @@
       },
       {
        "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"KEY RING\" shows \"-\"/blank in 1 row(s)"
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Cloud KMS",
+       "state": "live",
+       "calls": 1
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"ALGORITHM\" shows \"-\"/blank in 1 row(s)"
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "partial",
+       "calls": 1
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"PROTECTION LEVEL\" shows \"-\"/blank in 1 row(s)"
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
       },
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "resource detail: column \"STATE\" shows \"-\"/blank in 1 row(s)"
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Labels",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Versions",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Rotation & labels",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Key policy",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Import jobs",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Metrics",
+       "state": "live",
+       "calls": 4
       }
      ],
      "status": "broken"
@@ -1288,11 +5165,74 @@
      "target": "nano",
      "cloud": "gcp",
      "service": "IAM & Admin",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Members",
+      "Permissions",
+      "Keys",
+      "Properties",
+      "Activity log"
+     ],
      "findings": [
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "IAM & Admin",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Members",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Keys",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "live",
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -1308,6 +5248,20 @@
        "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Virtual Machines",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "unimplemented",
+       "calls": 1
+      }
+     ],
      "status": "broken"
     },
     {
@@ -1319,6 +5273,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Storage accounts (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1334,6 +5296,14 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "SQL servers (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -1345,6 +5315,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Service Bus (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1360,6 +5338,14 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Cosmos DB (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -1371,6 +5357,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Function apps (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1386,6 +5380,14 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "API Management (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -1397,6 +5399,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Virtual networks (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1412,6 +5422,14 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Network Security Group (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -1423,6 +5441,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Event Grid topics (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1438,6 +5464,14 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Key vaults (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -1449,6 +5483,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Role Definition (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1464,6 +5506,14 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Entra ID / RBAC (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -1475,6 +5525,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Blob containers (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1490,6 +5548,14 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Cosmos databases (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -1501,6 +5567,14 @@
       {
        "type": "CRAWL_ERROR",
        "detail": "locator.click: Timeout 5000ms exceeded."
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Key Vault secrets (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1516,6 +5590,14 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Key Vault keys (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     },
     {
@@ -1529,32 +5611,40 @@
        "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Storage queues (crawl error)",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
      "status": "broken"
     }
    ],
    "passed": 1,
    "failed": 42,
    "status": "fail",
-   "tail": "[nano/aws] 12 services crawled, 12 with findings\n[nano/gcp] 12 services crawled, 12 with findings\n[nano/azure] 19 services crawled, 18 with findings\nUI crawl nano: 1/43 services clean \u2192 tests/conformance/hourly/out/ui-nano.json"
+   "tail": "[nano/aws] 12 services crawled, 12 with findings\n[nano/gcp] 12 services crawled, 12 with findings\n[nano/azure] 19 services crawled, 18 with findings\nUI crawl nano: 1/43 services clean \u2192 tests/conformance/hourly/out/ui-nano.json\nConsole surfaces nano: {\"live\":109,\"partial\":31,\"static\":62,\"unimplemented\":47}"
   },
   {
    "id": "nano-cores",
    "target": "nano",
    "cloud": "all",
    "kind": "core",
-   "duration_s": 1.1,
+   "duration_s": 1.0,
    "exit_code": 5,
    "passed": 0,
    "failed": 1,
    "status": "fail",
-   "tail": "no tests ran in 0.83s"
+   "tail": "no tests ran in 0.75s"
   },
   {
    "id": "nano-ui-aws-api",
    "target": "nano",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 3.2,
+   "duration_s": 3.3,
    "exit_code": 0,
    "passed": 5,
    "failed": 1,
@@ -1571,7 +5661,7 @@
    "passed": 11,
    "failed": 0,
    "status": "pass",
-   "tail": "===== AWS s3 detail tabs \u2014 content check =====\n  [OK   ] (create)                           contentLen:999 200 {\"ok\":true,\"created\":true,\"name\":\"tabtest-bucket\",\"creation_date\":\"2026-10-26T16:29:29.000Z\",\"region\":\"us-east-1\",\"versioning\":\"Disabled\",\"versioning_enabled\":f\n  [OK   ] Overview                           contentLen:150 \n  [OK   ] Activity                           contentLen:239 \n  [OK   ] Tags                               contentLen:44 \n  [OK   ] Objects                            contentLen:107 \n  [OK   ] Versions                           contentLen:126 \n  [OK   ] Bucket Versioning                  contentLen:138 \n  [OK   ] Event notifications                contentLen:223 \n  [OK   ] Lifecycle rules                    contentLen:128 \n  [OK   ] Default encryption                 contentLen:149 \n  [OK   ] Block Public Access                contentLen:178 \n\n11/11 tabs render content \u2014 NO blank tabs"
+   "tail": "===== AWS s3 detail tabs \u2014 content check =====\n  [OK   ] (create)                           contentLen:999 200 {\"ok\":true,\"created\":true,\"name\":\"tabtest-bucket\",\"creation_date\":\"2026-10-26T17:44:30.000Z\",\"region\":\"us-east-1\",\"versioning\":\"Disabled\",\"versioning_enabled\":f\n  [OK   ] Overview                           contentLen:150 \n  [OK   ] Activity                           contentLen:239 \n  [OK   ] Tags                               contentLen:44 \n  [OK   ] Objects                            contentLen:107 \n  [OK   ] Versions                           contentLen:126 \n  [OK   ] Bucket Versioning                  contentLen:138 \n  [OK   ] Event notifications                contentLen:223 \n  [OK   ] Lifecycle rules                    contentLen:128 \n  [OK   ] Default encryption                 contentLen:149 \n  [OK   ] Block Public Access                contentLen:178 \n\n11/11 tabs render content \u2014 NO blank tabs"
   },
   {
    "id": "nano-ui-gcp-tabs",
@@ -1590,7 +5680,7 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 17.4,
+   "duration_s": 17.3,
    "exit_code": 0,
    "passed": 71,
    "failed": 0,
@@ -1602,7 +5692,7 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 9.8,
+   "duration_s": 10.3,
    "exit_code": 0,
    "passed": 5,
    "failed": 0,

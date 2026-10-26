@@ -1,19 +1,19 @@
 # Vyomi Conformance — hourly report
 
-Run **2026-10-26T16:30:13+00:00** · commit `346499f8028e` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
+Run **2026-10-26T17:45:15+00:00** · commit `d044b33fa2e2` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
 
 | Suites green | Checks passing | Checks failing | Nano UI clean | Offline UI clean | Open UI findings | API routes with tests |
 |---|---|---|---|---|---|---|
-| 13/22 | 517 | 102 | 1/43 | 5/38 | 169 | 12.8% (41/321) |
+| 13/22 | 515 | 104 | 1/43 | 3/38 | 260 | 12.8% (41/321) |
 
-> **Agent this run:** Fixed 2 product UI findings (offline S3 Creation date, offline Secrets Manager Encryption key) and 1 harness bug (Azure wizard blade, behind 17+ CRAWL_ERRORs per target), added 2 validators, 0 regressions — BUT the push was rejected.
+> **Agent this run:** Fixed 1 UI finding (offline EC2 detail tabs 404: missing GET /api/ec2/instances/{id}), added 1 api test, 0 regressions known.
 
 ## By cloud
 
 | Cloud | Suites green | Checks ✓ | Checks ✗ | Nano UI clean | Offline UI clean | Open findings |
 |---|---|---|---|---|---|---|
-| [AWS](#aws) | 4/6 | 145 | 2 | 0/12 | 3/12 | 63 |
-| [GCP](#gcp) | 3/4 | 17 | 1 | 0/12 | 1/12 | 75 |
+| [AWS](#aws) | 4/6 | 145 | 2 | 0/12 | 1/12 | 160 |
+| [GCP](#gcp) | 3/4 | 17 | 1 | 0/12 | 1/12 | 69 |
 | [Azure](#azure) | 5/6 | 107 | 1 | 1/19 | 1/14 | 31 |
 
 <a id="aws"></a>
@@ -21,12 +21,12 @@ Run **2026-10-26T16:30:13+00:00** · commit `346499f8028e` · Nano (in-browser) 
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-aws-api` | nano | ui | 5 | 1 | 3.2 |
-| ❌ | `offline-sdk-python-aws` | offline | sdk-python | 87 | 1 | 311.5 |
+| ❌ | `nano-ui-aws-api` | nano | ui | 5 | 1 | 3.3 |
+| ❌ | `offline-sdk-python-aws` | offline | sdk-python | 87 | 1 | 307.5 |
 | ✅ | `nano-ui-aws-tabs` | nano | ui | 11 | 0 | 12.4 |
-| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 18.0 |
-| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 41.9 |
-| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 13 | 0 | 11.7 |
+| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 20.4 |
+| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 41.2 |
+| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 13 | 0 | 8.4 |
 
 <details><summary>❌ <code>offline-sdk-python-aws</code> log</summary>
 
@@ -81,9 +81,71 @@ Run **2026-10-26T16:30:13+00:00** · commit `346499f8028e` · Nano (in-browser) 
 
 </details>
 
-**UI findings: 63**
+**UI findings: 160**
 
-<details><summary><b>EC2</b> (nano) — 9 finding(s)</summary>
+<details><summary><b>EventBridge</b> (offline) — 28 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Status" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Targets" shows "-"/blank in 1 row(s) |
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 9 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $99.73 (real aws would bill this resource) |
+| `PLACEHOLDER_CELL` |  | resource detail: column "STATUS" shows "-"/blank in 2 row(s) |
+| `PLACEHOLDER_CELL` |  | resource detail: column "TARGETS" shows "-"/blank in 2 row(s) |
+| `PLACEHOLDER_CELL` | Overview | tab Overview: column "STATUS" shows "-"/blank in 2 row(s) |
+| `PLACEHOLDER_CELL` | Overview | tab Overview: column "TARGETS" shows "-"/blank in 2 row(s) |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "STATUS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "TARGETS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Tags | tab Tags: column "STATUS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Tags | tab Tags: column "TARGETS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Rule details | tab Rule details: column "STATUS" shows "-"/blank in 2 row(s) |
+| `PLACEHOLDER_CELL` | Rule details | tab Rule details: column "TARGETS" shows "-"/blank in 2 row(s) |
+| `PLACEHOLDER_CELL` | Targets | tab Targets: column "STATUS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Targets | tab Targets: column "TARGETS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Event pattern | tab Event pattern: column "STATUS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Event pattern | tab Event pattern: column "TARGETS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Invocations | tab Invocations: column "STATUS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Invocations | tab Invocations: column "TARGETS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Dead-letter queue | tab Dead-letter queue: column "STATUS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Dead-letter queue | tab Dead-letter queue: column "TARGETS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Properties | tab Properties: column "STATUS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Properties | tab Properties: column "TARGETS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Properties | tab Properties: column "state" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Properties | tab Properties: column "target_count" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Permissions | tab Permissions: column "STATUS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Permissions | tab Permissions: column "TARGETS" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>EC2</b> (offline) — 20 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
+| `HTTP_404` |  | resource detail: /api/ec2/instances/i-8e774bcaf2db → 404 |
+| `HTTP_404` | Overview | /api/ec2/instances/i-8e774bcaf2db → 404 |
+| `HTTP_404` | Activity | /api/ec2/instances/i-8e774bcaf2db → 404 |
+| `HTTP_404` | Tags | /api/ec2/instances/i-8e774bcaf2db → 404 |
+| `HTTP_404` | Details | /api/ec2/instances/i-8e774bcaf2db → 404 |
+| `HTTP_404` | Status and alarms | /api/ec2/instances/i-8e774bcaf2db → 404 |
+| `HTTP_404` | Monitoring | /api/ec2/instances/i-8e774bcaf2db → 404 |
+| `DEAD_TAB` | Monitoring | clicking the tab changes nothing |
+| `HTTP_404` | Networking | /api/ec2/instances/i-8e774bcaf2db → 404 |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SUBNET ID" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SECURITY GROUPS" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Security | /api/ec2/instances/i-8e774bcaf2db → 404 |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "IAM ROLE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "LAUNCH TIME" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "STATE TRANSITION REASON" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Storage | /api/ec2/instances/i-8e774bcaf2db → 404 |
+| `HTTP_404` | Connect | /api/ec2/instances/i-8e774bcaf2db → 404 |
+
+</details>
+
+<details><summary><b>EC2</b> (nano) — 15 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
@@ -92,14 +154,146 @@ Run **2026-10-26T16:30:13+00:00** · commit `346499f8028e` · Nano (in-browser) 
 | `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "Private IPv4" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Instance ID" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "State" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Public IPv4" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Private IPv4" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+| `DEAD_TAB` | Monitoring | clicking the tab changes nothing |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PRIVATE IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SUBNET ID" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SECURITY GROUPS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "IAM ROLE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "LAUNCH TIME" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "STATE TRANSITION REASON" shows "-"/blank in 1 row(s) |
 
 </details>
 
-<details><summary><b>Secrets Manager</b> (offline) — 8 finding(s)</summary>
+<details><summary><b>DynamoDB</b> (offline) — 13 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
+| `HTTP_404` |  | resource detail: /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Overview | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Activity | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Tags | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Explore items | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Explore items | /api/dynamodb/tables//items → 404 |
+| `HTTP_404` | Query/Scan | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Indexes | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Streams and triggers | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Read/write capacity | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Encryption at rest | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Time to live | /api/dynamodb/tables/ → 404 |
+
+</details>
+
+<details><summary><b>IAM</b> (nano) — 12 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `HTTP_404` |  | resource detail: /api/iam/users/new-user → 404 |
+| `HTTP_404` | Overview | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Users | /api/iam/users/new-user → 404 |
+| `HTTP_404` | User groups | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Roles | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Policies | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Identity providers | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Password policy | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Password policy | /api/aws/sub/iam~new-user~passwordPolicy/get/_settings → 404 |
+| `HTTP_404` | Access Analyzer | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Access Analyzer | /api/aws/sub/iam~new-user~accessAdvisor/get/_settings → 404 |
+
+</details>
+
+<details><summary><b>SQS</b> (offline) — 12 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_404` |  | resource detail: /api/sqs/queues/ → 404 |
+| `HTTP_404` | Overview | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Activity | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Tags | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Send and receive messages | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Purge messages | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Configuration | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Dead-letter queue | /api/sqs/queues/ → 404 |
+| `PLACEHOLDER_CELL` | Dead-letter queue | tab Dead-letter queue: column "MAXIMUM RECEIVES" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Encryption | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Access policy | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Monitoring | /api/sqs/queues/ → 404 |
+
+</details>
+
+<details><summary><b>RDS</b> (nano) — 9 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Endpoints | tab Endpoints: column "ENDPOINT" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PRIVATE IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SUBNET ID" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SECURITY GROUPS" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Modify | /api/aws/sub/rds~database-1~modify/get/_settings → 404 |
+
+</details>
+
+<details><summary><b>DynamoDB</b> (nano) — 7 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Streams and triggers | /api/aws/sub/dynamodb~Music~streams/get/_settings → 404 |
+| `HTTP_404` | Read/write capacity | /api/aws/sub/dynamodb~Music~capacity/get/_settings → 404 |
+| `HTTP_404` | Encryption at rest | /api/aws/sub/dynamodb~Music~encryption/get/_settings → 404 |
+| `HTTP_404` | Time to live | /api/aws/sub/dynamodb~Music~ttl/get/_settings → 404 |
+
+</details>
+
+<details><summary><b>Secrets Manager</b> (nano) — 6 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Last rotated" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Next rotation" shows "-"/blank in 1 row(s) |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Rotation | /api/aws/sub/secretsmanager~my-secret~rotation/get/_settings → 404 |
+| `HTTP_404` | Encryption key | /api/aws/sub/secretsmanager~my-secret~kmsKey/get/_settings → 404 |
+
+</details>
+
+<details><summary><b>RDS</b> (offline) — 6 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` | Endpoints | tab Endpoints: column "ENDPOINT" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PRIVATE IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SUBNET ID" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SECURITY GROUPS" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>SQS</b> (nano) — 5 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Purge messages | /api/aws/sub/sqs~MyQueue~purge/get/_settings → 404 |
+| `PLACEHOLDER_CELL` | Dead-letter queue | tab Dead-letter queue: column "MAXIMUM RECEIVES" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Encryption | /api/aws/sub/sqs~MyQueue~encryption/get/_settings → 404 |
+
+</details>
+
+<details><summary><b>Secrets Manager</b> (offline) — 5 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
@@ -108,118 +302,38 @@ Run **2026-10-26T16:30:13+00:00** · commit `346499f8028e` · Nano (in-browser) 
 | `PLACEHOLDER_CELL` |  | after create: column "Encryption key" shows "-"/blank in 1 row(s) |
 | `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 12 after creating a resource |
 | `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $99.73 (real aws would bill this resource) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Last rotated" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Next rotation" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Encryption key" shows "-"/blank in 1 row(s) |
 
 </details>
 
-<details><summary><b>Secrets Manager</b> (nano) — 6 finding(s)</summary>
+<details><summary><b>S3</b> (nano) — 4 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `HTTP_404` |  | /assets/lazy_backends.js → 404 |
-| `PLACEHOLDER_CELL` |  | after create: column "Last rotated" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "Next rotation" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Last rotated" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Next rotation" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Default encryption | /api/aws/sub/s3~my-bucket-cloudlearn~encryption/get/_settings → 404 |
+| `HTTP_404` | Block Public Access | /api/aws/sub/s3~my-bucket-cloudlearn~blockPublic/get/_settings → 404 |
 
 </details>
 
-<details><summary><b>EventBridge</b> (offline) — 6 finding(s)</summary>
+<details><summary><b>VPC</b> (offline) — 4 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "Status" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "Targets" shows "-"/blank in 1 row(s) |
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 9 after creating a resource |
 | `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $99.73 (real aws would bill this resource) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Status" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Targets" shows "-"/blank in 1 row(s) |
+| `DEAD_TAB` | VPC details | clicking the tab changes nothing |
+| `PLACEHOLDER_CELL` | Security groups | tab Security groups: column "Security group ID" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security groups | tab Security groups: column "Name" shows "-"/blank in 1 row(s) |
 
 </details>
 
-<details><summary><b>DynamoDB</b> (nano) — 4 finding(s)</summary>
+<details><summary><b>IAM</b> (offline) — 3 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `HTTP_404` |  | /assets/lazy_backends.js → 404 |
-| `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Sort key" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>Lambda</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_404` |  | /assets/lazy_backends.js → 404 |
-| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
-
-</details>
-
-<details><summary><b>S3</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_404` |  | /assets/lazy_backends.js → 404 |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-
-</details>
-
-<details><summary><b>RDS</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_404` |  | /assets/lazy_backends.js → 404 |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-
-</details>
-
-<details><summary><b>SQS</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_404` |  | /assets/lazy_backends.js → 404 |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-
-</details>
-
-<details><summary><b>API Gateway</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_404` |  | /assets/lazy_backends.js → 404 |
-| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
-
-</details>
-
-<details><summary><b>EventBridge</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_404` |  | /assets/lazy_backends.js → 404 |
-| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
-
-</details>
-
-<details><summary><b>VPC</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_404` |  | /assets/lazy_backends.js → 404 |
-| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
-
-</details>
-
-<details><summary><b>IAM</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_404` |  | /assets/lazy_backends.js → 404 |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 12 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $99.73 (real aws would bill this resource) |
+| `PLACEHOLDER_CELL` | Users | tab Users: column "ARN" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -227,44 +341,17 @@ Run **2026-10-26T16:30:13+00:00** · commit `346499f8028e` · Nano (in-browser) 
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `HTTP_404` |  | /assets/lazy_backends.js → 404 |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `HTTP_404` | Key rotation | /api/aws/sub/kms~73fa60eef6724adea09659dd12668631~rotation/get/_settings → 404 |
 
 </details>
 
-<details><summary><b>EC2</b> (offline) — 2 finding(s)</summary>
+<details><summary><b>API Gateway</b> (offline) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
-| `HTTP_404` |  | resource detail: /api/ec2/instances/i-f0c995cd604e → 404 |
-
-</details>
-
-<details><summary><b>S3</b> (offline) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "Creation date" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Creation date" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>DynamoDB</b> (offline) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Sort key" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>IAM</b> (offline) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 12 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $99.73 (real aws would bill this resource) |
+| `HTTP_404` | Resources | /api/apigateway/apis/MyApi/resources → 404 |
+| `HTTP_404` | Stages | /api/apigateway/apis/MyApi/stages → 404 |
 
 </details>
 
@@ -277,19 +364,43 @@ Run **2026-10-26T16:30:13+00:00** · commit `346499f8028e` · Nano (in-browser) 
 
 </details>
 
-<details><summary><b>SQS</b> (offline) — 1 finding(s)</summary>
+<details><summary><b>Lambda</b> (nano) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `HTTP_404` |  | resource detail: /api/sqs/queues/ → 404 |
+| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
 
 </details>
 
-<details><summary><b>VPC</b> (offline) — 1 finding(s)</summary>
+<details><summary><b>API Gateway</b> (nano) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $99.73 (real aws would bill this resource) |
+| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
+
+</details>
+
+<details><summary><b>EventBridge</b> (nano) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
+
+</details>
+
+<details><summary><b>VPC</b> (nano) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
+
+</details>
+
+<details><summary><b>S3</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Creation date" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -300,8 +411,8 @@ Run **2026-10-26T16:30:13+00:00** · commit `346499f8028e` · Nano (in-browser) 
 |---|---|---|---|---|---|---|
 | ❌ | `nano-ui-gcp-tabs` | nano | ui | 0 | 1 | 3.3 |
 | ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 20.8 |
-| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 15.8 |
-| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 4.7 |
+| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 14.3 |
+| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 4.9 |
 
 <details><summary>❌ <code>nano-ui-gcp-tabs</code> log</summary>
 
@@ -325,9 +436,24 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 </details>
 
-**UI findings: 75**
+**UI findings: 69**
 
-<details><summary><b>Cloud KMS</b> (nano) — 9 finding(s)</summary>
+<details><summary><b>VPC Network</b> (nano) — 8 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "MODE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "ROUTING MODE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Network metrics | tab Network metrics: column "SUBNETS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Network metrics | tab Network metrics: column "FIREWALL RULES" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Network metrics | tab Network metrics: column "ROUTES" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>Cloud KMS</b> (nano) — 6 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
@@ -336,14 +462,11 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 | `PLACEHOLDER_CELL` |  | after create: column "PROTECTION LEVEL" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` |  | resource detail: column "KEY RING" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "ALGORITHM" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "PROTECTION LEVEL" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "STATE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
 
 </details>
 
-<details><summary><b>Firestore</b> (nano) — 7 finding(s)</summary>
+<details><summary><b>Firestore</b> (nano) — 5 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
@@ -351,27 +474,11 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 | `PLACEHOLDER_CELL` |  | after create: column "LOCATION" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` |  | resource detail: column "TYPE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "LOCATION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "STATE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
 
 </details>
 
-<details><summary><b>VPC Network</b> (nano) — 7 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "MODE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "ROUTING MODE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` |  | resource detail: column "MODE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "ROUTING MODE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>Pub/Sub</b> (nano) — 7 finding(s)</summary>
+<details><summary><b>Pub/Sub</b> (nano) — 5 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
@@ -379,21 +486,19 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 | `PLACEHOLDER_CELL` |  | after create: column "ENCRYPTION" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "SUBSCRIPTIONS" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` |  | resource detail: column "RETENTION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "ENCRYPTION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "SUBSCRIPTIONS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
 
 </details>
 
-<details><summary><b>Cloud Functions</b> (nano) — 5 finding(s)</summary>
+<details><summary><b>Eventarc</b> (nano) — 5 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "STATUS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "LAST DEPLOYED" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "REGION" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` |  | resource detail: column "STATUS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "LAST DEPLOYED" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Metrics | tab Metrics: column "EVENT FILTERS" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -409,25 +514,14 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 </details>
 
-<details><summary><b>Cloud Functions</b> (offline) — 4 finding(s)</summary>
+<details><summary><b>Cloud Functions</b> (nano) — 4 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
 | `PLACEHOLDER_CELL` |  | after create: column "STATUS" shows "-"/blank in 1 row(s) |
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "STATUS" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>VPC Network</b> (offline) — 4 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "LAST DEPLOYED" shows "-"/blank in 1 row(s) |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -448,17 +542,17 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 |---|---|---|
 | `PLACEHOLDER_CELL` |  | after create: column "ZONE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` |  | resource detail: column "ZONE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
 
 </details>
 
-<details><summary><b>Eventarc</b> (nano) — 3 finding(s)</summary>
+<details><summary><b>Cloud Functions</b> (offline) — 3 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "REGION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` |  | after create: column "STATUS" shows "-"/blank in 1 row(s) |
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
 
 </details>
 
@@ -469,6 +563,25 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 | `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
 | `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
+
+</details>
+
+<details><summary><b>VPC Network</b> (offline) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
+
+</details>
+
+<details><summary><b>Cloud Storage</b> (nano) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -496,14 +609,6 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 |---|---|---|
 | `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
 | `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
-
-</details>
-
-<details><summary><b>Cloud Storage</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 
 </details>
 
@@ -568,11 +673,11 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `offline-cli-azure` | offline | cli | 5 | 1 | 13.7 |
-| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 9.8 |
+| ❌ | `offline-cli-azure` | offline | cli | 5 | 1 | 15.4 |
+| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 10.3 |
 | ✅ | `nano-ui-azure-home` | nano | ui | 7 | 0 | 3.8 |
-| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 17.4 |
-| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 9.4 |
+| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 17.3 |
+| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 9.8 |
 | ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 20.6 |
 
 <details><summary>❌ <code>offline-cli-azure</code> log</summary>
@@ -847,20 +952,21 @@ RESULT pass=5 fail=1
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-cores` | nano | core | 0 | 1 | 1.1 |
-| ❌ | `nano-ui-crawl` | nano | ui | 1 | 42 | 637.5 |
-| ❌ | `offline-console-actions` | offline | api | 231 | 15 | 8.4 |
-| ❌ | `offline-cost-savings` | offline | api | 2 | 7 | 68.8 |
-| ❌ | `offline-ui-crawl` | offline | ui | 5 | 33 | 588.2 |
-| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 22.5 |
+| ❌ | `nano-cores` | nano | core | 0 | 1 | 1.0 |
+| ❌ | `nano-ui-crawl` | nano | ui | 1 | 42 | 786.7 |
+| ❌ | `offline-console-actions` | offline | api | 231 | 15 | 7.1 |
+| ❌ | `offline-cost-savings` | offline | api | 2 | 7 | 68.1 |
+| ❌ | `offline-ui-crawl` | offline | ui | 3 | 35 | 775.4 |
+| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 22.6 |
 
 <details><summary>❌ <code>offline-ui-crawl</code> log</summary>
 
 ```
-[offline/aws] 12 services crawled, 9 with findings
+[offline/aws] 12 services crawled, 11 with findings
 [offline/gcp] 12 services crawled, 11 with findings
 [offline/azure] 14 services crawled, 13 with findings
-UI crawl offline: 5/38 services clean → tests/conformance/hourly/out/ui-offline.json
+UI crawl offline: 3/38 services clean → tests/conformance/hourly/out/ui-offline.json
+Console surfaces offline: {"live":101,"partial":25,"unimplemented":52,"static":110}
 ```
 
 </details>
@@ -868,27 +974,27 @@ UI crawl offline: 5/38 services clean → tests/conformance/hourly/out/ui-offlin
 <details><summary>❌ <code>offline-console-actions</code> log</summary>
 
 ```
-conf-test-vm-b68ca89e/start → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+conf-test-vm-062a0ad7/start → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b68ca89e/stop → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-062a0ad7/stop → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b68ca89e/reset → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-062a0ad7/reset → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b68ca89e → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-062a0ad7 → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b68ca89e/documents → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-062a0ad7/documents → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b68ca89e/collectionGroups/-/indexes → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-062a0ad7/collectionGroups/-/indexes → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
 assert False
 FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.kms.create] - AssertionError: GCP kms.create POST /api/gcp/kms/keys → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"ok":false,"error":"missing 'name'"}
 assert False
 FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.create] - AssertionError: GCP secretmanager.create POST /api/gcp/secrets → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"ok":false,"error":"missing 'name'"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-b68ca89e/o/{object} → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Object not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-062a0ad7/o/{object} → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Object not found"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-b68ca89e/upload → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"detail":"missing 'file' field"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-062a0ad7/upload → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"detail":"missing 'file' field"}
 assert False
-15 failed, 231 passed, 10 skipped in 7.49s
+15 failed, 231 passed, 10 skipped in 6.83s
 ```
 
 </details>
@@ -923,6 +1029,7 @@ RESULT fail=7
 [nano/gcp] 12 services crawled, 12 with findings
 [nano/azure] 19 services crawled, 18 with findings
 UI crawl nano: 1/43 services clean → tests/conformance/hourly/out/ui-nano.json
+Console surfaces nano: {"live":109,"partial":31,"static":62,"unimplemented":47}
 ```
 
 </details>
@@ -930,7 +1037,7 @@ UI crawl nano: 1/43 services clean → tests/conformance/hourly/out/ui-nano.json
 <details><summary>❌ <code>nano-cores</code> log</summary>
 
 ```
-no tests ran in 0.83s
+no tests ran in 0.75s
 ```
 
 </details>
@@ -1172,6 +1279,7 @@ SetVersionState
 
 | Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |
 |---|---|---|---|---|---|---|
+| 2026-10-26T17:45:15+00:00 | 13/22 | 515 | 104 | 260 | 12.8% | Fixed 1 UI finding (offline EC2 detail tabs 404: missing GET /api/ec2/instances/{id}), added 1 api test, 0 regressions known. |
 | 2026-10-26T16:30:13+00:00 | 13/22 | 517 | 102 | 169 | 12.8% | Fixed 2 product UI findings (offline S3 Creation date, offline Secrets Manager Encryption key) and 1 harness bug (Azure wizard blade, behind 17+ CRAWL_ERRORs per target), added 2 validators, 0 regress |
 | 2026-10-26T15:30:03+00:00 | 13/22 | 516 | 103 | 188 | 12.8% |  |
 | 2026-10-26T14:22:51+00:00 | 13/22 | 517 | 102 | 117 | 12.8% | Fixed 2 UI findings (crawler Azure wizard/blade cascade = harness bug; offline S3 blank "Creation date"), added 1 test, 0 regressions checked beyond touched suites; commits are local only — the push t |
