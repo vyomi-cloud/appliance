@@ -44,6 +44,7 @@ from core.iam_store import InMemoryIamStore
 from core import iam_core as iam
 from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
+from core import cloudformation_core as cfn
 
 # Shared registry (Fix #2): the console adapter and the native-wire relay
 # (AwsWireRouter via stores=) draw from ONE store set, so console-created resources
@@ -57,6 +58,7 @@ SEC = _R["sec"]
 RDB = _R["rds"]
 IAM = _R["iam"]
 MSG = _R["msg"]
+CFN = _R["cfn"]
 REGION = "us-east-1"
 
 _CODE_RE = re.compile(rb"<Code>([^<]+)</Code>")
@@ -584,3 +586,20 @@ def rds_snapshots(p=None):
     return {"ok": True, "snapshots": [{"snapshot_id": s["db_snapshot_identifier"],
             "db_instance": s["db_instance_identifier"], "status": s["status"],
             "type": s.get("snapshot_type", "manual"), "created": s.get("created", "")} for s in snaps]}
+
+
+# ── CloudFormation (Query wire — core/cloudformation_core.py) ───────────────
+def cfn_list(p=None):
+    return cfn.console_list(CFN)
+
+
+def cfn_create(p):
+    return cfn.console_create(CFN, p or {})
+
+
+def cfn_get(p):
+    return cfn.console_get(CFN, str(p.get("name") or ""))
+
+
+def cfn_delete(p):
+    return cfn.console_delete(CFN, str(p.get("name") or ""))

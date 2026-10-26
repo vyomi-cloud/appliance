@@ -905,7 +905,7 @@ function renderHome(main){
   //    priced with rates that mirror core/cost_model. Simulator cost = $0, so every
   //    dollar of real-AWS cost for what you've spun up is a dollar saved.
   const _NANO_RATE = {
-    s3:0.50, dynamodb:1.25, kms:1.00, secretsmanager:0.40, sqs:0.40, iam:0, rds:25.55, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0,
+    s3:0.50, dynamodb:1.25, kms:1.00, cloudformation:0.90, secretsmanager:0.40, sqs:0.40, iam:0, rds:25.55, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0,
     compute:24.53, storage:0.50, cloudsql:25.00, pubsub:0.40, firestore:0.18, functions:0.20, secretmanager:0.18,
     'microsoft.compute/virtualmachines':30.37, 'microsoft.sql/servers':4.99, 'microsoft.storage/storageaccounts':0.50,
     'microsoft.documentdb/databaseaccounts':24.48, 'microsoft.web/sites':0.20, 'microsoft.servicebus/namespaces':9.81, 'microsoft.keyvault/vaults':0.03
@@ -2774,6 +2774,24 @@ SUB_RENDERERS.tags = function(svc, full, host){
   host.append(card);
 };
 SUB_RENDERERS.json = function(svc, full, host){ host.append(el("pre",{class:"json"}, JSON.stringify(full, null, 2))); };
+SUB_RENDERERS.listtable = function(svc, full, host, tab){
+  // Generic detail table: `tab.field` of the stack GET (list of rows) + `tab.columns`;
+  // `tab.mode == "text"` shows the field as preformatted text (e.g. the template).
+  const data = full[tab.field];
+  if (tab.mode === "text") {
+    host.append(el("pre",{class:"json","data-testid":"tab-"+tab.key}, String(data == null ? "" : data)));
+    return;
+  }
+  const rows = Array.isArray(data) ? data : [];
+  if (!rows.length) { host.append(el("div",{class:"empty"}, "No " + tab.label.toLowerCase() + ".")); return; }
+  const tbl = el("table",{class:"aws"});
+  tbl.append(el("tr",{}, ...(tab.columns||[]).map(c => el("th",{}, c[1]))));
+  rows.forEach(r => tbl.append(el("tr",{}, ...(tab.columns||[]).map(c => {
+    const v = getPath(r, c[0]);
+    return el("td",{class:"small"}, v == null || v === "" ? "—" : String(v));
+  }))));
+  host.append(tbl);
+};
 SUB_RENDERERS.properties = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "All properties"));

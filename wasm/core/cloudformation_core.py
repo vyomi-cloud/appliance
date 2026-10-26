@@ -1543,3 +1543,71 @@ def dispatch(store: CfnStore, params: dict | None = None) -> CfnResponse:
     if result is None and action in ("SetStackPolicy", "CancelUpdateStack", "DeleteStack"):
         return _envelope(action, None)
     return _envelope(action, result if result is not None else {})
+
+
+# ── console helpers (shared by the offline REST routes and the Nano adapter) ──
+DEFAULT_CONSOLE_TEMPLATE = json.dumps({
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Vyomi starter stack: an S3 bucket and an SQS queue",
+    "Parameters": {"Environment": {"Type": "String", "Default": "dev", "AllowedValues": ["dev", "test", "prod"]}},
+    "Resources": {
+        "AppBucket": {"Type": "AWS::S3::Bucket", "Properties": {"BucketName": {"Fn::Sub": "${AWS::StackName}-${Environment}-assets"}}},
+        "AppQueue": {"Type": "AWS::SQS::Queue", "Properties": {"QueueName": {"Fn::Sub": "${AWS::StackName}-${Environment}-jobs"}}},
+    },
+    "Outputs": {"BucketName": {"Value": {"Ref": "AppBucket"}, "Description": "Assets bucket"},
+                "QueueUrl": {"Value": {"Ref": "AppQueue"}, "Description": "Jobs queue"}},
+}, separators=(",", ":"))
+
+
+def _console_row(st: dict) -> dict:
+    created = st["CreationTime"]
+    return {"name": st["StackName"], "stack_name": st["StackName"], "stack_id": st["StackId"],
+            "status": st["StackStatus"], "created": created, "updated": st.get("LastUpdatedTime") or created,
+            "description": st.get("Description") or "No description",
+            "resource_count": len(st["_resources"]), "output_count": len(st.get("Outputs", [])),
+            "termination_protection": "Enabled" if st.get("EnableTerminationProtection") else "Disabled",
+            "drift_status": "NOT_CHECKED"}
+
+
+def console_list(store: CfnStore) -> dict:
+    rows = [_console_row(s) for s in store.stacks.values() if s["StackStatus"] != "DELETE_COMPLETE"]
+    return {"ok": True, "items": rows, "stacks": rows}
+
+
+def console_get(store: CfnStore, name: str) -> dict:
+    try:
+        st = _find_stack(store, name)
+    except CfnError:
+        return {"ok": False, "code": "ValidationError", "name": name}
+    row = _console_row(st)
+    row["resources"] = [{"logical_id": lg, "physical_id": r["physical"], "type": r["type"], "status": r["status"], "updated": r["ts"]}
+                        for lg, r in st["_resources"].items()]
+    row["events"] = [{"timestamp": e["Timestamp"], "logical_id": e["LogicalResourceId"], "type": e["ResourceType"],
+                      "status": e["ResourceStatus"], "reason": e.get("ResourceStatusReason", "")} for e in st["_events"]]
+    row["outputs"] = [{"key": o["OutputKey"], "value": o["OutputValue"], "description": o.get("Description", ""),
+                       "export_name": o.get("ExportName", "")} for o in st.get("Outputs", [])]
+    row["parameters"] = [{"key": p["ParameterKey"], "value": p["ParameterValue"]} for p in st.get("Parameters", [])]
+    row["template"] = st["_template"]
+    row["tags"] = {t["Key"]: t["Value"] for t in st.get("Tags", [])}
+    row["change_sets"] = [{"name": c["ChangeSetName"], "status": c["Status"], "execution_status": c["ExecutionStatus"], "created": c["CreationTime"]}
+                          for c in store.change_sets.values() if c["StackId"] == st["StackId"]]
+    return {"ok": True, **row}
+
+
+def console_create(store: CfnStore, body: dict) -> dict:
+    name = str((body or {}).get("name") or (body or {}).get("stack_name") or "").strip()
+    template = (body or {}).get("template") or DEFAULT_CONSOLE_TEMPLATE
+    args = {"StackName": name, "TemplateBody": template, "Capabilities": ["CAPABILITY_NAMED_IAM"]}
+    try:
+        op_create_stack(store, args)
+    except CfnError as e:
+        return {"ok": False, "code": e.code, "message": e.message}
+    return console_get(store, name)
+
+
+def console_delete(store: CfnStore, name: str) -> dict:
+    try:
+        op_delete_stack(store, {"StackName": name})
+    except CfnError as e:
+        return {"ok": False, "code": e.code, "message": e.message, "name": name}
+    return {"ok": True, "name": name}

@@ -47,6 +47,11 @@ class Aws(CloudProvider):
             ("kms", "GetKey"):      lambda b, a, p: A.kms_get_key(p),
             ("kms", "DeleteKey"):   lambda b, a, p: A.kms_delete_key(p),
             ("kms", "ListAliases"): lambda b, a, p: A.kms_list_aliases(p),
+            # CloudFormation — stacks, via core/cloudformation_core.py
+            ("cloudformation", "ListStacks"):  lambda b, a, p: A.cfn_list(p),
+            ("cloudformation", "CreateStack"): lambda b, a, p: A.cfn_create(p),
+            ("cloudformation", "GetStack"):    lambda b, a, p: A.cfn_get(p),
+            ("cloudformation", "DeleteStack"): lambda b, a, p: A.cfn_delete(p),
             # Secrets Manager — via core/secrets_core.py
             ("secrets", "ListSecrets"):  lambda b, a, p: A.secrets_list(p),
             ("secrets", "CreateSecret"): lambda b, a, p: A.secrets_create(p),
