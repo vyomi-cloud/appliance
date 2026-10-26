@@ -104,6 +104,15 @@ def markdown(d: dict, e: dict) -> str:
         L += [f"| {md(n['target'])} | {NAMES.get(n['cloud'], n['cloud'])} | {md(n['service'])} | {md(n['kind'])} | {md(n['name'])} | "
               f"{'—' if n.get('tested') is None else ('✅' if n['tested'] else '❌')} |" for n in d["new"][:100]]
         L.append("")
+    up = d.get("upstream", [])
+    L += ["## Upstream changes (AWS / GCP / Azure backlog)", "",
+          f"{len(up)} open `upstream-drift` issue(s) — real cloud changes the agent is working through. "
+          "[All](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) · [watcher log](https://github.com/vyomi-cloud/appliance/tree/upstream-state)", ""]
+    if up:
+        L += ["| Issue | Cloud | Kind | Change | Opened |", "|---|---|---|---|---|"]
+        L += [f"| #{u['number']} | {NAMES.get(u['cloud'], u['cloud'])} | {md(u['kind'])} | {md(u['title'].replace('[upstream] ', ''))} | {u['created']} |"
+              for u in up[:40]]
+        L.append("")
     L += ["## Nano ↔ offline parity gaps", ""]
     L += [f"- {NAMES.get(p['cloud'], p['cloud'])} {md(p['kind'])} **{md(p['name'])}** ({md(p['service'])}): only in {md(p['only_in'])}"
           for p in d["parity"][:60]] or ["None: both targets expose the same services, tabs and operations."]
@@ -175,6 +184,10 @@ def main() -> None:
         "parity": feats.get("parity", [])[:2000],
         "untested_ops": [{k: f.get(k) for k in ("target", "cloud", "service", "name")} for f in feats.get("untested_ops", [])],
         "uncovered": feats.get("uncovered", [])[:500],
+        "upstream": [{"number": i.get("number"), "title": i.get("title", ""), "created": (i.get("createdAt") or "")[:10],
+                      "cloud": next((l["name"].split(":", 1)[1] for l in i.get("labels", []) if l.get("name", "").startswith("cloud:")), "all"),
+                      "kind": next((l["name"].split(":", 1)[1] for l in i.get("labels", []) if l.get("name", "").startswith("kind:")), "")}
+                     for i in load(os.path.join(OUT, "upstream_issues.json"), [])],
     }
     template = open(os.path.join(HERE, "report.html"), encoding="utf-8").read()
     # Embedded as JSON inside <script type="application/json">; escape "</" so a

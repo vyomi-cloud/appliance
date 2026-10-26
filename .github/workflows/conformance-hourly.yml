@@ -32,6 +32,7 @@ jobs:
     permissions:
       contents: write     # agent pushes fixes to the daily branch
       actions: write      # chain the next hourly run
+      issues: read        # the upstream-drift backlog
       pages: write
       id-token: write
     environment:
@@ -123,6 +124,14 @@ jobs:
 
       - name: Detect new features, parity gaps and untested operations
         run: python3 tests/conformance/hourly/detect_new_features.py
+
+      - name: Upstream backlog (open upstream-drift issues)
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: |
+          mkdir -p tests/conformance/hourly/out
+          gh issue list -R "${{ github.repository }}" --label upstream-drift --state open --limit 200 \
+            --json number,title,labels,createdAt,body > tests/conformance/hourly/out/upstream_issues.json || echo '[]' > tests/conformance/hourly/out/upstream_issues.json
+          echo "open upstream-drift issues: $(python3 -c "import json;print(len(json.load(open('tests/conformance/hourly/out/upstream_issues.json'))))")"
 
       - name: Run conformance test beds
         run: python3 tests/conformance/hourly/run_suites.py

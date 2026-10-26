@@ -1,0 +1,87 @@
+name: Upstream watch (AWS / GCP / Azure changes)
+
+# Hourly: snapshot the real clouds' API surfaces (botocore models, Google
+# Discovery docs, Azure REST spec commits), SDK + CLI releases and lifecycle
+# feeds (deprecations, retirements, breaking changes) for every service Vyomi
+# simulates; diff against the last snapshot; file each actionable change as a
+# GitHub issue labelled `upstream-drift`. The hourly conformance agent works
+# that backlog (implement / adapt + a conformance test, closed by the daily PR).
+# State + run log live on the `upstream-state` branch.
+# Sources: tests/conformance/upstream/tracked.json
+
+on:
+  schedule:
+    - cron: '35 * * * *'   # backup only — GitHub's scheduler rarely fires here
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: write    # state on the upstream-state branch
+  issues: write      # the backlog
+  actions: write     # chain the next hourly run
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      OUT: ${{ github.workspace }}/upstream-out
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: Previous snapshot
+        run: |
+          mkdir -p prev
+          if git ls-remote --exit-code origin refs/heads/upstream-state >/dev/null 2>&1; then
+            git fetch -q origin upstream-state
+            git show FETCH_HEAD:state.json > prev/state.json 2>/dev/null || true
+          fi
+          [ -s prev/state.json ] && echo "STATE=$PWD/prev/state.json" >> "$GITHUB_ENV" || echo "No previous snapshot: this run is the baseline."
+
+      - name: Diff the clouds against the last snapshot
+        run: python3 tests/conformance/upstream/watch_upstream.py
+
+      - name: File actionable changes as backlog issues
+        run: python3 tests/conformance/upstream/file_issues.py
+
+      - name: Save snapshot + run log to upstream-state
+        run: |
+          git config user.name "vyomi-upstream-bot"; git config user.email "upstream-bot@users.noreply.github.com"
+          rm -rf /tmp/us && git worktree add -q --detach /tmp/us HEAD
+          cd /tmp/us
+          if git ls-remote --exit-code origin refs/heads/upstream-state >/dev/null 2>&1; then
+            git fetch -q origin upstream-state && git checkout -q -B upstream-state FETCH_HEAD
+          else
+            git checkout -q --orphan upstream-state && git rm -rfq . || true
+          fi
+          cp "$OUT/state.json" "$OUT/changes.json" .
+          # log.md: every run, newest first (capped). README: the latest run.
+          { cat "$OUT/summary.md"; echo; [ -f log.md ] && head -n 3000 log.md; } > log.next && mv log.next log.md
+          {
+            echo "# Upstream watch — AWS / GCP / Azure changes"; echo
+            echo "Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [\`upstream-drift\` issues](${{ github.server_url }}/${{ github.repository }}/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md)."; echo
+            cat "$OUT/summary.md"
+          } > README.md
+          git add state.json changes.json README.md log.md
+          git commit -q -m "upstream watch $(date -u +%Y-%m-%dT%H:%MZ)" || echo "no change"
+          git push -q origin HEAD:refs/heads/upstream-state
+          cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Chain the next hourly run
+        if: always()
+        run: |
+          queued=$(gh run list -R "${{ github.repository }}" --workflow upstream-watch.yml \
+            --json status -q '[.[] | select(.status=="queued" or .status=="pending" or .status=="waiting")] | length')
+          if [ "${queued:-0}" -gt 0 ]; then echo "A run is already queued; not chaining."; exit 0; fi
+          start=$(gh run view "${{ github.run_id }}" -R "${{ github.repository }}" --json startedAt -q .startedAt)
+          wait=$(( 3600 - ( $(date -u +%s) - $(date -u -d "$start" +%s) ) ))
+          if [ "$wait" -gt 0 ]; then echo "Next run in ${wait}s"; sleep "$wait"; fi
+          gh workflow run upstream-watch.yml -R "${{ github.repository }}" --ref main

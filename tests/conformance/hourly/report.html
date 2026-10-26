@@ -119,6 +119,10 @@ const VIEWS = {
   coverage: { label: "Untested API routes", rows: () => D.uncovered.map((u)=>({...u, cloud: /azure/i.test(u.path)?"azure":/\/gcp|storage\/v1/i.test(u.path)?"gcp":/\/(aws|s3|dynamodb|sqs|sns|iam|ec2|rds|lambda|kms)\b/i.test(u.path)?"aws":"all"})),
     filters: ["method"], search: ["path","file"],
     cols: [["cloud","Cloud",(r)=>cloudPill(r.cloud)],["method","Method"],["path","Route"],["file","Defined in"]] },
+  upstream: { label: "Upstream changes", rows: () => (D.upstream || []),
+    filters: ["kind"], search: ["title","kind"],
+    cols: [["number","Issue",(r)=>`<a href="https://github.com/vyomi-cloud/appliance/issues/${r.number}" target="_blank" rel="noreferrer">#${r.number}</a>`],
+           ["cloud","Cloud",(r)=>cloudPill(r.cloud)],["kind","Kind"],["title","Change",(r)=>esc(String(r.title).replace("[upstream] ",""))],["created","Opened"]] },
   history: { label: "History", rows: () => [...D.history].reverse().map((h)=>({...h, cloud:"all"})),
     filters: [], search: ["at","commit","agent"],
     cols: [["at","Run"],["suites_green","Suites green",(r)=>`${r.suites_green}/${r.suites_total}`],["checks_passed","Checks ✓"],
@@ -156,6 +160,7 @@ function renderKpis() {
   const nw = D.new.filter(inCloud).length, ut = D.untested_ops.filter(inCloud).length;
   k.push(["New features since last run", D.baseline ? nw : "—", D.baseline ? `${D.parity.filter(inCloud).length} Nano↔offline gaps` : "baseline taken this run"]);
   k.push(["SDK operations untested", ut, st.cloud === "all" ? `of ${D.ops.total}` : ""]);
+  k.push(["Upstream changes open", (D.upstream || []).filter(inCloud).length, "AWS/GCP/Azure backlog"]);
   if (st.cloud === "all") k.push(["API routes with tests", `${D.api.pct}%`, `${D.api.total - D.api.uncovered}/${D.api.total}`]);
   document.getElementById("kpis").innerHTML = k.map(([l, v, sub]) =>
     `<div class="kpi"><span class="mut">${l}</span><b>${v}</b>${sub ? `<span class="mut">${sub}</span>` : ""}</div>`).join("");
