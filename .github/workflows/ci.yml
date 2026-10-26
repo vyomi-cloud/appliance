@@ -75,8 +75,11 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"user":"ci","email":"ci@cl.io","tier":"enterprise","seats":10,"period":"annual"}' \
             || echo "::warning::signup unavailable — continuing on default tier"
-      - name: Conformance — per-service (isolated, threshold 45%)
+      - name: Conformance — per-service (isolated, threshold 85%)
         run: |
+          # 2026-10-26: back to 85% — with every backend started (--profile full)
+          # the suite scores 90.1%; the remaining 4 failures are GCP data-path
+          # bugs (storage insert 502, pubsub pull 500, firestore 500).
           # 2026-06-14: dropped threshold 85 → 45 to reflect actual baseline.
           # The 85% number assumed the older suite hit 88% in-house. After the
           # MVP launch the run_conformance.py harness drifted (more services
@@ -95,7 +98,7 @@ jobs:
           python tests/conformance/run_conformance.py \
             --endpoint http://127.0.0.1:9000 \
             --isolate-spaces \
-            --fail-under 45.0
+            --fail-under 85.0
       - name: Stop stack
         if: always()
         run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml --profile full down -v
