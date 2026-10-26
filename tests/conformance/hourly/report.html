@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vyomi Conformance</title>
+<style>
+:root{--bg:#f6f7f9;--fg:#141821;--mut:#5d6675;--card:#fff;--line:#e2e5eb;--hover:#f1f4f8;
+  --ok:#0f7b3f;--okbg:#e5f5eb;--bad:#b42318;--badbg:#fdeceb;--warn:#9a6700;--warnbg:#fff4d6;--acc:#2563eb;--accbg:#e8efff;
+  --aws:#ff9900;--gcp:#4285f4;--azure:#0089d6}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--mut:#9aa4b2;--card:#161b22;--line:#2a313b;--hover:#1c232c;
+  --ok:#3fb950;--okbg:#10251a;--bad:#f85149;--badbg:#2c1416;--warn:#d29922;--warnbg:#2b2312;--acc:#58a6ff;--accbg:#13233d;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1280px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:22px;margin:0} .mut{color:var(--mut)} code{font-size:12px}
+.head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 0}
+.tab{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;padding:6px 14px;font:inherit;cursor:pointer}
+.tab[aria-selected=true]{background:var(--acc);border-color:var(--acc);color:#fff}
+.tab .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:14px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kpi b{display:block;font-size:22px;line-height:1.3}
+.clouds{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:14px}
+.cc{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--c);border-radius:12px;padding:12px 14px;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.cc:hover{background:var(--hover)} .cc h3{margin:0 0 4px;font-size:15px}
+.views{display:flex;flex-wrap:wrap;gap:4px;margin:26px 0 0;border-bottom:1px solid var(--line)}
+.view{background:none;border:0;border-bottom:2px solid transparent;color:var(--mut);padding:8px 12px;font:inherit;cursor:pointer}
+.view[aria-selected=true]{color:var(--fg);border-bottom-color:var(--acc);font-weight:600}
+.view .n{font-size:12px;background:var(--line);border-radius:999px;padding:0 7px;margin-left:5px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;align-items:center}
+.bar select,.bar input{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit}
+.bar input{flex:1;min-width:180px}
+.count{margin-left:auto;color:var(--mut);font-size:13px}
+.grid{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{position:sticky;top:0;background:var(--card);text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;user-select:none}
+th:hover{color:var(--acc)} th .s{color:var(--mut);font-size:11px;margin-left:3px}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tbody tr.row{cursor:pointer} tbody tr.row:hover td{background:var(--hover)}
+tr.detail td{background:var(--bg)}
+pre{white-space:pre-wrap;word-break:break-word;font-size:12px;margin:0;max-height:360px;overflow:auto}
+.pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.pass,.ok{background:var(--okbg);color:var(--ok)} .fail,.broken{background:var(--badbg);color:var(--bad)}
+.type{background:var(--warnbg);color:var(--warn)} .cl{color:#fff} .cl-aws{background:var(--aws);color:#1a1a1a} .cl-gcp{background:var(--gcp)} .cl-azure{background:var(--azure)} .cl-all{background:var(--mut)}
+.empty{padding:28px;text-align:center;color:var(--mut)}
+.chart{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:12px}
+.chart svg{width:100%;height:180px} .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mut)}
+.legend i{display:inline-block;width:10px;height:3px;margin-right:5px;vertical-align:middle}
+.agent{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div><h1>Vyomi Conformance</h1>
+      <div class="mut">Nano (in-browser) and offline appliance · AWS, GCP, Azure · updated hourly</div></div>
+    <div class="mut" id="meta"></div>
+  </div>
+
+  <div class="tabs" role="tablist" id="cloudTabs"></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="clouds" id="cloudCards"></div>
+  <div class="agent" id="agent" hidden></div>
+
+  <div class="views" role="tablist" id="views"></div>
+  <div class="bar" id="bar"></div>
+  <div id="panel"></div>
+</div>
+
+<script type="application/json" id="data">__REPORT_DATA__</script>
+<script>
+const D = JSON.parse(document.getElementById("data").textContent);
+const CLOUDS = [["all","All clouds"],["aws","AWS"],["gcp","GCP"],["azure","Azure"]];
+const PLURAL = {status:"statuses", kind:"kinds", type:"problem types", target:"targets", method:"methods"};
+const NAME = {aws:"AWS",gcp:"GCP",azure:"Azure",all:"Cross-cloud"};
+const st = {cloud:"all", view:"findings", q:"", f:{}, sort:{}, open:new Set()};
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const inCloud = (r) => st.cloud === "all" || r.cloud === st.cloud;
+const pill = (cls, t) => `<span class="pill ${cls}">${esc(t)}</span>`;
+const cloudPill = (c) => pill("cl cl-" + (c || "all"), NAME[c] || c || "—");
+
+document.getElementById("meta").innerHTML = D.at
+  ? `Run ${esc(D.at.replace("T"," ").replace("+00:00"," UTC"))} · commit <code>${esc((D.commit||"").slice(0,12))}</code>`
+  : "No run yet";
+if (D.agent) { const a = document.getElementById("agent"); a.hidden = false;
+  a.innerHTML = `<b>Agent this run</b><pre>${esc(D.agent)}</pre>`; }
+
+// ── Views: column definitions + data per tab ─────────────────────────────
+const VIEWS = {
+  findings: { label: "UI findings", rows: () => D.findings,
+    filters: ["target","type"], search: ["service","tab","detail","type"],
+    cols: [["cloud","Cloud",(r)=>cloudPill(r.cloud)],["target","Target"],["service","Service"],["tab","Tab"],
+           ["type","Problem",(r)=>pill("type",r.type)],["detail","Detail"]] },
+  suites: { label: "Test suites", rows: () => D.suites,
+    filters: ["target","kind","status"], search: ["id","kind"],
+    cols: [["cloud","Cloud",(r)=>cloudPill(r.cloud)],["target","Target"],["kind","Kind"],["id","Suite"],
+           ["status","Status",(r)=>pill(r.status,r.status)],["passed","Passed"],["failed","Failed"],["duration_s","Time (s)"]],
+    detail: (r) => r.tail ? `<pre>${esc(r.tail)}</pre>` : "" },
+  services: { label: "UI services", rows: () => D.services,
+    filters: ["target","status"], search: ["service"],
+    cols: [["cloud","Cloud",(r)=>cloudPill(r.cloud)],["target","Target"],["service","Service"],
+           ["status","Status",(r)=>pill(r.status,r.status==="ok"?"clean":"broken")],["findings","Findings"],
+           ["tabs","Tabs walked",(r)=>esc((r.tabs||[]).join(", "))]],
+    detail: (r) => { const fs = D.findings.filter((f)=>f.target===r.target&&f.cloud===r.cloud&&f.service===r.service);
+      return fs.length ? "<pre>"+fs.map((f)=>`${f.type}${f.tab?" › "+f.tab:""}: ${f.detail}`).map(esc).join("\n")+"</pre>" : ""; } },
+  coverage: { label: "API coverage gaps", rows: () => D.uncovered.map((u)=>({...u, cloud: /azure/i.test(u.path)?"azure":/gcp|gcs|google|storage\/v1/i.test(u.path)?"gcp":/aws|s3|dynamo|sqs|sns|iam|ec2|rds|lambda|kms/i.test(u.path)?"aws":"all"})),
+    filters: ["method"], search: ["path","file"],
+    cols: [["cloud","Cloud",(r)=>cloudPill(r.cloud)],["method","Method"],["path","Route"],["file","Defined in"]] },
+  history: { label: "History", rows: () => [...D.history].reverse().map((h)=>({...h, cloud:"all"})),
+    filters: [], search: ["at","commit","agent"],
+    cols: [["at","Run"],["suites_green","Suites green",(r)=>`${r.suites_green}/${r.suites_total}`],["checks_passed","Checks ✓"],
+           ["checks_failed","Checks ✗"],["ui_findings","UI findings"],["api_coverage_pct","API cov. %"],["agent","Agent"]] },
+};
+
+function rowsFor(v) {
+  const V = VIEWS[v]; let rows = V.rows().filter(v === "history" ? () => true : inCloud);
+  for (const [k, val] of Object.entries(st.f[v] || {})) if (val) rows = rows.filter((r) => String(r[k]) === val);
+  const q = st.q.trim().toLowerCase();
+  if (q) rows = rows.filter((r) => V.search.some((k) => String(r[k] ?? "").toLowerCase().includes(q)));
+  const s = st.sort[v];
+  if (s) rows = [...rows].sort((a, b) => { const x = a[s.k], y = b[s.k];
+    const c = (typeof x === "number" && typeof y === "number") ? x - y : String(x ?? "").localeCompare(String(y ?? ""));
+    return s.d * c; });
+  return rows;
+}
+
+// ── Render ───────────────────────────────────────────────────────────────
+function renderCloudTabs() {
+  document.getElementById("cloudTabs").innerHTML = CLOUDS.map(([k, l]) =>
+    `<button class="tab" role="tab" aria-selected="${st.cloud===k}" data-cloud="${k}">` +
+    (k !== "all" ? `<span class="dot" style="background:var(--${k})"></span>` : "") + `${l}</button>`).join("");
+}
+function renderKpis() {
+  const S = D.suites.filter(inCloud), sv = D.services.filter(inCloud), F = D.findings.filter(inCloud);
+  const clean = (t) => { const r = sv.filter((s)=>s.target===t); return `${r.filter((s)=>s.status==="ok").length}/${r.length}`; };
+  const k = [
+    ["Suites green", `${S.filter((s)=>s.status==="pass").length}/${S.length}`],
+    ["Checks passing", S.reduce((a,s)=>a+(s.passed||0),0), `${S.reduce((a,s)=>a+(s.failed||0),0)} failing`],
+    ["Nano UI services clean", clean("nano")],
+    ["Offline UI services clean", clean("offline")],
+    ["Open UI findings", F.length],
+  ];
+  if (st.cloud === "all") k.push(["API routes with tests", `${D.api.pct}%`, `${D.api.total - D.api.uncovered}/${D.api.total}`]);
+  document.getElementById("kpis").innerHTML = k.map(([l, v, sub]) =>
+    `<div class="kpi"><span class="mut">${l}</span><b>${v}</b>${sub ? `<span class="mut">${sub}</span>` : ""}</div>`).join("");
+}
+function renderCloudCards() {
+  const el = document.getElementById("cloudCards");
+  if (st.cloud !== "all") { el.innerHTML = ""; return; }
+  el.innerHTML = ["aws","gcp","azure"].map((c) => {
+    const S = D.suites.filter((s)=>s.cloud===c), F = D.findings.filter((f)=>f.cloud===c), sv = D.services.filter((s)=>s.cloud===c);
+    const top = Object.entries(F.reduce((m,f)=>(m[f.type]=(m[f.type]||0)+1,m),{})).sort((a,b)=>b[1]-a[1]).slice(0,3);
+    return `<button class="cc" style="--c:var(--${c})" data-cloud="${c}"><h3>${NAME[c]}</h3>
+      <div>${S.filter((s)=>s.status==="pass").length}/${S.length} suites green · ${S.reduce((a,s)=>a+(s.passed||0),0)} checks ✓</div>
+      <div>${sv.filter((s)=>s.status==="ok").length}/${sv.length} UI services clean · <b>${F.length}</b> open findings</div>
+      <div class="mut">${top.map(([t,n])=>`${t} ${n}`).join(" · ") || "No open findings"}</div></button>`;
+  }).join("");
+}
+function renderViews() {
+  document.getElementById("views").innerHTML = Object.entries(VIEWS).map(([k, V]) => {
+    const n = k === "history" ? D.history.length : V.rows().filter(inCloud).length;
+    return `<button class="view" role="tab" aria-selected="${st.view===k}" data-view="${k}">${V.label}<span class="n">${n}</span></button>`;
+  }).join("");
+}
+function renderBar() {
+  const V = VIEWS[st.view], all = V.rows().filter(st.view === "history" ? () => true : inCloud), f = st.f[st.view] || {};
+  const sel = (k) => { const vals = [...new Set(all.map((r) => r[k]).filter((x) => x !== undefined && x !== ""))].sort();
+    return `<select data-f="${k}" aria-label="${k}"><option value="">All ${PLURAL[k] || k + "s"}</option>` +
+      vals.map((v) => `<option ${f[k]===String(v)?"selected":""}>${esc(v)}</option>`).join("") + `</select>`; };
+  document.getElementById("bar").innerHTML = V.filters.map(sel).join("") +
+    `<input type="search" id="q" placeholder="Search ${V.label.toLowerCase()}…" value="${esc(st.q)}">` +
+    `<span class="count" id="count"></span>`;
+}
+function renderGrid() {
+  const V = VIEWS[st.view], rows = rowsFor(st.view), s = st.sort[st.view];
+  document.getElementById("count").textContent = `${rows.length} row${rows.length===1?"":"s"}`;
+  if (!rows.length) { document.getElementById("panel").innerHTML = `<div class="grid"><div class="empty">${
+    D.at ? "Nothing here for this filter." : "No completed run yet. The first hourly run will fill this in."}</div></div>`; return; }
+  const head = V.cols.map(([k, l]) => `<th data-k="${k}">${l}<span class="s">${s&&s.k===k?(s.d>0?"▲":"▼"):"↕"}</span></th>`).join("");
+  const body = rows.slice(0, 2000).map((r, i) => {
+    const id = st.view + ":" + (r.id || r.path || r.at || "") + ":" + i;
+    const tds = V.cols.map(([k, , fmt]) => `<td>${fmt ? fmt(r) : esc(r[k])}</td>`).join("");
+    const det = V.detail && st.open.has(id) ? V.detail(r) : "";
+    return `<tr class="${V.detail ? "row" : ""}" data-id="${esc(id)}">${tds}</tr>` +
+      (det ? `<tr class="detail"><td colspan="${V.cols.length}">${det}</td></tr>` : "");
+  }).join("");
+  document.getElementById("panel").innerHTML = `<div class="grid"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>` +
+    (st.view === "history" ? chart() : "");
+}
+function chart() {
+  const H = D.history.slice(-168); if (H.length < 2) return "";
+  const series = [["checks_passed","var(--acc)","All checks ✓"],["aws_checks_passed","var(--aws)","AWS"],["gcp_checks_passed","var(--gcp)","GCP"],["azure_checks_passed","var(--azure)","Azure"]];
+  const max = Math.max(1, ...H.flatMap((h) => series.map(([k]) => h[k] || 0)));
+  const line = (k) => H.map((h, i) => `${(i/(H.length-1)*1000).toFixed(1)},${(170 - (h[k]||0)/max*160).toFixed(1)}`).join(" ");
+  return `<div class="chart"><svg viewBox="0 0 1000 180" preserveAspectRatio="none">${series.map(([k,c]) =>
+    `<polyline points="${line(k)}" fill="none" stroke="${c}" stroke-width="2.5" vector-effect="non-scaling-stroke"/>`).join("")}</svg>
+    <div class="legend">${series.map(([,c,l]) => `<span><i style="background:${c}"></i>${l}</span>`).join("")}<span>last ${H.length} runs</span></div></div>`;
+}
+function render() { renderCloudTabs(); renderKpis(); renderCloudCards(); renderViews(); renderBar(); renderGrid(); }
+
+// ── Events ───────────────────────────────────────────────────────────────
+document.addEventListener("click", (e) => {
+  const c = e.target.closest("[data-cloud]"); if (c) { st.cloud = c.dataset.cloud; st.open.clear(); return render(); }
+  const v = e.target.closest("[data-view]"); if (v) { st.view = v.dataset.view; st.q = ""; st.open.clear(); return render(); }
+  const th = e.target.closest("th[data-k]");
+  if (th) { const k = th.dataset.k, s = st.sort[st.view]; st.sort[st.view] = { k, d: s && s.k === k ? -s.d : 1 }; return renderGrid(); }
+  const tr = e.target.closest("tr.row");
+  if (tr) { const id = tr.dataset.id; st.open.has(id) ? st.open.delete(id) : st.open.add(id); return renderGrid(); }
+});
+document.addEventListener("change", (e) => {
+  const s = e.target.closest("select[data-f]"); if (!s) return;
+  (st.f[st.view] ||= {})[s.dataset.f] = s.value; renderGrid();
+});
+document.addEventListener("input", (e) => { if (e.target.id === "q") { st.q = e.target.value; renderGrid(); } });
+render();
+</script>
+</body>
+</html>
