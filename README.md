@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-26 20:00 UTC · refreshes after every pipeline run_
+_Updated 2026-10-26 20:20 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 36 services (AWS 12 · GCP 12 · Azure 12) of 1,068 the clouds publish
-- **Building now:** Amazon Elastic Container Registry (AWS, no manifest yet checks)
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS)
+- **Building now:** nothing
+- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon Elastic Container Registry (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS)
 - **Queued:** 76 services (P1 first, then P2)
 - **Consoles really implemented:** offline 38% · Nano 40%
 - **Hourly tests:** 13 of 22 suites passing (run 19:35 UTC)
@@ -16,7 +16,7 @@ _Updated 2026-10-26 20:00 UTC · refreshes after every pipeline run_
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 12 | 1 | 4 | 28 | 35% · 46% |
+| AWS | 12 | 0 | 5 | 28 | 35% · 46% |
 | GCP | 12 | 0 | 0 | 24 | 38% · 45% |
 | Azure | 12 | 0 | 0 | 24 | 53% · 2% |
 
@@ -26,7 +26,7 @@ _Updated 2026-10-26 20:00 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|
 | Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🔍 In gate ([PR #95](https://github.com/vyomi-cloud/appliance/pull/95)) | 18/18 | — |
 | Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🔍 In gate ([PR #96](https://github.com/vyomi-cloud/appliance/pull/96)) | 18/18 | — |
-| Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🛠 Building | no manifest yet | — |
+| Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🔍 In gate ([PR #100](https://github.com/vyomi-cloud/appliance/pull/100)) | 20/20 | — |
 | AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | — |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | — |
 
@@ -236,6 +236,33 @@ _Updated 2026-10-26 20:00 UTC · refreshes after every pipeline run_
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
 | ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
+
+</details>
+
+<details><summary>Gate checks — Amazon Elastic Container Registry (AWS)</summary>
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
+| ✅ | manifest status is ready | status=ready |
+| ✅ | engine exists in core/ | core/ecr_core.py |
+| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/ecr_core.py |
+| ✅ | engine listed in wasm/build_cores.py |  |
+| ✅ | service in the Nano console catalog (wasm/fixtures) | aws-catalog.json |
+| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
+| ✅ | registry entry (pending-release or released) |  |
+| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
+| ✅ | has a offline sdk-java test bed |  |
+| ✅ | has a offline sdk-go test bed |  |
+| ✅ | has a offline cli test bed |  |
+| ✅ | has a offline ui test bed |  |
+| ✅ | has a nano ui test bed |  |
+| ✅ | upstream id tracked by the hourly upstream watcher | ecr |
+| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'container', 'name': 'registry', 'image': 'registry:2.8.3', 'license': 'Apache-2.0', 'tier': 'lite', 'compose_service': 'vy |
+| ✅ | backend is the recommended one, or the manifest says why not | recommended: registry; chose registry |
+| ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=Apache-2.0 |
+| ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=Apache-2.0 |
+| ✅ | backend image is pinned to a version (not latest) | registry:2.8.3 |
 
 </details>
 
