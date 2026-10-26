@@ -109,6 +109,9 @@ jobs:
         timeout-minutes: 45
         uses: anthropics/claude-code-action@v1
         with:
+          # Either auth works: a Claude Max/Pro OAuth token (claude setup-token)
+          # or an Anthropic API key. Whichever secret is set is used.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
