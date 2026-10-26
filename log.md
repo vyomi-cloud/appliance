@@ -8,3 +8,4 @@
 | 2026-10-26T15:53Z | #50 | aws/apigatewayv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40353005257) |
 | 2026-10-26T16:25Z | #51 | aws/cloudformation | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40354182549) |
 | 2026-10-26T16:51Z | #50 | aws/apigatewayv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40359344512) |
+| 2026-10-26T17:01Z | #51 | aws/cloudformation | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40363463981) |
