@@ -65,7 +65,8 @@ const PLACEHOLDER_CELLS = (page) => page.evaluate(() => {
   const isPh = (t) => /^(-|—|–|n\/a|null|none)?$/i.test(t.trim());
   for (const table of document.querySelectorAll("#main table")) {
     const heads = [...table.querySelectorAll("thead th, tr:first-child th")].map((h) => (h.innerText || "").trim());
-    table.querySelectorAll("tbody tr").forEach((tr, ri) => {
+    // Consoles build tables with DOM calls (no <tbody>): data rows are the <tr>s with <td>s.
+    [...table.querySelectorAll("tr")].filter((tr) => tr.querySelector("td")).forEach((tr, ri) => {
       [...tr.querySelectorAll("td")].forEach((td, ci) => {
         const col = heads[ci] || `column ${ci + 1}`;
         // Checkbox / action columns legitimately have no text.
@@ -150,7 +151,10 @@ async function dismissPopups(page) {
   }
 }
 
-const rowCount = (page) => page.locator("#main tbody tr, #main [role=row]").count();
+// Data rows only: consoles often append <tr>s straight to <table> (no <tbody>),
+// so match any <tr> holding a <td>, not just "tbody tr".
+const ROW_SEL = "#main table tr:has(td), #main [role=row]:has([role=cell],[role=gridcell])";
+const rowCount = (page) => page.locator(ROW_SEL).count();
 
 // Create a resource accepting every form default, return to the service list
 // (create pages navigate away from it), and check the new row is there, fully
@@ -248,7 +252,7 @@ async function crawlConsole(browser, base, con, needsSW) {
           // Open the first resource so its detail tabs (where most unfilled
           // fields hide) get walked below.
           drain();
-          const link = page.locator("#main tbody tr a, #main tbody tr td:first-child, #main [role=row] a").first();
+          const link = page.locator("#main table tr:has(td) a, #main table tr:has(td) td:not(.chk), #main [role=row] a").first();
           if (await link.count()) {
             await link.click({ timeout: 3000 }).catch(() => {});
             await sleep(1500);
