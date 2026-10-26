@@ -56,7 +56,7 @@ def _user_view(u: dict) -> dict:
     return {"username": u["Username"], "email": am.get("email", ""),
             "email_verified": am.get("email_verified", "false"), "status": u["UserStatus"],
             "enabled": "Enabled" if u["Enabled"] else "Disabled", "sub": am.get("sub", ""),
-            "groups": ", ".join(u.get("_groups", [])), "created": _iso(u["UserCreateDate"]),
+            "groups": ", ".join(u.get("_groups", [])) or "None", "created": _iso(u["UserCreateDate"]),
             "last_modified": _iso(u["UserLastModifiedDate"])}
 
 
@@ -72,7 +72,7 @@ def _group_view(g: dict, store, pid) -> dict:
     members = sum(1 for u in store.users[pid].values() if g["GroupName"] in u.get("_groups", []))
     return {"group_name": g["GroupName"], "description": g.get("Description") or "No description",
             "precedence": g.get("Precedence", "None"), "members": members, "created": _iso(g["CreationDate"]),
-            "role_arn": g.get("RoleArn") or "None"}
+            "role_arn": g.get("RoleArn") or "None", "id": g["GroupName"]}
 
 
 def handle(store, method, path, query=None, body=None):
@@ -83,7 +83,8 @@ def handle(store, method, path, query=None, body=None):
         if path == "/user-pools":
             if method == "GET":
                 pools = sorted(store.pools.values(), key=lambda p: p["CreationDate"])
-                return 200, {"user_pools": [_pool_view(store, p) for p in pools]}
+                views = [_pool_view(store, p) for p in pools]
+                return 200, {"user_pools": views, "items": views}
             if method == "POST":
                 name = body.get("name") or body.get("PoolName") or "my-user-pool"
                 req = {"PoolName": name}
@@ -178,14 +179,18 @@ def handle(store, method, path, query=None, body=None):
             pool = cg._pool(store, pid)
             if method == "GET":
                 d = store.domains.get(pool.get("Domain") or "")
-                return 200, {"domain": (d or {}).get("Domain", ""), "status": (d or {}).get("Status", ""),
-                             "cloudfront": (d or {}).get("CloudFrontDistribution", "")}
+                return 200, {"domains": [{"domain": d["Domain"], "status": d["Status"], "cloudfront": d["CloudFrontDistribution"],
+                                          "url": f"https://{d['Domain']}.auth.{store.region}.amazoncognito.com"}] if d else []}
             if method == "POST":
                 _call(store, "CreateUserPoolDomain", UserPoolId=pid, Domain=body.get("domain") or f"{pool['Name']}-{pid[-6:]}".lower())
                 return 201, {"ok": True}
             if method == "DELETE":
                 _call(store, "DeleteUserPoolDomain", UserPoolId=pid, Domain=pool.get("Domain", ""))
                 return 200, {"ok": True}
+        m = re.fullmatch(r"/user-pools/([^/]+)/domain/([^/]+)", path)
+        if m and method == "DELETE":
+            _call(store, "DeleteUserPoolDomain", UserPoolId=m.group(1), Domain=m.group(2))
+            return 200, {"ok": True}
         return 404, {"code": "NotFound", "message": f"No console route {method} {path}"}
     except cg.CognitoError as e:
         return e.status, {"ok": False, "code": e.code, "message": e.message}

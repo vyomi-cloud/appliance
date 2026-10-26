@@ -598,6 +598,45 @@ RESOURCE_CATALOG_AWS = [
         ],
         "endpoints": {},
     },
+    # ========================================================================
+    # Amazon Cognito (user pools) — engine core/cognito_idp_core.py; the console
+    # REST facade is core/console_cognito_idp.py (same code offline and in Nano).
+    # ========================================================================
+    {
+        "key": "cognito-idp", "label": "Cognito", "icon": "badge",
+        "namespace": "AWS/Cognito", "service": "cognito-idp",
+        "collection_path": "/api/cognito-idp/user-pools",
+        "resource_path":   "/api/cognito-idp/user-pools/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "rail_items": [
+            {"group": "User pools"},
+            {"key": "user-pools", "label": "User pools", "icon": "badge", "type": "primary"},
+        ],
+        "api_paths": {
+            "users":   {"method": "GET",    "path": "/api/cognito-idp/user-pools/{name}/users"},
+            "groups":  {"method": "GET",    "path": "/api/cognito-idp/user-pools/{name}/groups"},
+            "clients": {"method": "GET",    "path": "/api/cognito-idp/user-pools/{name}/clients"},
+            "domain":  {"method": "GET",    "path": "/api/cognito-idp/user-pools/{name}/domain"},
+            "delete":  {"method": "DELETE", "path": "/api/cognito-idp/user-pools/{name}"},
+        },
+        "columns": [
+            ["name",    "User pool name"],
+            ["id",      "User pool ID"],
+            ["users",   "Users"],
+            ["sign_in", "Sign-in"],
+            ["mfa",     "MFA"],
+            ["tier",    "Feature plan"],
+            ["created", "Created time"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "User pool name", "default": "my-user-pool"},
+            {"name": "sign_in", "label": "Sign-in identifier (username, email or phone_number)", "default": "username"},
+            {"name": "min_password_length", "label": "Minimum password length", "type": "number", "default": 8},
+            {"name": "auto_verified", "label": "Auto-verify attribute (email or phone_number)", "default": "email"},
+        ],
+        "endpoints": {},
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_AWS}

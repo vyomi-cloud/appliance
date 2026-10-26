@@ -2939,6 +2939,66 @@ async function loadIamList(svc, host, kind, columns){
   host.append(tbl);
 }
 
+// Data-driven detail tab (list + create + row actions) — used by Cognito user pools.
+// The tab spec (core/aws_subblades.py) carries path/arrayKey/columns/create/rowActions,
+// so it is identical in the offline and Nano consoles.
+SUB_RENDERERS.subgrid = async function(svc, full, host, tab){
+  const name = itemKey(svc, full);
+  const paint = async () => {
+    host.innerHTML = "";
+    const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:10px;align-items:center"});
+    host.append(bar);
+    const formHost = el("div",{}); host.append(formHost);
+    if (tab.create) {
+      bar.append(el("button",{class:"btn primary","data-testid":"subgrid-create",onclick:()=>{
+        formHost.innerHTML = "";
+        const vals = {}; const card = el("div",{class:"kv-card"});
+        card.append(el("div",{class:"h"}, tab.create.label));
+        (tab.create.fields || []).forEach(f => {
+          vals[f.name] = f.default !== undefined ? f.default : "";
+          card.append(el("div",{class:"field"}, el("label",{}, f.label || f.name),
+            el("input",{type:"text",value:vals[f.name],oninput:e=>{vals[f.name]=e.target.value;}})));
+        });
+        card.append(el("div",{style:"display:flex;gap:8px;margin-top:8px"},
+          el("button",{class:"btn",onclick:()=>{formHost.innerHTML="";}}, "Cancel"),
+          el("button",{class:"btn primary","data-testid":"subgrid-submit",onclick:async()=>{
+            const r = await api("POST", fillPath(tab.create.path, {name}), vals);
+            if (r.ok || [200,201].includes(r.status)) { toast(tab.create.label + " — done"); paint(); }
+            else toast(((r.json||{}).message) || (tab.create.label + " failed ("+r.status+")"), "err");
+          }}, "Create")));
+        formHost.append(card);
+      }}, icon("add"), tab.create.label));
+    }
+    bar.append(el("button",{class:"btn",onclick:paint}, icon("refresh"), "Refresh"));
+    const r = await api("GET", fillPath(tab.path, {name}));
+    const j = r.json || {};
+    const items = j[tab.arrayKey] || (Array.isArray(j) ? j : []);
+    if (!r.ok) { host.append(el("div",{class:"alert err"}, "Failed to load: HTTP " + r.status)); return; }
+    if (!items.length) { host.append(el("div",{class:"empty"}, tab.empty || "Nothing here yet.")); return; }
+    const tbl = el("table",{class:"aws"});
+    const hdr = el("tr",{}); tab.columns.forEach(c => hdr.append(el("th",{}, c[1])));
+    if ((tab.rowActions || []).length) hdr.append(el("th",{}, "Actions"));
+    tbl.append(hdr);
+    items.forEach(it => {
+      const tr = el("tr",{});
+      tab.columns.forEach(c => { const v = getPath(it, c[0]); tr.append(el("td",{class:/id|url|arn/i.test(c[0])?"mono small":""}, String(v == null || v === "" ? "None" : v))); });
+      if ((tab.rowActions || []).length) {
+        const td = el("td",{});
+        tab.rowActions.forEach(a => td.append(el("button",{class:"btn"+(a.danger?" danger":""),style:"margin-right:4px;padding:2px 8px",onclick:async()=>{
+          if (a.danger && !confirm(a.label + " " + it[tab.idField] + "?")) return;
+          const rr = await api(a.method, fillPath(a.path, {name, id: it[tab.idField]}));
+          if (rr.ok || [200,201,204].includes(rr.status)) { toast(a.label + " — done"); paint(); }
+          else toast(((rr.json||{}).message) || (a.label + " failed ("+rr.status+")"), "err");
+        }}, a.label)));
+        tr.append(td);
+      }
+      tbl.append(tr);
+    });
+    host.append(tbl);
+  };
+  await paint();
+};
+
 // S3 specific
 SUB_RENDERERS.bucketobjects = function(svc, full, host){
   // v2.0.6 — add the Upload button that was missing from the Objects

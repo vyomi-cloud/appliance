@@ -342,6 +342,57 @@ _KMS_SUB = [
 ]
 
 
+# ===========================================================================
+# Cognito — user pool detail (data-driven `subgrid` tabs: list + create + row actions)
+# ===========================================================================
+_CG = "/api/cognito-idp/user-pools/{name}"
+_COGNITO_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "User pool", "items": [
+        {"key": "users", "label": "Users", "icon": "group", "type": "subgrid",
+         "path": _CG + "/users", "arrayKey": "users", "idField": "username", "empty": "No users in this user pool yet.",
+         "columns": [["username", "User name"], ["email", "Email address"], ["email_verified", "Email verified"],
+                     ["status", "Confirmation status"], ["enabled", "Status"], ["groups", "Groups"],
+                     ["created", "Created time"]],
+         "create": {"label": "Create user", "path": _CG + "/users", "fields": [
+             {"name": "username", "label": "User name", "default": "user1"},
+             {"name": "email", "label": "Email address", "default": "user1@example.com"},
+             {"name": "password", "label": "Temporary password", "default": "Temp#Pass123"}]},
+         "rowActions": [
+             {"label": "Disable", "method": "POST", "path": _CG + "/users/{id}/disable"},
+             {"label": "Enable", "method": "POST", "path": _CG + "/users/{id}/enable"},
+             {"label": "Confirm", "method": "POST", "path": _CG + "/users/{id}/confirm"},
+             {"label": "Delete", "method": "DELETE", "path": _CG + "/users/{id}", "danger": True}]},
+        {"key": "groups", "label": "Groups", "icon": "groups", "type": "subgrid",
+         "path": _CG + "/groups", "arrayKey": "groups", "idField": "group_name", "empty": "No groups in this user pool yet.",
+         "columns": [["group_name", "Group name"], ["description", "Description"], ["precedence", "Precedence"],
+                     ["members", "Users"], ["created", "Created time"]],
+         "create": {"label": "Create group", "path": _CG + "/groups", "fields": [
+             {"name": "group_name", "label": "Group name", "default": "admins"},
+             {"name": "description", "label": "Description", "default": "Administrators"},
+             {"name": "precedence", "label": "Precedence", "default": "1"}]},
+         "rowActions": [{"label": "Delete", "method": "DELETE", "path": _CG + "/groups/{id}", "danger": True}]},
+        {"key": "clients", "label": "App clients", "icon": "apps", "type": "subgrid",
+         "path": _CG + "/clients", "arrayKey": "clients", "idField": "client_id", "empty": "No app clients in this user pool yet.",
+         "columns": [["name", "App client name"], ["client_id", "Client ID"], ["secret", "Client secret"],
+                     ["auth_flows", "Authentication flows"], ["access_token_validity", "Access token expiration"],
+                     ["created", "Created time"]],
+         "create": {"label": "Create app client", "path": _CG + "/clients", "fields": [
+             {"name": "name", "label": "App client name", "default": "web-client"}]},
+         "rowActions": [{"label": "Delete", "method": "DELETE", "path": _CG + "/clients/{id}", "danger": True}]},
+        {"key": "domain", "label": "Domain", "icon": "language", "type": "subgrid",
+         "path": _CG + "/domain", "arrayKey": "domains", "idField": "domain", "empty": "No domain configured for this user pool.",
+         "columns": [["domain", "Domain prefix"], ["url", "Domain URL"], ["status", "Status"], ["cloudfront", "CloudFront distribution"]],
+         "create": {"label": "Create Cognito domain", "path": _CG + "/domain", "fields": [
+             {"name": "domain", "label": "Domain prefix", "default": "my-app-auth"}]},
+         "rowActions": [{"label": "Delete", "method": "DELETE", "path": _CG + "/domain/{id}", "danger": True}]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+    ]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -358,4 +409,5 @@ SUB_BLADES: dict[str, list] = {
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
     "kms":            _KMS_SUB,
+    "cognito-idp":    _COGNITO_SUB,
 }
