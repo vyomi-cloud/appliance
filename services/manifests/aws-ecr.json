@@ -56,5 +56,5 @@
   "offline-ui-aws-ecr",
   "nano-ui-aws-ecr"
  ],
- "status": "building"
+ "status": "ready"
 }
