@@ -182,7 +182,24 @@ jobs:
         run: |
           EXE='${{ steps.agent.outputs.execution_file }}'
           LIMIT=no
-          if [ -n "$EXE" ] && [ -f "$EXE" ] && grep -qiE 'usage limit|rate[_ ]limit|limit reached|429' "$EXE"; then LIMIT=yes; fi
+          # Only the agent's final result counts: grepping the whole transcript
+          # matches the agent's own code/output (e.g. "429" in a test).
+          if [ -n "$EXE" ] && [ -f "$EXE" ]; then
+            LIMIT=$(python3 - "$EXE" <<'PY'
+          import json, re, sys
+          try:
+              msgs = json.load(open(sys.argv[1]))
+          except Exception:
+              print("no"); raise SystemExit
+          res = next((m for m in reversed(msgs if isinstance(msgs, list) else []) if m.get("type") == "result"), None)
+          text = json.dumps(res or {}).lower()
+          hit = res is not None and (res.get("is_error") or res.get("subtype") != "success") and \
+              re.search(r"usage limit|rate.?limit|limit reached|\b429\b|overloaded|quota", text)
+          # The step can also die before a result is written (limit at start).
+          print("yes" if hit or (res is None and re.search(r"usage limit|limit reached", open(sys.argv[1]).read().lower())) else "no")
+          PY
+          )
+          fi
           echo "limit=$LIMIT" >> "$GITHUB_OUTPUT"
           LINE="| $(date -u +%FT%H:%MZ) | #$ISSUE | ${{ steps.pick.outputs.cloud }}/${{ steps.pick.outputs.key }} | ${{ steps.agent.outcome }} | ${{ steps.gate.outputs.state || 'n/a' }} | $LIMIT | [run](${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }}) |"
           rm -rf /tmp/state-wt
