@@ -606,6 +606,20 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "extras", "List",   { key: _ex[1] }] };
     if (method === "POST") return { tuple: ["aws", "extras", "Create", { key: _ex[1], ...(body || {}) }] };
   }
+  // Elastic Load Balancing (core/elbv2_core.py) — LBs + target groups + listeners
+  if (path === "/api/aws/elbv2/load-balancers") {
+    if (method === "GET")  return { tuple: ["aws", "elbv2", "ListLoadBalancers", {}] };
+    if (method === "POST") return { tuple: ["aws", "elbv2", "CreateLoadBalancer", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/elbv2\/load-balancers\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "elbv2", "GetLoadBalancer", { name: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "elbv2", "SetTags", { name: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "elbv2", "DeleteLoadBalancer", { name: dec(m[1]) }] };
+  m = path.match(/^\/api\/aws\/elbv2\/(target-groups|listeners)$/);
+  if (m && method === "GET")  return { tuple: ["aws", "elbv2", "ListChildren", { kind: m[1] }] };
+  if (m && method === "POST") return { tuple: ["aws", "elbv2", "CreateChild", { ...(body || {}), kind: m[1] }] };
+  m = path.match(/^\/api\/aws\/elbv2\/(target-groups|listeners)\/([^/]+)$/);
+  if (m && method === "DELETE") return { tuple: ["aws", "elbv2", "DeleteChild", { kind: m[1], name: dec(m[2]) }] };
   // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
   if (path === "/api/eventbridge/rules") {
     if (method === "GET")  return { tuple: ["aws", "eventbridge", "ListRules", {}] };

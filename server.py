@@ -181,12 +181,12 @@ register_azure_routes(app, None)
 # ── Route module registration ────────────────────────────────────────
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
-from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb
+from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2
 from routes import lazy_backends, shared, console_next
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
-            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb,
+            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2,
             lazy_backends, shared, console_next]:
     mod.register(app)
 
@@ -2540,6 +2540,13 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for queue_name, queue in aws_sqs.get("queues", {}).items():
         if isinstance(queue, dict):
             add("aws", "sqs", "queue", queue_name, queue)
+
+    aws_elbv2 = _cloudsim_service_state(space, "elbv2")
+    for lb_arn, lb in aws_elbv2.get("load_balancers", {}).items():
+        if isinstance(lb, dict):
+            add("aws", "elbv2", "load_balancer", lb.get("LoadBalancerName", lb_arn),
+                {**lb, "name": lb.get("LoadBalancerName", lb_arn), "instance_type": lb.get("Type", "application"),
+                 "state": (lb.get("State") or {}).get("Code", "active"), "created": lb.get("CreatedTime", "")})
 
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():

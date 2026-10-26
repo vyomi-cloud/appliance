@@ -34,6 +34,10 @@ AWS_RDS_HOURLY: dict[str, float] = {
     "db.r5.large": 0.24, "db.r5.xlarge": 0.48, "db.r5.2xlarge": 0.96,
 }
 
+AWS_ELBV2_HOURLY: dict[str, float] = {   # us-east-1 on-demand, per load balancer-hour (excl. LCUs)
+    "application": 0.0225, "network": 0.0225, "gateway": 0.0125,
+}
+
 GCP_VM_HOURLY: dict[str, float] = {
     "e2-micro": 0.0084, "e2-small": 0.0168, "e2-medium": 0.0336,
     "e2-standard-2": 0.067, "e2-standard-4": 0.134, "e2-standard-8": 0.268,
@@ -161,6 +165,17 @@ def estimate_resource_cost(provider: str, service: str, kind: str,
     # Database instances — use DB hourly pricing
     if kind in ("db_instance", "database") and service in ("rds", "sql", "gcp_sql", "cloudsql"):
         rate = db_hourly_rate(provider, instance_type)
+        return {
+            "hourly_usd": round(rate, 4),
+            "monthly_usd": round(rate * HOURS_PER_MONTH, 2),
+            "uptime_cost_usd": round(rate * uptime_hours, 2),
+            "uptime_hours": uptime_hours,
+            "source": "on-demand",
+        }
+
+    # ELBv2 load balancers — per-hour pricing by load balancer type
+    if provider == "aws" and service == "elbv2":
+        rate = AWS_ELBV2_HOURLY.get(instance_type, 0.0225)
         return {
             "hourly_usd": round(rate, 4),
             "monthly_usd": round(rate * HOURS_PER_MONTH, 2),

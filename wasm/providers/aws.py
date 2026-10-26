@@ -107,6 +107,15 @@ class Aws(CloudProvider):
             ("extras", "Delete"):    lambda b, a, p: D.extras_delete(p),
             ("extras", "ConfigGet"): lambda b, a, p: D.extras_config_get(p),
             ("extras", "ConfigPut"): lambda b, a, p: D.extras_config_put(p),
+            # Elastic Load Balancing — LBs, target groups, listeners (core/elbv2_core.py)
+            ("elbv2", "ListLoadBalancers"):  lambda b, a, p: D.elb_list(p),
+            ("elbv2", "CreateLoadBalancer"): lambda b, a, p: D.elb_create(p),
+            ("elbv2", "GetLoadBalancer"):    lambda b, a, p: D.elb_get(p),
+            ("elbv2", "DeleteLoadBalancer"): lambda b, a, p: D.elb_delete(p),
+            ("elbv2", "SetTags"):            lambda b, a, p: D.elb_tags(p),
+            ("elbv2", "ListChildren"):       lambda b, a, p: D.elb_children(p),
+            ("elbv2", "CreateChild"):        lambda b, a, p: D.elb_child_create(p),
+            ("elbv2", "DeleteChild"):        lambda b, a, p: D.elb_child_delete(p),
             # EventBridge — rules → SQS delivery, via core/eventbridge_core.py
             ("eventbridge", "ListRules"): lambda b, a, p: D.eb_list(p),
             ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),

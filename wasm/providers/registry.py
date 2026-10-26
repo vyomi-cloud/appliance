@@ -207,6 +207,11 @@ def _weigh(resources: int, vms: int) -> dict:
     }
 
 
+def _elb_census():
+    from core import nano_registry
+    return nano_registry.get()["elbv2"].load_balancers
+
+
 def _census_dispatch(backends: Backends, provider: str) -> dict:
     """Count the LIVE in-memory resources this page's backend holds for `provider`,
     across every core store, and weight them the same way the appliance does. The
@@ -232,6 +237,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                         len(A.iam_list_policies().get("policies", [])) +
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
+                "elbv2":          len(_elb_census()),
             }
             for svc, n in aws_counts.items():
                 if n:

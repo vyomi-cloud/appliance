@@ -1283,6 +1283,14 @@ function childSpec(svc, childType){
         columns: [["image_id","AMI ID"],["name","Name"],["state","State"],
                   ["architecture","Architecture"],["platform","Platform"]]},
     },
+    elbv2: {
+      "target-groups": {label:"Target groups", absolutePath:"/api/aws/elbv2/target-groups", arrayKey:"items",
+        columns: [["name","Name"],["protocol","Protocol"],["port","Port"],["target_type","Target type"],
+                  ["vpc_id","VPC ID"],["load_balancer","Load balancer"],["targets","Registered targets"],["health_check","Health check"]]},
+      "listeners":     {label:"Listeners", absolutePath:"/api/aws/elbv2/listeners", arrayKey:"items",
+        columns: [["name","Listener ID"],["load_balancer","Load balancer"],["protocol","Protocol"],["port","Port"],
+                  ["default_action","Default action"],["rules","Rules"]]},
+    },
     iam: {
       "iam-groups":    {label:"User groups",      absolutePath:"/api/iam/groups",    arrayKey:"groups",
         columns: [["group_name","Group name"],["arn","ARN"],["created","Created"]]},
