@@ -34,6 +34,7 @@ STORE_ATTRS = [
     "s3", "ddb", "kms", "sec", "rds", "iam", "msg",
     "gcs", "gcp_fs", "gcp_kms", "gcp_sec", "gcp_msg", "gcp_iam", "gcp_sql",
     "az_blob", "az_cosmos", "az_kvsec", "az_kvkeys", "az_queue", "az_sb",
+    "cw",       # CloudWatch metrics / alarms / dashboards
     "events",   # per-resource cloudsim event/activity log (core/nano_events.EventStore)
     # Generic catalog CRUD store (backends.store.ResourceStore, public dict
     # `collections`) — backs AWS /api/aws/sub/* children + editable settings AND

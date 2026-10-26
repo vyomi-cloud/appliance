@@ -712,6 +712,7 @@ function renderRail(){
       ["Application Integration", ["sqs", "apigateway", "eventbridge"]],
       ["Networking & Content Delivery", ["vpc"]],
       ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
+      ["Management & Governance", ["cloudwatch"]],
     ];
     groups.forEach(([label, keys]) => {
       rail.append(el("div",{class:"group"}, label));
@@ -2661,6 +2662,24 @@ SUB_RENDERERS.tags = function(svc, full, host){
   host.append(card);
 };
 SUB_RENDERERS.json = function(svc, full, host){ host.append(el("pre",{class:"json"}, JSON.stringify(full, null, 2))); };
+SUB_RENDERERS.listtable = function(svc, full, host, tab){
+  // Generic detail table: `tab.field` of the resource GET (list of rows) + `tab.columns`;
+  // `tab.mode == "text"` shows the field as preformatted text (e.g. a template).
+  const data = full[tab.field];
+  if (tab.mode === "text") {
+    host.append(el("pre",{class:"json","data-testid":"tab-"+tab.key}, String(data == null ? "" : data)));
+    return;
+  }
+  const rows = Array.isArray(data) ? data : [];
+  if (!rows.length) { host.append(el("div",{class:"empty"}, "No " + tab.label.toLowerCase() + ".")); return; }
+  const tbl = el("table",{class:"aws"});
+  tbl.append(el("tr",{}, ...(tab.columns||[]).map(c => el("th",{}, c[1]))));
+  rows.forEach(r => tbl.append(el("tr",{}, ...(tab.columns||[]).map(c => {
+    const v = getPath(r, c[0]);
+    return el("td",{class:"small"}, v == null || v === "" ? "—" : String(v));
+  }))));
+  host.append(tbl);
+};
 SUB_RENDERERS.properties = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "All properties"));

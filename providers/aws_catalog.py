@@ -598,6 +598,46 @@ RESOURCE_CATALOG_AWS = [
         ],
         "endpoints": {},
     },
+    # ========================================================================
+    # CloudWatch — alarms (metrics, dashboards, streams via the native wire)
+    # ========================================================================
+    {
+        "key": "cloudwatch", "label": "CloudWatch", "icon": "monitoring",
+        "namespace": "AWS/CloudWatch", "service": "cloudwatch",
+        "collection_path": "/api/aws/cloudwatch/alarms",
+        "resource_path":   "/api/aws/cloudwatch/alarms/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "alarms": {"method": "GET",    "path": "/api/aws/cloudwatch/alarms"},
+            "delete": {"method": "DELETE", "path": "/api/aws/cloudwatch/alarms/{name}"},
+        },
+        "rail_items": [
+            {"key": "alarms", "label": "Alarms", "icon": "notifications_active", "type": "primary"},
+        ],
+        "columns": [
+            ["name",      "Alarm name"],
+            ["state",     "State"],
+            ["metric",    "Metric"],
+            ["condition", "Conditions"],
+            ["period",    "Period"],
+            ["actions",   "Actions"],
+            ["updated",   "Last state update"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Alarm name", "default": "my-alarm"},
+            {"name": "namespace", "label": "Namespace", "default": "AWS/EC2"},
+            {"name": "metric_name", "label": "Metric name", "default": "CPUUtilization"},
+            {"name": "dimensions", "label": "Dimensions (Name=Value, ...)", "default": "InstanceId=i-0abcd1234efgh5678"},
+            {"name": "statistic", "label": "Statistic", "default": "Average"},
+            {"name": "period", "label": "Period (seconds)", "default": "300"},
+            {"name": "threshold", "label": "Threshold", "default": "80"},
+            {"name": "comparison_operator", "label": "Comparison operator", "default": "GreaterThanOrEqualToThreshold"},
+            {"name": "evaluation_periods", "label": "Evaluation periods", "default": "1"},
+            {"name": "alarm_action", "label": "Alarm action (SNS topic ARN)", "default": "arn:aws:sns:us-east-1:123456789012:alerts"},
+        ],
+        "endpoints": {},
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_AWS}
