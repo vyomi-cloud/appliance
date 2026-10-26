@@ -42,7 +42,14 @@ jobs:
         run: |
           # DEV_MODE=1 keeps /api/license/signup available in CI (production
           # mode disables that endpoint by design — see core/license_remote).
-          CLOUDLEARN_DEV_MODE=1 docker compose -f docker-compose.yml up -d --build
+          # --profile full starts every real backend (Vault, NATS, MinIO,
+          # DynamoDB, ElasticMQ, MySQL, Azurite, Pub/Sub, Firestore); without
+          # it they never start here and every KMS/secrets/eventing/IAM/MinIO
+          # check fails with status=0.
+          # The CI override sets CLOUDLEARN_TIER_ENFORCE=0 (no Free-tier locks,
+          # quotas or rate limit) and VYOMI_NO_TELEMETRY=1 inside the simulator.
+          docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml \
+            --profile full up -d --build
           # Wait for /healthz
           for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:9000/healthz > /dev/null; then
@@ -51,6 +58,14 @@ jobs:
             fi
             sleep 2
           done
+      - name: Wait for every backend to be ready
+        run: |
+          for i in $(seq 1 60); do
+            r=$(curl -sf http://127.0.0.1:9000/api/runtime/readiness || true)
+            echo "$r" | python3 -c "import sys,json;d=json.load(sys.stdin);print(f\"{d.get('ready_count')}/{d.get('total_count')} ready\");sys.exit(0 if d.get('ready') else 1)" 2>/dev/null && break
+            sleep 5
+          done
+          curl -sf http://127.0.0.1:9000/api/runtime/readiness | python3 -c "import sys,json;d=json.load(sys.stdin);[print(s['name'],s['status']) for s in d.get('services',[])]" || true
       - name: Sign up Enterprise (so eventing/nosql aren't tier-locked)
         run: |
           # If signup endpoint is disabled (prod mode reached us anyway), fall
@@ -74,13 +89,16 @@ jobs:
           # tests/conformance/console_actions/ harness (96%+) is the parity
           # gate we actually use; this older suite is kept around as a
           # SDK-level smoke test.
+          # MinIO is published on the runner at :9100 (the default points at an
+          # old Multipass VM IP).
+          CLOUDLEARN_MINIO_URL_HOST=http://127.0.0.1:9100 \
           python tests/conformance/run_conformance.py \
             --endpoint http://127.0.0.1:9000 \
             --isolate-spaces \
             --fail-under 45.0
       - name: Stop stack
         if: always()
-        run: docker compose down -v
+        run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml --profile full down -v
 
   # ── Tier middleware smoke (no docker, uses uvicorn) ─────────────────────
   tier-middleware:
