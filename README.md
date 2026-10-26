@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-26 16:43 UTC · refreshes after every pipeline run_
+_Updated 2026-10-26 16:44 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-10-26 16:43 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS)
 - **Queued:** 79 services (P1 first, then P2)
 - **Consoles really implemented:** offline not measured yet · Nano not measured yet
-- **Hourly tests:** 13 of 22 suites passing (run 15:30 UTC)
+- **Hourly tests:** 13 of 22 suites passing (run 16:30 UTC)
 - **Upstream watch:** 2 open changes from the real clouds to adopt
 
 ## By cloud
@@ -257,7 +257,7 @@ _Updated 2026-10-26 16:43 UTC · refreshes after every pipeline run_
 | offline-cli-gcp | ✅ | 6/6 |
 | offline-cli-azure | ❌ | 5/6 |
 | offline-ui-core | ✅ | 9/9 |
-| nano-ui-crawl | ❌ | 0/43 |
+| nano-ui-crawl | ❌ | 1/43 |
 | nano-cores | ❌ | 0/1 |
 | nano-ui-aws-api | ❌ | 5/6 |
 | nano-ui-aws-tabs | ✅ | 11/11 |
