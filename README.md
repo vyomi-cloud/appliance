@@ -1,11 +1,11 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-26 17:47 UTC · refreshes after every pipeline run_
+_Updated 2026-10-26 17:55 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 36 services (AWS 12 · GCP 12 · Azure 12) of 1,068 the clouds publish
-- **Building now:** Amazon CloudWatch (AWS, no manifest yet checks)
+- **Building now:** Amazon CloudWatch (AWS, 18/18 checks)
 - **In the gate / releasing:** AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS)
 - **Queued:** 78 services (P1 first, then P2)
 - **Consoles really implemented:** offline 35% · Nano 43%
@@ -24,7 +24,7 @@ _Updated 2026-10-26 17:47 UTC · refreshes after every pipeline run_
 
 | Service | Cloud | Stage | Checks | Still missing |
 |---|---|---|---|---|
-| Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🛠 Building | no manifest yet | — |
+| Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🛠 Building | 18/18 | — |
 | AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | — |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | — |
 
@@ -188,6 +188,31 @@ _Updated 2026-10-26 17:47 UTC · refreshes after every pipeline run_
 </details>
 
 ## Details
+
+<details><summary>Gate checks — Amazon CloudWatch (AWS)</summary>
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
+| ✅ | manifest status is ready | status=ready |
+| ✅ | engine exists in core/ | core/cloudwatch_core.py |
+| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/cloudwatch_core.py |
+| ✅ | engine listed in wasm/build_cores.py |  |
+| ✅ | service in the Nano console catalog (wasm/fixtures) | aws-catalog.json |
+| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
+| ✅ | registry entry (pending-release or released) |  |
+| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
+| ✅ | has a offline sdk-java test bed |  |
+| ✅ | has a offline sdk-go test bed |  |
+| ✅ | has a offline cli test bed |  |
+| ✅ | has a offline ui test bed |  |
+| ✅ | has a nano ui test bed |  |
+| ✅ | upstream id tracked by the hourly upstream watcher | cloudwatch |
+| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
+| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ✅ | claimed operations exist in the real API | not upstream: [] |
+
+</details>
 
 <details><summary>Gate checks — AmazonApiGatewayV2 (AWS)</summary>
 
