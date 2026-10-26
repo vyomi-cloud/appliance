@@ -32,7 +32,7 @@ def build_backed_router() -> AwsWireRouter:
     from core.persistent_store import (SqliteStateBackend, PersistentAzureBlobStore,
                                         PersistentNoSqlStore, PersistentFirestoreStore,
                                         PersistentCosmosStore, PersistentAzureQueueStore,
-                                        PersistentMessagingStore)
+                                        PersistentMessagingStore, PersistentCloudWatchStore)
     from core.nats_backed_store import NatsBackedMessagingStore
 
     minio = dict(
@@ -79,6 +79,9 @@ def build_backed_router() -> AwsWireRouter:
         # (topics+subscriptions, bytes-aware codec handles message bodies)
         "az_sb": PersistentMessagingStore(
             SqliteStateBackend(_cfg("VYOMI_AZSB_DB", "/tmp/vyomi-azsb.sqlite")), store_id="azsb"),
+        # CloudWatch — durable metrics / alarms / dashboards via the file-backed substrate
+        "cw": PersistentCloudWatchStore(
+            SqliteStateBackend(_cfg("VYOMI_CW_DB", "/tmp/vyomi-cw.sqlite"))),
         # messaging — SQS/SNS + Pub/Sub on NATS JetStream (separate KV buckets)
         "msg": NatsBackedMessagingStore(servers=nats_servers, bucket="aws_msg"),
         "gcp_msg": NatsBackedMessagingStore(servers=nats_servers, bucket="gcp_msg"),

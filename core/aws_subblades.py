@@ -450,6 +450,23 @@ _APIGW2_SUB = [
 ]
 
 
+# ===========================================================================
+# CloudWatch — alarm detail (tables read `full[field]` from the alarm GET)
+# ===========================================================================
+_CLOUDWATCH_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Alarm", "items": [
+        {"key": "details", "label": "Details", "icon": "info", "type": "listtable", "field": "details",
+         "columns": [["key", "Setting"], ["value", "Value"]]},
+        {"key": "history", "label": "History", "icon": "history", "type": "listtable", "field": "history",
+         "columns": [["timestamp", "Date"], ["type", "Type"], ["summary", "Description"]]},
+        {"key": "actions", "label": "Actions", "icon": "bolt", "type": "listtable", "field": "action_list",
+         "columns": [["state", "State"], ["action", "Action"], ["enabled", "Enabled"]]},
+    ]},
+    {"group": "Settings", "items": [*_settings_props_locks()]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -472,4 +489,5 @@ SUB_BLADES: dict[str, list] = {
     "kms":            _KMS_SUB,
     "elbv2":          _ELBV2_SUB,
     "logs":           _LOGS_SUB,
+    "cloudwatch":     _CLOUDWATCH_SUB,
 }

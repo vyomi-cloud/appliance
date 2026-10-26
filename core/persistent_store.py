@@ -32,6 +32,7 @@ from core.azure_blob_core import AzureBlobStore
 from core.gcp_firestore_core import FirestoreStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore, _Message
+from core.cloudwatch_core import CloudWatchStore
 from datetime import datetime
 
 
@@ -126,6 +127,14 @@ class PersistentMessagingStore(_PersistentMixin, InMemoryMessagingStore):
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "messaging"):
         InMemoryMessagingStore.__init__(self)
+        self._pinit(backend, store_id)
+
+
+class PersistentCloudWatchStore(_PersistentMixin, CloudWatchStore):
+    _STATE_ATTRS = ("metrics", "alarms", "composites", "history", "dashboards", "tags", "anomaly", "insight_rules", "streams")
+
+    def __init__(self, backend: SqliteStateBackend, store_id: str = "cloudwatch"):
+        CloudWatchStore.__init__(self)
         self._pinit(backend, store_id)
 
 

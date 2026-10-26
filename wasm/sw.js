@@ -147,6 +147,7 @@ const NANO_SERVICES = [
   { name: "kms",            label: "KMS engine",          category: "aws" },
   { name: "secretsmanager", label: "Secrets (KV)",        category: "aws" },
   { name: "sqs",            label: "Messaging (SQS/SNS)", category: "aws" },
+  { name: "cloudwatch",     label: "CloudWatch",          category: "aws" },
   { name: "iam",            label: "IAM",                 category: "aws" },
   { name: "rds",            label: "SqlStore (RDS)",      category: "aws" },
   { name: "gcp",            label: "ResourceStore (GCP)", category: "gcp" },
@@ -559,6 +560,14 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/aws\/secrets\/(.+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "secrets", "GetSecret", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "secrets", "DeleteSecret", { name: dec(m[1]) }] };
+  // ── CloudWatch alarms (core/cloudwatch_core.py) ─────────────────────
+  if (path === "/api/aws/cloudwatch/alarms") {
+    if (method === "GET")  return { tuple: ["aws", "cloudwatch", "ListAlarms", {}] };
+    if (method === "POST") return { tuple: ["aws", "cloudwatch", "CreateAlarm", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/cloudwatch\/alarms\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "cloudwatch", "GetAlarm", { name: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "cloudwatch", "DeleteAlarm", { name: dec(m[1]) }] };
   // ── KMS (core/kms_core.py) ──────────────────────────────────────────
   if (path === "/api/aws/kms/keys") {
     if (method === "GET")  return { tuple: ["aws", "kms", "ListKeys", {}] };
