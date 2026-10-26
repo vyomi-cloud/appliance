@@ -2216,8 +2216,7 @@ function openDiskGrow() {
 fetchDiskHealth();
 setInterval(fetchDiskHealth, 30000);
 </script>
-<script src="assets/lazy_backends.js">
-</script>
+<!-- lazy_backends.js is offline-only (it starts Docker backends); Nano has none. -->
 
 <style>
  #nano-docs{position:fixed;right:14px;bottom:40px;z-index:100000;font:13px system-ui,-apple-system,sans-serif}
