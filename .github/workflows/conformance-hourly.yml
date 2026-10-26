@@ -58,7 +58,7 @@ jobs:
         run: |
           pip install --quiet requests pytest boto3 azure-storage-blob
           mkdir -p .ci-node && cd .ci-node
-          npm init -y >/dev/null
+          echo '{"name":"vyomi-ci-node","private":true}' > package.json
           npm install --silent playwright@1.47.2 ws@8.18.0
           npx playwright install --with-deps chromium
 
