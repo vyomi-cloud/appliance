@@ -121,5 +121,29 @@
   "gcp_findings": 76,
   "azure_checks_passed": 107,
   "azure_findings": 31
+ },
+ {
+  "at": "2026-10-26T14:22:51+00:00",
+  "commit": "d5a79309baf0",
+  "suites_green": 13,
+  "suites_total": 22,
+  "checks_passed": 517,
+  "checks_failed": 102,
+  "api_coverage_pct": 12.8,
+  "ui_findings": 117,
+  "agent": "Fixed 2 UI findings (crawler Azure wizard/blade cascade = harness bug; offline S3 blank \"Creation date\"), added 1 test, 0 regressions checked beyond touched suites; commits are local only \u2014 the push t",
+  "new_features": 0,
+  "parity_gaps": 9,
+  "ops_tested_pct": 72.9,
+  "ui_clean_nano": 1,
+  "ui_total_nano": 43,
+  "ui_clean_offline": 2,
+  "ui_total_offline": 9,
+  "aws_checks_passed": 145,
+  "aws_findings": 46,
+  "gcp_checks_passed": 17,
+  "gcp_findings": 51,
+  "azure_checks_passed": 107,
+  "azure_findings": 20
  }
 ]
