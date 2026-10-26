@@ -1588,13 +1588,13 @@ def cbor_encode(v) -> bytes:
         if n < 24:
             out.append(major << 5 | n)
         elif n < 0x100:
-            out += bytes([major << 5 | 24, n])
+            out.extend(bytes([major << 5 | 24, n]))
         elif n < 0x10000:
-            out += bytes([major << 5 | 25]) + struct.pack(">H", n)
+            out.extend(bytes([major << 5 | 25]) + struct.pack(">H", n))
         elif n < 0x100000000:
-            out += bytes([major << 5 | 26]) + struct.pack(">I", n)
+            out.extend(bytes([major << 5 | 26]) + struct.pack(">I", n))
         else:
-            out += bytes([major << 5 | 27]) + struct.pack(">Q", n)
+            out.extend(bytes([major << 5 | 27]) + struct.pack(">Q", n))
 
     def enc(x) -> None:
         if x is None:

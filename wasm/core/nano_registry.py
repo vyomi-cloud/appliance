@@ -31,6 +31,7 @@ from core.azure_queue_core import AzureQueueStore
 from core.azure_arm_core import AzureArm
 from core.nano_events import EventStore
 from core.cloudwatch_core import CloudWatchStore
+from core.cloudwatch_core import CloudWatchStore
 
 _REG: dict | None = None
 
@@ -88,6 +89,7 @@ def get() -> dict:
             # + bounded: recorded on every mutating dispatch; persisted + cross-tab
             # synced via nano_persist (public dict attr `by_resource`, union-merge).
             "events": EventStore(),
+            "cw": CloudWatchStore(),   # CloudWatch (metrics / alarms / dashboards)
             "cw": CloudWatchStore(),   # CloudWatch (metrics / alarms / dashboards)
             # ── generic catalog CRUD + Azure ARM control plane ──
             # Both were previously built per-page inside Backends() with their state

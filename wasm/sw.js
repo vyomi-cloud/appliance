@@ -210,6 +210,23 @@ function nanoSpace(provider) {
            status: "running", active_region: region, active_account: acct };
 }
 
+// Live cost-savings for a provider's space: the console's census (by_service counts,
+// fresh only while a console is open) priced at the real-cloud monthly list rates
+// (mirrors core/cost_model.py and the dashboard's _NANO_RATE).
+const NANO_RATE = { s3: 0.50, dynamodb: 1.25, kms: 1.00, secretsmanager: 0.40, sqs: 0.40, iam: 0, rds: 25.55, ec2: 30.37,
+                    lambda: 0.20, apigateway: 3.50, vpc: 0, cloudwatch: 0.10, compute: 24.53, storage: 0.50, cloudsql: 25.00,
+                    pubsub: 0.40, firestore: 0.18, functions: 0.20, secretmanager: 0.18 };
+async function nanoSavings(provider) {
+  let c = null; try { c = await metaGet("census:" + provider); } catch (_) {}
+  const fresh = c && typeof c.ts === "number" && (Date.now() - c.ts) < 60000;
+  const bs = (fresh && c.by_service) || {};
+  let usd = 0, n = 0;
+  for (const k in bs) { n += Number(bs[k]) || 0; usd += (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0); }
+  usd = Math.round(usd * 100) / 100;
+  return { real_cloud_cost_usd: usd, simulator_cost_usd: 0, savings_usd: usd, savings_pct: usd > 0 ? 100 : 0,
+           by_provider: { [provider]: usd }, resource_count: n };
+}
+
 // ── User-created spaces (persisted) ───────────────────────────────────
 // Nano's default spaces come from the fixture (read-only); spaces the user
 // creates are persisted in IndexedDB so they survive reloads AND show up in the
@@ -734,7 +751,9 @@ self.addEventListener("fetch", (event) => {
           match = created.find((s) => s.space_id === activeId && s.provider === prov)
                || created.filter((s) => s.provider === prov).pop();
         } catch (_) {}
-        return json({ space: match || nanoSpace(prov) });
+        const sp = Object.assign({}, match || nanoSpace(prov));
+        sp.cost_savings = await nanoSavings(sp.provider || prov);
+        return json({ space: sp });
       }
       // Spaces list = fixture defaults + persisted user-created (deduped).
       if (apiPath === "/api/spaces" && method === "GET") {
@@ -744,7 +763,9 @@ self.addEventListener("fetch", (event) => {
         for (const s of [...(fx.spaces || []), ...created])
           if (!seen.has(s.space_id)) { seen.add(s.space_id); spaces.push(s); }
         let active = fx.active_space_id; try { active = (await metaGet("active")) || active; } catch (_) {}
-        return json({ spaces, active_space_id: active });
+        for (const sp of spaces) sp.cost_savings = await nanoSavings((sp.provider || "aws").toLowerCase());
+        const act = spaces.find((x) => x.space_id === active);
+        return json({ spaces, active_space_id: active, active_space: act });
       }
       // Appliance-health pies: per-cloud distribution computed live from the
       // in-browser spaces (the only CENTRAL resource data — the cores' resources
