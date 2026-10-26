@@ -23,3 +23,4 @@
 | 2026-10-26T20:25Z | #53 | aws/cognito-idp | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40395013289) |
 | 2026-10-26T20:31Z | #54 | aws/ecr | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40395798746) |
 | 2026-10-26T20:46Z | #55 | aws/ecs | success | building | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40396745046) |
+| 2026-10-26T21:02Z | #55 | aws/ecs | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40398876185) |
