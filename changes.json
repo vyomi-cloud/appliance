@@ -1,28 +1,6 @@
 {
- "at": "2026-10-26T15:54:47+00:00",
+ "at": "2026-10-26T16:54:45+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
-   "detail": {
-    "params": {
-     "was": [
-      "instance",
-      "project",
-      "workloadId"
-     ],
-     "now": [
-      "instance",
-      "project"
-     ]
-    }
-   },
-   "actionable": true
-  }
- ],
+ "changes": [],
  "errors": []
 }
