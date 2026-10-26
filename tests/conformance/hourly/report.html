@@ -73,7 +73,7 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:12px;margin:0;max-heigh
 <script>
 const D = JSON.parse(document.getElementById("data").textContent);
 const CLOUDS = [["all","All clouds"],["aws","AWS"],["gcp","GCP"],["azure","Azure"]];
-const PLURAL = {status:"statuses", kind:"kinds", type:"problem types", target:"targets", method:"methods"};
+const PLURAL = {status:"statuses", kind:"kinds", type:"problem types", target:"targets", method:"methods", only_in:"sides", service:"engines"};
 const NAME = {aws:"AWS",gcp:"GCP",azure:"Azure",all:"Cross-cloud"};
 const st = {cloud:"all", view:"findings", q:"", f:{}, sort:{}, open:new Set()};
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -105,7 +105,18 @@ const VIEWS = {
            ["tabs","Tabs walked",(r)=>esc((r.tabs||[]).join(", "))]],
     detail: (r) => { const fs = D.findings.filter((f)=>f.target===r.target&&f.cloud===r.cloud&&f.service===r.service);
       return fs.length ? "<pre>"+fs.map((f)=>`${f.type}${f.tab?" › "+f.tab:""}: ${f.detail}`).map(esc).join("\n")+"</pre>" : ""; } },
-  coverage: { label: "API coverage gaps", rows: () => D.uncovered.map((u)=>({...u, cloud: /azure/i.test(u.path)?"azure":/gcp|gcs|google|storage\/v1/i.test(u.path)?"gcp":/aws|s3|dynamo|sqs|sns|iam|ec2|rds|lambda|kms/i.test(u.path)?"aws":"all"})),
+  newf: { label: "New features", rows: () => D.new,
+    filters: ["target","kind"], search: ["service","name","kind"],
+    cols: [["cloud","Cloud",(r)=>cloudPill(r.cloud)],["target","Target"],["kind","Kind"],["service","Service / engine"],["name","Feature"],
+           ["tested","SDK test",(r)=>r.tested===null||r.tested===undefined?'<span class="mut">crawled live</span>':pill(r.tested?"pass":"fail",r.tested?"yes":"missing")]] },
+  parity: { label: "Nano ↔ offline gaps", rows: () => D.parity,
+    filters: ["kind","only_in"], search: ["service","name"],
+    cols: [["cloud","Cloud",(r)=>cloudPill(r.cloud)],["kind","Kind"],["service","Service / engine"],["name","Feature"],
+           ["only_in","Only in"],["missing_in","Missing in",(r)=>pill("fail",r.missing_in)]] },
+  ops: { label: "Untested SDK operations", rows: () => D.untested_ops,
+    filters: ["target","service"], search: ["service","name"],
+    cols: [["cloud","Cloud",(r)=>cloudPill(r.cloud)],["target","Target"],["service","Engine"],["name","Operation"]] },
+  coverage: { label: "Untested API routes", rows: () => D.uncovered.map((u)=>({...u, cloud: /azure/i.test(u.path)?"azure":/\/gcp|storage\/v1/i.test(u.path)?"gcp":/\/(aws|s3|dynamodb|sqs|sns|iam|ec2|rds|lambda|kms)\b/i.test(u.path)?"aws":"all"})),
     filters: ["method"], search: ["path","file"],
     cols: [["cloud","Cloud",(r)=>cloudPill(r.cloud)],["method","Method"],["path","Route"],["file","Defined in"]] },
   history: { label: "History", rows: () => [...D.history].reverse().map((h)=>({...h, cloud:"all"})),
@@ -142,6 +153,9 @@ function renderKpis() {
     ["Offline UI services clean", clean("offline")],
     ["Open UI findings", F.length],
   ];
+  const nw = D.new.filter(inCloud).length, ut = D.untested_ops.filter(inCloud).length;
+  k.push(["New features since last run", D.baseline ? nw : "—", D.baseline ? `${D.parity.filter(inCloud).length} Nano↔offline gaps` : "baseline taken this run"]);
+  k.push(["SDK operations untested", ut, st.cloud === "all" ? `of ${D.ops.total}` : ""]);
   if (st.cloud === "all") k.push(["API routes with tests", `${D.api.pct}%`, `${D.api.total - D.api.uncovered}/${D.api.total}`]);
   document.getElementById("kpis").innerHTML = k.map(([l, v, sub]) =>
     `<div class="kpi"><span class="mut">${l}</span><b>${v}</b>${sub ? `<span class="mut">${sub}</span>` : ""}</div>`).join("");

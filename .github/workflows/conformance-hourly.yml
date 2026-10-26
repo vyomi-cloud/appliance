@@ -108,15 +108,17 @@ jobs:
           nohup node wasm/relay/local-relay.mjs > relay.log 2>&1 &
           for i in $(seq 1 20); do curl -fs "$RELAY_HTTP/health" >/dev/null && break; sleep 1; done
 
-      - name: Fetch previous page history
+      - name: Fetch previous history + feature inventory
         run: |
           mkdir -p prev
           curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/conformance-report/history.json" -o prev/history.json \
             || curl -fsL "$PAGE_URL/history.json" -o prev/history.json || echo '[]' > prev/history.json
-          base=$(python3 -c "import json;h=json.load(open('prev/history.json'));print(h[-1]['commit'] if h else '')" 2>/dev/null || true)
-          echo "BASE_COMMIT=$base" >> "$GITHUB_ENV"
+          # Last run's feature inventory: the baseline new features are diffed against.
+          curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/conformance-report/inventory.json" \
+            -o prev/inventory.json || rm -f prev/inventory.json
+          echo "PREV_INVENTORY=$PWD/prev/inventory.json" >> "$GITHUB_ENV"
 
-      - name: Detect features without coverage
+      - name: Detect new features, parity gaps and untested operations
         run: python3 tests/conformance/hourly/detect_new_features.py
 
       - name: Run conformance test beds

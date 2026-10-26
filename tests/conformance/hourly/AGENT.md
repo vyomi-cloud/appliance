@@ -13,8 +13,15 @@ fast, and to prove it with conformance tests.
   EMPTY_PANEL, DEAD_TAB, PLACEHOLDER_CELL, CREATE_* and SAVINGS_* findings.
 - `tests/conformance/hourly/out/results.json` — every suite's pass/fail + log tail
   (full logs in `out/logs/<suite>.log`).
-- `tests/conformance/hourly/out/new_features.json` — routes/pages/cores added since
-  the last run (`new`) and every `/api` route no test mentions (`uncovered`).
+- `tests/conformance/hourly/out/new_features.json` — the feature inventory diff
+  against the last run, for both targets:
+  - `new` / `removed`: console services, tabs, create fields, grid columns and
+    actions (from each cloud's catalog; Nano = `wasm/fixtures/*-catalog.json`), SDK
+    operations each engine implements (`core/*_core.py`, `wasm/core/*_core.py`) and
+    `/api` routes added or dropped since the last run
+  - `parity`: features only one of Nano / offline has
+  - `untested_ops`: SDK operations no Java/Go/Python/CLI test calls
+  - `uncovered`: `/api` routes no test references
 
 ## Priorities, in order
 
@@ -39,8 +46,17 @@ fast, and to prove it with conformance tests.
    public price lists) and in the space tick in `server.py`, for AWS, GCP and Azure,
    and mirror the change in Nano. Never inflate numbers to pass; use real list prices.
 4. **Failing suites** in `results.json`.
-5. **New features** (`new_features.json` → `new` with `covered: false`): add tests.
-6. **Uncovered routes** (`uncovered`): add tests, a few per run.
+5. **New features** (`new_features.json` → `new`): a new SDK operation with
+   `tested: false` gets a Java or Go test (official SDK, endpoint changed only); a
+   new service/tab/action is crawled live — fix whatever the crawl finds and add a
+   Playwright validator for its main flow. A `removed` feature is a likely
+   regression: confirm it was intended (commit message) or restore it.
+6. **Nano ↔ offline parity** (`parity`): implement the missing side so both
+   targets expose the same services, tabs and operations (shared logic lives in
+   `core/` and is vendored to `wasm/core/` by `wasm/build_cores.py`). If an entry is
+   only a naming difference, not a missing feature, say so in the summary.
+7. **Untested SDK operations** (`untested_ops`) then **untested routes**
+   (`uncovered`): add tests, a few per run.
 
 ## Product bug or harness bug?
 

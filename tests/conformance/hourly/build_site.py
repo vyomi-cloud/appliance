@@ -94,9 +94,25 @@ def markdown(d: dict, e: dict) -> str:
                 L += [f"| `{md(f['type'])}` | {md(f.get('tab'))} | {md(f['detail'])} |" for f in fs]
                 L += ["", "</details>", ""]
 
-    new = [n for n in d.get("new", []) if not n.get("covered")]
-    L += ["## New features without tests", ""]
-    L += [f"- {md(n.get('kind'))}: {md(n.get('method', ''))} `{md(n.get('path') or n.get('file'))}`" for n in new[:50]] or ["None since the last run."]
+    L += ["## New features since the last run", ""]
+    if not d.get("baseline"):
+        L += ["First inventory taken this run; new features are reported from the next run.", ""]
+    elif not d["new"]:
+        L += ["None.", ""]
+    else:
+        L += ["| Target | Cloud | Service | Kind | Feature | SDK test |", "|---|---|---|---|---|---|"]
+        L += [f"| {md(n['target'])} | {NAMES.get(n['cloud'], n['cloud'])} | {md(n['service'])} | {md(n['kind'])} | {md(n['name'])} | "
+              f"{'—' if n.get('tested') is None else ('✅' if n['tested'] else '❌')} |" for n in d["new"][:100]]
+        L.append("")
+    L += ["## Nano ↔ offline parity gaps", ""]
+    L += [f"- {NAMES.get(p['cloud'], p['cloud'])} {md(p['kind'])} **{md(p['name'])}** ({md(p['service'])}): only in {md(p['only_in'])}"
+          for p in d["parity"][:60]] or ["None: both targets expose the same services, tabs and operations."]
+    L += ["", f"## SDK operations without a test ({d['ops']['untested']} of {d['ops']['total']})", ""]
+    by_engine = {}
+    for o in d["untested_ops"]:
+        by_engine.setdefault((o["target"], o["cloud"], o["service"]), []).append(o["name"])
+    for (t, c, eng), names in sorted(by_engine.items()):
+        L.append(f"<details><summary>{NAMES.get(c, c)} · <code>{md(eng)}</code> ({md(t)}) — {len(names)}</summary>\n\n{', '.join(sorted(names))}\n\n</details>")
     L += ["", "## Last 24 runs", "", "| Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |", "|---|---|---|---|---|---|---|"]
     for h in reversed(d["history"][-24:]):
         L.append(f"| {md(h.get('at'))} | {h.get('suites_green')}/{h.get('suites_total')} | {h.get('checks_passed')} | "
@@ -135,7 +151,9 @@ def main() -> None:
              "suites_green": sum(1 for s in suites if s["status"] == "pass"), "suites_total": len(suites),
              "checks_passed": sum(s.get("passed", 0) for s in suites),
              "checks_failed": sum(s.get("failed", 0) for s in suites), "api_coverage_pct": api_cov,
-             "ui_findings": len(findings), "agent": agent.splitlines()[0][:200] if agent else ""}
+             "ui_findings": len(findings), "agent": agent.splitlines()[0][:200] if agent else "",
+             "new_features": len(feats.get("new", [])), "parity_gaps": len(feats.get("parity", [])),
+             "ops_tested_pct": round(100 * (1 - feats.get("ops_untested", 0) / feats["ops_total"]), 1) if feats.get("ops_total") else 0.0}
     for t in ("nano", "offline"):
         entry[f"ui_clean_{t}"], entry[f"ui_total_{t}"] = clean(t)
     for c in ("aws", "gcp", "azure"):
@@ -150,7 +168,13 @@ def main() -> None:
                    for s in suites],
         "services": services, "findings": findings, "history": history,
         "api": {"total": rt, "uncovered": ru, "pct": api_cov},
-        "new": feats.get("new", []), "uncovered": feats.get("uncovered", [])[:500],
+        "ops": {"total": feats.get("ops_total", 0), "untested": feats.get("ops_untested", 0)},
+        "baseline": feats.get("baseline", False),
+        "new": [{k: f.get(k) for k in ("target", "cloud", "service", "kind", "name", "path", "tested")} for f in feats.get("new", [])][:2000],
+        "removed": [{k: f.get(k) for k in ("target", "cloud", "service", "kind", "name")} for f in feats.get("removed", [])][:500],
+        "parity": feats.get("parity", [])[:2000],
+        "untested_ops": [{k: f.get(k) for k in ("target", "cloud", "service", "name")} for f in feats.get("untested_ops", [])],
+        "uncovered": feats.get("uncovered", [])[:500],
     }
     template = open(os.path.join(HERE, "report.html"), encoding="utf-8").read()
     # Embedded as JSON inside <script type="application/json">; escape "</" so a
@@ -164,6 +188,10 @@ def main() -> None:
     json.dump(res, open(os.path.join(SITE, "results.json"), "w"), indent=1)
     json.dump(history, open(os.path.join(SITE, "history.json"), "w"), indent=1)
     json.dump(ui, open(os.path.join(SITE, "ui-findings.json"), "w"), indent=1)
+    # Next run diffs its feature inventory against this one.
+    inv = os.path.join(OUT, "inventory.json")
+    if os.path.exists(inv):
+        open(os.path.join(SITE, "inventory.json"), "w").write(open(inv).read())
     print(f"report written: {entry['suites_green']}/{len(suites)} suites green, "
           f"{len(findings)} UI findings, API coverage {api_cov}%")
 
