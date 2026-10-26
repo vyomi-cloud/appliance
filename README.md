@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-Updated **2026-10-26 15:31 UTC** · **36 services released** (AWS 12 / GCP 12 / Azure 12) · **81 in the pipeline** (P1 + P2) · covering all **1068 services** AWS, GCP and Azure publish (catalog of 2026-10-26).
+Updated **2026-10-26 15:47 UTC** · **36 services released** (AWS 12 / GCP 12 / Azure 12) · **81 in the pipeline** (P1 + P2) · covering all **1068 services** AWS, GCP and Azure publish (catalog of 2026-10-26).
 
 A new service goes live only when the service gate passes: engine, native SDK/CLI wire, console UI offline + Nano, Java + Go + CLI test beds, Playwright console tests offline + Nano, registered with the hourly conformance run and the upstream watcher. Then it is released (patch version) and handed off to both hourly jobs.
 
