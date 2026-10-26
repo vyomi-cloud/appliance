@@ -363,7 +363,7 @@ _ECS_SUB = [
              {"label": "Force deploy", "method": "POST", "path": _EC + "/services/{id}/restart"},
              {"label": "Delete", "method": "DELETE", "path": _EC + "/services/{id}", "danger": True}]},
         {"key": "tasks", "label": "Tasks", "icon": "memory", "type": "subgrid",
-         "path": _EC + "/tasks", "arrayKey": "tasks", "idField": "id", "empty": "No running tasks in this cluster yet.",
+         "path": _EC + "/tasks", "arrayKey": "tasks", "idField": "id", "empty": "No running tasks in this cluster yet. Tasks run as real containers on Pro and Max; Free, Lite and Nano are control-plane only.",
          "columns": [["task_id", "Task"], ["status", "Last status"], ["desired_status", "Desired status"], ["task_definition", "Task definition"],
                      ["launch_type", "Launch type"], ["group", "Group"], ["private_ip", "Private IP"], ["started", "Started at"]],
          "create": {"label": "Run new task", "path": _EC + "/tasks", "fields": [
