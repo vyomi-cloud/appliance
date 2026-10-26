@@ -1,131 +1,15 @@
 {
- "at": "2026-10-26T19:54:49+00:00",
+ "at": "2026-10-26T20:54:52+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "kms",
-   "kind": "operation-added",
-   "key": "aws:kms:Decapsulate:added",
-   "title": "AWS kms: new operation Decapsulate",
-   "detail": {
-    "in": [
-     "DryRun",
-     "EncapsulationAlgorithm",
-     "GrantTokens",
-     "KeyId",
-     "SharedSecretCiphertextBlob"
-    ],
-    "required": [
-     "EncapsulationAlgorithm",
-     "KeyId",
-     "SharedSecretCiphertextBlob"
-    ],
-    "out": [
-     "EncapsulationAlgorithm",
-     "KeyId",
-     "SharedSecret"
-    ],
-    "http": "POST",
-    "deprecated": false
-   },
-   "actionable": true
-  },
-  {
-   "cloud": "aws",
-   "service": "kms",
-   "kind": "operation-added",
-   "key": "aws:kms:Encapsulate:added",
-   "title": "AWS kms: new operation Encapsulate",
-   "detail": {
-    "in": [
-     "DryRun",
-     "EncapsulationAlgorithm",
-     "GrantTokens",
-     "KeyId"
-    ],
-    "required": [
-     "EncapsulationAlgorithm",
-     "KeyId"
-    ],
-    "out": [
-     "EncapsulationAlgorithm",
-     "KeyId",
-     "SharedSecret",
-     "SharedSecretCiphertextBlob"
-    ],
-    "http": "POST",
-    "deprecated": false
-   },
-   "actionable": true
-  },
-  {
-   "cloud": "aws",
-   "service": "kms",
-   "kind": "operation-changed",
-   "key": "aws:kms:GetPublicKey:253f14a7eedc",
-   "title": "AWS kms: operation GetPublicKey changed",
-   "detail": {
-    "out": {
-     "was": [
-      "CustomerMasterKeySpec",
-      "EncryptionAlgorithms",
-      "KeyAgreementAlgorithms",
-      "KeyId",
-      "KeySpec",
-      "KeyUsage",
-      "PublicKey",
-      "SigningAlgorithms"
-     ],
-     "now": [
-      "CustomerMasterKeySpec",
-      "EncapsulationAlgorithms",
-      "EncryptionAlgorithms",
-      "KeyAgreementAlgorithms",
-      "KeyId",
-      "KeySpec",
-      "KeyUsage",
-      "PublicKey",
-      "SigningAlgorithms"
-     ]
-    }
-   },
-   "actionable": true
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:boto3",
-   "kind": "release",
-   "key": "ver:pypi:boto3:1.43.119",
-   "title": "pypi:boto3: 1.43.118 \u2192 1.43.119",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:botocore",
-   "kind": "release",
-   "key": "ver:pypi:botocore:1.43.119",
-   "title": "pypi:botocore: 1.43.118 \u2192 1.43.119",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2",
+   "service": "Amazon RDS",
    "kind": "announcement",
-   "key": "feed:aws:898560c02675",
-   "title": "Amazon WorkSpaces Core Managed Instances now supports ModifyVolume API",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-workspaces-cmi-modifyvolume/",
-   "detail": "Amazon WorkSpaces Core Managed Instances now supports the ModifyVolume API, which lets you change volume size, volume type, IOPS, or throughput in place, without detaching the volume or restarting the instance. Previously, changing storage capacity or performance on a deployed managed instance required rebuilding it. With ModifyVolume, you can increase volume size up to 16,384 GiB, switch between supported Amazon EBS volume types, adjust IOPS for gp3, io1, and io2 volumes, and modify throughput for gp3 volumes. The API supports idempotency tokens to prevent duplicate changes, and you can track",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "AWS IAM",
-   "kind": "announcement",
-   "key": "feed:aws:3b89a1528322",
-   "title": "AWS IAM Identity Center now supports cross-Region trusted identity propagation",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/aws-iam-identity-center-cross-region-tip/",
-   "detail": "Trusted identity propagation carries a user's identity with their request, so AWS services can grant permissions based on who the user is and their underlying group associations, and log that user's access for auditing. With cross-Region support, this identity context can now be propagated to AWS services running in different AWS Regions, giving you greater flexibility in how you architect and deploy across AWS Regions. Customers often distribute workloads across AWS Regions for many reasons including separating the compute from the data it queries, to running workloads where capacity is avail",
+   "key": "feed:aws:ec12376ab0b0",
+   "title": "Amazon RDS now supports the latest Cumulative Update and GDR updates for Microsoft SQL Server",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-rds-supports-latest-cumulative-update-gdr-microsoft-sql-server/",
+   "detail": "Amazon Relational Database Service (Amazon RDS) for SQL Server now supports the latest Cumulative Updates (CU) and General Distribution Release (GDR) updates for Microsoft SQL Server. This release includes support for Microsoft SQL Server 2017 CU31+GDR KB5122774 (RDS version 14.00.3550.4.v1), SQL Server 2019 CU32+GDR KB5122772 (RDS version 15.00.4490.9.v1), SQL Server 2022 CU27 KB5104824 (RDS version 16.00.4295.3.v1) and SQL Server 2025 CU9 KB5122048 (RDS version 17.00.5005.3.v1). For additional information on the improvements and fixes included in these updates, see Microsoft documentation fo",
    "actionable": false
   }
  ],
