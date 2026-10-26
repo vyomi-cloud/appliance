@@ -1,0 +1,49 @@
+{
+  "cloud": "aws",
+  "key": "cloudformation",
+  "name": "AWS CloudFormation",
+  "upstream": "cloudformation",
+  "issue": 51,
+  "core": "core/cloudformation_core.py",
+  "operations": [
+    "CancelUpdateStack",
+    "CreateChangeSet",
+    "CreateStack",
+    "CreateStackSet",
+    "DeleteChangeSet",
+    "DeleteStack",
+    "DeleteStackSet",
+    "DescribeAccountLimits",
+    "DescribeChangeSet",
+    "DescribeStackEvents",
+    "DescribeStackResource",
+    "DescribeStackResources",
+    "DescribeStackSet",
+    "DescribeStacks",
+    "ExecuteChangeSet",
+    "GetStackPolicy",
+    "GetTemplate",
+    "GetTemplateSummary",
+    "ListChangeSets",
+    "ListExports",
+    "ListImports",
+    "ListStackResources",
+    "ListStackSets",
+    "ListStacks",
+    "SetStackPolicy",
+    "UpdateStack",
+    "UpdateTerminationProtection",
+    "ValidateTemplate"
+  ],
+  "backend": {
+    "kind": "in-process"
+  },
+  "suites": [
+    "offline-sdk-java-aws-cloudformation",
+    "offline-sdk-go-aws-cloudformation",
+    "offline-cli-aws-cloudformation",
+    "offline-ui-aws-cloudformation",
+    "nano-ui-aws-cloudformation"
+  ],
+  "status": "ready"
+}
