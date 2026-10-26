@@ -124,9 +124,12 @@ def _require_tenant_space(space_id: str) -> dict:
 
 
 def _space_payload(space: dict) -> dict:
-    payload = copy.deepcopy(space)
-    if not isinstance(payload, dict):
+    if not isinstance(space, dict):
         return {}
+    # service_states is the space's internal resource store (S3 object bodies,
+    # queue messages, …). Clients get the inventory from resources.nodes; raw
+    # bytes in here made every /api/spaces call 500 once a binary object existed.
+    payload = copy.deepcopy({k: v for k, v in space.items() if k != "service_states"})
     payload.setdefault("space_id", "")
     payload.setdefault("name", "")
     payload.setdefault("provider", "aws")
