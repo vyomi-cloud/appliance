@@ -27,6 +27,7 @@ from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
 from core.nano_events import EventStore
+from core.cloudformation_core import CfnStore
 
 _REG: dict | None = None
 
@@ -65,5 +66,6 @@ def get() -> dict:
             # + bounded: recorded on every mutating dispatch; persisted + cross-tab
             # synced via nano_persist (public dict attr `by_resource`, union-merge).
             "events": EventStore(),
+            "cfn": CfnStore(),    # CloudFormation (stacks / change sets / stack sets)
         }
     return _REG

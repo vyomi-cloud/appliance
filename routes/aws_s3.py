@@ -1097,6 +1097,9 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             if str(params.get("Action", "")).strip() in _EC2_VPC_ACTIONS:
                 return await _srv().api_vpc_query(request)
             return await _srv().api_ec2_query(request)
+        if service == "cloudformation":
+            from routes.aws_cloudformation import handle as _cfn_handle
+            return await _cfn_handle(request)
         if service == "sqs":
             return await _srv().api_sqs_query(request)
         if service == "rds":

@@ -98,6 +98,7 @@ from core import eventbridge_core as events
 from core import lambda_core as lam
 from core import apigateway_core as apigw
 from core import vpc_core as vpc
+from core import cloudformation_core as cfn
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
 import types as _types
@@ -149,6 +150,7 @@ _SIGNING = {
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
     "events": "events", "lambda": "lambda", "ec2": "vpc",
+    "cloudformation": "cloudformation",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
@@ -188,6 +190,16 @@ _QUERY_ACTION = {
     "CreateInternetGateway": "vpc", "AttachInternetGateway": "vpc", "CreateRoute": "vpc",
     "DescribeVpcs": "vpc", "CreateNetworkAcl": "vpc", "CreateNetworkAclEntry": "vpc",
     "AssociateNetworkAcl": "vpc", "AnalyzeReachability": "vpc",
+    # CloudFormation
+    "CreateStack": "cloudformation", "UpdateStack": "cloudformation", "DeleteStack": "cloudformation",
+    "DescribeStacks": "cloudformation", "ListStacks": "cloudformation",
+    "DescribeStackEvents": "cloudformation", "DescribeStackResources": "cloudformation",
+    "DescribeStackResource": "cloudformation", "ListStackResources": "cloudformation",
+    "GetTemplate": "cloudformation", "GetTemplateSummary": "cloudformation",
+    "ValidateTemplate": "cloudformation", "ListExports": "cloudformation",
+    "CreateChangeSet": "cloudformation", "DescribeChangeSet": "cloudformation",
+    "ExecuteChangeSet": "cloudformation", "DeleteChangeSet": "cloudformation",
+    "ListChangeSets": "cloudformation",
 }
 
 
@@ -235,6 +247,7 @@ class AwsWireRouter:
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
+        self.cfn = s.get("cfn") or cfn.CfnStore()             # CloudFormation stacks / change sets
 
     def _servicebus_service(self, method, path, lheaders):
         """Azure Service Bus (topics) — the pub/sub-fan-out peer of SNS/Pub-Sub.
@@ -444,6 +457,8 @@ class AwsWireRouter:
             r = rds.dispatch(self.rds, params)
         elif svc == "vpc":
             r = vpc.dispatch(self.vpc, params)
+        elif svc == "cloudformation":
+            r = cfn.dispatch(self.cfn, params)
         else:  # sns
             r = sns.dispatch(self.msg, params)
         hdrs = dict(r.headers or {})
