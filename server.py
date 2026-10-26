@@ -2467,11 +2467,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             _cloudsim_add_runtime_instance(runtime_instances, resource_id, provider, service, bundle_key or "", resource)
         try:
             from core import cost_model as _cm
-            _cost = _cm.estimate_resource_cost(
-                provider, service, kind,
+            _itype = (
                 resource.get("instance_type") or resource.get("machine_type") or resource.get("machineType")
-                or resource.get("db_instance_class") or resource.get("vmSize") or "",
+                or resource.get("db_instance_class") or resource.get("vmSize")
+                or ((resource.get("properties") or {}).get("hardwareProfile") or {}).get("vmSize") or ""
             )
+            if _itype:
+                node["instance_type"] = str(_itype).rsplit("/", 1)[-1]
+            _cost = _cm.estimate_resource_cost(provider, service, kind, node.get("instance_type", ""))
             node["estimated_real_cost_usd"] = _cost["monthly_usd"]
             node["estimated_hourly_usd"] = _cost["hourly_usd"]
         except Exception:

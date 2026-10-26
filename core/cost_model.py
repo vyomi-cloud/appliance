@@ -141,7 +141,7 @@ def estimate_resource_cost(provider: str, service: str, kind: str,
         {hourly_usd, monthly_usd, uptime_cost_usd, uptime_hours, source}
     """
     # VM instances — use hourly pricing tables
-    if kind in ("instance", "vm") and service in ("ec2", "compute", "vm", "gcp_compute"):
+    if kind in ("instance", "vm", "virtualmachines") and service in ("ec2", "compute", "vm", "gcp_compute"):
         rate = vm_hourly_rate(provider, instance_type)
         return {
             "hourly_usd": round(rate, 4),
