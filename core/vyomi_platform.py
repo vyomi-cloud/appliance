@@ -705,6 +705,10 @@ class FirestoreEngine:
         from core import tier_policy as _tp
         norm = _tp.normalize_tier(tier)
         base = set(CORE_PACK_IDS)
+        # CLOUDLEARN_TIER_ENFORCE=0 (test/dev) lifts every tier limit — the
+        # middleware honours it; this capability gate has to as well.
+        if os.environ.get("CLOUDLEARN_TIER_ENFORCE", "1").strip() in ("0", "false", ""):
+            return base
         if norm == "free":
             # Locked categories: nosql + eventing. The pack IDs in those
             # categories for any provider.

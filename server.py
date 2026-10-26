@@ -2837,6 +2837,10 @@ def _ensure_capability(path: str) -> None:
         PLATFORM.ensure_capability(path)
     except LookupError:
         raise HTTPException(404, detail="CapabilityPackMissing")
+    except PermissionError:
+        # A tier-locked capability pack is a 403 the caller can act on, not an
+        # unhandled PermissionError (which surfaced as a 500, e.g. Firestore).
+        raise HTTPException(403, detail="CapabilityLockedByTier")
 
 
 def _catalog() -> list[dict]:
