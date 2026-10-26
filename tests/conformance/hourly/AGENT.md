@@ -42,6 +42,15 @@ fast, and to prove it with conformance tests.
 5. **New features** (`new_features.json` → `new` with `covered: false`): add tests.
 6. **Uncovered routes** (`uncovered`): add tests, a few per run.
 
+## Product bug or harness bug?
+
+Before fixing a finding, confirm it reproduces for a real user (open the console
+with Playwright, or call the API the console calls). The crawler is heuristic: if
+a finding is the harness's mistake (e.g. it counted rows on the wrong screen, or
+clicked a non-submit button), fix the harness under `tests/conformance/hourly/`
+so it reports accurately, say so in the commit, and move on. Harness fixes may
+only make reporting more accurate, never hide a real problem.
+
 ## Every fix ships with a conformance test
 
 - UI fixes → a Playwright validator in `wasm/ui-tests/validate-<cloud>-<area>.mjs`

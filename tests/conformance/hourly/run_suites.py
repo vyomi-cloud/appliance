@@ -28,7 +28,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 OUT = os.path.join(HERE, "out")
 
-PASS_RE = re.compile(r"\[(?:PASS|✓)\]|^\s*(?:PASS|✓)\b|\bPASS\b(?: \(|:)|\s✓\s", re.M)
+PASS_RE = re.compile(r"\[(?:PASS|OK|✓)\s*\]|^\s*(?:PASS|✓)\b|\bPASS\b(?: \(|:)|\s✓\s", re.M)
 FAIL_RE = re.compile(r"\[(?:FAIL|✗)\]|^\s*(?:FAIL|✗)\b|\bFAIL\b(?: \(|:)|\s✗\s", re.M)
 PYTEST_RE = re.compile(r"(\d+) (passed|failed|error|errors)\b")
 # Never publish anything that looks like a credential in the public page.
@@ -87,6 +87,9 @@ def run_suite(s: dict, subs: dict) -> dict:
         passed, failed = count(log)
         if code != 0 and failed == 0:
             failed = 1  # crashed / non-zero without printing a FAIL line
+        if passed == 0 and failed == 0:
+            failed = 1  # nothing was checked: never report an empty run as green
+            log += "\nNO CHECKS RAN (no PASS/FAIL lines recognised)"
     res["passed"], res["failed"] = passed, failed
     res["status"] = "pass" if failed == 0 and (code == 0 or s["kind"] == "ui") else "fail"
     res["tail"] = "\n".join(log.strip().splitlines()[-30:])[-3000:]

@@ -16,7 +16,7 @@
     {"id": "offline-cli-azure", "target": "offline", "cloud": "azure", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-cli-smoke.sh", "timeout": 300},
 
     {"id": "nano-ui-crawl", "target": "nano", "cloud": "all", "kind": "ui", "cmd": "TARGET=nano NANO_DIR=wasm OUT=tests/conformance/hourly/out/ui-nano.json node tests/conformance/hourly/ui_crawler.mjs", "timeout": 1800},
-    {"id": "nano-cores", "target": "nano", "cloud": "all", "kind": "core", "cmd": "PYTHONPATH=wasm/core python3 -m pytest tests/conformance -q --tb=line -k core", "timeout": 900},
+    {"id": "nano-cores", "target": "nano", "cloud": "all", "kind": "core", "cmd": "PYTHONPATH=wasm/core python3 -m pytest tests/conformance/test_*_core.py -q --tb=line", "timeout": 900},
     {"id": "nano-ui-aws-api", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-api.mjs", "timeout": 600},
     {"id": "nano-ui-aws-tabs", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-tabs.mjs", "timeout": 600},
     {"id": "nano-ui-gcp-tabs", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-functional-tabs.mjs", "timeout": 600},

@@ -1,0 +1,6 @@
+# CI override for the hourly conformance run: lift tier limits (service locks,
+# quantity caps, rate limit) so suites measure behaviour, not the Free tier.
+services:
+  simulator:
+    environment:
+      CLOUDLEARN_TIER_ENFORCE: "0"

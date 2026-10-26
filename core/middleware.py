@@ -530,7 +530,10 @@ async def _capability_middleware(request: Request, call_next):
 async def _rate_limit_middleware(request: Request, call_next):
     """Per-tenant token-bucket rate limit. Bypasses health probes + static."""
     p = request.url.path
-    if any(p.startswith(x) for x in _RATE_LIMIT_BYPASS_PATHS):
+    # CLOUDLEARN_TIER_ENFORCE=0 is the test/dev escape hatch for every tier
+    # limit; the per-tier rate limit is one of them (CI conformance would
+    # otherwise 429 against the Free-tier 10 rps cap).
+    if not _TIER_ENFORCE or any(p.startswith(x) for x in _RATE_LIMIT_BYPASS_PATHS):
         return await call_next(request)
     try:
         tid = _active_tenant_id() or "anonymous"
