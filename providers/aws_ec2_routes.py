@@ -155,6 +155,13 @@ def register(app, h) -> None:
     def api_ec2_list_instances():
         return _server().api_ec2_list_instances()
 
+    @app.get("/api/ec2/instances/{instance_id}")
+    def api_ec2_get_instance(instance_id: str):
+        for inst in _server().api_ec2_list_instances().get("instances", []):
+            if inst.get("instance_id") == instance_id:
+                return inst
+        raise HTTPException(status_code=404, detail="InvalidInstanceID.NotFound")
+
     @app.post("/api/ec2/instances")
     async def api_ec2_create_instance(request: Request, auto_start: bool = True):
         payload = {}
