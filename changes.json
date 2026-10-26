@@ -1,6 +1,17 @@
 {
- "at": "2026-10-26T22:54:55+00:00",
+ "at": "2026-10-26T23:54:56+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "gcp",
+   "service": "Compute Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:65d2b90c493e",
+   "title": "Compute Engine: Security (October 26, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_26_2026",
+   "detail": "A vulnerability (CVE-2026-85299) about incorrect authorization in Compute Engine was discovered and has been addressed. For more information, see the GCP-2026-073 security bulletin .",
+   "actionable": false
+  }
+ ],
  "errors": []
 }
