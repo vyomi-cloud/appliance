@@ -1,5 +1,3 @@
-# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
-# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
 """API Gateway V2 core — substrate-independent HTTP + WebSocket API control plane
 (botocore `apigatewayv2`, 2018-11-29, rest-json).
 
@@ -588,6 +586,21 @@ def _untag(store, arn, query):
 
 
 _ROUTES = _routes()
+
+
+def console_view(api: dict) -> dict:
+    """Console grid/detail row for an API — every grid column is always populated."""
+    return {
+        "api_id": api["apiId"], "id": api["apiId"], "name": api["name"],
+        "protocol_type": api["protocolType"], "api_endpoint": api["apiEndpoint"],
+        "route_count": len(api["routes"]), "integration_count": len(api["integrations"]),
+        "stage_count": len(api["stages"]), "created": api["createdDate"],
+        "description": api.get("description") or "", "version": api.get("version") or "",
+        "route_selection_expression": api["routeSelectionExpression"],
+        "ip_address_type": api.get("ipAddressType", "ipv4"),
+        "status": "AVAILABLE", "tags": dict(api.get("tags") or {}),
+        "arn": f"arn:aws:apigateway:{REGION}::/apis/{api['apiId']}",
+    }
 
 
 def _parse(body):

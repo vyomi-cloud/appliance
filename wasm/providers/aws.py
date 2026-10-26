@@ -92,6 +92,13 @@ class Aws(CloudProvider):
             ("apigateway", "CreateApi"):  lambda b, a, p: D.apigw_create(p),
             ("apigateway", "DeleteApi"):  lambda b, a, p: D.apigw_delete(p),
             ("apigateway", "Invoke"):     lambda b, a, p: D.apigw_invoke(p),
+            # API Gateway V2 — HTTP/WebSocket APIs, via core/apigatewayv2_core.py
+            ("apigatewayv2", "ListApis"):    lambda b, a, p: D.apigwv2_list(p),
+            ("apigatewayv2", "CreateApi"):   lambda b, a, p: D.apigwv2_create(p),
+            ("apigatewayv2", "GetApi"):      lambda b, a, p: D.apigwv2_get(p),
+            ("apigatewayv2", "UpdateApi"):   lambda b, a, p: D.apigwv2_patch(p),
+            ("apigatewayv2", "DeleteApi"):   lambda b, a, p: D.apigwv2_delete(p),
+            ("apigatewayv2", "ListChildren"): lambda b, a, p: D.apigwv2_children(p),
             # VPC — topology + reachability analyzer, via core/vpc_core.py
             ("vpc", "List"):              lambda b, a, p: D.vpc_list(p),
             ("vpc", "CreateVpc"):         lambda b, a, p: D.vpc_create(p),

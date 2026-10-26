@@ -202,6 +202,18 @@ async function handleUpload(request, bucket, provider = "aws") {
 // Each console gates on an active space whose provider matches it. We derive
 // the provider from the page making the request, so aws/gcp/azure consoles all
 // pass their gate from the same in-browser substrate.
+// Cost-savings metrics for a space: the console page's live census (written by
+// nano-boot from the in-browser cores, priced by core/cost_model) for that cloud.
+const SAVINGS_TTL = 60000;
+async function withSavings(space) {
+  try {
+    const c = await metaGet("census:" + space.provider);
+    if (c && c.cost_savings && typeof c.ts === "number" && (Date.now() - c.ts) < SAVINGS_TTL)
+      return { ...space, cost_savings: c.cost_savings };
+  } catch (_) {}
+  return space;
+}
+
 function nanoSpace(provider) {
   const acct = provider === "gcp" ? "nano-project" : provider === "azure" ? "nano-sub" : "000000000000";
   const region = provider === "gcp" ? "us-central1" : provider === "azure" ? "eastus" : "us-east-1";
@@ -528,6 +540,17 @@ async function route(method, path, body, query) {
   if (m && method === "POST") return { tuple: ["aws", "apigateway", "Invoke", { id: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)$/);
   if (m && method === "DELETE") return { tuple: ["aws", "apigateway", "DeleteApi", { name: dec(m[1]) }] };
+  // API Gateway V2 (core/apigatewayv2_core.py) — HTTP/WebSocket APIs
+  if (path === "/api/apigatewayv2/apis") {
+    if (method === "GET")  return { tuple: ["aws", "apigatewayv2", "ListApis", {}] };
+    if (method === "POST") return { tuple: ["aws", "apigatewayv2", "CreateApi", body || {}] };
+  }
+  m = path.match(/^\/api\/apigatewayv2\/apis\/([^/]+)\/(routes|integrations|stages|deployments|authorizers|models)$/);
+  if (m && method === "GET") return { tuple: ["aws", "apigatewayv2", "ListChildren", { id: dec(m[1]), kind: m[2] }] };
+  m = path.match(/^\/api\/apigatewayv2\/apis\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "apigatewayv2", "GetApi", { id: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "apigatewayv2", "UpdateApi", { id: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "apigatewayv2", "DeleteApi", { id: dec(m[1]) }] };
   // VPC (core/vpc_core.py) — topology + reachability analyzer
   if (path === "/api/vpc" && method === "GET") return { tuple: ["aws", "vpc", "List", {}] };
   if (path === "/api/vpc/vpcs" && method === "POST") return { tuple: ["aws", "vpc", "CreateVpc", body || {}] };
@@ -725,7 +748,7 @@ self.addEventListener("fetch", (event) => {
           match = created.find((s) => s.space_id === activeId && s.provider === prov)
                || created.filter((s) => s.provider === prov).pop();
         } catch (_) {}
-        return json({ space: match || nanoSpace(prov) });
+        return json({ space: await withSavings(match || nanoSpace(prov)) });
       }
       // Spaces list = fixture defaults + persisted user-created (deduped).
       if (apiPath === "/api/spaces" && method === "GET") {
@@ -735,7 +758,7 @@ self.addEventListener("fetch", (event) => {
         for (const s of [...(fx.spaces || []), ...created])
           if (!seen.has(s.space_id)) { seen.add(s.space_id); spaces.push(s); }
         let active = fx.active_space_id; try { active = (await metaGet("active")) || active; } catch (_) {}
-        return json({ spaces, active_space_id: active });
+        return json({ spaces: await Promise.all(spaces.map(withSavings)), active_space_id: active });
       }
       // Appliance-health pies: per-cloud distribution computed live from the
       // in-browser spaces (the only CENTRAL resource data — the cores' resources

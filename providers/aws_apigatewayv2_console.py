@@ -11,20 +11,7 @@ from fastapi import HTTPException, Request
 from core import apigatewayv2_core as core
 
 
-def api_view(api: dict) -> dict:
-    """Console row for an API — every grid column is always populated."""
-    stages = api.get("stages", {})
-    return {
-        "api_id": api["apiId"], "id": api["apiId"], "name": api["name"],
-        "protocol_type": api["protocolType"], "api_endpoint": api["apiEndpoint"],
-        "route_count": len(api["routes"]), "integration_count": len(api["integrations"]),
-        "stage_count": len(stages), "created": api["createdDate"],
-        "description": api.get("description") or "", "version": api.get("version") or "",
-        "route_selection_expression": api["routeSelectionExpression"],
-        "ip_address_type": api.get("ipAddressType", "ipv4"),
-        "status": "AVAILABLE", "tags": dict(api.get("tags") or {}),
-        "arn": f"arn:aws:apigateway:{core.REGION}::/apis/{api['apiId']}",
-    }
+api_view = core.console_view
 
 
 def _call(method, path, body=None, query=None):

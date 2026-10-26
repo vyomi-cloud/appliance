@@ -207,6 +207,22 @@ def _weigh(resources: int, vms: int) -> dict:
     }
 
 
+def _cost_savings(provider: str, by_service: dict) -> dict:
+    """Space cost-savings metrics (same shape as the appliance's /api/spaces
+    `cost_savings`): what the live resources would bill on the real cloud, using the
+    shared core/cost_model list prices. The simulator costs $0, so savings = real cost."""
+    try:
+        from core import cost_model
+        nodes = [{"provider": provider, "service": svc, "kind": "resource", "resource_id": f"{svc}-{i}"}
+                 for svc, n in by_service.items() for i in range(n)]
+        s = cost_model.estimate_space_savings(nodes)
+        s.pop("per_resource_costs", None)
+        return s
+    except Exception:
+        return {"real_cloud_cost_usd": 0.0, "simulator_cost_usd": 0.0, "savings_usd": 0.0,
+                "savings_pct": 0.0, "by_provider": {}, "by_service": {}, "resource_count": 0}
+
+
 def _census_dispatch(backends: Backends, provider: str) -> dict:
     """Count the LIVE in-memory resources this page's backend holds for `provider`,
     across every core store, and weight them the same way the appliance does. The
@@ -233,6 +249,11 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
             }
+            try:   # API Gateway V2 lives in the shared registry store (console + relay wire)
+                from core import nano_registry
+                aws_counts["apigatewayv2"] = len(nano_registry.get()["apigwv2"].apis)
+            except Exception:
+                pass
             for svc, n in aws_counts.items():
                 if n:
                     by_service[svc] = by_service.get(svc, 0) + n
@@ -273,7 +294,8 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
 
     resources = sum(by_service.values())
     return {"ok": True, "provider": provider, "resources": resources, "vms": vms,
-            "by_service": by_service, **_weigh(resources, vms)}
+            "by_service": by_service, "cost_savings": _cost_savings(provider, by_service),
+            **_weigh(resources, vms)}
 
 
 # Verbs that begin a mutating per-cloud handler op (CreateBucket, DeleteTable,

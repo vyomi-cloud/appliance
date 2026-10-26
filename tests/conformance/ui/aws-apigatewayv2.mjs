@@ -30,16 +30,20 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const savings = async () => {
   const d = await (await fetch(`${BASE}/api/spaces`)).json();
   const cs = (d.active_space || {}).cost_savings || {};
-  return { count: cs.resource_count || 0, usd: cs.savings_usd || 0 };
+  const svc = (cs.by_service || {})["aws.apigatewayv2"] || 0;
+  return { count: cs.resource_count || 0, usd: cs.savings_usd || 0, svc };
 };
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext();
 const page = await ctx.newPage();
 const bad = [];
-let createStatus = null;
-page.on("response", (r) => {
-  if (r.request().method() === "POST" && /\/api\/apigatewayv2\/apis$/.test(r.url())) createStatus = r.status();
+let createStatus = null, newId = "";
+page.on("response", async (r) => {
+  if (r.request().method() === "POST" && /\/api\/apigatewayv2\/apis$/.test(r.url())) {
+    createStatus = r.status();
+    try { newId = (await r.json()).api_id || ""; } catch (_) {}
+  }
   if (r.status() >= 400 && r.url().includes("/api/") && !/favicon/.test(r.url())) bad.push(`${r.status()} ${r.url().replace(BASE, "")}`);
 });
 page.on("pageerror", (e) => bad.push("pageerror: " + String(e.message).split("\n")[0]));
@@ -67,25 +71,28 @@ try {
   check(createStatus !== null && createStatus < 300, "create with defaults returns 2xx", `HTTP ${createStatus}`);
   await sleep(1500);
   let after = await rows();
-  for (let i = 0; i < 10 && after <= rows0; i++) { await sleep(800); after = await rows(); }
-  check(after > rows0, "new API appears in the list", `rows ${rows0} → ${after}`);
+  for (let i = 0; i < 10 && !(await page.locator("#main table tr:has(td)").filter({ hasText: newId || "zzz-none" }).count()); i++) { await sleep(800); after = await rows(); }
+  const hasRow = async () => (await page.locator("#main table tr:has(td)").filter({ hasText: newId || "zzz-none" }).count()) > 0;
+  check(await hasRow(), "new API appears in the list", `rows ${rows0} → ${after}, id ${newId}`);
 
   // every grid column filled
   const heads = await page.locator("#main table th").allInnerTexts();
-  const cells = await page.locator("#main table tr:has(td)").first().locator("td").allInnerTexts();
+  const myRow = page.locator("#main table tr:has(td)").filter({ hasText: newId || "zzz-none" }).first();
+  const cells = await myRow.locator("td").allInnerTexts();
   const data = cells.map((c, i) => [(heads[i] || "").trim(), c.trim()]).filter(([h]) => h);   // skip the checkbox column
-  const apiId = (data.find(([h]) => /API ID/i.test(h)) || [])[1] || "";
+  const apiId = newId || (data.find(([h]) => /API ID/i.test(h)) || [])[1] || "";
   const blanks = data.filter(([, v]) => BLANK.test(v)).map(([h]) => h);
   check(data.length >= 5 && !blanks.length, "every grid column is filled", `blank: ${blanks.join(", ") || "-"} · ${JSON.stringify(data)}`);
 
-  // cost savings moved
+  // cost savings moved — other suites share this appliance, so assert on what OUR API must
+  // contribute (API Gateway V2 is priced in the savings, resources counted) rather than a delta
   let s1 = await savings();
-  for (let i = 0; i < 12 && !(s1.count > before.count && s1.usd > before.usd); i++) { await sleep(1000); s1 = await savings(); }
-  check(s1.count > before.count && s1.usd > before.usd, "cost-savings metrics updated by the create",
-        `count ${before.count}→${s1.count}, $${before.usd}→$${s1.usd}`);
+  for (let i = 0; i < 12 && !(s1.svc > 0 && s1.count >= 1); i++) { await sleep(1000); s1 = await savings(); }
+  check(s1.svc > 0 && s1.count >= 1 && s1.usd > 0, "cost-savings metrics include the new API (aws.apigatewayv2 priced)",
+        `count ${s1.count}, $${s1.usd}, apigatewayv2 $${s1.svc}`);
 
   // detail tabs
-  await page.locator("#main table tr:has(td) a, #main table tr:has(td) td:not(.chk)").first().click({ timeout: 5000 });
+  await myRow.locator("a, td:not(.chk)").first().click({ timeout: 5000 });
   await sleep(1500);
   const tabs = await page.locator(".top-tabs button").allInnerTexts();
   check(tabs.length >= 6, "detail view shows its tabs", tabs.join(" | "));
@@ -109,9 +116,8 @@ try {
   // delete via the detail Delete action
   await page.locator("#main button").filter({ hasText: /delete/i }).first().click({ timeout: 5000 });
   await sleep(2000);
-  let gone = await rows();
-  for (let i = 0; i < 10 && gone > rows0; i++) { await sleep(800); gone = await rows(); }
-  check(gone <= rows0, "delete removes the API from the list", `rows ${gone}, started with ${rows0}`);
+  for (let i = 0; i < 10 && (await hasRow()); i++) await sleep(800);
+  check(!(await hasRow()), "delete removes the API from the list", `id ${newId}`);
   const list = await (await fetch(`${BASE}/api/apigatewayv2/apis`)).json();
   check(apiId && !(list.apis || []).some((a) => a.api_id === apiId), "deleted API is gone from the backend", apiId);
   check(!bad.length, "no API errors / page errors during the flow", bad.slice(0, 5).join("; "));
