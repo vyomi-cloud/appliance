@@ -22,6 +22,7 @@
     {"id": "nano-ui-aws-tabs", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-tabs.mjs", "timeout": 600},
     {"id": "nano-ui-gcp-tabs", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-functional-tabs.mjs", "timeout": 600},
     {"id": "nano-ui-azure-tabs", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-tabs.mjs", "timeout": 600},
-    {"id": "nano-ui-azure-dp", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-dp.mjs", "timeout": 600}
+    {"id": "nano-ui-azure-dp", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-dp.mjs", "timeout": 600},
+    {"id": "nano-ui-azure-home", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-home.mjs", "timeout": 600}
   ]
 }

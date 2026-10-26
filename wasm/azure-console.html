@@ -1009,6 +1009,14 @@ async function selectHome(){
     const t=el("div",{class:"t"}, el("div",{class:"ic"},icon(s.icon)), s.label);
     const n=el("div",{class:"n"},"—"); const sub=el("div",{class:"s"},s.namespace+"/"+s.type);
     card.append(t,n,sub); grid.append(card);
+    if(s.dataPlane){
+      // Data-plane services have no ARM namespace/type; count them the way
+      // selectService lists them (in-WASM cores via /api/azure/{key}).
+      fetch(ORIGIN+"/api/azure/"+s.key).then(r=>r.json()).then(j=>{
+        n.textContent = Array.isArray(j.items)? j.items.length : "0";
+      }).catch(()=>{ n.textContent="0"; });
+      continue;
+    }
     arm("GET", collPath(s), undefined, s.apiVersion).then(res=>{
       n.textContent = res.json&&Array.isArray(res.json.value)? res.json.value.length : "0";
     });
