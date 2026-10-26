@@ -34,6 +34,8 @@ from __future__ import annotations
 # A bare entry {group:"<heading>"} renders as a section header.
 # rail_items is preferred over the legacy `children` list when both exist.
 
+from core.cloudformation_core import DEFAULT_CONSOLE_TEMPLATE as DEFAULT_CFN_TEMPLATE
+
 RESOURCE_CATALOG_AWS = [
     {
         "key": "ec2", "label": "EC2", "icon": "computer",
@@ -595,6 +597,38 @@ RESOURCE_CATALOG_AWS = [
         "createFields": [
             {"name": "name",     "label": "Alias",    "default": "my-kms-key"},
             {"name": "key_spec", "label": "Key spec", "default": "SYMMETRIC_DEFAULT"},
+        ],
+        "endpoints": {},
+    },
+    # ========================================================================
+    # CloudFormation — stacks, events, resources, outputs, change sets
+    # ========================================================================
+    {
+        "key": "cloudformation", "label": "CloudFormation", "icon": "deployed_code",
+        "namespace": "AWS/CloudFormation", "service": "cloudformation",
+        "collection_path": "/api/aws/cloudformation/stacks",
+        "resource_path":   "/api/aws/cloudformation/stacks/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "stacks": {"method": "GET",    "path": "/api/aws/cloudformation/stacks"},
+            "delete": {"method": "DELETE", "path": "/api/aws/cloudformation/stacks/{name}"},
+        },
+        "rail_items": [
+            {"key": "stacks", "label": "Stacks", "icon": "deployed_code", "type": "primary"},
+        ],
+        "columns": [
+            ["name",           "Stack name"],
+            ["status",         "Status"],
+            ["created",        "Created time"],
+            ["updated",        "Last updated"],
+            ["description",    "Description"],
+            ["resource_count", "Resources"],
+            ["output_count",   "Outputs"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Stack name", "default": "my-stack"},
+            {"name": "template", "label": "Template (JSON or YAML)", "default": DEFAULT_CFN_TEMPLATE},
         ],
         "endpoints": {},
     },

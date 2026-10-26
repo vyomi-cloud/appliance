@@ -342,6 +342,28 @@ _KMS_SUB = [
 ]
 
 
+# ===========================================================================
+# CloudFormation — stack detail (tables read `full[field]` from the stack GET)
+# ===========================================================================
+_CLOUDFORMATION_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Stack", "items": [
+        {"key": "resources", "label": "Resources", "icon": "category", "type": "listtable", "field": "resources",
+         "columns": [["logical_id", "Logical ID"], ["physical_id", "Physical ID"], ["type", "Type"], ["status", "Status"]]},
+        {"key": "events",    "label": "Events",    "icon": "event",    "type": "listtable", "field": "events",
+         "columns": [["timestamp", "Timestamp"], ["logical_id", "Logical ID"], ["status", "Status"], ["reason", "Status reason"]]},
+        {"key": "outputs",   "label": "Outputs",   "icon": "output",   "type": "listtable", "field": "outputs",
+         "columns": [["key", "Key"], ["value", "Value"], ["description", "Description"], ["export_name", "Export name"]]},
+        {"key": "parameters","label": "Parameters","icon": "tune",     "type": "listtable", "field": "parameters",
+         "columns": [["key", "Key"], ["value", "Value"]]},
+        {"key": "template",  "label": "Template",  "icon": "code",     "type": "listtable", "field": "template", "mode": "text"},
+        {"key": "changesets","label": "Change sets","icon": "difference","type": "listtable", "field": "change_sets",
+         "columns": [["name", "Name"], ["status", "Status"], ["execution_status", "Execution status"], ["created", "Created"]]},
+    ]},
+    {"group": "Settings", "items": [*_settings_props_locks()]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -358,4 +380,5 @@ SUB_BLADES: dict[str, list] = {
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
     "kms":            _KMS_SUB,
+    "cloudformation": _CLOUDFORMATION_SUB,
 }

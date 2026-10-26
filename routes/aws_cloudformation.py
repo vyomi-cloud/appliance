@@ -9,8 +9,8 @@ import os
 import urllib.request
 from urllib.parse import parse_qsl
 
-from fastapi import Request
-from fastapi.responses import Response
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, Response
 
 from core import cloudformation_core as cfn
 from core.persistent_store import PersistentCfnStore, SqliteStateBackend
@@ -38,3 +38,35 @@ async def handle(request: Request) -> Response:
         params.update(dict(parse_qsl(raw.decode("utf-8", errors="ignore"), keep_blank_values=True)))
     r = cfn.dispatch(get_store(), params)
     return Response(content=r.body, status_code=r.status, media_type="text/xml")
+
+
+def console_rows() -> list[dict]:
+    return cfn.console_list(get_store())["items"]
+
+
+def register(app: FastAPI) -> None:
+    """Console REST for the /console/aws CloudFormation page (same shapes as the Nano adapter)."""
+    base = "/api/aws/cloudformation/stacks"
+
+    @app.get(base)
+    async def cfn_list() -> dict:
+        return cfn.console_list(get_store())
+
+    @app.post(base)
+    async def cfn_create(request: Request) -> Response:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        r = cfn.console_create(get_store(), body if isinstance(body, dict) else {})
+        return JSONResponse(r, status_code=200 if r.get("ok") else 400)
+
+    @app.get(base + "/{name}")
+    async def cfn_get(name: str) -> Response:
+        r = cfn.console_get(get_store(), name)
+        return JSONResponse(r, status_code=200 if r.get("ok") else 404)
+
+    @app.delete(base + "/{name}")
+    async def cfn_delete(name: str) -> Response:
+        r = cfn.console_delete(get_store(), name)
+        return JSONResponse(r, status_code=200 if r.get("ok") else 400)

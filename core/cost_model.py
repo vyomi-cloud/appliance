@@ -79,6 +79,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.dynamodb": 1.25,     # on-demand, light usage
     "aws.apigateway": 3.50,   # ~1M calls
     "aws.vpc": 0.00,          # free (NAT GW extra)
+    "aws.cloudformation": 0.90,  # native AWS:: stacks are free; ~1,000 third-party handler ops @ $0.0009
     # GCP
     "gcp.sql": 25.00,         # db-f1-micro 730h
     "gcp.functions": 0.20,    # minimal invocations
