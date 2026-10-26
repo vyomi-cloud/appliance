@@ -18,3 +18,4 @@
 | 2026-10-26T19:26Z | #50 | aws/apigatewayv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40386006752) |
 | 2026-10-26T19:31Z | #52 | aws/cloudwatch | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40387032471) |
 | 2026-10-26T19:37Z | #50 | aws/apigatewayv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40387775472) |
+| 2026-10-26T19:52Z | #53 | aws/cognito-idp | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40388751815) |
