@@ -1,0 +1,115 @@
+name: Daily conformance PR
+
+# 23:45 IST every day: open one consolidated PR per repo with the day's
+# conformance-agent fixes.
+#   - appliance: conformance/daily-<date> → main
+#   - portal:    the day's Nano bundle changes, vendored into portal/app/nano
+#                by wasm/vendor_to_portal.py (needs the PORTAL_REPO_TOKEN secret)
+# Approving the appliance PR cuts the next patch release and merges the linked
+# portal PR (conformance-release.yml).
+
+on:
+  schedule:
+    - cron: '15 18 * * *'     # 23:45 IST
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Daily branch date (YYYY-MM-DD, IST). Blank = today.'
+        required: false
+
+# Wait for an in-flight hourly run so the PR includes its fixes.
+concurrency:
+  group: conformance-hourly
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  open-prs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PORTAL_TOKEN: ${{ secrets.PORTAL_REPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Resolve the day's branch
+        id: day
+        run: |
+          D="${{ inputs.date }}"; [ -n "$D" ] || D=$(TZ=Asia/Kolkata date +%F)
+          B="conformance/daily-$D"
+          echo "date=$D" >> "$GITHUB_OUTPUT"; echo "branch=$B" >> "$GITHUB_OUTPUT"
+          if ! git ls-remote --exit-code origin "$B" >/dev/null 2>&1; then
+            echo "No $B branch: the agent made no fixes today."; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          git fetch -q origin "$B" main
+          AHEAD=$(git rev-list --count "origin/main..origin/$B")
+          echo "ahead=$AHEAD" >> "$GITHUB_OUTPUT"
+          [ "$AHEAD" -gt 0 ] || { echo "$B has nothing new over main."; echo "skip=1" >> "$GITHUB_OUTPUT"; }
+          NEXT=$(python3 -c "v=open('VERSION').read().strip().split('.');v[-1]=str(int(v[-1])+1);print('.'.join(v))")
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Portal PR (vendored Nano bundle)
+        id: portal
+        if: steps.day.outputs.skip != '1'
+        run: |
+          B="${{ steps.day.outputs.branch }}"; D="${{ steps.day.outputs.date }}"
+          if [ -z "$PORTAL_TOKEN" ]; then
+            echo "No PORTAL_REPO_TOKEN secret: skipping the portal PR."; exit 0
+          fi
+          if git diff --quiet "origin/main" "origin/$B" -- wasm/; then
+            echo "No Nano bundle changes today: no portal PR."; exit 0
+          fi
+          git checkout -q "origin/$B"
+          git clone -q "https://x-access-token:${PORTAL_TOKEN}@github.com/vyomi-cloud/portal.git" /tmp/portal
+          python3 wasm/vendor_to_portal.py --apply --portal /tmp/portal/app/nano
+          cd /tmp/portal
+          git config user.name "vyomi-conformance-bot"
+          git config user.email "conformance-bot@users.noreply.github.com"
+          if git diff --quiet && [ -z "$(git status --porcelain)" ]; then
+            echo "Portal already matches the bundle."; exit 0
+          fi
+          git checkout -q -B "$B"
+          git add -A app/nano
+          git commit -q -m "nano: vendor conformance fixes from appliance $B" \
+            -m "Synced from vyomi-cloud/appliance $B by wasm/vendor_to_portal.py."
+          git push -q -f origin "$B"
+          URL=$(GH_TOKEN="$PORTAL_TOKEN" gh pr list -R vyomi-cloud/portal --head "$B" --json url -q '.[0].url')
+          if [ -z "$URL" ]; then
+            URL=$(GH_TOKEN="$PORTAL_TOKEN" gh pr create -R vyomi-cloud/portal --base main --head "$B" \
+              --title "Daily conformance fixes $D (Nano bundle)" \
+              --body "Nano bundle changes from the appliance daily conformance PR for $D, vendored by \`wasm/vendor_to_portal.py\`. Merging deploys the portal. It is merged automatically when the appliance PR is approved.")
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Appliance PR
+        if: steps.day.outputs.skip != '1'
+        run: |
+          B="${{ steps.day.outputs.branch }}"; D="${{ steps.day.outputs.date }}"; NEXT="${{ steps.day.outputs.next }}"
+          PORTAL="${{ steps.portal.outputs.url }}"
+          {
+            echo "Consolidated conformance-agent fixes for **$D**."
+            echo
+            echo "**Approving this PR cuts appliance v$NEXT**: bumps VERSION, packaging and CHANGELOG, squash-merges, creates \`release/v$NEXT\` and tag \`v$NEXT\`, and runs the release + Docker publish workflows."
+            if [ -n "$PORTAL" ]; then echo; echo "Approving also merges the portal PR (deploys the portal): $PORTAL"; fi
+            echo
+            echo "Report: https://github.com/${{ github.repository }}/tree/conformance-report"
+            echo
+            echo "### Commits"
+            git log --no-merges --format='- %s (%h)' "origin/main..origin/$B"
+            echo
+            echo "<!-- portal-pr: $PORTAL -->"
+          } > /tmp/body.md
+          gh label create daily-release --color 1d76db --description "Daily conformance release PR" 2>/dev/null || true
+          EXISTING=$(gh pr list --head "$B" --base main --json number -q '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            gh pr edit "$EXISTING" --body-file /tmp/body.md --title "Daily conformance fixes $D → v$NEXT"
+            echo "Updated PR #$EXISTING"
+          else
+            gh pr create --base main --head "$B" --label daily-release \
+              --title "Daily conformance fixes $D → v$NEXT" --body-file /tmp/body.md
+          fi

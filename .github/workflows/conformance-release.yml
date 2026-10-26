@@ -1,0 +1,120 @@
+name: Release on daily PR approval
+
+# Approving a daily conformance PR (label daily-release, head
+# conformance/daily-*) cuts the next PATCH release (3.0.7 → 3.0.8):
+#   1. bump VERSION + package manifests + CHANGELOG on the PR branch
+#   2. squash-merge the PR into main
+#   3. create release/vX.Y.Z and tag vX.Y.Z
+#   4. run release.yml + docker-publish.yml for the tag (a tag pushed with the
+#      workflow token doesn't trigger workflows on its own)
+#   5. merge the linked portal PR (deploys the portal), if there is one
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  group: conformance-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  release:
+    if: >-
+      github.event.review.state == 'approved' &&
+      github.event.pull_request.base.ref == 'main' &&
+      startsWith(github.event.pull_request.head.ref, 'conformance/daily-') &&
+      contains(github.event.pull_request.labels.*.name, 'daily-release')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD: ${{ github.event.pull_request.head.ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Bump to the next patch version
+        id: v
+        run: |
+          git config user.name "vyomi-conformance-bot"
+          git config user.email "conformance-bot@users.noreply.github.com"
+          git fetch -q origin main
+          # Base the bump on main's VERSION so two PRs can't claim the same number.
+          OLD=$(git show origin/main:VERSION | tr -d '[:space:]')
+          NEW=$(python3 -c "v='$OLD'.split('.');v[-1]=str(int(v[-1])+1);print('.'.join(v))")
+          if git ls-remote --exit-code --tags origin "v$NEW" >/dev/null 2>&1; then
+            echo "::error::Tag v$NEW already exists"; exit 1
+          fi
+          echo "old=$OLD" >> "$GITHUB_OUTPUT"; echo "new=$NEW" >> "$GITHUB_OUTPUT"
+          echo "$NEW" > VERSION
+          for f in packaging/rpm/cloud-learn.spec packaging/scoop/vyomi.json packaging/scoop/cloud-learn.json \
+                   packaging/snap/snapcraft.yaml packaging/winget/Vyomi.Vyomi.yaml \
+                   packaging/winget/Vyomi.Vyomi.installer.yaml packaging/winget/Vyomi.Vyomi.locale.en-US.yaml; do
+            [ -f "$f" ] && sed -i "s/$(echo "$OLD" | sed 's/\./\\./g')/$NEW/g" "$f"
+          done
+          python3 - "$NEW" <<'PY'
+          import subprocess, sys, datetime
+          new = sys.argv[1]
+          log = subprocess.run(["git", "log", "--no-merges", "--format=- %s", "origin/main..HEAD"],
+                               capture_output=True, text=True).stdout.strip()
+          today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+          entry = f"## [{new}] — {today}\n\nDaily conformance release.\n\n{log}\n\n"
+          old = open("CHANGELOG.md", encoding="utf-8").read()
+          # Insert above the first existing release heading.
+          i = old.find("\n## ")
+          new_txt = old[: i + 1] + entry + old[i + 1:] if i >= 0 else entry + old
+          open("CHANGELOG.md", "w", encoding="utf-8").write(new_txt)
+          PY
+          git add -A VERSION CHANGELOG.md packaging
+          git commit -q -m "release(v$NEW): daily conformance fixes"
+          git push -q origin "HEAD:$HEAD"
+
+      - name: Merge, branch and tag
+        run: |
+          NEW="${{ steps.v.outputs.new }}"
+          # Wait for GitHub to see the bump commit on the PR before merging.
+          for i in $(seq 1 20); do
+            [ "$(gh pr view "$PR" --json headRefOid -q .headRefOid)" = "$(git rev-parse HEAD)" ] && break; sleep 3
+          done
+          gh pr merge "$PR" --squash --subject "release(v$NEW): daily conformance fixes (#$PR)"
+          git fetch -q origin main
+          SHA=$(git rev-parse origin/main)
+          git push -q origin "$SHA:refs/heads/release/v$NEW"
+          git tag -a "v$NEW" "$SHA" -m "v$NEW: daily conformance release"
+          git push -q origin "v$NEW"
+          echo "Released v$NEW at $SHA"
+
+      - name: Run release + Docker publish for the tag
+        run: |
+          NEW="${{ steps.v.outputs.new }}"
+          gh workflow run release.yml --ref "v$NEW" -f version="$NEW"
+          gh workflow run docker-publish.yml --ref "v$NEW" -f tag="$NEW"
+
+      - name: Merge the linked portal PR
+        env:
+          PORTAL_TOKEN: ${{ secrets.PORTAL_REPO_TOKEN }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          URL=$(printf '%s' "$BODY" | sed -n 's/.*<!-- portal-pr: \(https[^ ]*\) -->.*/\1/p' | head -1)
+          if [ -z "$URL" ]; then echo "No linked portal PR."; exit 0; fi
+          if [ -z "$PORTAL_TOKEN" ]; then echo "::warning::No PORTAL_REPO_TOKEN: merge $URL by hand."; exit 0; fi
+          GH_TOKEN="$PORTAL_TOKEN" gh pr merge "$URL" --squash
+          echo "Merged $URL (portal deploys from main)."
+
+      - name: Comment on the PR
+        if: always()
+        run: |
+          NEW="${{ steps.v.outputs.new }}"
+          if [ "${{ job.status }}" = "success" ]; then
+            gh pr comment "$PR" --body "Released **v$NEW**: tag \`v$NEW\`, branch \`release/v$NEW\`. Release + Docker publish are running: https://github.com/${{ github.repository }}/actions"
+          else
+            gh pr comment "$PR" --body "Release on approval failed. See https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi

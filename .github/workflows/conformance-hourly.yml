@@ -4,7 +4,7 @@ name: Hourly conformance agent
 # broken/unimplemented UI (incl. blank grid cells, default-create gaps and
 # cost-savings updates), run the Java/Go/Python SDK, CLI and API test beds,
 # detect features without coverage, let the conformance agent fix findings and
-# add tests (pushing to main), then publish the coverage page to GitHub Pages.
+# add tests (pushing to today's conformance/daily-* branch), then publish the coverage page to GitHub Pages.
 # Agent instructions: tests/conformance/hourly/AGENT.md
 
 on:
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     permissions:
-      contents: write     # agent pushes fixes to main
+      contents: write     # agent pushes fixes to the daily branch
       pages: write
       id-token: write
     environment:
@@ -44,6 +44,25 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+
+      # The agent works on one branch per day (India time); the daily PR workflow
+      # opens it as a PR into main at 23:45 IST. Tests run on that branch so the
+      # day's fixes build on each other.
+      - name: Use today's daily branch
+        run: |
+          git config user.name "vyomi-conformance-bot"
+          git config user.email "conformance-bot@users.noreply.github.com"
+          B="conformance/daily-$(TZ=Asia/Kolkata date +%F)"
+          if git ls-remote --exit-code origin "$B" >/dev/null 2>&1; then
+            git fetch -q origin "$B"
+            git checkout -q -B "$B" FETCH_HEAD
+            # Pick up anything merged to main since the branch was cut.
+            git merge -q --no-edit origin/main || git merge --abort
+          else
+            git checkout -q -B "$B"
+          fi
+          echo "DAILY_BRANCH=$B" >> "$GITHUB_ENV"
+          echo "Working on $B"
 
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
@@ -103,7 +122,7 @@ jobs:
       - name: Run conformance test beds
         run: python3 tests/conformance/hourly/run_suites.py
 
-      - name: Conformance agent (fix findings, add tests, push to main)
+      - name: Conformance agent (fix findings, add tests, push to the daily branch)
         if: ${{ !inputs.skip_agent }}
         continue-on-error: true
         timeout-minutes: 45
@@ -117,6 +136,7 @@ jobs:
           prompt: |
             Follow tests/conformance/hourly/AGENT.md exactly. This hour's inputs are in
             tests/conformance/hourly/out/. Start with the UI findings.
+            Push only to the daily branch ${{ env.DAILY_BRANCH }} (never to main).
           claude_args: >-
             --max-turns 120
             --allowedTools "Bash,Read,Edit,Write,Glob,Grep"

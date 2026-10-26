@@ -69,8 +69,11 @@ only make reporting more accurate, never hide a real problem.
 2. Re-run every suite that was green this hour and could be affected. Nothing that
    was green may go red.
 3. Commit with a message starting `conformance-agent:` describing the finding fixed
-   and the test added, then `git pull --rebase origin main && git push origin HEAD:main`.
-   If the rebase conflicts, abort and leave that fix for the next run.
+   and the test added, then push to today's daily branch (`$DAILY_BRANCH`, already
+   checked out): `git pull --rebase origin "$DAILY_BRANCH" && git push origin HEAD:"$DAILY_BRANCH"`.
+   Never push to main: the day's work reaches main through the daily PR, which a
+   human approves, and approval cuts the release. If the rebase conflicts, abort and
+   leave that fix for the next run.
 4. Commit in small, separate commits — one finding (or one closely related group) each.
 
 ## Never
@@ -82,7 +85,7 @@ only make reporting more accurate, never hide a real problem.
 - Never edit `.github/`, release/version files (`VERSION`, `CHANGELOG.md`, packaging),
   secrets, or anything outside this repo (the portal is deployed separately — do not
   touch it).
-- Never `git push --force`, rewrite history, or create tags/releases.
+- Never push to `main`, `git push --force`, rewrite history, or create tags/releases.
 - Never put secrets, tokens or license keys in code, tests, logs or the summary — the
   conformance page is public.
 
