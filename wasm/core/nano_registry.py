@@ -28,29 +28,10 @@ from core.gcp_firestore_core import FirestoreStore
 from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
-from core.azure_arm_core import AzureArm
 from core.nano_events import EventStore
+from core.elasticache_core import ElastiCacheStore
 
 _REG: dict | None = None
-
-
-def _new_resource_store():
-    """The generic catalog-CRUD store (backends.store.ResourceStore). It lives in
-    the `wasm` package, not in `core`, so import it LAZILY + GUARDED: the console
-    context (nano-boot) has `wasm` on sys.path and binds this as the ONE store its
-    catalog CRUD + nano_persist both use; the native-wire RELAY context doesn't
-    load the `wasm` package and doesn't need the catalog store, so a failed import
-    simply omits the key (capture/restore tolerate a missing store). Falls back to
-    a plain dict-backed shim if the class can't be imported, keeping the registry
-    well-formed and still persistable (public `collections` dict)."""
-    for mod in ("wasm.backends.store", "backends.store"):
-        try:
-            __import__(mod)
-            import sys
-            return sys.modules[mod].ResourceStore()
-        except Exception:
-            continue
-    return None
 
 
 def get() -> dict:
@@ -68,6 +49,7 @@ def get() -> dict:
             "rds": InMemorySqlStore(),
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
+            "elasticache": ElastiCacheStore(),  # ElastiCache clusters / groups / snapshots (control plane)
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),
@@ -87,23 +69,5 @@ def get() -> dict:
             # + bounded: recorded on every mutating dispatch; persisted + cross-tab
             # synced via nano_persist (public dict attr `by_resource`, union-merge).
             "events": EventStore(),
-            # ── generic catalog CRUD + Azure ARM control plane ──
-            # Both were previously built per-page inside Backends() with their state
-            # in underscore attrs (ResourceStore._c, AzureArm._state) → NOT captured,
-            # so second-level sub-resources + editable settings were LOST on reload.
-            # Now they're registry-backed with PUBLIC dict attrs (ResourceStore
-            # .collections, AzureArm.state) and listed in nano_persist.STORE_ATTRS,
-            # so EVERYTHING created through the generic path (AWS /api/aws/sub/*
-            # children + settings, GCP compute/vpc/functions/apigateway/eventarc
-            # parents AND their record-kind children) and every Azure ARM resource +
-            # ARM-core child (servicebus topics/subs, vnet peerings, slots) survives
-            # a full page reload and cross-tab syncs. Backends() binds these SAME
-            # instances (see backends/store.py).
-            "resources": _new_resource_store(),   # generic catalog store (may be None in the relay)
-            "az_arm":    AzureArm(),               # Azure ARM control plane (resources + ARM children)
         }
-        # Drop a None `resources` so the registry stays {str: store} (the relay
-        # context, which never loads the catalog store, simply has no such key).
-        if _REG.get("resources") is None:
-            _REG.pop("resources", None)
     return _REG

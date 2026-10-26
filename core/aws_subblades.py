@@ -342,6 +342,18 @@ _KMS_SUB = [
 ]
 
 
+# ===========================================================================
+# ElastiCache — cache detail
+# ===========================================================================
+_ELASTICACHE_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Cache", "items": [
+        {"key": "details",     "label": "Details",     "icon": "info",   "type": "properties"},
+        {"key": "config",      "label": "Configuration", "icon": "data_object", "type": "json"},
+    ]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -358,4 +370,5 @@ SUB_BLADES: dict[str, list] = {
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
     "kms":            _KMS_SUB,
+    "elasticache":    _ELASTICACHE_SUB,
 }

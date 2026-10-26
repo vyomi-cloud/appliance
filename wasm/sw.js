@@ -555,6 +555,20 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "extras", "List",   { key: _ex[1] }] };
     if (method === "POST") return { tuple: ["aws", "extras", "Create", { key: _ex[1], ...(body || {}) }] };
   }
+  // ElastiCache (core/elasticache_core.py) — caches + subnet/parameter groups + snapshots
+  if (path === "/api/aws/elasticache/clusters") {
+    if (method === "GET")  return { tuple: ["aws", "elasticache", "ListClusters", {}] };
+    if (method === "POST") return { tuple: ["aws", "elasticache", "CreateCluster", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/elasticache\/clusters\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "elasticache", "GetCluster", { name: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "elasticache", "SetTags", { name: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "elasticache", "DeleteCluster", { name: dec(m[1]) }] };
+  m = path.match(/^\/api\/aws\/elasticache\/(subnet-groups|parameter-groups|snapshots)$/);
+  if (m && method === "GET")  return { tuple: ["aws", "elasticache", "ListChildren", { kind: m[1] }] };
+  if (m && method === "POST") return { tuple: ["aws", "elasticache", "CreateChild", { ...(body || {}), kind: m[1] }] };
+  m = path.match(/^\/api\/aws\/elasticache\/(subnet-groups|parameter-groups|snapshots)\/([^/]+)$/);
+  if (m && method === "DELETE") return { tuple: ["aws", "elasticache", "DeleteChild", { kind: m[1], name: dec(m[2]) }] };
   // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
   if (path === "/api/eventbridge/rules") {
     if (method === "GET")  return { tuple: ["aws", "eventbridge", "ListRules", {}] };

@@ -598,6 +598,55 @@ RESOURCE_CATALOG_AWS = [
         ],
         "endpoints": {},
     },
+    # ========================================================================
+    # ElastiCache — Valkey / Redis OSS / Memcached caches. Engine:
+    # core/elasticache_core.py (native Query wire + this console REST).
+    # ========================================================================
+    {
+        "key": "elasticache", "label": "ElastiCache", "icon": "memory",
+        "namespace": "AWS/ElastiCache", "service": "elasticache",
+        "collection_path": "/api/aws/elasticache/clusters",
+        "resource_path":   "/api/aws/elasticache/clusters/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "clusters":         {"method": "GET",  "path": "/api/aws/elasticache/clusters"},
+            "subnetGroups":     {"method": "GET",  "path": "/api/aws/elasticache/subnet-groups"},
+            "parameterGroups":  {"method": "GET",  "path": "/api/aws/elasticache/parameter-groups"},
+            "snapshots":        {"method": "GET",  "path": "/api/aws/elasticache/snapshots"},
+            "delete":           {"method": "DELETE", "path": "/api/aws/elasticache/clusters/{name}"},
+        },
+        "rail_items": [
+            {"key": "caches",           "label": "Caches",           "icon": "memory",        "type": "primary"},
+            {"group": "Configuration"},
+            {"key": "subnet-groups",    "label": "Subnet groups",    "icon": "view_module",
+                "type": "child", "child_key": "subnet-groups"},
+            {"key": "parameter-groups", "label": "Parameter groups", "icon": "settings",
+                "type": "child", "child_key": "parameter-groups"},
+            {"group": "Backup"},
+            {"key": "snapshots",        "label": "Snapshots",        "icon": "photo_camera",
+                "type": "child", "child_key": "snapshots"},
+        ],
+        "children": [
+            {"type": "subnet-groups", "label": "Subnet groups", "icon": "view_module"},
+            {"type": "parameter-groups", "label": "Parameter groups", "icon": "settings"},
+            {"type": "snapshots", "label": "Snapshots", "icon": "photo_camera"},
+        ],
+        "columns": [
+            ["name",           "Name"],
+            ["engine",         "Engine"],
+            ["engine_version", "Engine version"],
+            ["node_type",      "Node type"],
+            ["status",         "Status"],
+            ["endpoint",       "Endpoint"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Cache name", "default": "my-cache"},
+            {"name": "engine", "label": "Engine (valkey, redis, memcached)", "default": "valkey"},
+            {"name": "node_type", "label": "Node type", "default": "cache.t3.micro"},
+        ],
+        "endpoints": {},
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_AWS}

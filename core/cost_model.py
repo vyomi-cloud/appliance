@@ -34,6 +34,13 @@ AWS_RDS_HOURLY: dict[str, float] = {
     "db.r5.large": 0.24, "db.r5.xlarge": 0.48, "db.r5.2xlarge": 0.96,
 }
 
+AWS_ELASTICACHE_HOURLY: dict[str, float] = {   # us-east-1 on-demand, per node
+    "cache.t3.micro": 0.017, "cache.t3.small": 0.034, "cache.t3.medium": 0.068,
+    "cache.t4g.micro": 0.016, "cache.t4g.small": 0.032, "cache.t4g.medium": 0.065,
+    "cache.m5.large": 0.156, "cache.m6g.large": 0.149, "cache.m7g.large": 0.157,
+    "cache.r5.large": 0.216, "cache.r6g.large": 0.206, "cache.r7g.large": 0.219,
+}
+
 GCP_VM_HOURLY: dict[str, float] = {
     "e2-micro": 0.0084, "e2-small": 0.0168, "e2-medium": 0.0336,
     "e2-standard-2": 0.067, "e2-standard-4": 0.134, "e2-standard-8": 0.268,
@@ -154,6 +161,17 @@ def estimate_resource_cost(provider: str, service: str, kind: str,
     # Database instances — use DB hourly pricing
     if kind in ("db_instance", "database") and service in ("rds", "sql", "gcp_sql", "cloudsql"):
         rate = db_hourly_rate(provider, instance_type)
+        return {
+            "hourly_usd": round(rate, 4),
+            "monthly_usd": round(rate * HOURS_PER_MONTH, 2),
+            "uptime_cost_usd": round(rate * uptime_hours, 2),
+            "uptime_hours": uptime_hours,
+            "source": "on-demand",
+        }
+
+    # ElastiCache nodes — per-node-hour pricing by cache node type
+    if provider == "aws" and service == "elasticache":
+        rate = AWS_ELASTICACHE_HOURLY.get(instance_type, 0.017)
         return {
             "hourly_usd": round(rate, 4),
             "monthly_usd": round(rate * HOURS_PER_MONTH, 2),

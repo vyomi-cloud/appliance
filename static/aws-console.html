@@ -1283,6 +1283,15 @@ function childSpec(svc, childType){
         columns: [["image_id","AMI ID"],["name","Name"],["state","State"],
                   ["architecture","Architecture"],["platform","Platform"]]},
     },
+    elasticache: {
+      "subnet-groups":    {label:"Subnet groups", absolutePath:"/api/aws/elasticache/subnet-groups", arrayKey:"items",
+        columns: [["name","Name"],["description","Description"],["vpc_id","VPC"],["subnets","Subnets"]]},
+      "parameter-groups": {label:"Parameter groups", absolutePath:"/api/aws/elasticache/parameter-groups", arrayKey:"items",
+        columns: [["name","Name"],["family","Family"],["type","Type"],["description","Description"]]},
+      "snapshots":        {label:"Snapshots", absolutePath:"/api/aws/elasticache/snapshots", arrayKey:"items",
+        columns: [["name","Snapshot name"],["source","Source cache"],["status","Status"],
+                  ["engine","Engine"],["node_type","Node type"],["created","Created"]]},
+    },
     iam: {
       "iam-groups":    {label:"User groups",      absolutePath:"/api/iam/groups",    arrayKey:"groups",
         columns: [["group_name","Group name"],["arn","ARN"],["created","Created"]]},
