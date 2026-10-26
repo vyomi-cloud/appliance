@@ -1,0 +1,293 @@
+{
+ "_comment": "Released services \u2014 the source of truth for counts (portal, README, release notes). Only the service gate adds entries (tests/conformance/expansion/). Each release publishes this as services.json.",
+ "services": [
+  {
+   "cloud": "aws",
+   "key": "ec2",
+   "name": "EC2",
+   "upstream": "ec2",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "s3",
+   "name": "S3",
+   "upstream": "s3",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "iam",
+   "name": "IAM",
+   "upstream": "iam",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "rds",
+   "name": "RDS",
+   "upstream": "rds",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "dynamodb",
+   "name": "DynamoDB",
+   "upstream": "dynamodb",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "sqs",
+   "name": "SQS",
+   "upstream": "sqs",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "lambda",
+   "name": "Lambda",
+   "upstream": "lambda",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "apigateway",
+   "name": "API Gateway",
+   "upstream": "apigateway",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "vpc",
+   "name": "VPC",
+   "upstream": "ec2",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "eventbridge",
+   "name": "EventBridge",
+   "upstream": "events",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "secretsmanager",
+   "name": "Secrets Manager",
+   "upstream": "secretsmanager",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "kms",
+   "name": "KMS",
+   "upstream": "kms",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "gcp",
+   "key": "compute",
+   "name": "Compute Engine",
+   "upstream": "compute/v1",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "gcp",
+   "key": "storage",
+   "name": "Cloud Storage",
+   "upstream": "storage/v1",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "gcp",
+   "key": "cloudsql",
+   "name": "Cloud SQL",
+   "upstream": "sqladmin/v1beta4",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "gcp",
+   "key": "pubsub",
+   "name": "Pub/Sub",
+   "upstream": "pubsub/v1",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "gcp",
+   "key": "firestore",
+   "name": "Firestore",
+   "upstream": "firestore/v1",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "gcp",
+   "key": "functions",
+   "name": "Cloud Functions",
+   "upstream": "cloudfunctions/v2",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "gcp",
+   "key": "apigateway",
+   "name": "API Gateway",
+   "upstream": "apigateway/v1",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "gcp",
+   "key": "vpc",
+   "name": "VPC Network",
+   "upstream": "compute/v1",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "gcp",
+   "key": "iam",
+   "name": "IAM & Admin",
+   "upstream": "iam/v1",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "gcp",
+   "key": "eventarc",
+   "name": "Eventarc",
+   "upstream": "eventarc/v1",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "gcp",
+   "key": "secretmanager",
+   "name": "Secret Manager",
+   "upstream": "secretmanager/v1",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "gcp",
+   "key": "kms",
+   "name": "Cloud KMS",
+   "upstream": "cloudkms/v1",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "azure",
+   "key": "vm",
+   "name": "Virtual Machines",
+   "upstream": "Microsoft.Compute",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "azure",
+   "key": "storage",
+   "name": "Storage accounts",
+   "upstream": "Microsoft.Storage",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "azure",
+   "key": "sql",
+   "name": "SQL servers",
+   "upstream": "Microsoft.Sql",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "azure",
+   "key": "servicebus",
+   "name": "Service Bus",
+   "upstream": "Microsoft.ServiceBus",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "azure",
+   "key": "cosmos",
+   "name": "Cosmos DB",
+   "upstream": "Microsoft.DocumentDB",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "azure",
+   "key": "functionapp",
+   "name": "Function apps",
+   "upstream": "Microsoft.Web",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "azure",
+   "key": "apim",
+   "name": "API Management",
+   "upstream": "Microsoft.ApiManagement",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "azure",
+   "key": "vnet",
+   "name": "Virtual networks",
+   "upstream": "Microsoft.Network",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "azure",
+   "key": "nsg",
+   "name": "Network Security Group",
+   "upstream": "Microsoft.Network",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "azure",
+   "key": "eventgrid",
+   "name": "Event Grid topics",
+   "upstream": "Microsoft.EventGrid",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "azure",
+   "key": "keyvault",
+   "name": "Key vaults",
+   "upstream": "Microsoft.KeyVault",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "azure",
+   "key": "rbac",
+   "name": "Entra ID / RBAC",
+   "upstream": "Microsoft.Authorization",
+   "status": "released",
+   "released_in": "<=3.0.8"
+  }
+ ]
+}

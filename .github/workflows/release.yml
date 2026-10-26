@@ -115,6 +115,23 @@ jobs:
           done
           ! grep -qE "vyomi/(appliance|cloudsim):latest" docker-compose.cloudlite.yml
 
+      # services.json — the released-service registry with counts, attached to
+      # the GitHub Release (dist/*). The portal reads the latest release's copy,
+      # so every service count on the site follows releases automatically.
+      - name: Publish the service registry (services.json)
+        run: |
+          mkdir -p dist
+          python3 - "${{ steps.ver.outputs.version }}" <<'PY'
+          import json, sys
+          reg = json.load(open("services/registry.json"))
+          svcs = [s for s in reg["services"] if s.get("status") == "released"]
+          counts = {c: sum(1 for s in svcs if s["cloud"] == c) for c in ("aws", "gcp", "azure")}
+          out = {"version": sys.argv[1], "total": sum(counts.values()), "counts": counts,
+                 "services": [{k: s[k] for k in ("cloud", "key", "name", "upstream", "released_in")} for s in svcs]}
+          json.dump(out, open("dist/services.json", "w"), indent=1)
+          print(f"services.json: {out['total']} services {counts}")
+          PY
+
       - name: Build source tarball
         run: |
           mkdir -p dist

@@ -1956,7 +1956,7 @@
       // services
       const services = tier.service_categories_unlocked;
       if (services === 'ALL') {
-        ul.appendChild(li('check', `<strong>All 35 services</strong> × ${key === 'pro' ? 'one chosen cloud' : 'all 3 clouds'}`));
+        ul.appendChild(li('check', `<strong>All <span data-svc-total>${window.VYOMI_SVC_TOTAL || 36}</span> services</strong> × ${key === 'pro' ? 'one chosen cloud' : 'all 3 clouds'}`));
       } else {
         const count = Array.isArray(services) ? services.length : 0;
         ul.appendChild(li('check', `<strong>${count} service categories</strong> × all 3 clouds`));
@@ -2683,5 +2683,18 @@
     document.addEventListener("keydown", function(e){ if(e.key==="Escape") docs.classList.remove("open"); });
   }
 })();
-</script></body>
+</script><script>
+/* Live released-service count from the portal (/api/service-catalog, which
+   follows the appliance's latest release). Fills every [data-svc-total]. */
+(function () {
+  window.VYOMI_SVC_TOTAL = window.VYOMI_SVC_TOTAL || 36;
+  function apply() { document.querySelectorAll("[data-svc-total]").forEach(function (e) { e.textContent = window.VYOMI_SVC_TOTAL; }); }
+  try {
+    fetch("/api/service-catalog", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && d.total > 0) { window.VYOMI_SVC_TOTAL = d.total; apply(); } }).catch(function () {});
+  } catch (_) {}
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply); else apply();
+})();
+</script>
+</body>
 </html>

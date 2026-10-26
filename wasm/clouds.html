@@ -1668,7 +1668,7 @@
       <div class="kc-sec-label">Platform</div>
       <a class="kct" href="https://vyomi.cloud/docs/coverage" target="_blank" rel="noopener">
         <h3><span class="material-icons" style="color:#2563eb">grid_view</span> Service matrix</h3>
-        <p>35 services across 3 clouds with real-backend / simulated tags and an SDK compatibility table.</p>
+        <p><span data-svc-total>36</span> services across 3 clouds with real-backend / simulated tags and an SDK compatibility table.</p>
         <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
       </a>
       <a class="kct" href="https://vyomi.cloud/docs/architecture" target="_blank" rel="noopener">
@@ -3463,5 +3463,18 @@
     document.addEventListener("keydown", function(e){ if(e.key==="Escape") docs.classList.remove("open"); });
   }
 })();
-</script></body>
+</script><script>
+/* Live released-service count from the portal (/api/service-catalog, which
+   follows the appliance's latest release). Fills every [data-svc-total]. */
+(function () {
+  window.VYOMI_SVC_TOTAL = window.VYOMI_SVC_TOTAL || 36;
+  function apply() { document.querySelectorAll("[data-svc-total]").forEach(function (e) { e.textContent = window.VYOMI_SVC_TOTAL; }); }
+  try {
+    fetch("/api/service-catalog", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && d.total > 0) { window.VYOMI_SVC_TOTAL = d.total; apply(); } }).catch(function () {});
+  } catch (_) {}
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply); else apply();
+})();
+</script>
+</body>
 </html>

@@ -1,0 +1,13 @@
+{
+  "_comment": "Build order for new services. P1 = what developers building apps reach for first (containers, observability, queues/streams, caching, DNS, workflow, identity, AI inference); P2 = next tier of widely used services; everything else in the catalog is P3. ids: AWS = botocore service name, GCP = discovery api/version, Azure = azure-rest-api-specs specification dir.",
+  "P1": {
+    "aws": ["sts", "ssm", "logs", "cloudwatch", "ecr", "ecs", "elbv2", "route53", "cloudformation", "stepfunctions", "kinesis", "elasticache", "cognito-idp", "sesv2", "apigatewayv2", "sns"],
+    "gcp": ["run/v2", "artifactregistry/v1", "container/v1", "logging/v2", "monitoring/v3", "cloudtasks/v2", "cloudscheduler/v1", "dns/v1", "redis/v1", "bigquery/v2", "workflows/v1", "cloudbuild/v1", "iamcredentials/v1"],
+    "azure": ["containerservice", "containerregistry", "app", "operationalinsights", "applicationinsights", "redis", "eventhub", "appconfiguration", "dns", "cognitiveservices", "msi", "monitor"]
+  },
+  "P2": {
+    "aws": ["sqs", "dynamodbstreams", "kafka", "opensearch", "batch", "codebuild", "efs", "mq", "athena", "glue", "firehose", "appsync", "bedrock-runtime", "acm", "autoscaling", "scheduler", "backup", "xray"],
+    "gcp": ["spanner/v1", "bigtableadmin/v2", "file/v1", "datastore/v1", "dataflow/v1b3", "dataproc/v1", "composer/v1", "aiplatform/v1", "translate/v3", "cloudtrace/v2", "certificatemanager/v1", "batch/v1"],
+    "azure": ["postgresql", "mysql", "signalr", "notificationhubs", "batch", "search", "datafactory", "frontdoor", "cdn", "privatedns", "servicefabric", "synapse"]
+  }
+}

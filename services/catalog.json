@@ -1,0 +1,7546 @@
+{
+ "generated": "2026-10-26T14:24:51+00:00",
+ "botocore": "1.43.118",
+ "summary": {
+  "aws": {
+   "total": 435,
+   "released": 12,
+   "P1": 16,
+   "P2": 17
+  },
+  "gcp": {
+   "total": 316,
+   "released": 11,
+   "P1": 12,
+   "P2": 12
+  },
+  "azure": {
+   "total": 317,
+   "released": 11,
+   "P1": 12,
+   "P2": 12
+  }
+ },
+ "services": [
+  {
+   "cloud": "aws",
+   "id": "accessanalyzer",
+   "name": "accessanalyzer",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "account-access",
+   "name": "account-access",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "account",
+   "name": "account",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "acm-pca",
+   "name": "acm-pca",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "acm",
+   "name": "AWS Certificate Manager",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 40
+  },
+  {
+   "cloud": "aws",
+   "id": "agent-registry-control",
+   "name": "agent-registry-control",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "agent-registry",
+   "name": "agent-registry",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "aiops",
+   "name": "aiops",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "amp",
+   "name": "amp",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "amplify",
+   "name": "amplify",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "amplifybackend",
+   "name": "amplifybackend",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "amplifyuibuilder",
+   "name": "amplifyuibuilder",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "apigateway",
+   "name": "apigateway",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "aws",
+   "id": "apigatewaymanagementapi",
+   "name": "apigatewaymanagementapi",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "apigatewayv2",
+   "name": "AmazonApiGatewayV2",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 103
+  },
+  {
+   "cloud": "aws",
+   "id": "appconfig",
+   "name": "appconfig",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "appconfigdata",
+   "name": "appconfigdata",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "appfabric",
+   "name": "appfabric",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "appflow",
+   "name": "appflow",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "appintegrations",
+   "name": "appintegrations",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "application-autoscaling",
+   "name": "application-autoscaling",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "application-insights",
+   "name": "application-insights",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "application-signals",
+   "name": "application-signals",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "applicationcostprofiler",
+   "name": "applicationcostprofiler",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "appmesh",
+   "name": "appmesh",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "apprunner",
+   "name": "apprunner",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "appstream",
+   "name": "appstream",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "appsync",
+   "name": "AWS AppSync",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 74
+  },
+  {
+   "cloud": "aws",
+   "id": "arc-region-switch",
+   "name": "arc-region-switch",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "arc-zonal-shift",
+   "name": "arc-zonal-shift",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "artifact",
+   "name": "artifact",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "athena",
+   "name": "Amazon Athena",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 70
+  },
+  {
+   "cloud": "aws",
+   "id": "auditmanager",
+   "name": "auditmanager",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "autoscaling-plans",
+   "name": "autoscaling-plans",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "autoscaling",
+   "name": "Auto Scaling",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 68
+  },
+  {
+   "cloud": "aws",
+   "id": "b2bi",
+   "name": "b2bi",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "backup-gateway",
+   "name": "backup-gateway",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "backup",
+   "name": "AWS Backup",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 115
+  },
+  {
+   "cloud": "aws",
+   "id": "backupsearch",
+   "name": "backupsearch",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "batch",
+   "name": "AWS Batch",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 48
+  },
+  {
+   "cloud": "aws",
+   "id": "bcm-dashboards",
+   "name": "bcm-dashboards",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "bcm-data-exports",
+   "name": "bcm-data-exports",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "bcm-pricing-calculator",
+   "name": "bcm-pricing-calculator",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "bcm-recommended-actions",
+   "name": "bcm-recommended-actions",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "bedrock-agent-runtime",
+   "name": "bedrock-agent-runtime",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "bedrock-agent",
+   "name": "bedrock-agent",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "bedrock-agentcore-control",
+   "name": "bedrock-agentcore-control",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "bedrock-agentcore",
+   "name": "bedrock-agentcore",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "bedrock-data-automation-runtime",
+   "name": "bedrock-data-automation-runtime",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "bedrock-data-automation",
+   "name": "bedrock-data-automation",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "bedrock-runtime",
+   "name": "Amazon Bedrock Runtime",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 11
+  },
+  {
+   "cloud": "aws",
+   "id": "bedrock",
+   "name": "bedrock",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "billing",
+   "name": "billing",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "billingconductor",
+   "name": "billingconductor",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "braket",
+   "name": "braket",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "budgets",
+   "name": "budgets",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ce",
+   "name": "ce",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "chatbot",
+   "name": "chatbot",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "chime-sdk-identity",
+   "name": "chime-sdk-identity",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "chime-sdk-media-pipelines",
+   "name": "chime-sdk-media-pipelines",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "chime-sdk-meetings",
+   "name": "chime-sdk-meetings",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "chime-sdk-messaging",
+   "name": "chime-sdk-messaging",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "chime-sdk-voice",
+   "name": "chime-sdk-voice",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "chime",
+   "name": "chime",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cleanrooms",
+   "name": "cleanrooms",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cleanroomsml",
+   "name": "cleanroomsml",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cloud9",
+   "name": "cloud9",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cloudcontrol",
+   "name": "cloudcontrol",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "clouddirectory",
+   "name": "clouddirectory",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cloudformation",
+   "name": "AWS CloudFormation",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 90
+  },
+  {
+   "cloud": "aws",
+   "id": "cloudfront-keyvaluestore",
+   "name": "cloudfront-keyvaluestore",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cloudfront",
+   "name": "cloudfront",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cloudhsm",
+   "name": "cloudhsm",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cloudhsmv2",
+   "name": "cloudhsmv2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cloudsearch",
+   "name": "cloudsearch",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cloudsearchdomain",
+   "name": "cloudsearchdomain",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cloudtrail-data",
+   "name": "cloudtrail-data",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cloudtrail",
+   "name": "cloudtrail",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cloudwatch",
+   "name": "Amazon CloudWatch",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 55
+  },
+  {
+   "cloud": "aws",
+   "id": "cloudwatchomni",
+   "name": "cloudwatchomni",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "codeartifact",
+   "name": "codeartifact",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "codebuild",
+   "name": "AWS CodeBuild",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 59
+  },
+  {
+   "cloud": "aws",
+   "id": "codecatalyst",
+   "name": "codecatalyst",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "codecommit",
+   "name": "codecommit",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "codeconnections",
+   "name": "codeconnections",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "codedeploy",
+   "name": "codedeploy",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "codeguru-reviewer",
+   "name": "codeguru-reviewer",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "codeguru-security",
+   "name": "codeguru-security",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "codeguruprofiler",
+   "name": "codeguruprofiler",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "codepipeline",
+   "name": "codepipeline",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "codestar-connections",
+   "name": "codestar-connections",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "codestar-notifications",
+   "name": "codestar-notifications",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cognito-identity",
+   "name": "cognito-identity",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cognito-idp",
+   "name": "Amazon Cognito Identity Provider",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 132
+  },
+  {
+   "cloud": "aws",
+   "id": "cognito-sync",
+   "name": "cognito-sync",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "comprehend",
+   "name": "comprehend",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "comprehendmedical",
+   "name": "comprehendmedical",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "compute-optimizer-automation",
+   "name": "compute-optimizer-automation",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "compute-optimizer",
+   "name": "compute-optimizer",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "config",
+   "name": "config",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "connect-contact-lens",
+   "name": "connect-contact-lens",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "connect",
+   "name": "connect",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "connectcampaigns",
+   "name": "connectcampaigns",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "connectcampaignsv2",
+   "name": "connectcampaignsv2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "connectcases",
+   "name": "connectcases",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "connecthealth",
+   "name": "connecthealth",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "connectparticipant",
+   "name": "connectparticipant",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "continuum",
+   "name": "continuum",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "controlcatalog",
+   "name": "controlcatalog",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "controltower",
+   "name": "controltower",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cost-optimization-hub",
+   "name": "cost-optimization-hub",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "cur",
+   "name": "cur",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "customer-profiles",
+   "name": "customer-profiles",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "databrew",
+   "name": "databrew",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "dataexchange",
+   "name": "dataexchange",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "datapipeline",
+   "name": "datapipeline",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "datasync",
+   "name": "datasync",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "datazone",
+   "name": "datazone",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "dax",
+   "name": "dax",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "deadline",
+   "name": "deadline",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "detective",
+   "name": "detective",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "devicefarm",
+   "name": "devicefarm",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "devops-agent",
+   "name": "devops-agent",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "devops-guru",
+   "name": "devops-guru",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "directconnect",
+   "name": "directconnect",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "discovery",
+   "name": "discovery",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "dlm",
+   "name": "dlm",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "dms",
+   "name": "dms",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "docdb-elastic",
+   "name": "docdb-elastic",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "docdb",
+   "name": "docdb",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "drs",
+   "name": "drs",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ds-data",
+   "name": "ds-data",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ds",
+   "name": "ds",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "dsql",
+   "name": "dsql",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "dynamodb",
+   "name": "Amazon DynamoDB",
+   "priority": "P3",
+   "status": "released",
+   "operations": 58
+  },
+  {
+   "cloud": "aws",
+   "id": "dynamodbstreams",
+   "name": "Amazon DynamoDB Streams",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 4
+  },
+  {
+   "cloud": "aws",
+   "id": "ebs",
+   "name": "ebs",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ec2-instance-connect",
+   "name": "ec2-instance-connect",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ec2",
+   "name": "Amazon Elastic Compute Cloud",
+   "priority": "P3",
+   "status": "released",
+   "operations": 809
+  },
+  {
+   "cloud": "aws",
+   "id": "ecr-public",
+   "name": "ecr-public",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ecr",
+   "name": "Amazon Elastic Container Registry",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 58
+  },
+  {
+   "cloud": "aws",
+   "id": "ecs",
+   "name": "Amazon EC2 Container Service",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 88
+  },
+  {
+   "cloud": "aws",
+   "id": "efs",
+   "name": "Amazon Elastic File System",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 31
+  },
+  {
+   "cloud": "aws",
+   "id": "eks-auth",
+   "name": "eks-auth",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "eks",
+   "name": "eks",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "elasticache",
+   "name": "Amazon ElastiCache",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 77
+  },
+  {
+   "cloud": "aws",
+   "id": "elasticbeanstalk",
+   "name": "elasticbeanstalk",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "elb",
+   "name": "elb",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "elbv2",
+   "name": "Elastic Load Balancing",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 51
+  },
+  {
+   "cloud": "aws",
+   "id": "elementalinference",
+   "name": "elementalinference",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "emr-containers",
+   "name": "emr-containers",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "emr-serverless",
+   "name": "emr-serverless",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "emr",
+   "name": "emr",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "endusermessaging",
+   "name": "endusermessaging",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "entityresolution",
+   "name": "entityresolution",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "es",
+   "name": "es",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "eventbridgev2",
+   "name": "eventbridgev2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "events",
+   "name": "Amazon EventBridge",
+   "priority": "P3",
+   "status": "released",
+   "operations": 57
+  },
+  {
+   "cloud": "aws",
+   "id": "evs",
+   "name": "evs",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "firehose",
+   "name": "Amazon Kinesis Firehose",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 12
+  },
+  {
+   "cloud": "aws",
+   "id": "fis",
+   "name": "fis",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "fms",
+   "name": "fms",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "forecast",
+   "name": "forecast",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "forecastquery",
+   "name": "forecastquery",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "frauddetector",
+   "name": "frauddetector",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "freetier",
+   "name": "freetier",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "fsx",
+   "name": "fsx",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "gamelift",
+   "name": "gamelift",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "gameliftstreams",
+   "name": "gameliftstreams",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "geo-maps",
+   "name": "geo-maps",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "geo-places",
+   "name": "geo-places",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "geo-routes",
+   "name": "geo-routes",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "glacier",
+   "name": "glacier",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "globalaccelerator",
+   "name": "globalaccelerator",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "glue",
+   "name": "AWS Glue",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 306
+  },
+  {
+   "cloud": "aws",
+   "id": "grafana",
+   "name": "grafana",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "greengrass",
+   "name": "greengrass",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "greengrassv2",
+   "name": "greengrassv2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "groundstation",
+   "name": "groundstation",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "guardduty",
+   "name": "guardduty",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "health",
+   "name": "health",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "healthlake",
+   "name": "healthlake",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "iam-toolbox",
+   "name": "iam-toolbox",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "iam",
+   "name": "AWS Identity and Access Management",
+   "priority": "P3",
+   "status": "released",
+   "operations": 180
+  },
+  {
+   "cloud": "aws",
+   "id": "identitystore",
+   "name": "identitystore",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "imagebuilder",
+   "name": "imagebuilder",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "importexport",
+   "name": "importexport",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "inspector-scan",
+   "name": "inspector-scan",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "inspector",
+   "name": "inspector",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "inspector2",
+   "name": "inspector2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "interconnect",
+   "name": "interconnect",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "internetmonitor",
+   "name": "internetmonitor",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "invoicing",
+   "name": "invoicing",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "iot-data",
+   "name": "iot-data",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "iot-jobs-data",
+   "name": "iot-jobs-data",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "iot-managed-integrations",
+   "name": "iot-managed-integrations",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "iot",
+   "name": "iot",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "iotdeviceadvisor",
+   "name": "iotdeviceadvisor",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "iotfleetwise",
+   "name": "iotfleetwise",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "iotsecuretunneling",
+   "name": "iotsecuretunneling",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "iotsitewise",
+   "name": "iotsitewise",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "iotthingsgraph",
+   "name": "iotthingsgraph",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "iottwinmaker",
+   "name": "iottwinmaker",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "iotwireless",
+   "name": "iotwireless",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ivs-realtime",
+   "name": "ivs-realtime",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ivs",
+   "name": "ivs",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ivschat",
+   "name": "ivschat",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "kafka",
+   "name": "Managed Streaming for Kafka",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 64
+  },
+  {
+   "cloud": "aws",
+   "id": "kafkaconnect",
+   "name": "kafkaconnect",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "kendra-ranking",
+   "name": "kendra-ranking",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "kendra",
+   "name": "kendra",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "keyspaces",
+   "name": "keyspaces",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "keyspacesstreams",
+   "name": "keyspacesstreams",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "kinesis-video-archived-media",
+   "name": "kinesis-video-archived-media",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "kinesis-video-media",
+   "name": "kinesis-video-media",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "kinesis-video-signaling",
+   "name": "kinesis-video-signaling",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "kinesis-video-webrtc-storage",
+   "name": "kinesis-video-webrtc-storage",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "kinesis",
+   "name": "Amazon Kinesis",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 45
+  },
+  {
+   "cloud": "aws",
+   "id": "kinesisanalytics",
+   "name": "kinesisanalytics",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "kinesisanalyticsv2",
+   "name": "kinesisanalyticsv2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "kinesisvideo",
+   "name": "kinesisvideo",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "kms",
+   "name": "AWS Key Management Service",
+   "priority": "P3",
+   "status": "released",
+   "operations": 54
+  },
+  {
+   "cloud": "aws",
+   "id": "lakeformation",
+   "name": "lakeformation",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "lambda-core",
+   "name": "lambda-core",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "lambda-microvms",
+   "name": "lambda-microvms",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "lambda-web",
+   "name": "lambda-web",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "lambda",
+   "name": "AWS Lambda",
+   "priority": "P3",
+   "status": "released",
+   "operations": 88
+  },
+  {
+   "cloud": "aws",
+   "id": "launch-wizard",
+   "name": "launch-wizard",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "lex-models",
+   "name": "lex-models",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "lex-runtime",
+   "name": "lex-runtime",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "lexv2-models",
+   "name": "lexv2-models",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "lexv2-runtime",
+   "name": "lexv2-runtime",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "license-manager-linux-subscriptions",
+   "name": "license-manager-linux-subscriptions",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "license-manager-user-subscriptions",
+   "name": "license-manager-user-subscriptions",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "license-manager",
+   "name": "license-manager",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "lightsail",
+   "name": "lightsail",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "location",
+   "name": "location",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "logs",
+   "name": "Amazon CloudWatch Logs",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 118
+  },
+  {
+   "cloud": "aws",
+   "id": "lookoutequipment",
+   "name": "lookoutequipment",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "m2",
+   "name": "m2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "machinelearning",
+   "name": "machinelearning",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "macie2",
+   "name": "macie2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mailmanager",
+   "name": "mailmanager",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "managedblockchain-query",
+   "name": "managedblockchain-query",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "managedblockchain",
+   "name": "managedblockchain",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "marketplace-agreement",
+   "name": "marketplace-agreement",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "marketplace-catalog",
+   "name": "marketplace-catalog",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "marketplace-deployment",
+   "name": "marketplace-deployment",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "marketplace-discovery",
+   "name": "marketplace-discovery",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "marketplace-entitlement",
+   "name": "marketplace-entitlement",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "marketplace-reporting",
+   "name": "marketplace-reporting",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "marketplacecommerceanalytics",
+   "name": "marketplacecommerceanalytics",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mediaconnect",
+   "name": "mediaconnect",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mediaconvert",
+   "name": "mediaconvert",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "medialive",
+   "name": "medialive",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mediapackage-vod",
+   "name": "mediapackage-vod",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mediapackage",
+   "name": "mediapackage",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mediapackagev2",
+   "name": "mediapackagev2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mediastore-data",
+   "name": "mediastore-data",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mediastore",
+   "name": "mediastore",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mediatailor",
+   "name": "mediatailor",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "medical-imaging",
+   "name": "medical-imaging",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "memorydb",
+   "name": "memorydb",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "meteringmarketplace",
+   "name": "meteringmarketplace",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mgh",
+   "name": "mgh",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mgn",
+   "name": "mgn",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "migration-hub-refactor-spaces",
+   "name": "migration-hub-refactor-spaces",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "migrationhub-config",
+   "name": "migrationhub-config",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "migrationhuborchestrator",
+   "name": "migrationhuborchestrator",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "migrationhubstrategy",
+   "name": "migrationhubstrategy",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mpa",
+   "name": "mpa",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mq",
+   "name": "AmazonMQ",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 25
+  },
+  {
+   "cloud": "aws",
+   "id": "mturk",
+   "name": "mturk",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mwaa-serverless",
+   "name": "mwaa-serverless",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "mwaa",
+   "name": "mwaa",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "neptune-graph",
+   "name": "neptune-graph",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "neptune",
+   "name": "neptune",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "neptunedata",
+   "name": "neptunedata",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "network-firewall",
+   "name": "network-firewall",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "network-security-manager",
+   "name": "network-security-manager",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "networkflowmonitor",
+   "name": "networkflowmonitor",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "networkmanager",
+   "name": "networkmanager",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "networkmonitor",
+   "name": "networkmonitor",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "notifications",
+   "name": "notifications",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "notificationscontacts",
+   "name": "notificationscontacts",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "nova-act",
+   "name": "nova-act",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "oam",
+   "name": "oam",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "observabilityadmin",
+   "name": "observabilityadmin",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "odb",
+   "name": "odb",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "omics",
+   "name": "omics",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "opensearch",
+   "name": "Amazon OpenSearch Service",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 96
+  },
+  {
+   "cloud": "aws",
+   "id": "opensearchserverless",
+   "name": "opensearchserverless",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "organizations",
+   "name": "organizations",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "osis",
+   "name": "osis",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "outposts",
+   "name": "outposts",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "partnercentral-account",
+   "name": "partnercentral-account",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "partnercentral-benefits",
+   "name": "partnercentral-benefits",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "partnercentral-channel",
+   "name": "partnercentral-channel",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "partnercentral-revenue-measurement",
+   "name": "partnercentral-revenue-measurement",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "partnercentral-selling",
+   "name": "partnercentral-selling",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "payment-cryptography-data",
+   "name": "payment-cryptography-data",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "payment-cryptography",
+   "name": "payment-cryptography",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "pca-connector-ad",
+   "name": "pca-connector-ad",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "pca-connector-scep",
+   "name": "pca-connector-scep",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "pcs",
+   "name": "pcs",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "personalize-events",
+   "name": "personalize-events",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "personalize-runtime",
+   "name": "personalize-runtime",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "personalize",
+   "name": "personalize",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "pi",
+   "name": "pi",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "pinpoint-email",
+   "name": "pinpoint-email",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "pinpoint-sms-voice-v2",
+   "name": "pinpoint-sms-voice-v2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "pinpoint-sms-voice",
+   "name": "pinpoint-sms-voice",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "pinpoint",
+   "name": "pinpoint",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "pipes",
+   "name": "pipes",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "polly",
+   "name": "polly",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "pricing-plan-manager",
+   "name": "pricing-plan-manager",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "pricing",
+   "name": "pricing",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "proton",
+   "name": "proton",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "qapps",
+   "name": "qapps",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "qbusiness",
+   "name": "qbusiness",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "qconnect",
+   "name": "qconnect",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "quicksight",
+   "name": "quicksight",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ram",
+   "name": "ram",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "rbin",
+   "name": "rbin",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "rds-data",
+   "name": "AWS RDS DataService",
+   "priority": "P3",
+   "status": "released",
+   "operations": 6
+  },
+  {
+   "cloud": "aws",
+   "id": "rds",
+   "name": "Amazon Relational Database Service",
+   "priority": "P3",
+   "status": "released",
+   "operations": 168
+  },
+  {
+   "cloud": "aws",
+   "id": "redshift-data",
+   "name": "redshift-data",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "redshift-serverless",
+   "name": "redshift-serverless",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "redshift",
+   "name": "redshift",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "rekognition",
+   "name": "rekognition",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "repostspace",
+   "name": "repostspace",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "resiliencehub",
+   "name": "resiliencehub",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "resiliencehubv2",
+   "name": "resiliencehubv2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "resource-explorer-2",
+   "name": "resource-explorer-2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "resource-groups",
+   "name": "resource-groups",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "resourcegroupstaggingapi",
+   "name": "resourcegroupstaggingapi",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "rolesanywhere",
+   "name": "rolesanywhere",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "route53-recovery-cluster",
+   "name": "route53-recovery-cluster",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "route53-recovery-control-config",
+   "name": "route53-recovery-control-config",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "route53-recovery-readiness",
+   "name": "route53-recovery-readiness",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "route53",
+   "name": "Amazon Route 53",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 71
+  },
+  {
+   "cloud": "aws",
+   "id": "route53domains",
+   "name": "route53domains",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "route53globalresolver",
+   "name": "route53globalresolver",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "route53profiles",
+   "name": "route53profiles",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "route53resolver",
+   "name": "route53resolver",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "rtbfabric",
+   "name": "rtbfabric",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "rum",
+   "name": "rum",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "s3",
+   "name": "Amazon Simple Storage Service",
+   "priority": "P3",
+   "status": "released",
+   "operations": 116
+  },
+  {
+   "cloud": "aws",
+   "id": "s3control",
+   "name": "s3control",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "s3files",
+   "name": "s3files",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "s3outposts",
+   "name": "s3outposts",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "s3tables",
+   "name": "s3tables",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "s3vectors",
+   "name": "s3vectors",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sagemaker-a2i-runtime",
+   "name": "sagemaker-a2i-runtime",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sagemaker-edge",
+   "name": "sagemaker-edge",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sagemaker-featurestore-runtime",
+   "name": "sagemaker-featurestore-runtime",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sagemaker-geospatial",
+   "name": "sagemaker-geospatial",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sagemaker-metrics",
+   "name": "sagemaker-metrics",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sagemaker-runtime",
+   "name": "sagemaker-runtime",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sagemaker",
+   "name": "sagemaker",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sagemakerjobruntime",
+   "name": "sagemakerjobruntime",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sagemakertrainingsessionruntime",
+   "name": "sagemakertrainingsessionruntime",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "savingsplans",
+   "name": "savingsplans",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "scheduler",
+   "name": "Amazon EventBridge Scheduler",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 12
+  },
+  {
+   "cloud": "aws",
+   "id": "schemas",
+   "name": "schemas",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sdb",
+   "name": "sdb",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "secretsmanager",
+   "name": "AWS Secrets Manager",
+   "priority": "P3",
+   "status": "released",
+   "operations": 23
+  },
+  {
+   "cloud": "aws",
+   "id": "security-ir",
+   "name": "security-ir",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "securityagent",
+   "name": "securityagent",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "securityhub",
+   "name": "securityhub",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "securitylake",
+   "name": "securitylake",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "serverlessrepo",
+   "name": "serverlessrepo",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "service-quotas",
+   "name": "service-quotas",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "servicecatalog-appregistry",
+   "name": "servicecatalog-appregistry",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "servicecatalog",
+   "name": "servicecatalog",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "servicediscovery",
+   "name": "servicediscovery",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ses",
+   "name": "ses",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sesv2",
+   "name": "Amazon Simple Email Service",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 116
+  },
+  {
+   "cloud": "aws",
+   "id": "shield",
+   "name": "shield",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "signer-data",
+   "name": "signer-data",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "signer",
+   "name": "signer",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "signin",
+   "name": "signin",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "simpledbv2",
+   "name": "simpledbv2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sms-voice",
+   "name": "sms-voice",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "snow-device-management",
+   "name": "snow-device-management",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "snowball",
+   "name": "snowball",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sns",
+   "name": "Amazon Simple Notification Service",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 42
+  },
+  {
+   "cloud": "aws",
+   "id": "socialmessaging",
+   "name": "socialmessaging",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sqs",
+   "name": "Amazon Simple Queue Service",
+   "priority": "P2",
+   "status": "released",
+   "operations": 23
+  },
+  {
+   "cloud": "aws",
+   "id": "ssm-contacts",
+   "name": "ssm-contacts",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ssm-guiconnect",
+   "name": "ssm-guiconnect",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ssm-incidents",
+   "name": "ssm-incidents",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ssm-quicksetup",
+   "name": "ssm-quicksetup",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ssm-sap",
+   "name": "ssm-sap",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "ssm",
+   "name": "Amazon Simple Systems Manager (SSM)",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 152
+  },
+  {
+   "cloud": "aws",
+   "id": "sso-admin",
+   "name": "sso-admin",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sso-oidc",
+   "name": "sso-oidc",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sso",
+   "name": "sso",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "stepfunctions",
+   "name": "AWS Step Functions",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 37
+  },
+  {
+   "cloud": "aws",
+   "id": "storagegateway",
+   "name": "storagegateway",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sts",
+   "name": "AWS Security Token Service",
+   "priority": "P1",
+   "status": "not started",
+   "operations": 11
+  },
+  {
+   "cloud": "aws",
+   "id": "supplychain",
+   "name": "supplychain",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "support-app",
+   "name": "support-app",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "support",
+   "name": "support",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "supportauthz",
+   "name": "supportauthz",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "sustainability",
+   "name": "sustainability",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "swf",
+   "name": "swf",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "synthetics",
+   "name": "synthetics",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "taxsettings",
+   "name": "taxsettings",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "textract",
+   "name": "textract",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "timestream-influxdb",
+   "name": "timestream-influxdb",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "timestream-query",
+   "name": "timestream-query",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "timestream-write",
+   "name": "timestream-write",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "transcribe",
+   "name": "transcribe",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "transfer",
+   "name": "transfer",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "translate",
+   "name": "translate",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "trustedadvisor",
+   "name": "trustedadvisor",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "uxc",
+   "name": "uxc",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "verifiedpermissions",
+   "name": "verifiedpermissions",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "voice-id",
+   "name": "voice-id",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "vpc-lattice",
+   "name": "vpc-lattice",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "waf-regional",
+   "name": "waf-regional",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "waf",
+   "name": "waf",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "wafv2",
+   "name": "wafv2",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "wellarchitected",
+   "name": "wellarchitected",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "wickr",
+   "name": "wickr",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "wisdom",
+   "name": "wisdom",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "workdocs",
+   "name": "workdocs",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "workmail",
+   "name": "workmail",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "workmailmessageflow",
+   "name": "workmailmessageflow",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "workspaces-instances",
+   "name": "workspaces-instances",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "workspaces-thin-client",
+   "name": "workspaces-thin-client",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "workspaces-web",
+   "name": "workspaces-web",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "workspaces",
+   "name": "workspaces",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "aws",
+   "id": "xray",
+   "name": "AWS X-Ray",
+   "priority": "P2",
+   "status": "not started",
+   "operations": 38
+  },
+  {
+   "cloud": "gcp",
+   "id": "abusiveexperiencereport/v1",
+   "name": "Abusive Experience Report API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "acceleratedmobilepageurl/v1",
+   "name": "Accelerated Mobile Pages (AMP) URL API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "accessapproval/v1",
+   "name": "Access Approval API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "accesscontextmanager/v1",
+   "name": "Access Context Manager API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "addressvalidation/v1",
+   "name": "Address Validation API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "adexchangebuyer2/v2beta1",
+   "name": "Ad Exchange Buyer API II",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "adexperiencereport/v1",
+   "name": "Ad Experience Report API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "admin/reports_v1",
+   "name": "Admin SDK API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "admob/v1",
+   "name": "AdMob API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "adsense/v2",
+   "name": "AdSense Management API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "adsenseplatform/v1",
+   "name": "AdSense Platform API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "advisorynotifications/v1",
+   "name": "Advisory Notifications API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "agenciesandbrands/v1",
+   "name": "Agencies and Brands API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "agentidentity/v1",
+   "name": "Agent Identity API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "agentidentitycredentials/v1",
+   "name": "Agent Identity Credentials API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "agentregistry/v1",
+   "name": "Agent Registry API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "aiplatform/v1",
+   "name": "Agent Platform API",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "airquality/v1",
+   "name": "Air Quality API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "alertcenter/v1beta1",
+   "name": "Google Workspace Alert Center API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "alloydb/v1",
+   "name": "AlloyDB API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "analyticsadmin/v1beta",
+   "name": "Google Analytics Admin API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "analyticsdata/v1beta",
+   "name": "Google Analytics Data API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "analyticshub/v1",
+   "name": "Analytics Hub API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "androiddeveloperidstatus/v1",
+   "name": "Android Developer ID Status API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "androiddeviceprovisioning/v1",
+   "name": "Android Device Provisioning Partner API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "androidenterprise/v1",
+   "name": "Google Play EMM API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "androidmanagement/v1",
+   "name": "Android Management API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "androidpublisher/v3",
+   "name": "Google Play Android Developer API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "apigateway/v1",
+   "name": "API Gateway API",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "gcp",
+   "id": "apigee/v1",
+   "name": "Apigee API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "apihub/v1",
+   "name": "API hub API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "apikeys/v2",
+   "name": "API Keys API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "apim/v1alpha",
+   "name": "API Management API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "appengine/v1",
+   "name": "App Engine Admin API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "apphub/v1",
+   "name": "App Hub API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "appsmarket/v2",
+   "name": "Google Workspace Marketplace API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "area120tables/v1alpha1",
+   "name": "Area120 Tables API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "areainsights/v1",
+   "name": "Places Aggregate API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "artifactregistry/v1",
+   "name": "Artifact Registry API",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "assuredworkloads/v1",
+   "name": "Assured Workloads API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "auditmanager/v1",
+   "name": "Audit Manager API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "authorizedbuyersmarketplace/v1",
+   "name": "Authorized Buyers Marketplace API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "backupdr/v1",
+   "name": "Backup and DR Service API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "baremetalsolution/v2",
+   "name": "Bare Metal Solution API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "batch/v1",
+   "name": "Batch API",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "beyondcorp/v1",
+   "name": "BeyondCorp API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "biglake/v1",
+   "name": "Lakehouse API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "bigquery/v2",
+   "name": "BigQuery API",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "bigqueryconnection/v1",
+   "name": "BigQuery Connection API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "bigquerydatapolicy/v2",
+   "name": "BigQuery Data Policy API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "bigquerydatatransfer/v1",
+   "name": "BigQuery Data Transfer API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "bigqueryreservation/v1",
+   "name": "BigQuery Reservation API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "bigtableadmin/v2",
+   "name": "Cloud Bigtable Admin API",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "billingbudgets/v1",
+   "name": "Cloud Billing Budget API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "binaryauthorization/v1",
+   "name": "Binary Authorization API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "blockchainnodeengine/v1",
+   "name": "Blockchain Node Engine API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "blogger/v3",
+   "name": "Blogger API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "books/v1",
+   "name": "Books API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "businessprofileperformance/v1",
+   "name": "Business Profile Performance API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "calendar/v3",
+   "name": "Google Calendar API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "certificatemanager/v1",
+   "name": "Certificate Manager API",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "ces/v1",
+   "name": "Gemini Enterprise for Customer Experience API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "chat/v1",
+   "name": "Google Chat API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "checks/v1alpha",
+   "name": "Checks API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "chromemanagement/v1",
+   "name": "Chrome Management API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "chromepolicy/v1",
+   "name": "Chrome Policy API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "chromeuxreport/v1",
+   "name": "Chrome UX Report API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "chromewebstore/v2",
+   "name": "Chrome Web Store API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "civicinfo/v2",
+   "name": "Google Civic Information API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "classroom/v1",
+   "name": "Google Classroom API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudasset/v1",
+   "name": "Cloud Asset API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudbilling/v1",
+   "name": "Cloud Billing API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudbuild/v2",
+   "name": "Cloud Build API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudchannel/v1",
+   "name": "Cloud Channel API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudcommerceprocurement/v1",
+   "name": "Cloud Commerce Partner Procurement API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudcontrolspartner/v1",
+   "name": "Cloud Controls Partner API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "clouddeploy/v1",
+   "name": "Cloud Deploy API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "clouderrorreporting/v1beta1",
+   "name": "Error Reporting API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudfunctions/v2",
+   "name": "Cloud Functions API",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudidentity/v1",
+   "name": "Cloud Identity API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudkms/v1",
+   "name": "Cloud Key Management Service (KMS) API",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudlocationfinder/v1",
+   "name": "Cloud Location Finder API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudnumberregistry/v1alpha",
+   "name": "Cloud Number Registry API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudproductregistry/v1",
+   "name": "Cloud Product Registry API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudprofiler/v2",
+   "name": "Cloud Profiler API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudresourcemanager/v3",
+   "name": "Cloud Resource Manager API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudscheduler/v1",
+   "name": "Cloud Scheduler API",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudsearch/v1",
+   "name": "Cloud Search API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudshell/v1",
+   "name": "Cloud Shell API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudsupport/v2",
+   "name": "Google Cloud Support API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudtasks/v2",
+   "name": "Cloud Tasks API",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "cloudtrace/v2",
+   "name": "Cloud Trace API",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "composer/v1",
+   "name": "Cloud Composer API",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "compute/v1",
+   "name": "Compute Engine API",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "gcp",
+   "id": "config/v1",
+   "name": "Infrastructure Manager API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "connectors/v2",
+   "name": "Connectors API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "contactcenteraiplatform/v1alpha1",
+   "name": "Contact Center AI Platform API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "contactcenterinsights/v1",
+   "name": "Contact Center AI Insights API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "container/v1",
+   "name": "Kubernetes Engine API",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "containeranalysis/v1",
+   "name": "Container Analysis API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "contentwarehouse/v1",
+   "name": "Document AI Warehouse API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "css/v1",
+   "name": "CSS API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "curationpartners/v1",
+   "name": "Curation Partners API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "customsearch/v1",
+   "name": "Custom Search API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "databasecenter/v1beta",
+   "name": "Database Center API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "datacatalog/v1",
+   "name": "Google Cloud Data Catalog API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "dataflow/v1b3",
+   "name": "Dataflow API",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "dataform/v1",
+   "name": "Dataform API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "datafusion/v1",
+   "name": "Cloud Data Fusion API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "datalabeling/v1beta1",
+   "name": "Data Labeling API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "datalineage/v1",
+   "name": "Data Lineage API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "datamanager/v1",
+   "name": "Data Manager API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "datamigration/v1",
+   "name": "Database Migration API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "datapipelines/v1",
+   "name": "Data pipelines API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "dataplex/v1",
+   "name": "Cloud Dataplex API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "dataportability/v1",
+   "name": "Data Portability API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "dataproc/v1",
+   "name": "Cloud Dataproc API",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "datastore/v1",
+   "name": "Cloud Datastore API",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "datastream/v1",
+   "name": "Datastream API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "deepreview/v1",
+   "name": "Deep Review API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "deploymentmanager/v2",
+   "name": "Cloud Deployment Manager V2 API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "developerconnect/v1",
+   "name": "Developer Connect API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "developerknowledge/v1",
+   "name": "Developer Knowledge API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "devicerun/v1alpha",
+   "name": "Device Run API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "dfareporting/v5",
+   "name": "Campaign Manager 360 API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "dialogflow/v3",
+   "name": "Dialogflow API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "digitalassetlinks/v1",
+   "name": "Digital Asset Links API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "discovery/v1",
+   "name": "API Discovery Service",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "discoveryengine/v1",
+   "name": "Discovery Engine API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "displayvideo/v5",
+   "name": "Display & Video 360 API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "dlp/v2",
+   "name": "Sensitive Data Protection (DLP)",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "dns/v1",
+   "name": "Cloud DNS API",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "docs/v1",
+   "name": "Google Docs API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "documentai/v1",
+   "name": "Cloud Document AI API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "domains/v1",
+   "name": "Cloud Domains API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "doubleclickbidmanager/v2",
+   "name": "DoubleClick Bid Manager API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "doubleclicksearch/v2",
+   "name": "Search Ads 360 API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "drive/v3",
+   "name": "Drive API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "driveactivity/v2",
+   "name": "Drive Activity API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "drivelabels/v2",
+   "name": "Drive Labels API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "essentialcontacts/v1",
+   "name": "Essential Contacts API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "eventarc/v1",
+   "name": "Eventarc API",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "gcp",
+   "id": "factchecktools/v1alpha1",
+   "name": "Fact Check Tools API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "fcm/v1",
+   "name": "Firebase Cloud Messaging API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "fcmdata/v1beta1",
+   "name": "Firebase Cloud Messaging Data API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "file/v1",
+   "name": "Cloud Filestore API",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "firebase/v1beta1",
+   "name": "Firebase Management API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "firebaseappcheck/v1",
+   "name": "Firebase App Check API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "firebaseappdistribution/v1",
+   "name": "Firebase App Distribution API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "firebaseapphosting/v1",
+   "name": "Firebase App Hosting API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "firebasecrashlytics/v1alpha",
+   "name": "Firebase Crashlytics API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "firebasedatabase/v1beta",
+   "name": "Firebase Realtime Database Management API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "firebasedataconnect/v1",
+   "name": "Firebase SQL Connect API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "firebasedynamiclinks/v1",
+   "name": "Firebase Dynamic Links API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "firebasehosting/v1",
+   "name": "Firebase Hosting API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "firebaseml/v1",
+   "name": "Firebase ML API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "firebaserules/v1",
+   "name": "Firebase Rules API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "firebasestorage/v1beta",
+   "name": "Cloud Storage for Firebase API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "firestore/v1",
+   "name": "Cloud Firestore API",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "gcp",
+   "id": "fitness/v1",
+   "name": "Fitness API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "forms/v1",
+   "name": "Google Forms API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "ftp/v1",
+   "name": "Cloud FTP API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "games/v1",
+   "name": "Google Play Games Services API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "gamesConfiguration/v1configuration",
+   "name": "Google Play Games Services Publishing API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "gamesManagement/v1management",
+   "name": "Google Play Games Services Management API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "gkebackup/v1",
+   "name": "Backup for GKE API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "gkehub/v2",
+   "name": "GKE Hub API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "gkeonprem/v1",
+   "name": "GKE On-Prem API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "gmail/v1",
+   "name": "Gmail API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "gmailpostmastertools/v2",
+   "name": "Gmail Postmaster Tools API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "groupsmigration/v1",
+   "name": "Groups Migration API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "groupssettings/v1",
+   "name": "Groups Settings API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "health/v4",
+   "name": "Google Health API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "healthcare/v1",
+   "name": "Cloud Healthcare API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "homegraph/v1",
+   "name": "HomeGraph API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "hypercomputecluster/v1",
+   "name": "Cluster Director API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "iam/v2",
+   "name": "Identity and Access Management (IAM) API",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "gcp",
+   "id": "iamcredentials/v1",
+   "name": "IAM Service Account Credentials API",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "iap/v1",
+   "name": "Cloud Identity-Aware Proxy API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "identitytoolkit/v3",
+   "name": "Identity Toolkit API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "ids/v1",
+   "name": "Cloud IDS API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "indexing/v3",
+   "name": "Web Search Indexing API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "integrations/v2",
+   "name": "Application Integration API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "jobs/v4",
+   "name": "Cloud Talent Solution API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "keep/v1",
+   "name": "Google Keep API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "kgsearch/v1",
+   "name": "Knowledge Graph Search API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "kmsinventory/v1",
+   "name": "KMS Inventory API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "language/v2",
+   "name": "Cloud Natural Language API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "libraryagent/v1",
+   "name": "Library Agent API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "licensing/v1",
+   "name": "Enterprise License Manager API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "localservices/v1",
+   "name": "Local Services API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "logging/v2",
+   "name": "Cloud Logging API",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "looker/v1",
+   "name": "Looker (Google Cloud core) API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "managedidentities/v1",
+   "name": "Managed Service for Microsoft Active Directory API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "managedkafka/v1",
+   "name": "Managed Service for Apache Kafka API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "manufacturers/v1",
+   "name": "Manufacturer Center API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "marketingplatformadmin/v1alpha",
+   "name": "Google Marketing Platform Admin API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "meet/v2",
+   "name": "Google Meet API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "memcache/v1",
+   "name": "Cloud Memorystore for Memcached API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "merchantapi/reviews_v1beta",
+   "name": "Merchant API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "metastore/v1",
+   "name": "Dataproc Metastore API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "migrationcenter/v1",
+   "name": "Migration Center API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "ml/v1",
+   "name": "AI Platform Training & Prediction API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "monitoring/v3",
+   "name": "Cloud Monitoring API",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "mybusinessaccountmanagement/v1",
+   "name": "My Business Account Management API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "mybusinessbusinessinformation/v1",
+   "name": "My Business Business Information API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "mybusinesslodging/v1",
+   "name": "My Business Lodging API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "mybusinessnotifications/v1",
+   "name": "My Business Notifications API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "mybusinessplaceactions/v1",
+   "name": "My Business Place Actions API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "mybusinessqanda/v1",
+   "name": "My Business Q&A API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "mybusinessverifications/v1",
+   "name": "My Business Verifications API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "netapp/v1",
+   "name": "NetApp API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "networkconnectivity/v1",
+   "name": "Network Connectivity API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "networkmanagement/v1",
+   "name": "Network Management API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "networksecurity/v1",
+   "name": "Network Security API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "networkservices/v1",
+   "name": "Network Services API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "notebooks/v2",
+   "name": "Notebooks API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "oauth2/v2",
+   "name": "Google OAuth2 API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "observability/v1",
+   "name": "Observability API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "ondemandscanning/v1",
+   "name": "On-Demand Scanning API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "oracledatabase/v1",
+   "name": "Oracle Database@Google Cloud API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "orgpolicy/v2",
+   "name": "Organization Policy API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "osconfig/v2",
+   "name": "OS Config API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "oslogin/v1",
+   "name": "Cloud OS Login API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "pagespeedonline/v5",
+   "name": "PageSpeed Insights API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "parallelstore/v1",
+   "name": "Parallelstore API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "parametermanager/v1",
+   "name": "Parameter Manager API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "paymentsresellersubscription/v1",
+   "name": "Payments Reseller Subscription API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "people/v1",
+   "name": "People API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "places/v1",
+   "name": "Places API (New)",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "playcustomapp/v1",
+   "name": "Google Play Custom App Publishing API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "playdeveloperreporting/v1beta1",
+   "name": "Google Play Developer Reporting API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "playgrouping/v1alpha1",
+   "name": "Google Play Grouping API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "playintegrity/v1",
+   "name": "Google Play Integrity API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "policyanalyzer/v1",
+   "name": "Policy Analyzer API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "policysimulator/v1",
+   "name": "Policy Simulator API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "policytroubleshooter/v3",
+   "name": "Policy Troubleshooter API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "pollen/v1",
+   "name": "Pollen API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "poly/v1",
+   "name": "Poly API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "privateca/v1",
+   "name": "Certificate Authority API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "prod_tt_sasportal/v1alpha1",
+   "name": "SAS Portal API (Testing)",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "publicca/v1",
+   "name": "Public Certificate Authority API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "pubsub/v1",
+   "name": "Cloud Pub/Sub API",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "gcp",
+   "id": "pubsublite/v1",
+   "name": "Pub/Sub Lite API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "rapidmigrationassessment/v1",
+   "name": "Rapid Migration Assessment API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "readerrevenuesubscriptionlinking/v1",
+   "name": "Reader Revenue Subscription Linking API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "realtimebidding/v1",
+   "name": "Real-time Bidding API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "recaptchaenterprise/v1",
+   "name": "reCAPTCHA Enterprise API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "recommendationengine/v1beta1",
+   "name": "Recommendations AI (Beta)",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "recommender/v1",
+   "name": "Recommender API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "redis/v1",
+   "name": "Google Cloud Memorystore for Redis API",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "reseller/v1",
+   "name": "Google Workspace Reseller API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "retail/v2",
+   "name": "AI Commerce Search API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "run/v2",
+   "name": "Cloud Run Admin API",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "runtimeconfig/v1",
+   "name": "Cloud Runtime Configuration API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "saasservicemgmt/v1",
+   "name": "App Lifecycle Manager API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "safebrowsing/v5",
+   "name": "Safe Browsing API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "sasportal/v1alpha1",
+   "name": "SAS Portal API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "script/v1",
+   "name": "Apps Script API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "searchads360/v23",
+   "name": "Search Ads 360 Reporting API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "searchconsole/v1",
+   "name": "Google Search Console API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "secretmanager/v1",
+   "name": "Secret Manager API",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "gcp",
+   "id": "securesourcemanager/v1",
+   "name": "Secure Source Manager API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "securitycenter/v1",
+   "name": "Security Command Center API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "securityposture/v1",
+   "name": "Security Posture API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "serviceconsumermanagement/v1",
+   "name": "Service Consumer Management API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "servicecontrol/v2",
+   "name": "Service Control API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "servicedirectory/v1",
+   "name": "Service Directory API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "servicemanagement/v1",
+   "name": "Service Management API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "servicenetworking/v1",
+   "name": "Service Networking API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "serviceusage/v1",
+   "name": "Service Usage API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "sheets/v4",
+   "name": "Google Sheets API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "siteVerification/v1",
+   "name": "Site Verification API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "slides/v1",
+   "name": "Google Slides API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "smartdevicemanagement/v1",
+   "name": "Smart Device Management API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "solar/v1",
+   "name": "Solar API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "spanner/v1",
+   "name": "Cloud Spanner API",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "speech/v1",
+   "name": "Cloud Speech-to-Text API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "sqladmin/v1",
+   "name": "Cloud SQL Admin API",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "gcp",
+   "id": "storage/v1",
+   "name": "Cloud Storage API",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "gcp",
+   "id": "storagebatchoperations/v1",
+   "name": "Storage Batch Operations API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "storagetransfer/v1",
+   "name": "Storage Transfer API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "streetviewpublish/v1",
+   "name": "Street View Publish API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "sts/v1",
+   "name": "Security Token Service API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "tagmanager/v2",
+   "name": "Tag Manager API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "tasks/v1",
+   "name": "Google Tasks API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "testing/v1",
+   "name": "Cloud Testing API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "texttospeech/v1",
+   "name": "Cloud Text-to-Speech API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "threatintelligence/v1beta",
+   "name": "Threat Intelligence API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "toolresults/v1beta3",
+   "name": "Cloud Tool Results API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "tpu/v2",
+   "name": "Cloud TPU API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "trafficdirector/v3",
+   "name": "Traffic Director API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "transcoder/v1",
+   "name": "Transcoder API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "translate/v3",
+   "name": "Cloud Translation API",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "travelimpactmodel/v1",
+   "name": "Travel Impact Model API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "vault/v1",
+   "name": "Google Vault API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "verifiedaccess/v2",
+   "name": "Chrome Verified Access API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "versionhistory/v1",
+   "name": "versionhistory.googleapis.com API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "videointelligence/v1",
+   "name": "Cloud Video Intelligence API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "vision/v1",
+   "name": "Cloud Vision API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "vmmigration/v1",
+   "name": "VM Migration API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "vmwareengine/v1",
+   "name": "VMware Engine API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "vpcaccess/v1",
+   "name": "Serverless VPC Access API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "walletobjects/v1",
+   "name": "Google Wallet API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "webcontentpublisher/v1",
+   "name": "Web Content Publisher API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "webfonts/v1",
+   "name": "Web Fonts Developer API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "webrisk/v1",
+   "name": "Web Risk API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "websecurityscanner/v1",
+   "name": "Web Security Scanner API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "workflowexecutions/v1",
+   "name": "Workflow Executions API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "workflows/v1",
+   "name": "Workflows API",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "workloadmanager/v1",
+   "name": "Workload Manager API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "workspaceevents/v1",
+   "name": "Google Workspace Events API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "workstations/v1",
+   "name": "Cloud Workstations API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "youtube/v3",
+   "name": "YouTube Data API v3",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "youtubeAnalytics/v2",
+   "name": "YouTube Analytics API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "gcp",
+   "id": "youtubereporting/v1",
+   "name": "YouTube Reporting API",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "EnterpriseKnowledgeGraph",
+   "name": "EnterpriseKnowledgeGraph",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "addons",
+   "name": "addons",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "adhybridhealthservice",
+   "name": "adhybridhealthservice",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "advisor",
+   "name": "advisor",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "agricultureplatform",
+   "name": "agricultureplatform",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "agrifood",
+   "name": "agrifood",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "ai-foundry",
+   "name": "ai-foundry",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "ai",
+   "name": "ai",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "alertsmanagement",
+   "name": "alertsmanagement",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "analysisservices",
+   "name": "analysisservices",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "anyscale",
+   "name": "anyscale",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "apicenter",
+   "name": "apicenter",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "apimanagement",
+   "name": "apimanagement",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "azure",
+   "id": "app",
+   "name": "app",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "appcomplianceautomation",
+   "name": "appcomplianceautomation",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "appconfiguration",
+   "name": "appconfiguration",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "applicationinsights",
+   "name": "applicationinsights",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "applink",
+   "name": "applink",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "appplatform",
+   "name": "appplatform",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "artifactsigning",
+   "name": "artifactsigning",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "attestation",
+   "name": "attestation",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "authorization",
+   "name": "authorization",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "azure",
+   "id": "automanage",
+   "name": "automanage",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "automation",
+   "name": "automation",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "awsconnector",
+   "name": "awsconnector",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azsadmin",
+   "name": "azsadmin",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azure-kusto",
+   "name": "azure-kusto",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azure-native-integrations",
+   "name": "azure-native-integrations",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azureactivedirectory",
+   "name": "azureactivedirectory",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azurearcdata",
+   "name": "azurearcdata",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azuredata",
+   "name": "azuredata",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azuredatatransfer",
+   "name": "azuredatatransfer",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azuredependencymap",
+   "name": "azuredependencymap",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azurefleet",
+   "name": "azurefleet",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azureintegrationspaces",
+   "name": "azureintegrationspaces",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azurelargeinstance",
+   "name": "azurelargeinstance",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azureresiliencemanagement",
+   "name": "azureresiliencemanagement",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azurestack",
+   "name": "azurestack",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "azurestackhci",
+   "name": "azurestackhci",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "baremetalinfrastructure",
+   "name": "baremetalinfrastructure",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "batch",
+   "name": "batch",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "billing",
+   "name": "billing",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "billingbenefits",
+   "name": "billingbenefits",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "billingtrust",
+   "name": "billingtrust",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "blueprint",
+   "name": "blueprint",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "botservice",
+   "name": "botservice",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "carbon",
+   "name": "carbon",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "cdn",
+   "name": "cdn",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "certificateregistration",
+   "name": "certificateregistration",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "chaos",
+   "name": "chaos",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "cloudhealth",
+   "name": "cloudhealth",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "cloudshell",
+   "name": "cloudshell",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "codesigning",
+   "name": "codesigning",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "cognitiveservices",
+   "name": "cognitiveservices",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "commerce",
+   "name": "commerce",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "common-types",
+   "name": "common-types",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "communication",
+   "name": "communication",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "communitytraining",
+   "name": "communitytraining",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "compute",
+   "name": "compute",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "azure",
+   "id": "computebulkactions",
+   "name": "computebulkactions",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "computelimit",
+   "name": "computelimit",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "computeschedule",
+   "name": "computeschedule",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "confidentialledger",
+   "name": "confidentialledger",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "confluent",
+   "name": "confluent",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "connectedcache",
+   "name": "connectedcache",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "connectedvmware",
+   "name": "connectedvmware",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "consumption",
+   "name": "consumption",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "containerinstance",
+   "name": "containerinstance",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "containerregistry",
+   "name": "containerregistry",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "containerservice",
+   "name": "containerservice",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "containerstorage",
+   "name": "containerstorage",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "contosowidgetmanager",
+   "name": "contosowidgetmanager",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "cosmos-db",
+   "name": "cosmos-db",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "azure",
+   "id": "cost-management",
+   "name": "cost-management",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "cpim",
+   "name": "cpim",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "customer-insights",
+   "name": "customer-insights",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "customerlockbox",
+   "name": "customerlockbox",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "customproviders",
+   "name": "customproviders",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "dashboard",
+   "name": "dashboard",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "databasefleetmanager",
+   "name": "databasefleetmanager",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "databasewatcher",
+   "name": "databasewatcher",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "databox",
+   "name": "databox",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "databoxedge",
+   "name": "databoxedge",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "databricks",
+   "name": "databricks",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "datacatalog",
+   "name": "datacatalog",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "datadog",
+   "name": "datadog",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "datafactory",
+   "name": "datafactory",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "datalake-analytics",
+   "name": "datalake-analytics",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "datalake-store",
+   "name": "datalake-store",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "datamigration",
+   "name": "datamigration",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "dataprotection",
+   "name": "dataprotection",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "datashare",
+   "name": "datashare",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "dell",
+   "name": "dell",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "desktopvirtualization",
+   "name": "desktopvirtualization",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "devcenter",
+   "name": "devcenter",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "developerhub",
+   "name": "developerhub",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "deviceprovisioningservices",
+   "name": "deviceprovisioningservices",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "deviceregistry",
+   "name": "deviceregistry",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "deviceupdate",
+   "name": "deviceupdate",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "devops",
+   "name": "devops",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "devopsinfrastructure",
+   "name": "devopsinfrastructure",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "devspaces",
+   "name": "devspaces",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "devtestlabs",
+   "name": "devtestlabs",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "dfp",
+   "name": "dfp",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "digitaltwins",
+   "name": "digitaltwins",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "discovery",
+   "name": "discovery",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "dnc",
+   "name": "dnc",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "dns",
+   "name": "dns",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "dnsresolver",
+   "name": "dnsresolver",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "domainregistration",
+   "name": "domainregistration",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "domainservices",
+   "name": "domainservices",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "durabletask",
+   "name": "durabletask",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "dynamicstelemetry",
+   "name": "dynamicstelemetry",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "dynatrace",
+   "name": "dynatrace",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "edge",
+   "name": "edge",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "edgemarketplace",
+   "name": "edgemarketplace",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "edgeoperator",
+   "name": "edgeoperator",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "edgeorder",
+   "name": "edgeorder",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "edgeorderpartner",
+   "name": "edgeorderpartner",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "edgezones",
+   "name": "edgezones",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "education",
+   "name": "education",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "elastic",
+   "name": "elastic",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "elasticsan",
+   "name": "elasticsan",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "engagementfabric",
+   "name": "engagementfabric",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "eventgrid",
+   "name": "eventgrid",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "azure",
+   "id": "eventhub",
+   "name": "eventhub",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "ews",
+   "name": "ews",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "extendedlocation",
+   "name": "extendedlocation",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "fabric",
+   "name": "fabric",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "fileshares",
+   "name": "fileshares",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "fist",
+   "name": "fist",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "fluidrelay",
+   "name": "fluidrelay",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "frontdoor",
+   "name": "frontdoor",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "gcpconnector",
+   "name": "gcpconnector",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "github-network",
+   "name": "github-network",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "graphservicesprod",
+   "name": "graphservicesprod",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "guestconfiguration",
+   "name": "guestconfiguration",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "hanaonazure",
+   "name": "hanaonazure",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "hardwaresecuritymodules",
+   "name": "hardwaresecuritymodules",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "hdinsight",
+   "name": "hdinsight",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "healthbot",
+   "name": "healthbot",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "healthcareapis",
+   "name": "healthcareapis",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "healthdataaiservices",
+   "name": "healthdataaiservices",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "help",
+   "name": "help",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "horizondb",
+   "name": "horizondb",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "hybridaks",
+   "name": "hybridaks",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "hybridcloud",
+   "name": "hybridcloud",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "hybridcompute",
+   "name": "hybridcompute",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "hybridconnectivity",
+   "name": "hybridconnectivity",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "hybridkubernetes",
+   "name": "hybridkubernetes",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "hybridnetwork",
+   "name": "hybridnetwork",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "imagebuilder",
+   "name": "imagebuilder",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "imds",
+   "name": "imds",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "impact",
+   "name": "impact",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "inferenceservice",
+   "name": "inferenceservice",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "informatica",
+   "name": "informatica",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "intune",
+   "name": "intune",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "iotcentral",
+   "name": "iotcentral",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "iothub",
+   "name": "iothub",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "iotoperations",
+   "name": "iotoperations",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "iotoperationsdataprocessor",
+   "name": "iotoperationsdataprocessor",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "iotoperationsmq",
+   "name": "iotoperationsmq",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "iotoperationsorchestrator",
+   "name": "iotoperationsorchestrator",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "iotspaces",
+   "name": "iotspaces",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "keyvault",
+   "name": "keyvault",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "azure",
+   "id": "kubernetesconfiguration",
+   "name": "kubernetesconfiguration",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "kubernetesruntime",
+   "name": "kubernetesruntime",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "labservices",
+   "name": "labservices",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "liftrarize",
+   "name": "liftrarize",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "liftrcommvault",
+   "name": "liftrcommvault",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "liftrhyperexecute",
+   "name": "liftrhyperexecute",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "liftrmongodb",
+   "name": "liftrmongodb",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "liftrpinecone",
+   "name": "liftrpinecone",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "liftrqumulo",
+   "name": "liftrqumulo",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "liftrweightsandbiases",
+   "name": "liftrweightsandbiases",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "loadtestservice",
+   "name": "loadtestservice",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "logic",
+   "name": "logic",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "m365securityandcompliance",
+   "name": "m365securityandcompliance",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "machinelearning",
+   "name": "machinelearning",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "machinelearningservices",
+   "name": "machinelearningservices",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "maintenance",
+   "name": "maintenance",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "managednetwork",
+   "name": "managednetwork",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "managednetworkfabric",
+   "name": "managednetworkfabric",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "managedoperations",
+   "name": "managedoperations",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "managedservices",
+   "name": "managedservices",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "management",
+   "name": "management",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "managementpartner",
+   "name": "managementpartner",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "manufacturingplatform",
+   "name": "manufacturingplatform",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "maps",
+   "name": "maps",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "mariadb",
+   "name": "mariadb",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "marketplace",
+   "name": "marketplace",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "marketplacecatalog",
+   "name": "marketplacecatalog",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "marketplacenotifications",
+   "name": "marketplacenotifications",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "marketplaceordering",
+   "name": "marketplaceordering",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "migrate",
+   "name": "migrate",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "migrateprojects",
+   "name": "migrateprojects",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "mission",
+   "name": "mission",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "mongocluster",
+   "name": "mongocluster",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "monitor",
+   "name": "monitor",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "monitoringservice",
+   "name": "monitoringservice",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "msi",
+   "name": "msi",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "mysql",
+   "name": "mysql",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "mysqldiscovery",
+   "name": "mysqldiscovery",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "napster",
+   "name": "napster",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "netapp",
+   "name": "netapp",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "network",
+   "name": "network",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "azure",
+   "id": "networkcloud",
+   "name": "networkcloud",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "networkfunction",
+   "name": "networkfunction",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "newrelic",
+   "name": "newrelic",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "nginx",
+   "name": "nginx",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "notificationhubs",
+   "name": "notificationhubs",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "oep",
+   "name": "oep",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "offazurespringboot",
+   "name": "offazurespringboot",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "onlineexperimentation",
+   "name": "onlineexperimentation",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "operationalinsights",
+   "name": "operationalinsights",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "operationsmanagement",
+   "name": "operationsmanagement",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "oracle",
+   "name": "oracle",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "orbital",
+   "name": "orbital",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "orbitalplanetarycomputer",
+   "name": "orbitalplanetarycomputer",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "paloaltonetworks",
+   "name": "paloaltonetworks",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "peering",
+   "name": "peering",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "platformvalidation",
+   "name": "platformvalidation",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "playwrighttesting",
+   "name": "playwrighttesting",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "policyinsights",
+   "name": "policyinsights",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "portal",
+   "name": "portal",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "portalservices",
+   "name": "portalservices",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "postgresql",
+   "name": "postgresql",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "postgresqlhsc",
+   "name": "postgresqlhsc",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "powerbidedicated",
+   "name": "powerbidedicated",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "powerbiembedded",
+   "name": "powerbiembedded",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "powerbiprivatelinks",
+   "name": "powerbiprivatelinks",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "powerplatform",
+   "name": "powerplatform",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "privatedns",
+   "name": "privatedns",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "privatetrafficmanager",
+   "name": "privatetrafficmanager",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "professionalservice",
+   "name": "professionalservice",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "programenrollment",
+   "name": "programenrollment",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "programmableconnectivity",
+   "name": "programmableconnectivity",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "providerhub",
+   "name": "providerhub",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "purestorage",
+   "name": "purestorage",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "purview",
+   "name": "purview",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "purviewdatagovernace",
+   "name": "purviewdatagovernace",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "purviewdatagovernance",
+   "name": "purviewdatagovernance",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "purviewpolicy",
+   "name": "purviewpolicy",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "quantum",
+   "name": "quantum",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "quota",
+   "name": "quota",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "recommendationsservice",
+   "name": "recommendationsservice",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "recoveryservices",
+   "name": "recoveryservices",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "recoveryservicesbackup",
+   "name": "recoveryservicesbackup",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "recoveryservicesdatareplication",
+   "name": "recoveryservicesdatareplication",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "recoveryservicessiterecovery",
+   "name": "recoveryservicessiterecovery",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "redhatopenshift",
+   "name": "redhatopenshift",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "redis",
+   "name": "redis",
+   "priority": "P1",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "redisenterprise",
+   "name": "redisenterprise",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "relationships",
+   "name": "relationships",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "relay",
+   "name": "relay",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "reservations",
+   "name": "reservations",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "resourceconnector",
+   "name": "resourceconnector",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "resourcegraph",
+   "name": "resourcegraph",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "resourcehealth",
+   "name": "resourcehealth",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "resourcemover",
+   "name": "resourcemover",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "resources",
+   "name": "resources",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "riskiq",
+   "name": "riskiq",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "saas",
+   "name": "saas",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "scheduler",
+   "name": "scheduler",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "schemaregistry",
+   "name": "schemaregistry",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "scom",
+   "name": "scom",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "scvmm",
+   "name": "scvmm",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "search",
+   "name": "search",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "security",
+   "name": "security",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "securityandcompliance",
+   "name": "securityandcompliance",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "securityinsights",
+   "name": "securityinsights",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "serialconsole",
+   "name": "serialconsole",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "service-map",
+   "name": "service-map",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "servicebus",
+   "name": "servicebus",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "azure",
+   "id": "servicefabric",
+   "name": "servicefabric",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "servicefabricmanagedclusters",
+   "name": "servicefabricmanagedclusters",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "servicefabricmesh",
+   "name": "servicefabricmesh",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "servicelinker",
+   "name": "servicelinker",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "servicenetworking",
+   "name": "servicenetworking",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "signalr",
+   "name": "signalr",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "softwareplan",
+   "name": "softwareplan",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "solutions",
+   "name": "solutions",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "sovereign",
+   "name": "sovereign",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "sphere",
+   "name": "sphere",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "splitio",
+   "name": "splitio",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "sql",
+   "name": "sql",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "azure",
+   "id": "sqlvirtualmachine",
+   "name": "sqlvirtualmachine",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "standbypool",
+   "name": "standbypool",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "storage",
+   "name": "storage",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "azure",
+   "id": "storageactions",
+   "name": "storageactions",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "storagecache",
+   "name": "storagecache",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "storagediscovery",
+   "name": "storagediscovery",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "storageimportexport",
+   "name": "storageimportexport",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "storagemover",
+   "name": "storagemover",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "storagepool",
+   "name": "storagepool",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "storagesync",
+   "name": "storagesync",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "streamanalytics",
+   "name": "streamanalytics",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "subscription",
+   "name": "subscription",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "support",
+   "name": "support",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "synapse",
+   "name": "synapse",
+   "priority": "P2",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "syntex",
+   "name": "syntex",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "terraform",
+   "name": "terraform",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "testbase",
+   "name": "testbase",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "timeseriesinsights",
+   "name": "timeseriesinsights",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "trafficmanager",
+   "name": "trafficmanager",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "translation",
+   "name": "translation",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "verifiedid",
+   "name": "verifiedid",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "vi",
+   "name": "vi",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "vmware",
+   "name": "vmware",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "vmwarecloudsimple",
+   "name": "vmwarecloudsimple",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "web",
+   "name": "web",
+   "priority": "P3",
+   "status": "released"
+  },
+  {
+   "cloud": "azure",
+   "id": "webpubsub",
+   "name": "webpubsub",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "widget",
+   "name": "widget",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "windowsesu",
+   "name": "windowsesu",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "windowsiot",
+   "name": "windowsiot",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "workloadmonitor",
+   "name": "workloadmonitor",
+   "priority": "P3",
+   "status": "not started"
+  },
+  {
+   "cloud": "azure",
+   "id": "workloads",
+   "name": "workloads",
+   "priority": "P3",
+   "status": "not started"
+  }
+ ]
+}
