@@ -39,7 +39,8 @@
   "image": "valkey/valkey:8.0.1-alpine",
   "license": "BSD-3-Clause",
   "tier": "lite",
-  "compose_service": "vyomi-valkey"
+  "compose_service": "vyomi-valkey",
+  "note": "One shared Valkey (vyomi-valkey) serves ElastiCache, Memorystore and Azure Cache; cache node endpoints point at VYOMI_VALKEY_HOST:VYOMI_VALKEY_PORT. Nano has no sockets, so there it is control-plane only."
  },
  "suites": [
   "offline-sdk-java-aws-elasticache",
@@ -48,5 +49,5 @@
   "offline-ui-aws-elasticache",
   "nano-ui-aws-elasticache"
  ],
- "status": "building"
+ "status": "ready"
 }

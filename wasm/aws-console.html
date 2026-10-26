@@ -1141,7 +1141,9 @@ async function renderList(main){
         return av.localeCompare(bv) * state.sortDir;
       });
     }
-    document.getElementById("countChip").textContent = `(${filtered.length})`;
+    const _chip = document.getElementById("countChip");
+    if (!_chip) return;   // a newer render replaced this list while the fetch was in flight
+    _chip.textContent = `(${filtered.length})`;
     statsSpan.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;

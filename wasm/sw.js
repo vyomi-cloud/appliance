@@ -209,6 +209,38 @@ function nanoSpace(provider) {
            status: "running", active_region: region, active_account: acct };
 }
 
+// Real-cloud list price per resource ($/month) by census service key — mirrors
+// core/cost_model.SERVICE_MONTHLY and the consoles' _NANO_RATE.
+const NANO_RATE = {
+  s3: 0.50, dynamodb: 1.25, kms: 1.00, secretsmanager: 0.40, sqs: 0.40, iam: 0, rds: 25.55, elasticache: 12.41,
+  ec2: 30.37, lambda: 0.20, apigateway: 3.50, vpc: 0, compute: 24.53, storage: 0.50, cloudsql: 25.00, pubsub: 0.40,
+  firestore: 0.18, functions: 0.20, secretmanager: 0.18,
+  "microsoft.compute/virtualmachines": 30.37, "microsoft.sql/servers": 4.99, "microsoft.storage/storageaccounts": 0.50,
+  "microsoft.documentdb/databaseaccounts": 24.48, "microsoft.web/sites": 0.20,
+  "microsoft.servicebus/namespaces": 9.81, "microsoft.keyvault/vaults": 0.03,
+};
+// Space cost-savings from the live per-provider census (written by nano-boot).
+async function nanoCostSavings() {
+  const out = { real_cloud_cost_usd: 0, simulator_cost_usd: 0, savings_usd: 0, savings_pct: 0,
+                by_provider: { aws: 0, gcp: 0, azure: 0 }, by_service: {}, resource_count: 0 };
+  const now = Date.now();
+  for (const p of ["aws", "gcp", "azure"]) {
+    let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
+    if (!c || typeof c.ts !== "number" || (now - c.ts) >= 60000) continue;
+    for (const [k, n] of Object.entries(c.by_service || {})) {
+      const usd = (Number(n) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+      out.by_provider[p] = Math.round((out.by_provider[p] + usd) * 100) / 100;
+      out.by_service[p + "." + k] = Math.round(usd * 100) / 100;
+      out.resource_count += Number(n) || 0;
+      out.savings_usd += usd;
+    }
+  }
+  out.savings_usd = Math.round(out.savings_usd * 100) / 100;
+  out.real_cloud_cost_usd = out.savings_usd;
+  out.savings_pct = out.savings_usd > 0 ? 100 : 0;
+  return out;
+}
+
 // ── User-created spaces (persisted) ───────────────────────────────────
 // Nano's default spaces come from the fixture (read-only); spaces the user
 // creates are persisted in IndexedDB so they survive reloads AND show up in the
@@ -749,7 +781,12 @@ self.addEventListener("fetch", (event) => {
         for (const s of [...(fx.spaces || []), ...created])
           if (!seen.has(s.space_id)) { seen.add(s.space_id); spaces.push(s); }
         let active = fx.active_space_id; try { active = (await metaGet("active")) || active; } catch (_) {}
-        return json({ spaces, active_space_id: active });
+        // Cost-savings metrics (same shape as the appliance's space.cost_savings):
+        // live census × list-price rates, so creating a resource moves them.
+        const cs = await nanoCostSavings();
+        for (const sp of spaces) sp.cost_savings = cs;
+        const activeSpace = spaces.find((s) => s.space_id === active) || spaces[0] || null;
+        return json({ spaces, active_space_id: active, active_space: activeSpace });
       }
       // Appliance-health pies: per-cloud distribution computed live from the
       // in-browser spaces (the only CENTRAL resource data — the cores' resources

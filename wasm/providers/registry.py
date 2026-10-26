@@ -58,7 +58,8 @@ def _emit_event(provider: str, service: str, resource: str, action: str,
             ok = False
         status = "ok" if ok else (str(result.get("code")) if isinstance(result, dict) and result.get("code") else "error")
         nano_events.record(provider=provider, service=service, resource=resource or "",
-                           action=action, status=status)
+                           action=action, status=status,
+                           detail=f"{service}: {action} {resource or ''}".strip())
     except Exception:
         pass
 
