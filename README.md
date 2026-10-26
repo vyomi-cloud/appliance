@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-Updated **2026-10-26 15:30 UTC** · **36 services released** (AWS 12 / GCP 12 / Azure 12) · **81 in the pipeline** (P1 + P2) · covering all **1068 services** AWS, GCP and Azure publish (catalog of 2026-10-26).
+Updated **2026-10-26 15:31 UTC** · **36 services released** (AWS 12 / GCP 12 / Azure 12) · **81 in the pipeline** (P1 + P2) · covering all **1068 services** AWS, GCP and Azure publish (catalog of 2026-10-26).
 
 A new service goes live only when the service gate passes: engine, native SDK/CLI wire, console UI offline + Nano, Java + Go + CLI test beds, Playwright console tests offline + Nano, registered with the hourly conformance run and the upstream watcher. Then it is released (patch version) and handed off to both hourly jobs.
 
@@ -8,7 +8,7 @@ A new service goes live only when the service gate passes: engine, native SDK/CL
 
 Links: [backlog](https://github.com/vyomi-cloud/appliance/issues?q=label%3Anew-service) · [expansion runs](https://github.com/vyomi-cloud/appliance/actions/workflows/expansion-agent.yml) · [usage-limit log](https://github.com/vyomi-cloud/appliance/tree/expansion-state) · [hourly conformance report](https://github.com/vyomi-cloud/appliance/tree/conformance-report) · [upstream watcher](https://github.com/vyomi-cloud/appliance/tree/upstream-state) · [full catalog](https://github.com/vyomi-cloud/appliance/blob/main/docs/expansion/CLOUD-CATALOG.md)
 
-**Latest hourly run** (2026-10-26 14:22 UTC): `offline-ui-crawl` ❌ 5/38 · `offline-console-actions` ❌ 231/246 · `offline-sdk-python-aws` ❌ 87/88 · `offline-sdk-go-aws` ✅ 14/14 · `offline-sdk-go-gcp` ✅ 5/5 · `offline-sdk-go-azure` ✅ 14/14 · `offline-sdk-java-aws` ✅ 13/13 · `offline-sdk-java-gcp` ✅ 6/6 · `offline-sdk-java-azure` ✅ 5/5 · `offline-cost-savings` ❌ 2/9 · `offline-cli-aws` ✅ 15/15 · `offline-cli-gcp` ✅ 6/6 · `offline-cli-azure` ❌ 5/6 · `offline-ui-core` ✅ 9/9 · `nano-ui-crawl` ❌ 1/43 · `nano-cores` ❌ 0/1 · `nano-ui-aws-api` ❌ 5/6 · `nano-ui-aws-tabs` ✅ 11/11 · `nano-ui-gcp-tabs` ❌ 0/1 · `nano-ui-azure-tabs` ✅ 71/71 · `nano-ui-azure-dp` ✅ 5/5 · `nano-ui-azure-home` ✅ 7/7
+**Latest hourly run** (2026-10-26 15:30 UTC): `offline-ui-crawl` ❌ 5/38 · `offline-console-actions` ❌ 231/246 · `offline-sdk-python-aws` ❌ 87/88 · `offline-sdk-go-aws` ✅ 14/14 · `offline-sdk-go-gcp` ✅ 5/5 · `offline-sdk-go-azure` ✅ 14/14 · `offline-sdk-java-aws` ✅ 13/13 · `offline-sdk-java-gcp` ✅ 6/6 · `offline-sdk-java-azure` ✅ 5/5 · `offline-cost-savings` ❌ 2/9 · `offline-cli-aws` ✅ 15/15 · `offline-cli-gcp` ✅ 6/6 · `offline-cli-azure` ❌ 5/6 · `offline-ui-core` ✅ 9/9 · `nano-ui-crawl` ❌ 0/43 · `nano-cores` ❌ 0/1 · `nano-ui-aws-api` ❌ 5/6 · `nano-ui-aws-tabs` ✅ 11/11 · `nano-ui-gcp-tabs` ❌ 0/1 · `nano-ui-azure-tabs` ✅ 71/71 · `nano-ui-azure-dp` ✅ 5/5 · `nano-ui-azure-home` ✅ 7/7
 
 ## AWS — 12 released, 33 in the pipeline, 390 not yet scheduled (435 published by AWS)
 
@@ -18,18 +18,18 @@ Released: **12** · 📋 Queued: **15** · 🛠 Building: **1** · · Not filed:
 
 | Service | Pri | Stage | Offline backend | Engine | Nano | Console | Java | Go | CLI | PW offline | PW Nano | Nano ↔ offline | Gate | Release | Hourly conformance hand-off | Upstream watcher hand-off |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **EC2** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 30/30 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 3 · UI nano ⚠️ 10 | 👁 watched (809 ops) |
-| **S3** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 27/27 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 4 · UI nano ⚠️ 2 | 👁 watched (116 ops) |
-| **IAM** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 21/21 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 2 | 👁 watched (180 ops) |
-| **RDS** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 32/32 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 2 | 👁 watched (168 ops) |
-| **DynamoDB** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 30/30 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 4 | 👁 watched (58 ops) |
-| **SQS** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 22/22 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 2 | 👁 watched (23 ops) |
-| **Lambda** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 29/29 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 2 | 👁 watched (88 ops) |
-| **API Gateway** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 26/26 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 2 | 👁 watched (124 ops) |
-| **VPC** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 33/33 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 2 | 👁 watched (809 ops) |
-| **EventBridge** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 26/26 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 2 | 👁 watched (57 ops) |
-| **Secrets Manager** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 24/24 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 6 | 👁 watched (23 ops) |
-| **KMS** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 27/27 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 2 | 👁 watched (54 ops) |
+| **EC2** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 30/30 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 2 · UI nano ⚠️ 9 | 👁 watched (809 ops) |
+| **S3** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 27/27 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 2 · UI nano ⚠️ 2 | 👁 watched (116 ops) |
+| **IAM** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 21/21 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 2 · UI nano ⚠️ 2 | 👁 watched (180 ops) |
+| **RDS** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 32/32 | baseline (pre-gate) | <=3.0.8 | UI offline ✅ · UI nano ⚠️ 2 | 👁 watched (168 ops) |
+| **DynamoDB** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 30/30 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 2 · UI nano ⚠️ 4 | 👁 watched (58 ops) |
+| **SQS** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 22/22 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 2 | 👁 watched (23 ops) |
+| **Lambda** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 29/29 | baseline (pre-gate) | <=3.0.8 | UI offline ✅ · UI nano ⚠️ 2 | 👁 watched (88 ops) |
+| **API Gateway** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 26/26 | baseline (pre-gate) | <=3.0.8 | UI offline ✅ · UI nano ⚠️ 2 | 👁 watched (124 ops) |
+| **VPC** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 33/33 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 2 | 👁 watched (809 ops) |
+| **EventBridge** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 26/26 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 6 · UI nano ⚠️ 2 | 👁 watched (57 ops) |
+| **Secrets Manager** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 24/24 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 8 · UI nano ⚠️ 6 | 👁 watched (23 ops) |
+| **KMS** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 27/27 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 2 · UI nano ⚠️ 2 | 👁 watched (54 ops) |
 | Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | P1 | 📋 Queued | in-process | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
 | Amazon CloudWatch Logs [#59](https://github.com/vyomi-cloud/appliance/issues/59) | P1 | 📋 Queued | in-process | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
 | Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | P1 | 📋 Queued | in-process | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
@@ -496,17 +496,17 @@ Released: **12** · 📋 Queued: **12** · · Not filed: **12**
 | Service | Pri | Stage | Offline backend | Engine | Nano | Console | Java | Go | CLI | PW offline | PW Nano | Nano ↔ offline | Gate | Release | Hourly conformance hand-off | Upstream watcher hand-off |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | **Compute Engine** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 30/30 | baseline (pre-gate) | <=3.0.8 | UI offline ✅ · UI nano ⚠️ 3 | 👁 watched (1018 ops) |
-| **Cloud Storage** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 23/23 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched (87 ops) |
-| **Cloud SQL** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 28/28 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched (85 ops) · [⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) |
-| **Pub/Sub** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 19/19 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 7 | 👁 watched (46 ops) |
-| **Firestore** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 20/20 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 7 | 👁 watched (60 ops) |
+| **Cloud Storage** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 23/23 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 2 · UI nano ⚠️ 1 | 👁 watched (87 ops) |
+| **Cloud SQL** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 28/28 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched (85 ops) · [⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) |
+| **Pub/Sub** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 19/19 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 5 · UI nano ⚠️ 7 | 👁 watched (46 ops) |
+| **Firestore** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 20/20 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 3 · UI nano ⚠️ 7 | 👁 watched (60 ops) |
 | **Cloud Functions** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 24/24 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 4 · UI nano ⚠️ 5 | 👁 watched (21 ops) |
-| **API Gateway** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 19/19 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched (30 ops) |
-| **VPC Network** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 21/21 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 7 | 👁 watched (1018 ops) |
-| **IAM & Admin** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 16/16 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched (137 ops) |
-| **Eventarc** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 20/20 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 3 | 👁 watched (66 ops) |
-| **Secret Manager** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 20/20 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched (36 ops) |
-| **Cloud KMS** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 25/25 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 9 | 👁 watched (87 ops) |
+| **API Gateway** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 19/19 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched (30 ops) |
+| **VPC Network** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 21/21 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 4 · UI nano ⚠️ 7 | 👁 watched (1018 ops) |
+| **IAM & Admin** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 16/16 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 2 · UI nano ⚠️ 1 | 👁 watched (137 ops) |
+| **Eventarc** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 20/20 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 4 · UI nano ⚠️ 3 | 👁 watched (66 ops) |
+| **Secret Manager** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 20/20 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched (36 ops) |
+| **Cloud KMS** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 25/25 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 2 · UI nano ⚠️ 9 | 👁 watched (87 ops) |
 | Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | P1 | 📋 Queued | registry · 10 MB · Lite (default) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
 | BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | P1 | 📋 Queued | duckdb (default) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
 | Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | P1 | 📋 Queued | coredns · 15 MB · Lite (default) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
@@ -839,16 +839,16 @@ Released: **12** · 📋 Queued: **12** · · Not filed: **12**
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | **Virtual Machines** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 27/27 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched |
 | **Storage accounts** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 28/28 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched |
-| **SQL servers** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 27/27 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched |
-| **Service Bus** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 21/21 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched |
-| **Cosmos DB** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 24/24 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched |
-| **Function apps** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 27/27 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched |
-| **API Management** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 25/25 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched |
-| **Virtual networks** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 21/21 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched |
-| **Network Security Group** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 6/6 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched |
-| **Event Grid topics** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 21/21 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched |
-| **Key vaults** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 22/22 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched |
-| **Entra ID / RBAC** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 10/10 | baseline (pre-gate) | <=3.0.8 | UI nano ⚠️ 1 | 👁 watched |
+| **SQL servers** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 27/27 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched |
+| **Service Bus** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 21/21 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched |
+| **Cosmos DB** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 24/24 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched |
+| **Function apps** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 27/27 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched |
+| **API Management** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 25/25 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched |
+| **Virtual networks** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 21/21 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched |
+| **Network Security Group** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 6/6 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched |
+| **Event Grid topics** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 21/21 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched |
+| **Key vaults** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 22/22 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched |
+| **Entra ID / RBAC** | — | 🟢 Released | — | — | — | — | — | — | — | — | — | ✅ 10/10 | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched |
 | app [#78](https://github.com/vyomi-cloud/appliance/issues/78) | P1 | 📋 Queued | docker · Pro (default) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
 | appconfiguration [#79](https://github.com/vyomi-cloud/appliance/issues/79) | P1 | 📋 Queued | in-process | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
 | applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | P1 | 📋 Queued | in-process | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
