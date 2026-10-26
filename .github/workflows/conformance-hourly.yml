@@ -207,6 +207,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # End of day (IST): open/refresh the daily PR — GitHub's cron for
+          # conformance-daily-pr.yml doesn't fire either. From 23:00 IST each
+          # run refreshes today's PR (idempotent); after midnight, the first run
+          # makes sure yesterday's branch got its PR.
+          ist_hour=$(TZ=Asia/Kolkata date +%H)
+          if [ "$ist_hour" -ge 23 ]; then
+            gh workflow run conformance-daily-pr.yml -R "${{ github.repository }}" --ref main && echo "Daily PR dispatched for $(TZ=Asia/Kolkata date +%F)."
+          fi
+          yday=$(TZ=Asia/Kolkata date -d yesterday +%F)
+          if git ls-remote --exit-code origin "refs/heads/conformance/daily-$yday" >/dev/null 2>&1 \
+             && [ -z "$(gh pr list -R "${{ github.repository }}" --head "conformance/daily-$yday" --state all --json number -q '.[0].number')" ]; then
+            gh workflow run conformance-daily-pr.yml -R "${{ github.repository }}" --ref main -f date="$yday" && echo "Daily PR dispatched for $yday (missed)."
+          fi
           queued=$(gh run list -R "${{ github.repository }}" --workflow conformance-hourly.yml \
             --json status -q '[.[] | select(.status=="queued" or .status=="pending" or .status=="waiting")] | length')
           if [ "${queued:-0}" -gt 0 ]; then echo "A run is already queued; not chaining."; exit 0; fi
