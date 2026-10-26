@@ -1,13 +1,13 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-26 18:47 UTC · refreshes after every pipeline run_
+_Updated 2026-10-26 18:50 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 36 services (AWS 12 · GCP 12 · Azure 12) of 1,068 the clouds publish
-- **Building now:** nothing
+- **Building now:** Amazon Cognito Identity Provider (AWS, no manifest yet checks)
 - **In the gate / releasing:** Amazon CloudWatch (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS)
-- **Queued:** 78 services (P1 first, then P2)
+- **Queued:** 77 services (P1 first, then P2)
 - **Consoles really implemented:** offline 36% · Nano 43%
 - **Hourly tests:** 14 of 23 suites passing (run 18:32 UTC)
 - **Upstream watch:** 2 open changes from the real clouds to adopt
@@ -16,7 +16,7 @@ _Updated 2026-10-26 18:47 UTC · refreshes after every pipeline run_
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 12 | 0 | 3 | 30 | 36% · 46% |
+| AWS | 12 | 1 | 3 | 29 | 36% · 46% |
 | GCP | 12 | 0 | 0 | 24 | 38% · 47% |
 | Azure | 12 | 0 | 0 | 24 | 18% · 9% |
 
@@ -25,6 +25,7 @@ _Updated 2026-10-26 18:47 UTC · refreshes after every pipeline run_
 | Service | Cloud | Stage | Checks | Still missing |
 |---|---|---|---|---|
 | Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🔍 In gate ([PR #95](https://github.com/vyomi-cloud/appliance/pull/95)) | 18/18 | — |
+| Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🛠 Building | no manifest yet | — |
 | AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | — |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | — |
 
@@ -88,12 +89,11 @@ _Updated 2026-10-26 18:47 UTC · refreshes after every pipeline run_
 
 ## Up next
 
-<details><summary><b>AWS</b> — 30 queued</summary>
+<details><summary><b>AWS</b> — 29 queued</summary>
 
 | Service | Priority | Issue | Offline backend |
 |---|---|---|---|
 | Amazon CloudWatch Logs | P1 | [#59](https://github.com/vyomi-cloud/appliance/issues/59) | in-process |
-| Amazon Cognito Identity Provider | P1 | [#53](https://github.com/vyomi-cloud/appliance/issues/53) | in-process |
 | Amazon EC2 Container Service | P1 | [#55](https://github.com/vyomi-cloud/appliance/issues/55) | docker · Pro |
 | Amazon Elastic Container Registry | P1 | [#54](https://github.com/vyomi-cloud/appliance/issues/54) | registry · 10 MB · Lite |
 | Amazon ElastiCache | P1 | [#56](https://github.com/vyomi-cloud/appliance/issues/56) | valkey · 8 MB · Lite |
