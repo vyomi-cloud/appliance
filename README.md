@@ -1,13 +1,13 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-26 17:33 UTC · refreshes after every pipeline run_
+_Updated 2026-10-26 17:38 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 36 services (AWS 12 · GCP 12 · Azure 12) of 1,068 the clouds publish
-- **Building now:** nothing
+- **Building now:** Amazon CloudWatch (AWS, no manifest yet checks)
 - **In the gate / releasing:** AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS)
-- **Queued:** 79 services (P1 first, then P2)
+- **Queued:** 78 services (P1 first, then P2)
 - **Consoles really implemented:** offline not measured yet · Nano not measured yet
 - **Hourly tests:** 13 of 22 suites passing (run 16:30 UTC)
 - **Upstream watch:** 2 open changes from the real clouds to adopt
@@ -16,7 +16,7 @@ _Updated 2026-10-26 17:33 UTC · refreshes after every pipeline run_
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 12 | 0 | 2 | 31 | not measured yet · not measured yet |
+| AWS | 12 | 1 | 2 | 30 | not measured yet · not measured yet |
 | GCP | 12 | 0 | 0 | 24 | not measured yet · not measured yet |
 | Azure | 12 | 0 | 0 | 24 | not measured yet · not measured yet |
 
@@ -24,6 +24,7 @@ _Updated 2026-10-26 17:33 UTC · refreshes after every pipeline run_
 
 | Service | Cloud | Stage | Checks | Still missing |
 |---|---|---|---|---|
+| Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🛠 Building | no manifest yet | — |
 | AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | — |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | — |
 
@@ -87,11 +88,10 @@ _Updated 2026-10-26 17:33 UTC · refreshes after every pipeline run_
 
 ## Up next
 
-<details><summary><b>AWS</b> — 31 queued</summary>
+<details><summary><b>AWS</b> — 30 queued</summary>
 
 | Service | Priority | Issue | Offline backend |
 |---|---|---|---|
-| Amazon CloudWatch | P1 | [#52](https://github.com/vyomi-cloud/appliance/issues/52) | in-process |
 | Amazon CloudWatch Logs | P1 | [#59](https://github.com/vyomi-cloud/appliance/issues/59) | in-process |
 | Amazon Cognito Identity Provider | P1 | [#53](https://github.com/vyomi-cloud/appliance/issues/53) | in-process |
 | Amazon EC2 Container Service | P1 | [#55](https://github.com/vyomi-cloud/appliance/issues/55) | docker · Pro |
