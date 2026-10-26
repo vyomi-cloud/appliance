@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.request
@@ -106,6 +107,65 @@ def fixture_in_sync(cloud: str, key: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _mb(v) -> float:
+    """'256m' / '1g' / '512MiB' / 268435456 → MB."""
+    t = str(v).strip().lower().replace("ib", "").replace("b", "")
+    mult = {"k": 1 / 1024, "m": 1, "g": 1024}
+    return float(t[:-1]) * mult[t[-1]] if t and t[-1] in mult else float(t) / (1024 * 1024)
+
+
+def backend_static(m: dict) -> None:
+    """Offline data-plane backend: cheap, permissively licensed, multi-arch,
+    pinned, wired into the stack (tests/conformance/expansion/backends.json)."""
+    pol = json.load(open(os.path.join(HERE, "backends.json")))
+    P = pol["policy"]
+    b = m.get("backend") or {}
+    kind = b.get("kind")
+    if not check("manifest declares its offline backend (in-process / container / substrate)",
+                 kind in ("in-process", "container", "substrate"), f"backend={b or 'missing'}"):
+        return
+    upid = f"{m.get('cloud')}:{m.get('upstream')}"
+    rec = next((n for n, x in pol["shared"].items() if upid in x.get("for", [])), None)
+    rec_inproc = m.get("upstream") in pol["in_process"].get(m.get("cloud"), [])
+    matches = (rec and b.get("name") == rec) or (rec_inproc and kind == "in-process") or (not rec and not rec_inproc)
+    check("backend is the recommended one, or the manifest says why not", matches or bool(b.get("reason")),
+          f"recommended: {rec or ('in-process' if rec_inproc else 'none')}; chose {b.get('name') or kind}")
+    tier = b.get("tier", "lite")
+    if kind == "substrate":
+        check("substrate backends are Pro or Max only", tier in ("pro", "max"), f"tier={tier}")
+        return
+    if kind == "in-process":
+        return
+    lic = b.get("license", "")
+    check("backend license is permissive (or GPL as an unmodified separate container)",
+          lic in P["license_allow"] or lic in P["license_allow_separate_process"], f"license={lic or 'missing'}")
+    check("backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary)",
+          lic not in P["license_deny"], f"license={lic}")
+    img = b.get("image", "")
+    tag = img.rsplit(":", 1)[1] if ":" in img.split("/")[-1] else ""
+    check("backend image is pinned to a version (not latest)", bool(tag) and tag != "latest" and any(c.isdigit() for c in tag), img)
+    svc = b.get("compose_service", "")
+    budget = P["budget_idle_mb"].get(tier, 128)
+    import yaml
+    for f in ("docker-compose.yml", "docker-compose.cloudlite.yml"):
+        d = (yaml.safe_load(open(rel(f))) or {}).get("services", {})
+        c = d.get(svc) or {}
+        lim = ((c.get("deploy") or {}).get("resources") or {}).get("limits", {}).get("memory") or c.get("mem_limit")
+        check(f"backend service `{svc}` in {f}: image, profile full, healthcheck, mem limit ≤ {budget} MB ({tier})",
+              bool(c) and c.get("image") == img and "full" in (c.get("profiles") or []) and bool(c.get("healthcheck"))
+              and lim is not None and _mb(lim) <= budget,
+              "missing" if not c else f"image={c.get('image')} profiles={c.get('profiles')} healthcheck={bool(c.get('healthcheck'))} mem={lim}")
+    ci = [l.strip() for l in open(rel("tests/conformance/hourly/ci-services.txt")) if l.strip() and not l.startswith("#")]
+    check("backend service started by CI / gate / hourly (ci-services.txt)", svc in ci, svc)
+    try:
+        out = subprocess.run(["docker", "manifest", "inspect", img], capture_output=True, text=True, timeout=120)
+        archs = set(re.findall(r'"architecture":\s*"(\w+)"', out.stdout))
+        check("backend image is multi-arch (amd64 + arm64)", set(P["arch_required"]) <= archs,
+              f"architectures: {sorted(archs) or out.stderr.strip()[:120]}")
+    except FileNotFoundError:
+        check("backend image is multi-arch (amd64 + arm64)", False, "docker not available to inspect the image")
+
+
 def static(m: dict) -> None:
     cloud, key = m.get("cloud"), m.get("key")
     check("manifest has cloud, key, name, upstream, core, operations, suites",
@@ -135,6 +195,7 @@ def static(m: dict) -> None:
     tracked = json.load(open(rel("tests/conformance/upstream/tracked.json")))
     lists = {"aws": tracked["aws"]["botocore"], "gcp": tracked["gcp"]["discovery"], "azure": tracked["azure"]["specs"]}
     check("upstream id tracked by the hourly upstream watcher", m.get("upstream") in lists.get(cloud, []), m.get("upstream", ""))
+    backend_static(m)
     ups = upstream_ops(cloud, m.get("upstream", ""))
     if ups is not None:
         bad = [o for o in m.get("operations", []) if o not in ups]
@@ -143,6 +204,18 @@ def static(m: dict) -> None:
 
 def live(m: dict) -> None:
     cloud, key = m["cloud"], m["key"]
+    b = m.get("backend") or {}
+    if b.get("kind") == "container":
+        budget = json.load(open(os.path.join(HERE, "backends.json")))["policy"]["budget_idle_mb"].get(b.get("tier", "lite"), 128)
+        p = subprocess.run(["docker", "compose", "-f", rel("docker-compose.yml"), "ps", "-q", b.get("compose_service", "")],
+                           capture_output=True, text=True)
+        cid = p.stdout.strip().splitlines()[:1]
+        used = None
+        if cid:
+            st = subprocess.run(["docker", "stats", "--no-stream", "--format", "{{.MemUsage}}", cid[0]], capture_output=True, text=True)
+            used = _mb(st.stdout.split("/")[0]) if st.stdout.strip() else None
+        check(f"backend idle memory ≤ {budget} MB", used is not None and used <= budget,
+              f"{b.get('compose_service')}: {round(used, 1) if used is not None else 'not running'} MB")
     try:
         keys = {s.get("key") for s in get_json(f"{BASE}/api/{cloud}/catalog").get("services", [])}
     except Exception as e:

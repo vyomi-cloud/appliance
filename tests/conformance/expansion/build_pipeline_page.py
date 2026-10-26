@@ -96,6 +96,19 @@ def main() -> int:
     up_state = raw("upstream-state", "state.json") or {}
     tracked = json.load(open(os.path.join(ROOT, "tests", "conformance", "upstream", "tracked.json")))
     suite_res = {s["id"]: s for s in hourly.get("suites", [])}
+    bk = json.load(open(os.path.join(HERE, "backends.json")))
+
+    def backend_cell(cloud: str, upstream: str, manifest_backend: dict | None) -> str:
+        b = manifest_backend or {}
+        if b.get("kind") == "in-process" or (not b and upstream in bk["in_process"].get(cloud, [])):
+            return "in-process"
+        name = b.get("name") or next((n for n, x in bk["shared"].items() if f"{cloud}:{upstream}" in x.get("for", [])), None)
+        if not name:
+            return "to choose"
+        x = bk["shared"].get(name, {})
+        tier = b.get("tier") or x.get("tier", "")
+        bits = [name] + ([f"{x['idle_mb']} MB"] if x.get("idle_mb") else []) + ([tier.capitalize()] if tier else [])
+        return " · ".join(bits) + ("" if b else " (default)")
     # Nano ↔ offline feature parity from the hourly inventory (routes are an
     # offline-only concept, so they're left out).
     feats: dict = {}
@@ -191,7 +204,7 @@ def main() -> int:
             stages["Released"] = stages.get("Released", 0) + 1
             # Pre-gate (baseline) services weren't built through the gate: no
             # per-check claims for them, only their hourly + upstream status.
-            rows.append([f"**{s['name']}**", "—", "🟢 Released"] + (["✅"] * len(COLS) if suites else ["—"] * len(COLS)) +
+            rows.append([f"**{s['name']}**", "—", "🟢 Released", "—"] + (["✅"] * len(COLS) if suites else ["—"] * len(COLS)) +
                         [par_cell(cloud, s["name"]), "✅ passed" if suites else "baseline (pre-gate)", rel, hourly_cell(cloud, s["name"], suites),
                          upstream_cell(cloud, s.get("upstream") or s["key"], [s["key"], s["name"]])])
 
@@ -228,12 +241,18 @@ def main() -> int:
                 cells = ["⬜"] * len(COLS)
                 gcell = "no manifest yet" if branch in branches else "—"
             name = s["name"] if s["name"] != s["id"] else s["id"]
-            rows.append([f"{name}{issue}", s["priority"], stage] + cells + ["⏳ gated", gcell, "—", "⏳ after release",
+            mb = None
+            if branch in branches:
+                try:
+                    mb = json.loads(sh("git", "show", f"origin/{branch}:services/manifests/{cloud}-{k}.json") or "{}").get("backend")
+                except ValueError:
+                    mb = None
+            rows.append([f"{name}{issue}", s["priority"], stage, backend_cell(cloud, s["id"], mb)] + cells + ["⏳ gated", gcell, "—", "⏳ after release",
                         "⏳ registered at build" if not gate else
                         ("✅ registered" if gate.get("upstream id tracked by the hourly upstream watcher", (False,))[0] else "⬜ not yet")])
 
         totals[cloud] = {"released": len(released), "queue": len(queue), **stages}
-        head = ["Service", "Pri", "Stage"] + [c for c, _ in COLS] + ["Nano ↔ offline", "Gate", "Release", "Hourly conformance hand-off", "Upstream watcher hand-off"]
+        head = ["Service", "Pri", "Stage", "Offline backend"] + [c for c, _ in COLS] + ["Nano ↔ offline", "Gate", "Release", "Hourly conformance hand-off", "Upstream watcher hand-off"]
         t = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)] + ["| " + " | ".join(r) + " |" for r in rows]
         summary = " · ".join(f"{k}: **{v}**" for k, v in stages.items())
         gaps = []
@@ -278,6 +297,9 @@ def main() -> int:
           "the upstream watcher. Then it is released (patch version) and handed off to both hourly jobs.", "",
           "**Stages:** 📋 Queued → 🛠 Building → 🔍 In gate → 🚀 Releasing → 🟢 Released. "
           "Columns Engine…PW Nano are the gate's static checks on the service branch (⬜ = not checked yet). "
+          "Offline backend is the cheap, permissively licensed software behind the service offline "
+          "([rules + defaults](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/expansion/backends.json)); "
+          "the gate checks its license, arch, pinning and idle memory. "
           "Nano ↔ offline compares every console feature (pages, tabs, columns, create fields, actions, operations) "
           "between the two simulators from the latest hourly inventory; a new service can't pass the gate unless both match. "
           "Hourly hand-off shows the latest hourly UI crawl (⚠️ n = open findings) and the service's own suites; "
