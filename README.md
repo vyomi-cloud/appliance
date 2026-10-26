@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-26 21:08 UTC · refreshes after every pipeline run_
+_Updated 2026-10-26 21:33 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 36 services (AWS 12 · GCP 12 · Azure 12) of 1,068 the clouds publish
-- **Building now:** Amazon ElastiCache (AWS, no manifest yet checks)
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS)
+- **Building now:** nothing
+- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS)
 - **Queued:** 74 services (P1 first, then P2)
 - **Consoles really implemented:** offline 38% · Nano 39%
 - **Hourly tests:** 13 of 22 suites passing (run 20:39 UTC)
@@ -16,7 +16,7 @@ _Updated 2026-10-26 21:08 UTC · refreshes after every pipeline run_
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 12 | 1 | 6 | 26 | 34% · 46% |
+| AWS | 12 | 0 | 7 | 26 | 34% · 46% |
 | GCP | 12 | 0 | 0 | 24 | 38% · 44% |
 | Azure | 12 | 0 | 0 | 24 | 53% · 2% |
 
@@ -28,7 +28,7 @@ _Updated 2026-10-26 21:08 UTC · refreshes after every pipeline run_
 | Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🔍 In gate ([PR #96](https://github.com/vyomi-cloud/appliance/pull/96)) | 18/18 | — |
 | Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🔍 In gate ([PR #101](https://github.com/vyomi-cloud/appliance/pull/101)) | 19/19 | — |
 | Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🔍 In gate ([PR #100](https://github.com/vyomi-cloud/appliance/pull/100)) | 20/20 | — |
-| Amazon ElastiCache [#56](https://github.com/vyomi-cloud/appliance/issues/56) | AWS | 🛠 Building | no manifest yet | — |
+| Amazon ElastiCache [#56](https://github.com/vyomi-cloud/appliance/issues/56) | AWS | 🔍 In gate ([PR #102](https://github.com/vyomi-cloud/appliance/pull/102)) | 20/20 | — |
 | AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | — |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | — |
 
@@ -289,6 +289,33 @@ _Updated 2026-10-26 21:08 UTC · refreshes after every pipeline run_
 | ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=Apache-2.0 |
 | ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=Apache-2.0 |
 | ✅ | backend image is pinned to a version (not latest) | registry:2.8.3 |
+
+</details>
+
+<details><summary>Gate checks — Amazon ElastiCache (AWS)</summary>
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
+| ✅ | manifest status is ready | status=ready |
+| ✅ | engine exists in core/ | core/elasticache_core.py |
+| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/elasticache_core.py |
+| ✅ | engine listed in wasm/build_cores.py |  |
+| ✅ | service in the Nano console catalog (wasm/fixtures) | aws-catalog.json |
+| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
+| ✅ | registry entry (pending-release or released) |  |
+| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
+| ✅ | has a offline sdk-java test bed |  |
+| ✅ | has a offline sdk-go test bed |  |
+| ✅ | has a offline cli test bed |  |
+| ✅ | has a offline ui test bed |  |
+| ✅ | has a nano ui test bed |  |
+| ✅ | upstream id tracked by the hourly upstream watcher | elasticache |
+| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'container', 'name': 'valkey', 'image': 'valkey/valkey:8.0.1-alpine', 'license': 'BSD-3-Clause', 'tier': 'lite', 'compose_s |
+| ✅ | backend is the recommended one, or the manifest says why not | recommended: valkey; chose valkey |
+| ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=BSD-3-Clause |
+| ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=BSD-3-Clause |
+| ✅ | backend image is pinned to a version (not latest) | valkey/valkey:8.0.1-alpine |
 
 </details>
 
