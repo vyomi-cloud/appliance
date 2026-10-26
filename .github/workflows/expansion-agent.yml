@@ -220,6 +220,11 @@ jobs:
         if: always() && steps.pick.outputs.issue
         run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml down -v
 
+      - name: Refresh the service pipeline page
+        if: always()
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: gh workflow run pipeline-status.yml -R "${{ github.repository }}" --ref main || true
+
       # Continuous: start the next run (after a pause; 30 min after a usage-limit
       # hit, 1h when the backlog is empty). Daily: the hourly conformance chain
       # starts one run per 24h. The hourly chain also revives a broken chain.
