@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-Updated **2026-10-26 15:55 UTC** · **36 services released** (AWS 12 / GCP 12 / Azure 12) · **81 in the pipeline** (P1 + P2) · covering all **1068 services** AWS, GCP and Azure publish (catalog of 2026-10-26).
+Updated **2026-10-26 16:20 UTC** · **36 services released** (AWS 12 / GCP 12 / Azure 12) · **81 in the pipeline** (P1 + P2) · covering all **1068 services** AWS, GCP and Azure publish (catalog of 2026-10-26).
 
 A new service goes live only when the service gate passes: engine, native SDK/CLI wire, console UI offline + Nano, Java + Go + CLI test beds, Playwright console tests offline + Nano, registered with the hourly conformance run and the upstream watcher. Then it is released (patch version) and handed off to both hourly jobs.
 
@@ -12,7 +12,7 @@ Links: [backlog](https://github.com/vyomi-cloud/appliance/issues?q=label%3Anew-s
 
 ## AWS — 12 released, 33 in the pipeline, 390 not yet scheduled (435 published by AWS)
 
-Released: **12** · 📋 Queued: **15** · 🔍 In gate: **1** · · Not filed: **17**
+Released: **12** · 📋 Queued: **14** · 🔍 In gate: **1** · 🛠 Building: **1** · · Not filed: **17**
 
 **Nano ↔ offline parity:** ✅ every console page has the same features on both.
 
@@ -41,8 +41,8 @@ Released: **12** · 📋 Queued: **15** · 🔍 In gate: **1** · · Not filed: 
 | Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | P1 | 📋 Queued | mailpit · 15 MB · Lite (default) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
 | Amazon Simple Notification Service [#62](https://github.com/vyomi-cloud/appliance/issues/62) | P1 | 📋 Queued | in-process | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
 | Amazon Simple Systems Manager (SSM) [#63](https://github.com/vyomi-cloud/appliance/issues/63) | P1 | 📋 Queued | in-process | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
-| AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | P1 | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | in-process | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⏳ gated | static 18/18 · live [⏳ running](https://github.com/vyomi-cloud/appliance/actions/runs/40353829013) | — | ⏳ after release | ✅ registered |
-| AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | P1 | 📋 Queued | in-process | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
+| AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | P1 | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | in-process | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⏳ gated | static 18/18 · live [❌ failure](https://github.com/vyomi-cloud/appliance/actions/runs/40353829013) | — | ⏳ after release | ✅ registered |
+| AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | P1 | 🛠 Building | in-process | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | no manifest yet | — | ⏳ after release | ⏳ registered at build |
 | AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | P1 | 📋 Queued | in-process | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
 | AWS Step Functions [#64](https://github.com/vyomi-cloud/appliance/issues/64) | P1 | 📋 Queued | in-process | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
 | Elastic Load Balancing [#57](https://github.com/vyomi-cloud/appliance/issues/57) | P1 | 📋 Queued | caddy · 15 MB · Lite (default) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ gated | — | — | ⏳ after release | ⏳ registered at build |
