@@ -228,6 +228,20 @@ async function crawlConsole(browser, base, con, needsSW) {
     const services = await page.evaluate((sel) => [...document.querySelectorAll(sel)]
       .map((e, i) => ({ i, label: (e.innerText || e.title || e.getAttribute("data-key") || e.getAttribute("data-service") || "").trim().split("\n").pop() }))
       .filter((x) => x.label && !/^home$/i.test(x.label)), RAIL_SEL);
+    // Opening a service swaps #rail for that service's own sidebar (EC2 →
+    // Events, Instances, …), so the service list's indexes stop matching.
+    // Go back to the console home whenever the rail entry isn't this service.
+    const railLabel = (i) => page.locator(RAIL_SEL).nth(i).evaluate((e) =>
+      (e.innerText || e.title || e.getAttribute("data-key") || e.getAttribute("data-service") || "").trim().split("\n").pop()).catch(() => "");
+    const openService = async (svc) => {
+      if ((await railLabel(svc.i)) !== svc.label) {
+        await page.goto(base + con.path, { waitUntil: "domcontentloaded" });
+        await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, RAIL_SEL, { timeout: 120000, polling: 500 });
+        await sleep(1000);
+        await dismissPopups(page);
+      }
+      await page.locator(RAIL_SEL).nth(svc.i).click({ timeout: 5000 });
+    };
     const seen = new Set();
     for (const svc of services) {
       if (seen.has(svc.label) || seen.size >= MAX_SERVICES) continue;
@@ -235,7 +249,7 @@ async function crawlConsole(browser, base, con, needsSW) {
       const row = { target: TARGET, cloud: con.cloud, service: svc.label, tabs: [], findings: [] };
       try {
         await dismissPopups(page);
-        await page.locator(RAIL_SEL).nth(svc.i).click({ timeout: 5000 });
+        await openService(svc);
         await sleep(1500);
         const s = await snap(page);
         row.findings.push(...drain(), ...textFindings(s.text));
@@ -245,7 +259,7 @@ async function crawlConsole(browser, base, con, needsSW) {
           const backToList = async () => {
             await page.keyboard.press("Escape").catch(() => {});
             await dismissPopups(page);
-            await page.locator(RAIL_SEL).nth(svc.i).click({ timeout: 5000 }).catch(() => {});
+            await openService(svc).catch(() => {});
             await sleep(1500);
           };
           row.findings.push(...(await createWithDefaults(page, drain, con.cloud, backToList)));
