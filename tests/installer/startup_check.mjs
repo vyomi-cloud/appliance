@@ -31,13 +31,21 @@ const check = (name, ok, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"}: ${name}${detail ? " — " + detail : ""}`);
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const getJson = async (path, opts) => { const r = await fetch(BASE + path, opts); return { status: r.status, body: await r.json().catch(() => null) }; };
+// Every request gets a real (ref'd) timeout: while a container is starting,
+// Docker's port proxy accepts the TCP connection and then drops it, and a bare
+// fetch can then stay pending with nothing keeping Node alive (exit code 13).
+const fetchT = (url, opts = {}, ms = 10_000) => {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), ms);
+  return fetch(url, { ...opts, signal: ac.signal }).finally(() => clearTimeout(timer));
+};
+const getJson = async (path, opts) => { const r = await fetchT(BASE + path, opts); return { status: r.status, body: await r.json().catch(() => null) }; };
 
 // ── 1. Simulator up ───────────────────────────────────────────────────────
 const t0 = Date.now();
 let healthy = false;
 while (Date.now() - t0 < 300_000) {
-  try { if ((await fetch(BASE + "/healthz")).ok) { healthy = true; break; } } catch {}
+  try { if ((await fetchT(BASE + "/healthz", {}, 5000)).ok) { healthy = true; break; } } catch {}
   await sleep(2000);
 }
 check("simulator answers /healthz", healthy, `${Math.round((Date.now() - t0) / 1000)}s`);
@@ -55,7 +63,7 @@ if (healthy) {
       // On-demand backends start on first use; do what the UI would.
       if (s.status !== "ready" && s.name !== "simulator" && !kicked.has(s.name)) {
         kicked.add(s.name);
-        await fetch(`${BASE}/api/runtime/backends/${s.name}/provision`, { method: "POST" }).catch(() => {});
+        await fetchT(`${BASE}/api/runtime/backends/${s.name}/provision`, { method: "POST" }).catch(() => {});
       }
     }
     if (rd?.ready) break;
