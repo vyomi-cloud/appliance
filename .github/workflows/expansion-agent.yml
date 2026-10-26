@@ -1,0 +1,237 @@
+name: Service expansion agent
+
+# Builds new AWS / GCP / Azure services end to end, one backlog issue
+# (label new-service) at a time, on its own branch expansion/<cloud>-<key>:
+# engine, native SDK/CLI wire, console UI offline + Nano, Java/Go/CLI/Playwright
+# test beds, hourly-suite + upstream-watcher registration.
+# Agent instructions: tests/conformance/expansion/EXPANSION.md
+#
+# When the agent marks the manifest ready and the static gate passes, this opens
+# a PR (label new-service-release). service-gate.yml runs the full gate on a fresh
+# stack and merges it; conformance-release.yml then cuts the patch release, which
+# publishes services.json, so the portal's service list and counts follow.
+#
+# Cadence: repo variable EXPANSION_CADENCE = continuous (default: each run starts
+# the next) | daily (one run per 24h, started by the hourly conformance chain).
+# Every run's outcome, incl. Claude usage-limit hits, is logged on the
+# expansion-state branch (log.md).
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: 'Backlog issue number to work on (default: next in the queue)'
+        required: false
+        default: ''
+
+concurrency:
+  group: expansion-agent
+  cancel-in-progress: false
+
+jobs:
+  expand:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+      actions: write
+      issues: write
+      pull-requests: write
+    env:
+      VYOMI_BASE_URL: http://localhost:9000
+      RELAY_HTTP: http://127.0.0.1:8090
+      NODE_PATH: ${{ github.workspace }}/.ci-node/node_modules
+      # Issues via GITHUB_TOKEN (the bot PAT has no Issues scope); the PAT
+      # (BOT) only for the checkout/pushes and the PR, so they trigger the gate.
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BOT: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      # The bot token (not GITHUB_TOKEN) so pushes and the PR trigger the gate.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+
+      - name: File the backlog (idempotent)
+        env: { GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}', GITHUB_REPOSITORY: '${{ github.repository }}' }
+        run: python3 tests/conformance/expansion/file_backlog.py
+
+      # Queue order: an issue already in progress (not waiting on its gate) →
+      # oldest open P1 → oldest open P2. Skips blocked and in-review issues.
+      - name: Pick the next service
+        id: pick
+        run: |
+          if [ -n "${{ inputs.issue }}" ]; then
+            N="${{ inputs.issue }}"
+          else
+            q() { gh issue list -R "$REPO" --state open --limit 200 --label new-service "$@" \
+                    --json number,labels -q '[.[] | select([.labels[].name] | (index("blocked") or index("in-review")) | not)] | sort_by(.number) | .[0].number // empty'; }
+            N=$(q --label in-progress); [ -n "$N" ] || N=$(q --label priority:P1); [ -n "$N" ] || N=$(q --label priority:P2)
+          fi
+          if [ -z "$N" ]; then echo "Backlog empty."; echo "issue=" >> "$GITHUB_OUTPUT"; exit 0; fi
+          BODY=$(gh issue view "$N" -R "$REPO" --json body -q .body)
+          CLOUD=$(printf '%s' "$BODY" | sed -n 's/.*<!-- expansion: cloud=\([a-z]*\) key=\([A-Za-z0-9_.-]*\).*/\1/p' | head -1)
+          KEY=$(printf '%s' "$BODY" | sed -n 's/.*<!-- expansion: cloud=\([a-z]*\) key=\([A-Za-z0-9_.-]*\).*/\2/p' | head -1)
+          if [ -z "$CLOUD" ] || [ -z "$KEY" ]; then echo "::error::#$N has no expansion marker"; exit 1; fi
+          gh issue edit "$N" -R "$REPO" --add-label in-progress >/dev/null
+          echo "issue=$N" >> "$GITHUB_OUTPUT"; echo "cloud=$CLOUD" >> "$GITHUB_OUTPUT"; echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "ISSUE=$N" >> "$GITHUB_ENV"; echo "BRANCH=expansion/$CLOUD-$KEY" >> "$GITHUB_ENV"
+          echo "MANIFEST=services/manifests/$CLOUD-$KEY.json" >> "$GITHUB_ENV"
+          echo "Working on #$N ($CLOUD/$KEY)"
+
+      - name: Check out the service branch
+        if: steps.pick.outputs.issue
+        run: |
+          git config user.name "vyomi-expansion-bot"
+          git config user.email "conformance-bot@users.noreply.github.com"
+          if git ls-remote --exit-code origin "$BRANCH" >/dev/null 2>&1; then
+            git fetch -q origin "$BRANCH"
+            git checkout -q -B "$BRANCH" FETCH_HEAD
+            git merge -q --no-edit origin/main || git merge --abort
+          else
+            git checkout -q -B "$BRANCH"
+            git push -q origin "HEAD:refs/heads/$BRANCH"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.pick.outputs.issue
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        if: steps.pick.outputs.issue
+        with: { node-version: '20' }
+      - uses: actions/setup-go@v5
+        if: steps.pick.outputs.issue
+        with: { go-version: '1.22', cache: false }
+      - uses: actions/setup-java@v4
+        if: steps.pick.outputs.issue
+        with: { distribution: temurin, java-version: '17', cache: maven }
+
+      - name: Install test tooling
+        if: steps.pick.outputs.issue
+        run: |
+          pip install --quiet requests pytest boto3 azure-storage-blob
+          mkdir -p .ci-node && cd .ci-node
+          echo '{"name":"vyomi-ci-node","private":true}' > package.json
+          npm install --silent playwright@1.47.2 ws@8.18.0
+          npx playwright install --with-deps chromium
+
+      - name: Boot offline appliance stack (from the service branch)
+        if: steps.pick.outputs.issue
+        run: |
+          docker build -t cloudlearn/simulator:ci .
+          CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:ci \
+            docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml up -d \
+              simulator vyomi-pubsub vyomi-firestore \
+              vyomi-sql-postgres vyomi-minio vyomi-nats \
+              vyomi-dynamodb vyomi-elasticmq vyomi-vault vyomi-azurite
+          for i in $(seq 1 90); do curl -fs "$VYOMI_BASE_URL/healthz" >/dev/null && break; sleep 2; done
+          curl -f "$VYOMI_BASE_URL/healthz"
+          nohup node wasm/relay/local-relay.mjs > relay.log 2>&1 &
+          for i in $(seq 1 20); do curl -fs "$RELAY_HTTP/health" >/dev/null && break; sleep 1; done
+
+      - name: Expansion agent (build the service)
+        id: agent
+        if: steps.pick.outputs.issue
+        continue-on-error: true
+        timeout-minutes: 55
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+          prompt: |
+            Follow tests/conformance/expansion/EXPANSION.md exactly.
+            Service: issue #${{ env.ISSUE }} (cloud ${{ steps.pick.outputs.cloud }}, key ${{ steps.pick.outputs.key }}).
+            Branch: ${{ env.BRANCH }} (push only there). Manifest: ${{ env.MANIFEST }}.
+            Read the issue with: gh issue view ${{ env.ISSUE }} --comments
+          claude_args: >-
+            --max-turns 200
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+
+      # Ready + static gate green → open the release PR; the full gate runs there.
+      - name: Static gate → open the release PR
+        id: gate
+        if: steps.pick.outputs.issue
+        run: |
+          git fetch -q origin "$BRANCH" && git checkout -q -B "$BRANCH" FETCH_HEAD
+          if [ ! -f "$MANIFEST" ]; then echo "state=building" >> "$GITHUB_OUTPUT"; echo "No manifest yet."; exit 0; fi
+          if [ "$(python3 -c "import json;print(json.load(open('$MANIFEST')).get('status'))")" != "ready" ]; then
+            echo "state=building" >> "$GITHUB_OUTPUT"; echo "Manifest not ready yet."; exit 0
+          fi
+          if python3 tests/conformance/expansion/gate.py "$MANIFEST" --static; then
+            NAME=$(python3 -c "import json;print(json.load(open('$MANIFEST'))['name'])")
+            PR=$(GH_TOKEN=$BOT gh pr list -R "$REPO" --head "$BRANCH" --state open --json url -q '.[0].url')
+            if [ -z "$PR" ]; then
+              gh label create new-service-release -R "$REPO" --color 0e8a16 2>/dev/null || true
+              gh label create in-review -R "$REPO" --color 5319e7 2>/dev/null || true
+              PR=$(GH_TOKEN=$BOT gh pr create -R "$REPO" --base main --head "$BRANCH" --label new-service-release \
+                --title "New service: ${{ steps.pick.outputs.cloud }} $NAME" \
+                --body "$(printf 'Closes #%s\n\nBuilt by the expansion agent. The service gate (service-gate.yml) runs the full check on a fresh stack and merges this when it passes; merging cuts the patch release.\n\n%s\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)' "$ISSUE" "$(cat tests/conformance/expansion/out/gate-*.md)")")
+            fi
+            gh issue edit "$ISSUE" -R "$REPO" --add-label in-review >/dev/null
+            echo "state=in-review" >> "$GITHUB_OUTPUT"; echo "Release PR: $PR"
+          else
+            echo "state=static-gate-failed" >> "$GITHUB_OUTPUT"
+            gh issue comment "$ISSUE" -R "$REPO" --body-file tests/conformance/expansion/out/gate-*.md
+          fi
+
+      # Run log + usage-limit tracking (EXPANSION_CADENCE can drop to daily if
+      # the Max plan's limit is hit often).
+      - name: Log the run (expansion-state branch)
+        if: always() && steps.pick.outputs.issue
+        id: log
+        run: |
+          EXE='${{ steps.agent.outputs.execution_file }}'
+          LIMIT=no
+          if [ -n "$EXE" ] && [ -f "$EXE" ] && grep -qiE 'usage limit|rate[_ ]limit|limit reached|429' "$EXE"; then LIMIT=yes; fi
+          echo "limit=$LIMIT" >> "$GITHUB_OUTPUT"
+          LINE="| $(date -u +%FT%H:%MZ) | #$ISSUE | ${{ steps.pick.outputs.cloud }}/${{ steps.pick.outputs.key }} | ${{ steps.agent.outcome }} | ${{ steps.gate.outputs.state || 'n/a' }} | $LIMIT | [run](${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }}) |"
+          rm -rf /tmp/state-wt
+          if git ls-remote --exit-code origin expansion-state >/dev/null 2>&1; then
+            git fetch -q origin expansion-state && git worktree add -q /tmp/state-wt FETCH_HEAD
+            git -C /tmp/state-wt checkout -q -B expansion-state
+          else
+            git worktree add -q --detach /tmp/state-wt && git -C /tmp/state-wt checkout -q --orphan expansion-state
+            git -C /tmp/state-wt rm -rfq . || true
+            printf '# Expansion agent runs\n\n| Time (UTC) | Issue | Service | Agent | State | Usage limit hit | Run |\n|---|---|---|---|---|---|---|\n' > /tmp/state-wt/log.md
+          fi
+          cd /tmp/state-wt
+          echo "$LINE" >> log.md
+          python3 - <<'PY'
+          import datetime, re
+          rows = [l for l in open("log.md") if l.startswith("| 20")]
+          since = (datetime.datetime.utcnow() - datetime.timedelta(days=7)).strftime("%Y-%m-%dT%H:%M")
+          week = [r for r in rows if r[2:18] >= since]
+          hits = sum(1 for r in week if r.split("|")[6].strip() == "yes")
+          open("README.md", "w").write(
+              f"# Expansion agent\n\nLast 7 days: **{len(week)} runs, {hits} hit the Claude usage limit**"
+              f" ({(100 * hits // len(week)) if week else 0}%).\n\nFull run log: [log.md](log.md). Backlog: issues labelled"
+              " `new-service`. Released services: `services/registry.json` on main.\n")
+          PY
+          git add log.md README.md && git commit -qm "expansion run #$ISSUE" && git push -q origin expansion-state
+
+      - name: Note progress on the issue
+        if: always() && steps.pick.outputs.issue && steps.agent.outcome != 'success'
+        run: |
+          gh issue comment "$ISSUE" -R "$REPO" --body "Expansion run ended with \`${{ steps.agent.outcome }}\` (usage limit hit: ${{ steps.log.outputs.limit }}). The next run continues on \`$BRANCH\`. ${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }}" || true
+
+      - name: Tear down
+        if: always() && steps.pick.outputs.issue
+        run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml down -v
+
+      # Continuous: start the next run (after a pause; 30 min after a usage-limit
+      # hit, 1h when the backlog is empty). Daily: the hourly conformance chain
+      # starts one run per 24h. The hourly chain also revives a broken chain.
+      - name: Chain the next run
+        if: always()
+        run: |
+          if [ "${{ vars.EXPANSION_CADENCE || 'continuous' }}" != "continuous" ]; then echo "Cadence ${{ vars.EXPANSION_CADENCE }}: not chaining."; exit 0; fi
+          queued=$(gh run list -R "$REPO" --workflow expansion-agent.yml \
+            --json status -q '[.[] | select(.status=="queued" or .status=="pending" or .status=="waiting")] | length')
+          if [ "${queued:-0}" -gt 0 ]; then echo "A run is already queued; not chaining."; exit 0; fi
+          wait=120
+          [ "${{ steps.log.outputs.limit }}" = "yes" ] && wait=1800
+          [ -z "${{ steps.pick.outputs.issue }}" ] && wait=3600
+          echo "Next run in ${wait}s"; sleep "$wait"
+          gh workflow run expansion-agent.yml -R "$REPO" --ref main

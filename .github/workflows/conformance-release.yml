@@ -1,8 +1,12 @@
 name: Release on daily PR merge
 
 # Merging a daily conformance PR (label daily-release, head conformance/daily-*)
-# into main cuts the next PATCH release (3.0.7 → 3.0.8):
-#   1. bump VERSION + package manifests + CHANGELOG on main
+# or a new-service PR that passed the service gate (label new-service-release,
+# head expansion/*) into main cuts the next PATCH release (3.0.7 → 3.0.8):
+#   1. bump VERSION + package manifests + CHANGELOG on main; flip services in
+#      services/registry.json from pending-release to released (stamped with the
+#      version) — release.yml publishes them as services.json, which the portal
+#      reads for its service list and counts
 #   2. create release/vX.Y.Z and tag vX.Y.Z — pushed with CONFORMANCE_BOT_TOKEN,
 #      so the tag triggers release.yml + docker-publish.yml like a manual release
 #   3. merge the linked portal PR (deploys the portal), if there is one
@@ -27,13 +31,16 @@ jobs:
     if: >-
       github.event.pull_request.merged == true &&
       github.event.pull_request.base.ref == 'main' &&
-      startsWith(github.event.pull_request.head.ref, 'conformance/daily-') &&
-      contains(github.event.pull_request.labels.*.name, 'daily-release')
+      ((startsWith(github.event.pull_request.head.ref, 'conformance/daily-') &&
+        contains(github.event.pull_request.labels.*.name, 'daily-release')) ||
+       (startsWith(github.event.pull_request.head.ref, 'expansion/') &&
+        contains(github.event.pull_request.labels.*.name, 'new-service-release')))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
       PR: ${{ github.event.pull_request.number }}
+      KIND: ${{ startsWith(github.event.pull_request.head.ref, 'expansion/') && 'New service release' || 'Daily conformance release' }}
     steps:
       - name: Require the bot token
         run: |
@@ -68,26 +75,37 @@ jobs:
           gh pr view "$PR" --json commits -q '.commits[].messageHeadline' \
             | grep -v '^Merge ' | sed 's/^/- /' > /tmp/changes.md || true
           python3 - "$NEW" <<'PY'
-          import sys, datetime
+          import sys, datetime, json, os
           new = sys.argv[1]
+          # Services that passed the gate go live with this release.
+          added = []
+          if os.path.exists("services/registry.json"):
+              reg = json.load(open("services/registry.json", encoding="utf-8"))
+              for s in reg["services"]:
+                  if s.get("status") == "pending-release":
+                      s["status"], s["released_in"] = "released", new
+                      added.append(f"- New service: {s['cloud'].upper()} {s['name']}")
+              json.dump(reg, open("services/registry.json", "w", encoding="utf-8"), indent=1)
+              open("services/registry.json", "a").write("\n")
           log = open("/tmp/changes.md", encoding="utf-8").read().strip() or "- Conformance fixes"
+          log = "\n".join(added + [log]) if added else log
           today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-          entry = f"## [{new}] — {today}\n\nDaily conformance release.\n\n{log}\n\n"
+          entry = f"## [{new}] — {today}\n\n{os.environ['KIND']}.\n\n{log}\n\n"
           old = open("CHANGELOG.md", encoding="utf-8").read()
           # Insert above the first existing release heading.
           i = old.find("\n## ")
           new_txt = old[: i + 1] + entry + old[i + 1:] if i >= 0 else entry + old
           open("CHANGELOG.md", "w", encoding="utf-8").write(new_txt)
           PY
-          git add -A VERSION CHANGELOG.md packaging
-          git commit -q -m "release(v$NEW): daily conformance fixes (#$PR)"
+          git add -A VERSION CHANGELOG.md packaging services
+          git commit -q -m "release(v$NEW): ${KIND,,} (#$PR)"
           git push -q origin HEAD:main
 
       - name: Release branch + tag (starts release + Docker publish)
         run: |
           NEW="${{ steps.v.outputs.new }}"
           SHA=$(git rev-parse HEAD)
-          git tag -a "v$NEW" "$SHA" -m "v$NEW: daily conformance release"
+          git tag -a "v$NEW" "$SHA" -m "v$NEW: ${KIND,,}"
           git push -q origin "v$NEW"
           # Release branch = the tagged commit + a front page that shows the
           # release checks (placeholder until Release checks report fills it).

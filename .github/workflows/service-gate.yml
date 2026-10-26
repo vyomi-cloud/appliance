@@ -1,0 +1,127 @@
+name: Service gate
+
+# The go-live check for a new service. Runs on every expansion/* PR: builds the
+# PR's stack fresh, then tests/conformance/expansion/gate.py checks — static
+# (engine, byte-identical Nano copy, catalog, registry, test beds, hourly +
+# upstream registration, real operation names) and live (offline console
+# catalog, every Java/Go/CLI/Playwright suite of the service passes, UI crawl
+# clean on offline AND Nano).
+#
+# Pass → merge the PR with the bot token (conformance-release.yml then cuts the
+# patch release, flipping the service to released and publishing services.json
+# for the portal). Set repo variable EXPANSION_REQUIRE_APPROVAL=true to merge by
+# hand instead. Fail → the report goes on the PR + issue and the issue goes back
+# to the expansion agent's queue.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'PR number to gate'
+        required: true
+
+concurrency:
+  group: service-gate-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.pull_request.head.ref, 'expansion/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    env:
+      VYOMI_BASE_URL: http://localhost:9000
+      RELAY_HTTP: http://127.0.0.1:8090
+      NODE_PATH: ${{ github.workspace }}/.ci-node/node_modules
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number || inputs.pr }}
+    steps:
+      - name: Resolve the PR
+        id: pr
+        run: |
+          HEAD=$(gh pr view "$PR" -R "$REPO" --json headRefName -q .headRefName)
+          case "$HEAD" in expansion/*) ;; *) echo "::error::$HEAD is not an expansion branch"; exit 1;; esac
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
+          echo "MANIFEST=services/manifests/${HEAD#expansion/}.json" >> "$GITHUB_ENV"
+          ISSUE=$(gh pr view "$PR" -R "$REPO" --json body -q .body | sed -n 's/.*Closes #\([0-9]*\).*/\1/p' | head -1)
+          echo "ISSUE=$ISSUE" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.22', cache: false }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17', cache: maven }
+
+      - name: Install test tooling
+        run: |
+          pip install --quiet requests pytest boto3 azure-storage-blob
+          mkdir -p .ci-node && cd .ci-node
+          echo '{"name":"vyomi-ci-node","private":true}' > package.json
+          npm install --silent playwright@1.47.2 ws@8.18.0
+          npx playwright install --with-deps chromium
+
+      - name: Boot the PR's stack + Nano relay
+        run: |
+          docker build -t cloudlearn/simulator:ci .
+          CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:ci \
+            docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml up -d \
+              simulator vyomi-pubsub vyomi-firestore \
+              vyomi-sql-postgres vyomi-minio vyomi-nats \
+              vyomi-dynamodb vyomi-elasticmq vyomi-vault vyomi-azurite
+          for i in $(seq 1 90); do curl -fs "$VYOMI_BASE_URL/healthz" >/dev/null && break; sleep 2; done
+          curl -f "$VYOMI_BASE_URL/healthz"
+          nohup node wasm/relay/local-relay.mjs > relay.log 2>&1 &
+          for i in $(seq 1 20); do curl -fs "$RELAY_HTTP/health" >/dev/null && break; sleep 1; done
+
+      - name: Apply test license
+        env:
+          VYOMI_TEST_LICENSE_JWT: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
+        run: |
+          [ -z "$VYOMI_TEST_LICENSE_JWT" ] || curl -fs -X POST -H 'Content-Type: application/json' \
+            -d "{\"license_key\":\"$VYOMI_TEST_LICENSE_JWT\"}" "$VYOMI_BASE_URL/api/license/activate" >/dev/null
+
+      - name: Service gate (static + live)
+        id: gate
+        run: |
+          if [ ! -f "$MANIFEST" ]; then echo "::error::$MANIFEST missing"; exit 1; fi
+          python3 tests/conformance/expansion/gate.py "$MANIFEST"
+
+      - name: Report
+        if: always()
+        run: |
+          f=$(ls tests/conformance/expansion/out/gate-*.md 2>/dev/null | head -1)
+          [ -n "$f" ] || { echo "### Service gate — did not run (see ${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }})" > /tmp/gate.md; f=/tmp/gate.md; }
+          cat "$f" >> "$GITHUB_STEP_SUMMARY"
+          gh pr comment "$PR" -R "$REPO" --body-file "$f"
+          if [ "${{ steps.gate.outcome }}" != "success" ] && [ -n "$ISSUE" ]; then
+            # Back to the expansion agent's queue.
+            gh issue comment "$ISSUE" -R "$REPO" --body-file "$f"
+            gh issue edit "$ISSUE" -R "$REPO" --remove-label in-review >/dev/null || true
+          fi
+
+      - name: Go live (merge → patch release)
+        if: success() && vars.EXPANSION_REQUIRE_APPROVAL != 'true'
+        env: { GH_TOKEN: '${{ secrets.CONFORMANCE_BOT_TOKEN }}' }
+        run: |
+          gh pr merge "$PR" -R "$REPO" --squash
+          echo "Merged #$PR; conformance-release.yml cuts the release."
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml down -v

@@ -229,6 +229,17 @@ jobs:
              && [ -z "$(gh pr list -R "${{ github.repository }}" --head "conformance/daily-$yday" --state all --json number -q '.[0].number')" ]; then
             gh workflow run conformance-daily-pr.yml -R "${{ github.repository }}" --ref main -f date="$yday" && echo "Daily PR dispatched for $yday (missed)."
           fi
+          # Expansion agent: daily cadence = one run per 24h started from here;
+          # continuous = revive its chain if nothing is running or queued.
+          if gh workflow view expansion-agent.yml -R "${{ github.repository }}" >/dev/null 2>&1; then
+            live=$(gh run list -R "${{ github.repository }}" --workflow expansion-agent.yml -L 20 \
+              --json status -q '[.[] | select(.status!="completed")] | length')
+            last=$(gh run list -R "${{ github.repository }}" --workflow expansion-agent.yml -L 1 --json createdAt -q '.[0].createdAt // empty')
+            age=999999; [ -n "$last" ] && age=$(( $(date -u +%s) - $(date -u -d "$last" +%s) ))
+            if [ "${live:-0}" -eq 0 ] && { [ "${{ vars.EXPANSION_CADENCE || 'continuous' }}" = "continuous" ] || [ "$age" -ge 86400 ]; }; then
+              gh workflow run expansion-agent.yml -R "${{ github.repository }}" --ref main && echo "Expansion agent started."
+            fi
+          fi
           queued=$(gh run list -R "${{ github.repository }}" --workflow conformance-hourly.yml \
             --json status -q '[.[] | select(.status=="queued" or .status=="pending" or .status=="waiting")] | length')
           if [ "${queued:-0}" -gt 0 ]; then echo "A run is already queued; not chaining."; exit 0; fi
