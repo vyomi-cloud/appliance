@@ -1,10 +1,12 @@
 # Vyomi Conformance — hourly report
 
-Run **2026-10-26T15:30:03+00:00** · commit `2e96eccf0655` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
+Run **2026-10-26T16:30:13+00:00** · commit `346499f8028e` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
 
 | Suites green | Checks passing | Checks failing | Nano UI clean | Offline UI clean | Open UI findings | API routes with tests |
 |---|---|---|---|---|---|---|
-| 13/22 | 516 | 103 | 0/43 | 5/38 | 188 | 12.8% (41/321) |
+| 13/22 | 517 | 102 | 1/43 | 5/38 | 169 | 12.8% (41/321) |
+
+> **Agent this run:** Fixed 2 product UI findings (offline S3 Creation date, offline Secrets Manager Encryption key) and 1 harness bug (Azure wizard blade, behind 17+ CRAWL_ERRORs per target), added 2 validators, 0 regressions — BUT the push was rejected.
 
 ## By cloud
 
@@ -12,19 +14,19 @@ Run **2026-10-26T15:30:03+00:00** · commit `2e96eccf0655` · Nano (in-browser) 
 |---|---|---|---|---|---|---|
 | [AWS](#aws) | 4/6 | 145 | 2 | 0/12 | 3/12 | 63 |
 | [GCP](#gcp) | 3/4 | 17 | 1 | 0/12 | 1/12 | 75 |
-| [Azure](#azure) | 5/6 | 107 | 1 | 0/19 | 1/14 | 50 |
+| [Azure](#azure) | 5/6 | 107 | 1 | 1/19 | 1/14 | 31 |
 
 <a id="aws"></a>
 ## AWS
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-aws-api` | nano | ui | 5 | 1 | 3.3 |
-| ❌ | `offline-sdk-python-aws` | offline | sdk-python | 87 | 1 | 317.6 |
+| ❌ | `nano-ui-aws-api` | nano | ui | 5 | 1 | 3.2 |
+| ❌ | `offline-sdk-python-aws` | offline | sdk-python | 87 | 1 | 311.5 |
 | ✅ | `nano-ui-aws-tabs` | nano | ui | 11 | 0 | 12.4 |
-| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 20.3 |
-| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 40.6 |
-| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 13 | 0 | 9.6 |
+| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 18.0 |
+| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 41.9 |
+| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 13 | 0 | 11.7 |
 
 <details><summary>❌ <code>offline-sdk-python-aws</code> log</summary>
 
@@ -235,7 +237,7 @@ Run **2026-10-26T15:30:03+00:00** · commit `2e96eccf0655` · Nano (in-browser) 
 | Problem | Tab | Detail |
 |---|---|---|
 | `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
-| `HTTP_404` |  | resource detail: /api/ec2/instances/i-a3ad27d37bfa → 404 |
+| `HTTP_404` |  | resource detail: /api/ec2/instances/i-f0c995cd604e → 404 |
 
 </details>
 
@@ -297,9 +299,9 @@ Run **2026-10-26T15:30:03+00:00** · commit `2e96eccf0655` · Nano (in-browser) 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
 | ❌ | `nano-ui-gcp-tabs` | nano | ui | 0 | 1 | 3.3 |
-| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 12.9 |
-| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 14.7 |
-| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 4.8 |
+| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 20.8 |
+| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 15.8 |
+| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 4.7 |
 
 <details><summary>❌ <code>nano-ui-gcp-tabs</code> log</summary>
 
@@ -566,12 +568,12 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `offline-cli-azure` | offline | cli | 5 | 1 | 14.1 |
-| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 10.9 |
+| ❌ | `offline-cli-azure` | offline | cli | 5 | 1 | 13.7 |
+| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 9.8 |
 | ✅ | `nano-ui-azure-home` | nano | ui | 7 | 0 | 3.8 |
 | ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 17.4 |
-| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 9.6 |
-| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 20.7 |
+| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 9.4 |
+| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 20.6 |
 
 <details><summary>❌ <code>offline-cli-azure</code> log</summary>
 
@@ -590,39 +592,13 @@ RESULT pass=5 fail=1
 
 </details>
 
-**UI findings: 50**
-
-<details><summary><b>Resource groups</b> (nano) — 19 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `BAD_TEXT` |  | shows 'undefined' |
-| `PLACEHOLDER_CELL` |  | list: column "Virtual Machines" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Storage accounts" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "SQL servers" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Service Bus" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Cosmos DB" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Function apps" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "API Management" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Virtual networks" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Network Security Group" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Event Grid topics" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Key vaults" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Role Definition" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Entra ID / RBAC" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Blob containers" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Cosmos databases" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Key Vault secrets" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Key Vault keys" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Storage queues" shows "-"/blank in 1 row(s) |
-
-</details>
+**UI findings: 31**
 
 <details><summary><b>Virtual Machines</b> (nano) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PAGE_ERROR` |  | Cannot set properties of null (setting 'innerHTML') |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -630,7 +606,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
 
 </details>
 
@@ -871,12 +847,12 @@ RESULT pass=5 fail=1
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-cores` | nano | core | 0 | 1 | 1.0 |
-| ❌ | `nano-ui-crawl` | nano | ui | 0 | 43 | 633.5 |
-| ❌ | `offline-console-actions` | offline | api | 231 | 15 | 8.0 |
-| ❌ | `offline-cost-savings` | offline | api | 2 | 7 | 68.2 |
-| ❌ | `offline-ui-crawl` | offline | ui | 5 | 33 | 588.3 |
-| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 22.6 |
+| ❌ | `nano-cores` | nano | core | 0 | 1 | 1.1 |
+| ❌ | `nano-ui-crawl` | nano | ui | 1 | 42 | 637.5 |
+| ❌ | `offline-console-actions` | offline | api | 231 | 15 | 8.4 |
+| ❌ | `offline-cost-savings` | offline | api | 2 | 7 | 68.8 |
+| ❌ | `offline-ui-crawl` | offline | ui | 5 | 33 | 588.2 |
+| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 22.5 |
 
 <details><summary>❌ <code>offline-ui-crawl</code> log</summary>
 
@@ -892,27 +868,27 @@ UI crawl offline: 5/38 services clean → tests/conformance/hourly/out/ui-offlin
 <details><summary>❌ <code>offline-console-actions</code> log</summary>
 
 ```
-conf-test-vm-b5f0f22e/start → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+conf-test-vm-b68ca89e/start → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b5f0f22e/stop → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b68ca89e/stop → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b5f0f22e/reset → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b68ca89e/reset → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b5f0f22e → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b68ca89e → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b5f0f22e/documents → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b68ca89e/documents → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b5f0f22e/collectionGroups/-/indexes → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b68ca89e/collectionGroups/-/indexes → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
 assert False
 FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.kms.create] - AssertionError: GCP kms.create POST /api/gcp/kms/keys → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"ok":false,"error":"missing 'name'"}
 assert False
 FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.create] - AssertionError: GCP secretmanager.create POST /api/gcp/secrets → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"ok":false,"error":"missing 'name'"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-b5f0f22e/o/{object} → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Object not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-b68ca89e/o/{object} → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Object not found"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-b5f0f22e/upload → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"detail":"missing 'file' field"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-b68ca89e/upload → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"detail":"missing 'file' field"}
 assert False
-15 failed, 231 passed, 10 skipped in 7.59s
+15 failed, 231 passed, 10 skipped in 7.49s
 ```
 
 </details>
@@ -945,8 +921,8 @@ RESULT fail=7
 ```
 [nano/aws] 12 services crawled, 12 with findings
 [nano/gcp] 12 services crawled, 12 with findings
-[nano/azure] 19 services crawled, 19 with findings
-UI crawl nano: 0/43 services clean → tests/conformance/hourly/out/ui-nano.json
+[nano/azure] 19 services crawled, 18 with findings
+UI crawl nano: 1/43 services clean → tests/conformance/hourly/out/ui-nano.json
 ```
 
 </details>
@@ -954,7 +930,7 @@ UI crawl nano: 0/43 services clean → tests/conformance/hourly/out/ui-nano.json
 <details><summary>❌ <code>nano-cores</code> log</summary>
 
 ```
-no tests ran in 0.74s
+no tests ran in 0.83s
 ```
 
 </details>
@@ -965,10 +941,11 @@ None.
 
 ## Upstream changes (AWS / GCP / Azure backlog)
 
-1 open `upstream-drift` issue(s) — real cloud changes the agent is working through. [All](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) · [watcher log](https://github.com/vyomi-cloud/appliance/tree/upstream-state)
+2 open `upstream-drift` issue(s) — real cloud changes the agent is working through. [All](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) · [watcher log](https://github.com/vyomi-cloud/appliance/tree/upstream-state)
 
 | Issue | Cloud | Kind | Change | Opened |
 |---|---|---|---|---|
+| #92 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed | 2026-10-26 |
 | #90 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed | 2026-10-26 |
 
 ## Nano ↔ offline parity gaps
@@ -1195,6 +1172,7 @@ SetVersionState
 
 | Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |
 |---|---|---|---|---|---|---|
+| 2026-10-26T16:30:13+00:00 | 13/22 | 517 | 102 | 169 | 12.8% | Fixed 2 product UI findings (offline S3 Creation date, offline Secrets Manager Encryption key) and 1 harness bug (Azure wizard blade, behind 17+ CRAWL_ERRORs per target), added 2 validators, 0 regress |
 | 2026-10-26T15:30:03+00:00 | 13/22 | 516 | 103 | 188 | 12.8% |  |
 | 2026-10-26T14:22:51+00:00 | 13/22 | 517 | 102 | 117 | 12.8% | Fixed 2 UI findings (crawler Azure wizard/blade cascade = harness bug; offline S3 blank "Creation date"), added 1 test, 0 regressions checked beyond touched suites; commits are local only — the push t |
 | 2026-10-26T13:05:38+00:00 | 13/22 | 509 | 108 | 171 | 12.8% |  |

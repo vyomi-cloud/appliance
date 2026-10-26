@@ -1,13 +1,13 @@
 {
- "at": "2026-10-26T15:30:03+00:00",
- "commit": "2e96eccf0655a9313df85af98b3fcd6c147b9d90",
+ "at": "2026-10-26T16:30:13+00:00",
+ "commit": "346499f8028e2a945841f3d3f698846fdff8137d",
  "suites": [
   {
    "id": "offline-ui-crawl",
    "target": "offline",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 588.3,
+   "duration_s": 588.2,
    "exit_code": 0,
    "broken_services": [
     {
@@ -22,7 +22,7 @@
       },
       {
        "type": "HTTP_404",
-       "detail": "resource detail: /api/ec2/instances/i-a3ad27d37bfa \u2192 404"
+       "detail": "resource detail: /api/ec2/instances/i-f0c995cd604e \u2192 404"
       }
      ],
      "status": "broken"
@@ -590,19 +590,19 @@
    "target": "offline",
    "cloud": "all",
    "kind": "api",
-   "duration_s": 8.0,
+   "duration_s": 8.4,
    "exit_code": 1,
    "passed": 231,
    "failed": 15,
    "status": "fail",
-   "tail": "conf-test-vm-b5f0f22e/start \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b5f0f22e/stop \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b5f0f22e/reset \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b5f0f22e \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b5f0f22e/documents \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b5f0f22e/collectionGroups/-/indexes \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.kms.create] - AssertionError: GCP kms.create POST /api/gcp/kms/keys \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.create] - AssertionError: GCP secretmanager.create POST /api/gcp/secrets \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-b5f0f22e/o/{object} \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Object not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-b5f0f22e/upload \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"missing 'file' field\"}\nassert False\n15 failed, 231 passed, 10 skipped in 7.59s"
+   "tail": "conf-test-vm-b68ca89e/start \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b68ca89e/stop \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b68ca89e/reset \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b68ca89e \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b68ca89e/documents \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b68ca89e/collectionGroups/-/indexes \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.kms.create] - AssertionError: GCP kms.create POST /api/gcp/kms/keys \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.create] - AssertionError: GCP secretmanager.create POST /api/gcp/secrets \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-b68ca89e/o/{object} \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Object not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-b68ca89e/upload \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"missing 'file' field\"}\nassert False\n15 failed, 231 passed, 10 skipped in 7.49s"
   },
   {
    "id": "offline-sdk-python-aws",
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-python",
-   "duration_s": 317.6,
+   "duration_s": 311.5,
    "exit_code": 1,
    "passed": 87,
    "failed": 1,
@@ -614,31 +614,31 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-go",
-   "duration_s": 40.6,
+   "duration_s": 41.9,
    "exit_code": 0,
    "passed": 14,
    "failed": 0,
    "status": "pass",
-   "tail": "PASS sqs ListQueues\nRESULT pass=14 fail=0\ngo: downloading github.com/aws/aws-sdk-go-v2 v1.30.0\ngo: downloading github.com/aws/aws-sdk-go-v2/config v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/credentials v1.17.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/dynamodb v1.32.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ec2 v1.160.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/iam v1.34.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sqs v1.32.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/s3 v1.55.0\ngo: downloading github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.15.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sso v1.19.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ssooidc v1.22.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sts v1.27.0\ngo: downloading github.com/aws/smithy-go v1.20.2\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.12\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.2\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.6\ngo: downloading github.com/jmespath/go-jmespath v0.4.0\ngo: downloading github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.8\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.8\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.12\nSDK 2026/10/26 15:15:20 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 15:15:20 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 15:15:20 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 15:15:20 WARN failed to close HTTP response body, this may affect connection reuse"
+   "tail": "PASS sqs ListQueues\nRESULT pass=14 fail=0\ngo: downloading github.com/aws/aws-sdk-go-v2 v1.30.0\ngo: downloading github.com/aws/aws-sdk-go-v2/config v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/credentials v1.17.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/dynamodb v1.32.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ec2 v1.160.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/iam v1.34.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/s3 v1.55.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sqs v1.32.0\ngo: downloading github.com/aws/smithy-go v1.20.2\ngo: downloading github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.15.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sso v1.19.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ssooidc v1.22.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sts v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.12\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.2\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.6\ngo: downloading github.com/jmespath/go-jmespath v0.4.0\ngo: downloading github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.8\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.8\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.12\nSDK 2026/10/26 16:15:18 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 16:15:18 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 16:15:18 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 16:15:18 WARN failed to close HTTP response body, this may affect connection reuse"
   },
   {
    "id": "offline-sdk-go-gcp",
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-go",
-   "duration_s": 14.7,
+   "duration_s": 15.8,
    "exit_code": 0,
    "passed": 5,
    "failed": 0,
    "status": "pass",
-   "tail": "go: downloading github.com/google/uuid v1.6.0\ngo: downloading github.com/googleapis/gax-go/v2 v2.12.5\ngo: downloading golang.org/x/oauth2 v0.21.0\ngo: downloading google.golang.org/api v0.187.0\ngo: downloading google.golang.org/genproto v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/grpc v1.64.0\ngo: downloading google.golang.org/protobuf v1.34.2\ngo: downloading go.opencensus.io v0.24.0\ngo: downloading go.opentelemetry.io/otel v1.24.0\ngo: downloading go.opentelemetry.io/otel/trace v1.24.0\ngo: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/genproto/googleapis/api v0.0.0-20240617180043-68d350f18fd4\ngo: downloading cloud.google.com/go/auth v0.6.1\ngo: downloading cloud.google.com/go/auth/oauth2adapt v0.2.2\ngo: downloading go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0\ngo: downloading golang.org/x/net v0.26.0\ngo: downloading github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da\ngo: downloading github.com/go-logr/logr v1.4.1\ngo: downloading go.opentelemetry.io/otel/metric v1.24.0\ngo: downloading go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0\ngo: downloading golang.org/x/time v0.5.0\ngo: downloading github.com/google/s2a-go v0.1.7\ngo: downloading github.com/googleapis/enterprise-certificate-proxy v0.3.2\ngo: downloading golang.org/x/sys v0.21.0\ngo: downloading github.com/go-logr/stdr v1.2.2\ngo: downloading github.com/felixge/httpsnoop v1.0.4\ngo: downloading github.com/golang/protobuf v1.5.4\ngo: downloading golang.org/x/text v0.16.0\ngo: downloading golang.org/x/sync v0.7.0\ngo: downloading golang.org/x/crypto v0.24.0"
+   "tail": "go: downloading github.com/google/uuid v1.6.0\ngo: downloading github.com/googleapis/gax-go/v2 v2.12.5\ngo: downloading golang.org/x/oauth2 v0.21.0\ngo: downloading google.golang.org/api v0.187.0\ngo: downloading google.golang.org/genproto v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/grpc v1.64.0\ngo: downloading google.golang.org/protobuf v1.34.2\ngo: downloading go.opencensus.io v0.24.0\ngo: downloading go.opentelemetry.io/otel v1.24.0\ngo: downloading go.opentelemetry.io/otel/trace v1.24.0\ngo: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/genproto/googleapis/api v0.0.0-20240617180043-68d350f18fd4\ngo: downloading cloud.google.com/go/auth v0.6.1\ngo: downloading cloud.google.com/go/auth/oauth2adapt v0.2.2\ngo: downloading go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0\ngo: downloading golang.org/x/net v0.26.0\ngo: downloading github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da\ngo: downloading github.com/go-logr/logr v1.4.1\ngo: downloading go.opentelemetry.io/otel/metric v1.24.0\ngo: downloading go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0\ngo: downloading golang.org/x/time v0.5.0\ngo: downloading github.com/google/s2a-go v0.1.7\ngo: downloading github.com/googleapis/enterprise-certificate-proxy v0.3.2\ngo: downloading github.com/felixge/httpsnoop v1.0.4\ngo: downloading golang.org/x/sys v0.21.0\ngo: downloading github.com/go-logr/stdr v1.2.2\ngo: downloading github.com/golang/protobuf v1.5.4\ngo: downloading golang.org/x/text v0.16.0\ngo: downloading golang.org/x/sync v0.7.0\ngo: downloading golang.org/x/crypto v0.24.0"
   },
   {
    "id": "offline-sdk-go-azure",
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-go",
-   "duration_s": 9.6,
+   "duration_s": 9.4,
    "exit_code": 0,
    "passed": 14,
    "failed": 0,
@@ -650,7 +650,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-java",
-   "duration_s": 9.6,
+   "duration_s": 11.7,
    "exit_code": 0,
    "passed": 13,
    "failed": 0,
@@ -662,19 +662,19 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-java",
-   "duration_s": 4.8,
+   "duration_s": 4.7,
    "exit_code": 0,
    "passed": 6,
    "failed": 0,
    "status": "pass",
-   "tail": "== google-cloud-storage (Java) against http://localhost:9000 project=gcp-dev ==\nPASS buckets.insert :: java-sdk-test-1793027759261\nPASS buckets.list contains new bucket\nPASS objects.insert (upload) :: greeting.txt\nPASS objects.get (download byte-exact) :: hello-from-java-sdk\nPASS objects.delete :: true\nPASS buckets.delete :: true\nRESULT pass=6 fail=0"
+   "tail": "== google-cloud-storage (Java) against http://localhost:9000 project=gcp-dev ==\nPASS buckets.insert :: java-sdk-test-1793031360296\nPASS buckets.list contains new bucket\nPASS objects.insert (upload) :: greeting.txt\nPASS objects.get (download byte-exact) :: hello-from-java-sdk\nPASS objects.delete :: true\nPASS buckets.delete :: true\nRESULT pass=6 fail=0"
   },
   {
    "id": "offline-sdk-java-azure",
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-java",
-   "duration_s": 20.7,
+   "duration_s": 20.6,
    "exit_code": 0,
    "passed": 5,
    "failed": 0,
@@ -686,7 +686,7 @@
    "target": "offline",
    "cloud": "all",
    "kind": "api",
-   "duration_s": 68.2,
+   "duration_s": 68.8,
    "exit_code": 1,
    "passed": 2,
    "failed": 7,
@@ -698,7 +698,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "cli",
-   "duration_s": 20.3,
+   "duration_s": 18.0,
    "exit_code": 0,
    "passed": 15,
    "failed": 0,
@@ -710,7 +710,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "cli",
-   "duration_s": 12.9,
+   "duration_s": 20.8,
    "exit_code": 0,
    "passed": 6,
    "failed": 0,
@@ -722,7 +722,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "cli",
-   "duration_s": 14.1,
+   "duration_s": 13.7,
    "exit_code": 1,
    "passed": 5,
    "failed": 1,
@@ -734,7 +734,7 @@
    "target": "offline",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 22.6,
+   "duration_s": 22.5,
    "exit_code": 0,
    "passed": 9,
    "failed": 0,
@@ -746,7 +746,7 @@
    "target": "nano",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 633.5,
+   "duration_s": 637.5,
    "exit_code": 0,
    "broken_services": [
     {
@@ -1300,97 +1300,12 @@
     {
      "target": "nano",
      "cloud": "azure",
-     "service": "Resource groups",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "BAD_TEXT",
-       "detail": "shows 'undefined'"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Virtual Machines\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Storage accounts\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"SQL servers\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Service Bus\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Cosmos DB\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Function apps\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"API Management\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Virtual networks\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Network Security Group\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Event Grid topics\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Key vaults\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Role Definition\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Entra ID / RBAC\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Blob containers\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Cosmos databases\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Key Vault secrets\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Key Vault keys\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Storage queues\" shows \"-\"/blank in 1 row(s)"
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "azure",
      "service": "Virtual Machines",
      "tabs": [],
      "findings": [
       {
-       "type": "PAGE_ERROR",
-       "detail": "Cannot set properties of null (setting 'innerHTML')"
+       "type": "CREATE_FAILED",
+       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
       }
      ],
      "status": "broken"
@@ -1402,8 +1317,8 @@
      "tabs": [],
      "findings": [
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "CRAWL_ERROR",
+       "detail": "locator.click: Timeout 5000ms exceeded."
       }
      ],
      "status": "broken"
@@ -1617,29 +1532,29 @@
      "status": "broken"
     }
    ],
-   "passed": 0,
-   "failed": 43,
+   "passed": 1,
+   "failed": 42,
    "status": "fail",
-   "tail": "[nano/aws] 12 services crawled, 12 with findings\n[nano/gcp] 12 services crawled, 12 with findings\n[nano/azure] 19 services crawled, 19 with findings\nUI crawl nano: 0/43 services clean \u2192 tests/conformance/hourly/out/ui-nano.json"
+   "tail": "[nano/aws] 12 services crawled, 12 with findings\n[nano/gcp] 12 services crawled, 12 with findings\n[nano/azure] 19 services crawled, 18 with findings\nUI crawl nano: 1/43 services clean \u2192 tests/conformance/hourly/out/ui-nano.json"
   },
   {
    "id": "nano-cores",
    "target": "nano",
    "cloud": "all",
    "kind": "core",
-   "duration_s": 1.0,
+   "duration_s": 1.1,
    "exit_code": 5,
    "passed": 0,
    "failed": 1,
    "status": "fail",
-   "tail": "no tests ran in 0.74s"
+   "tail": "no tests ran in 0.83s"
   },
   {
    "id": "nano-ui-aws-api",
    "target": "nano",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 3.3,
+   "duration_s": 3.2,
    "exit_code": 0,
    "passed": 5,
    "failed": 1,
@@ -1656,7 +1571,7 @@
    "passed": 11,
    "failed": 0,
    "status": "pass",
-   "tail": "===== AWS s3 detail tabs \u2014 content check =====\n  [OK   ] (create)                           contentLen:999 200 {\"ok\":true,\"created\":true,\"name\":\"tabtest-bucket\",\"creation_date\":\"2026-10-26T15:29:19.000Z\",\"region\":\"us-east-1\",\"versioning\":\"Disabled\",\"versioning_enabled\":f\n  [OK   ] Overview                           contentLen:150 \n  [OK   ] Activity                           contentLen:239 \n  [OK   ] Tags                               contentLen:44 \n  [OK   ] Objects                            contentLen:107 \n  [OK   ] Versions                           contentLen:126 \n  [OK   ] Bucket Versioning                  contentLen:138 \n  [OK   ] Event notifications                contentLen:223 \n  [OK   ] Lifecycle rules                    contentLen:128 \n  [OK   ] Default encryption                 contentLen:149 \n  [OK   ] Block Public Access                contentLen:178 \n\n11/11 tabs render content \u2014 NO blank tabs"
+   "tail": "===== AWS s3 detail tabs \u2014 content check =====\n  [OK   ] (create)                           contentLen:999 200 {\"ok\":true,\"created\":true,\"name\":\"tabtest-bucket\",\"creation_date\":\"2026-10-26T16:29:29.000Z\",\"region\":\"us-east-1\",\"versioning\":\"Disabled\",\"versioning_enabled\":f\n  [OK   ] Overview                           contentLen:150 \n  [OK   ] Activity                           contentLen:239 \n  [OK   ] Tags                               contentLen:44 \n  [OK   ] Objects                            contentLen:107 \n  [OK   ] Versions                           contentLen:126 \n  [OK   ] Bucket Versioning                  contentLen:138 \n  [OK   ] Event notifications                contentLen:223 \n  [OK   ] Lifecycle rules                    contentLen:128 \n  [OK   ] Default encryption                 contentLen:149 \n  [OK   ] Block Public Access                contentLen:178 \n\n11/11 tabs render content \u2014 NO blank tabs"
   },
   {
    "id": "nano-ui-gcp-tabs",
@@ -1687,7 +1602,7 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 10.9,
+   "duration_s": 9.8,
    "exit_code": 0,
    "passed": 5,
    "failed": 0,
