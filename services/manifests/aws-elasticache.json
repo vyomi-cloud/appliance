@@ -1,0 +1,52 @@
+{
+ "cloud": "aws",
+ "key": "elasticache",
+ "name": "Amazon ElastiCache",
+ "upstream": "elasticache",
+ "issue": 56,
+ "core": "core/elasticache_core.py",
+ "operations": [
+  "CreateCacheCluster",
+  "DescribeCacheClusters",
+  "ModifyCacheCluster",
+  "DeleteCacheCluster",
+  "RebootCacheCluster",
+  "CreateReplicationGroup",
+  "DescribeReplicationGroups",
+  "ModifyReplicationGroup",
+  "DeleteReplicationGroup",
+  "CreateCacheSubnetGroup",
+  "DescribeCacheSubnetGroups",
+  "ModifyCacheSubnetGroup",
+  "DeleteCacheSubnetGroup",
+  "CreateCacheParameterGroup",
+  "DescribeCacheParameterGroups",
+  "ModifyCacheParameterGroup",
+  "DeleteCacheParameterGroup",
+  "DescribeCacheParameters",
+  "CreateSnapshot",
+  "DescribeSnapshots",
+  "DeleteSnapshot",
+  "AddTagsToResource",
+  "RemoveTagsFromResource",
+  "ListTagsForResource",
+  "DescribeCacheEngineVersions",
+  "DescribeEvents"
+ ],
+ "backend": {
+  "kind": "container",
+  "name": "valkey",
+  "image": "valkey/valkey:8.0.1-alpine",
+  "license": "BSD-3-Clause",
+  "tier": "lite",
+  "compose_service": "vyomi-valkey"
+ },
+ "suites": [
+  "offline-sdk-java-aws-elasticache",
+  "offline-sdk-go-aws-elasticache",
+  "offline-cli-aws-elasticache",
+  "offline-ui-aws-elasticache",
+  "nano-ui-aws-elasticache"
+ ],
+ "status": "building"
+}

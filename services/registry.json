@@ -288,6 +288,13 @@
    "upstream": "Microsoft.Authorization",
    "status": "released",
    "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "elasticache",
+   "name": "Amazon ElastiCache",
+   "upstream": "elasticache",
+   "status": "pending-release"
   }
  ]
 }
