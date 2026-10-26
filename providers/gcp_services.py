@@ -79,6 +79,7 @@ TARGETS = [
     "api_gcp_pubsub_publish",
     "api_gcp_pubsub_list_subscriptions",
     "api_gcp_pubsub_create_subscription",
+    "api_gcp_pubsub_put_subscription",
     "api_gcp_pubsub_get_subscription",
     "api_gcp_pubsub_patch_subscription",
     "api_gcp_pubsub_list_subscription_messages",
@@ -252,7 +253,13 @@ async def api_gcp_storage_create_object(bucket: str, request: Request):
         # Real SDK / gsutil upload: proxy the raw bytes to the byte store, which
         # handles media/multipart and returns the GCS object metadata.
         try:
-            _status, body = gcs.upload(s._tenant_scoped_bucket(bucket), str(request.url.query), raw, ctype)
+            # A named upload with no uploadType is a simple media upload in
+            # real GCS; the byte store rejects it without the parameter (400 →
+            # surfaced as 502).
+            query = str(request.url.query)
+            if not upload_type:
+                query = (query + "&" if query else "") + "uploadType=media"
+            _status, body = gcs.upload(s._tenant_scoped_bucket(bucket), query, raw, ctype)
             meta = json.loads(body.decode("utf-8")) if body else {}
             name = str(meta.get("name") or qp.get("name") or "")
         except Exception as exc:
@@ -700,7 +707,7 @@ async def api_gcp_pubsub_create_subscription(project: str, request: Request, que
     project = _gcp_project_name(project)
     payload = await request.json() if request is not None else {}
     payload = payload if isinstance(payload, dict) else {}
-    sub_id = str(payload.get("subscriptionId") or payload.get("name") or queue_name or "").split("/")[-1].strip()
+    sub_id = str(queue_name or payload.get("subscriptionId") or payload.get("name") or "").split("/")[-1].strip()
     if not sub_id:
         raise HTTPException(400, detail="Subscription id is required")
     if _ps_emu.available():
@@ -726,6 +733,14 @@ async def api_gcp_pubsub_create_subscription(project: str, request: Request, que
         raise HTTPException(400, detail="Topic is required")
     gcp_pubsub_state.setdefault("subscriptions", {})[sub_id] = sub
     return s._gcp_pubsub_subscription_view(project, sub)
+
+
+async def api_gcp_pubsub_put_subscription(project: str, subscription: str, request: Request):
+    """PUT .../subscriptions/{sub} — how the real client libraries and gcloud
+    create a subscription. Same path as POST create (so it lands in the Pub/Sub
+    emulator when one is running); the id comes from the URL."""
+    sub_id = str(subscription or "").split("/")[-1].strip()
+    return await api_gcp_pubsub_create_subscription(project, request, queue_name=sub_id)
 
 
 def api_gcp_pubsub_get_subscription(project: str, subscription: str):
@@ -846,7 +861,11 @@ async def api_gcp_pubsub_pull(project: str, subscription: str, request: Request)
     payload = payload if isinstance(payload, dict) else {}
     max_messages = int(payload.get("maxMessages") or payload.get("max_messages") or 10)
     if _ps_emu.available():
-        received = await asyncio.to_thread(_ps_emu.pull, project, subscription, max_messages)
+        from google.api_core import exceptions as _gax
+        try:
+            received = await asyncio.to_thread(_ps_emu.pull, project, subscription, max_messages)
+        except _gax.NotFound:
+            raise HTTPException(404, detail="Subscription not found")
         return {"receivedMessages": received}
     rec = gcp_pubsub_state.get("subscriptions", {}).get(subscription)
     if not rec or str(rec.get("project") or project) != project:

@@ -99,6 +99,11 @@ jobs:
             --endpoint http://127.0.0.1:9000 \
             --isolate-spaces \
             --fail-under 85.0
+      - name: Simulator errors (tracebacks) from this run
+        if: always()
+        run: |
+          docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml logs --no-color simulator 2>&1 \
+            | grep -B3 -A40 "Traceback" | grep -vE "^\s*\^+\s*$" | tail -400 || echo "no tracebacks"
       - name: Stop stack
         if: always()
         run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml --profile full down -v

@@ -16499,9 +16499,13 @@ def _gcp_pubsub_topic_view(project: str, topic: dict) -> dict:
 
 
 def _gcp_pubsub_subscription_view(project: str, subscription: dict) -> dict:
+    # Records store the full resource name; only prefix a bare id (doubling it
+    # produced "projects/p/subscriptions/projects/p/subscriptions/s").
     name = str(subscription.get("name") or "")
+    if not name.startswith("projects/"):
+        name = f"projects/{project}/subscriptions/{name}"
     return {
-        "name": f"projects/{project}/subscriptions/{name}",
+        "name": name,
         "topic": subscription.get("topic", ""),
         "ackDeadlineSeconds": subscription.get("ackDeadlineSeconds", 10),
         "retainAckedMessages": subscription.get("retainAckedMessages", False),
