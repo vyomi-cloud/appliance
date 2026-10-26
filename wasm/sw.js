@@ -606,6 +606,16 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "extras", "List",   { key: _ex[1] }] };
     if (method === "POST") return { tuple: ["aws", "extras", "Create", { key: _ex[1], ...(body || {}) }] };
   }
+  // Kinesis Data Streams (core/kinesis_core.py) — streams + put record
+  if (path === "/api/kinesis/streams") {
+    if (method === "GET")  return { tuple: ["aws", "kinesis", "ListStreams", {}] };
+    if (method === "POST") return { tuple: ["aws", "kinesis", "CreateStream", body || {}] };
+  }
+  m = path.match(/^\/api\/kinesis\/streams\/([^/]+)\/put$/);
+  if (m && method === "POST") return { tuple: ["aws", "kinesis", "PutRecord", { name: dec(m[1]), ...(body || {}) }] };
+  m = path.match(/^\/api\/kinesis\/streams\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "kinesis", "GetStream", { name: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "kinesis", "DeleteStream", { name: dec(m[1]) }] };
   // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
   if (path === "/api/eventbridge/rules") {
     if (method === "GET")  return { tuple: ["aws", "eventbridge", "ListRules", {}] };

@@ -107,6 +107,12 @@ class Aws(CloudProvider):
             ("extras", "Delete"):    lambda b, a, p: D.extras_delete(p),
             ("extras", "ConfigGet"): lambda b, a, p: D.extras_config_get(p),
             ("extras", "ConfigPut"): lambda b, a, p: D.extras_config_put(p),
+            # Kinesis Data Streams — via core/kinesis_core.py
+            ("kinesis", "ListStreams"):  lambda b, a, p: D.kinesis_list(p),
+            ("kinesis", "CreateStream"): lambda b, a, p: D.kinesis_create(p),
+            ("kinesis", "GetStream"):    lambda b, a, p: D.kinesis_get(p),
+            ("kinesis", "DeleteStream"): lambda b, a, p: D.kinesis_delete(p),
+            ("kinesis", "PutRecord"):    lambda b, a, p: D.kinesis_put(p),
             # EventBridge — rules → SQS delivery, via core/eventbridge_core.py
             ("eventbridge", "ListRules"): lambda b, a, p: D.eb_list(p),
             ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),

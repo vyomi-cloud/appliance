@@ -198,6 +198,22 @@ _VM_SERVICES = {
 }
 
 
+def _savings_usd(provider: str, by_service: dict) -> float:
+    """What this census would cost on the real cloud per month (list prices from
+    core/cost_model — the same table the appliance's space savings use)."""
+    try:
+        from core import cost_model as cm
+        total = 0.0
+        for svc, n in by_service.items():
+            if svc in ("ec2", "vm"):
+                total += n * cm.vm_hourly_rate(provider, "") * cm.HOURS_PER_MONTH
+            else:
+                total += n * cm.SERVICE_MONTHLY.get(f"{provider}.{svc}", 0.0)
+        return round(total, 2)
+    except Exception:
+        return 0.0
+
+
 def _weigh(resources: int, vms: int) -> dict:
     light = max(0, resources - vms)
     return {
@@ -232,6 +248,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                         len(A.iam_list_policies().get("policies", [])) +
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
+                "kinesis":        len(A._R["kinesis"].streams),
             }
             for svc, n in aws_counts.items():
                 if n:
@@ -299,7 +316,8 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
 
     resources = sum(by_service.values())
     return {"ok": True, "provider": provider, "resources": resources, "vms": vms,
-            "by_service": by_service, **_weigh(resources, vms)}
+            "by_service": by_service, "savings_usd": _savings_usd(provider, by_service),
+            **_weigh(resources, vms)}
 
 
 # Verbs that begin a mutating per-cloud handler op (CreateBucket, DeleteTable,

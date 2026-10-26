@@ -774,7 +774,7 @@ def console_row(store, st: dict) -> dict:
 
 def console_list(store) -> dict:
     rows = [console_row(store, s) for s in _store_streams(store).values()]
-    return {"ok": True, "streams": rows, "count": len(rows)}
+    return {"ok": True, "items": rows, "count": len(rows)}
 
 
 def console_create(store, body: dict) -> dict:

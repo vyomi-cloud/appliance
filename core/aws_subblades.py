@@ -342,6 +342,18 @@ _KMS_SUB = [
 ]
 
 
+# ===========================================================================
+# Kinesis Data Streams — stream detail
+# ===========================================================================
+_KINESIS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Data stream", "items": [
+        {"key": "configuration", "label": "Configuration",       "icon": "tune",          "type": "properties"},
+        {"key": "shards",        "label": "Shards and consumers", "icon": "account_tree", "type": "json"},
+    ]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -358,4 +370,5 @@ SUB_BLADES: dict[str, list] = {
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
     "kms":            _KMS_SUB,
+    "kinesis":        _KINESIS_SUB,
 }

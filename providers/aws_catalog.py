@@ -598,6 +598,38 @@ RESOURCE_CATALOG_AWS = [
         ],
         "endpoints": {},
     },
+    {
+        "key": "kinesis", "label": "Kinesis", "icon": "stream",
+        "namespace": "AWS/Kinesis", "service": "kinesis",
+        "collection_path": "/api/kinesis/streams",
+        "resource_path":   "/api/kinesis/streams/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "rail_items": [
+            {"key": "streams", "label": "Data streams", "icon": "stream", "type": "primary"},
+        ],
+        "api_paths": {
+            "put":    {"method": "POST",   "path": "/api/kinesis/streams/{name}/put"},
+            "delete": {"method": "DELETE", "path": "/api/kinesis/streams/{name}"},
+        },
+        "columns": [
+            ["name",          "Name"],
+            ["status",        "Status"],
+            ["capacity_mode", "Capacity mode"],
+            ["open_shards",   "Open shards"],
+            ["retention",     "Data retention"],
+            ["encryption",    "Encryption"],
+            ["consumers",     "Consumers"],
+            ["created",       "Created"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Data stream name", "default": "my-stream"},
+            {"name": "capacity_mode", "label": "Capacity mode", "default": "Provisioned"},
+            {"name": "shard_count", "label": "Provisioned shards", "default": "1"},
+            {"name": "retention_hours", "label": "Data retention (hours)", "default": "24"},
+        ],
+        "endpoints": {},
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_AWS}
