@@ -1,6 +1,15 @@
 {
- "at": "2026-10-26T17:54:48+00:00",
+ "at": "2026-10-26T18:54:48+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "sdk",
+   "service": "cli:aws",
+   "kind": "release",
+   "key": "ver:cli:aws:2.38.6",
+   "title": "cli:aws: 2.38.5 \u2192 2.38.6",
+   "actionable": false
+  }
+ ],
  "errors": []
 }
