@@ -246,8 +246,21 @@ def main() -> int:
         summary += ("\n\n**Nano ↔ offline parity gaps** (the hourly agent closes these):\n\n"
                     "| Console page | Offline only | Nano only |\n|---|---|---|\n" + "\n".join(gaps)) if gaps \
             else "\n\n**Nano ↔ offline parity:** ✅ every console page has the same features on both."
-        sections.append(f"## {label} — {len(released)} released, {len(queue)} in the pipeline\n\n{summary}\n\n" + "\n".join(t)
-                        + ("\n\n**Gate details**\n\n" + "\n\n".join(details) if details else ""))
+        # Everything else the cloud publishes (P3): listed so the page covers
+        # the whole cloud, folded because it's long.
+        rest = sorted((r for r in cat["services"] if r["cloud"] == cloud and r["priority"] == "P3"
+                       and r["status"] != "released" and key_of(r["id"]) not in released_keys),
+                      key=lambda r: r["id"])
+        upstream_total = sum(1 for r in cat["services"] if r["cloud"] == cloud)
+        totals[cloud]["upstream"] = upstream_total
+        p3 = (f"<details><summary><b>Not yet scheduled (P3): {len(rest)} services</b> — the rest of {label}'s "
+              f"{upstream_total} published services; scheduled by promoting them to P1/P2 in tests/conformance/expansion/priorities.json</summary>\n\n"
+              "| Service | Upstream id | Operations | Stage |\n|---|---|---|---|\n" +
+              "\n".join(f"| {r['name'] if r['name'] != r['id'] else '—'} | `{r['id']}` | {r.get('operations', '')} | · not scheduled |"
+                         for r in rest) + "\n\n</details>")
+        sections.append(f"## {label} — {len(released)} released, {len(queue)} in the pipeline, {len(rest)} not yet scheduled "
+                        f"({upstream_total} published by {label})\n\n{summary}\n\n" + "\n".join(t)
+                        + ("\n\n**Gate details**\n\n" + "\n\n".join(details) if details else "") + "\n\n" + p3)
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     cloud_suites = " · ".join(f"`{sid}` {'✅' if r['status'] == 'pass' else '❌'} {r.get('passed', 0)}/{r.get('passed', 0) + r.get('failed', 0)}"
@@ -257,7 +270,9 @@ def main() -> int:
     md = [f"# Vyomi service pipeline", "",
           f"Updated **{now}** · **{total_rel} services released** "
           f"({per_cloud}) · "
-          f"**{sum(v['queue'] for v in totals.values())} in the pipeline** (P1 + P2).", "",
+          f"**{sum(v['queue'] for v in totals.values())} in the pipeline** (P1 + P2) · "
+          f"covering all **{sum(v.get('upstream', 0) for v in totals.values())} services** AWS, GCP and Azure publish "
+          f"(catalog of {cat.get('generated', '')[:10]}).", "",
           "A new service goes live only when the service gate passes: engine, native SDK/CLI wire, console UI offline + Nano, "
           "Java + Go + CLI test beds, Playwright console tests offline + Nano, registered with the hourly conformance run and "
           "the upstream watcher. Then it is released (patch version) and handed off to both hourly jobs.", "",
