@@ -9,7 +9,9 @@ name: Hourly conformance agent
 
 on:
   schedule:
-    - cron: '7 * * * *'
+    # Hourly, non-negotiable. Also triggered by the always-on laptop's
+    # heartbeat (vyomi-cloud/release-e2e) if GitHub's scheduler misses a slot.
+    - cron: '5 * * * *'
   workflow_dispatch:
     inputs:
       skip_agent:

@@ -116,7 +116,10 @@ def main() -> int:
     commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     out = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "commit": commit, "suites": results}
     os.makedirs(OUT, exist_ok=True)
-    json.dump(out, open(os.path.join(OUT, "results.json"), "w"), indent=1)
+    # A partial re-run (--only / --target, e.g. the agent verifying a fix) must
+    # not overwrite the full hour's results the report is built from.
+    name = "results.json" if (a.target == "all" and not only) else "results-partial.json"
+    json.dump(out, open(os.path.join(OUT, name), "w"), indent=1)
     bad = [r["id"] for r in results if r["status"] != "pass"]
     print(f"\n{len(results) - len(bad)}/{len(results)} suites green" + (f"; failing: {', '.join(bad)}" if bad else ""))
     return 0  # the agent and the page decide what to do with failures
