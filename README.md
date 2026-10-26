@@ -1,32 +1,30 @@
 # Vyomi Conformance — hourly report
 
-Run **2026-10-26T14:22:51+00:00** · commit `d5a79309baf0` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
+Run **2026-10-26T15:30:03+00:00** · commit `2e96eccf0655` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
 
 | Suites green | Checks passing | Checks failing | Nano UI clean | Offline UI clean | Open UI findings | API routes with tests |
 |---|---|---|---|---|---|---|
-| 13/22 | 517 | 102 | 1/43 | 2/9 | 117 | 12.8% (41/321) |
-
-> **Agent this run:** Fixed 2 UI findings (crawler Azure wizard/blade cascade = harness bug; offline S3 blank "Creation date"), added 1 test, 0 regressions checked beyond touched suites; commits are local only — the push to conformance/daily-2026-10-26 was rejected.
+| 13/22 | 516 | 103 | 0/43 | 5/38 | 188 | 12.8% (41/321) |
 
 ## By cloud
 
 | Cloud | Suites green | Checks ✓ | Checks ✗ | Nano UI clean | Offline UI clean | Open findings |
 |---|---|---|---|---|---|---|
-| [AWS](#aws) | 4/6 | 145 | 2 | 0/12 | 0/3 | 46 |
-| [GCP](#gcp) | 3/4 | 17 | 1 | 0/12 | 1/3 | 51 |
-| [Azure](#azure) | 5/6 | 107 | 1 | 1/19 | 1/3 | 20 |
+| [AWS](#aws) | 4/6 | 145 | 2 | 0/12 | 3/12 | 63 |
+| [GCP](#gcp) | 3/4 | 17 | 1 | 0/12 | 1/12 | 75 |
+| [Azure](#azure) | 5/6 | 107 | 1 | 0/19 | 1/14 | 50 |
 
 <a id="aws"></a>
 ## AWS
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-aws-api` | nano | ui | 5 | 1 | 2.6 |
-| ❌ | `offline-sdk-python-aws` | offline | sdk-python | 87 | 1 | 307.0 |
-| ✅ | `nano-ui-aws-tabs` | nano | ui | 11 | 0 | 11.7 |
-| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 25.9 |
-| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 32.3 |
-| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 13 | 0 | 7.2 |
+| ❌ | `nano-ui-aws-api` | nano | ui | 5 | 1 | 3.3 |
+| ❌ | `offline-sdk-python-aws` | offline | sdk-python | 87 | 1 | 317.6 |
+| ✅ | `nano-ui-aws-tabs` | nano | ui | 11 | 0 | 12.4 |
+| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 20.3 |
+| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 40.6 |
+| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 13 | 0 | 9.6 |
 
 <details><summary>❌ <code>offline-sdk-python-aws</code> log</summary>
 
@@ -81,13 +79,12 @@ Run **2026-10-26T14:22:51+00:00** · commit `d5a79309baf0` · Nano (in-browser) 
 
 </details>
 
-**UI findings: 46**
+**UI findings: 63**
 
-<details><summary><b>EC2</b> (nano) — 10 finding(s)</summary>
+<details><summary><b>EC2</b> (nano) — 9 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PAGE_ERROR` |  | during create: Cannot set properties of null (setting 'textContent') |
 | `PLACEHOLDER_CELL` |  | after create: column "Instance ID" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "State" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
@@ -97,6 +94,21 @@ Run **2026-10-26T14:22:51+00:00** · commit `d5a79309baf0` · Nano (in-browser) 
 | `PLACEHOLDER_CELL` |  | resource detail: column "State" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | resource detail: column "Public IPv4" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | resource detail: column "Private IPv4" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>Secrets Manager</b> (offline) — 8 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Last rotated" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Next rotation" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Encryption key" shows "-"/blank in 1 row(s) |
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 12 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $99.73 (real aws would bill this resource) |
+| `PLACEHOLDER_CELL` |  | resource detail: column "Last rotated" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | resource detail: column "Next rotation" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | resource detail: column "Encryption key" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -113,6 +125,19 @@ Run **2026-10-26T14:22:51+00:00** · commit `d5a79309baf0` · Nano (in-browser) 
 
 </details>
 
+<details><summary><b>EventBridge</b> (offline) — 6 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Status" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Targets" shows "-"/blank in 1 row(s) |
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 9 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $99.73 (real aws would bill this resource) |
+| `PLACEHOLDER_CELL` |  | resource detail: column "Status" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | resource detail: column "Targets" shows "-"/blank in 1 row(s) |
+
+</details>
+
 <details><summary><b>DynamoDB</b> (nano) — 4 finding(s)</summary>
 
 | Problem | Tab | Detail |
@@ -121,27 +146,6 @@ Run **2026-10-26T14:22:51+00:00** · commit `d5a79309baf0` · Nano (in-browser) 
 | `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 | `PLACEHOLDER_CELL` |  | resource detail: column "Sort key" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>S3</b> (offline) — 4 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | list: column "Creation date" shows "-"/blank in 4 row(s) |
-| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
-| `PLACEHOLDER_CELL` |  | after create: column "Creation date" shows "-"/blank in 4 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "Creation date" shows "-"/blank in 4 row(s) |
-
-</details>
-
-<details><summary><b>EC2</b> (offline) — 3 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | list: column "Public IPv4" shows "-"/blank in 2 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 3 row(s) |
-| `HTTP_404` |  | resource detail: /api/ec2/instances/i-051057f5f66d → 404 |
 
 </details>
 
@@ -226,11 +230,64 @@ Run **2026-10-26T14:22:51+00:00** · commit `d5a79309baf0` · Nano (in-browser) 
 
 </details>
 
-<details><summary><b>Lambda</b> (offline) — 1 finding(s)</summary>
+<details><summary><b>EC2</b> (offline) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
+| `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
+| `HTTP_404` |  | resource detail: /api/ec2/instances/i-a3ad27d37bfa → 404 |
+
+</details>
+
+<details><summary><b>S3</b> (offline) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Creation date" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | resource detail: column "Creation date" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>DynamoDB</b> (offline) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | resource detail: column "Sort key" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>IAM</b> (offline) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 12 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $99.73 (real aws would bill this resource) |
+
+</details>
+
+<details><summary><b>KMS</b> (offline) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 12 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $99.73 (real aws would bill this resource) |
+
+</details>
+
+<details><summary><b>SQS</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_404` |  | resource detail: /api/sqs/queues/ → 404 |
+
+</details>
+
+<details><summary><b>VPC</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $99.73 (real aws would bill this resource) |
 
 </details>
 
@@ -239,10 +296,10 @@ Run **2026-10-26T14:22:51+00:00** · commit `d5a79309baf0` · Nano (in-browser) 
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-gcp-tabs` | nano | ui | 0 | 1 | 2.6 |
-| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 18.9 |
-| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 14.1 |
-| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 4.0 |
+| ❌ | `nano-ui-gcp-tabs` | nano | ui | 0 | 1 | 3.3 |
+| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 12.9 |
+| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 14.7 |
+| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 4.8 |
 
 <details><summary>❌ <code>nano-ui-gcp-tabs</code> log</summary>
 
@@ -266,7 +323,7 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 </details>
 
-**UI findings: 51**
+**UI findings: 75**
 
 <details><summary><b>Cloud KMS</b> (nano) — 9 finding(s)</summary>
 
@@ -338,14 +395,48 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 </details>
 
+<details><summary><b>Pub/Sub</b> (offline) — 5 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "RETENTION" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "ENCRYPTION" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "SUBSCRIPTIONS" shows "-"/blank in 1 row(s) |
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
+
+</details>
+
 <details><summary><b>Cloud Functions</b> (offline) — 4 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` |  | list: column "STATUS" shows "-"/blank in 1 row(s) |
-| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
 | `PLACEHOLDER_CELL` |  | after create: column "STATUS" shows "-"/blank in 1 row(s) |
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
 | `PLACEHOLDER_CELL` |  | resource detail: column "STATUS" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>VPC Network</b> (offline) — 4 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
+| `PLACEHOLDER_CELL` |  | resource detail: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>Eventarc</b> (offline) — 4 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "REGION" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
 
 </details>
 
@@ -366,6 +457,43 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 | `PLACEHOLDER_CELL` |  | after create: column "REGION" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+
+</details>
+
+<details><summary><b>Firestore</b> (offline) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
+
+</details>
+
+<details><summary><b>Cloud Storage</b> (offline) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
+
+</details>
+
+<details><summary><b>Cloud KMS</b> (offline) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
+
+</details>
+
+<details><summary><b>IAM & Admin</b> (offline) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
 
 </details>
 
@@ -409,7 +537,23 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 </details>
 
-<details><summary><b>Cloud Storage</b> (offline) — 1 finding(s)</summary>
+<details><summary><b>Cloud SQL</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
+
+</details>
+
+<details><summary><b>API Gateway</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
+
+</details>
+
+<details><summary><b>Secret Manager</b> (offline) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
@@ -422,12 +566,12 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `offline-cli-azure` | offline | cli | 5 | 1 | 28.1 |
-| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 9.7 |
-| ✅ | `nano-ui-azure-home` | nano | ui | 7 | 0 | 3.6 |
-| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 16.6 |
-| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 8.7 |
-| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 20.2 |
+| ❌ | `offline-cli-azure` | offline | cli | 5 | 1 | 14.1 |
+| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 10.9 |
+| ✅ | `nano-ui-azure-home` | nano | ui | 7 | 0 | 3.8 |
+| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 17.4 |
+| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 9.6 |
+| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 20.7 |
 
 <details><summary>❌ <code>offline-cli-azure</code> log</summary>
 
@@ -446,13 +590,39 @@ RESULT pass=5 fail=1
 
 </details>
 
-**UI findings: 20**
+**UI findings: 50**
+
+<details><summary><b>Resource groups</b> (nano) — 19 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `BAD_TEXT` |  | shows 'undefined' |
+| `PLACEHOLDER_CELL` |  | list: column "Virtual Machines" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Storage accounts" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "SQL servers" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Service Bus" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Cosmos DB" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Function apps" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "API Management" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Virtual networks" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Network Security Group" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Event Grid topics" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Key vaults" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Role Definition" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Entra ID / RBAC" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Blob containers" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Cosmos databases" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Key Vault secrets" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Key Vault keys" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Storage queues" shows "-"/blank in 1 row(s) |
+
+</details>
 
 <details><summary><b>Virtual Machines</b> (nano) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+| `PAGE_ERROR` |  | Cannot set properties of null (setting 'innerHTML') |
 
 </details>
 
@@ -460,7 +630,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -596,11 +766,99 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: azure savings stayed $0.5 (real azure would bill this resource) |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
 <details><summary><b>Storage accounts</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+
+</details>
+
+<details><summary><b>SQL servers</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+
+</details>
+
+<details><summary><b>Service Bus</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+
+</details>
+
+<details><summary><b>Cosmos DB</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+
+</details>
+
+<details><summary><b>Function apps</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+
+</details>
+
+<details><summary><b>API Management</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+
+</details>
+
+<details><summary><b>Virtual networks</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+
+</details>
+
+<details><summary><b>Network Security Group</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+
+</details>
+
+<details><summary><b>Event Grid topics</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+
+</details>
+
+<details><summary><b>Key vaults</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+
+</details>
+
+<details><summary><b>Role Definition</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+
+</details>
+
+<details><summary><b>Entra ID / RBAC</b> (offline) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
@@ -613,12 +871,12 @@ RESULT pass=5 fail=1
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-cores` | nano | core | 0 | 1 | 0.7 |
-| ❌ | `nano-ui-crawl` | nano | ui | 1 | 42 | 626.4 |
-| ❌ | `offline-console-actions` | offline | api | 231 | 15 | 11.9 |
-| ❌ | `offline-cost-savings` | offline | api | 2 | 7 | 77.1 |
-| ❌ | `offline-ui-crawl` | offline | ui | 5 | 33 | 592.0 |
-| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 28.4 |
+| ❌ | `nano-cores` | nano | core | 0 | 1 | 1.0 |
+| ❌ | `nano-ui-crawl` | nano | ui | 0 | 43 | 633.5 |
+| ❌ | `offline-console-actions` | offline | api | 231 | 15 | 8.0 |
+| ❌ | `offline-cost-savings` | offline | api | 2 | 7 | 68.2 |
+| ❌ | `offline-ui-crawl` | offline | ui | 5 | 33 | 588.3 |
+| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 22.6 |
 
 <details><summary>❌ <code>offline-ui-crawl</code> log</summary>
 
@@ -634,27 +892,27 @@ UI crawl offline: 5/38 services clean → tests/conformance/hourly/out/ui-offlin
 <details><summary>❌ <code>offline-console-actions</code> log</summary>
 
 ```
-onf-test-vm-4cf8655a/start → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+conf-test-vm-b5f0f22e/start → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-4cf8655a/stop → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b5f0f22e/stop → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-4cf8655a/reset → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b5f0f22e/reset → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-4cf8655a → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b5f0f22e → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-4cf8655a/documents → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b5f0f22e/documents → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-4cf8655a/collectionGroups/-/indexes → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b5f0f22e/collectionGroups/-/indexes → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
 assert False
 FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.kms.create] - AssertionError: GCP kms.create POST /api/gcp/kms/keys → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"ok":false,"error":"missing 'name'"}
 assert False
 FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.create] - AssertionError: GCP secretmanager.create POST /api/gcp/secrets → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"ok":false,"error":"missing 'name'"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-4cf8655a/o/{object} → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Object not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-b5f0f22e/o/{object} → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Object not found"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-4cf8655a/upload → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"detail":"missing 'file' field"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-b5f0f22e/upload → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"detail":"missing 'file' field"}
 assert False
-15 failed, 231 passed, 10 skipped in 11.51s
+15 failed, 231 passed, 10 skipped in 7.59s
 ```
 
 </details>
@@ -687,8 +945,8 @@ RESULT fail=7
 ```
 [nano/aws] 12 services crawled, 12 with findings
 [nano/gcp] 12 services crawled, 12 with findings
-[nano/azure] 19 services crawled, 18 with findings
-UI crawl nano: 1/43 services clean → tests/conformance/hourly/out/ui-nano.json
+[nano/azure] 19 services crawled, 19 with findings
+UI crawl nano: 0/43 services clean → tests/conformance/hourly/out/ui-nano.json
 ```
 
 </details>
@@ -696,7 +954,7 @@ UI crawl nano: 1/43 services clean → tests/conformance/hourly/out/ui-nano.json
 <details><summary>❌ <code>nano-cores</code> log</summary>
 
 ```
-no tests ran in 0.50s
+no tests ran in 0.74s
 ```
 
 </details>
@@ -707,7 +965,11 @@ None.
 
 ## Upstream changes (AWS / GCP / Azure backlog)
 
-0 open `upstream-drift` issue(s) — real cloud changes the agent is working through. [All](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) · [watcher log](https://github.com/vyomi-cloud/appliance/tree/upstream-state)
+1 open `upstream-drift` issue(s) — real cloud changes the agent is working through. [All](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) · [watcher log](https://github.com/vyomi-cloud/appliance/tree/upstream-state)
+
+| Issue | Cloud | Kind | Change | Opened |
+|---|---|---|---|---|
+| #90 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed | 2026-10-26 |
 
 ## Nano ↔ offline parity gaps
 
@@ -933,6 +1195,7 @@ SetVersionState
 
 | Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |
 |---|---|---|---|---|---|---|
+| 2026-10-26T15:30:03+00:00 | 13/22 | 516 | 103 | 188 | 12.8% |  |
 | 2026-10-26T14:22:51+00:00 | 13/22 | 517 | 102 | 117 | 12.8% | Fixed 2 UI findings (crawler Azure wizard/blade cascade = harness bug; offline S3 blank "Creation date"), added 1 test, 0 regressions checked beyond touched suites; commits are local only — the push t |
 | 2026-10-26T13:05:38+00:00 | 13/22 | 509 | 108 | 171 | 12.8% |  |
 |  | 0/0 | 0 | 0 | 69 | 12.8% |  |
