@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-26 16:57 UTC · refreshes after every pipeline run_
+_Updated 2026-10-26 17:02 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -25,7 +25,7 @@ _Updated 2026-10-26 16:57 UTC · refreshes after every pipeline run_
 | Service | Cloud | Stage | Checks | Still missing |
 |---|---|---|---|---|
 | AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 18/18 | — |
-| AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 18/18 | — |
+| AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | — |
 
 ## Released services
 
@@ -236,6 +236,8 @@ _Updated 2026-10-26 16:57 UTC · refreshes after every pipeline run_
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
 | ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
+| ✅ | blank like the real console: Events / Status reason | AWS console shows - for the Status reason of successful stack events |
+| ✅ | blank like the real console: Outputs / Export name | AWS console shows - for an output that declares no Export |
 
 </details>
 
