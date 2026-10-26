@@ -81,8 +81,9 @@ jobs:
         shell: pwsh
         run: |
           $ver = "${{ steps.rel.outputs.ver }}"; $prev = "${{ steps.rel.outputs.prev }}"
-          $vargs = @("-Msi", "msi\cloud-learn-$ver-x64.msi", "-Version", $ver, "-OutDir", "msi-validation")
-          if ($prev) { $vargs += @("-PrevMsi", "prev\cloud-learn-$($prev.TrimStart('v'))-x64.msi") }
+          # Hashtable splat: named parameters (an array would splat them positionally).
+          $vargs = @{ Msi = "msi\cloud-learn-$ver-x64.msi"; Version = $ver; OutDir = "msi-validation" }
+          if ($prev) { $vargs.PrevMsi = "prev\cloud-learn-$($prev.TrimStart('v'))-x64.msi" }
           ./tests/installer/validate-msi.ps1 @vargs
 
       - name: Job summary
