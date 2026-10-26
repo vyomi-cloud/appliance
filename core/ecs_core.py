@@ -632,8 +632,8 @@ def _new_task(store, cname: str, td: dict, *, launch_type, group, started_by, ov
     if store.runtime is not None:
         try:
             store.runtime.start(cname, t, td)
-        except Exception:
-            pass
+        except Exception as e:   # the real service stops a task whose containers cannot start
+            _stop(store, cname, t, f"Task failed to start: {e}", "TaskFailedToStart")
     return t
 
 

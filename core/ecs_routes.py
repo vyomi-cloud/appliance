@@ -43,6 +43,13 @@ def store():
                 except Exception:
                     pass
         st.persist = persist
+        if os.environ.get("VYOMI_ECS_DOCKER", "").strip().lower() in ("1", "true", "yes"):
+            try:   # Pro / Max: back tasks with real containers on the Docker substrate
+                from core import ecs_docker_runtime as _rt
+                if _rt.available():
+                    st.runtime = _rt.DockerRuntime()
+            except Exception:
+                pass
         _STORE = st
         if _MIRROR:
             try:
