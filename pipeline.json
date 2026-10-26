@@ -1,10 +1,10 @@
 {
- "updated": "2026-10-26 22:16 UTC",
+ "updated": "2026-10-26 22:29 UTC",
  "totals": {
   "aws": {
    "released": 12,
    "queue": 33,
-   "building": 0,
+   "building": 1,
    "in_gate": 8,
    "upstream": 435
   },
