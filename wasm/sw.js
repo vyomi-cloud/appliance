@@ -199,6 +199,26 @@ async function handleUpload(request, bucket, provider = "aws") {
   return json({ ok, uploaded: results.length, results }, ok ? 200 : 400);
 }
 
+// Real-cloud list price ($/month per resource) by census service key — mirrors the
+// table clouds.html uses for the Spaces cards, so both agree.
+const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,"microsoft.compute/virtualmachines":30.37,"microsoft.sql/servers":4.99,"microsoft.storage/storageaccounts":0.50,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.servicebus/namespaces":9.81,"microsoft.keyvault/vaults":0.03};
+async function nanoCostSavings() {
+  const now = Date.now();
+  const by_provider = { aws: 0, gcp: 0, azure: 0 };
+  let resource_count = 0;
+  for (const p of ["aws", "gcp", "azure"]) {
+    let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
+    if (!c || typeof c.ts !== "number" || (now - c.ts) >= 60000) continue;
+    resource_count += c.resources || 0;
+    const bs = c.by_service || {};
+    let usd = 0;
+    for (const k in bs) usd += (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+    by_provider[p] = Math.round(usd * 100) / 100;
+  }
+  const savings_usd = Math.round((by_provider.aws + by_provider.gcp + by_provider.azure) * 100) / 100;
+  return { resource_count, savings_usd, by_provider, period: "monthly" };
+}
+
 // Each console gates on an active space whose provider matches it. We derive
 // the provider from the page making the request, so aws/gcp/azure consoles all
 // pass their gate from the same in-browser substrate.
@@ -716,6 +736,15 @@ self.addEventListener("fetch", (event) => {
       // The active space is provider-specific (console gate) — derive it from
       // the requesting page so every console opens against a matching space.
       // Prefer a user-created space for that provider (honours its name/region).
+      // Host CPU/memory budget chip: Nano has no host to carve a budget from; report
+      // the browser's own CPU/memory so the chip renders instead of a 501.
+      if (apiPath === "/api/runtime/budget" && method === "GET") {
+        const cpu = (self.navigator && self.navigator.hardwareConcurrency) || 1;
+        const memMb = Math.round((((self.navigator && self.navigator.deviceMemory) || 4)) * 1024);
+        return json({ budget: { cpu, memory_mb: memMb }, used: { cpu: 0, memory_mb: 0 },
+                      free: { cpu, memory_mb: memMb }, host: { cpu, memory_mb: memMb },
+                      budget_pct: 100, clamp: [30, 100], bypassed: true });
+      }
       if (apiPath === "/api/spaces/active" && method === "GET") {
         const prov = await providerOf(event.clientId);
         let match = null;
@@ -735,6 +764,10 @@ self.addEventListener("fetch", (event) => {
         for (const s of [...(fx.spaces || []), ...created])
           if (!seen.has(s.space_id)) { seen.add(s.space_id); spaces.push(s); }
         let active = fx.active_space_id; try { active = (await metaGet("active")) || active; } catch (_) {}
+        // Every space reports the same cost_savings shape the appliance's core/cost_model
+        // produces, from the live census of the one shared in-browser substrate.
+        const cs = await nanoCostSavings();
+        for (const s of spaces) s.cost_savings = cs;
         return json({ spaces, active_space_id: active });
       }
       // Appliance-health pies: per-cloud distribution computed live from the
