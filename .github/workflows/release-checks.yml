@@ -133,19 +133,20 @@ jobs:
           collect release-startup-validate.yml "startup-check-$VER" startup
           cat ext/index.txt
 
+      # The private repo saves each version's result as results/<ver>.md on its
+      # state branch; reading a file only needs Contents access on the token.
       - name: Windows E2E (private repo)
         run: |
           if [ -z "$E2E_TOKEN" ]; then echo "windows-e2e|||no access" >> ext/index.txt; exit 0; fi
-          # The run that produced this version's artifact (newest first).
-          found=""
-          for line in $(GH_TOKEN="$E2E_TOKEN" gh run list -R vyomi-cloud/release-e2e --workflow windows-e2e.yml -L 30 \
-                         --status completed --json databaseId,conclusion -q '.[] | "\(.databaseId),\(.conclusion)"' 2>/dev/null); do
-            id="${line%%,*}"; concl="${line##*,}"
-            if GH_TOKEN="$E2E_TOKEN" gh run download "$id" -R vyomi-cloud/release-e2e -n "windows-e2e-$VER" -D ext/windows-e2e >/dev/null 2>&1; then
-              found="$id|$concl"; break
-            fi
-          done
-          echo "windows-e2e|windows-e2e.yml|${found%%|*}|${found##*|}" >> ext/index.txt
+          mkdir -p ext/windows-e2e/startup-check
+          if GH_TOKEN="$E2E_TOKEN" gh api "repos/vyomi-cloud/release-e2e/contents/results/$VER.md?ref=state" -q .content 2>/dev/null \
+               | base64 -d > /tmp/win.md 2>/dev/null && [ -s /tmp/win.md ]; then
+            concl=$(sed -n 's/^result: //p' /tmp/win.md | head -1)
+            sed '1,/^$/d' /tmp/win.md > ext/windows-e2e/startup-check/summary.md
+            echo "windows-e2e|windows-e2e.yml||${concl:-unknown}" >> ext/index.txt
+          else
+            echo "windows-e2e|windows-e2e.yml||" >> ext/index.txt
+          fi
 
       - name: Write RELEASE-CHECKS.md
         run: |
@@ -177,16 +178,15 @@ jobs:
             [ -f ext/msi/summary.md ] && { echo "## MSI"; echo; cat ext/msi/summary.md; echo; }
             [ -f ext/startup/summary.md ] && { echo "## Startup (all services + UI)"; echo; cat ext/startup/summary.md; echo; }
             [ -f ext/windows-e2e/startup-check/summary.md ] && { echo "## Windows E2E"; echo; cat ext/windows-e2e/startup-check/summary.md; echo; }
-          } > RELEASE-CHECKS.md
-          cat RELEASE-CHECKS.md >> "$GITHUB_STEP_SUMMARY"
+          } > /tmp/RELEASE-CHECKS.md
+          cat /tmp/RELEASE-CHECKS.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit to release/v${{ needs.resolve.outputs.ver }}
         run: |
           B="release/v$VER"
           git config user.name "vyomi-release-bot"; git config user.email "release-bot@users.noreply.github.com"
-          cp RELEASE-CHECKS.md /tmp/RELEASE-CHECKS.md
-          if git ls-remote --exit-code origin "refs/heads/$B" >/dev/null; then git fetch -q origin "$B"; git checkout -q -B "$B" FETCH_HEAD
-          else git checkout -q -B "$B" "$TAG"; fi
+          if git ls-remote --exit-code origin "refs/heads/$B" >/dev/null; then git fetch -q origin "$B"; git checkout -q -f -B "$B" FETCH_HEAD
+          else git checkout -q -f -B "$B" "$TAG"; fi
           cp /tmp/RELEASE-CHECKS.md RELEASE-CHECKS.md
           # The release branch's front page IS the checks report (main's README
           # is unaffected; the tag and published artifacts don't change).
