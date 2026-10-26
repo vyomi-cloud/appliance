@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-26 15:11 UTC",
+ "updated": "2026-10-26 15:21 UTC",
  "totals": {
   "aws": {
    "released": 12,
@@ -7,21 +7,24 @@
    "Released": 12,
    "\ud83d\udccb Queued": 15,
    "\ud83d\udee0 Building": 1,
-   "\u00b7 Not filed": 17
+   "\u00b7 Not filed": 17,
+   "upstream": 435
   },
   "gcp": {
    "released": 12,
    "queue": 24,
    "Released": 12,
    "\ud83d\udccb Queued": 12,
-   "\u00b7 Not filed": 12
+   "\u00b7 Not filed": 12,
+   "upstream": 316
   },
   "azure": {
    "released": 12,
    "queue": 24,
    "Released": 12,
    "\ud83d\udccb Queued": 12,
-   "\u00b7 Not filed": 12
+   "\u00b7 Not filed": 12,
+   "upstream": 317
   }
  }
 }
