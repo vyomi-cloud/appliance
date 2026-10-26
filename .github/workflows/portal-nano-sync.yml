@@ -1,0 +1,98 @@
+name: Portal Nano sync (once a day)
+
+# The portal serves its own copy of Nano (portal/app/nano) and every merge to
+# portal main is a paid DigitalOcean deploy, so Nano changes go to the portal
+# at most ONCE A DAY, in one PR merged once: everything that changed in the
+# Nano bundle on appliance main since the last sync — daily conformance fixes,
+# new services' Nano code, direct fixes. Applied as a patch so portal-only edits
+# survive (same rules as wasm/vendor_to_portal.py).
+#
+# The last synced appliance commit is recorded in the portal itself
+# (app/nano/APPLIANCE_SYNC.json), in the same commit, so the next sync diffs
+# from exactly there. Dispatched by every hourly conformance run; it only acts
+# from 22:00 IST and only if it hasn't synced today (force overrides both).
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Sync now even if already synced today / before 22:00 IST'
+        type: boolean
+        default: false
+
+concurrency:
+  group: portal-nano-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PORTAL_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+      # Appliance commit portal #13 was synced from (daily PR #48), used only
+      # until the first sync writes APPLIANCE_SYNC.json.
+      INITIAL_BASE: 38bfb70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sync the day's Nano changes to the portal
+        run: |
+          set -e
+          TODAY=$(TZ=Asia/Kolkata date +%F); HOUR=$(TZ=Asia/Kolkata date +%H)
+          git clone -q "https://x-access-token:${PORTAL_TOKEN}@github.com/vyomi-cloud/portal.git" /tmp/portal
+          MARK=/tmp/portal/app/nano/APPLIANCE_SYNC.json
+          BASE=$(python3 -c "import json;print(json.load(open('$MARK'))['sha'])" 2>/dev/null || echo "$INITIAL_BASE")
+          LAST=$(python3 -c "import json;print(json.load(open('$MARK'))['date'])" 2>/dev/null || echo "")
+          if [ "${{ inputs.force }}" != "true" ]; then
+            if [ "$LAST" = "$TODAY" ]; then echo "Already synced today ($TODAY)."; exit 0; fi
+            if [ "$HOUR" -lt 22 ]; then echo "Waiting for 22:00 IST (now $HOUR:xx)."; exit 0; fi
+          fi
+          HEAD=$(git rev-parse origin/main)
+          echo "Nano changes $BASE..$HEAD"
+          git diff --name-only "$BASE" "$HEAD" -- wasm/ > /tmp/changed.txt
+          python3 - > /tmp/bundle-files.txt <<'PY'
+          import sys
+          sys.path.insert(0, "wasm")
+          from vendor_to_portal import in_bundle
+          for line in open("/tmp/changed.txt"):
+              rel = line.strip()[len("wasm/"):]
+              if rel and in_bundle(rel):
+                  print("wasm/" + rel)
+          PY
+          if [ ! -s /tmp/bundle-files.txt ]; then echo "No Nano bundle changes since $BASE: no portal deploy today."; exit 0; fi
+          cat /tmp/bundle-files.txt
+          git diff --binary "$BASE" "$HEAD" -- $(cat /tmp/bundle-files.txt) \
+            | sed -e 's#^\(diff --git a/\)wasm/#\1app/nano/#' -e 's# b/wasm/# b/app/nano/#' \
+                  -e 's#^--- a/wasm/#--- a/app/nano/#' -e 's#^+++ b/wasm/#+++ b/app/nano/#' \
+                  -e 's#^\(rename\|copy\) \(from\|to\) wasm/#\1 \2 app/nano/#' > /tmp/nano.patch
+          cd /tmp/portal
+          git config user.name "vyomi-conformance-bot"
+          git config user.email "conformance-bot@users.noreply.github.com"
+          B="nano-sync/$TODAY"
+          git checkout -q -B "$B"
+          if ! git apply --check /tmp/nano.patch 2>/tmp/apply.err; then
+            cat /tmp/apply.err
+            BODY=$(printf 'The daily Nano sync %s..%s does not apply to portal/app/nano (the portal copy diverged). Nothing was deployed.\n\n```\n%s\n```\n\nFiles:\n%s' "$BASE" "$HEAD" "$(head -c 3000 /tmp/apply.err)" "$(sed 's/^/- /' /tmp/bundle-files.txt)")
+            GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" gh issue create -R "${{ github.repository }}" --title "Portal Nano sync blocked $TODAY" --body "$BODY" || true
+            echo "::error::Nano patch doesn't apply to the portal copy."; exit 1
+          fi
+          git apply /tmp/nano.patch
+          printf '{"sha": "%s", "date": "%s"}\n' "$HEAD" "$TODAY" > "$MARK"
+          git add -A app/nano
+          git commit -q -m "nano: daily sync from appliance ${BASE:0:7}..${HEAD:0:7}" \
+            -m "All Nano bundle changes on vyomi-cloud/appliance main since the last sync, applied as one patch (portal-only edits preserved). One deploy per day."
+          git push -q -f origin "$B"
+          URL=$(GH_TOKEN="$PORTAL_TOKEN" gh pr list -R vyomi-cloud/portal --head "$B" --state open --json url -q '.[0].url')
+          [ -n "$URL" ] || URL=$(GH_TOKEN="$PORTAL_TOKEN" gh pr create -R vyomi-cloud/portal --base main --head "$B" \
+            --title "Nano daily sync $TODAY" \
+            --body "Everything that changed in the Nano bundle on appliance main ${BASE:0:7}..${HEAD:0:7}, as one patch. Merged automatically: the portal deploys Nano once a day.")
+          GH_TOKEN="$PORTAL_TOKEN" gh pr merge "$URL" --squash
+          echo "Synced and merged: $URL (one portal deploy)."

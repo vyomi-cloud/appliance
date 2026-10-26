@@ -241,6 +241,9 @@ jobs:
              && [ -z "$(gh pr list -R "${{ github.repository }}" --head "conformance/daily-$yday" --state all --json number -q '.[0].number')" ]; then
             gh workflow run conformance-daily-pr.yml -R "${{ github.repository }}" --ref main -f date="$yday" && echo "Daily PR dispatched for $yday (missed)."
           fi
+          # Nano → portal, once a day (portal-nano-sync.yml acts only from
+          # 22:00 IST and only if it hasn't synced today: one paid deploy/day).
+          gh workflow run portal-nano-sync.yml -R "${{ github.repository }}" --ref main || true
           # Expansion agent: daily cadence = one run per 24h started from here;
           # continuous = revive its chain if nothing is running or queued.
           if gh workflow view expansion-agent.yml -R "${{ github.repository }}" >/dev/null 2>&1; then

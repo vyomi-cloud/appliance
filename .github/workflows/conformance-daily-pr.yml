@@ -3,8 +3,8 @@ name: Daily conformance PR
 # 23:45 IST every day: open one consolidated PR per repo with the day's
 # conformance-agent fixes.
 #   - appliance: conformance/daily-<date> → main
-#   - portal:    the day's Nano bundle changes, applied to portal/app/nano as a
-#                patch so portal-only edits survive (needs CONFORMANCE_BOT_TOKEN)
+#   - portal:    none here — Nano reaches the portal in the nightly
+#                portal-nano-sync.yml (one paid deploy a day)
 # Merging the appliance PR cuts the next patch release and merges the linked
 # portal PR (conformance-release.yml).
 #
@@ -70,7 +70,9 @@ jobs:
       # cleanly, no portal PR is opened and the appliance PR says why.
       - name: Portal PR (the day's Nano bundle changes)
         id: portal
-        if: steps.day.outputs.skip != '1'
+        # Off: the portal deploys once a day from portal-nano-sync.yml, which
+        # carries these changes after this PR is merged.
+        if: false
         run: |
           B="${{ steps.day.outputs.branch }}"; D="${{ steps.day.outputs.date }}"
           if [ -z "$PORTAL_TOKEN" ]; then
