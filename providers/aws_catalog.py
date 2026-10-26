@@ -514,6 +514,44 @@ RESOURCE_CATALOG_AWS = [
         "endpoints": {},
     },
     # ========================================================================
+    # ECR — private container registry. Repositories are the primary entity;
+    # served by core/ecr_core.py (routes/aws_ecr.py offline, the Nano adapter in
+    # the browser). Native wire: X-Amz-Target AmazonEC2ContainerRegistry_V20150921.
+    # ========================================================================
+    {
+        "key": "ecr", "label": "ECR", "icon": "deployed_code",
+        "namespace": "AWS/ECR", "service": "ecr",
+        "collection_path": "/api/aws/ecr/repositories",
+        "resource_path":   "/api/aws/ecr/repositories/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "repositories": {"method": "GET",  "path": "/api/aws/ecr/repositories"},
+            "images":       {"method": "GET",  "path": "/api/aws/ecr/repositories/{name}/images"},
+            "delete":       {"method": "DELETE", "path": "/api/aws/ecr/repositories/{name}"},
+        },
+        "rail_items": [
+            {"key": "repositories", "label": "Private repositories", "icon": "deployed_code", "type": "primary"},
+        ],
+        "columns": [
+            ["name",           "Repository name"],
+            ["uri",            "URI"],
+            ["created",        "Created at"],
+            ["tag_mutability", "Tag immutability"],
+            ["scan_on_push",   "Scan on push"],
+            ["encryption",     "Encryption"],
+            ["image_count",    "Images"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Repository name", "default": "my-app/web"},
+            {"name": "tag_mutability", "label": "Tag immutability (MUTABLE or IMMUTABLE)", "default": "MUTABLE"},
+            {"name": "scan_on_push", "label": "Scan on push (true or false)", "default": "true"},
+            {"name": "encryption", "label": "Encryption (AES256 or KMS)", "default": "AES256"},
+        ],
+        "editable": False,
+        "endpoints": {},
+    },
+    # ========================================================================
     # Secrets Manager — secrets + rotation + replication
     # ========================================================================
     {

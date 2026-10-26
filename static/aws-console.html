@@ -707,6 +707,7 @@ function renderRail(){
     rail.append(el("h3",{}, "Console Home"));
     const groups = [
       ["Compute", ["ec2", "lambda"]],
+      ["Containers", ["ecr"]],
       ["Storage", ["s3"]],
       ["Databases", ["rds", "dynamodb"]],
       ["Application Integration", ["sqs", "apigateway", "eventbridge"]],
@@ -3198,6 +3199,28 @@ SUB_RENDERERS.rdsparametergroups = function(svc, full, host){
       el("td",{}, el("a",{class:"id"}, g.name||"—")),
       el("td",{}, g.family||"—"),
       el("td",{}, g.description||""))));
+    host.append(tbl);
+  });
+};
+
+SUB_RENDERERS.ecrimages = function(svc, full, host){
+  const name = itemKey(svc, full);
+  const ap = svc.api_paths.images;
+  fetch(ORIGIN+fillPath(ap.path, {name})).then(r=>r.json()).then(j=>{
+    const imgs = j.images || j.items || [];
+    if (!imgs.length) {
+      host.append(el("div",{class:"empty"}, "No images in "+name+" yet — push one with docker push or aws ecr put-image."));
+      return;
+    }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, ["Image tags","Image digest","Type","Size","Pushed at","Scan status"].map(h => el("th",{}, h))));
+    imgs.forEach(i => tbl.append(el("tr",{},
+      el("td",{}, el("a",{class:"id"}, i.tags)),
+      el("td",{class:"mono small"}, i.digest),
+      el("td",{}, i.type),
+      el("td",{}, i.size),
+      el("td",{class:"small"}, i.pushed),
+      el("td",{}, i.scan_status))));
     host.append(tbl);
   });
 };

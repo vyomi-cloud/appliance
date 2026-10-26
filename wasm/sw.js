@@ -209,6 +209,32 @@ function nanoSpace(provider) {
            status: "running", active_region: region, active_account: acct };
 }
 
+// ── Nano cost-savings metrics for the active space ───────────────────
+// The offline appliance reports space.cost_savings {resource_count, savings_usd,
+// by_provider} (core/cost_model). Nano derives the same block from the LIVE
+// census its console page persists (nano-boot.writeCensus), priced with the same
+// list-price rates the console's savings card uses (aws-console _NANO_RATE).
+const NANO_RATE = {
+  s3: 0.50, dynamodb: 1.25, ecr: 0.10, kms: 1.00, secretsmanager: 0.40, sqs: 0.40, iam: 0, rds: 25.55, ec2: 30.37,
+  lambda: 0.20, apigateway: 3.50, vpc: 0, compute: 24.53, storage: 0.50, cloudsql: 25.00, pubsub: 0.40,
+  firestore: 0.18, functions: 0.20, secretmanager: 0.18,
+  "microsoft.compute/virtualmachines": 30.37, "microsoft.sql/servers": 4.99, "microsoft.storage/storageaccounts": 0.50,
+  "microsoft.documentdb/databaseaccounts": 24.48, "microsoft.web/sites": 0.20, "microsoft.servicebus/namespaces": 9.81,
+  "microsoft.keyvault/vaults": 0.03,
+};
+async function nanoCostSavings(provider) {
+  let c = null; try { c = await metaGet("census:" + provider); } catch (_) {}
+  const bs = (c && c.by_service) || {};
+  let usd = 0;
+  for (const k of Object.keys(bs)) usd += (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+  usd = Math.round(usd * 100) / 100;
+  return { resource_count: (c && c.resources) || 0, savings_usd: usd, by_provider: { [provider]: usd } };
+}
+async function withSavings(space) {
+  if (!space || !space.provider) return space;
+  return { ...space, cost_savings: await nanoCostSavings(space.provider) };
+}
+
 // ── User-created spaces (persisted) ───────────────────────────────────
 // Nano's default spaces come from the fixture (read-only); spaces the user
 // creates are persisted in IndexedDB so they survive reloads AND show up in the
@@ -555,6 +581,17 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "extras", "List",   { key: _ex[1] }] };
     if (method === "POST") return { tuple: ["aws", "extras", "Create", { key: _ex[1], ...(body || {}) }] };
   }
+  // ECR (core/ecr_core.py) — repositories + images
+  if (path === "/api/aws/ecr/repositories") {
+    if (method === "GET")  return { tuple: ["aws", "ecr", "List", {}] };
+    if (method === "POST") return { tuple: ["aws", "ecr", "Create", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/ecr\/repositories\/(.+)\/images$/);
+  if (m && method === "GET") return { tuple: ["aws", "ecr", "Images", { name: dec(m[1]) }] };
+  m = path.match(/^\/api\/aws\/ecr\/repositories\/(.+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "ecr", "Get", { name: dec(m[1]) }] };
+  if (m && (method === "PATCH" || method === "PUT")) return { tuple: ["aws", "ecr", "Update", { name: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "ecr", "Delete", { name: dec(m[1]) }] };
   // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
   if (path === "/api/eventbridge/rules") {
     if (method === "GET")  return { tuple: ["aws", "eventbridge", "ListRules", {}] };
@@ -725,7 +762,7 @@ self.addEventListener("fetch", (event) => {
           match = created.find((s) => s.space_id === activeId && s.provider === prov)
                || created.filter((s) => s.provider === prov).pop();
         } catch (_) {}
-        return json({ space: match || nanoSpace(prov) });
+        return json({ space: await withSavings(match || nanoSpace(prov)) });
       }
       // Spaces list = fixture defaults + persisted user-created (deduped).
       if (apiPath === "/api/spaces" && method === "GET") {
@@ -735,7 +772,9 @@ self.addEventListener("fetch", (event) => {
         for (const s of [...(fx.spaces || []), ...created])
           if (!seen.has(s.space_id)) { seen.add(s.space_id); spaces.push(s); }
         let active = fx.active_space_id; try { active = (await metaGet("active")) || active; } catch (_) {}
-        return json({ spaces, active_space_id: active });
+        const withCs = [];
+        for (const sp of spaces) withCs.push(await withSavings(sp));
+        return json({ spaces: withCs, active_space_id: active });
       }
       // Appliance-health pies: per-cloud distribution computed live from the
       // in-browser spaces (the only CENTRAL resource data — the cores' resources

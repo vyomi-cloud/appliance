@@ -9,7 +9,7 @@ work in the console exactly as they do over the wire:
   - Service Bus topics live in the shared messaging store.
   - API Gateway AWS_PROXY integrations invoke functions from the SAME Lambda registry.
 
-Services covered: lambda, apigateway, vpc, eventbridge (AWS) + servicebus, azuresql,
+Services covered: lambda, apigateway, vpc, eventbridge, ecr (AWS) + servicebus, azuresql,
 azurerbac (Azure). Pure core calls, no fastapi/boto3 — loads under Pyodide.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import types
 
-from core import lambda_core, apigateway_core, vpc_core, eventbridge_core
+from core import lambda_core, apigateway_core, vpc_core, eventbridge_core, ecr_core
 from core import azure_servicebus_core, azure_sql_core, azure_iam_core
 from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
 
@@ -235,6 +235,37 @@ def eb_put_event(p):
                                        "DetailType": str(p.get("detailType") or ""),
                                        "Detail": detail or "{}"}]})
     return {"ok": True, "eventId": (r.body.get("Entries") or [{}])[0].get("EventId")}
+
+
+# ── ECR (repositories + images, via core/ecr_core.py) ──────────────────────
+# One EcrStore, shared with the native-wire relay through the nano_registry
+# singleton, so an `aws ecr` call and the console see the same repositories.
+from core import nano_registry as _nreg
+ECR = _nreg.get()["ecr"]
+
+
+def ecr_list(p=None):
+    return ecr_core.console_list(ECR)
+
+
+def ecr_create(p):
+    return ecr_core.console_create(ECR, p or {})
+
+
+def ecr_get(p):
+    return ecr_core.console_get(ECR, str(p.get("name") or ""))
+
+
+def ecr_update(p):
+    return ecr_core.console_update(ECR, str(p.get("name") or ""), p or {})
+
+
+def ecr_delete(p):
+    return ecr_core.console_delete(ECR, str(p.get("name") or ""))
+
+
+def ecr_images(p):
+    return ecr_core.console_images(ECR, str(p.get("name") or ""))
 
 
 # ── Azure Service Bus (topics + subscriptions + send/receive) ──────────────

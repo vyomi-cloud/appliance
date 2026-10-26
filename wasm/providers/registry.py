@@ -233,6 +233,11 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
             }
+            try:
+                from . import dataplane_adapter as _D
+                aws_counts["ecr"] = len(_D.ecr_list().get("repositories", []))
+            except Exception:
+                pass
             for svc, n in aws_counts.items():
                 if n:
                     by_service[svc] = by_service.get(svc, 0) + n
