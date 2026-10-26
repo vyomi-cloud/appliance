@@ -12,6 +12,7 @@ from urllib.parse import parse_qsl
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
+from core import app_context as ctx
 from core import cloudformation_core as cfn
 from core.persistent_store import PersistentCfnStore, SqliteStateBackend
 
@@ -37,6 +38,9 @@ async def handle(request: Request) -> Response:
     if raw:
         params.update(dict(parse_qsl(raw.decode("utf-8", errors="ignore"), keep_blank_values=True)))
     r = cfn.dispatch(get_store(), params)
+    action = params.get("Action", "")
+    if r.status < 300 and action.startswith(("Create", "Update", "Delete", "Execute")):
+        ctx.record_usage("cloudformation." + action, {"name": params.get("StackName", "")})   # refreshes cost savings
     return Response(content=r.body, status_code=r.status, media_type="text/xml")
 
 
@@ -59,6 +63,8 @@ def register(app: FastAPI) -> None:
         except Exception:
             body = {}
         r = cfn.console_create(get_store(), body if isinstance(body, dict) else {})
+        if r.get("ok"):
+            ctx.record_usage("cloudformation.create_stack", {"name": (body or {}).get("name", "")})
         return JSONResponse(r, status_code=200 if r.get("ok") else 400)
 
     @app.get(base + "/{name}")
@@ -69,4 +75,6 @@ def register(app: FastAPI) -> None:
     @app.delete(base + "/{name}")
     async def cfn_delete(name: str) -> Response:
         r = cfn.console_delete(get_store(), name)
+        if r.get("ok"):
+            ctx.record_usage("cloudformation.delete_stack", {"name": name})
         return JSONResponse(r, status_code=200 if r.get("ok") else 400)

@@ -45,5 +45,17 @@
     "offline-ui-aws-cloudformation",
     "nano-ui-aws-cloudformation"
   ],
-  "status": "ready"
+  "status": "ready",
+  "blank_like_real_console": [
+    {
+      "tab": "Events",
+      "column": "Status reason",
+      "why": "AWS console shows - for the Status reason of successful stack events"
+    },
+    {
+      "tab": "Outputs",
+      "column": "Export name",
+      "why": "AWS console shows - for an output that declares no Export"
+    }
+  ]
 }
