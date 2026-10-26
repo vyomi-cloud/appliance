@@ -95,6 +95,12 @@ the upstream id and the checklist.
    A container backend looks like `{"kind": "container", "name": "valkey",
    "image": "valkey/valkey:8.0.1-alpine", "license": "BSD-3-Clause", "tier": "lite",
    "compose_service": "vyomi-valkey"}`; an in-process one is `{"kind": "in-process"}`.
+   Fill every column the real cloud fills. Where the real console itself shows
+   `-` (CloudFormation "Status reason" on a successful event, an output with no
+   export), don't invent a value: declare it in the manifest,
+   `"blank_like_real_console": [{"tab": "Events", "column": "Status reason",
+   "why": "AWS shows - for successful events"}]`. The gate prints each `why` for
+   review; anything else blank fails.
    Set `"status": "ready"` only when you believe every item above passes locally.
 
 ## How to work

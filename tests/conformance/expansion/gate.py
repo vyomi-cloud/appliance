@@ -202,6 +202,20 @@ def static(m: dict) -> None:
         check("claimed operations exist in the real API", not bad, f"not upstream: {bad[:10]}")
 
 
+def blank_like_real(m: dict, f: dict) -> bool:
+    """A blank cell the real cloud console also shows blank (e.g. CloudFormation
+    "Status reason" on a successful event). Declared per column in the manifest
+    as {"tab": ..., "column": ..., "why": ...}; `why` is required and printed in
+    the gate report so a reviewer can check it against the real console."""
+    if f.get("type") != "PLACEHOLDER_CELL":
+        return False
+    for e in m.get("blank_like_real_console", []):
+        if e.get("why") and f'column "{e.get("column")}"' in f.get("detail", "") and \
+                (not e.get("tab") or f.get("tab") == e["tab"] or f"tab {e['tab']}:" in f.get("detail", "")):
+            return True
+    return False
+
+
 def live(m: dict) -> None:
     cloud, key = m["cloud"], m["key"]
     b = m.get("backend") or {}
@@ -241,7 +255,7 @@ def live(m: dict) -> None:
                     and (r["service"].lower() == m["name"].lower() or key.lower() in r["service"].lower().replace(" ", ""))]
         except Exception:
             rows = []
-        bad = [x for r in rows for x in r.get("findings", [])]
+        bad = [x for r in rows for x in r.get("findings", []) if not blank_like_real(m, x)]
         tabs[target] = {t if isinstance(t, str) else t.get("name") for r in rows for t in r.get("tabs", [])}
         check(f"UI crawl clean on {target}", rows and not bad,
               "service not on the rail" if not rows else "; ".join(f"{x['type']}: {x['detail']}" for x in bad[:5]))
@@ -257,6 +271,9 @@ def main() -> int:
     static(m)
     if "--static" not in sys.argv:
         live(m)
+    for e in m.get("blank_like_real_console", []):
+        check(f"blank like the real console: {e.get('tab', '*')} / {e.get('column')}", bool(e.get("why")),
+              e.get("why") or "needs a why (what the real console shows)")
     failed = [r for r in results if not r[1]]
     os.makedirs(OUT, exist_ok=True)
     md = [f"### Service gate — {m.get('cloud', '?').upper()} {m.get('name', '?')} — "

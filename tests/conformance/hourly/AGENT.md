@@ -42,7 +42,9 @@ fast, and to prove it with conformance tests.
    column the grid shows, filled with realistic, provider-shaped values. A grid must
    never show `-`, `—`, blank, `undefined` or `null` for a field the real cloud fills.
    Fix PLACEHOLDER_CELL and CREATE_* findings at the source (the create handler / the
-   provider model), not by hiding the column.
+   provider model), not by hiding the column. Never invent a value the real
+   cloud wouldn't show: where the real console itself shows `-` (e.g. CloudFormation
+   "Status reason" on a successful event), leave it and list it in your summary.
 3. **Implement the console: no static or unimplemented surfaces.** Each
    `ui-*.json` service row has `surfaces`: the service page, create, resource
    detail and every detail tab, each classified `live` (loads data from the API or
