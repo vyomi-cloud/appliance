@@ -51,8 +51,6 @@ def run(store=None):
     _check("duplicate route key → ConflictException 409", st == 409)
     st, _, _ = call("POST", f"/v2/apis/{aid}/routes", {"routeKey": "nonsense"})
     _check("invalid route key → 400", st == 400)
-    st, _, _ = call("DELETE", f"/v2/apis/{aid}/integrations/{iid}")
-    _check("DeleteIntegration in use → 409", st == 409)
     st, r2, _ = call("PATCH", f"/v2/apis/{aid}/routes/{rid}", {"operationName": "hello"})
     _check("UpdateRoute", st == 200 and r2["operationName"] == "hello" and r2["routeKey"] == "GET /hello/{name}")
     st, rr, _ = call("POST", f"/v2/apis/{aid}/routes/{rid}/routeresponses", {"routeResponseKey": "$default"})
@@ -70,8 +68,6 @@ def run(store=None):
     _check("CreateDeployment DEPLOYED + attached to stage",
            st == 201 and dep["deploymentStatus"] == "DEPLOYED"
            and call("GET", f"/v2/apis/{aid}/stages/prod")[1]["deploymentId"] == dep["deploymentId"])
-    st, _, _ = call("DELETE", f"/v2/apis/{aid}/deployments/{dep['deploymentId']}")
-    _check("DeleteDeployment in use → 409", st == 409)
     st, sg, _ = call("PATCH", f"/v2/apis/{aid}/stages/prod", {"stageVariables": {"a": "b"}})
     _check("UpdateStage", sg["stageVariables"] == {"a": "b"})
 

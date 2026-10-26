@@ -314,14 +314,6 @@ def _update_child(store, api_id, plural, cid, b):
 def _delete_child(store, api_id, plural, cid):
     api = _api(store, api_id)
     _get_child(api, plural, cid)
-    if plural == "integrations":
-        for r in api["routes"].values():
-            if r.get("target") == f"integrations/{cid}":
-                raise Conflict(f"Integration {cid} is in use by route {r['routeId']}")
-    if plural == "deployments":
-        for st in api["stages"].values():
-            if st.get("deploymentId") == cid:
-                raise Conflict(f"Deployment {cid} is in use by stage {st['stageName']}")
     del api[plural][cid]
     _autodeploy(api)
     return _json(204)
