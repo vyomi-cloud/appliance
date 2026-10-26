@@ -1,4 +1,5 @@
 name: Validate Windows MSI
+run-name: "Validate Windows MSI ${{ github.event.workflow_run.head_branch || inputs.version || 'latest' }}"
 
 # After every appliance release, install the published MSI on a clean x64
 # Windows runner and validate it end to end (tests/installer/validate-msi.ps1):

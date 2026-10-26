@@ -1,4 +1,5 @@
 name: Validate release startup
+run-name: "Validate release startup ${{ github.event.workflow_run.head_branch || inputs.version || 'latest' }}"
 
 # After a release's Docker images are published, boot that exact release the
 # way `vyomi up` does on the Docker tiers (the release tarball's

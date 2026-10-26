@@ -1,0 +1,188 @@
+name: Release checks report
+
+# After every appliance release: install → check → uninstall each Linux/macOS
+# package (DEB + RPM, both variants; Homebrew vyomi + vyomi-docker), collect
+# the MSI (Validate Windows MSI), startup (Validate release startup) and
+# Windows E2E (private vyomi-cloud/release-e2e) results, and commit one
+# RELEASE-CHECKS.md to the release/vX.Y.Z branch.
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release to check (e.g. 3.0.7). Blank = latest release.'
+        required: false
+
+permissions:
+  contents: write     # commit RELEASE-CHECKS.md to release/vX.Y.Z
+  actions: read
+
+concurrency:
+  group: release-checks-${{ github.event.workflow_run.head_branch || inputs.version || 'latest' }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion != 'cancelled' && startsWith(github.event.workflow_run.head_branch, 'v'))
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.r.outputs.tag }}
+      ver: ${{ steps.r.outputs.ver }}
+    env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+    steps:
+      - id: r
+        run: |
+          TAG="${{ github.event.workflow_run.head_branch }}"
+          [ -n "$TAG" ] || { [ -n "${{ inputs.version }}" ] && TAG="v${{ inputs.version }}" || TAG=$(gh release view -R "${{ github.repository }}" --json tagName -q .tagName); }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"; echo "ver=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+  deb:
+    needs: resolve
+    runs-on: ubuntu-latest
+    env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}', VER: '${{ needs.resolve.outputs.ver }}' }
+    steps:
+      - uses: actions/checkout@v4
+      - run: gh release download "v$VER" -p "*_${VER}_all.deb" -D pkgs
+      - name: cloud-learn (.deb)
+        run: tests/installer/pkg_checks.sh deb "pkgs/cloud-learn_${VER}_all.deb" "$VER" out
+      - name: vyomi-docker (.deb)
+        if: always()
+        run: tests/installer/pkg_checks.sh deb "pkgs/vyomi-docker_${VER}_all.deb" "$VER" out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: checks-deb, path: out/ }
+
+  rpm:
+    needs: resolve
+    runs-on: ubuntu-latest
+    container: fedora:40
+    env: { VER: '${{ needs.resolve.outputs.ver }}' }
+    steps:
+      - run: dnf install -y -q git tar curl findutils which >/dev/null
+      - uses: actions/checkout@v4
+      - name: Download the RPMs
+        run: |
+          base="https://github.com/${{ github.repository }}/releases/download/v$VER"
+          mkdir -p pkgs
+          for f in "cloud-learn-$VER-1.noarch.rpm" "vyomi-docker-$VER-1.noarch.rpm"; do curl -fsSL "$base/$f" -o "pkgs/$f"; done
+      - name: cloud-learn (.rpm)
+        run: tests/installer/pkg_checks.sh rpm "pkgs/cloud-learn-$VER-1.noarch.rpm" "$VER" out
+      - name: vyomi-docker (.rpm)
+        if: always()
+        run: tests/installer/pkg_checks.sh rpm "pkgs/vyomi-docker-$VER-1.noarch.rpm" "$VER" out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: checks-rpm, path: out/ }
+
+  brew:
+    needs: resolve
+    runs-on: macos-latest
+    env: { VER: '${{ needs.resolve.outputs.ver }}' }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tap
+        run: brew tap vyomi-cloud/tap
+      - name: vyomi (Homebrew)
+        run: tests/installer/pkg_checks.sh brew vyomi "$VER" out
+      - name: vyomi-docker (Homebrew)
+        if: always()
+        run: tests/installer/pkg_checks.sh brew vyomi-docker "$VER" out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: checks-brew, path: out/ }
+
+  report:
+    needs: [resolve, deb, rpm, brew]
+    if: always() && needs.resolve.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      E2E_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+      TAG: ${{ needs.resolve.outputs.tag }}
+      VER: ${{ needs.resolve.outputs.ver }}
+      R: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/download-artifact@v4
+        with: { path: arts }
+
+      # MSI + startup checks run as their own workflows for this tag; wait for
+      # them (up to ~100 min) and pull their summaries.
+      - name: Collect MSI + startup results
+        run: |
+          mkdir -p ext
+          collect() {  # collect <workflow file> <artifact name> <label>
+            local wf="$1" art="$2" label="$3" id="" st="" concl=""
+            for i in $(seq 1 100); do
+              read -r id st concl < <(gh run list -R "$R" --workflow "$wf" -L 30 --json databaseId,status,conclusion,headBranch,displayTitle \
+                -q "[.[] | select(.displayTitle|test(\"(^| |v)$VER( |$)\"))][0] | \"\(.databaseId) \(.status) \(.conclusion)\"" 2>/dev/null)
+              [ -n "$id" ] && [ "$st" = completed ] && break
+              sleep 60
+            done
+            echo "$label|$wf|${id:-}|${concl:-not run}" >> ext/index.txt
+            [ -n "$id" ] && gh run download "$id" -R "$R" -n "$art" -D "ext/$label" 2>/dev/null || true
+          }
+          collect msi-validate.yml "msi-validation-$VER" msi
+          collect release-startup-validate.yml "startup-check-$VER" startup
+          cat ext/index.txt
+
+      - name: Windows E2E (private repo)
+        run: |
+          if [ -z "$E2E_TOKEN" ]; then echo "windows-e2e|||no access" >> ext/index.txt; exit 0; fi
+          line=$(GH_TOKEN="$E2E_TOKEN" gh run list -R vyomi-cloud/release-e2e --workflow windows-e2e.yml -L 30 \
+            --json databaseId,status,conclusion,displayTitle -q ".[] | select(.status==\"completed\" and (.displayTitle|test(\"(^| |v)$VER( |$)\"))) | \"\(.databaseId) \(.conclusion)\"" 2>/dev/null | head -1)
+          echo "windows-e2e|windows-e2e.yml|${line%% *}|${line##* }" >> ext/index.txt
+          [ -n "$line" ] && GH_TOKEN="$E2E_TOKEN" gh run download "${line%% *}" -R vyomi-cloud/release-e2e -n "windows-e2e-$VER" -D ext/windows-e2e 2>/dev/null || true
+
+      - name: Write RELEASE-CHECKS.md
+        run: |
+          res() { [ "$1" = success ] && echo "✅ passed" || { [ "$1" = skipped ] || [ -z "$1" ] && echo "— not run" || echo "❌ $1"; }; }
+          count() { f="$1"; [ -f "$f" ] && grep -oE '[0-9]+/[0-9]+ (checks )?passed' "$f" | head -1 || echo ""; }
+          url="${{ github.server_url }}/$R/actions/runs/${{ github.run_id }}"
+          {
+            echo "# Release checks — v$VER"
+            echo
+            echo "Generated $(date -u +'%Y-%m-%d %H:%M UTC') by [Release checks report]($url) for tag \`$TAG\`."
+            echo
+            echo "| Package / check | Platform | Result |"
+            echo "|---|---|---|"
+            echo "| DEB: cloud-learn + vyomi-docker | Ubuntu (GitHub) | $(res "${{ needs.deb.result }}") |"
+            echo "| RPM: cloud-learn + vyomi-docker | Fedora 40 (GitHub) | $(res "${{ needs.rpm.result }}") |"
+            echo "| Homebrew: vyomi + vyomi-docker | macOS (GitHub) | $(res "${{ needs.brew.result }}") |"
+            while IFS='|' read -r label wf id concl; do
+              case "$label" in
+                msi) name="MSI: install, upgrade, uninstall (+ signing)"; plat="Windows (GitHub)"; link="${{ github.server_url }}/$R/actions/runs/$id" ;;
+                startup) name="Startup: all services + UI status"; plat="Linux, release images"; link="${{ github.server_url }}/$R/actions/runs/$id" ;;
+                windows-e2e) name="Windows E2E: MSI → vyomi up → services + UI"; plat="Windows laptop (private runner)"; link="" ;;
+              esac
+              echo "| $name | $plat | $(res "$concl")$([ -n "$id" ] && [ -n "$link" ] && echo " ([run]($link))") |"
+            done < ext/index.txt
+            echo
+            for k in deb rpm brew; do
+              [ -f "arts/checks-$k/summary.md" ] && { echo "## ${k^^}"; echo; cat "arts/checks-$k/summary.md"; echo; }
+            done
+            [ -f ext/msi/summary.md ] && { echo "## MSI"; echo; cat ext/msi/summary.md; echo; }
+            [ -f ext/startup/summary.md ] && { echo "## Startup (all services + UI)"; echo; cat ext/startup/summary.md; echo; }
+            [ -f ext/windows-e2e/startup-check/summary.md ] && { echo "## Windows E2E"; echo; cat ext/windows-e2e/startup-check/summary.md; echo; }
+          } > RELEASE-CHECKS.md
+          cat RELEASE-CHECKS.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit to release/v${{ needs.resolve.outputs.ver }}
+        run: |
+          B="release/v$VER"
+          git config user.name "vyomi-release-bot"; git config user.email "release-bot@users.noreply.github.com"
+          cp RELEASE-CHECKS.md /tmp/RELEASE-CHECKS.md
+          if git ls-remote --exit-code origin "refs/heads/$B" >/dev/null; then git fetch -q origin "$B"; git checkout -q -B "$B" FETCH_HEAD
+          else git checkout -q -B "$B" "$TAG"; fi
+          cp /tmp/RELEASE-CHECKS.md RELEASE-CHECKS.md
+          git add RELEASE-CHECKS.md
+          git commit -q -m "docs(release): checks report for v$VER" || { echo "No change"; exit 0; }
+          git push -q origin "HEAD:refs/heads/$B"
+          echo "Report: ${{ github.server_url }}/$R/blob/$B/RELEASE-CHECKS.md" | tee -a "$GITHUB_STEP_SUMMARY"
