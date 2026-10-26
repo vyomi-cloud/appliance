@@ -217,5 +217,29 @@
   "gcp_findings": 69,
   "azure_checks_passed": 107,
   "azure_findings": 31
+ },
+ {
+  "at": "2026-10-26T18:32:21+00:00",
+  "commit": "43b733819761",
+  "suites_green": 14,
+  "suites_total": 23,
+  "checks_passed": 522,
+  "checks_failed": 101,
+  "api_coverage_pct": 12.8,
+  "ui_findings": 150,
+  "agent": "Fixed the Azure create-flow harness false findings and Azure VM billing; 2 commits, 1 test file added, offline stack not restarted so the live fix is unverified end to end.",
+  "new_features": 0,
+  "parity_gaps": 9,
+  "ops_tested_pct": 72.9,
+  "ui_clean_nano": 1,
+  "ui_total_nano": 43,
+  "ui_clean_offline": 5,
+  "ui_total_offline": 38,
+  "aws_checks_passed": 149,
+  "aws_findings": 62,
+  "gcp_checks_passed": 17,
+  "gcp_findings": 57,
+  "azure_checks_passed": 107,
+  "azure_findings": 31
  }
 ]
