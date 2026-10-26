@@ -34,6 +34,12 @@ the upstream id and the checklist.
    column must be filled for resources you create — never `-`/blank. Creating a
    resource must update the space's cost-savings metrics (add list prices to
    `core/cost_model.py`).
+   **Nano and offline must be feature-identical**: the Nano catalog entry must be
+   exactly what `build_fixtures.py` generates (never hand-edit
+   `wasm/fixtures/*`), and both consoles must show the same tabs, columns,
+   create fields and actions. The gate checks both, and the service's Nano
+   changes must apply cleanly to the portal's copy (`portal/app/nano`), because
+   the portal ships them in the same release.
 5. **Conformance test beds**, using the **official SDKs/CLIs** with only the
    endpoint changed, each printing one `[PASS]`/`[FAIL]` line per check and
    exiting non-zero on failure:

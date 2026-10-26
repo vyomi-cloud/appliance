@@ -96,6 +96,16 @@ def main() -> int:
     up_state = raw("upstream-state", "state.json") or {}
     tracked = json.load(open(os.path.join(ROOT, "tests", "conformance", "upstream", "tracked.json")))
     suite_res = {s["id"]: s for s in hourly.get("suites", [])}
+    # Nano ↔ offline feature parity from the hourly inventory (routes are an
+    # offline-only concept, so they're left out).
+    feats: dict = {}
+    for x in (raw("conformance-report", "inventory.json") or {}).get("features", []):
+        if x.get("kind") != "route":
+            feats.setdefault((x["target"], x["cloud"], x["service"]), set()).add((x["kind"], x["name"]))
+
+    def parity(cloud: str, svc: str) -> tuple[int, int, int]:
+        o, n = feats.get(("offline", cloud, svc), set()), feats.get(("nano", cloud, svc), set())
+        return len(o | n), len(o - n), len(n - o)
     ui_res = {(t, s["cloud"], s["service"]): s for t in ("offline", "nano") for s in (ui.get(t) or {}).get("services", [])}
 
     issues = gh_json("issue", "list", "-R", REPO, "--label", "new-service", "--state", "all", "--limit", "500",
@@ -154,6 +164,15 @@ def main() -> int:
             return "✅ handed off (awaiting next hourly run)" if suites else "—"
         return " · ".join(parts)
 
+    def par_cell(cloud: str, svc: str) -> str:
+        tot, off_only, nano_only = parity(cloud, svc)
+        if not tot:
+            return "—"
+        if not off_only and not nano_only:
+            return f"✅ {tot}/{tot}"
+        return f"⚠️ {tot - off_only - nano_only}/{tot}" + (f" · {off_only} offline-only" if off_only else "") + \
+            (f" · {nano_only} Nano-only" if nano_only else "")
+
     sections, totals = [], {}
     for cloud, label in CLOUDS:
         rows, stages = [], {}
@@ -173,7 +192,7 @@ def main() -> int:
             # Pre-gate (baseline) services weren't built through the gate: no
             # per-check claims for them, only their hourly + upstream status.
             rows.append([f"**{s['name']}**", "—", "🟢 Released"] + (["✅"] * len(COLS) if suites else ["—"] * len(COLS)) +
-                        ["✅ passed" if suites else "baseline (pre-gate)", rel, hourly_cell(cloud, s["name"], suites),
+                        [par_cell(cloud, s["name"]), "✅ passed" if suites else "baseline (pre-gate)", rel, hourly_cell(cloud, s["name"], suites),
                          upstream_cell(cloud, s.get("upstream") or s["key"], [s["key"], s["name"]])])
 
         for s in queue:
@@ -209,14 +228,24 @@ def main() -> int:
                 cells = ["⬜"] * len(COLS)
                 gcell = "no manifest yet" if branch in branches else "—"
             name = s["name"] if s["name"] != s["id"] else s["id"]
-            rows.append([f"{name}{issue}", s["priority"], stage] + cells + [gcell, "—", "⏳ after release",
+            rows.append([f"{name}{issue}", s["priority"], stage] + cells + ["⏳ gated", gcell, "—", "⏳ after release",
                         "⏳ registered at build" if not gate else
                         ("✅ registered" if gate.get("upstream id tracked by the hourly upstream watcher", (False,))[0] else "⬜ not yet")])
 
         totals[cloud] = {"released": len(released), "queue": len(queue), **stages}
-        head = ["Service", "Pri", "Stage"] + [c for c, _ in COLS] + ["Gate", "Release", "Hourly conformance hand-off", "Upstream watcher hand-off"]
+        head = ["Service", "Pri", "Stage"] + [c for c, _ in COLS] + ["Nano ↔ offline", "Gate", "Release", "Hourly conformance hand-off", "Upstream watcher hand-off"]
         t = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)] + ["| " + " | ".join(r) + " |" for r in rows]
         summary = " · ".join(f"{k}: **{v}**" for k, v in stages.items())
+        gaps = []
+        for svc in sorted({k[2] for k in feats if k[1] == cloud}):
+            tot, off_only, nano_only = parity(cloud, svc)
+            if off_only or nano_only:
+                o, n = feats.get(("offline", cloud, svc), set()), feats.get(("nano", cloud, svc), set())
+                gaps.append(f"| {svc} | {', '.join(f'{k}: {v}' for k, v in sorted(o - n)[:6]) or '—'} | "
+                            f"{', '.join(f'{k}: {v}' for k, v in sorted(n - o)[:6]) or '—'} |")
+        summary += ("\n\n**Nano ↔ offline parity gaps** (the hourly agent closes these):\n\n"
+                    "| Console page | Offline only | Nano only |\n|---|---|---|\n" + "\n".join(gaps)) if gaps \
+            else "\n\n**Nano ↔ offline parity:** ✅ every console page has the same features on both."
         sections.append(f"## {label} — {len(released)} released, {len(queue)} in the pipeline\n\n{summary}\n\n" + "\n".join(t)
                         + ("\n\n**Gate details**\n\n" + "\n\n".join(details) if details else ""))
 
@@ -234,6 +263,8 @@ def main() -> int:
           "the upstream watcher. Then it is released (patch version) and handed off to both hourly jobs.", "",
           "**Stages:** 📋 Queued → 🛠 Building → 🔍 In gate → 🚀 Releasing → 🟢 Released. "
           "Columns Engine…PW Nano are the gate's static checks on the service branch (⬜ = not checked yet). "
+          "Nano ↔ offline compares every console feature (pages, tabs, columns, create fields, actions, operations) "
+          "between the two simulators from the latest hourly inventory; a new service can't pass the gate unless both match. "
           "Hourly hand-off shows the latest hourly UI crawl (⚠️ n = open findings) and the service's own suites; "
           "upstream hand-off shows whether the watcher tracks the API and any open drift issues.", "",
           f"Links: [backlog]({GH}/issues?q=label%3Anew-service) · [expansion runs]({GH}/actions/workflows/expansion-agent.yml) · "
