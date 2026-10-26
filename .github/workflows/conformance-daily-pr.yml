@@ -4,9 +4,13 @@ name: Daily conformance PR
 # conformance-agent fixes.
 #   - appliance: conformance/daily-<date> → main
 #   - portal:    the day's Nano bundle changes, vendored into portal/app/nano
-#                by wasm/vendor_to_portal.py (needs the PORTAL_REPO_TOKEN secret)
-# Approving the appliance PR cuts the next patch release and merges the linked
+#                by wasm/vendor_to_portal.py (needs the CONFORMANCE_BOT_TOKEN secret)
+# Merging the appliance PR cuts the next patch release and merges the linked
 # portal PR (conformance-release.yml).
+#
+# Uses the CONFORMANCE_BOT_TOKEN secret (fine-grained PAT: appliance + portal,
+# Contents / Pull requests / Workflows read+write) because the org policy
+# doesn't let the workflow token open PRs.
 
 on:
   schedule:
@@ -31,11 +35,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      PORTAL_TOKEN: ${{ secrets.PORTAL_REPO_TOKEN }}
+      GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+      PORTAL_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
     steps:
+      - name: Require the bot token
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Set the CONFORMANCE_BOT_TOKEN secret (see conformance-daily-pr.yml header)."; exit 1
+          fi
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
 
       - name: Resolve the day's branch
         id: day
@@ -59,7 +70,7 @@ jobs:
         run: |
           B="${{ steps.day.outputs.branch }}"; D="${{ steps.day.outputs.date }}"
           if [ -z "$PORTAL_TOKEN" ]; then
-            echo "No PORTAL_REPO_TOKEN secret: skipping the portal PR."; exit 0
+            echo "No CONFORMANCE_BOT_TOKEN secret: skipping the portal PR."; exit 0
           fi
           if git diff --quiet "origin/main" "origin/$B" -- wasm/; then
             echo "No Nano bundle changes today: no portal PR."; exit 0
@@ -82,7 +93,7 @@ jobs:
           if [ -z "$URL" ]; then
             URL=$(GH_TOKEN="$PORTAL_TOKEN" gh pr create -R vyomi-cloud/portal --base main --head "$B" \
               --title "Daily conformance fixes $D (Nano bundle)" \
-              --body "Nano bundle changes from the appliance daily conformance PR for $D, vendored by \`wasm/vendor_to_portal.py\`. Merging deploys the portal. It is merged automatically when the appliance PR is approved.")
+              --body "Nano bundle changes from the appliance daily conformance PR for $D, vendored by \`wasm/vendor_to_portal.py\`. Merging deploys the portal. It is merged automatically when the appliance PR is merged.")
           fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
@@ -94,8 +105,8 @@ jobs:
           {
             echo "Consolidated conformance-agent fixes for **$D**."
             echo
-            echo "**Approving this PR cuts appliance v$NEXT**: bumps VERSION, packaging and CHANGELOG, squash-merges, creates \`release/v$NEXT\` and tag \`v$NEXT\`, and runs the release + Docker publish workflows."
-            if [ -n "$PORTAL" ]; then echo; echo "Approving also merges the portal PR (deploys the portal): $PORTAL"; fi
+            echo "**Merging this PR (squash) cuts appliance v$NEXT**: bumps VERSION, packaging and CHANGELOG on main, creates \`release/v$NEXT\` and tag \`v$NEXT\`, which runs the release + Docker publish workflows."
+            if [ -n "$PORTAL" ]; then echo; echo "Merging also merges the portal PR (deploys the portal): $PORTAL"; fi
             echo
             echo "Report: https://github.com/${{ github.repository }}/tree/conformance-report"
             echo
