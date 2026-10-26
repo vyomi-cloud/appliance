@@ -8,21 +8,28 @@ on:
   workflow_run:
     workflows: ["Release"]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to signal (e.g. 3.0.8)'
+        required: true
 
 permissions: {}
 
 jobs:
   notify:
-    if: github.event.workflow_run.conclusion != 'cancelled' && startsWith(github.event.workflow_run.head_branch, 'v')
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion != 'cancelled' && startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Send appliance-release to vyomi-cloud/release-e2e
         env:
           GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
-          TAG: ${{ github.event.workflow_run.head_branch }}
+          TAG: ${{ github.event.workflow_run.head_branch || format('v{0}', inputs.version) }}
         run: |
           if [ -z "$GH_TOKEN" ]; then echo "No CONFORMANCE_BOT_TOKEN; the 10-minute poll will pick it up."; exit 0; fi
           gh api repos/vyomi-cloud/release-e2e/dispatches -f event_type=appliance-release \
             -F "client_payload[version]=${TAG#v}" \
-            || echo "::warning::Signal not delivered (token lacks access to release-e2e?); the 10-minute poll will pick it up."
+            || { echo "::error::Signal not delivered (token lacks access to release-e2e?)"; exit 1; }
