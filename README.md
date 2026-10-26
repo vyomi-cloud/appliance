@@ -1,20 +1,18 @@
 # Vyomi Conformance — hourly report
 
-Run **2026-10-26T18:32:21+00:00** · commit `43b733819761` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
+Run **2026-10-26T19:35:34+00:00** · commit `e4a2bda7153c` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
 
 | Suites green | Checks passing | Checks failing | Nano UI clean | Offline UI clean | Open UI findings | API routes with tests |
 |---|---|---|---|---|---|---|
-| 14/23 | 522 | 101 | 1/43 | 5/38 | 150 | 12.8% (41/321) |
-
-> **Agent this run:** Fixed the Azure create-flow harness false findings and Azure VM billing; 2 commits, 1 test file added, offline stack not restarted so the live fix is unverified end to end.
+| 13/22 | 516 | 103 | 0/43 | 5/38 | 228 | 12.8% (41/321) |
 
 ## By cloud
 
 | Cloud | Suites green | Checks ✓ | Checks ✗ | Nano UI clean | Offline UI clean | Open findings |
 |---|---|---|---|---|---|---|
-| [AWS](#aws) | 5/7 | 149 | 2 | 0/12 | 3/12 | 62 |
-| [GCP](#gcp) | 3/4 | 17 | 1 | 0/12 | 1/12 | 57 |
-| [Azure](#azure) | 5/6 | 107 | 1 | 1/19 | 1/14 | 31 |
+| [AWS](#aws) | 4/6 | 145 | 2 | 0/12 | 3/12 | 86 |
+| [GCP](#gcp) | 3/4 | 17 | 1 | 0/12 | 1/12 | 63 |
+| [Azure](#azure) | 5/6 | 107 | 1 | 0/19 | 1/14 | 79 |
 
 <a id="aws"></a>
 ## AWS
@@ -22,12 +20,11 @@ Run **2026-10-26T18:32:21+00:00** · commit `43b733819761` · Nano (in-browser) 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
 | ❌ | `nano-ui-aws-api` | nano | ui | 5 | 1 | 3.3 |
-| ❌ | `offline-sdk-python-aws` | offline | sdk-python | 87 | 1 | 311.4 |
-| ✅ | `nano-ui-aws-tabs` | nano | ui | 11 | 0 | 12.3 |
-| ✅ | `offline-api-ec2-instance-get` | offline | api | 4 | 0 | 0.3 |
-| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 25.6 |
-| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 41.1 |
-| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 13 | 0 | 19.3 |
+| ❌ | `offline-sdk-python-aws` | offline | sdk-python | 87 | 1 | 308.3 |
+| ✅ | `nano-ui-aws-tabs` | nano | ui | 11 | 0 | 12.7 |
+| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 20.5 |
+| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 40.4 |
+| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 13 | 0 | 11.8 |
 
 <details><summary>❌ <code>offline-sdk-python-aws</code> log</summary>
 
@@ -82,48 +79,92 @@ Run **2026-10-26T18:32:21+00:00** · commit `43b733819761` · Nano (in-browser) 
 
 </details>
 
-**UI findings: 62**
+**UI findings: 86**
 
-<details><summary><b>EC2</b> (offline) — 9 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
-| `DEAD_TAB` | Monitoring | clicking the tab changes nothing |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SUBNET ID" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SECURITY GROUPS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Security | tab Security: column "IAM ROLE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Security | tab Security: column "LAUNCH TIME" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Security | tab Security: column "STATE TRANSITION REASON" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>DynamoDB</b> (nano) — 7 finding(s)</summary>
+<details><summary><b>DynamoDB</b> (offline) — 13 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
 | `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
-| `HTTP_404` | Streams and triggers | /api/aws/sub/dynamodb~Music~streams/get/_settings → 404 |
-| `HTTP_404` | Read/write capacity | /api/aws/sub/dynamodb~Music~capacity/get/_settings → 404 |
-| `HTTP_404` | Encryption at rest | /api/aws/sub/dynamodb~Music~encryption/get/_settings → 404 |
-| `HTTP_404` | Time to live | /api/aws/sub/dynamodb~Music~ttl/get/_settings → 404 |
+| `HTTP_404` |  | resource detail: /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Overview | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Activity | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Tags | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Explore items | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Explore items | /api/dynamodb/tables//items → 404 |
+| `HTTP_404` | Query/Scan | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Indexes | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Streams and triggers | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Read/write capacity | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Encryption at rest | /api/dynamodb/tables/ → 404 |
+| `HTTP_404` | Time to live | /api/dynamodb/tables/ → 404 |
 
 </details>
 
-<details><summary><b>Secrets Manager</b> (nano) — 6 finding(s)</summary>
+<details><summary><b>IAM</b> (nano) — 12 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "Last rotated" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "Next rotation" shows "-"/blank in 1 row(s) |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `HTTP_404` |  | resource detail: /api/iam/users/new-user → 404 |
+| `HTTP_404` | Overview | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Users | /api/iam/users/new-user → 404 |
+| `HTTP_404` | User groups | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Roles | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Policies | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Identity providers | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Password policy | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Password policy | /api/aws/sub/iam~new-user~passwordPolicy/get/_settings → 404 |
+| `HTTP_404` | Access Analyzer | /api/iam/users/new-user → 404 |
+| `HTTP_404` | Access Analyzer | /api/aws/sub/iam~new-user~accessAdvisor/get/_settings → 404 |
+
+</details>
+
+<details><summary><b>SQS</b> (offline) — 12 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_404` |  | resource detail: /api/sqs/queues/ → 404 |
+| `HTTP_404` | Overview | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Activity | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Tags | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Send and receive messages | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Purge messages | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Configuration | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Dead-letter queue | /api/sqs/queues/ → 404 |
+| `PLACEHOLDER_CELL` | Dead-letter queue | tab Dead-letter queue: column "MAXIMUM RECEIVES" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Encryption | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Access policy | /api/sqs/queues/ → 404 |
+| `HTTP_404` | Monitoring | /api/sqs/queues/ → 404 |
+
+</details>
+
+<details><summary><b>RDS</b> (nano) — 9 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 | `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
-| `HTTP_404` | Rotation | /api/aws/sub/secretsmanager~my-secret~rotation/get/_settings → 404 |
-| `HTTP_404` | Encryption key | /api/aws/sub/secretsmanager~my-secret~kmsKey/get/_settings → 404 |
+| `PLACEHOLDER_CELL` | Endpoints | tab Endpoints: column "ENDPOINT" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PRIVATE IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SUBNET ID" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SECURITY GROUPS" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Modify | /api/aws/sub/rds~database-1~modify/get/_settings → 404 |
+
+</details>
+
+<details><summary><b>EC2</b> (nano) — 6 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PAGE_ERROR` |  | during create: Cannot set properties of null (setting 'textContent') |
+| `PLACEHOLDER_CELL` |  | after create: column "Instance ID" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "State" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Private IPv4" shows "-"/blank in 1 row(s) |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 
 </details>
 
@@ -140,30 +181,6 @@ Run **2026-10-26T18:32:21+00:00** · commit `43b733819761` · Nano (in-browser) 
 
 </details>
 
-<details><summary><b>EC2</b> (nano) — 5 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "Instance ID" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "State" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "Private IPv4" shows "-"/blank in 1 row(s) |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-
-</details>
-
-<details><summary><b>SQS</b> (nano) — 5 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
-| `HTTP_404` | Purge messages | /api/aws/sub/sqs~MyQueue~purge/get/_settings → 404 |
-| `PLACEHOLDER_CELL` | Dead-letter queue | tab Dead-letter queue: column "MAXIMUM RECEIVES" shows "-"/blank in 1 row(s) |
-| `HTTP_404` | Encryption | /api/aws/sub/sqs~MyQueue~encryption/get/_settings → 404 |
-
-</details>
-
 <details><summary><b>Secrets Manager</b> (offline) — 5 finding(s)</summary>
 
 | Problem | Tab | Detail |
@@ -176,30 +193,42 @@ Run **2026-10-26T18:32:21+00:00** · commit `43b733819761` · Nano (in-browser) 
 
 </details>
 
-<details><summary><b>IAM</b> (nano) — 2 finding(s)</summary>
+<details><summary><b>S3</b> (nano) — 4 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_404` |  | resource detail: /api/iam/users/new-user → 404 |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Default encryption | /api/aws/sub/s3~my-bucket-cloudlearn~encryption/get/_settings → 404 |
+| `HTTP_404` | Block Public Access | /api/aws/sub/s3~my-bucket-cloudlearn~blockPublic/get/_settings → 404 |
 
 </details>
 
-<details><summary><b>KMS</b> (nano) — 2 finding(s)</summary>
+<details><summary><b>Secrets Manager</b> (nano) — 3 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Last rotated" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Next rotation" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_404` | Key rotation | /api/aws/sub/kms~0e46a4383e6a4412baede361f1e8205b~rotation/get/_settings → 404 |
 
 </details>
 
-<details><summary><b>DynamoDB</b> (offline) — 2 finding(s)</summary>
+<details><summary><b>DynamoDB</b> (nano) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
 | `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
-| `HTTP_404` |  | resource detail: /api/dynamodb/tables/ → 404 |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+
+</details>
+
+<details><summary><b>EC2</b> (offline) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
+| `HTTP_404` |  | resource detail: /api/ec2/instances/i-14f0e70cb7fb → 404 |
 
 </details>
 
@@ -229,15 +258,7 @@ Run **2026-10-26T18:32:21+00:00** · commit `43b733819761` · Nano (in-browser) 
 
 </details>
 
-<details><summary><b>S3</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-
-</details>
-
-<details><summary><b>RDS</b> (nano) — 1 finding(s)</summary>
+<details><summary><b>SQS</b> (nano) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
@@ -269,19 +290,19 @@ Run **2026-10-26T18:32:21+00:00** · commit `43b733819761` · Nano (in-browser) 
 
 </details>
 
+<details><summary><b>KMS</b> (nano) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+
+</details>
+
 <details><summary><b>S3</b> (offline) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
 | `PLACEHOLDER_CELL` |  | after create: column "Creation date" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>SQS</b> (offline) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_404` |  | resource detail: /api/sqs/queues/ → 404 |
 
 </details>
 
@@ -298,9 +319,9 @@ Run **2026-10-26T18:32:21+00:00** · commit `43b733819761` · Nano (in-browser) 
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-gcp-tabs` | nano | ui | 0 | 1 | 3.2 |
-| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 24.5 |
-| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 14.5 |
+| ❌ | `nano-ui-gcp-tabs` | nano | ui | 0 | 1 | 3.8 |
+| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 14.2 |
+| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 15.6 |
 | ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 4.8 |
 
 <details><summary>❌ <code>nano-ui-gcp-tabs</code> log</summary>
@@ -325,7 +346,43 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 </details>
 
-**UI findings: 57**
+**UI findings: 63**
+
+<details><summary><b>Firestore</b> (nano) — 5 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "TYPE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "LOCATION" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>Pub/Sub</b> (nano) — 5 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "RETENTION" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "ENCRYPTION" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "SUBSCRIPTIONS" shows "-"/blank in 1 row(s) |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>Eventarc</b> (nano) — 5 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "REGION" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Metrics | tab Metrics: column "EVENT FILTERS" shows "-"/blank in 1 row(s) |
+
+</details>
 
 <details><summary><b>Cloud KMS</b> (nano) — 5 finding(s)</summary>
 
@@ -351,14 +408,14 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 </details>
 
-<details><summary><b>Firestore</b> (nano) — 4 finding(s)</summary>
+<details><summary><b>Compute Engine</b> (nano) — 4 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "TYPE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "LOCATION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
+| `PAGE_ERROR` |  | during create: Cannot set properties of null (setting 'textContent') |
+| `PLACEHOLDER_CELL` |  | after create: column "ZONE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -369,17 +426,6 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 | `PLACEHOLDER_CELL` |  | after create: column "MODE" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "ROUTING MODE" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-
-</details>
-
-<details><summary><b>Pub/Sub</b> (nano) — 4 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "RETENTION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "ENCRYPTION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "SUBSCRIPTIONS" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 
 </details>
@@ -401,16 +447,6 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 |---|---|---|
 | `PLACEHOLDER_CELL` |  | after create: column "STATUS" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "LAST DEPLOYED" shows "-"/blank in 1 row(s) |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-
-</details>
-
-<details><summary><b>Eventarc</b> (nano) — 3 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "REGION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 
 </details>
@@ -442,15 +478,6 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 | `PLACEHOLDER_CELL` |  | after create: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
 | `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
-
-</details>
-
-<details><summary><b>Compute Engine</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "ZONE" shows "-"/blank in 1 row(s) |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 
 </details>
 
@@ -550,12 +577,12 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `offline-cli-azure` | offline | cli | 5 | 1 | 13.8 |
-| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 9.8 |
-| ✅ | `nano-ui-azure-home` | nano | ui | 7 | 0 | 3.7 |
-| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 17.3 |
-| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 9.4 |
-| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 20.8 |
+| ❌ | `offline-cli-azure` | offline | cli | 5 | 1 | 12.7 |
+| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 10.0 |
+| ✅ | `nano-ui-azure-home` | nano | ui | 7 | 0 | 3.8 |
+| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 17.6 |
+| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 9.6 |
+| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 20.6 |
 
 <details><summary>❌ <code>offline-cli-azure</code> log</summary>
 
@@ -574,13 +601,188 @@ RESULT pass=5 fail=1
 
 </details>
 
-**UI findings: 31**
+**UI findings: 79**
+
+<details><summary><b>Resource groups</b> (nano) — 19 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `BAD_TEXT` |  | shows 'undefined' |
+| `PLACEHOLDER_CELL` |  | list: column "Virtual Machines" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Storage accounts" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "SQL servers" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Service Bus" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Cosmos DB" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Function apps" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "API Management" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Virtual networks" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Network Security Group" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Event Grid topics" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Key vaults" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Role Definition" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Entra ID / RBAC" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Blob containers" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Cosmos databases" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Key Vault secrets" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Key Vault keys" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Storage queues" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>Service Bus</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>Cosmos DB</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>Function apps</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>API Management</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>Virtual networks</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>Network Security Group</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>Event Grid topics</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>Key vaults</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>Role Definition</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>Entra ID / RBAC</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>Blob containers</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>Cosmos databases</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>Key Vault secrets</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>Key Vault keys</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
+
+<details><summary><b>SQL servers</b> (nano) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+
+</details>
 
 <details><summary><b>Virtual Machines</b> (nano) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
+| `PAGE_ERROR` |  | Cannot set properties of null (setting 'innerHTML') |
 
 </details>
 
@@ -588,127 +790,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>SQL servers</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>Service Bus</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>Cosmos DB</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>Function apps</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>API Management</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>Virtual networks</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>Network Security Group</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>Event Grid topics</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>Key vaults</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>Role Definition</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>Entra ID / RBAC</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>Blob containers</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>Cosmos databases</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>Key Vault secrets</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
-
-</details>
-
-<details><summary><b>Key Vault keys</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -732,7 +814,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -740,7 +822,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -748,7 +830,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -756,7 +838,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -764,7 +846,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -772,7 +854,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -780,7 +862,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -788,7 +870,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -796,7 +878,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -804,7 +886,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -812,7 +894,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -820,7 +902,7 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+| `CREATE_FAILED` |  | create with defaults failed: locator.click: Timeout 3000ms exceeded. |
 
 </details>
 
@@ -830,10 +912,10 @@ RESULT pass=5 fail=1
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
 | ❌ | `nano-cores` | nano | core | 0 | 1 | 1.0 |
-| ❌ | `nano-ui-crawl` | nano | ui | 1 | 42 | 680.3 |
-| ❌ | `offline-console-actions` | offline | api | 232 | 14 | 7.5 |
-| ❌ | `offline-cost-savings` | offline | api | 2 | 7 | 68.4 |
-| ❌ | `offline-ui-crawl` | offline | ui | 5 | 33 | 643.7 |
+| ❌ | `nano-ui-crawl` | nano | ui | 0 | 43 | 825.2 |
+| ❌ | `offline-console-actions` | offline | api | 231 | 15 | 7.6 |
+| ❌ | `offline-cost-savings` | offline | api | 2 | 7 | 68.1 |
+| ❌ | `offline-ui-crawl` | offline | ui | 5 | 33 | 718.8 |
 | ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 22.6 |
 
 <details><summary>❌ <code>offline-ui-crawl</code> log</summary>
@@ -843,7 +925,7 @@ RESULT pass=5 fail=1
 [offline/gcp] 12 services crawled, 11 with findings
 [offline/azure] 14 services crawled, 13 with findings
 UI crawl offline: 5/38 services clean → tests/conformance/hourly/out/ui-offline.json
-Console surfaces offline: {"live":104,"partial":27,"static":115,"unimplemented":42}
+Console surfaces offline: {"live":116,"partial":27,"unimplemented":43,"static":114}
 ```
 
 </details>
@@ -851,27 +933,27 @@ Console surfaces offline: {"live":104,"partial":27,"static":115,"unimplemented":
 <details><summary>❌ <code>offline-console-actions</code> log</summary>
 
 ```
-conf-test-vm-3e08d049/start → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+conf-test-vm-b319d82f/start → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-3e08d049/stop → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b319d82f/stop → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-3e08d049/reset → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b319d82f/reset → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-3e08d049 → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-b319d82f → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-3e08d049/documents → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b319d82f/documents → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-3e08d049/collectionGroups/-/indexes → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-b319d82f/collectionGroups/-/indexes → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
 assert False
 FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.kms.create] - AssertionError: GCP kms.create POST /api/gcp/kms/keys → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"ok":false,"error":"missing 'name'"}
 assert False
 FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.create] - AssertionError: GCP secretmanager.create POST /api/gcp/secrets → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"ok":false,"error":"missing 'name'"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-3e08d049/o/{object} → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Object not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-b319d82f/o/{object} → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Object not found"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-3e08d049/upload → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"detail":"missing 'file' field"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-b319d82f/upload → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"detail":"missing 'file' field"}
 assert False
-14 failed, 232 passed, 10 skipped in 7.04s
+15 failed, 231 passed, 10 skipped in 6.98s
 ```
 
 </details>
@@ -880,9 +962,9 @@ assert False
 
 ```
 == aws: S3 bucket ==
-FAIL: aws: creating a S3 bucket raises the space resource_count :: 19 → 19
-FAIL: aws: creating a S3 bucket raises aws savings :: $188.57 → $188.57
-FAIL: aws: using the S3 bucket (5 × 2 MB uploads) raises savings :: $188.57 → $188.57 (real aws bills storage + requests)
+FAIL: aws: creating a S3 bucket raises the space resource_count :: 18 → 18
+FAIL: aws: creating a S3 bucket raises aws savings :: $158.2 → $158.2
+FAIL: aws: using the S3 bucket (5 × 2 MB uploads) raises savings :: $158.2 → $158.2 (real aws bills storage + requests)
 
 == gcp: Cloud Storage bucket ==
 FAIL: gcp: creating a Cloud Storage bucket raises the space resource_count :: 16 → 16
@@ -904,9 +986,9 @@ RESULT fail=7
 ```
 [nano/aws] 12 services crawled, 12 with findings
 [nano/gcp] 12 services crawled, 12 with findings
-[nano/azure] 19 services crawled, 18 with findings
-UI crawl nano: 1/43 services clean → tests/conformance/hourly/out/ui-nano.json
-Console surfaces nano: {"live":109,"partial":31,"static":62,"unimplemented":47}
+[nano/azure] 19 services crawled, 19 with findings
+UI crawl nano: 0/43 services clean → tests/conformance/hourly/out/ui-nano.json
+Console surfaces nano: {"live":106,"unimplemented":65,"partial":29,"static":64}
 ```
 
 </details>
@@ -914,7 +996,7 @@ Console surfaces nano: {"live":109,"partial":31,"static":62,"unimplemented":47}
 <details><summary>❌ <code>nano-cores</code> log</summary>
 
 ```
-no tests ran in 0.79s
+no tests ran in 0.77s
 ```
 
 </details>
@@ -1156,6 +1238,7 @@ SetVersionState
 
 | Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |
 |---|---|---|---|---|---|---|
+| 2026-10-26T19:35:34+00:00 | 13/22 | 516 | 103 | 228 | 12.8% |  |
 | 2026-10-26T18:32:21+00:00 | 14/23 | 522 | 101 | 150 | 12.8% | Fixed the Azure create-flow harness false findings and Azure VM billing; 2 commits, 1 test file added, offline stack not restarted so the live fix is unverified end to end. |
 | 2026-10-26T17:45:15+00:00 | 13/22 | 515 | 104 | 260 | 12.8% | Fixed 1 UI finding (offline EC2 detail tabs 404: missing GET /api/ec2/instances/{id}), added 1 api test, 0 regressions known. |
 | 2026-10-26T16:30:13+00:00 | 13/22 | 517 | 102 | 169 | 12.8% | Fixed 2 product UI findings (offline S3 Creation date, offline Secrets Manager Encryption key) and 1 harness bug (Azure wizard blade, behind 17+ CRAWL_ERRORs per target), added 2 validators, 0 regress |
