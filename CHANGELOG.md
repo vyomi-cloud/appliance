@@ -4,6 +4,15 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.8] — 2026-10-26
+
+Daily conformance release.
+
+- conformance-agent: fix /api/spaces 500 on binary S3 objects and VM cr…
+- conformance-agent: harness — count table rows without requiring <tbody>
+- conformance-agent: Nano Azure home stops requesting providers/undefin…
+- conformance-agent: harness — return to console home before each service
+
 ## [3.0.7] — 2026-10-23
 
 **Minor: 14-day appliance trial, redesigned space cards, Nano tunnel fix.**
