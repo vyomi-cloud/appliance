@@ -176,6 +176,11 @@ def register_install(
     on failure. Caller can inspect but should NOT treat failure as
     a blocker for anything user-facing.
     """
+    # Same opt-out as the package phone-home (packaging/common/phone-home.sh):
+    # users can switch it off, and CI/test boots must, or every fresh test
+    # container counts as a new install in the traction numbers.
+    if (os.environ.get("VYOMI_NO_TELEMETRY") or "").strip().lower() in ("1", "true", "yes"):
+        return {"ok": True, "skipped": True, "reason": "VYOMI_NO_TELEMETRY"}
     if current_state not in _VALID_STATES:
         return {"ok": False, "error": f"invalid state: {current_state}"}
     if _should_skip(state, current_state, ttl_seconds):

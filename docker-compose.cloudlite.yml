@@ -51,6 +51,8 @@ services:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
       CLOUDLEARN_LICENSE_SECRET: ${VYOMI_LICENSE_SECRET:-cloudlearn-dev-secret}
       CLOUDLEARN_LICENSE_BACKEND_URL: ${VYOMI_LICENSE_BACKEND_URL:-https://vyomi.cloud}
+      # Opt out of install registration (users; always set in CI/test boots).
+      VYOMI_NO_TELEMETRY: ${VYOMI_NO_TELEMETRY:-}
       # Docker compute backend — EC2/GCP/Azure instances run as sibling Docker
       # containers (no LXD/Multipass). The socket mount below lets the simulator
       # drive the host daemon; instances join vyomi-net so they reach the APIs.

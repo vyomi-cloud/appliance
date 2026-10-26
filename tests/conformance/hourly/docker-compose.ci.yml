@@ -1,6 +1,9 @@
 # CI override for the hourly conformance run: lift tier limits (service locks,
-# quantity caps, rate limit) so suites measure behaviour, not the Free tier.
+# quantity caps, rate limit) so suites measure behaviour, not the Free tier,
+# and keep CI boots out of the install/traction numbers.
 services:
   simulator:
     environment:
       CLOUDLEARN_TIER_ENFORCE: "0"
+      # Test boots must not count as installs in the traction numbers.
+      VYOMI_NO_TELEMETRY: "1"

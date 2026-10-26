@@ -70,6 +70,7 @@ jobs:
         run: |
           VER="${{ steps.rel.outputs.ver }}"
           export VYOMI_SIMULATOR_IMAGE="vyomi/appliance:$VER"
+          export VYOMI_NO_TELEMETRY=1   # test boots must not count as installs
           # cloudsim is published with the same version tag; fall back to latest.
           if docker manifest inspect "vyomi/cloudsim:$VER" >/dev/null 2>&1; then export VYOMI_CLOUDSIM_IMAGE="vyomi/cloudsim:$VER"; fi
           docker compose -f docker-compose.cloudlite.yml -p vyomi pull --quiet

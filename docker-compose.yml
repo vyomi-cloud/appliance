@@ -195,6 +195,8 @@ services:
       #   - Local Mac:     http://host.docker.internal:8001
       #   - Compose net:   http://vyomi-portal:8000  (if portal in same compose)
       CLOUDLEARN_LICENSE_BACKEND_URL: ${VYOMI_LICENSE_BACKEND_URL:-${CLOUDLEARN_LICENSE_BACKEND_URL:-https://vyomi.cloud}}
+      # Opt out of install registration (users; always set in CI/test boots).
+      VYOMI_NO_TELEMETRY: ${VYOMI_NO_TELEMETRY:-}
       # Refresh interval (seconds) — appliance validates with portal to pick
       # up subscription changes. Default 24h — matches JWT TTL and the
       # user-facing "validate once per day" promise. The JWT's

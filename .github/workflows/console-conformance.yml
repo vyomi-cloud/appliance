@@ -57,7 +57,8 @@ jobs:
         run: |
           # Use the dev compose; mounts host paths the appliance compose
           # expects (the multipass-specific paths aren't relevant in CI).
-          CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:ci \
+          # VYOMI_NO_TELEMETRY: CI boots must not count as installs.
+          VYOMI_NO_TELEMETRY=1 CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:ci \
             docker compose -f docker-compose.yml up -d \
               simulator vyomi-pubsub vyomi-firestore \
               vyomi-sql-postgres vyomi-minio vyomi-nats \
