@@ -337,5 +337,29 @@
   "gcp_findings": 62,
   "azure_checks_passed": 107,
   "azure_findings": 324
+ },
+ {
+  "at": "2026-10-26T23:41:36+00:00",
+  "commit": "74c78e0cf17b",
+  "suites_green": 14,
+  "suites_total": 23,
+  "checks_passed": 530,
+  "checks_failed": 94,
+  "api_coverage_pct": 12.8,
+  "ui_findings": 418,
+  "agent": "Fixed Nano's `/api/runtime/budget` 501 and its missing `cost_savings` (including Azure/GCP data-plane resources), added 1 Playwright validator, 0 regressions in the 5 green Nano suites re-run.",
+  "new_features": 0,
+  "parity_gaps": 9,
+  "ops_tested_pct": 72.9,
+  "ui_clean_nano": 0,
+  "ui_total_nano": 43,
+  "ui_clean_offline": 13,
+  "ui_total_offline": 38,
+  "aws_checks_passed": 148,
+  "aws_findings": 59,
+  "gcp_checks_passed": 17,
+  "gcp_findings": 64,
+  "azure_checks_passed": 107,
+  "azure_findings": 295
  }
 ]

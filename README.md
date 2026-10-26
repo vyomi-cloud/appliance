@@ -1,31 +1,32 @@
 # Vyomi Conformance — hourly report
 
-Run **2026-10-26T22:44:40+00:00** · commit `425868d9f3d4` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
+Run **2026-10-26T23:41:36+00:00** · commit `74c78e0cf17b` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
 
 | Suites green | Checks passing | Checks failing | Nano UI clean | Offline UI clean | Open UI findings | API routes with tests |
 |---|---|---|---|---|---|---|
-| 13/22 | 524 | 97 | 0/43 | 11/38 | 483 | 12.8% (41/321) |
+| 14/23 | 530 | 94 | 0/43 | 13/38 | 418 | 12.8% (41/321) |
 
-> **Agent this run:** Fixed 1 offline UI finding (EC2 resource detail 404), added 1 API test; the rest of the UI backlog is untouched this run.
+> **Agent this run:** Fixed Nano's `/api/runtime/budget` 501 and its missing `cost_savings` (including Azure/GCP data-plane resources), added 1 Playwright validator, 0 regressions in the 5 green Nano suites re-run.
 
 ## By cloud
 
 | Cloud | Suites green | Checks ✓ | Checks ✗ | Nano UI clean | Offline UI clean | Open findings |
 |---|---|---|---|---|---|---|
-| [AWS](#aws) | 4/6 | 145 | 2 | 0/12 | 1/12 | 97 |
-| [GCP](#gcp) | 3/4 | 17 | 1 | 0/12 | 1/12 | 62 |
-| [Azure](#azure) | 5/6 | 107 | 1 | 0/19 | 9/14 | 324 |
+| [AWS](#aws) | 5/7 | 148 | 2 | 0/12 | 3/12 | 59 |
+| [GCP](#gcp) | 3/4 | 17 | 1 | 0/12 | 1/12 | 64 |
+| [Azure](#azure) | 5/6 | 107 | 1 | 0/19 | 9/14 | 295 |
 
 <a id="aws"></a>
 ## AWS
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-aws-api` | nano | ui | 5 | 1 | 2.2 |
-| ❌ | `offline-sdk-python-aws` | offline | sdk-python | 87 | 1 | 310.4 |
-| ✅ | `nano-ui-aws-tabs` | nano | ui | 11 | 0 | 11.3 |
-| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 16.4 |
-| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 26.6 |
+| ❌ | `nano-ui-aws-api` | nano | ui | 5 | 1 | 2.5 |
+| ❌ | `offline-sdk-python-aws` | offline | sdk-python | 87 | 1 | 312.7 |
+| ✅ | `nano-ui-aws-tabs` | nano | ui | 11 | 0 | 11.7 |
+| ✅ | `offline-api-ec2-instance-detail` | offline | api | 3 | 0 | 0.2 |
+| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 21.6 |
+| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 32.2 |
 | ✅ | `offline-sdk-java-aws` | offline | sdk-java | 13 | 0 | 9.2 |
 
 <details><summary>❌ <code>offline-sdk-python-aws</code> log</summary>
@@ -81,9 +82,47 @@ Run **2026-10-26T22:44:40+00:00** · commit `425868d9f3d4` · Nano (in-browser) 
 
 </details>
 
-**UI findings: 97**
+**UI findings: 59**
 
-<details><summary><b>EventBridge</b> (offline) — 28 finding(s)</summary>
+<details><summary><b>EC2</b> (nano) — 15 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Instance ID" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "State" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Private IPv4" shows "-"/blank in 1 row(s) |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+| `DEAD_TAB` | Monitoring | clicking the tab changes nothing |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PRIVATE IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SUBNET ID" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SECURITY GROUPS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "IAM ROLE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "LAUNCH TIME" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "STATE TRANSITION REASON" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>EC2</b> (offline) — 9 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
+| `DEAD_TAB` | Monitoring | clicking the tab changes nothing |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SUBNET ID" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SECURITY GROUPS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "IAM ROLE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "LAUNCH TIME" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "STATE TRANSITION REASON" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>EventBridge</b> (offline) — 6 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
@@ -93,88 +132,6 @@ Run **2026-10-26T22:44:40+00:00** · commit `425868d9f3d4` · Nano (in-browser) 
 | `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $76.95 (real aws would bill this resource) |
 | `PLACEHOLDER_CELL` |  | resource detail: column "STATUS" shows "-"/blank in 2 row(s) |
 | `PLACEHOLDER_CELL` |  | resource detail: column "TARGETS" shows "-"/blank in 2 row(s) |
-| `PLACEHOLDER_CELL` | Overview | tab Overview: column "STATUS" shows "-"/blank in 2 row(s) |
-| `PLACEHOLDER_CELL` | Overview | tab Overview: column "TARGETS" shows "-"/blank in 2 row(s) |
-| `PLACEHOLDER_CELL` | Activity | tab Activity: column "STATUS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Activity | tab Activity: column "TARGETS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Tags | tab Tags: column "STATUS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Tags | tab Tags: column "TARGETS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Rule details | tab Rule details: column "STATUS" shows "-"/blank in 2 row(s) |
-| `PLACEHOLDER_CELL` | Rule details | tab Rule details: column "TARGETS" shows "-"/blank in 2 row(s) |
-| `PLACEHOLDER_CELL` | Targets | tab Targets: column "STATUS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Targets | tab Targets: column "TARGETS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Event pattern | tab Event pattern: column "STATUS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Event pattern | tab Event pattern: column "TARGETS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Invocations | tab Invocations: column "STATUS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Invocations | tab Invocations: column "TARGETS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Dead-letter queue | tab Dead-letter queue: column "STATUS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Dead-letter queue | tab Dead-letter queue: column "TARGETS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Properties | tab Properties: column "STATUS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Properties | tab Properties: column "TARGETS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Properties | tab Properties: column "state" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Properties | tab Properties: column "target_count" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Permissions | tab Permissions: column "STATUS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Permissions | tab Permissions: column "TARGETS" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>IAM</b> (nano) — 12 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_404` |  | resource detail: /api/iam/users/new-user → 404 |
-| `HTTP_404` | Overview | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Users | /api/iam/users/new-user → 404 |
-| `HTTP_404` | User groups | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Roles | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Policies | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Identity providers | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Password policy | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Password policy | /api/aws/sub/iam~new-user~passwordPolicy/get/_settings → 404 |
-| `HTTP_404` | Access Analyzer | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Access Analyzer | /api/aws/sub/iam~new-user~accessAdvisor/get/_settings → 404 |
-
-</details>
-
-<details><summary><b>RDS</b> (nano) — 9 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Endpoints | tab Endpoints: column "ENDPOINT" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PRIVATE IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SUBNET ID" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SECURITY GROUPS" shows "-"/blank in 1 row(s) |
-| `HTTP_404` | Modify | /api/aws/sub/rds~database-1~modify/get/_settings → 404 |
-
-</details>
-
-<details><summary><b>RDS</b> (offline) — 6 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | Endpoints | tab Endpoints: column "ENDPOINT" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PRIVATE IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SUBNET ID" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SECURITY GROUPS" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>EC2</b> (nano) — 5 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "Instance ID" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "State" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "Private IPv4" shows "-"/blank in 1 row(s) |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 
 </details>
 
@@ -190,28 +147,6 @@ Run **2026-10-26T22:44:40+00:00** · commit `425868d9f3d4` · Nano (in-browser) 
 
 </details>
 
-<details><summary><b>S3</b> (nano) — 4 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
-| `HTTP_404` | Default encryption | /api/aws/sub/s3~my-bucket-cloudlearn~encryption/get/_settings → 404 |
-| `HTTP_404` | Block Public Access | /api/aws/sub/s3~my-bucket-cloudlearn~blockPublic/get/_settings → 404 |
-
-</details>
-
-<details><summary><b>VPC</b> (offline) — 4 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $76.95 (real aws would bill this resource) |
-| `DEAD_TAB` | VPC details | clicking the tab changes nothing |
-| `PLACEHOLDER_CELL` | Security groups | tab Security groups: column "Security group ID" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Security groups | tab Security groups: column "Name" shows "-"/blank in 1 row(s) |
-
-</details>
-
 <details><summary><b>Secrets Manager</b> (nano) — 3 finding(s)</summary>
 
 | Problem | Tab | Detail |
@@ -219,16 +154,6 @@ Run **2026-10-26T22:44:40+00:00** · commit `425868d9f3d4` · Nano (in-browser) 
 | `PLACEHOLDER_CELL` |  | after create: column "Last rotated" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "Next rotation" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-
-</details>
-
-<details><summary><b>IAM</b> (offline) — 3 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 12 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $76.95 (real aws would bill this resource) |
-| `PLACEHOLDER_CELL` | Users | tab Users: column "ARN" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -241,12 +166,12 @@ Run **2026-10-26T22:44:40+00:00** · commit `425868d9f3d4` · Nano (in-browser) 
 
 </details>
 
-<details><summary><b>EC2</b> (offline) — 2 finding(s)</summary>
+<details><summary><b>IAM</b> (nano) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "Public IPv4" shows "-"/blank in 1 row(s) |
-| `HTTP_404` |  | resource detail: /api/ec2/instances/i-191b56dece9d → 404 |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `HTTP_404` |  | resource detail: /api/iam/users/new-user → 404 |
 
 </details>
 
@@ -259,12 +184,12 @@ Run **2026-10-26T22:44:40+00:00** · commit `425868d9f3d4` · Nano (in-browser) 
 
 </details>
 
-<details><summary><b>API Gateway</b> (offline) — 2 finding(s)</summary>
+<details><summary><b>IAM</b> (offline) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `HTTP_404` | Resources | /api/apigateway/apis/MyApi/resources → 404 |
-| `HTTP_404` | Stages | /api/apigateway/apis/MyApi/stages → 404 |
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 12 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $76.95 (real aws would bill this resource) |
 
 </details>
 
@@ -282,6 +207,22 @@ Run **2026-10-26T22:44:40+00:00** · commit `425868d9f3d4` · Nano (in-browser) 
 | Problem | Tab | Detail |
 |---|---|---|
 | `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
+
+</details>
+
+<details><summary><b>S3</b> (nano) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+
+</details>
+
+<details><summary><b>RDS</b> (nano) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 
 </details>
 
@@ -341,15 +282,23 @@ Run **2026-10-26T22:44:40+00:00** · commit `425868d9f3d4` · Nano (in-browser) 
 
 </details>
 
+<details><summary><b>VPC</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $76.95 (real aws would bill this resource) |
+
+</details>
+
 <a id="gcp"></a>
 ## GCP
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-gcp-tabs` | nano | ui | 0 | 1 | 2.1 |
-| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 12.9 |
-| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 12.0 |
-| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 3.3 |
+| ❌ | `nano-ui-gcp-tabs` | nano | ui | 0 | 1 | 2.6 |
+| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 14.1 |
+| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 13.9 |
+| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 3.7 |
 
 <details><summary>❌ <code>nano-ui-gcp-tabs</code> log</summary>
 
@@ -373,45 +322,24 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 </details>
 
-**UI findings: 62**
+**UI findings: 64**
 
-<details><summary><b>Firestore</b> (nano) — 5 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "TYPE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "LOCATION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>Pub/Sub</b> (nano) — 5 finding(s)</summary>
+<details><summary><b>VPC Network</b> (nano) — 8 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "RETENTION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "ENCRYPTION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "SUBSCRIPTIONS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "MODE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "ROUTING MODE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 | `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Network metrics | tab Network metrics: column "SUBNETS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Network metrics | tab Network metrics: column "FIREWALL RULES" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Network metrics | tab Network metrics: column "ROUTES" shows "-"/blank in 1 row(s) |
 
 </details>
 
-<details><summary><b>Eventarc</b> (nano) — 5 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "REGION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Metrics | tab Metrics: column "EVENT FILTERS" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>Cloud KMS</b> (nano) — 5 finding(s)</summary>
+<details><summary><b>Cloud KMS</b> (nano) — 6 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
@@ -420,6 +348,7 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 | `PLACEHOLDER_CELL` |  | after create: column "PROTECTION LEVEL" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -435,13 +364,35 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 </details>
 
-<details><summary><b>VPC Network</b> (nano) — 4 finding(s)</summary>
+<details><summary><b>Cloud Functions</b> (nano) — 4 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "MODE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "ROUTING MODE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "STATUS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "LAST DEPLOYED" shows "-"/blank in 1 row(s) |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>Firestore</b> (nano) — 4 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "TYPE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "LOCATION" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+
+</details>
+
+<details><summary><b>Pub/Sub</b> (nano) — 4 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "RETENTION" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "ENCRYPTION" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "SUBSCRIPTIONS" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 
 </details>
@@ -457,22 +408,12 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 </details>
 
-<details><summary><b>Compute Engine</b> (nano) — 3 finding(s)</summary>
+<details><summary><b>Eventarc</b> (nano) — 3 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "ZONE" shows "-"/blank in 1 row(s) |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>Cloud Functions</b> (nano) — 3 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "STATUS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "LAST DEPLOYED" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "REGION" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 
 </details>
@@ -507,6 +448,24 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 </details>
 
+<details><summary><b>Compute Engine</b> (nano) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "ZONE" shows "-"/blank in 1 row(s) |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+
+</details>
+
+<details><summary><b>Cloud Storage</b> (nano) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `PLACEHOLDER_CELL` | Activity | tab Activity: column "Detail" shows "-"/blank in 1 row(s) |
+
+</details>
+
 <details><summary><b>Cloud Storage</b> (offline) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
@@ -531,14 +490,6 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 |---|---|---|
 | `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 1 after creating a resource |
 | `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $24.53 (real gcp would bill this resource) |
-
-</details>
-
-<details><summary><b>Cloud Storage</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 
 </details>
 
@@ -603,12 +554,12 @@ NO CHECKS RAN (no PASS/FAIL lines recognised)
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `offline-cli-azure` | offline | cli | 5 | 1 | 14.8 |
-| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 9.6 |
+| ❌ | `offline-cli-azure` | offline | cli | 5 | 1 | 16.7 |
+| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 9.7 |
 | ✅ | `nano-ui-azure-home` | nano | ui | 7 | 0 | 3.6 |
-| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 16.3 |
-| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 6.7 |
-| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 19.0 |
+| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 16.6 |
+| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 8.3 |
+| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 19.4 |
 
 <details><summary>❌ <code>offline-cli-azure</code> log</summary>
 
@@ -627,44 +578,30 @@ RESULT pass=5 fail=1
 
 </details>
 
-**UI findings: 324**
+**UI findings: 295**
 
-<details><summary><b>Storage accounts</b> (nano) — 25 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_501` |  | /api/runtime/budget → 501 |
-| `HTTP_501` |  | /api/runtime/budget → 501 |
-| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Overview | /api/azure/blobcontainers → 500 |
-| `HTTP_5XX` | Overview | /api/azure/cosmosdbs → 500 |
-| `HTTP_5XX` | Overview | /api/azure/kvsecrets → 500 |
-| `HTTP_5XX` | Overview | /api/azure/kvkeys → 500 |
-| `HTTP_5XX` | Overview | /api/azure/queues → 500 |
-| `HTTP_501` | Containers | /api/azure/storage/stcloudlearn/containers → 501 |
-| `HTTP_501` | File shares | /api/runtime/budget → 501 |
-| `HTTP_501` | Queues | /api/azure/storage/stcloudlearn/queues → 501 |
-
-</details>
-
-<details><summary><b>Key vaults</b> (nano) — 24 finding(s)</summary>
+<details><summary><b>API Management</b> (nano) — 41 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /api/azure/blobcontainers → 500 |
+| `HTTP_5XX` |  | /api/azure/cosmosdbs → 500 |
+| `HTTP_5XX` |  | /api/azure/kvsecrets → 500 |
+| `HTTP_5XX` |  | /api/azure/kvkeys → 500 |
+| `HTTP_5XX` |  | /api/azure/queues → 500 |
 | `HTTP_501` |  | /api/runtime/budget → 501 |
 | `HTTP_501` |  | during create: /api/runtime/budget → 501 |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
@@ -686,97 +623,8 @@ RESULT pass=5 fail=1
 | `HTTP_5XX` | Activity log | /api/azure/kvsecrets → 500 |
 | `HTTP_5XX` | Activity log | /api/azure/kvkeys → 500 |
 | `HTTP_5XX` | Activity log | /api/azure/queues → 500 |
-| `HTTP_404` | Secrets | /azure-data/keyvault/kv-cloudlearn/secrets → 404 |
-| `HTTP_404` | Keys | /azure-data/keyvault/kv-cloudlearn/keys → 404 |
-| `HTTP_501` | Certificates | /api/runtime/budget → 501 |
-
-</details>
-
-<details><summary><b>API Management</b> (nano) — 23 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_501` |  | /api/runtime/budget → 501 |
-| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/blobcontainers → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/cosmosdbs → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/kvsecrets → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/kvkeys → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/queues → 500 |
-| `HTTP_501` | Subscriptions | /api/runtime/budget → 501 |
+| `HTTP_501` | Products | /api/runtime/budget → 501 |
 | `HTTP_404` | Policies | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/apim-cloudlearn/policies/policy?api-version=2023-05-01-preview → 404 |
-
-</details>
-
-<details><summary><b>SQL servers</b> (nano) — 22 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_501` |  | /api/runtime/budget → 501 |
-| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/blobcontainers → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/cosmosdbs → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/kvsecrets → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/kvkeys → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/queues → 500 |
-| `HTTP_501` | Pricing tier | /api/runtime/budget → 501 |
-
-</details>
-
-<details><summary><b>Service Bus</b> (nano) — 22 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_501` |  | /api/runtime/budget → 501 |
-| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/blobcontainers → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/cosmosdbs → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/kvsecrets → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/kvkeys → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/queues → 500 |
-| `HTTP_501` | Shared access policies | /api/runtime/budget → 501 |
 
 </details>
 
@@ -784,28 +632,28 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /api/azure/blobcontainers → 500 |
+| `HTTP_5XX` |  | /api/azure/cosmosdbs → 500 |
+| `HTTP_5XX` |  | /api/azure/kvsecrets → 500 |
+| `HTTP_5XX` |  | /api/azure/kvkeys → 500 |
+| `HTTP_5XX` |  | /api/azure/queues → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
 | `HTTP_501` |  | /api/runtime/budget → 501 |
 | `HTTP_501` |  | during create: /api/runtime/budget → 501 |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Overview | /api/azure/blobcontainers → 500 |
-| `HTTP_5XX` | Overview | /api/azure/cosmosdbs → 500 |
-| `HTTP_5XX` | Overview | /api/azure/kvsecrets → 500 |
-| `HTTP_5XX` | Overview | /api/azure/kvkeys → 500 |
-| `HTTP_5XX` | Overview | /api/azure/queues → 500 |
-| `HTTP_501` | Throughput (RU/s) | /api/runtime/budget → 501 |
 
 </details>
 
@@ -813,114 +661,113 @@ RESULT pass=5 fail=1
 
 | Problem | Tab | Detail |
 |---|---|---|
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /api/azure/blobcontainers → 500 |
+| `HTTP_5XX` |  | /api/azure/cosmosdbs → 500 |
+| `HTTP_5XX` |  | /api/azure/kvsecrets → 500 |
+| `HTTP_5XX` |  | /api/azure/kvkeys → 500 |
+| `HTTP_5XX` |  | /api/azure/queues → 500 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
+| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+
+</details>
+
+<details><summary><b>Blob containers</b> (nano) — 22 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /api/azure/blobcontainers → 500 |
+| `HTTP_5XX` |  | /api/azure/cosmosdbs → 500 |
+| `HTTP_5XX` |  | /api/azure/kvsecrets → 500 |
+| `HTTP_5XX` |  | /api/azure/kvkeys → 500 |
+| `HTTP_5XX` |  | /api/azure/queues → 500 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+| `HTTP_404` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined/demo1?api-version=2023-01-01 → 404 |
+
+</details>
+
+<details><summary><b>Service Bus</b> (nano) — 21 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /api/azure/blobcontainers → 500 |
+| `HTTP_5XX` |  | /api/azure/cosmosdbs → 500 |
+| `HTTP_5XX` |  | /api/azure/kvsecrets → 500 |
+| `HTTP_5XX` |  | /api/azure/kvkeys → 500 |
+| `HTTP_5XX` |  | /api/azure/queues → 500 |
 | `HTTP_501` |  | /api/runtime/budget → 501 |
 | `HTTP_501` |  | during create: /api/runtime/budget → 501 |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Overview | /api/azure/blobcontainers → 500 |
-| `HTTP_5XX` | Overview | /api/azure/cosmosdbs → 500 |
-| `HTTP_5XX` | Overview | /api/azure/kvsecrets → 500 |
-| `HTTP_5XX` | Overview | /api/azure/kvkeys → 500 |
-| `HTTP_5XX` | Overview | /api/azure/queues → 500 |
-| `HTTP_501` | App keys | /api/runtime/budget → 501 |
 
 </details>
 
-<details><summary><b>Virtual networks</b> (nano) — 22 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_501` |  | /api/runtime/budget → 501 |
-| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Activity log | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/blobcontainers → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/cosmosdbs → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/kvsecrets → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/kvkeys → 500 |
-| `HTTP_5XX` | Activity log | /api/azure/queues → 500 |
-| `HTTP_501` | Subnets | /api/runtime/budget → 501 |
-
-</details>
-
-<details><summary><b>Event Grid topics</b> (nano) — 22 finding(s)</summary>
+<details><summary><b>Event Grid topics</b> (nano) — 21 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
 | `HTTP_501` |  | during create: /api/runtime/budget → 501 |
 | `HTTP_501` |  | during create: /api/runtime/budget → 501 |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Overview | /api/azure/blobcontainers → 500 |
-| `HTTP_5XX` | Overview | /api/azure/cosmosdbs → 500 |
-| `HTTP_5XX` | Overview | /api/azure/kvsecrets → 500 |
-| `HTTP_5XX` | Overview | /api/azure/kvkeys → 500 |
-| `HTTP_5XX` | Overview | /api/azure/queues → 500 |
-| `HTTP_501` | Event subscriptions | /api/runtime/budget → 501 |
-
-</details>
-
-<details><summary><b>Entra ID / RBAC</b> (nano) — 21 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
-| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
-| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Overview | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
-| `HTTP_5XX` | Overview | /api/azure/blobcontainers → 500 |
-| `HTTP_5XX` | Overview | /api/azure/cosmosdbs → 500 |
-| `HTTP_5XX` | Overview | /api/azure/kvsecrets → 500 |
-| `HTTP_5XX` | Overview | /api/azure/kvkeys → 500 |
-| `HTTP_5XX` | Overview | /api/azure/queues → 500 |
+| `HTTP_5XX` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
+| `HTTP_5XX` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
+| `HTTP_5XX` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
+| `HTTP_5XX` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
+| `HTTP_5XX` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
+| `HTTP_5XX` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
+| `HTTP_5XX` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
+| `HTTP_5XX` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | resource detail: /api/azure/blobcontainers → 500 |
+| `HTTP_5XX` |  | resource detail: /api/azure/cosmosdbs → 500 |
+| `HTTP_5XX` |  | resource detail: /api/azure/kvsecrets → 500 |
+| `HTTP_5XX` |  | resource detail: /api/azure/kvkeys → 500 |
+| `HTTP_5XX` |  | resource detail: /api/azure/queues → 500 |
 
 </details>
 
@@ -1008,12 +855,67 @@ RESULT pass=5 fail=1
 
 </details>
 
-<details><summary><b>Resource groups</b> (nano) — 18 finding(s)</summary>
+<details><summary><b>Network Security Group</b> (nano) — 20 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /api/azure/blobcontainers → 500 |
+| `HTTP_5XX` |  | /api/azure/cosmosdbs → 500 |
+| `HTTP_5XX` |  | /api/azure/kvsecrets → 500 |
+| `HTTP_5XX` |  | /api/azure/kvkeys → 500 |
+| `HTTP_5XX` |  | /api/azure/queues → 500 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
+
+</details>
+
+<details><summary><b>Role Definition</b> (nano) — 20 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 → 500 |
+| `HTTP_5XX` |  | /api/azure/blobcontainers → 500 |
+| `HTTP_5XX` |  | /api/azure/cosmosdbs → 500 |
+| `HTTP_5XX` |  | /api/azure/kvsecrets → 500 |
+| `HTTP_5XX` |  | /api/azure/kvkeys → 500 |
+| `HTTP_5XX` |  | /api/azure/queues → 500 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
+
+</details>
+
+<details><summary><b>Resource groups</b> (nano) — 19 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
 | `BAD_TEXT` |  | shows 'undefined' |
 | `PLACEHOLDER_CELL` |  | list: column "Virtual Machines" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Storage accounts" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | list: column "SQL servers" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | list: column "Service Bus" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | list: column "Cosmos DB" shows "-"/blank in 1 row(s) |
@@ -1033,43 +935,63 @@ RESULT pass=5 fail=1
 
 </details>
 
-<details><summary><b>Virtual Machines</b> (nano) — 4 finding(s)</summary>
+<details><summary><b>SQL servers</b> (nano) — 4 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+
+</details>
+
+<details><summary><b>Key vaults</b> (nano) — 4 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
+
+</details>
+
+<details><summary><b>Storage accounts</b> (nano) — 3 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
 | `HTTP_501` |  | during create: /api/runtime/budget → 501 |
 | `HTTP_501` |  | during create: /api/runtime/budget → 501 |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_501` | Diagnose and solve problems | /api/runtime/budget → 501 |
 
 </details>
 
-<details><summary><b>Blob containers</b> (nano) — 4 finding(s)</summary>
+<details><summary><b>Virtual networks</b> (nano) — 3 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
 | `HTTP_501` |  | /api/runtime/budget → 501 |
-| `HTTP_501` |  | /api/runtime/budget → 501 |
+| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
 | `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
-| `HTTP_404` |  | resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined/demo1?api-version=2023-01-01 → 404 |
 
 </details>
 
-<details><summary><b>Network Security Group</b> (nano) — 2 finding(s)</summary>
+<details><summary><b>Entra ID / RBAC</b> (nano) — 3 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `HTTP_501` |  | /api/runtime/budget → 501 |
-| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
+| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
+| `HTTP_501` |  | during create: /api/runtime/budget → 501 |
+| `SAVINGS_MISSING` |  | create: active space has no cost_savings metrics |
 
 </details>
 
-<details><summary><b>Role Definition</b> (nano) — 2 finding(s)</summary>
+<details><summary><b>Virtual Machines</b> (nano) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `HTTP_501` |  | /api/runtime/budget → 501 |
-| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
+| `PAGE_ERROR` |  | Cannot set properties of null (setting 'innerHTML') |
 
 </details>
 
@@ -1126,21 +1048,21 @@ RESULT pass=5 fail=1
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-cores` | nano | core | 0 | 1 | 0.6 |
-| ❌ | `nano-ui-crawl` | nano | ui | 0 | 43 | 992.8 |
-| ❌ | `offline-console-actions` | offline | api | 231 | 15 | 9.0 |
-| ❌ | `offline-cost-savings` | offline | api | 4 | 7 | 74.1 |
-| ❌ | `offline-ui-crawl` | offline | ui | 11 | 27 | 928.3 |
-| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 24.6 |
+| ❌ | `nano-cores` | nano | core | 0 | 1 | 0.7 |
+| ❌ | `nano-ui-crawl` | nano | ui | 0 | 43 | 886.5 |
+| ❌ | `offline-console-actions` | offline | api | 232 | 14 | 8.4 |
+| ❌ | `offline-cost-savings` | offline | api | 4 | 7 | 76.3 |
+| ❌ | `offline-ui-crawl` | offline | ui | 13 | 25 | 808.8 |
+| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 25.6 |
 
 <details><summary>❌ <code>offline-ui-crawl</code> log</summary>
 
 ```
-[offline/aws] 12 services crawled, 11 with findings
+[offline/aws] 12 services crawled, 9 with findings
 [offline/gcp] 12 services crawled, 11 with findings
 [offline/azure] 14 services crawled, 5 with findings
-UI crawl offline: 11/38 services clean → tests/conformance/hourly/out/ui-offline.json
-Console surfaces offline: {"live":195,"partial":25,"unimplemented":42,"static":152}
+UI crawl offline: 13/38 services clean → tests/conformance/hourly/out/ui-offline.json
+Console surfaces offline: {"live":198,"partial":27,"static":157,"unimplemented":32}
 ```
 
 </details>
@@ -1148,27 +1070,27 @@ Console surfaces offline: {"live":195,"partial":25,"unimplemented":42,"static":1
 <details><summary>❌ <code>offline-console-actions</code> log</summary>
 
 ```
-conf-test-vm-7f0709b9/start → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+conf-test-vm-ec4baad9/start → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-7f0709b9/stop → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-ec4baad9/stop → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-7f0709b9/reset → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-ec4baad9/reset → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-7f0709b9 → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-ec4baad9 → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"NoSuchInstance"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-7f0709b9/documents → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-ec4baad9/documents → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-7f0709b9/collectionGroups/-/indexes → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-ec4baad9/collectionGroups/-/indexes → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Not found"}
 assert False
 FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.kms.create] - AssertionError: GCP kms.create POST /api/gcp/kms/keys → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"ok":false,"error":"missing 'name'"}
 assert False
 FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.create] - AssertionError: GCP secretmanager.create POST /api/gcp/secrets → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"ok":false,"error":"missing 'name'"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-7f0709b9/o/{object} → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Object not found"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-ec4baad9/o/{object} → HTTP 404 (expected one of (200, 201, 202, 204)). Body: {"detail":"Object not found"}
 assert False
-FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-7f0709b9/upload → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"detail":"missing 'file' field"}
+FAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-ec4baad9/upload → HTTP 400 (expected one of (200, 201, 202, 204)). Body: {"detail":"missing 'file' field"}
 assert False
-15 failed, 231 passed, 10 skipped in 8.79s
+14 failed, 232 passed, 10 skipped in 8.17s
 ```
 
 </details>
@@ -1207,7 +1129,7 @@ RESULT fail=7
 [nano/gcp] 12 services crawled, 12 with findings
 [nano/azure] 19 services crawled, 19 with findings
 UI crawl nano: 0/43 services clean → tests/conformance/hourly/out/ui-nano.json
-Console surfaces nano: {"live":161,"partial":31,"static":104,"unimplemented":87}
+Console surfaces nano: {"live":160,"partial":31,"static":103,"unimplemented":87}
 ```
 
 </details>
@@ -1215,7 +1137,7 @@ Console surfaces nano: {"live":161,"partial":31,"static":104,"unimplemented":87}
 <details><summary>❌ <code>nano-cores</code> log</summary>
 
 ```
-no tests ran in 0.46s
+no tests ran in 0.49s
 ```
 
 </details>
@@ -1460,6 +1382,7 @@ SetVersionState
 
 | Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |
 |---|---|---|---|---|---|---|
+| 2026-10-26T23:41:36+00:00 | 14/23 | 530 | 94 | 418 | 12.8% | Fixed Nano's `/api/runtime/budget` 501 and its missing `cost_savings` (including Azure/GCP data-plane resources), added 1 Playwright validator, 0 regressions in the 5 green Nano suites re-run. |
 | 2026-10-26T22:44:40+00:00 | 13/22 | 524 | 97 | 483 | 12.8% | Fixed 1 offline UI finding (EC2 resource detail 404), added 1 API test; the rest of the UI backlog is untouched this run. |
 | 2026-10-26T21:37:59+00:00 | 13/22 | 516 | 103 | 216 | 12.8% | Fixed the Azure create-wizard harness mistake (17 services) and Azure VM cost savings, added 1 conformance check, 0 regressions known. |
 | 2026-10-26T20:39:12+00:00 | 13/22 | 516 | 103 | 214 | 12.8% |  |
