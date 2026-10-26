@@ -1,6 +1,6 @@
 # Release checks — v3.0.8
 
-Generated 2026-10-26 13:30 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/40329852324) for tag `v3.0.8`.
+Generated 2026-10-26 13:57 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/40334973865) for tag `v3.0.8`.
 
 | Package / check | Platform | Result |
 |---|---|---|
@@ -9,7 +9,7 @@ Generated 2026-10-26 13:30 UTC by [Release checks report](https://github.com/vyo
 | Homebrew: vyomi + vyomi-docker | macOS (GitHub) | ✅ passed |
 | MSI: install, upgrade, uninstall (+ signing) | Windows (GitHub) | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/40329852486)) |
 | Startup: all services + UI status | Linux, release images | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/40329848743)) |
-| Windows E2E: MSI → vyomi up → services + UI | Windows laptop (private runner) | — not run |
+| Windows E2E: MSI → vyomi up → services + UI | Windows laptop (private runner) | ✅ passed |
 
 ## DEB
 
@@ -17,7 +17,7 @@ Generated 2026-10-26 13:30 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install cloud-learn_3.0.8_all.deb | 10s |
+| ✅ | install cloud-learn_3.0.8_all.deb | 4s |
 | ✅ | package manager reports version 3.0.8 | found '3.0.8' |
 | ✅ | bundled VERSION is 3.0.8 | /usr/share/vyomi/packaging/common/VERSION = 3.0.8 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -75,7 +75,7 @@ Generated 2026-10-26 13:30 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi | 13s |
+| ✅ | install vyomi | 10s |
 | ✅ | package manager reports version 3.0.8 | found '3.0.8' |
 | ✅ | bundled VERSION is 3.0.8 | /opt/homebrew/opt/vyomi/libexec/VERSION = 3.0.8 |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -89,7 +89,7 @@ Generated 2026-10-26 13:30 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker | 5s |
+| ✅ | install vyomi-docker | 3s |
 | ✅ | package manager reports version 3.0.8 | found '3.0.8' |
 | ✅ | ships docker-compose.cloudlite.yml | /opt/homebrew/opt/vyomi-docker/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -120,6 +120,39 @@ Generated 2026-10-26 13:30 UTC by [Release checks report](https://github.com/vyo
 | ✅ | service Pub/Sub emulator ready | ready after 44s |
 | ✅ | service Firestore emulator ready | ready after 44s |
 | ✅ | service CloudSim Plus ready | ready after 8s |
+| ✅ | /clouds status banner says 'Appliance is Ready' | Appliance is Ready |
+| ✅ | /clouds banner counts every service | — all 12 services running |
+| ✅ | running version is 3.0.8 | reports 3.0.8 |
+| ✅ | AWS console loads its service rail | 12 rail items |
+| ✅ | AWS console has no page errors |  |
+| ✅ | AWS console has no 5xx API calls |  |
+| ✅ | GCP console loads its service rail | 12 rail items |
+| ✅ | GCP console has no page errors |  |
+| ✅ | GCP console has no 5xx API calls |  |
+| ✅ | AZURE console loads its service rail | 15 rail items |
+| ✅ | AZURE console has no page errors |  |
+| ✅ | AZURE console has no 5xx API calls |  |
+
+## Windows E2E
+
+### Vyomi 3.0.8 startup — 26/26 checks passed
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | simulator answers /healthz | 4s |
+| ✅ | readiness reports every service ready | 12/12 ready, 100% |
+| ✅ | service Vyomi simulator ready | ready after 6s |
+| ✅ | service PostgreSQL ready | ready after 6s |
+| ✅ | service MySQL ready | ready after 356s |
+| ✅ | service Vault (KMS / secrets) ready | ready after 7s |
+| ✅ | service MinIO (S3) ready | ready after 7s |
+| ✅ | service DynamoDB ready | ready after 7s |
+| ✅ | service NATS (EventBridge) ready | ready after 7s |
+| ✅ | service ElasticMQ (SQS) ready | ready after 7s |
+| ✅ | service fake-gcs-server ready | ready after 7s |
+| ✅ | service Pub/Sub emulator ready | ready after 7s |
+| ✅ | service Firestore emulator ready | ready after 7s |
+| ✅ | service CloudSim Plus ready | ready after 7s |
 | ✅ | /clouds status banner says 'Appliance is Ready' | Appliance is Ready |
 | ✅ | /clouds banner counts every service | — all 12 services running |
 | ✅ | running version is 3.0.8 | reports 3.0.8 |
