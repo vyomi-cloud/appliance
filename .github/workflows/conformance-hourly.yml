@@ -28,9 +28,10 @@ concurrency:
 jobs:
   hourly:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 200
     permissions:
       contents: write     # agent pushes fixes to the daily branch
+      actions: write      # chain the next hourly run
       pages: write
       id-token: write
     environment:
@@ -196,6 +197,25 @@ jobs:
             tests/conformance/hourly/out/
             relay.log
           retention-days: 7
+
+      # GitHub's cron scheduler doesn't reliably fire for this repo, and hourly
+      # runs are non-negotiable: each run starts the next one, waiting out the
+      # rest of the hour first. Skipped if a run is already queued (e.g. a
+      # manual one or a late cron), so there is only ever one chain.
+      - name: Chain the next hourly run
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          queued=$(gh run list -R "${{ github.repository }}" --workflow conformance-hourly.yml \
+            --json status -q '[.[] | select(.status=="queued" or .status=="pending" or .status=="waiting")] | length')
+          if [ "${queued:-0}" -gt 0 ]; then echo "A run is already queued; not chaining."; exit 0; fi
+          start=$(gh run view "${{ github.run_id }}" -R "${{ github.repository }}" --json startedAt -q .startedAt)
+          elapsed=$(( $(date -u +%s) - $(date -u -d "$start" +%s) ))
+          wait=$(( 3600 - elapsed ))
+          if [ "$wait" -gt 0 ]; then echo "Waiting ${wait}s to keep an hourly cadence"; sleep "$wait"; fi
+          gh workflow run conformance-hourly.yml -R "${{ github.repository }}" --ref main
+          echo "Next hourly run dispatched."
 
       - name: Tear down
         if: always()
