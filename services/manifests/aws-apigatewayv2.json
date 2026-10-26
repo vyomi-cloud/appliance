@@ -83,5 +83,8 @@
     "offline-ui-aws-apigatewayv2",
     "nano-ui-aws-apigatewayv2"
   ],
-  "status": "building"
+  "status": "ready",
+  "backend": {
+    "kind": "in-process"
+  }
 }
