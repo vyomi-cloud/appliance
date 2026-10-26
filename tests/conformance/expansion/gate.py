@@ -26,7 +26,8 @@ import sys
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
+# GATE_ROOT: check another checkout (the pipeline page gates each service branch).
+ROOT = os.environ.get("GATE_ROOT") or os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 OUT = os.environ.get("OUT", os.path.join(HERE, "out"))
 BASE = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000").rstrip("/")
 REQUIRED_KINDS = [("offline", "sdk-java"), ("offline", "sdk-go"), ("offline", "cli"), ("offline", "ui"), ("nano", "ui")]
@@ -44,7 +45,10 @@ def rel(p: str) -> str:
 
 
 def get_json(url: str):
-    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "vyomi-gate"}), timeout=60) as r:
+    h = {"User-Agent": "vyomi-gate"}
+    if "api.github.com" in url and os.environ.get("GITHUB_TOKEN"):
+        h["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+    with urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=60) as r:
         return json.loads(r.read())
 
 

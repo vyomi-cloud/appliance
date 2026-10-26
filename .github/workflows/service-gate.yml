@@ -34,6 +34,7 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
+      actions: write
       issues: write
       pull-requests: write
     env:
@@ -121,6 +122,11 @@ jobs:
         run: |
           gh pr merge "$PR" -R "$REPO" --squash
           echo "Merged #$PR; conformance-release.yml cuts the release."
+
+      - name: Refresh the service pipeline page
+        if: always()
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: gh workflow run pipeline-status.yml -R "${{ github.repository }}" --ref main || true
 
       - name: Tear down
         if: always()

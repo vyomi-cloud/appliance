@@ -207,6 +207,11 @@ jobs:
             relay.log
           retention-days: 7
 
+      - name: Refresh the service pipeline page
+        if: always()
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: gh workflow run pipeline-status.yml -R "${{ github.repository }}" --ref main || true
+
       # GitHub's cron scheduler doesn't reliably fire for this repo, and hourly
       # runs are non-negotiable: each run starts the next one, waiting out the
       # rest of the hour first. Skipped if a run is already queued (e.g. a

@@ -75,6 +75,11 @@ jobs:
           git push -q origin HEAD:refs/heads/upstream-state
           cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Refresh the service pipeline page
+        if: always()
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: gh workflow run pipeline-status.yml -R "${{ github.repository }}" --ref main || true
+
       - name: Chain the next hourly run
         if: always()
         run: |

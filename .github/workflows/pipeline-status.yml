@@ -1,0 +1,64 @@
+name: Service pipeline page
+
+# Rebuilds the service pipeline grid (README.md on the service-pipeline
+# branch): every service per cloud — released or in the build queue — with its
+# gate checks, release, and hand-off to hourly conformance + the upstream
+# watcher. Dispatched at the end of the expansion agent, service gate, release,
+# hourly conformance and upstream watcher runs, and on registry changes.
+# Script: tests/conformance/expansion/build_pipeline_page.py
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['services/**', 'tests/conformance/hourly/suites.json', 'tests/conformance/upstream/tracked.json']
+
+concurrency:
+  group: pipeline-status
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  page:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: Build the grid
+        run: python3 tests/conformance/expansion/build_pipeline_page.py /tmp/pipeline
+
+      - name: Publish to the service-pipeline branch
+        run: |
+          set -e
+          git config user.name "vyomi-conformance-bot"
+          git config user.email "conformance-bot@users.noreply.github.com"
+          if git ls-remote --exit-code origin service-pipeline >/dev/null 2>&1; then
+            git fetch -q origin service-pipeline
+            git worktree add -q /tmp/page-wt FETCH_HEAD
+            git -C /tmp/page-wt checkout -q -B service-pipeline
+          else
+            git worktree add -q --detach /tmp/page-wt
+            git -C /tmp/page-wt checkout -q --orphan service-pipeline
+            git -C /tmp/page-wt rm -rfq . || true
+          fi
+          find /tmp/page-wt -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -r /tmp/pipeline/. /tmp/page-wt/
+          cd /tmp/page-wt
+          git add -A
+          git commit -q -m "service pipeline $(date -u +%Y-%m-%dT%H:%MZ)" || { echo "no changes"; exit 0; }
+          git push -q origin service-pipeline
+          echo "Page: https://github.com/${{ github.repository }}/tree/service-pipeline"

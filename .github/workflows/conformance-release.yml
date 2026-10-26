@@ -24,6 +24,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write
   pull-requests: write
 
 jobs:
@@ -147,3 +148,8 @@ jobs:
           else
             gh pr comment "$PR" --body "Release on merge failed. See https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" || true
           fi
+
+      - name: Refresh the service pipeline page
+        if: always()
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: gh workflow run pipeline-status.yml -R "${{ github.repository }}" --ref main || true
