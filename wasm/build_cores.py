@@ -47,6 +47,7 @@ CORES = [
     "azure_servicebus_core.py",                     # v2.5.0 Azure: Service Bus topics (pub/sub fan-out — SNS/Pub-Sub peer)
     "azure_sql_core.py",                            # v2.6.0 Azure: SQL data plane on the SqlStore seam (RDS/Cloud SQL peer)
     "azure_iam_core.py",                            # v2.6.0 Azure: RBAC checkAccess decision core (IAM/testIamPermissions peer)
+    "ecr_core.py",                                  # AWS: Elastic Container Registry (repos, images, layer upload, policies, scans)
     "eventbridge_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
@@ -59,6 +60,10 @@ CORES = [
     "nano_registry.py",                             # shared in-context store registry (console adapter + relay router draw from ONE set)
     "nano_persist.py",                              # store serialize/restore + cross-context sync (persistence + console↔SDK parity)
 ]
+
+# New-service engines are vendored VERBATIM (no generated-file header): the service
+# gate requires wasm/core/<engine> to be byte-identical to core/<engine>.
+VERBATIM = {"ecr_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
@@ -128,7 +133,7 @@ def main():
         with open(os.path.join(SRC, name)) as f:
             src = f.read()
         with open(os.path.join(OUT, name), "w") as f:
-            f.write(HEADER + src)
+            f.write(src if name in VERBATIM else HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
     check_relay_cores()   # fail loudly if a relay loader lags the cores
 

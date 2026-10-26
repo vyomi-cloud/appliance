@@ -10,3 +10,4 @@ vyomi-dynamodb
 vyomi-elasticmq
 vyomi-vault
 vyomi-azurite
+vyomi-registry

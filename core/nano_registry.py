@@ -27,6 +27,7 @@ from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
 from core.nano_events import EventStore
+from core.ecr_core import EcrStore
 
 _REG: dict | None = None
 
@@ -46,6 +47,7 @@ def get() -> dict:
             "rds": InMemorySqlStore(),
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
+            "ecr": EcrStore(),                 # Elastic Container Registry
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),

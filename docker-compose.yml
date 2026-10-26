@@ -81,6 +81,25 @@ services:
       - vyomi-nats:/data
     restart: unless-stopped
 
+  # ECR data plane — the CNCF Distribution registry (Apache-2.0), shared by ECR,
+  # Artifact Registry and ACR so `docker push` / `docker pull` hit a real registry.
+  vyomi-registry:
+    profiles: ["full"]
+    image: registry:2.8.3
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    ports:
+      - "5000:5000"
+    volumes:
+      - vyomi-registry:/var/lib/registry
+    mem_limit: 96m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/v2/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   vyomi-minio:
     profiles: ["full"]
     # MinIO removed its public Docker Hub image (docker.io/minio/minio → 404);
@@ -235,6 +254,9 @@ services:
       CLOUDLEARN_MINIO_SECRET_KEY: cloudlearn-dev-secret-key
       CLOUDLEARN_DYNAMODB_URL: http://vyomi-dynamodb:8000
       CLOUDLEARN_ELASTICMQ_URL: http://vyomi-elasticmq:9324
+      # ECR: mirror images docker-pushed to the shared registry (best effort).
+      VYOMI_ECR_REGISTRY_URL: http://vyomi-registry:5000
+      VYOMI_ECR_REGISTRY_HOST: localhost:5000
       # v2.0.9 new-service backends — Azure Storage (blob + queue) + GCP emulators.
       CLOUDLEARN_AZURITE_URL: http://vyomi-azurite:10000
       CLOUDLEARN_AZURITE_QUEUE_URL: http://vyomi-azurite:10001
@@ -327,6 +349,7 @@ services:
     profiles: ["tls"]
 
 volumes:
+  vyomi-registry:
   vyomi-data:
   cloudsim-data:
   vyomi-sql-pg:

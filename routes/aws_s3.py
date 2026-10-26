@@ -1099,6 +1099,9 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return await _srv().api_ec2_query(request)
         if service == "sqs":
             return await _srv().api_sqs_query(request)
+        if service == "ecr":
+            from routes.aws_ecr import wire as _ecr_wire
+            return await _ecr_wire(request)
         if service == "rds":
             return await _srv().api_rds_query(request)
         if service == "dynamodb":
