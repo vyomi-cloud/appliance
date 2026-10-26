@@ -143,6 +143,9 @@ jobs:
           # Either auth works: a Claude Max/Pro OAuth token (claude setup-token)
           # or an Anthropic API key. Whichever secret is set is used.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Chained runs are dispatched by the workflow token, so the actor is
+          # github-actions[bot]; the action refuses bot actors unless allowed.
+          allowed_bots: 'github-actions'
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
