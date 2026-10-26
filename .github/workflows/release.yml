@@ -107,6 +107,20 @@ jobs:
           echo "$VER" > VERSION
           echo "version=$VER" >> "$GITHUB_OUTPUT"
 
+      # Every package starts the appliance from the bundled compose files;
+      # pin them to THIS release's images so an installed version never drifts
+      # onto whatever `latest` is later (the Windows E2E caught a 3.0.7 MSI
+      # running :latest). Main keeps :latest for development.
+      - name: Pin bundled compose files to this release's images
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          for f in docker-compose.cloudlite.yml docker-compose.appliance.yml; do
+            [ -f "$f" ] || continue
+            sed -i -E "s#vyomi/(appliance|cloudsim):latest#vyomi/\1:${VER}#g" "$f"
+            grep -nE "vyomi/(appliance|cloudsim):" "$f"
+          done
+          ! grep -qE "vyomi/(appliance|cloudsim):latest" docker-compose.cloudlite.yml
+
       - name: Build source tarball
         run: |
           mkdir -p dist

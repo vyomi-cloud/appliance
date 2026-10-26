@@ -203,6 +203,17 @@ func (c *Config) invokeDockerSubstrate(action string, dcArgs []string) error {
 			"Install Docker Desktop: https://docs.docker.com/desktop/")
 	}
 	base := []string{"compose", "-f", cf, "-p", "vyomi"}
+	// The heavy backends (MySQL, Vault, NATS, MinIO, DynamoDB, ElasticMQ,
+	// Azurite, Pub/Sub, Firestore) sit behind the compose `full` profile, so a
+	// plain `up -d` never starts them (the Windows E2E found 4/12 services).
+	// Start them as a second wave, and include them in down/ps/logs/pull.
+	full := append(append([]string{}, base...), "--profile", "full")
+	wave2 := func() {
+		progress("==> Starting the backends (S3, KMS, SQL, NoSQL, queues, eventing); the first run downloads their images...")
+		if err := run("docker", append(append([]string{}, full...), "up", "-d")...); err != nil {
+			progress("==> Warning: some backends failed to start (" + err.Error() + "); re-run `vyomi up` or check `vyomi logs`.")
+		}
+	}
 	switch action {
 	case "up", "start", "restart":
 		if err := ensureDockerEngine(150 * time.Second); err != nil {
@@ -214,24 +225,33 @@ func (c *Config) invokeDockerSubstrate(action string, dcArgs []string) error {
 		if err := run("docker", append(append([]string{}, base...), "up", "-d")...); err != nil {
 			return err
 		}
-		progress("==> Vyomi (Docker) starting - open http://localhost:9000 in ~30s")
+		progress("==> Vyomi (Docker) console starting - open http://localhost:9000 in ~30s")
+		wave2()
 		return nil
 	case "down", "stop":
-		return run("docker", append(append([]string{}, base...), "down")...)
+		return run("docker", append(append([]string{}, full...), "down")...)
 	case "restart":
-		if err := run("docker", append(append([]string{}, base...), "down")...); err != nil {
+		if err := run("docker", append(append([]string{}, full...), "down")...); err != nil {
 			return err
 		}
-		return run("docker", append(append([]string{}, base...), "up", "-d")...)
+		if err := run("docker", append(append([]string{}, base...), "up", "-d")...); err != nil {
+			return err
+		}
+		wave2()
+		return nil
 	case "status", "ps":
-		return run("docker", append(append([]string{}, base...), "ps")...)
+		return run("docker", append(append([]string{}, full...), "ps")...)
 	case "logs":
-		return run("docker", append(append(append([]string{}, base...), "logs"), dcArgs...)...)
+		return run("docker", append(append(append([]string{}, full...), "logs"), dcArgs...)...)
 	case "update":
-		if err := run("docker", append(append([]string{}, base...), "pull")...); err != nil {
+		if err := run("docker", append(append([]string{}, full...), "pull")...); err != nil {
 			return err
 		}
-		return run("docker", append(append([]string{}, base...), "up", "-d")...)
+		if err := run("docker", append(append([]string{}, base...), "up", "-d")...); err != nil {
+			return err
+		}
+		wave2()
+		return nil
 	default:
 		return run("docker", append(append(append([]string{}, base...), action), dcArgs...)...)
 	}

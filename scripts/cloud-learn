@@ -2523,13 +2523,21 @@ _docker_substrate_run() {
   fi
   local dc; if docker compose version >/dev/null 2>&1; then dc="docker compose"; else dc="docker-compose"; fi
   _dc() { $dc -f "$cf" -p "${VYOMI_PROJECT:-vyomi}" "$@"; }
+  # The heavy backends (MySQL, Vault, NATS, MinIO, DynamoDB, ElasticMQ,
+  # Azurite, Pub/Sub, Firestore) sit behind the compose `full` profile, so a
+  # plain `up -d` never starts them. Start them as a second wave and include
+  # them in down/ps/logs/pull (same as packaging/docker/vyomi).
+  _wave2() {
+    printf '==> Starting the backends (S3, KMS, SQL, NoSQL, queues, eventing); the first run downloads their images...\n'
+    _dc --profile full up -d || printf '==> Warning: some backends failed to start; re-run `vyomi up` or check `vyomi logs`.\n' >&2
+  }
   case "$action" in
-    up|start)      _dc up -d; printf '==> Vyomi (Docker) starting — open http://localhost:9000 in ~30s\n' ;;
-    down|stop)     _dc down ;;
-    restart)       _dc down; _dc up -d ;;
-    status|ps)     _dc ps ;;
-    logs)          _dc logs "$@" ;;
-    update|upgrade) _dc pull && _dc up -d ;;
+    up|start)      _dc up -d && printf '==> Vyomi (Docker) console starting — open http://localhost:9000 in ~30s\n' && _wave2 ;;
+    down|stop)     _dc --profile full down ;;
+    restart)       _dc --profile full down; _dc up -d && _wave2 ;;
+    status|ps)     _dc --profile full ps ;;
+    logs)          _dc --profile full logs "$@" ;;
+    update|upgrade) _dc --profile full pull && _dc up -d && _wave2 ;;
     *)             _dc "$action" "$@" ;;
   esac
 }

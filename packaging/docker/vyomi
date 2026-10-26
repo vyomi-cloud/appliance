@@ -83,5 +83,15 @@ case "${1:-up}" in
   status|ps)       dc --profile full ps ;;
   logs)            shift; dc --profile full logs "$@" ;;
   update|upgrade)  dc --profile full pull && dc up -d && wave2_full_bg ;;
+  doctor)
+    # Environment report (was falling through to `docker compose doctor`,
+    # which isn't a compose command, so it printed compose's usage text).
+    echo "vyomi (Docker substrate) doctor"
+    echo "  compose file : $COMPOSE_FILE"
+    echo "  docker       : $(docker --version 2>/dev/null || echo missing)"
+    echo "  compose      : $("${DC[@]}" version --short 2>/dev/null || "${DC[@]}" version 2>/dev/null | head -1 || echo missing)"
+    if docker info >/dev/null 2>&1; then echo "  engine       : running"; else echo "  engine       : NOT reachable (start Docker Desktop / dockerd)"; fi
+    echo "  containers   :"; dc --profile full ps --format '    {{.Name}}  {{.Status}}' 2>/dev/null || echo "    (none)"
+    ;;
   *)               dc "$@" ;;
 esac
