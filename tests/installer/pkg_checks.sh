@@ -34,9 +34,9 @@ check "install $NAME" "$rc" "$(( $(date +%s) - t0 ))s$([ "$rc" != 0 ] && echo ";
 # ── Installed version + files ─────────────────────────────────────────────
 case "$KIND" in
   deb)  pname=$(dpkg-deb -f "$PKG" Package); iv=$(dpkg-query -W -f '${Version}' "$pname" 2>/dev/null)
-        root=$(dpkg -L "$pname" 2>/dev/null | grep -E '/VERSION$' | head -1 | xargs -r dirname) ;;
+        root=$(dpkg -L "$pname" 2>/dev/null | grep -E '/VERSION$' | sort -r -k1,1 | grep -m1 -E '/lib/cloud-learn/VERSION$|/VERSION$' | xargs -r dirname) ;;
   rpm)  pname=$(rpm -qp --qf '%{NAME}' "$PKG"); iv=$(rpm -q --qf '%{VERSION}' "$pname" 2>/dev/null)
-        root=$(rpm -ql "$pname" 2>/dev/null | grep -E '/VERSION$' | head -1 | xargs -r dirname) ;;
+        root=$(rpm -ql "$pname" 2>/dev/null | grep -E '/VERSION$' | grep -m1 -E '/lib/cloud-learn/VERSION$|/VERSION$' | xargs -r dirname) ;;
   brew) pname="$PKG"; iv=$(brew list --versions "$PKG" 2>/dev/null | awk '{print $2}')
         root="$(brew --prefix "$PKG" 2>/dev/null)/libexec" ;;
 esac
@@ -81,6 +81,7 @@ case "$KIND" in
   rpm) left=$(rpm -q "$pname" >/dev/null 2>&1 && echo 1 || echo 0) ;;
   brew) left=$(brew list --versions "$PKG" 2>/dev/null | wc -l) ;;
 esac
+left=$(echo "$left" | tr -d '[:space:]')   # macOS wc pads with spaces
 [ "$left" = 0 ] && [ -z "$(command -v vyomi)" ]; check "uninstall leaves no package and no 'vyomi' on PATH" $? "package entries: $left; vyomi: $(command -v vyomi || echo none)"
 
 { echo "#### $KIND · \`$NAME\` — $pass/$((pass+fail)) passed"; echo
