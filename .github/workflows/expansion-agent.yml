@@ -137,6 +137,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Chained runs are dispatched by the workflow token, so the actor is
+          # github-actions[bot]; the action refuses bot actors unless allowed.
+          allowed_bots: 'github-actions'
           github_token: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
           prompt: |
             Follow tests/conformance/expansion/EXPANSION.md exactly.
