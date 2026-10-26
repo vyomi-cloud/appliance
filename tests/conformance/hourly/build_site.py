@@ -25,6 +25,86 @@ def load(path, default):
         return default
 
 
+NAMES = {"aws": "AWS", "gcp": "GCP", "azure": "Azure", "all": "Cross-cloud"}
+
+
+def md(s) -> str:
+    """Make a value safe inside a Markdown table cell."""
+    return str(s if s is not None else "").replace("|", "\\|").replace("\n", " ").strip()
+
+
+def markdown(d: dict, e: dict) -> str:
+    """The report as GitHub-rendered Markdown (README.md on the report branch):
+    per-cloud sections with collapsible findings and failing-suite logs."""
+    suites, services, findings = d["suites"], d["services"], d["findings"]
+    L = [f"# Vyomi Conformance — hourly report",
+         "",
+         f"Run **{md(d.get('at') or 'not yet')}** · commit `{md((d.get('commit') or '')[:12])}` · "
+         "Nano (in-browser) + offline appliance · updated every hour by "
+         "[the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).",
+         "",
+         "| Suites green | Checks passing | Checks failing | Nano UI clean | Offline UI clean | Open UI findings | API routes with tests |",
+         "|---|---|---|---|---|---|---|",
+         f"| {e['suites_green']}/{e['suites_total']} | {e['checks_passed']} | {e['checks_failed']} | "
+         f"{e['ui_clean_nano']}/{e['ui_total_nano']} | {e['ui_clean_offline']}/{e['ui_total_offline']} | "
+         f"{e['ui_findings']} | {d['api']['pct']}% ({d['api']['total'] - d['api']['uncovered']}/{d['api']['total']}) |",
+         ""]
+    if d.get("agent"):
+        L += ["> **Agent this run:** " + md(d["agent"].splitlines()[0]), ""]
+
+    L += ["## By cloud", "",
+          "| Cloud | Suites green | Checks ✓ | Checks ✗ | Nano UI clean | Offline UI clean | Open findings |",
+          "|---|---|---|---|---|---|---|"]
+    for c in ("aws", "gcp", "azure"):
+        cs = [s for s in suites if s["cloud"] == c]
+        def clean(t):
+            rows = [s for s in services if s["cloud"] == c and s["target"] == t]
+            return f"{sum(1 for s in rows if s['status'] == 'ok')}/{len(rows)}"
+        L.append(f"| [{NAMES[c]}](#{c}) | {sum(1 for s in cs if s['status'] == 'pass')}/{len(cs)} | "
+                 f"{sum(s.get('passed') or 0 for s in cs)} | {sum(s.get('failed') or 0 for s in cs)} | "
+                 f"{clean('nano')} | {clean('offline')} | {sum(1 for f in findings if f['cloud'] == c)} |")
+    L.append("")
+
+    for c in ("aws", "gcp", "azure", "all"):
+        cs = [s for s in suites if s["cloud"] == c]
+        cf = [f for f in findings if f["cloud"] == c]
+        if c == "all" and not cs:
+            continue
+        L += [f'<a id="{c}"></a>', f"## {NAMES[c]}", ""]
+        if cs:
+            L += ["| Status | Suite | Target | Kind | Passed | Failed | Time (s) |", "|---|---|---|---|---|---|---|"]
+            for s in sorted(cs, key=lambda s: (s["status"] == "pass", s["id"])):
+                L.append(f"| {'✅' if s['status'] == 'pass' else '❌'} | `{md(s['id'])}` | {md(s['target'])} | "
+                         f"{md(s['kind'])} | {s.get('passed') or 0} | {s.get('failed') or 0} | {md(s.get('duration_s'))} |")
+            L.append("")
+            for s in cs:
+                if s["status"] != "pass" and s.get("tail"):
+                    L += [f"<details><summary>❌ <code>{md(s['id'])}</code> log</summary>", "", "```",
+                          s["tail"].replace("```", "'''"), "```", "", "</details>", ""]
+        if c != "all":
+            by_svc: dict[tuple, list] = {}
+            for f in cf:
+                by_svc.setdefault((f["target"], f["service"]), []).append(f)
+            L += [f"**UI findings: {len(cf)}**", ""]
+            if not by_svc:
+                L += ["No open UI findings.", ""]
+            for (t, svc), fs in sorted(by_svc.items(), key=lambda kv: -len(kv[1])):
+                L += [f"<details><summary><b>{md(svc)}</b> ({md(t)}) — {len(fs)} finding(s)</summary>", "",
+                      "| Problem | Tab | Detail |", "|---|---|---|"]
+                L += [f"| `{md(f['type'])}` | {md(f.get('tab'))} | {md(f['detail'])} |" for f in fs]
+                L += ["", "</details>", ""]
+
+    new = [n for n in d.get("new", []) if not n.get("covered")]
+    L += ["## New features without tests", ""]
+    L += [f"- {md(n.get('kind'))}: {md(n.get('method', ''))} `{md(n.get('path') or n.get('file'))}`" for n in new[:50]] or ["None since the last run."]
+    L += ["", "## Last 24 runs", "", "| Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |", "|---|---|---|---|---|---|---|"]
+    for h in reversed(d["history"][-24:]):
+        L.append(f"| {md(h.get('at'))} | {h.get('suites_green')}/{h.get('suites_total')} | {h.get('checks_passed')} | "
+                 f"{h.get('checks_failed')} | {h.get('ui_findings')} | {h.get('api_coverage_pct')}% | {md(h.get('agent'))} |")
+    L += ["", "Raw data in this branch: `results.json`, `ui-findings.json`, `history.json`."]
+    return "\n".join(L) + "\n"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--history", default="")
@@ -80,6 +160,7 @@ def main() -> None:
 
     os.makedirs(SITE, exist_ok=True)
     open(os.path.join(SITE, "index.html"), "w", encoding="utf-8").write(page)
+    open(os.path.join(SITE, "README.md"), "w", encoding="utf-8").write(markdown(data, entry))
     json.dump(res, open(os.path.join(SITE, "results.json"), "w"), indent=1)
     json.dump(history, open(os.path.join(SITE, "history.json"), "w"), indent=1)
     json.dump(ui, open(os.path.join(SITE, "ui-findings.json"), "w"), indent=1)

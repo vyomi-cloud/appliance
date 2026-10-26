@@ -92,7 +92,8 @@ jobs:
       - name: Fetch previous page history
         run: |
           mkdir -p prev
-          curl -fsL "$PAGE_URL/history.json" -o prev/history.json || echo '[]' > prev/history.json
+          curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/conformance-report/history.json" -o prev/history.json \
+            || curl -fsL "$PAGE_URL/history.json" -o prev/history.json || echo '[]' > prev/history.json
           base=$(python3 -c "import json;h=json.load(open('prev/history.json'));print(h[-1]['commit'] if h else '')" 2>/dev/null || true)
           echo "BASE_COMMIT=$base" >> "$GITHUB_ENV"
 
@@ -120,6 +121,34 @@ jobs:
       - name: Build coverage page
         if: always()
         run: python3 tests/conformance/hourly/build_site.py --history prev/history.json
+
+      # The report lives in the repo itself: README.md (+ raw JSON + the
+      # interactive index.html) on the dedicated conformance-report branch,
+      # rendered at github.com/<repo>/tree/conformance-report. A separate branch
+      # keeps 24 report commits a day off main.
+      - name: Publish report to the conformance-report branch
+        if: always()
+        run: |
+          set -e
+          git config user.name "vyomi-conformance-bot"
+          git config user.email "conformance-bot@users.noreply.github.com"
+          rm -rf /tmp/report && mkdir /tmp/report && cp -r tests/conformance/hourly/site/. /tmp/report/
+          if git ls-remote --exit-code origin conformance-report >/dev/null 2>&1; then
+            git fetch -q origin conformance-report
+            git worktree add -q /tmp/report-wt FETCH_HEAD
+            git -C /tmp/report-wt checkout -q -B conformance-report
+          else
+            git worktree add -q --detach /tmp/report-wt
+            git -C /tmp/report-wt checkout -q --orphan conformance-report
+            git -C /tmp/report-wt rm -rfq . || true
+          fi
+          find /tmp/report-wt -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -r /tmp/report/. /tmp/report-wt/
+          cd /tmp/report-wt
+          git add -A
+          git commit -q -m "conformance report $(date -u +%Y-%m-%dT%H:%MZ)" || echo "no report changes"
+          git push -q origin conformance-report
+          echo "Report: https://github.com/${{ github.repository }}/tree/conformance-report"
 
       - uses: actions/configure-pages@v5
         if: always()
