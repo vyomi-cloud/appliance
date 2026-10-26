@@ -1,15 +1,23 @@
 {
- "at": "2026-10-26T20:54:52+00:00",
+ "at": "2026-10-26T21:54:53+00:00",
  "baseline": false,
  "changes": [
   {
+   "cloud": "sdk",
+   "service": "pypi:azure-identity",
+   "kind": "release",
+   "key": "ver:pypi:azure-identity:1.27.0",
+   "title": "pypi:azure-identity: 1.26.0 \u2192 1.27.0",
+   "actionable": false
+  },
+  {
    "cloud": "aws",
-   "service": "Amazon RDS",
+   "service": "AWS KMS, Key Management Service",
    "kind": "announcement",
-   "key": "feed:aws:ec12376ab0b0",
-   "title": "Amazon RDS now supports the latest Cumulative Update and GDR updates for Microsoft SQL Server",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-rds-supports-latest-cumulative-update-gdr-microsoft-sql-server/",
-   "detail": "Amazon Relational Database Service (Amazon RDS) for SQL Server now supports the latest Cumulative Updates (CU) and General Distribution Release (GDR) updates for Microsoft SQL Server. This release includes support for Microsoft SQL Server 2017 CU31+GDR KB5122774 (RDS version 14.00.3550.4.v1), SQL Server 2019 CU32+GDR KB5122772 (RDS version 15.00.4490.9.v1), SQL Server 2022 CU27 KB5104824 (RDS version 16.00.4295.3.v1) and SQL Server 2025 CU9 KB5122048 (RDS version 17.00.5005.3.v1). For additional information on the improvements and fixes included in these updates, see Microsoft documentation fo",
+   "key": "feed:aws:3cdf63d17206",
+   "title": "AWS Key Management Service now supports ML-KEM for post-quantum key encapsulation",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/kms-ml-kem-post-quantum/",
+   "detail": "AWS Key Management Service (KMS) now supports Module-Lattice-Based Key-Encapsulation Mechanism (ML-KEM), a post-quantum cryptography standard under NIST FIPS 203 , which enables two parties to establish a shared secret. NIST designed ML-KEM to replace the classical key-establishment schemes, like DH/ECDH key agreement, and RSA-based key transport, in their strategic cryptographic roadmap (see NIST IR 8547 ). ML-KEM addresses the \"harvest now, decrypt later\" threat to those classical schemes, where an adversary records the key-establishment exchange today and recovers the shared secret once suf",
    "actionable": false
   }
  ],
