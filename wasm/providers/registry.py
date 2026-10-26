@@ -76,7 +76,18 @@ def _events_query(params: dict) -> dict:
             service=params.get("service") or None,
             limit=int(params.get("limit") or 200),
         )
-        return {"ok": True, "events": evs}
+        # The console's Activity tab reads the offline appliance's shape:
+        # {at, event, detail:{name, …}} — project the store's events onto it so the
+        # tab is filtered by resource and its Detail column is filled, like offline.
+        out = []
+        for e in evs:
+            d = e.get("detail")
+            d = dict(d) if isinstance(d, dict) else ({"note": d} if d else {})
+            d.setdefault("name", e.get("resource", ""))
+            d.setdefault("service", e.get("service", ""))
+            d.setdefault("status", e.get("status", ""))
+            out.append({**e, "at": e.get("ts", ""), "event": e.get("action", ""), "detail": d})
+        return {"ok": True, "events": out}
     except Exception as e:
         return {"ok": True, "events": [], "error": str(e)}
 
