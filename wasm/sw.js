@@ -615,6 +615,7 @@ async function route(method, path, body, query) {
   if (m && method === "POST") return { tuple: ["aws", "kinesis", "PutRecord", { name: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/kinesis\/streams\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "kinesis", "GetStream", { name: dec(m[1]) }] };
+  if (m && (method === "PUT" || method === "PATCH")) return { tuple: ["aws", "kinesis", "UpdateStream", { name: dec(m[1]), body: body || {} }] };
   if (m && method === "DELETE") return { tuple: ["aws", "kinesis", "DeleteStream", { name: dec(m[1]) }] };
   // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
   if (path === "/api/eventbridge/rules") {

@@ -111,6 +111,7 @@ class Aws(CloudProvider):
             ("kinesis", "ListStreams"):  lambda b, a, p: D.kinesis_list(p),
             ("kinesis", "CreateStream"): lambda b, a, p: D.kinesis_create(p),
             ("kinesis", "GetStream"):    lambda b, a, p: D.kinesis_get(p),
+            ("kinesis", "UpdateStream"): lambda b, a, p: D.kinesis_update(p),
             ("kinesis", "DeleteStream"): lambda b, a, p: D.kinesis_delete(p),
             ("kinesis", "PutRecord"):    lambda b, a, p: D.kinesis_put(p),
             # EventBridge — rules → SQS delivery, via core/eventbridge_core.py

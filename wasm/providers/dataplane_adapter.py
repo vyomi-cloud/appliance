@@ -254,6 +254,10 @@ def kinesis_get(p):
     return kinesis_core.console_get(KIN, str(p.get("name") or ""))
 
 
+def kinesis_update(p):
+    return kinesis_core.console_update(KIN, str(p.get("name") or ""), p.get("body") or {})
+
+
 def kinesis_delete(p):
     return kinesis_core.console_delete(KIN, str(p.get("name") or ""))
 

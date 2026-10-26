@@ -98,6 +98,11 @@ def register(app: FastAPI, **kwargs) -> None:
         r = kinesis_core.console_get(STORE, name)
         return r if r.get("ok") else _fail(r)
 
+    @app.api_route("/api/kinesis/streams/{name}", methods=["PUT", "PATCH"])
+    def api_kinesis_update(name: str, payload: dict = Body(default=None)):
+        r = kinesis_core.console_update(STORE, name, payload or {})
+        return r if r.get("ok") else _fail(r)
+
     @app.delete("/api/kinesis/streams/{name}")
     def api_kinesis_delete(name: str):
         r = kinesis_core.console_delete(STORE, name)

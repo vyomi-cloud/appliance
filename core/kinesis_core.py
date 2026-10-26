@@ -801,6 +801,24 @@ def console_get(store, name: str) -> dict:
         {"ok": False, "code": "ResourceNotFoundException", "status": 404}
 
 
+def console_update(store, name: str, body: dict) -> dict:
+    """Console Save actions: tags (replace the set) and retention period."""
+    st = _store_streams(store).get(name)
+    if st is None:
+        return {"ok": False, "code": "ResourceNotFoundException", "status": 404}
+    if isinstance(body.get("tags"), dict):
+        st["tags"] = {str(k): str(v) for k, v in body["tags"].items() if k}
+    if body.get("retention_hours") is not None:
+        h = int(body["retention_hours"])
+        op = "IncreaseStreamRetentionPeriod" if h > st["retention"] else "DecreaseStreamRetentionPeriod"
+        if h != st["retention"]:
+            r = dispatch(store, "Kinesis_20131202." + op, {"StreamName": name, "RetentionPeriodHours": h})
+            if r.status >= 400:
+                return {"ok": False, "code": r.body.get("__type"), "detail": r.body.get("message"), "status": r.status}
+    _persist(store)
+    return console_get(store, name)
+
+
 def console_delete(store, name: str) -> dict:
     r = dispatch(store, "Kinesis_20131202.DeleteStream", {"StreamName": name, "EnforceConsumerDeletion": True})
     return {"ok": r.status < 400, "name": name, "code": r.body.get("__type"), "status": r.status}
