@@ -84,20 +84,43 @@ jobs:
           # Hashtable splat: named parameters (an array would splat them positionally).
           $vargs = @{ Msi = "msi\cloud-learn-$ver-x64.msi"; Version = $ver; OutDir = "msi-validation" }
           if ($prev) { $vargs.PrevMsi = "prev\cloud-learn-$($prev.TrimStart('v'))-x64.msi" }
+          # Once release signing is live, set the repo variable MSI_SIGNER (e.g.
+          # "Vyomi Cloud") and a missing/invalid signature fails validation.
+          if ("${{ vars.MSI_SIGNER }}") { $vargs.ExpectSigner = "${{ vars.MSI_SIGNER }}" }
           ./tests/installer/validate-msi.ps1 @vargs
+
+      # Until the real certificate is live: rehearse the whole signing path with
+      # a throwaway self-signed certificate trusted only on this runner. Proves
+      # the MSI signs cleanly, verifies (also as an internet download) and still
+      # installs/upgrades/uninstalls once signed. Never published.
+      - name: Signing rehearsal (self-signed, this runner only)
+        if: ${{ !vars.MSI_SIGNER }}
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.rel.outputs.ver }}"
+          New-Item -ItemType Directory -Force signed | Out-Null
+          ./tests/installer/sign-selfsigned.ps1 -Msi "msi\cloud-learn-$ver-x64.msi" -Out "signed\cloud-learn-$ver-x64.msi"
+          ./tests/installer/validate-msi.ps1 -Msi "signed\cloud-learn-$ver-x64.msi" -Version $ver `
+            -OutDir msi-validation-selfsigned -ExpectSigner "Vyomi Test Signing"
 
       - name: Job summary
         if: always()
         shell: pwsh
         run: |
           if (Test-Path msi-validation\summary.md) { Get-Content msi-validation\summary.md -Raw >> $env:GITHUB_STEP_SUMMARY }
+          if (Test-Path msi-validation-selfsigned\summary.md) {
+            "`n#### Signing rehearsal (self-signed, never published)`n" >> $env:GITHUB_STEP_SUMMARY
+            Get-Content msi-validation-selfsigned\summary.md -Raw >> $env:GITHUB_STEP_SUMMARY
+          }
 
       - name: Keep logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: msi-validation-${{ steps.rel.outputs.ver }}
-          path: msi-validation/
+          path: |
+            msi-validation/
+            msi-validation-selfsigned/
           retention-days: 30
 
       - name: Open an issue on failure

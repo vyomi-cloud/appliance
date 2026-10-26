@@ -23,7 +23,11 @@ param(
   [Parameter(Mandatory)] [string] $Msi,
   [string] $PrevMsi = "",
   [Parameter(Mandatory)] [string] $Version,
-  [string] $OutDir = "msi-validation"
+  [string] $OutDir = "msi-validation",
+  # When set, the MSI must carry a Valid Authenticode signature from a
+  # certificate whose subject contains this text (e.g. "Vyomi Cloud"), also
+  # when it carries the browser's downloaded-from-the-internet mark.
+  [string] $ExpectSigner = ""
 )
 $ErrorActionPreference = "Stop"
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
@@ -111,7 +115,21 @@ function CheckRemoved([string]$Scenario) {
 # ── Package itself ────────────────────────────────────────────────────────
 $sig = Get-AuthenticodeSignature $Msi
 Write-Host "Authenticode: $($sig.Status) $($sig.SignerCertificate.Subject)"
-$Results.Add([pscustomobject]@{ scenario = "package"; check = "Authenticode signature (informational)"; ok = $true; detail = "$($sig.Status)" })
+if (-not $ExpectSigner) {
+  $Results.Add([pscustomobject]@{ scenario = "package"; check = "Authenticode signature (informational)"; ok = $true; detail = "$($sig.Status)" })
+} else {
+  Check "package" "Authenticode signature is Valid" ($sig.Status -eq "Valid") "$($sig.Status): $($sig.StatusMessage)"
+  Check "package" "signed by '$ExpectSigner'" ("$($sig.SignerCertificate.Subject)" -like "*$ExpectSigner*") "$($sig.SignerCertificate.Subject)"
+  Check "package" "signature is timestamped" ($null -ne $sig.TimeStamperCertificate) "$($sig.TimeStamperCertificate.Subject)"
+  # What a user gets: the browser tags downloads with Zone.Identifier (ZoneId=3,
+  # Internet). The signature must still verify on that copy.
+  $dl = Join-Path $OutDir ("downloaded-" + (Split-Path $Msi -Leaf))
+  Copy-Item $Msi $dl -Force
+  Set-Content -Path $dl -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3`r`nHostUrl=https://github.com/vyomi-cloud/appliance/releases/"
+  $dsig = Get-AuthenticodeSignature $dl
+  Check "package" "downloaded (internet-zone) copy verifies" ($dsig.Status -eq "Valid") "$($dsig.Status)"
+  Remove-Item $dl -Force
+}
 
 # ── Scenario A: fresh install ─────────────────────────────────────────────
 if ((VyomiEntries).Count -gt 0) { throw "Vyomi is already installed on this machine; run on a clean box." }
