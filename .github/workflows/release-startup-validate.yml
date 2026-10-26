@@ -1,0 +1,110 @@
+name: Validate release startup
+
+# After a release's Docker images are published, boot that exact release the
+# way `vyomi up` does on the Docker tiers (the release tarball's
+# docker-compose.cloudlite.yml, project "vyomi", vyomi/appliance:X.Y.Z) on a
+# clean Linux runner, then tests/installer/startup_check.mjs checks that every
+# service comes up and that the UI reports it (/clouds "Appliance is Ready",
+# AWS/GCP/Azure consoles load). A failure opens an issue.
+#
+# This covers the release's images and compose file, not the Windows host:
+# GitHub runners can't run Docker Desktop/Hyper-V. The Windows path is next,
+# on an Azure VM.
+
+on:
+  workflow_run:
+    workflows: ["Docker Publish"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release to validate (e.g. 3.0.7). Blank = latest release.'
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: release-startup-${{ github.event.workflow_run.head_branch || inputs.version || 'latest' }}
+  cancel-in-progress: false
+
+jobs:
+  startup:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Resolve the release
+        id: rel
+        run: |
+          TAG="${{ github.event.workflow_run.head_branch }}"
+          [ -n "$TAG" ] || { [ -n "${{ inputs.version }}" ] && TAG="v${{ inputs.version }}" || TAG=$(gh release view --json tagName -q .tagName); }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"; echo "ver=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Validating startup of $TAG"
+
+      - name: Fetch the release bundle (its own compose file)
+        run: |
+          VER="${{ steps.rel.outputs.ver }}"
+          gh release download "${{ steps.rel.outputs.tag }}" -p "cloud-learn-$VER.tar.gz" -D /tmp/rel
+          mkdir -p /tmp/bundle && tar -xzf "/tmp/rel/cloud-learn-$VER.tar.gz" -C /tmp/bundle --strip-components=1
+          test -f /tmp/bundle/docker-compose.cloudlite.yml
+
+      - name: Install Playwright
+        run: |
+          mkdir -p .ci-node && cd .ci-node
+          echo '{"name":"vyomi-ci-node","private":true}' > package.json
+          npm install --silent playwright@1.47.2
+          npx playwright install --with-deps chromium
+
+      - name: Boot the release like `vyomi up` (Docker tiers)
+        working-directory: /tmp/bundle
+        run: |
+          VER="${{ steps.rel.outputs.ver }}"
+          export VYOMI_SIMULATOR_IMAGE="vyomi/appliance:$VER"
+          # cloudsim is published with the same version tag; fall back to latest.
+          if docker manifest inspect "vyomi/cloudsim:$VER" >/dev/null 2>&1; then export VYOMI_CLOUDSIM_IMAGE="vyomi/cloudsim:$VER"; fi
+          docker compose -f docker-compose.cloudlite.yml -p vyomi pull --quiet
+          docker compose -f docker-compose.cloudlite.yml -p vyomi up -d
+          docker compose -f docker-compose.cloudlite.yml -p vyomi ps
+
+      - name: Check every service comes up and the UI reports it
+        env:
+          BASE: http://localhost:9000
+          OUT: startup-check
+          VERSION: ${{ steps.rel.outputs.ver }}
+          NODE_PATH: ${{ github.workspace }}/.ci-node/node_modules
+          TIMEOUT_S: '900'
+        run: node tests/installer/startup_check.mjs
+
+      - name: Job summary + container state
+        if: always()
+        run: |
+          [ -f startup-check/summary.md ] && cat startup-check/summary.md >> "$GITHUB_STEP_SUMMARY"
+          docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' | tee startup-check/containers.txt
+          docker compose -f /tmp/bundle/docker-compose.cloudlite.yml -p vyomi logs --no-color --tail 200 > startup-check/compose.log 2>&1 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: startup-check-${{ steps.rel.outputs.ver }}
+          path: startup-check/
+          retention-days: 30
+
+      - name: Open an issue on failure
+        if: failure()
+        run: |
+          VER="${{ steps.rel.outputs.ver }}"
+          { echo "Release **v$VER** did not come up cleanly (Docker-tier startup on Linux)."; echo
+            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"; echo
+            [ -f startup-check/summary.md ] && cat startup-check/summary.md; } > /tmp/issue.md
+          gh label create release-startup --color d93f0b --description "Release fails to start" 2>/dev/null || true
+          gh issue create --title "Release v$VER startup check failed" --label release-startup --body-file /tmp/issue.md
