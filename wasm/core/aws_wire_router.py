@@ -97,6 +97,7 @@ from core import azure_servicebus_core as az_sb
 from core import eventbridge_core as events
 from core import lambda_core as lam
 from core import apigateway_core as apigw
+from core import apigatewayv2_core as apigw2
 from core import vpc_core as vpc
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
@@ -234,6 +235,7 @@ class AwsWireRouter:
         # API Gateway shares the Lambda store so an AWS_PROXY integration can reach
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
+        self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
 
     def _servicebus_service(self, method, path, lheaders):
@@ -271,6 +273,9 @@ class AwsWireRouter:
             return "az-servicebus"
         if "/2015-03-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
             return "lambda"
+        if path.startswith("/v2/") and path[4:].split("/", 1)[0] in (   # API Gateway V2 control plane
+                "apis", "domainnames", "vpclinks", "tags", "portals", "portalproducts"):
+            return "apigatewayv2"
         if "/restapis" in path:               # API Gateway v1 control plane
             return "apigateway"
         if "microsoft.authorization" in path.lower():   # Azure RBAC checkAccess
@@ -366,6 +371,13 @@ class AwsWireRouter:
             r = lam.dispatch(self.lam, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "apigatewayv2":   # native API Gateway V2 control plane (/v2/apis, …)
+            r = apigw2.dispatch(self.apigwv2, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            if r.media_type and r.body and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 

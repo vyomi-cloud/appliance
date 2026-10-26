@@ -115,6 +115,7 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
 
         /2015-03-31/functions...        Lambda (serverless invoke)
         /restapis...                    API Gateway
+        /v2/apis, /v2/domainnames, /v2/vpclinks, /v2/tags   API Gateway V2
         /azure-sql/...                  Azure SQL data plane
         /providers/Microsoft.Authorization/...   Azure RBAC checkAccess
 
@@ -137,7 +138,7 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
                         headers={k: v for k, v in (out["headers"] or {}).items()})
 
     methods = ["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"]
-    for prefix in ("/2015-03-31/functions", "/restapis", "/azure-sql",
+    for prefix in ("/2015-03-31/functions", "/restapis", "/v2/apis", "/v2/domainnames", "/v2/vpclinks", "/v2/tags", "/azure-sql",
                    "/providers/Microsoft.Authorization"):
         app.add_route(prefix, _proxy, methods=methods)
         app.add_route(prefix + "/{rest:path}", _proxy, methods=methods)
