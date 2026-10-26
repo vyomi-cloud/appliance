@@ -1,0 +1,53 @@
+[
+ {
+  "at": "",
+  "commit": "",
+  "suites_green": 0,
+  "suites_total": 0,
+  "checks_passed": 0,
+  "checks_failed": 0,
+  "api_coverage_pct": 0.0,
+  "ui_clean_nano": 0,
+  "ui_total_nano": 0,
+  "ui_clean_offline": 0,
+  "ui_total_offline": 0,
+  "ui_findings": 0,
+  "agent": ""
+ },
+ {
+  "at": "2026-10-26T07:46:18+00:00",
+  "commit": "db7fb0248224",
+  "suites_green": 9,
+  "suites_total": 20,
+  "checks_passed": 137,
+  "checks_failed": 228,
+  "api_coverage_pct": 10.3,
+  "ui_clean_nano": 0,
+  "ui_total_nano": 43,
+  "ui_clean_offline": 1,
+  "ui_total_offline": 38,
+  "ui_findings": 86,
+  "agent": ""
+ },
+ {
+  "at": "2026-10-26T08:05:52+00:00",
+  "commit": "18e4b086a48d",
+  "suites_green": 9,
+  "suites_total": 20,
+  "checks_passed": 147,
+  "checks_failed": 220,
+  "api_coverage_pct": 10.3,
+  "ui_findings": 86,
+  "agent": "",
+  "ui_clean_nano": 0,
+  "ui_total_nano": 43,
+  "ui_clean_offline": 1,
+  "ui_total_offline": 38,
+  "aws_checks_passed": 32,
+  "aws_findings": 25,
+  "gcp_checks_passed": 17,
+  "gcp_findings": 25,
+  "azure_checks_passed": 28,
+  "azure_findings": 36
+ }
+]

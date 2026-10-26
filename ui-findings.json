@@ -1,0 +1,1086 @@
+{
+ "nano": {
+  "target": "nano",
+  "at": "2026-10-26T08:05:05.589Z",
+  "services": [
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "EC2",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "Lambda",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_FAILED",
+      "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "S3",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "RDS",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "DynamoDB",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "SQS",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "API Gateway",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "EventBridge",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "VPC",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "IAM",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "Secrets Manager",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "KMS",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Compute Engine",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Cloud Functions",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Cloud Storage",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Cloud SQL",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Firestore",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "VPC Network",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Pub/Sub",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "API Gateway",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Eventarc",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Secret Manager",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Cloud KMS",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "IAM & Admin",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Resource groups",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "HTTP_404",
+      "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined?api-version=2023-01-01 \u2192 404"
+     },
+     {
+      "type": "HTTP_404",
+      "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined?api-version=2023-01-01 \u2192 404"
+     },
+     {
+      "type": "HTTP_404",
+      "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined?api-version=2023-01-01 \u2192 404"
+     },
+     {
+      "type": "HTTP_404",
+      "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined?api-version=2023-01-01 \u2192 404"
+     },
+     {
+      "type": "HTTP_404",
+      "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined?api-version=2023-01-01 \u2192 404"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Virtual Machines",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_FAILED",
+      "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Storage accounts",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "SQL servers",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Service Bus",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Cosmos DB",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Function apps",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "API Management",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Virtual networks",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Network Security Group",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Event Grid topics",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Key vaults",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Role Definition",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Entra ID / RBAC",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Blob containers",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Cosmos databases",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Key Vault secrets",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Key Vault keys",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Storage queues",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   }
+  ]
+ },
+ "offline": {
+  "target": "offline",
+  "at": "2026-10-26T07:52:45.168Z",
+  "services": [
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "EC2",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "HTTP_5XX",
+      "detail": "during create: /api/ec2/instances \u2192 500"
+     },
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "Lambda",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_FAILED",
+      "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "S3",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "RDS",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "DynamoDB",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "SQS",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "API Gateway",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "EventBridge",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "VPC",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "IAM",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "Secrets Manager",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "KMS",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Compute Engine",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "HTTP_5XX",
+      "detail": "during create: /api/gcp/compute/v1/projects/123456789012/zones/us-central1-a/instances \u2192 500"
+     },
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Cloud Functions",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Cloud Storage",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Cloud SQL",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Firestore",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "VPC Network",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Pub/Sub",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "API Gateway",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Eventarc",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Secret Manager",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Cloud KMS",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "IAM & Admin",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Resource groups",
+    "tabs": [],
+    "findings": [],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Virtual Machines",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CREATE_FAILED",
+      "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Storage accounts",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "SQL servers",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Service Bus",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Cosmos DB",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Function apps",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "API Management",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Virtual networks",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Network Security Group",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Event Grid topics",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Key vaults",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Role Definition",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Entra ID / RBAC",
+    "tabs": [],
+    "findings": [
+     {
+      "type": "CRAWL_ERROR",
+      "detail": "locator.click: Timeout 5000ms exceeded."
+     }
+    ],
+    "status": "broken"
+   }
+  ]
+ }
+}
