@@ -65,7 +65,8 @@ const PLACEHOLDER_CELLS = (page) => page.evaluate(() => {
   const isPh = (t) => /^(-|—|–|n\/a|null|none)?$/i.test(t.trim());
   for (const table of document.querySelectorAll("#main table")) {
     const heads = [...table.querySelectorAll("thead th, tr:first-child th")].map((h) => (h.innerText || "").trim());
-    table.querySelectorAll("tbody tr").forEach((tr, ri) => {
+    // Consoles build tables with DOM calls (no <tbody>): data rows are the <tr>s with <td>s.
+    [...table.querySelectorAll("tr")].filter((tr) => tr.querySelector("td")).forEach((tr, ri) => {
       [...tr.querySelectorAll("td")].forEach((td, ci) => {
         const col = heads[ci] || `column ${ci + 1}`;
         // Checkbox / action columns legitimately have no text.
@@ -150,7 +151,10 @@ async function dismissPopups(page) {
   }
 }
 
-const rowCount = (page) => page.locator("#main tbody tr, #main [role=row]").count();
+// Data rows only: consoles often append <tr>s straight to <table> (no <tbody>),
+// so match any <tr> holding a <td>, not just "tbody tr".
+const ROW_SEL = "#main table tr:has(td), #main [role=row]:has([role=cell],[role=gridcell])";
+const rowCount = (page) => page.locator(ROW_SEL).count();
 
 // Create a resource accepting every form default, return to the service list
 // (create pages navigate away from it), and check the new row is there, fully
@@ -224,6 +228,20 @@ async function crawlConsole(browser, base, con, needsSW) {
     const services = await page.evaluate((sel) => [...document.querySelectorAll(sel)]
       .map((e, i) => ({ i, label: (e.innerText || e.title || e.getAttribute("data-key") || e.getAttribute("data-service") || "").trim().split("\n").pop() }))
       .filter((x) => x.label && !/^home$/i.test(x.label)), RAIL_SEL);
+    // Opening a service swaps #rail for that service's own sidebar (EC2 →
+    // Events, Instances, …), so the service list's indexes stop matching.
+    // Go back to the console home whenever the rail entry isn't this service.
+    const railLabel = (i) => page.locator(RAIL_SEL).nth(i).evaluate((e) =>
+      (e.innerText || e.title || e.getAttribute("data-key") || e.getAttribute("data-service") || "").trim().split("\n").pop()).catch(() => "");
+    const openService = async (svc) => {
+      if ((await railLabel(svc.i)) !== svc.label) {
+        await page.goto(base + con.path, { waitUntil: "domcontentloaded" });
+        await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, RAIL_SEL, { timeout: 120000, polling: 500 });
+        await sleep(1000);
+        await dismissPopups(page);
+      }
+      await page.locator(RAIL_SEL).nth(svc.i).click({ timeout: 5000 });
+    };
     const seen = new Set();
     for (const svc of services) {
       if (seen.has(svc.label) || seen.size >= MAX_SERVICES) continue;
@@ -231,7 +249,7 @@ async function crawlConsole(browser, base, con, needsSW) {
       const row = { target: TARGET, cloud: con.cloud, service: svc.label, tabs: [], findings: [] };
       try {
         await dismissPopups(page);
-        await page.locator(RAIL_SEL).nth(svc.i).click({ timeout: 5000 });
+        await openService(svc);
         await sleep(1500);
         const s = await snap(page);
         row.findings.push(...drain(), ...textFindings(s.text));
@@ -241,14 +259,14 @@ async function crawlConsole(browser, base, con, needsSW) {
           const backToList = async () => {
             await page.keyboard.press("Escape").catch(() => {});
             await dismissPopups(page);
-            await page.locator(RAIL_SEL).nth(svc.i).click({ timeout: 5000 }).catch(() => {});
+            await openService(svc).catch(() => {});
             await sleep(1500);
           };
           row.findings.push(...(await createWithDefaults(page, drain, con.cloud, backToList)));
           // Open the first resource so its detail tabs (where most unfilled
           // fields hide) get walked below.
           drain();
-          const link = page.locator("#main tbody tr a, #main tbody tr td:first-child, #main [role=row] a").first();
+          const link = page.locator("#main table tr:has(td) a, #main table tr:has(td) td:not(.chk), #main [role=row] a").first();
           if (await link.count()) {
             await link.click({ timeout: 3000 }).catch(() => {});
             await sleep(1500);

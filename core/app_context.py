@@ -60,9 +60,31 @@ LXD_CONSOLE_PORT = 8080
 EC2_TERMINATED_VISIBILITY_SECONDS = int(
     os.environ.get("CLOUDLEARN_EC2_TERMINATED_VISIBILITY_SECONDS", "60"),
 )
-INSTANCE_WORK_ROOT = Path(
-    os.environ.get("CLOUDLEARN_DEPLOY_DIR", "/var/lib/cloudlearn/deployments"),
-)
+def _writable_deploy_root() -> Path:
+    """The configured deploy dir, or a writable fallback when it isn't usable.
+
+    Compose bind-mounts /var/lib/cloudlearn/deployments from the host; when the
+    host path didn't exist Docker creates it root-owned and the (non-root)
+    simulator can't create instance workspaces in it — which used to 500 every
+    EC2 / GCE / Azure VM launch. Fall back to the data volume instead.
+    """
+    configured = Path(os.environ.get("CLOUDLEARN_DEPLOY_DIR", "/var/lib/cloudlearn/deployments"))
+    candidates = [configured, Path("/data/deployments"),
+                  Path(__file__).resolve().parent.parent / "deployments"]
+    for cand in candidates:
+        try:
+            cand.mkdir(parents=True, exist_ok=True)
+            if os.access(cand, os.W_OK | os.X_OK):
+                if cand != configured:
+                    print(f"[vyomi] deploy dir {configured} is not writable; "
+                          f"instance workspaces go to {cand}", flush=True)
+                return cand
+        except OSError:
+            continue
+    return configured
+
+
+INSTANCE_WORK_ROOT = _writable_deploy_root()
 
 EC2_XML_NS = "http://ec2.amazonaws.com/doc/2016-11-15/"
 RDS_XML_NS = "http://rds.amazonaws.com/doc/2014-10-31/"
