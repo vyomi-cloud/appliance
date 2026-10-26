@@ -1,29 +1,25 @@
 {
- "updated": "2026-10-26 16:25 UTC",
+ "updated": "2026-10-26 16:33 UTC",
  "totals": {
   "aws": {
    "released": 12,
    "queue": 33,
-   "Released": 12,
-   "\ud83d\udccb Queued": 14,
-   "\ud83d\udd0d In gate": 2,
-   "\u00b7 Not filed": 17,
+   "building": 0,
+   "in_gate": 2,
    "upstream": 435
   },
   "gcp": {
    "released": 12,
    "queue": 24,
-   "Released": 12,
-   "\ud83d\udccb Queued": 12,
-   "\u00b7 Not filed": 12,
+   "building": 0,
+   "in_gate": 0,
    "upstream": 316
   },
   "azure": {
    "released": 12,
    "queue": 24,
-   "Released": 12,
-   "\ud83d\udccb Queued": 12,
-   "\u00b7 Not filed": 12,
+   "building": 0,
+   "in_gate": 0,
    "upstream": 317
   }
  }
