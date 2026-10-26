@@ -188,7 +188,10 @@ jobs:
           if git ls-remote --exit-code origin "refs/heads/$B" >/dev/null; then git fetch -q origin "$B"; git checkout -q -B "$B" FETCH_HEAD
           else git checkout -q -B "$B" "$TAG"; fi
           cp /tmp/RELEASE-CHECKS.md RELEASE-CHECKS.md
-          git add RELEASE-CHECKS.md
+          # The release branch's front page IS the checks report (main's README
+          # is unaffected; the tag and published artifacts don't change).
+          { cat /tmp/RELEASE-CHECKS.md; echo; echo "---"; echo "Project README: ${{ github.server_url }}/$R#readme"; } > README.md
+          git add RELEASE-CHECKS.md README.md
           git commit -q -m "docs(release): checks report for v$VER" || { echo "No change"; exit 0; }
           git push -q origin "HEAD:refs/heads/$B"
-          echo "Report: ${{ github.server_url }}/$R/blob/$B/RELEASE-CHECKS.md" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Report: ${{ github.server_url }}/$R/tree/$B (README) · ${{ github.server_url }}/$R/blob/$B/RELEASE-CHECKS.md" | tee -a "$GITHUB_STEP_SUMMARY"

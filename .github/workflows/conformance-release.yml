@@ -87,9 +87,28 @@ jobs:
         run: |
           NEW="${{ steps.v.outputs.new }}"
           SHA=$(git rev-parse HEAD)
-          git push -q origin "$SHA:refs/heads/release/v$NEW"
           git tag -a "v$NEW" "$SHA" -m "v$NEW: daily conformance release"
           git push -q origin "v$NEW"
+          # Release branch = the tagged commit + a front page that shows the
+          # release checks (placeholder until Release checks report fills it).
+          git checkout -q -B "release/v$NEW" "$SHA"
+          {
+            echo "# Vyomi appliance v$NEW — release checks"; echo
+            echo "⏳ **Checks in progress.** This page is replaced with the full results as soon as they finish."; echo
+            echo "| Package / check | Platform |"; echo "|---|---|"
+            echo "| DEB: cloud-learn + vyomi-docker | Ubuntu |"
+            echo "| RPM: cloud-learn + vyomi-docker | Fedora 40 |"
+            echo "| Homebrew: vyomi + vyomi-docker | macOS |"
+            echo "| MSI: install, upgrade, uninstall (+ signing) | Windows |"
+            echo "| Startup: all services + UI status | Linux, release images |"
+            echo "| Windows E2E: MSI → vyomi up → services + UI | Windows (self-hosted) |"; echo
+            echo "- Release: ${{ github.server_url }}/${{ github.repository }}/releases/tag/v$NEW"
+            echo "- Progress: ${{ github.server_url }}/${{ github.repository }}/actions"
+            echo "- Project README: ${{ github.server_url }}/${{ github.repository }}#readme"
+          } > README.md
+          git add README.md
+          git commit -q -m "docs(release): release-checks placeholder for v$NEW"
+          git push -q origin "HEAD:refs/heads/release/v$NEW"
           echo "Released v$NEW at $SHA"
 
       - name: Merge the linked portal PR
