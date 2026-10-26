@@ -289,5 +289,29 @@
   "gcp_findings": 64,
   "azure_checks_passed": 107,
   "azure_findings": 79
+ },
+ {
+  "at": "2026-10-26T21:37:59+00:00",
+  "commit": "e4a2bda7153c",
+  "suites_green": 13,
+  "suites_total": 22,
+  "checks_passed": 516,
+  "checks_failed": 103,
+  "api_coverage_pct": 12.8,
+  "ui_findings": 216,
+  "agent": "Fixed the Azure create-wizard harness mistake (17 services) and Azure VM cost savings, added 1 conformance check, 0 regressions known.",
+  "new_features": 0,
+  "parity_gaps": 9,
+  "ops_tested_pct": 72.9,
+  "ui_clean_nano": 0,
+  "ui_total_nano": 43,
+  "ui_clean_offline": 5,
+  "ui_total_offline": 38,
+  "aws_checks_passed": 145,
+  "aws_findings": 77,
+  "gcp_checks_passed": 17,
+  "gcp_findings": 57,
+  "azure_checks_passed": 107,
+  "azure_findings": 82
  }
 ]
