@@ -28,6 +28,7 @@ from core.nosql_store import InMemoryNoSqlStore
 from core.kms_keystore import InMemoryKeyStore
 from core.messaging_store import InMemoryMessagingStore
 from core.iam_store import InMemoryIamStore
+from core.cognito_idp_core import InMemoryCognitoIdpStore
 from core.azure_blob_core import AzureBlobStore
 from core.gcp_firestore_core import FirestoreStore
 from core.azure_cosmos_core import CosmosStore
@@ -135,6 +136,15 @@ class PersistentKeyStore(_PersistentMixin, InMemoryKeyStore):
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "kms"):
         InMemoryKeyStore.__init__(self)
+        self._pinit(backend, store_id)
+
+
+class PersistentCognitoIdpStore(_PersistentMixin, InMemoryCognitoIdpStore):
+    """Cognito user pools durable across restarts (offline appliance)."""
+    _STATE_ATTRS = ("pools", "clients", "users", "groups", "idps", "servers", "domains", "tokens", "sessions", "ui")
+
+    def __init__(self, backend: SqliteStateBackend, store_id: str = "cognito-idp"):
+        InMemoryCognitoIdpStore.__init__(self)
         self._pinit(backend, store_id)
 
 

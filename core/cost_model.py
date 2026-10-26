@@ -79,6 +79,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.dynamodb": 1.25,     # on-demand, light usage
     "aws.apigateway": 3.50,   # ~1M calls
     "aws.vpc": 0.00,          # free (NAT GW extra)
+    "aws.cognito-idp": 15.00, # Essentials $0.015/MAU x 1,000 MAU baseline (user pool)
     # GCP
     "gcp.sql": 25.00,         # db-f1-micro 730h
     "gcp.functions": 0.20,    # minimal invocations

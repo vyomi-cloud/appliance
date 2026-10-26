@@ -2541,6 +2541,11 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(table, dict):
             add("aws", "dynamodb", "table", table_name, table)
 
+    aws_cognito = _cloudsim_service_state(space, "cognito-idp")
+    for pool_id, pool in aws_cognito.get("user_pools", {}).items():
+        if isinstance(pool, dict):
+            add("aws", "cognito-idp", "user_pool", pool_id, pool)
+
     gcp_compute = _cloudsim_service_state(space, "gcp_compute")
     for instance_id, instance in gcp_compute.get("instances", {}).items():
         if isinstance(instance, dict):
@@ -2628,6 +2633,22 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             add("azure", service or "resource", kind, str(rec.get("id") or rid), rec)
 
     return nodes, counts, runtime_instances
+
+
+def _cognito_mirror_state(cog_store) -> None:
+    """Mirror Cognito user pools (held in the SDK/console store) into the active
+    space's service state so the space's cost-savings metrics count them."""
+    pools = {pid: {"name": p["Name"], "created": p["CreationDate"]} for pid, p in cog_store.pools.items()}
+    with STATE_LOCK:
+        spaces_state = _spaces_state()
+        active = spaces_state.get("spaces", {}).get(spaces_state.get("active_space_id", ""))
+        for st in ([active.setdefault("service_states", {})] if isinstance(active, dict) else []) + [STATE]:
+            if isinstance(st, dict):
+                st["cognito-idp"] = {"user_pools": pools}
+    try:
+        _cloudsim_refresh_bridge("cognito-idp.mirror")
+    except Exception:
+        pass
 
 
 def _cloudsim_refresh_bridge(reason: str, detail: dict | None = None) -> None:
@@ -22948,6 +22969,11 @@ if not _UNIFIED_INGRESS:
         _mount_new_services(app)
     except Exception as _e:   # never let this break appliance boot
         print(f"[wire_ingress] net-new service mount skipped: {_e}")
+    try:
+        from core import cognito_idp_routes as _cognito_routes
+        _cognito_routes.register(app, mirror=_cognito_mirror_state)
+    except Exception as _e:
+        print(f"[cognito-idp] routes skipped: {_e}")
     aws_s3.register(app, aws_xamz_dispatchers=_aws_xamz_dispatchers)
 else:
     # Retire the bespoke S3 handler; the unified ingress (final fallback catch-all)

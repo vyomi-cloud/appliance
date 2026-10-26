@@ -1054,6 +1054,8 @@ def _aws_query_target_service(request: Request) -> str:
         return "secretsmanager"
     if target.startswith("AWSEvents."):
         return "events"
+    if target.startswith("AWSCognitoIdentityProviderService."):
+        return "cognito-idp"
     return ""
 
 
@@ -1099,6 +1101,9 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return await _srv().api_ec2_query(request)
         if service == "sqs":
             return await _srv().api_sqs_query(request)
+        if service == "cognito-idp":
+            from core import cognito_idp_routes as _cognito_routes
+            return await _cognito_routes.root_dispatch(request)
         if service == "rds":
             return await _srv().api_rds_query(request)
         if service == "dynamodb":
