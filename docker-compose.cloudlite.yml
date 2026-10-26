@@ -159,6 +159,21 @@ services:
     networks: [vyomi-net]
     restart: unless-stopped
 
+  # Shared Redis-protocol data plane for ElastiCache / Memorystore / Azure Cache
+  # (BSD-3-Clause Valkey; not Redis 7.4+, which is RSALv2/SSPL).
+  vyomi-valkey:
+    profiles: ["full"]
+    image: valkey/valkey:8.0.1-alpine
+    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "48mb", "--maxmemory-policy", "allkeys-lru"]
+    networks: [vyomi-net]
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   vyomi-minio:
     profiles: ["full"]
     # MinIO removed its public Docker Hub image (docker.io/minio/minio → 404);
