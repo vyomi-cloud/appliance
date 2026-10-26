@@ -1,0 +1,28 @@
+name: Notify Windows E2E
+
+# When a release finishes, signal the private release-e2e repo so its Windows
+# machine tests the new MSI right away. The machine never takes jobs from this
+# public repo; it only reacts to this signal (and polls as a fallback).
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  notify:
+    if: github.event.workflow_run.conclusion != 'cancelled' && startsWith(github.event.workflow_run.head_branch, 'v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send appliance-release to vyomi-cloud/release-e2e
+        env:
+          GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+          TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "No CONFORMANCE_BOT_TOKEN; the 10-minute poll will pick it up."; exit 0; fi
+          gh api repos/vyomi-cloud/release-e2e/dispatches -f event_type=appliance-release \
+            -F "client_payload[version]=${TAG#v}" \
+            || echo "::warning::Signal not delivered (token lacks access to release-e2e?); the 10-minute poll will pick it up."
