@@ -6,13 +6,13 @@
 Static (files + wiring, no stack needed):
   manifest complete + status ready · engine in core/ · byte-identical Nano copy
   in wasm/core/ and listed in wasm/build_cores.py · service in the Nano console
-  catalog (wasm/fixtures) · registry entry · test beds for Java, Go, CLI,
+  catalog (wasm/fixtures), entry identical to the offline catalog's · registry entry · test beds for Java, Go, CLI,
   Playwright offline and Playwright Nano registered in the hourly suites.json ·
   upstream id tracked by the upstream watcher · claimed operations exist
   upstream (AWS botocore model / Google Discovery doc).
 Live (needs the stack at VYOMI_BASE_URL + the Nano relay, as in the hourly run):
   service in the offline console catalog · every manifest suite passes ·
-  UI crawl of that service is clean on offline AND Nano.
+  UI crawl of that service is clean on offline AND Nano, with the same tabs.
 
 Writes gate-report.md next to the manifest's id under OUT and exits 1 on any
 failure.
@@ -77,6 +77,35 @@ def upstream_ops(cloud: str, upstream: str) -> set[str] | None:
     return None  # Azure: operations are checked by the SDK/CLI suites
 
 
+def fixture_in_sync(cloud: str, key: str) -> tuple[bool, str]:
+    """Regenerate the Nano catalog from providers/<cloud>_catalog.py and compare
+    this service's entry with the committed one (the file is restored)."""
+    f = rel(f"wasm/fixtures/{cloud}-catalog.json")
+    if not os.path.exists(f):
+        return False, "no Nano catalog"
+    fx = rel("wasm/fixtures")
+    snapshot = {n: open(os.path.join(fx, n), "rb").read() for n in os.listdir(fx) if os.path.isfile(os.path.join(fx, n))}
+    saved = snapshot[os.path.basename(f)]
+    try:
+        p = subprocess.run([sys.executable, rel("wasm/build_fixtures.py")], cwd=ROOT, capture_output=True, text=True)
+        if p.returncode:
+            return False, "build_fixtures.py failed: " + (p.stderr or p.stdout)[-200:]
+        gen = {s.get("key"): s for s in json.load(open(f)).get("services", [])}
+    finally:  # build_fixtures rewrites every fixture: put them all back
+        for n in os.listdir(fx):
+            if n not in snapshot and os.path.isfile(os.path.join(fx, n)):
+                os.remove(os.path.join(fx, n))
+        for n, data in snapshot.items():
+            open(os.path.join(fx, n), "wb").write(data)
+    have = {s.get("key"): s for s in json.loads(saved).get("services", [])}
+    if key not in gen:
+        return False, "not in the offline catalog (providers)"
+    if gen[key] != have.get(key):
+        diff = sorted(k for k in set(gen[key]) | set(have.get(key) or {}) if gen[key].get(k) != (have.get(key) or {}).get(k))
+        return False, f"Nano entry differs from offline in: {diff[:8]} — run wasm/build_fixtures.py"
+    return True, ""
+
+
 def static(m: dict) -> None:
     cloud, key = m.get("cloud"), m.get("key")
     check("manifest has cloud, key, name, upstream, core, operations, suites",
@@ -93,6 +122,7 @@ def static(m: dict) -> None:
     except Exception:
         nano_keys = set()
     check("service in the Nano console catalog (wasm/fixtures)", key in nano_keys, f"{cloud}-catalog.json")
+    check("Nano console entry is identical to the offline catalog's (build_fixtures.py)", *fixture_in_sync(cloud, key))
     reg = json.load(open(rel("services/registry.json")))["services"]
     check("registry entry (pending-release or released)",
           any(s["cloud"] == cloud and s["key"] == key and s.get("status") in ("pending-release", "released") for s in reg))
@@ -124,6 +154,7 @@ def live(m: dict) -> None:
     part = json.load(open(rel("tests/conformance/hourly/out/results-partial.json")))
     for s in part.get("suites", []):
         check(f"suite {s['id']} passes", s["status"] == "pass", f"{s.get('passed')} passed, {s.get('failed')} failed")
+    tabs = {}
     for target in ("offline", "nano"):
         f = rel(f"tests/conformance/hourly/out/ui-{target}.json")
         env = dict(os.environ, TARGET=target, OUT=f, CREATE="1")
@@ -136,8 +167,12 @@ def live(m: dict) -> None:
         except Exception:
             rows = []
         bad = [x for r in rows for x in r.get("findings", [])]
+        tabs[target] = {t if isinstance(t, str) else t.get("name") for r in rows for t in r.get("tabs", [])}
         check(f"UI crawl clean on {target}", rows and not bad,
               "service not on the rail" if not rows else "; ".join(f"{x['type']}: {x['detail']}" for x in bad[:5]))
+    only_off, only_nano = tabs.get("offline", set()) - tabs.get("nano", set()), tabs.get("nano", set()) - tabs.get("offline", set())
+    check("Nano and offline consoles have the same detail tabs", not only_off and not only_nano,
+          f"offline only: {sorted(only_off)}; Nano only: {sorted(only_nano)}")
 
 
 def main() -> int:
