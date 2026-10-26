@@ -1,0 +1,153 @@
+name: Windows E2E (self-hosted laptop)
+
+# After every release, a Windows 10/11 machine registered as a GitHub
+# self-hosted runner (label: vyomi-e2e) pulls this job — outbound HTTPS only,
+# like a Jenkins JNLP agent — and runs the real user path:
+#   uninstall any previous Vyomi → install the release MSI → `vyomi up`
+#   (Docker Desktop substrate) → tests/installer/startup_check.mjs (every
+#   service ready, /clouds "Appliance is Ready", AWS/GCP/Azure consoles) →
+#   `vyomi down` → uninstall.
+# Off until the repo variable WINDOWS_E2E is "true" (so releases don't queue a
+# job no machine will pick up). A failure opens an issue.
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release to test (e.g. 3.0.7). Blank = latest release.'
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: windows-e2e          # one laptop: one run at a time
+  cancel-in-progress: false
+
+jobs:
+  windows-e2e:
+    if: >-
+      vars.WINDOWS_E2E == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion != 'cancelled' && startsWith(github.event.workflow_run.head_branch, 'v')))
+    runs-on: [self-hosted, Windows, vyomi-e2e]
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VYOMI_SUBSTRATE: docker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Resolve the release
+        id: rel
+        shell: pwsh
+        run: |
+          $api = "https://api.github.com/repos/${{ github.repository }}/releases"
+          $h = @{ Authorization = "Bearer $env:GH_TOKEN"; "User-Agent" = "vyomi-e2e" }
+          $tag = "${{ github.event.workflow_run.head_branch }}"
+          if (-not $tag -and "${{ inputs.version }}") { $tag = "v${{ inputs.version }}" }
+          $rel = if ($tag) { Invoke-RestMethod "$api/tags/$tag" -Headers $h } else { Invoke-RestMethod "$api/latest" -Headers $h }
+          $ver = $rel.tag_name.TrimStart("v")
+          "tag=$($rel.tag_name)" >> $env:GITHUB_OUTPUT; "ver=$ver" >> $env:GITHUB_OUTPUT
+          New-Item -ItemType Directory -Force e2e | Out-Null
+          foreach ($n in "cloud-learn-$ver-x64.msi", "cloud-learn-$ver-x64.msi.sha256") {
+            $a = $rel.assets | Where-Object name -eq $n
+            if (-not $a) { throw "Release $($rel.tag_name) has no $n" }
+            Invoke-WebRequest $a.browser_download_url -OutFile "e2e\$n"
+          }
+          $want = (Get-Content "e2e\cloud-learn-$ver-x64.msi.sha256" -Raw).Trim().Split()[0].ToLower()
+          $got = (Get-FileHash "e2e\cloud-learn-$ver-x64.msi" -Algorithm SHA256).Hash.ToLower()
+          if ($want -ne $got) { throw "SHA256 mismatch: $want vs $got" }
+          Write-Host "Testing $($rel.tag_name) on $env:COMPUTERNAME"
+
+      - name: Remove any previous Vyomi
+        shell: pwsh
+        run: |
+          if (Get-Command vyomi -ErrorAction SilentlyContinue) { vyomi down 2>&1 | Out-Host }
+          $keys = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+          foreach ($e in @(Get-ItemProperty $keys -ErrorAction SilentlyContinue | Where-Object DisplayName -eq "Vyomi")) {
+            Write-Host "Uninstalling Vyomi $($e.DisplayVersion)"
+            Start-Process msiexec.exe -ArgumentList "/x", $e.PSChildName, "/qn", "/norestart" -Wait
+          }
+          docker compose -p vyomi down -v 2>&1 | Out-Host
+
+      - name: Install the release MSI
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.rel.outputs.ver }}"
+          $p = Start-Process msiexec.exe -ArgumentList "/i", "`"$PWD\e2e\cloud-learn-$ver-x64.msi`"", "/qn", "/norestart", "/l*v", "`"$PWD\e2e\install.log`"" -Wait -PassThru
+          if ($p.ExitCode -notin 0, 3010) { throw "msiexec exit $($p.ExitCode)" }
+          "C:\Program Files\Vyomi\bin" >> $env:GITHUB_PATH
+
+      - name: vyomi up (Docker Desktop)
+        shell: pwsh
+        timeout-minutes: 40
+        run: |
+          vyomi doctor | Out-Host
+          vyomi up
+          if ($LASTEXITCODE -ne 0) { throw "vyomi up exited $LASTEXITCODE" }
+
+      - name: Every service comes up and the UI reports it
+        shell: pwsh
+        env:
+          BASE: http://localhost:9000
+          OUT: e2e/startup-check
+          VERSION: ${{ steps.rel.outputs.ver }}
+          TIMEOUT_S: '1200'
+        run: |
+          Push-Location $env:RUNNER_TEMP
+          if (-not (Test-Path vyomi-e2e-node\node_modules\playwright)) {
+            New-Item -ItemType Directory -Force vyomi-e2e-node | Out-Null
+            Set-Content vyomi-e2e-node\package.json '{"name":"vyomi-e2e-node","private":true}'
+            Push-Location vyomi-e2e-node; npm install --silent playwright@1.47.2; npx playwright install chromium; Pop-Location
+          }
+          $env:NODE_PATH = "$env:RUNNER_TEMP\vyomi-e2e-node\node_modules"
+          Pop-Location
+          node tests/installer/startup_check.mjs
+
+      - name: Summary + logs
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path e2e\startup-check\summary.md) {
+            "### Windows E2E on $env:COMPUTERNAME`n" >> $env:GITHUB_STEP_SUMMARY
+            Get-Content e2e\startup-check\summary.md -Raw >> $env:GITHUB_STEP_SUMMARY
+          }
+          New-Item -ItemType Directory -Force e2e\startup-check | Out-Null
+          docker ps -a --format "table {{.Names}}\t{{.Image}}\t{{.Status}}" 2>&1 | Out-File e2e\startup-check\containers.txt
+          docker compose -p vyomi logs --no-color --tail 200 2>&1 | Out-File e2e\startup-check\compose.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-e2e-${{ steps.rel.outputs.ver }}
+          path: e2e/
+          retention-days: 30
+
+      - name: Tear down (vyomi down + uninstall)
+        if: always()
+        shell: pwsh
+        run: |
+          if (Get-Command vyomi -ErrorAction SilentlyContinue) { vyomi down 2>&1 | Out-Host }
+          docker compose -p vyomi down -v 2>&1 | Out-Host
+          $ver = "${{ steps.rel.outputs.ver }}"
+          if (Test-Path "e2e\cloud-learn-$ver-x64.msi") {
+            Start-Process msiexec.exe -ArgumentList "/x", "`"$PWD\e2e\cloud-learn-$ver-x64.msi`"", "/qn", "/norestart" -Wait
+          }
+
+      - name: Open an issue on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.rel.outputs.ver }}"
+          $body = "Release **v$ver** failed the Windows E2E (MSI → ``vyomi up`` → services + UI) on the self-hosted machine.`n`nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`n`n"
+          if (Test-Path e2e\startup-check\summary.md) { $body += Get-Content e2e\startup-check\summary.md -Raw }
+          $h = @{ Authorization = "Bearer $env:GH_TOKEN"; "User-Agent" = "vyomi-e2e"; Accept = "application/vnd.github+json" }
+          $payload = @{ title = "Windows E2E failed for v$ver"; body = $body; labels = @("installer") } | ConvertTo-Json
+          Invoke-RestMethod "https://api.github.com/repos/${{ github.repository }}/issues" -Method Post -Headers $h -Body $payload -ContentType "application/json" | Out-Null
