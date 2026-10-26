@@ -66,8 +66,10 @@ const BAD_TEXT = [
 // Snapshot of the main panel, used to detect empty panels and dead tabs.
 const snap = (page) => page.evaluate(() => {
   const m = document.querySelector("#main");
-  const text = (m?.innerText || "").trim();
-  return { text: text.slice(0, 4000), len: text.length, html: (m?.innerHTML || "").length };
+  // Azure shows resource detail (and its tabs) in the #blade side pane, outside #main.
+  const bl = document.querySelector("#blade.open");
+  const text = ((m?.innerText || "") + (bl ? "\n" + bl.innerText : "")).trim();
+  return { text: text.slice(0, 4000), len: text.length, html: (m?.innerHTML || "").length + (bl ? bl.innerHTML.length : 0) };
 });
 
 // How implemented each console surface is (service page, create, resource
@@ -204,7 +206,20 @@ async function createWithDefaults(page, drain, cloud, backToList) {
     await btn.click({ timeout: 3000 });
     await sleep(1200);
     await dismissPopups(page);
-    const dialog = page.locator("[role=dialog]:visible, .modal:visible, .drawer:visible").last();
+    // Azure's create form is a multi-step wizard in the #blade side pane (no
+    // dialog role): step through Next / Review + create to the final Create.
+    const blade = page.locator("#blade.open");
+    if (await blade.count()) {
+      for (let step = 0; step < 12; step++) {
+        const fin = blade.locator("button").filter({ hasText: /^\s*create\s*$/i });
+        if (await fin.count()) break;
+        const next = blade.locator("button").filter({ hasText: /^\s*(next|review \+ create)\s*$/i }).last();
+        if (!(await next.count())) break;
+        await next.click({ timeout: 3000 });
+        await sleep(300);
+      }
+    }
+    const dialog = (await blade.count()) ? blade : page.locator("[role=dialog]:visible, .modal:visible, .drawer:visible").last();
     const scope = (await dialog.count()) ? dialog : page.locator("#main");
     const submit = scope.locator("button, [type=submit]").filter({ hasText: SUBMIT_BTN }).filter({ hasNotText: NOT_SUBMIT }).last();
     if (!(await submit.count())) { f.push({ type: "CREATE_NO_SUBMIT", detail: "create form has no submit button" }); return f; }
