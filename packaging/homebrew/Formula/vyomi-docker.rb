@@ -18,7 +18,11 @@ class VyomiDocker < Formula
   license :cannot_represent  # BSL 1.1 — not in SPDX simple form
   version "2.2.1"
 
-  conflicts_with "cloud-learn", because: "both install a `vyomi` launcher"
+  # No `conflicts_with "cloud-learn"`: that name is an alias of the `vyomi`
+  # formula, and checking it makes Homebrew load a second formula from this
+  # third-party tap, which current Homebrew refuses ("untrusted tap") — so
+  # `brew install vyomi-cloud/tap/vyomi-docker` failed outright. Both formulas
+  # install bin/vyomi, so Homebrew still refuses to link one over the other.
 
   def install
     # Minimal: the thin Docker wrapper + the pull-only compose file. The
