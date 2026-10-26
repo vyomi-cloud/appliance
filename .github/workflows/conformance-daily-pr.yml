@@ -3,8 +3,8 @@ name: Daily conformance PR
 # 23:45 IST every day: open one consolidated PR per repo with the day's
 # conformance-agent fixes.
 #   - appliance: conformance/daily-<date> → main
-#   - portal:    the day's Nano bundle changes, vendored into portal/app/nano
-#                by wasm/vendor_to_portal.py (needs the CONFORMANCE_BOT_TOKEN secret)
+#   - portal:    the day's Nano bundle changes, applied to portal/app/nano as a
+#                patch so portal-only edits survive (needs CONFORMANCE_BOT_TOKEN)
 # Merging the appliance PR cuts the next patch release and merges the linked
 # portal PR (conformance-release.yml).
 #
@@ -64,7 +64,11 @@ jobs:
           NEXT=$(python3 -c "v=open('VERSION').read().strip().split('.');v[-1]=str(int(v[-1])+1);print('.'.join(v))")
           echo "next=$NEXT" >> "$GITHUB_OUTPUT"
 
-      - name: Portal PR (vendored Nano bundle)
+      # Carry over ONLY the day's Nano changes, as a patch. The portal's copy of
+      # the bundle has portal-only edits (e.g. the login-gated landing), so
+      # copying whole files would revert them. If the patch doesn't apply
+      # cleanly, no portal PR is opened and the appliance PR says why.
+      - name: Portal PR (the day's Nano bundle changes)
         id: portal
         if: steps.day.outputs.skip != '1'
         run: |
@@ -72,28 +76,44 @@ jobs:
           if [ -z "$PORTAL_TOKEN" ]; then
             echo "No CONFORMANCE_BOT_TOKEN secret: skipping the portal PR."; exit 0
           fi
-          if git diff --quiet "origin/main" "origin/$B" -- wasm/; then
-            echo "No Nano bundle changes today: no portal PR."; exit 0
-          fi
-          git checkout -q "origin/$B"
+          # Files the day changed that belong to the served bundle (same scope
+          # rules as wasm/vendor_to_portal.py).
+          git diff --name-only "origin/main...origin/$B" -- wasm/ > /tmp/changed.txt
+          python3 - > /tmp/bundle-files.txt <<'PY'
+          import sys
+          sys.path.insert(0, "wasm")
+          from vendor_to_portal import in_bundle
+          for line in open("/tmp/changed.txt"):
+              rel = line.strip()[len("wasm/"):]
+              if rel and in_bundle(rel):
+                  print("wasm/" + rel)
+          PY
+          if [ ! -s /tmp/bundle-files.txt ]; then echo "No Nano bundle changes today: no portal PR."; exit 0; fi
+          echo "Nano bundle files changed today:"; cat /tmp/bundle-files.txt
+          git diff --binary "origin/main...origin/$B" -- $(cat /tmp/bundle-files.txt) \
+            | sed -e 's#^\(diff --git a/\)wasm/#\1app/nano/#' -e 's# b/wasm/# b/app/nano/#' \
+                  -e 's#^--- a/wasm/#--- a/app/nano/#' -e 's#^+++ b/wasm/#+++ b/app/nano/#' \
+                  -e 's#^\(rename\|copy\) \(from\|to\) wasm/#\1 \2 app/nano/#' > /tmp/nano.patch
           git clone -q "https://x-access-token:${PORTAL_TOKEN}@github.com/vyomi-cloud/portal.git" /tmp/portal
-          python3 wasm/vendor_to_portal.py --apply --portal /tmp/portal/app/nano
           cd /tmp/portal
           git config user.name "vyomi-conformance-bot"
           git config user.email "conformance-bot@users.noreply.github.com"
-          if git diff --quiet && [ -z "$(git status --porcelain)" ]; then
-            echo "Portal already matches the bundle."; exit 0
-          fi
           git checkout -q -B "$B"
+          if ! git apply --check /tmp/nano.patch 2>/tmp/apply.err; then
+            echo "::warning::The day's Nano changes don't apply cleanly to the portal copy:"; cat /tmp/apply.err
+            { echo "conflict<<EOF"; cat /tmp/bundle-files.txt; echo "EOF"; } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git apply /tmp/nano.patch
           git add -A app/nano
-          git commit -q -m "nano: vendor conformance fixes from appliance $B" \
-            -m "Synced from vyomi-cloud/appliance $B by wasm/vendor_to_portal.py."
+          git commit -q -m "nano: conformance fixes from appliance $B" \
+            -m "Only the day's changes to the Nano bundle, applied as a patch from vyomi-cloud/appliance $B (portal-only edits preserved)."
           git push -q -f origin "$B"
-          URL=$(GH_TOKEN="$PORTAL_TOKEN" gh pr list -R vyomi-cloud/portal --head "$B" --json url -q '.[0].url')
+          URL=$(GH_TOKEN="$PORTAL_TOKEN" gh pr list -R vyomi-cloud/portal --head "$B" --state open --json url -q '.[0].url')
           if [ -z "$URL" ]; then
             URL=$(GH_TOKEN="$PORTAL_TOKEN" gh pr create -R vyomi-cloud/portal --base main --head "$B" \
               --title "Daily conformance fixes $D (Nano bundle)" \
-              --body "Nano bundle changes from the appliance daily conformance PR for $D, vendored by \`wasm/vendor_to_portal.py\`. Merging deploys the portal. It is merged automatically when the appliance PR is merged.")
+              --body "The day's Nano bundle changes from the appliance daily conformance PR for $D, applied as a patch (portal-only edits preserved). Merging deploys the portal. It is merged automatically when the appliance PR is merged.")
           fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
@@ -107,6 +127,11 @@ jobs:
             echo
             echo "**Merging this PR (squash) cuts appliance v$NEXT**: bumps VERSION, packaging and CHANGELOG on main, creates \`release/v$NEXT\` and tag \`v$NEXT\`, which runs the release + Docker publish workflows."
             if [ -n "$PORTAL" ]; then echo; echo "Merging also merges the portal PR (deploys the portal): $PORTAL"; fi
+            CONFLICT="${{ steps.portal.outputs.conflict }}"
+            if [ -n "$CONFLICT" ]; then
+              echo; echo "⚠️ **Nano changes need a manual portal sync.** They don't apply cleanly to \`portal/app/nano\` (the portal copy has diverged), so no portal PR was opened:"
+              echo; printf '%s\n' "$CONFLICT" | sed 's/^/- `/; s/$/`/'
+            fi
             echo
             echo "Report: https://github.com/${{ github.repository }}/tree/conformance-report"
             echo
