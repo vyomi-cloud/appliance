@@ -1,0 +1,305 @@
+/* Hourly UI crawler — finds broken / unimplemented console functionality.
+ *
+ * Walks every cloud console of one target, clicks every service on the rail and
+ * every tab inside it, and records what a user would hit: uncaught page errors,
+ * failing API calls (5xx / 501 / 404), placeholder text ("undefined",
+ * "not implemented", "[object Object]"…), empty panels, dead tabs, grid cells
+ * showing "-"/blank, and — with CREATE=1 (default) — resources created through
+ * the UI's default values that come out with unfilled details or that don't
+ * move the space's cost-savings metrics.
+ *
+ * It does not pass/fail anything itself — it writes a findings inventory that the
+ * hourly agent works through (fix the UI, then add a conformance test for it).
+ *
+ *   TARGET=nano     serves NANO_DIR (default ../../../wasm) with the Nano SW
+ *   TARGET=offline  crawls VYOMI_BASE_URL (default http://localhost:9000)/console/*
+ *   OUT=path.json   where to write findings (default out/ui-<target>.json)
+ *   MAX_SERVICES / MAX_TABS cap the crawl per console (defaults 80 / 10)
+ */
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const TARGET = process.env.TARGET || "nano";
+if (TARGET === "nano" && !process.env.NANO_DIR) process.env.NANO_DIR = resolve(HERE, "../../../wasm");
+const { startServer, bootConsole, chromium, sleep, RAIL_SEL } = await import("../../../wasm/ui-tests/lib.mjs");
+
+const OUT = process.env.OUT || resolve(HERE, `out/ui-${TARGET}.json`);
+const MAX_SERVICES = +(process.env.MAX_SERVICES || 80);
+const MAX_TABS = +(process.env.MAX_TABS || 10);
+const CREATE = (process.env.CREATE ?? "1") !== "0";
+const OFFLINE_BASE = (process.env.VYOMI_BASE_URL || "http://localhost:9000").replace(/\/$/, "");
+
+const CONSOLES = TARGET === "nano"
+  ? [{ cloud: "aws", path: "/aws-console.html" }, { cloud: "gcp", path: "/gcp-console.html" }, { cloud: "azure", path: "/azure-console.html" }]
+  : [{ cloud: "aws", path: "/console/aws" }, { cloud: "gcp", path: "/console/gcp" }, { cloud: "azure", path: "/console/azure" }];
+
+const TAB_SEL = '#main [role=tab], #main .tab, #main .tabs button, #main .tabbar button, #main [data-tab]';
+const BAD_TEXT = [
+  [/\bundefined\b/i, "shows 'undefined'"],
+  [/\bNaN\b/, "shows 'NaN'"],
+  [/\[object Object\]/, "shows '[object Object]'"],
+  [/not implemented|notimplemented/i, "says not implemented"],
+  [/coming soon/i, "says coming soon"],
+  [/traceback \(most recent call last\)/i, "shows a Python traceback"],
+];
+
+// Snapshot of the main panel, used to detect empty panels and dead tabs.
+const snap = (page) => page.evaluate(() => {
+  const m = document.querySelector("#main");
+  const text = (m?.innerText || "").trim();
+  return { text: text.slice(0, 4000), len: text.length, html: (m?.innerHTML || "").length };
+});
+
+function textFindings(text) {
+  return BAD_TEXT.filter(([re]) => re.test(text)).map(([, why]) => ({ type: "BAD_TEXT", detail: why }));
+}
+
+// Grid cells that render a placeholder instead of real data ("-", "—", "–",
+// "n/a", blank). Every resource Vyomi creates — including via a UI default
+// action — must have its details filled, so these are findings, keyed by the
+// column header so the agent knows which field is missing.
+const PLACEHOLDER_CELLS = (page) => page.evaluate(() => {
+  const out = [];
+  const isPh = (t) => /^(-|—|–|n\/a|null|none)?$/i.test(t.trim());
+  for (const table of document.querySelectorAll("#main table")) {
+    const heads = [...table.querySelectorAll("thead th, tr:first-child th")].map((h) => (h.innerText || "").trim());
+    table.querySelectorAll("tbody tr").forEach((tr, ri) => {
+      [...tr.querySelectorAll("td")].forEach((td, ci) => {
+        const col = heads[ci] || `column ${ci + 1}`;
+        // Checkbox / action columns legitimately have no text.
+        if (td.querySelector("input,button,svg,[role=checkbox]") || !col || /^(actions?|select)$/i.test(col)) return;
+        if (isPh(td.innerText || "")) out.push({ row: ri + 1, col });
+      });
+    });
+  }
+  // Detail panels are key/value layouts, not tables: flag any leaf element whose
+  // whole text is a placeholder, labelled by the nearest preceding label text.
+  for (const el of document.querySelectorAll("#main *")) {
+    if (el.children.length || el.closest("table,[role=grid],[role=table],button,input,select,textarea")) continue;
+    const t = (el.innerText || el.textContent || "").trim();
+    if (!/^(-|—|–)$/.test(t)) continue;
+    let label = "";
+    for (let n = el.previousElementSibling || el.parentElement?.previousElementSibling; n && !label; n = n.previousElementSibling) {
+      label = (n.innerText || "").trim().split("\n").pop();
+    }
+    out.push({ row: 0, col: label || "(unlabelled field)" });
+  }
+  for (const grid of document.querySelectorAll("#main [role=grid], #main [role=table]")) {
+    const heads = [...grid.querySelectorAll("[role=columnheader]")].map((h) => (h.innerText || "").trim());
+    grid.querySelectorAll("[role=row]").forEach((r, ri) => {
+      [...r.querySelectorAll("[role=cell],[role=gridcell]")].forEach((c, ci) => {
+        const col = heads[ci] || `column ${ci + 1}`;
+        if (c.querySelector("input,button,svg") || /^(actions?|select)$/i.test(col)) return;
+        if (isPh(c.innerText || "")) out.push({ row: ri, col });
+      });
+    });
+  }
+  return out;
+});
+
+async function placeholderFindings(page, where) {
+  const cells = await PLACEHOLDER_CELLS(page).catch(() => []);
+  // One finding per column, not per cell, to keep the inventory readable.
+  const byCol = new Map();
+  for (const c of cells) byCol.set(c.col, (byCol.get(c.col) || 0) + 1);
+  return [...byCol].map(([col, n]) => ({ type: "PLACEHOLDER_CELL", detail: `${where}: column "${col}" shows "-"/blank in ${n} row(s)` }));
+}
+
+// Active space's cost-savings metrics (core/cost_model → /api/spaces). Fetched
+// from inside the page so it works for both targets (Nano's SW serves the API).
+const savingsSnapshot = (page) => page.evaluate(async () => {
+  try {
+    const d = await (await fetch("/api/spaces", { cache: "no-store" })).json();
+    const sp = d.active_space || (d.spaces || []).find((s) => s.id === d.active_space_id || s.space_id === d.active_space_id) || {};
+    const cs = sp.cost_savings || {};
+    return { ok: true, count: cs.resource_count ?? null, usd: cs.savings_usd ?? null, byProvider: cs.by_provider || {} };
+  } catch (e) { return { ok: false, err: String(e) }; }
+});
+
+// Every resource created must show up in the space's savings: resource_count
+// goes up, and the creating cloud's saved dollars go up (real cloud would bill it).
+function savingsFindings(cloud, before, after, stage) {
+  const f = [];
+  if (!before.ok || !after.ok) return [{ type: "SAVINGS_UNAVAILABLE", detail: `${stage}: /api/spaces cost_savings unreadable` }];
+  if (after.count === null || after.usd === null) return [{ type: "SAVINGS_MISSING", detail: `${stage}: active space has no cost_savings metrics` }];
+  if (stage === "create" && !(after.count > before.count)) {
+    f.push({ type: "SAVINGS_NOT_UPDATED", detail: `${stage}: resource_count stayed ${before.count} after creating a resource` });
+  }
+  const b = before.byProvider[cloud] || 0, a = after.byProvider[cloud] || 0;
+  if (!(a > b)) f.push({ type: "SAVINGS_NOT_UPDATED", detail: `${stage}: ${cloud} savings stayed $${b} (real ${cloud} would bill this resource)` });
+  return f;
+}
+
+// Playwright matches a button's textContent, where a Material icon ligature runs
+// straight into the label ("addLaunch instances", "add_circleCreate"), so match
+// the action word anywhere rather than on word boundaries.
+const CREATE_BTN = /create|launch|upload|generate|deploy|new [a-z]/i;
+const SUBMIT_BTN = /create|save|submit|launch|confirm|deploy|upload|generate|\bok\b|^\s*add\b/i;
+const NOT_SUBMIT = /cancel|close|back|previous/i;
+
+// Create a resource accepting every form default, then check the new row is
+// fully populated. Only runs when CREATE=1 (on by default in CI).
+// Close nag popups ("Maybe later", "×") that would otherwise sit over the
+// console and swallow the crawler's clicks.
+async function dismissPopups(page) {
+  for (const name of [/^maybe later$/i, /^not now$/i, /^dismiss$/i, /^×$/]) {
+    const b = page.getByRole("button", { name }).first();
+    if (await b.isVisible().catch(() => false)) await b.click({ timeout: 1000 }).catch(() => {});
+  }
+}
+
+const rowCount = (page) => page.locator("#main tbody tr, #main [role=row]").count();
+
+// Create a resource accepting every form default, return to the service list
+// (create pages navigate away from it), and check the new row is there, fully
+// populated, and reflected in the space's cost savings.
+async function createWithDefaults(page, drain, cloud, backToList) {
+  const f = [];
+  const btn = page.locator("#main button, #main [role=button]").filter({ hasText: CREATE_BTN }).first();
+  if (!(await btn.count())) return f;
+  const rowsBefore = await rowCount(page);
+  const savBefore = await savingsSnapshot(page);
+  try {
+    await btn.click({ timeout: 3000 });
+    await sleep(1200);
+    await dismissPopups(page);
+    const dialog = page.locator("[role=dialog]:visible, .modal:visible, .drawer:visible").last();
+    const scope = (await dialog.count()) ? dialog : page.locator("#main");
+    const submit = scope.locator("button, [type=submit]").filter({ hasText: SUBMIT_BTN }).filter({ hasNotText: NOT_SUBMIT }).last();
+    if (!(await submit.count())) { f.push({ type: "CREATE_NO_SUBMIT", detail: "create form has no submit button" }); return f; }
+    await submit.click({ timeout: 3000 });
+    await sleep(3000);
+  } catch (e) {
+    f.push({ type: "CREATE_FAILED", detail: `create with defaults failed: ${String(e.message || e).split("\n")[0].slice(0, 200)}` });
+    return f;
+  }
+  f.push(...drain().map((x) => ({ ...x, detail: `during create: ${x.detail}` })));
+  const s = await snap(page);
+  if (/\b(error|failed|invalid)\b/i.test(s.text.slice(0, 800))) {
+    f.push({ type: "CREATE_REJECTED", detail: `create with default values was rejected: "${(s.text.match(/[^\n]*(error|failed|invalid)[^\n]*/i) || [""])[0].slice(0, 140)}"` });
+  }
+  await backToList();
+  const rowsAfter = await rowCount(page);
+  if (rowsAfter <= rowsBefore) f.push({ type: "CREATE_NO_ROW", detail: "create with defaults added no resource to the list" });
+  f.push(...(await placeholderFindings(page, "after create")));
+  if (rowsAfter > rowsBefore) {
+    await sleep(1500); // savings are recomputed on the space tick after the write
+    f.push(...savingsFindings(cloud, savBefore, await savingsSnapshot(page), "create"));
+  }
+  return f;
+}
+
+async function crawlConsole(browser, base, con, needsSW) {
+  const ctx = await browser.newContext();
+  if (TARGET === "nano") await ctx.addInitScript(() => { try { localStorage.setItem("nano_tunnel_on", "1"); } catch (_) {} });
+  const page = await ctx.newPage();
+  const net = [];          // failing responses since the last drain
+  const errs = [];         // uncaught page errors since the last drain
+  page.on("response", (r) => {
+    const s = r.status(), u = r.url();
+    if (s >= 400 && !/favicon|\.map$|hot-update/.test(u)) net.push({ status: s, url: u.replace(base, "").slice(0, 200) });
+  });
+  page.on("pageerror", (e) => errs.push(String(e.message).split("\n")[0].slice(0, 300)));
+  const drain = () => {
+    const f = [];
+    for (const n of net.splice(0)) {
+      if (n.status === 501) f.push({ type: "HTTP_501", detail: `${n.url} → 501` });
+      else if (n.status >= 500) f.push({ type: "HTTP_5XX", detail: `${n.url} → ${n.status}` });
+      else if (n.status === 404) f.push({ type: "HTTP_404", detail: `${n.url} → 404` });
+    }
+    for (const e of errs.splice(0)) f.push({ type: "PAGE_ERROR", detail: e });
+    return f;
+  };
+
+  const rows = [];
+  try {
+    if (needsSW) await bootConsole(page, base, con.path);
+    else {
+      await page.goto(base + con.path, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, RAIL_SEL, { timeout: 120000, polling: 500 });
+    }
+    drain(); // boot noise is reported once below, not per service
+    const services = await page.evaluate((sel) => [...document.querySelectorAll(sel)]
+      .map((e, i) => ({ i, label: (e.innerText || e.title || e.getAttribute("data-key") || e.getAttribute("data-service") || "").trim().split("\n").pop() }))
+      .filter((x) => x.label && !/^home$/i.test(x.label)), RAIL_SEL);
+    const seen = new Set();
+    for (const svc of services) {
+      if (seen.has(svc.label) || seen.size >= MAX_SERVICES) continue;
+      seen.add(svc.label);
+      const row = { target: TARGET, cloud: con.cloud, service: svc.label, tabs: [], findings: [] };
+      try {
+        await dismissPopups(page);
+        await page.locator(RAIL_SEL).nth(svc.i).click({ timeout: 5000 });
+        await sleep(1500);
+        const s = await snap(page);
+        row.findings.push(...drain(), ...textFindings(s.text));
+        if (s.len < 15) row.findings.push({ type: "EMPTY_PANEL", detail: "service panel renders no content" });
+        row.findings.push(...(await placeholderFindings(page, "list")));
+        if (CREATE) {
+          const backToList = async () => {
+            await page.keyboard.press("Escape").catch(() => {});
+            await dismissPopups(page);
+            await page.locator(RAIL_SEL).nth(svc.i).click({ timeout: 5000 }).catch(() => {});
+            await sleep(1500);
+          };
+          row.findings.push(...(await createWithDefaults(page, drain, con.cloud, backToList)));
+          // Open the first resource so its detail tabs (where most unfilled
+          // fields hide) get walked below.
+          drain();
+          const link = page.locator("#main tbody tr a, #main tbody tr td:first-child, #main [role=row] a").first();
+          if (await link.count()) {
+            await link.click({ timeout: 3000 }).catch(() => {});
+            await sleep(1500);
+            const d = await snap(page);
+            row.findings.push(...drain().map((x) => ({ ...x, detail: `resource detail: ${x.detail}` })),
+              ...textFindings(d.text), ...(await placeholderFindings(page, "resource detail")));
+          }
+        }
+
+        const tabs = await page.locator(TAB_SEL).allInnerTexts().catch(() => []);
+        for (let t = 0; t < Math.min(tabs.length, MAX_TABS); t++) {
+          const label = (tabs[t] || "").trim().split("\n")[0] || `tab ${t + 1}`;
+          const before = await snap(page);
+          try {
+            await page.locator(TAB_SEL).nth(t).click({ timeout: 3000 });
+            await sleep(900);
+          } catch (e) { row.findings.push({ type: "DEAD_TAB", tab: label, detail: "tab not clickable" }); continue; }
+          const after = await snap(page);
+          const tf = [...drain(), ...textFindings(after.text), ...(await placeholderFindings(page, `tab ${label}`))].map((f) => ({ ...f, tab: label }));
+          if (t > 0 && after.text === before.text && after.html === before.html) tf.push({ type: "DEAD_TAB", tab: label, detail: "clicking the tab changes nothing" });
+          row.tabs.push(label);
+          row.findings.push(...tf);
+        }
+      } catch (e) {
+        row.findings.push({ type: "CRAWL_ERROR", detail: String(e.message || e).split("\n")[0].slice(0, 300) });
+      }
+      row.status = row.findings.length ? "broken" : "ok";
+      rows.push(row);
+    }
+  } catch (e) {
+    rows.push({ target: TARGET, cloud: con.cloud, service: "(console boot)", tabs: [], status: "broken",
+      findings: [{ type: "BOOT_FAILED", detail: String(e.message || e).split("\n")[0].slice(0, 300) }, ...drain()] });
+  }
+  await ctx.close();
+  return rows;
+}
+
+let server = null, base = OFFLINE_BASE;
+if (TARGET === "nano") ({ server, base } = await startServer());
+const browser = await chromium.launch();
+const all = [];
+for (const con of CONSOLES) {
+  const rows = await crawlConsole(browser, base, con, TARGET === "nano");
+  const bad = rows.filter((r) => r.status !== "ok").length;
+  console.log(`[${TARGET}/${con.cloud}] ${rows.length} services crawled, ${bad} with findings`);
+  all.push(...rows);
+}
+await browser.close();
+server?.close();
+
+mkdirSync(dirname(OUT), { recursive: true });
+writeFileSync(OUT, JSON.stringify({ target: TARGET, at: new Date().toISOString(), services: all }, null, 1));
+const broken = all.filter((r) => r.status !== "ok");
+console.log(`UI crawl ${TARGET}: ${all.length - broken.length}/${all.length} services clean → ${OUT}`);

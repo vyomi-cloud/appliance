@@ -16,10 +16,16 @@ import { extname, join, normalize } from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const pw = require("/Users/sudhirganti/Applications/simulator/portal/node_modules/playwright");
+// CI resolves playwright from NODE_PATH / local node_modules; the Mac dev box
+// falls back to the portal's install.
+let pw;
+try { pw = require("playwright"); }
+catch { pw = require("/Users/sudhirganti/Applications/simulator/portal/node_modules/playwright"); }
 export const chromium = pw.chromium;
 
-export const NANO_DIR = "/Users/sudhirganti/Applications/simulator/portal/app/nano";
+// NANO_DIR: CI serves the canonical bundle (appliance/wasm); local runs default
+// to the portal's vendored copy, as before.
+export const NANO_DIR = process.env.NANO_DIR || "/Users/sudhirganti/Applications/simulator/portal/app/nano";
 export const RELAY = process.env.RELAY_HTTP || "http://127.0.0.1:8090";
 
 // Rail-item selector that works across all three consoles: AWS/GCP use

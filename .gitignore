@@ -68,3 +68,8 @@ docker-compose.unified.yml
 /*.jpg
 /*.jpeg
 /*.png
+
+# hourly conformance CI scratch
+/.ci-node/
+/prev/
+/relay.log

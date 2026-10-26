@@ -1,0 +1,146 @@
+name: Hourly conformance agent
+
+# Every hour: boot the offline appliance + serve Nano, crawl every console for
+# broken/unimplemented UI (incl. blank grid cells, default-create gaps and
+# cost-savings updates), run the Java/Go/Python SDK, CLI and API test beds,
+# detect features without coverage, let the conformance agent fix findings and
+# add tests (pushing to main), then publish the coverage page to GitHub Pages.
+# Agent instructions: tests/conformance/hourly/AGENT.md
+
+on:
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+    inputs:
+      skip_agent:
+        description: 'Run tests and publish only (no agent)'
+        type: boolean
+        default: false
+
+# One run at a time; a run that overlaps the next hour queues instead of racing
+# the agent's pushes.
+concurrency:
+  group: conformance-hourly
+  cancel-in-progress: false
+
+jobs:
+  hourly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: write     # agent pushes fixes to main
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      VYOMI_BASE_URL: http://localhost:9000
+      RELAY_HTTP: http://127.0.0.1:8090
+      NODE_PATH: ${{ github.workspace }}/.ci-node/node_modules
+      PAGE_URL: https://vyomi-cloud.github.io/appliance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.22', cache: false }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17', cache: maven }
+
+      - name: Install test tooling
+        run: |
+          pip install --quiet requests pytest boto3 azure-storage-blob
+          mkdir -p .ci-node && cd .ci-node
+          npm init -y >/dev/null
+          npm install --silent playwright@1.47.2 ws@8.18.0
+          npx playwright install --with-deps chromium
+
+      - name: Boot offline appliance stack
+        run: |
+          docker build -t cloudlearn/simulator:ci .
+          CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:ci \
+            docker compose -f docker-compose.yml up -d \
+              simulator vyomi-pubsub vyomi-firestore \
+              vyomi-sql-postgres vyomi-minio vyomi-nats \
+              vyomi-dynamodb vyomi-elasticmq vyomi-vault vyomi-azurite
+          for i in $(seq 1 90); do curl -fs "$VYOMI_BASE_URL/healthz" >/dev/null && break; sleep 2; done
+          curl -f "$VYOMI_BASE_URL/healthz"
+
+      - name: Apply test license
+        env:
+          VYOMI_TEST_LICENSE_JWT: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
+        run: |
+          if [ -n "$VYOMI_TEST_LICENSE_JWT" ]; then
+            curl -fs -X POST -H 'Content-Type: application/json' \
+              -d "{\"license_key\":\"$VYOMI_TEST_LICENSE_JWT\"}" "$VYOMI_BASE_URL/api/license/activate" >/dev/null
+          else
+            echo "No VYOMI_TEST_LICENSE_JWT secret: tier-gated services will show as locked."
+          fi
+
+      - name: Start Nano relay
+        run: |
+          nohup node wasm/relay/local-relay.mjs > relay.log 2>&1 &
+          for i in $(seq 1 20); do curl -fs "$RELAY_HTTP/health" >/dev/null && break; sleep 1; done
+
+      - name: Fetch previous page history
+        run: |
+          mkdir -p prev
+          curl -fsL "$PAGE_URL/history.json" -o prev/history.json || echo '[]' > prev/history.json
+          base=$(python3 -c "import json;h=json.load(open('prev/history.json'));print(h[-1]['commit'] if h else '')" 2>/dev/null || true)
+          echo "BASE_COMMIT=$base" >> "$GITHUB_ENV"
+
+      - name: Detect features without coverage
+        run: python3 tests/conformance/hourly/detect_new_features.py
+
+      - name: Run conformance test beds
+        run: python3 tests/conformance/hourly/run_suites.py
+
+      - name: Conformance agent (fix findings, add tests, push to main)
+        if: ${{ !inputs.skip_agent }}
+        continue-on-error: true
+        timeout-minutes: 45
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            Follow tests/conformance/hourly/AGENT.md exactly. This hour's inputs are in
+            tests/conformance/hourly/out/. Start with the UI findings.
+          claude_args: >-
+            --max-turns 120
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+
+      - name: Build coverage page
+        if: always()
+        run: python3 tests/conformance/hourly/build_site.py --history prev/history.json
+
+      - uses: actions/configure-pages@v5
+        if: always()
+      - uses: actions/upload-pages-artifact@v3
+        if: always()
+        with:
+          path: tests/conformance/hourly/site
+      - id: deploy
+        if: always()
+        uses: actions/deploy-pages@v4
+
+      - name: Keep logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-hourly-${{ github.run_id }}
+          path: |
+            tests/conformance/hourly/out/
+            relay.log
+          retention-days: 7
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yml down -v
