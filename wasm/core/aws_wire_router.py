@@ -50,6 +50,8 @@ from core import iam_core as iam
 from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
 from core import sns_core as sns
+from core import cognito_idp_core as cognito
+from core.cognito_idp_core import CognitoIdpStore, InMemoryCognitoIdpStore
 from core import rds_data_core as rds_data
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
 from core import gcp_firestore_core as gcp_fs
@@ -149,19 +151,24 @@ _SIGNING = {
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
     "events": "events", "lambda": "lambda", "ec2": "vpc",
+    "cognito-idp": "cognito-idp",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
 _TARGET_PREFIX = {
     "DynamoDB_": "dynamodb", "TrentService": "kms",
     "secretsmanager": "secretsmanager", "AmazonSQS": "sqs", "AWSEvents": "events",
+    "AWSCognitoIdentityProviderService": "cognito-idp",
 }
+
+# Cognito's public OIDC discovery documents: /<poolId>/.well-known/{jwks.json,openid-configuration}
+_COGNITO_WELLKNOWN = re.compile(r"^/([a-z]{2}(?:-[a-z]+)+-\d_[A-Za-z0-9]+)/\.well-known/(jwks\.json|openid-configuration)$")
 
 # Native JSON content-types the real SDK expects back per service.
 _JSON_CT = {
     "dynamodb": "application/x-amz-json-1.0", "kms": "application/x-amz-json-1.1",
     "secretsmanager": "application/x-amz-json-1.1", "sqs": "application/x-amz-json-1.0",
-    "events": "application/x-amz-json-1.1",
+    "events": "application/x-amz-json-1.1", "cognito-idp": "application/x-amz-json-1.1",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -235,6 +242,7 @@ class AwsWireRouter:
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
+        self.cognito = s.get("cognito") or InMemoryCognitoIdpStore()   # Cognito user pools
 
     def _servicebus_service(self, method, path, lheaders):
         """Azure Service Bus (topics) — the pub/sub-fan-out peer of SNS/Pub-Sub.
@@ -277,6 +285,8 @@ class AwsWireRouter:
             return "azure-sql-iam-rbac"
         if path.startswith("/azure-sql/") or path == "/azure-sql":  # Azure SQL data plane
             return "azure-sql"
+        if _COGNITO_WELLKNOWN.match(path):    # Cognito OIDC discovery (public, unsigned GET)
+            return "cognito-wellknown"
         target = lheaders.get("x-amz-target", "") or ""
         if target:
             for prefix, svc in _TARGET_PREFIX.items():
@@ -357,6 +367,13 @@ class AwsWireRouter:
             return {"status": 400, "headers": {"x-amzn-errortype": "BadRequestException"},
                     "body": b'{"message":"RDS Data API requires the async dispatch path"}'}
 
+        if svc == "cognito-wellknown":
+            m = _COGNITO_WELLKNOWN.match(path)
+            doc = (cognito.jwks if m.group(2) == "jwks.json" else cognito.openid_configuration)(self.cognito, m.group(1))
+            if doc is None:
+                return {"status": 404, "headers": {"content-type": "application/json"}, "body": b'{"message":"Not Found"}'}
+            return {"status": 200, "headers": {"content-type": "application/json"}, "body": json.dumps(doc).encode()}
+
         if svc == "s3":
             r = s3.dispatch(self.s3, method, path, query or {}, headers or {}, bytes(body))
             return {"status": r.status, "headers": dict(r.headers or {}),
@@ -429,6 +446,8 @@ class AwsWireRouter:
                 r = secrets.dispatch(self.sec, target, payload)
             elif svc == "events":
                 r = events.dispatch(self.events, target, payload)
+            elif svc == "cognito-idp":
+                r = cognito.dispatch(self.cognito, target, payload)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload)
             hdrs = dict(r.headers or {})

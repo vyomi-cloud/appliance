@@ -380,6 +380,12 @@ async function route(method, path, body, query) {
     return { tuple: ["azure", "_arm", method, { path, query: query || {}, body: body || null }] };
   }
 
+  // Cognito user pools (core/cognito_idp_core.py via console_cognito_idp) — one generic
+  // passthrough: the facade owns the whole /api/cognito-idp/* REST surface.
+  if (path.startsWith("/api/cognito-idp/")) {
+    return { tuple: ["aws", "cognito-idp", "Api", { method, path: path.slice("/api/cognito-idp".length), query: query || {}, body: body || {} }] };
+  }
+
   // ── v2.9.0 Azure net-new data planes → real cores (dataplane_adapter) ──
   let am;
   // Service Bus (core/azure_servicebus_core.py) — topics + subscriptions + send/receive

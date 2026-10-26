@@ -22,6 +22,7 @@ from core.kv_store import InMemoryKvStore
 from core.sql_store import InMemorySqlStore
 from core.iam_store import InMemoryIamStore
 from core.messaging_store import InMemoryMessagingStore
+from core.cognito_idp_core import InMemoryCognitoIdpStore
 from core.gcp_firestore_core import FirestoreStore
 from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
@@ -46,6 +47,7 @@ def get() -> dict:
             "rds": InMemorySqlStore(),
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
+            "cognito": InMemoryCognitoIdpStore(),   # Cognito user pools
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),
