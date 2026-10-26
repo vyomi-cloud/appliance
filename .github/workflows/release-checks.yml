@@ -136,10 +136,16 @@ jobs:
       - name: Windows E2E (private repo)
         run: |
           if [ -z "$E2E_TOKEN" ]; then echo "windows-e2e|||no access" >> ext/index.txt; exit 0; fi
-          line=$(GH_TOKEN="$E2E_TOKEN" gh run list -R vyomi-cloud/release-e2e --workflow windows-e2e.yml -L 30 \
-            --json databaseId,status,conclusion,displayTitle -q ".[] | select(.status==\"completed\" and (.displayTitle|test(\"(^| |v)$VER( |$)\"))) | \"\(.databaseId) \(.conclusion)\"" 2>/dev/null | head -1)
-          echo "windows-e2e|windows-e2e.yml|${line%% *}|${line##* }" >> ext/index.txt
-          [ -n "$line" ] && GH_TOKEN="$E2E_TOKEN" gh run download "${line%% *}" -R vyomi-cloud/release-e2e -n "windows-e2e-$VER" -D ext/windows-e2e 2>/dev/null || true
+          # The run that produced this version's artifact (newest first).
+          found=""
+          for line in $(GH_TOKEN="$E2E_TOKEN" gh run list -R vyomi-cloud/release-e2e --workflow windows-e2e.yml -L 30 \
+                         --status completed --json databaseId,conclusion -q '.[] | "\(.databaseId),\(.conclusion)"' 2>/dev/null); do
+            id="${line%%,*}"; concl="${line##*,}"
+            if GH_TOKEN="$E2E_TOKEN" gh run download "$id" -R vyomi-cloud/release-e2e -n "windows-e2e-$VER" -D ext/windows-e2e >/dev/null 2>&1; then
+              found="$id|$concl"; break
+            fi
+          done
+          echo "windows-e2e|windows-e2e.yml|${found%%|*}|${found##*|}" >> ext/index.txt
 
       - name: Write RELEASE-CHECKS.md
         run: |
