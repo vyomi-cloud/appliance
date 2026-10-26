@@ -160,6 +160,11 @@
     {"id": "offline-sdk-go-aws-apigatewayv2", "target": "offline", "cloud": "aws", "kind": "sdk-go", "cwd": "tests/conformance/aws-sdk-go-apigatewayv2", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-aws-apigatewayv2", "target": "offline", "cloud": "aws", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-apigatewayv2-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-aws-apigatewayv2", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-apigatewayv2.mjs", "timeout": 600},
-    {"id": "nano-ui-aws-apigatewayv2", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-apigatewayv2.mjs", "timeout": 600}
+    {"id": "nano-ui-aws-apigatewayv2", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-apigatewayv2.mjs", "timeout": 600},
+    {"id": "offline-sdk-java-aws-cloudwatch", "target": "offline", "cloud": "aws", "kind": "sdk-java", "cwd": "tests/conformance/aws-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=AwsCloudWatchConformance", "timeout": 900},
+    {"id": "offline-sdk-go-aws-cloudwatch", "target": "offline", "cloud": "aws", "kind": "sdk-go", "cwd": "tests/conformance/aws-sdk-go-cloudwatch", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-aws-cloudwatch", "target": "offline", "cloud": "aws", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-cloudwatch-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-aws-cloudwatch", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-cloudwatch.mjs", "timeout": 600},
+    {"id": "nano-ui-aws-cloudwatch", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-cloudwatch.mjs", "timeout": 600}
   ]
 }

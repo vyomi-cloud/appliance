@@ -1411,7 +1411,7 @@ def op_put_insight_rule(store, a):
         raise _invalid(f"The value {state} for parameter RuleState is invalid.")
     if name not in store.insight_rules and len(store.insight_rules) >= 500:
         raise CwError("LimitExceededException", "The maximum number of Contributor Insights rules has been reached.")
-    store.insight_rules[name] = {"Name": name, "State": state, "Schema": {"Name": "CloudWatchLogRule", "Version": 1},
+    store.insight_rules[name] = {"Name": name, "State": state, "Schema": '{"Name": "CloudWatchLogRule", "Version": 1}',
                                  "Definition": definition, "ManagedRule": False,
                                  "ApplyOnTransformedLogs": _b(a.get("ApplyOnTransformedLogs"))}
     tags = _tag_list(a.get("Tags"))
