@@ -298,7 +298,18 @@ async function crawlConsole(browser, base, con, needsSW) {
         await sleep(1000);
         await dismissPopups(page);
       }
-      await page.locator(RAIL_SEL).nth(svc.i).click({ timeout: 5000 });
+      try {
+        await page.locator(RAIL_SEL).nth(svc.i).click({ timeout: 5000 });
+      } catch (e) {
+        // A dialog left open by the previous service (e.g. a rejected create)
+        // covers the rail: reload the console so one failure doesn't cascade
+        // into every service after it.
+        await page.goto(base + con.path, { waitUntil: "domcontentloaded" });
+        await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, RAIL_SEL, { timeout: 120000, polling: 500 });
+        await sleep(1000);
+        await dismissPopups(page);
+        await page.locator(RAIL_SEL).nth(svc.i).click({ timeout: 5000 });
+      }
     };
     const seen = new Set();
     for (const svc of services) {
