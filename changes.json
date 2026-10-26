@@ -1,25 +1,6 @@
 {
- "at": "2026-10-26T21:54:53+00:00",
+ "at": "2026-10-26T22:54:55+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "sdk",
-   "service": "pypi:azure-identity",
-   "kind": "release",
-   "key": "ver:pypi:azure-identity:1.27.0",
-   "title": "pypi:azure-identity: 1.26.0 \u2192 1.27.0",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "AWS KMS, Key Management Service",
-   "kind": "announcement",
-   "key": "feed:aws:3cdf63d17206",
-   "title": "AWS Key Management Service now supports ML-KEM for post-quantum key encapsulation",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/kms-ml-kem-post-quantum/",
-   "detail": "AWS Key Management Service (KMS) now supports Module-Lattice-Based Key-Encapsulation Mechanism (ML-KEM), a post-quantum cryptography standard under NIST FIPS 203 , which enables two parties to establish a shared secret. NIST designed ML-KEM to replace the classical key-establishment schemes, like DH/ECDH key agreement, and RSA-based key transport, in their strategic cryptographic roadmap (see NIST IR 8547 ). ML-KEM addresses the \"harvest now, decrypt later\" threat to those classical schemes, where an adversary records the key-establishment exchange today and recovers the shared secret once suf",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
