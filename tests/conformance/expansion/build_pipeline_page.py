@@ -177,6 +177,23 @@ def main() -> int:
             return "✅ handed off (awaiting next hourly run)" if suites else "—"
         return " · ".join(parts)
 
+    # Console implementation (hourly crawl `surfaces`): live / partial /
+    # static / unimplemented per service page, create, detail and tab.
+    STATES = ("live", "partial", "static", "unimplemented")
+
+    def surf(target: str, cloud: str, svc: str | None = None) -> list:
+        return [x for r in (ui.get(target) or {}).get("services", []) if r["cloud"] == cloud and (svc is None or r["service"] == svc)
+                for x in r.get("surfaces", [])]
+
+    def console_cell(cloud: str, svc: str) -> str:
+        parts = []
+        for t, lbl in (("offline", "off"), ("nano", "Nano")):
+            xs = surf(t, cloud, svc)
+            if xs:
+                live = sum(x["state"] == "live" for x in xs)
+                parts.append(f"{lbl} {'✅' if live == len(xs) else '🧩'} {live}/{len(xs)}")
+        return " · ".join(parts) or "—"
+
     def par_cell(cloud: str, svc: str) -> str:
         tot, off_only, nano_only = parity(cloud, svc)
         if not tot:
@@ -186,35 +203,37 @@ def main() -> int:
         return f"⚠️ {tot - off_only - nano_only}/{tot}" + (f" · {off_only} offline-only" if off_only else "") + \
             (f" · {nano_only} Nano-only" if nano_only else "")
 
-    sections, totals = [], {}
+    # ---- collect --------------------------------------------------------
+    data = {}
     for cloud, label in CLOUDS:
-        rows, stages = [], {}
         released = [s for s in reg if s["cloud"] == cloud and s.get("status") == "released"]
         released_keys = {s["key"] for s in released} | {key_of(s.get("upstream") or s["key"]) for s in released}
         queue = [s for s in cat["services"] if s["cloud"] == cloud and s["priority"] in ("P1", "P2")
                  and s["status"] != "released" and key_of(s["id"]) not in released_keys]
         queue.sort(key=lambda s: (s["priority"], s["name"].lower()))
-        details = []
-
+        rest = sorted((r for r in cat["services"] if r["cloud"] == cloud and r["priority"] == "P3"
+                       and r["status"] != "released" and key_of(r["id"]) not in released_keys), key=lambda r: r["id"])
+        rel_rows = []
         for s in released:
-            man = os.path.join(ROOT, "services", "manifests", f"{cloud}-{s['key']}.json")
-            suites = json.load(open(man)).get("suites", []) if os.path.exists(man) else []
+            issues_n = []
+            for t in ("offline", "nano"):
+                r = ui_res.get((t, cloud, s["name"]))
+                issues_n.append(str(len(r.get("findings", []))) if r else "–")
+            up = upstream_cell(cloud, s.get("upstream") or s["key"], [s["key"], s["name"]])
+            up = "⬜ not watched" if up.startswith("⬜") else ("⚠️ " + up.split("⚠️ ")[1] if "⚠️" in up else "✅ watched")
             ver = s.get("released_in", "")
-            rel = f"[v{ver}]({GH}/releases/tag/v{ver})" if re.match(r"^\d", ver) else (ver or "baseline")
-            stages["Released"] = stages.get("Released", 0) + 1
-            # Pre-gate (baseline) services weren't built through the gate: no
-            # per-check claims for them, only their hourly + upstream status.
-            rows.append([f"**{s['name']}**", "—", "🟢 Released", "—"] + (["✅"] * len(COLS) if suites else ["—"] * len(COLS)) +
-                        [par_cell(cloud, s["name"]), "✅ passed" if suites else "baseline (pre-gate)", rel, hourly_cell(cloud, s["name"], suites),
-                         upstream_cell(cloud, s.get("upstream") or s["key"], [s["key"], s["name"]])])
-
+            rel_rows.append({"name": s["name"], "console": console_cell(cloud, s["name"]).replace("off ", "").replace("Nano ", ""),
+                             "issues": " · ".join(issues_n), "upstream": up,
+                             "release": f"[v{ver}]({GH}/releases/tag/v{ver})" if re.match(r"^\d", ver) else "before gate"})
+        moving, queued = [], []
         for s in queue:
             k = key_of(s["id"])
             branch = f"expansion/{cloud}-{k}"
             it = by_key.get((cloud, k))
             labels = {l["name"] for l in (it or {}).get("labels", [])}
             pr = prs.get(branch)
-            issue = f" [#{it['number']}]({GH}/issues/{it['number']})" if it else ""
+            name = s["name"] if s["name"] != s["id"] else s["id"]
+            link = f"[#{it['number']}]({GH}/issues/{it['number']})" if it else ""
             if pr and pr["state"] == "MERGED":
                 stage = "🚀 Releasing"
             elif "blocked" in labels:
@@ -226,89 +245,146 @@ def main() -> int:
             elif it and it["state"] == "OPEN":
                 stage = "📋 Queued"
             else:
-                stage = "· Not filed"
-            stages[stage.split(" (")[0]] = stages.get(stage.split(" (")[0], 0) + 1
-            gate = static_gate(branch, f"services/manifests/{cloud}-{k}.json") if branch in branches else {}
-            if gate:
-                cells = ["✅" if all(gate.get(c, (False,))[0] for c in checks) else "❌" for _, checks in COLS]
-                ok = sum(1 for v in gate.values() if v[0])
-                gcell = f"static {ok}/{len(gate)} · live {live_gate(branch) if pr else '—'}"
-                details.append(f"<details><summary>{label} {s['name']} — gate {ok}/{len(gate)}</summary>\n\n"
-                               "| | Check | Detail |\n|---|---|---|\n" +
-                               "\n".join(f"| {'✅' if v[0] else '❌'} | {n} | {v[1].replace('|', '/')[:160]} |" for n, v in gate.items())
-                               + "\n\n</details>")
-            else:
-                cells = ["⬜"] * len(COLS)
-                gcell = "no manifest yet" if branch in branches else "—"
-            name = s["name"] if s["name"] != s["id"] else s["id"]
+                stage = "Not filed"
             mb = None
             if branch in branches:
                 try:
                     mb = json.loads(sh("git", "show", f"origin/{branch}:services/manifests/{cloud}-{k}.json") or "{}").get("backend")
                 except ValueError:
                     mb = None
-            rows.append([f"{name}{issue}", s["priority"], stage, backend_cell(cloud, s["id"], mb)] + cells + ["⏳ gated", gcell, "—", "⏳ after release",
-                        "⏳ registered at build" if not gate else
-                        ("✅ registered" if gate.get("upstream id tracked by the hourly upstream watcher", (False,))[0] else "⬜ not yet")])
-
-        totals[cloud] = {"released": len(released), "queue": len(queue), **stages}
-        head = ["Service", "Pri", "Stage", "Offline backend"] + [c for c, _ in COLS] + ["Nano ↔ offline", "Gate", "Release", "Hourly conformance hand-off", "Upstream watcher hand-off"]
-        t = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)] + ["| " + " | ".join(r) + " |" for r in rows]
-        summary = " · ".join(f"{k}: **{v}**" for k, v in stages.items())
+            row = {"name": name, "link": link, "priority": s["priority"], "stage": stage,
+                   "backend": backend_cell(cloud, s["id"], mb).replace(" (default)", "")}
+            if stage.startswith(("📋", "Not")):
+                queued.append(row)
+                continue
+            gate = static_gate(branch, f"services/manifests/{cloud}-{k}.json") if branch in branches else {}
+            ok = sum(1 for v in gate.values() if v[0])
+            row["checks"] = f"{ok}/{len(gate)}" if gate else "no manifest yet"
+            row["missing"] = [n for n, v in gate.items() if not v[0]]
+            row["gate"] = gate
+            row["live"] = live_gate(branch) if pr else ""
+            moving.append(row)
+        con = {}
+        notlive = []
+        for t in ("offline", "nano"):
+            xs = surf(t, cloud)
+            con[t] = {st: sum(x["state"] == st for x in xs) for st in STATES} | {"total": len(xs)}
+            for r in (ui.get(t) or {}).get("services", []):
+                if r["cloud"] == cloud:
+                    notlive += [(r["service"], t, x) for x in r.get("surfaces", []) if x["state"] != "live"]
         gaps = []
         for svc in sorted({k[2] for k in feats if k[1] == cloud}):
             tot, off_only, nano_only = parity(cloud, svc)
             if off_only or nano_only:
-                o, n = feats.get(("offline", cloud, svc), set()), feats.get(("nano", cloud, svc), set())
-                gaps.append(f"| {svc} | {', '.join(f'{k}: {v}' for k, v in sorted(o - n)[:6]) or '—'} | "
-                            f"{', '.join(f'{k}: {v}' for k, v in sorted(n - o)[:6]) or '—'} |")
-        summary += ("\n\n**Nano ↔ offline parity gaps** (the hourly agent closes these):\n\n"
-                    "| Console page | Offline only | Nano only |\n|---|---|---|\n" + "\n".join(gaps)) if gaps \
-            else "\n\n**Nano ↔ offline parity:** ✅ every console page has the same features on both."
-        # Everything else the cloud publishes (P3): listed so the page covers
-        # the whole cloud, folded because it's long.
-        rest = sorted((r for r in cat["services"] if r["cloud"] == cloud and r["priority"] == "P3"
-                       and r["status"] != "released" and key_of(r["id"]) not in released_keys),
-                      key=lambda r: r["id"])
-        upstream_total = sum(1 for r in cat["services"] if r["cloud"] == cloud)
-        totals[cloud]["upstream"] = upstream_total
-        p3 = (f"<details><summary><b>Not yet scheduled (P3): {len(rest)} services</b> — the rest of {label}'s "
-              f"{upstream_total} published services; scheduled by promoting them to P1/P2 in tests/conformance/expansion/priorities.json</summary>\n\n"
-              "| Service | Upstream id | Operations | Stage |\n|---|---|---|---|\n" +
-              "\n".join(f"| {r['name'] if r['name'] != r['id'] else '—'} | `{r['id']}` | {r.get('operations', '')} | · not scheduled |"
-                         for r in rest) + "\n\n</details>")
-        sections.append(f"## {label} — {len(released)} released, {len(queue)} in the pipeline, {len(rest)} not yet scheduled "
-                        f"({upstream_total} published by {label})\n\n{summary}\n\n" + "\n".join(t)
-                        + ("\n\n**Gate details**\n\n" + "\n\n".join(details) if details else "") + "\n\n" + p3)
+                gaps.append((svc, off_only, nano_only))
+        data[cloud] = {"label": label, "released": rel_rows, "moving": moving, "queued": queued, "rest": rest,
+                       "upstream": sum(1 for r in cat["services"] if r["cloud"] == cloud), "console": con,
+                       "notlive": notlive, "gaps": gaps}
+    totals = {c: {"released": len(d["released"]), "queue": len(d["moving"]) + len(d["queued"]),
+                  "building": sum(r["stage"].startswith("🛠") for r in d["moving"]),
+                  "in_gate": sum(r["stage"].startswith(("🔍", "🚀")) for r in d["moving"]),
+                  "upstream": d["upstream"]} for c, d in data.items()}
+
+    # ---- render ---------------------------------------------------------
+    def pct(c: dict) -> str:
+        return f"{100 * c['live'] // c['total']}%" if c.get("total") else "not measured yet"
+
+    def con_total(t: str) -> dict:
+        agg = {"total": 0, **{st: 0 for st in STATES}}
+        for d in data.values():
+            for k in agg:
+                agg[k] += d["console"][t].get(k, 0)
+        return agg
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    cloud_suites = " · ".join(f"`{sid}` {'✅' if r['status'] == 'pass' else '❌'} {r.get('passed', 0)}/{r.get('passed', 0) + r.get('failed', 0)}"
-                              for sid, r in suite_res.items())
-    total_rel = sum(v["released"] for v in totals.values())
-    per_cloud = " / ".join(f"{l} {totals[c]['released']}" for c, l in CLOUDS)
-    md = [f"# Vyomi service pipeline", "",
-          f"Updated **{now}** · **{total_rel} services released** "
-          f"({per_cloud}) · "
-          f"**{sum(v['queue'] for v in totals.values())} in the pipeline** (P1 + P2) · "
-          f"covering all **{sum(v.get('upstream', 0) for v in totals.values())} services** AWS, GCP and Azure publish "
-          f"(catalog of {cat.get('generated', '')[:10]}).", "",
-          "A new service goes live only when the service gate passes: engine, native SDK/CLI wire, console UI offline + Nano, "
-          "Java + Go + CLI test beds, Playwright console tests offline + Nano, registered with the hourly conformance run and "
-          "the upstream watcher. Then it is released (patch version) and handed off to both hourly jobs.", "",
-          "**Stages:** 📋 Queued → 🛠 Building → 🔍 In gate → 🚀 Releasing → 🟢 Released. "
-          "Columns Engine…PW Nano are the gate's static checks on the service branch (⬜ = not checked yet). "
-          "Offline backend is the cheap, permissively licensed software behind the service offline "
-          "([rules + defaults](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/expansion/backends.json)); "
-          "the gate checks its license, arch, pinning and idle memory. "
-          "Nano ↔ offline compares every console feature (pages, tabs, columns, create fields, actions, operations) "
-          "between the two simulators from the latest hourly inventory; a new service can't pass the gate unless both match. "
-          "Hourly hand-off shows the latest hourly UI crawl (⚠️ n = open findings) and the service's own suites; "
-          "upstream hand-off shows whether the watcher tracks the API and any open drift issues.", "",
-          f"Links: [backlog]({GH}/issues?q=label%3Anew-service) · [expansion runs]({GH}/actions/workflows/expansion-agent.yml) · "
-          f"[usage-limit log]({GH}/tree/expansion-state) · [hourly conformance report]({GH}/tree/conformance-report) · "
-          f"[upstream watcher]({GH}/tree/upstream-state) · [full catalog]({GH}/blob/main/docs/expansion/CLOUD-CATALOG.md)", "",
-          f"**Latest hourly run** ({hourly.get('at', 'n/a')[:16].replace('T', ' ')} UTC): {cloud_suites or 'n/a'}", ""]
-    md += ["\n\n".join(sections), ""]
+    T = lambda k: sum(v[k] for v in totals.values())
+    moving_all = [(d["label"], r) for d in data.values() for r in d["moving"]]
+    building = [f"{r['name']} ({lbl}, {r['checks']} checks)" for lbl, r in moving_all if r["stage"].startswith("🛠")]
+    gating = [f"{r['name']} ({lbl})" for lbl, r in moving_all if r["stage"].startswith(("🔍", "🚀"))]
+    passing = sum(1 for r in suite_res.values() if r["status"] == "pass")
+    drift_n = len(drift)
+    off, nano = con_total("offline"), con_total("nano")
+    md = ["# Vyomi service pipeline", "",
+          f"_Updated {now} · refreshes after every pipeline run_", "",
+          "## At a glance", "",
+          f"- **Released:** {T('released')} services (AWS {totals['aws']['released']} · GCP {totals['gcp']['released']} · "
+          f"Azure {totals['azure']['released']}) of {T('upstream'):,} the clouds publish",
+          f"- **Building now:** {', '.join(building) or 'nothing'}",
+          f"- **In the gate / releasing:** {', '.join(gating) or 'nothing'}",
+          f"- **Queued:** {sum(len(d['queued']) for d in data.values())} services (P1 first, then P2)",
+          f"- **Consoles really implemented:** offline {pct(off)} · Nano {pct(nano)}",
+          f"- **Hourly tests:** {passing} of {len(suite_res)} suites passing" + (f" (run {hourly['at'][11:16]} UTC)" if hourly.get("at") else ""),
+          f"- **Upstream watch:** {drift_n} open change{'s' if drift_n != 1 else ''} from the real clouds to adopt", "",
+          "## By cloud", "",
+          "| Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |", "|---|---|---|---|---|---|"]
+    for c, d in data.items():
+        md.append(f"| {d['label']} | {totals[c]['released']} | {totals[c]['building']} | {totals[c]['in_gate']} | {len(d['queued'])} | "
+                  f"{pct(d['console']['offline'])} · {pct(d['console']['nano'])} |")
+
+    md += ["", "## In progress", ""]
+    if moving_all:
+        md += ["| Service | Cloud | Stage | Checks | Still missing |", "|---|---|---|---|---|"]
+        for lbl, r in moving_all:
+            miss = "; ".join(r["missing"][:3]) + (f" (+{len(r['missing']) - 3} more)" if len(r["missing"]) > 3 else "")
+            md.append(f"| {r['name']} {r['link']} | {lbl} | {r['stage']} | {r['checks']} | {miss or '—'} |")
+    else:
+        md.append("- Nothing is being built right now.")
+
+    md += ["", "## Released services", "",
+           "- **Console live:** parts of the console that are really implemented, offline · Nano",
+           "- **UI issues:** problems the latest hourly crawl found, offline · Nano", ""]
+    for c, d in data.items():
+        md += [f"### {d['label']}", "", "| Service | Console live | UI issues | Upstream | Release |", "|---|---|---|---|---|"]
+        md += [f"| {r['name']} | {r['console']} | {r['issues']} | {r['upstream']} | {r['release']} |" for r in d["released"]]
+        if d["gaps"]:
+            md += ["", "- **Nano ↔ offline gaps:** " + ", ".join(
+                f"{svc} ({'offline-only' if o else 'Nano-only'})" for svc, o, n in d["gaps"])]
+        md.append("")
+
+    md += ["## Up next", ""]
+    for c, d in data.items():
+        md += [f"<details><summary><b>{d['label']}</b> — {len(d['queued'])} queued</summary>", "",
+               "| Service | Priority | Issue | Offline backend |", "|---|---|---|---|"]
+        md += [f"| {r['name']} | {r['priority']} | {r['link'] or 'not filed'} | {r['backend']} |" for r in d["queued"]]
+        md += ["", "</details>", ""]
+
+    md += ["## Details", ""]
+    for lbl, r in moving_all:
+        if r["gate"]:
+            md += [f"<details><summary>Gate checks — {r['name']} ({lbl})</summary>", "", "| | Check | Detail |", "|---|---|---|"]
+            md += [f"| {'✅' if v[0] else '❌'} | {n} | {v[1].replace('|', '/')[:140]} |" for n, v in r["gate"].items()]
+            md += ["", "</details>", ""]
+    for c, d in data.items():
+        if d["notlive"]:
+            md += [f"<details><summary>Console parts not live yet — {d['label']} ({len(d['notlive'])})</summary>", "",
+                   "| Service | Console | Part | State |", "|---|---|---|---|"]
+            md += [f"| {svc} | {t} | {x['kind']}: {x['name']} | {x['state']} |" for svc, t, x in d["notlive"]]
+            md += ["", "</details>", ""]
+    if suite_res:
+        md += ["<details><summary>Latest hourly test results</summary>", "", "| Suite | Result | Checks |", "|---|---|---|"]
+        md += [f"| {sid} | {'✅' if r['status'] == 'pass' else '❌'} | {r.get('passed', 0)}/{r.get('passed', 0) + r.get('failed', 0)} |"
+               for sid, r in suite_res.items()]
+        md += ["", "</details>", ""]
+    for c, d in data.items():
+        md += [f"<details><summary>Not yet scheduled — {d['label']} ({len(d['rest'])} of {d['upstream']} published)</summary>", "",
+               "| Service | Upstream id | Operations |", "|---|---|---|"]
+        md += [f"| {r['name'] if r['name'] != r['id'] else '—'} | `{r['id']}` | {r.get('operations', '')} |" for r in d["rest"]]
+        md += ["", "</details>", ""]
+
+    md += ["## How to read this page", "",
+           "- **Stages:** 📋 Queued → 🛠 Building → 🔍 In gate → 🚀 Releasing → released",
+           "- **A service goes live only when the gate passes:** engine, native SDK/CLI, console offline + Nano, "
+           "Java/Go/CLI/Playwright tests, cheap licensed backend, hourly + upstream registration",
+           "- **Console parts:** service page, create, resource detail and each detail tab",
+           "  - ✅ live = real data from the API",
+           "  - 🟡 partial = real but some fields blank",
+           "  - ⬜ static = hard-coded or generic text",
+           "  - ❌ unimplemented = errors, 404/501, empty",
+           "- **Console live `6/12 · 5/12`:** 6 of 12 parts live offline, 5 of 12 in Nano",
+           f"- **Backends:** [rules and defaults]({GH}/blob/main/tests/conformance/expansion/backends.json)",
+           f"- **Links:** [backlog]({GH}/issues?q=label%3Anew-service) · [expansion runs]({GH}/actions/workflows/expansion-agent.yml) · "
+           f"[run log]({GH}/tree/expansion-state) · [hourly report]({GH}/tree/conformance-report) · "
+           f"[upstream watcher]({GH}/tree/upstream-state) · [full catalog]({GH}/blob/main/docs/expansion/CLOUD-CATALOG.md)", ""]
     open(os.path.join(out_dir, "README.md"), "w").write("\n".join(md))
     json.dump({"updated": now, "totals": totals}, open(os.path.join(out_dir, "pipeline.json"), "w"), indent=1)
     print(json.dumps(totals))
