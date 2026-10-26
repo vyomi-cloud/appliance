@@ -64,7 +64,7 @@ jobs:
           fi
           cp "$OUT/state.json" "$OUT/changes.json" .
           # log.md: every run, newest first (capped). README: the latest run.
-          { cat "$OUT/summary.md"; echo; [ -f log.md ] && head -n 3000 log.md; } > log.next && mv log.next log.md
+          { cat "$OUT/summary.md"; echo; if [ -f log.md ]; then head -n 3000 log.md; fi; } > log.next && mv log.next log.md
           {
             echo "# Upstream watch — AWS / GCP / Azure changes"; echo
             echo "Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [\`upstream-drift\` issues](${{ github.server_url }}/${{ github.repository }}/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md)."; echo
