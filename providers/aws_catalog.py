@@ -602,7 +602,7 @@ RESOURCE_CATALOG_AWS = [
     # Engine: core/elbv2_core.py (native Query wire + this console REST).
     # ========================================================================
     {
-        "key": "elbv2", "label": "Load Balancing", "icon": "alt_route",
+        "key": "elbv2", "label": "Elastic Load Balancing", "icon": "alt_route",
         "namespace": "AWS/ApplicationELB", "service": "elbv2",
         "collection_path": "/api/aws/elbv2/load-balancers",
         "resource_path":   "/api/aws/elbv2/load-balancers/{name}",
