@@ -1,0 +1,110 @@
+name: Validate Windows MSI
+
+# After every appliance release, install the published MSI on a clean x64
+# Windows runner and validate it end to end (tests/installer/validate-msi.ps1):
+# fresh install, upgrade from the previous release, CLI from a new shell, PATH,
+# Start-menu shortcut, Add/Remove Programs, clean uninstall. A failure opens an
+# issue so a broken installer never goes unnoticed.
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release to validate (e.g. 3.0.7). Blank = latest release.'
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: msi-validate-${{ github.event.workflow_run.head_branch || inputs.version || 'latest' }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    # Release runs on tags (head_branch = vX.Y.Z); skip cancelled runs.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion != 'cancelled' && startsWith(github.event.workflow_run.head_branch, 'v'))
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the release and the previous one
+        id: rel
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.workflow_run.head_branch }}"
+          if (-not $tag) { $tag = if ("${{ inputs.version }}") { "v${{ inputs.version }}" } else { gh release view --json tagName -q .tagName } }
+          $ver = $tag.TrimStart("v")
+          # Previous stable release that ships an MSI (upgrade source).
+          $prev = gh api "repos/${{ github.repository }}/releases?per_page=30" `
+            -q '[.[] | select(.draft|not) | select(.prerelease|not) | select(any(.assets[]; .name|endswith("-x64.msi")))] | .[].tag_name' |
+            Where-Object { $_ -ne $tag } | Where-Object { [version]($_.TrimStart("v") -replace '[^0-9.]','') -lt [version]$ver } | Select-Object -First 1
+          "tag=$tag"   >> $env:GITHUB_OUTPUT
+          "ver=$ver"   >> $env:GITHUB_OUTPUT
+          "prev=$prev" >> $env:GITHUB_OUTPUT
+          Write-Host "Validating $tag (upgrade from: $(if ($prev) { $prev } else { 'none' }))"
+
+      - name: Download the MSIs and verify the checksum
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.rel.outputs.tag }}"; $ver = "${{ steps.rel.outputs.ver }}"
+          New-Item -ItemType Directory -Force msi | Out-Null
+          # The MSI is attached by the release job; give a just-finished release a moment.
+          for ($i = 0; $i -lt 10; $i++) {
+            gh release download $tag -p "cloud-learn-$ver-x64.msi*" -D msi --clobber 2>$null
+            if (Test-Path "msi\cloud-learn-$ver-x64.msi") { break }
+            Start-Sleep 30
+          }
+          if (-not (Test-Path "msi\cloud-learn-$ver-x64.msi")) { throw "No cloud-learn-$ver-x64.msi on release $tag" }
+          $want = (Get-Content "msi\cloud-learn-$ver-x64.msi.sha256" -Raw).Trim().Split()[0].ToLower()
+          $got  = (Get-FileHash "msi\cloud-learn-$ver-x64.msi" -Algorithm SHA256).Hash.ToLower()
+          if ($want -ne $got) { throw "SHA256 mismatch: release says $want, downloaded file is $got" }
+          Write-Host "SHA256 OK $got"
+          $prev = "${{ steps.rel.outputs.prev }}"
+          if ($prev) {
+            $pv = $prev.TrimStart("v")
+            New-Item -ItemType Directory -Force prev | Out-Null
+            gh release download $prev -p "cloud-learn-$pv-x64.msi" -D prev --clobber
+          }
+
+      - name: Validate install, upgrade and uninstall
+        id: validate
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.rel.outputs.ver }}"; $prev = "${{ steps.rel.outputs.prev }}"
+          $vargs = @("-Msi", "msi\cloud-learn-$ver-x64.msi", "-Version", $ver, "-OutDir", "msi-validation")
+          if ($prev) { $vargs += @("-PrevMsi", "prev\cloud-learn-$($prev.TrimStart('v'))-x64.msi") }
+          ./tests/installer/validate-msi.ps1 @vargs
+
+      - name: Job summary
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path msi-validation\summary.md) { Get-Content msi-validation\summary.md -Raw >> $env:GITHUB_STEP_SUMMARY }
+
+      - name: Keep logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msi-validation-${{ steps.rel.outputs.ver }}
+          path: msi-validation/
+          retention-days: 30
+
+      - name: Open an issue on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.rel.outputs.ver }}"
+          $body = "The Windows MSI for **v$ver** failed end-to-end validation.`n`nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`n`n"
+          if (Test-Path msi-validation\summary.md) { $body += (Get-Content msi-validation\summary.md -Raw) }
+          gh label create installer --color d93f0b --description "Windows/installer problems" 2>$null
+          gh issue create --title "MSI validation failed for v$ver" --label installer --body $body
