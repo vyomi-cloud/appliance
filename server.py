@@ -2526,6 +2526,13 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(api, dict):
             add("aws", "apigateway", "api", api_id, api)
 
+    try:   # API Gateway V2 — the shared wire/console store (console + SDK/CLI created APIs)
+        from core.apigatewayv2_core import shared_store as _apigwv2_store
+        for api_id, api in _apigwv2_store().apis.items():
+            add("aws", "apigatewayv2", "api", api_id, {"name": api["name"], "created": api["createdDate"]})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -22937,6 +22944,22 @@ _UNIFIED_INGRESS = os.environ.get("VYOMI_UNIFIED_INGRESS", "").strip().lower() i
 # we registered the @app.post("/{bucket}/{key:path}") catch-all up
 # top (as the file originally did), it swallowed POST /api/auth/...
 # with bucket=api, key=auth/... and returned a NoSuchBucket XML.
+# API Gateway V2 console REST (/api/apigatewayv2/*) — shares its store with the native /v2 wire.
+try:
+    from providers import aws_apigatewayv2_console as _apigwv2_console
+
+    def _apigwv2_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("aws", "apigatewayv2", "api", payload, {}, None, action="delete")
+            _record_usage("apigatewayv2.delete_api", {"api_id": payload})
+        else:
+            _cloudsim_sync_service_resource("aws", "apigatewayv2", "api", payload["apiId"],
+                                            {"name": payload["name"], "created": payload["createdDate"]}, None)
+            _record_usage("apigatewayv2.create_api", {"api_id": payload["apiId"], "name": payload["name"]})
+    _apigwv2_console.register(app, _apigwv2_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[apigatewayv2] console routes skipped: {_e}")
+
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)
     # on the DEFAULT path — targeted, additive routes for path prefixes that have no

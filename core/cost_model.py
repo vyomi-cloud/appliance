@@ -78,6 +78,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.sqs": 0.40,          # ~1M requests
     "aws.dynamodb": 1.25,     # on-demand, light usage
     "aws.apigateway": 3.50,   # ~1M calls
+    "aws.apigatewayv2": 1.00, # HTTP API $1.00/M requests (~1M calls)
     "aws.vpc": 0.00,          # free (NAT GW extra)
     # GCP
     "gcp.sql": 25.00,         # db-f1-micro 730h

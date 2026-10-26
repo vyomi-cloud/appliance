@@ -83,6 +83,8 @@ def build_backed_router() -> AwsWireRouter:
         "msg": NatsBackedMessagingStore(servers=nats_servers, bucket="aws_msg"),
         "gcp_msg": NatsBackedMessagingStore(servers=nats_servers, bucket="gcp_msg"),
     }
+    from core.apigatewayv2_core import shared_store
+    stores["apigwv2"] = shared_store()   # shared with the console REST (/api/apigatewayv2)
     return AwsWireRouter(stores=stores)
 
 
@@ -128,7 +130,8 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     unified ingress (mount())."""
     from fastapi import Request, Response
 
-    r = router or AwsWireRouter()
+    from core.apigatewayv2_core import shared_store
+    r = router or AwsWireRouter(stores={"apigwv2": shared_store()})
 
     async def _proxy(request: Request):
         body = await request.body()

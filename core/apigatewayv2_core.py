@@ -36,6 +36,18 @@ class ApiGwV2Store:
         self.vpclinks: dict = {}
 
 
+_SHARED: ApiGwV2Store | None = None
+
+
+def shared_store() -> ApiGwV2Store:
+    """The appliance-wide store: the native wire (/v2/...) and the console REST
+    (/api/apigatewayv2/...) both read/write this one instance."""
+    global _SHARED
+    if _SHARED is None:
+        _SHARED = ApiGwV2Store()
+    return _SHARED
+
+
 @dataclass
 class ApiGwV2Response:
     status: int = 200

@@ -252,6 +252,33 @@ _APIGW_SUB = [
 
 
 # ===========================================================================
+# API Gateway V2 — HTTP / WebSocket API detail (generic `apigw2list` tab renderer;
+# `list_key` names the api_paths entry, `cols` the [field, label] grid columns)
+# ===========================================================================
+_APIGW2_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Develop", "items": [
+        {"key": "routes",       "label": "Routes",       "icon": "alt_route",   "type": "apigw2list", "list_key": "routes",
+         "cols": [["routeKey", "Route key"], ["target", "Target"], ["authorizationType", "Authorization"], ["routeId", "Route ID"]]},
+        {"key": "integrations", "label": "Integrations", "icon": "integration_instructions", "type": "apigw2list", "list_key": "integrations",
+         "cols": [["integrationId", "Integration ID"], ["integrationType", "Type"], ["integrationUri", "URI"], ["payloadFormatVersion", "Payload format"]]},
+        {"key": "authorizers",  "label": "Authorization", "icon": "lock_person", "type": "apigw2list", "list_key": "authorizers",
+         "cols": [["name", "Name"], ["authorizerType", "Type"], ["authorizerId", "Authorizer ID"]]},
+    ]},
+    {"group": "Deploy", "items": [
+        {"key": "stages",       "label": "Stages",       "icon": "rocket_launch", "type": "apigw2list", "list_key": "stages",
+         "cols": [["stageName", "Stage"], ["deploymentId", "Deployment"], ["autoDeploy", "Auto-deploy"], ["createdDate", "Created"]]},
+        {"key": "deployments",  "label": "Deployments",  "icon": "history",     "type": "apigw2list", "list_key": "deployments",
+         "cols": [["deploymentId", "Deployment ID"], ["deploymentStatus", "Status"], ["createdDate", "Created"], ["description", "Description"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "monitoring", "label": "Monitoring", "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
+# ===========================================================================
 # VPC — composite (VPCs / Subnets / SGs / Route tables / IGWs)
 # ===========================================================================
 _VPC_SUB = [
@@ -354,6 +381,7 @@ SUB_BLADES: dict[str, list] = {
     "sqs":            _SQS_SUB,
     "lambda":         _LAMBDA_SUB,
     "apigateway":     _APIGW_SUB,
+    "apigatewayv2":   _APIGW2_SUB,
     "vpc":            _VPC_SUB,
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
