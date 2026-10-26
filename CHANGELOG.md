@@ -6,12 +6,25 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [3.0.8] — 2026-10-26
 
-Daily conformance release.
+**Patch: every backend starts on Windows and from packages, images pinned to the release, GCP data-path fixes, Homebrew `vyomi-docker` installs again.** (Re-cut: the first 3.0.8 build was revoked after the new release checks caught the issues below.)
 
-- conformance-agent: fix /api/spaces 500 on binary S3 objects and VM cr…
-- conformance-agent: harness — count table rows without requiring <tbody>
-- conformance-agent: Nano Azure home stops requesting providers/undefin…
-- conformance-agent: harness — return to console home before each service
+### Fixed
+- **Windows MSI and the deb/rpm/brew `vyomi` launcher started only 4 of 12 services.** `vyomi up` ran a plain `docker compose up -d`, so the backends behind the compose `full` profile (MySQL, Vault, NATS, MinIO, DynamoDB, ElasticMQ, Azurite, Pub/Sub, Firestore) never started. Both launchers now start them as a second wave and include them in `down` / `ps` / `logs` / `update`.
+- **Installed packages ran `vyomi/appliance:latest`, not their own version.** Release builds now pin the bundled compose files to the release's appliance and cloudsim images (env vars still override; main keeps `latest`).
+- **Homebrew `vyomi-docker` failed to install** on current Homebrew ("untrusted tap"): its `conflicts_with "cloud-learn"` made Homebrew load a second formula from the tap. Removed; the two formulas still can't both link `bin/vyomi`.
+- **GCP Pub/Sub:** subscriptions created with `PUT` (client libraries, gcloud) were never created in the emulator, so `pull` returned 500; the subscription view doubled its resource name; a missing subscription is now 404.
+- **GCP Cloud Storage:** a named upload without `uploadType` returned 502; it is now a simple media upload, as in real GCS.
+- **Tier-locked capabilities returned 500** (e.g. Firestore on Free) instead of a 403 `CapabilityLockedByTier`.
+- **`/api/spaces` 500** on binary S3 objects; **EC2/GCE create 500** on an unwritable deploy dir; **Nano Azure home** requested `providers/undefined/undefined`.
+- **`vyomi doctor`** (vyomi-docker) printed `docker compose` usage instead of an environment report.
+
+### Added
+- **`VYOMI_NO_TELEMETRY=1`** opts the simulator out of install registration (CI and test boots set it).
+- **Per-release checks** on the `release/vX.Y.Z` branch: MSI install/upgrade/uninstall, DEB/RPM/Homebrew install checks, a full startup + UI-status check, and a Windows end-to-end run.
+
+### Changed
+- `CLOUDLEARN_TIER_ENFORCE=0` (test/dev) now also lifts the rate limiter and the capability-pack gate.
+- **Distribution:** Scoop and winget are no longer published by the release pipeline. Windows installs use the MSI from the GitHub Release; macOS/Linux use Homebrew, `.deb`, `.rpm` or Docker.
 
 ## [3.0.7] — 2026-10-23
 

@@ -59,9 +59,9 @@ jobs:
           fi
           echo "old=$OLD" >> "$GITHUB_OUTPUT"; echo "new=$NEW" >> "$GITHUB_OUTPUT"
           echo "$NEW" > VERSION
-          for f in packaging/rpm/cloud-learn.spec packaging/scoop/vyomi.json packaging/scoop/cloud-learn.json \
-                   packaging/snap/snapcraft.yaml packaging/winget/Vyomi.Vyomi.yaml \
-                   packaging/winget/Vyomi.Vyomi.installer.yaml packaging/winget/Vyomi.Vyomi.locale.en-US.yaml; do
+          # Only manifests the release still publishes (Scoop, winget and Snap
+          # were dropped from the pipeline).
+          for f in packaging/rpm/cloud-learn.spec; do
             [ -f "$f" ] && sed -i "s/$(echo "$OLD" | sed 's/\./\\./g')/$NEW/g" "$f"
           done
           # Changelog lines = the commits that came in with this PR.

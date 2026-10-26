@@ -3,9 +3,9 @@ name: Release
 # On every STABLE v*.*.* tag (no -rc/-beta/-alpha suffix) or manual dispatch:
 #   1. Build the source tarball + .deb + .rpm
 #   2. Publish a GitHub Release with all artifacts attached
-#   3. Fan out to downstream package managers (Brew tap, Scoop) — each one
-#      is OPT-IN via its secret being set (winget dropped 2026-10-06, Snap
-#      dropped 2026-10-23 — see the "REMOVED" notes where their jobs were)
+#   3. Fan out to the Homebrew tap (OPT-IN via its secret). Windows ships as the
+#      MSI on the GitHub Release. winget (2026-10-06), Snap (2026-10-23) and
+#      Scoop (2026-10-26) were dropped — see the "REMOVED" notes.
 #
 # Release Candidate tags (v*-rc*, v*-beta*, v*-alpha*) are handled by
 # the separate release-candidate.yml workflow, which builds the SAME
@@ -19,11 +19,9 @@ name: Release
 # own secret being present. Adding a secret turns that PM's job on:
 #
 #   HOMEBREW_TAP_TOKEN        — PAT (contents:write) on the homebrew-tap repo
-#   SCOOP_BUCKET_TOKEN        — PAT (contents:write) on the scoop-bucket repo
 #
-# Note: Chocolatey was dropped 2026-06-11. The community-feed review
-# overhead + MSI mismatch with the multipass-only architecture made it
-# the wrong fit. Scoop replaces it as the Windows-native path.
+# Note: Chocolatey was dropped 2026-06-11, Scoop 2026-10-26. Windows users
+# install the MSI from the GitHub Release.
 #
 # The Docker Hub publish lives in a separate workflow (docker-publish.yml).
 
@@ -62,22 +60,18 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       has_brew:   ${{ steps.check.outputs.has_brew }}
-      has_scoop:  ${{ steps.check.outputs.has_scoop }}
     steps:
       - id: check
         env:
           BREW:   ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          SCOOP:  ${{ secrets.SCOOP_BUCKET_TOKEN }}
         run: |
           mask() { [ -n "$1" ] && echo true || echo false; }
           {
             echo "has_brew=$(mask "$BREW")"
-            echo "has_scoop=$(mask "$SCOOP")"
           } >> "$GITHUB_OUTPUT"
           {
             echo "## Downstream targets"
             echo "- Homebrew tap : $(mask "$BREW")"
-            echo "- Scoop bucket : $(mask "$SCOOP")"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ── source tarball + deb + rpm ──────────────────────────────────────────
@@ -391,67 +385,11 @@ jobs:
   # Linux is served by the .deb/.rpm on the GitHub Release + Homebrew. The
   # packaging/snap/ manifest is kept in case the Snap Store is revisited.
 
-  # ── Winget PR submission — REMOVED ──────────────────────────────────────
-  # Dropped: submissions to the official microsoft/winget-pkgs catalog require a
-  # manual moderator review + CLA + installation-validation pass, and the headless
-  # CLI MSI reliably trips automated executable-validation. Not worth gating/
-  # red-badging every release. Windows distribution is served by Scoop (our own
-  # bucket, auto-published below — no review) + the direct MSI on the GitHub
-  # Release. Revisit winget later via our own account/PAT + a one-time manual
-  # submission; the packaging/winget/ manifests are kept for that.
+  # ── Winget PR submission — REMOVED (2026-10-06) ─────────────────────────
+  # Official winget-pkgs submissions need manual moderator review and the
+  # headless CLI MSI trips its automated validation. Windows ships as the MSI on
+  # the GitHub Release.
 
-  # ── Scoop bucket auto-bump ──────────────────────────────────────────────
-  # Updates cloud-learn.json in the vyomi-cloud/scoop-bucket repo with
-  # the new url + sha256. Scoop is the Brew of Windows: manifest-based, no
-  # review queue, no MSI. Requires SCOOP_BUCKET_TOKEN secret (PAT with
-  # `contents:write` on vyomi-cloud/scoop-bucket). Falls back to a
-  # no-op if missing.
-  scoop-publish:
-    needs: [preflight, build]
-    if: needs.preflight.outputs.has_scoop == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout scoop-bucket repo
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.GH_OWNER }}/scoop-bucket
-          token: ${{ secrets.SCOOP_BUCKET_TOKEN }}
-          path: scoop-bucket
-
-      - name: Checkout main repo (for manifest template)
-        uses: actions/checkout@v4
-        with:
-          path: cloud-learn
-
-      - name: Bump both manifests (vyomi primary + cloud-learn deprecation shim)
-        run: |
-          VER="${{ needs.build.outputs.version }}"
-          SHA="${{ needs.build.outputs.tarball_sha256 }}"
-          mkdir -p scoop-bucket/bucket
-          # Substitute version/hash/url into BOTH manifests so `scoop install vyomi`
-          # and `scoop install cloud-learn` (deprecated, will be removed in v3.0)
-          # both stay valid until the cloud-learn manifest is retired.
-          python3 - "$VER" "$SHA" "${{ env.GH_OWNER }}" "${{ env.GH_REPO }}" <<'PY'
-          import json, sys, pathlib
-          ver, sha, owner, repo = sys.argv[1:5]
-          url = f"https://github.com/{owner}/{repo}/releases/download/v{ver}/cloud-learn-{ver}.tar.gz"
-          for name in ("vyomi", "cloud-learn"):
-              src = pathlib.Path(f"cloud-learn/packaging/scoop/{name}.json")
-              dst = pathlib.Path(f"scoop-bucket/bucket/{name}.json")
-              with open(src) as f:
-                  m = json.load(f)
-              m["version"] = ver
-              m["url"] = url
-              m["hash"] = sha
-              m["extract_dir"] = f"cloud-learn-{ver}"
-              with open(dst, "w") as f:
-                  json.dump(m, f, indent=2)
-                  f.write("\n")
-              print(f"  bumped bucket/{name}.json → {ver}")
-          PY
-          cd scoop-bucket
-          git config user.email "bot@vyomi.cloud"
-          git config user.name  "Vyomi Release Bot"
-          git add bucket/vyomi.json bucket/cloud-learn.json
-          git commit -m "vyomi ${VER}"
-          git push
+  # ── Scoop bucket auto-bump — REMOVED (2026-10-26) ───────────────────────
+  # Dropped with winget: Windows ships as the MSI on the GitHub Release. The
+  # vyomi-cloud/scoop-bucket repo is no longer updated.
