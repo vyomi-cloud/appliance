@@ -1,13 +1,13 @@
 {
- "at": "2026-10-26T21:37:59+00:00",
- "commit": "e4a2bda7153c9b0b55862f16d88dda9ea67db0ec",
+ "at": "2026-10-26T22:44:40+00:00",
+ "commit": "425868d9f3d46648cf4a1d5d3e9efa0eb7d91c90",
  "suites": [
   {
    "id": "offline-ui-crawl",
    "target": "offline",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 718.1,
+   "duration_s": 928.3,
    "exit_code": 0,
    "broken_services": [
     {
@@ -33,7 +33,7 @@
       },
       {
        "type": "HTTP_404",
-       "detail": "resource detail: /api/ec2/instances/i-d14c0047167f \u2192 404"
+       "detail": "resource detail: /api/ec2/instances/i-191b56dece9d \u2192 404"
       }
      ],
      "surfaces": [
@@ -173,71 +173,191 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Objects",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Versions",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Bucket Versioning",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Event notifications",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Lifecycle rules",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Default encryption",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Block Public Access",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
+      }
+     ],
+     "status": "broken"
+    },
+    {
+     "target": "offline",
+     "cloud": "aws",
+     "service": "RDS",
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Endpoints",
+      "Networking",
+      "Permissions",
+      "Configuration",
+      "Modify",
+      "Parameter groups",
+      "Snapshots"
+     ],
+     "findings": [
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Endpoints: column \"ENDPOINT\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Endpoints"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PRIVATE IPV4 ADDRESS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PUBLIC IPV4 ADDRESS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PUBLIC IPV4 DNS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SUBNET ID\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SECURITY GROUPS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "RDS",
+       "state": "live",
+       "calls": 7
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Endpoints",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Configuration",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Modify",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Parameter groups",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Snapshots",
+       "state": "live",
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -266,61 +386,6 @@
       {
        "type": "HTTP_404",
        "detail": "resource detail: /api/dynamodb/tables/ \u2192 404"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/dynamodb/tables/ \u2192 404",
-       "tab": "Overview"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/dynamodb/tables/ \u2192 404",
-       "tab": "Activity"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/dynamodb/tables/ \u2192 404",
-       "tab": "Tags"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/dynamodb/tables/ \u2192 404",
-       "tab": "Explore items"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/dynamodb/tables//items \u2192 404",
-       "tab": "Explore items"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/dynamodb/tables/ \u2192 404",
-       "tab": "Query/Scan"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/dynamodb/tables/ \u2192 404",
-       "tab": "Indexes"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/dynamodb/tables/ \u2192 404",
-       "tab": "Streams and triggers"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/dynamodb/tables/ \u2192 404",
-       "tab": "Read/write capacity"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/dynamodb/tables/ \u2192 404",
-       "tab": "Encryption at rest"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/dynamodb/tables/ \u2192 404",
-       "tab": "Time to live"
       }
      ],
      "surfaces": [
@@ -328,7 +393,7 @@
        "kind": "page",
        "name": "DynamoDB",
        "state": "live",
-       "calls": 6
+       "calls": 7
       },
       {
        "kind": "create",
@@ -346,61 +411,71 @@
        "kind": "tab",
        "name": "Overview",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "unimplemented",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Explore items",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Query/Scan",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Indexes",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Streams and triggers",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Read/write capacity",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Encryption at rest",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Time to live",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -425,61 +500,6 @@
       {
        "type": "HTTP_404",
        "detail": "resource detail: /api/sqs/queues/ \u2192 404"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/sqs/queues/ \u2192 404",
-       "tab": "Overview"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/sqs/queues/ \u2192 404",
-       "tab": "Activity"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/sqs/queues/ \u2192 404",
-       "tab": "Tags"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/sqs/queues/ \u2192 404",
-       "tab": "Send and receive messages"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/sqs/queues/ \u2192 404",
-       "tab": "Purge messages"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/sqs/queues/ \u2192 404",
-       "tab": "Configuration"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/sqs/queues/ \u2192 404",
-       "tab": "Dead-letter queue"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Dead-letter queue: column \"MAXIMUM RECEIVES\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Dead-letter queue"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/sqs/queues/ \u2192 404",
-       "tab": "Encryption"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/sqs/queues/ \u2192 404",
-       "tab": "Access policy"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/sqs/queues/ \u2192 404",
-       "tab": "Monitoring"
       }
      ],
      "surfaces": [
@@ -487,7 +507,7 @@
        "kind": "page",
        "name": "SQS",
        "state": "live",
-       "calls": 7
+       "calls": 6
       },
       {
        "kind": "create",
@@ -505,60 +525,180 @@
        "kind": "tab",
        "name": "Overview",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "unimplemented",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Send and receive messages",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Purge messages",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Configuration",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Dead-letter queue",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Encryption",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Access policy",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Monitoring",
        "state": "unimplemented",
+       "calls": 0,
+       "carried": true
+      }
+     ],
+     "status": "broken"
+    },
+    {
+     "target": "offline",
+     "cloud": "aws",
+     "service": "API Gateway",
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Resources",
+      "Authorizers",
+      "Models",
+      "Stages",
+      "Deployments",
+      "Settings",
+      "Resource policy"
+     ],
+     "findings": [
+      {
+       "type": "HTTP_404",
+       "detail": "/api/apigateway/apis/MyApi/resources \u2192 404",
+       "tab": "Resources"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/apigateway/apis/MyApi/stages \u2192 404",
+       "tab": "Stages"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "API Gateway",
+       "state": "live",
+       "calls": 6
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Resources",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Authorizers",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Models",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Stages",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Deployments",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Settings",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Resource policy",
+       "state": "static",
        "calls": 0
       }
      ],
@@ -595,7 +735,7 @@
       },
       {
        "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: aws savings stayed $99.73 (real aws would bill this resource)"
+       "detail": "create: aws savings stayed $76.95 (real aws would bill this resource)"
       },
       {
        "type": "PLACEHOLDER_CELL",
@@ -604,6 +744,116 @@
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "resource detail: column \"TARGETS\" shows \"-\"/blank in 2 row(s)"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Overview: column \"STATUS\" shows \"-\"/blank in 2 row(s)",
+       "tab": "Overview"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Overview: column \"TARGETS\" shows \"-\"/blank in 2 row(s)",
+       "tab": "Overview"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Tags: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Tags"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Tags: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Tags"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Rule details: column \"STATUS\" shows \"-\"/blank in 2 row(s)",
+       "tab": "Rule details"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Rule details: column \"TARGETS\" shows \"-\"/blank in 2 row(s)",
+       "tab": "Rule details"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Targets: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Targets"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Targets: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Targets"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Event pattern: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Event pattern"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Event pattern: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Event pattern"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Invocations: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Invocations"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Invocations: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Invocations"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Dead-letter queue: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Dead-letter queue"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Dead-letter queue: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Dead-letter queue"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Properties: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Properties"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Properties: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Properties"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Properties: column \"state\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Properties"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Properties: column \"target_count\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Properties"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Permissions: column \"STATUS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Permissions"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Permissions: column \"TARGETS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Permissions"
       }
      ],
      "surfaces": [
@@ -611,7 +861,7 @@
        "kind": "page",
        "name": "EventBridge",
        "state": "live",
-       "calls": 6
+       "calls": 7
       },
       {
        "kind": "create",
@@ -629,71 +879,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "partial",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "partial",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Rule details",
        "state": "partial",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Targets",
        "state": "partial",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Event pattern",
        "state": "partial",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Invocations",
        "state": "partial",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Dead-letter queue",
        "state": "partial",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "partial",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "partial",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -717,7 +957,22 @@
      "findings": [
       {
        "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: aws savings stayed $99.73 (real aws would bill this resource)"
+       "detail": "create: aws savings stayed $76.95 (real aws would bill this resource)"
+      },
+      {
+       "type": "DEAD_TAB",
+       "tab": "VPC details",
+       "detail": "clicking the tab changes nothing"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Security groups: column \"Security group ID\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Security groups"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Security groups: column \"Name\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Security groups"
       }
      ],
      "surfaces": [
@@ -725,7 +980,7 @@
        "kind": "page",
        "name": "VPC",
        "state": "live",
-       "calls": 6
+       "calls": 7
       },
       {
        "kind": "create",
@@ -743,71 +998,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "VPC details",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Subnets",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Route tables",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Internet gateways",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "NAT gateways",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Endpoints",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Security groups",
        "state": "partial",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Network ACLs",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Flow logs",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -833,7 +1078,12 @@
       },
       {
        "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: aws savings stayed $99.73 (real aws would bill this resource)"
+       "detail": "create: aws savings stayed $76.95 (real aws would bill this resource)"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Users: column \"ARN\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Users"
       }
      ],
      "surfaces": [
@@ -841,7 +1091,7 @@
        "kind": "page",
        "name": "IAM",
        "state": "live",
-       "calls": 6
+       "calls": 7
       },
       {
        "kind": "create",
@@ -859,57 +1109,49 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Users",
        "state": "partial",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "User groups",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Roles",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Policies",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Identity providers",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Password policy",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Access Analyzer",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -949,7 +1191,7 @@
       },
       {
        "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: aws savings stayed $99.73 (real aws would bill this resource)"
+       "detail": "create: aws savings stayed $76.95 (real aws would bill this resource)"
       }
      ],
      "surfaces": [
@@ -957,7 +1199,7 @@
        "kind": "page",
        "name": "Secrets Manager",
        "state": "live",
-       "calls": 6
+       "calls": 7
       },
       {
        "kind": "create",
@@ -975,61 +1217,71 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Secret value",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Versions",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Rotation",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Replication",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Resource policy",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Encryption key",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -1057,7 +1309,7 @@
       },
       {
        "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: aws savings stayed $99.73 (real aws would bill this resource)"
+       "detail": "create: aws savings stayed $76.95 (real aws would bill this resource)"
       }
      ],
      "surfaces": [
@@ -1065,7 +1317,7 @@
        "kind": "page",
        "name": "KMS",
        "state": "live",
-       "calls": 7
+       "calls": 6
       },
       {
        "kind": "create",
@@ -1083,61 +1335,71 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "General configuration",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Key policy",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Aliases",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Key rotation",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Key users",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Key administrators",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Grants",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -1189,7 +1451,7 @@
        "kind": "detail",
        "name": "resource detail",
        "state": "live",
-       "calls": 0
+       "calls": 1
       },
       {
        "kind": "tab",
@@ -1307,7 +1569,7 @@
        "kind": "detail",
        "name": "resource detail",
        "state": "live",
-       "calls": 1
+       "calls": 0
       },
       {
        "kind": "tab",
@@ -1462,71 +1724,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Data",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Query builder",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Indexes",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Security rules",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Import / Export",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1696,7 +1948,7 @@
        "kind": "page",
        "name": "Pub/Sub",
        "state": "live",
-       "calls": 2
+       "calls": 1
       },
       {
        "kind": "create",
@@ -1714,71 +1966,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Subscriptions",
-       "state": "live",
-       "calls": 1,
-       "carried": true
+       "state": "static",
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Schema",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Messages",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Encryption",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Metrics",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1866,64 +2108,55 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Event matching",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Destination",
-       "state": "static",
-       "calls": 0,
-       "carried": true
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Metrics",
-       "state": "live",
-       "calls": 1,
-       "carried": true
+       "state": "static",
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Logs",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -2112,205 +2345,49 @@
        "kind": "detail",
        "name": "resource detail",
        "state": "live",
-       "calls": 0
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Members",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Keys",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity log",
        "state": "static",
-       "calls": 0
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "azure",
-     "service": "Virtual Machines",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Virtual Machines",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "azure",
-     "service": "Storage accounts",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Storage accounts",
-       "state": "live",
-       "calls": 19
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "azure",
-     "service": "SQL servers",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "SQL servers",
-       "state": "live",
-       "calls": 19
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "azure",
-     "service": "Service Bus",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Service Bus",
-       "state": "live",
-       "calls": 19
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "azure",
-     "service": "Cosmos DB",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Cosmos DB",
-       "state": "live",
-       "calls": 19
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "azure",
-     "service": "Function apps",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Function apps",
-       "state": "live",
-       "calls": 19
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
+       "calls": 0,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -2319,11 +2396,23 @@
      "target": "offline",
      "cloud": "azure",
      "service": "API Management",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity log",
+      "Access control (IAM)",
+      "Tags",
+      "Diagnose and solve problems",
+      "APIs",
+      "Products",
+      "Subscriptions",
+      "Policies",
+      "Named values"
+     ],
      "findings": [
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "HTTP_404",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/apim-cloudlearn/policies/policy?api-version=2023-05-01-preview \u2192 404",
+       "tab": "Policies"
       }
      ],
      "surfaces": [
@@ -2336,8 +2425,74 @@
       {
        "kind": "create",
        "name": "create with defaults",
-       "state": "unimplemented",
+       "state": "live",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Access control (IAM)",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Diagnose and solve problems",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "APIs",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Products",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Subscriptions",
+       "state": "live",
+       "calls": 2
+      },
+      {
+       "kind": "tab",
+       "name": "Policies",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Named values",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -2346,11 +2501,22 @@
      "target": "offline",
      "cloud": "azure",
      "service": "Virtual networks",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity log",
+      "Access control (IAM)",
+      "Tags",
+      "Diagnose and solve problems",
+      "Address space",
+      "Subnets",
+      "Connected devices",
+      "Peerings",
+      "DNS servers"
+     ],
      "findings": [
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_NOT_UPDATED",
+       "detail": "create: azure savings stayed $95.99 (real azure would bill this resource)"
       }
      ],
      "surfaces": [
@@ -2358,13 +2524,79 @@
        "kind": "page",
        "name": "Virtual networks",
        "state": "live",
-       "calls": 19
+       "calls": 18
       },
       {
        "kind": "create",
        "name": "create with defaults",
-       "state": "unimplemented",
+       "state": "live",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Access control (IAM)",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Diagnose and solve problems",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Address space",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Subnets",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Connected devices",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Peerings",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "DNS servers",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -2376,8 +2608,8 @@
      "tabs": [],
      "findings": [
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "CREATE_NO_ROW",
+       "detail": "create with defaults added no resource to the list"
       }
      ],
      "surfaces": [
@@ -2385,61 +2617,7 @@
        "kind": "page",
        "name": "Network Security Group",
        "state": "live",
-       "calls": 19
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "azure",
-     "service": "Event Grid topics",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Event Grid topics",
-       "state": "live",
-       "calls": 19
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "azure",
-     "service": "Key vaults",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Key vaults",
-       "state": "live",
-       "calls": 19
+       "calls": 18
       },
       {
        "kind": "create",
@@ -2457,8 +2635,8 @@
      "tabs": [],
      "findings": [
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "CREATE_NO_ROW",
+       "detail": "create with defaults added no resource to the list"
       }
      ],
      "surfaces": [
@@ -2466,7 +2644,7 @@
        "kind": "page",
        "name": "Role Definition",
        "state": "live",
-       "calls": 19
+       "calls": 18
       },
       {
        "kind": "create",
@@ -2481,11 +2659,15 @@
      "target": "offline",
      "cloud": "azure",
      "service": "Entra ID / RBAC",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "JSON view",
+      "Conditions"
+     ],
      "findings": [
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_NOT_UPDATED",
+       "detail": "create: azure savings stayed $96.62 (real azure would bill this resource)"
       }
      ],
      "surfaces": [
@@ -2493,41 +2675,65 @@
        "kind": "page",
        "name": "Entra ID / RBAC",
        "state": "live",
-       "calls": 19
+       "calls": 1
       },
       {
        "kind": "create",
        "name": "create with defaults",
-       "state": "unimplemented",
+       "state": "live",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "JSON view",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Conditions",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
     }
    ],
-   "passed": 5,
-   "failed": 33,
+   "passed": 11,
+   "failed": 27,
    "status": "fail",
-   "tail": "[offline/aws] 12 services crawled, 9 with findings\n[offline/gcp] 12 services crawled, 11 with findings\n[offline/azure] 14 services crawled, 13 with findings\nUI crawl offline: 5/38 services clean \u2192 tests/conformance/hourly/out/ui-offline.json\nConsole surfaces offline: {\"live\":114,\"partial\":25,\"unimplemented\":52,\"static\":109}"
+   "tail": "[offline/aws] 12 services crawled, 11 with findings\n[offline/gcp] 12 services crawled, 11 with findings\n[offline/azure] 14 services crawled, 5 with findings\nUI crawl offline: 11/38 services clean \u2192 tests/conformance/hourly/out/ui-offline.json\nConsole surfaces offline: {\"live\":195,\"partial\":25,\"unimplemented\":42,\"static\":152}"
   },
   {
    "id": "offline-console-actions",
    "target": "offline",
    "cloud": "all",
    "kind": "api",
-   "duration_s": 8.0,
+   "duration_s": 9.0,
    "exit_code": 1,
    "passed": 231,
    "failed": 15,
    "status": "fail",
-   "tail": "conf-test-vm-f280988c/start \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-f280988c/stop \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-f280988c/reset \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-f280988c \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-f280988c/documents \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-f280988c/collectionGroups/-/indexes \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.kms.create] - AssertionError: GCP kms.create POST /api/gcp/kms/keys \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.create] - AssertionError: GCP secretmanager.create POST /api/gcp/secrets \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-f280988c/o/{object} \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Object not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-f280988c/upload \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"missing 'file' field\"}\nassert False\n15 failed, 231 passed, 10 skipped in 7.76s"
+   "tail": "conf-test-vm-7f0709b9/start \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-7f0709b9/stop \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-7f0709b9/reset \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-7f0709b9 \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-7f0709b9/documents \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-7f0709b9/collectionGroups/-/indexes \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.kms.create] - AssertionError: GCP kms.create POST /api/gcp/kms/keys \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.create] - AssertionError: GCP secretmanager.create POST /api/gcp/secrets \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-7f0709b9/o/{object} \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Object not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-7f0709b9/upload \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"missing 'file' field\"}\nassert False\n15 failed, 231 passed, 10 skipped in 8.79s"
   },
   {
    "id": "offline-sdk-python-aws",
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-python",
-   "duration_s": 311.4,
+   "duration_s": 310.4,
    "exit_code": 1,
    "passed": 87,
    "failed": 1,
@@ -2539,19 +2745,19 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-go",
-   "duration_s": 27.6,
+   "duration_s": 26.6,
    "exit_code": 0,
    "passed": 14,
    "failed": 0,
    "status": "pass",
-   "tail": "PASS sqs ListQueues\nRESULT pass=14 fail=0\ngo: downloading github.com/aws/aws-sdk-go-v2 v1.30.0\ngo: downloading github.com/aws/aws-sdk-go-v2/config v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/credentials v1.17.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/dynamodb v1.32.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ec2 v1.160.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/iam v1.34.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sqs v1.32.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/s3 v1.55.0\ngo: downloading github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.15.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sso v1.19.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ssooidc v1.22.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sts v1.27.0\ngo: downloading github.com/aws/smithy-go v1.20.2\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.12\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.2\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.6\ngo: downloading github.com/jmespath/go-jmespath v0.4.0\ngo: downloading github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.8\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.8\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.12\nSDK 2026/10/26 21:20:52 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 21:20:52 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 21:20:52 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 21:20:52 WARN failed to close HTTP response body, this may affect connection reuse"
+   "tail": "PASS sqs ListQueues\nRESULT pass=14 fail=0\ngo: downloading github.com/aws/aws-sdk-go-v2 v1.30.0\ngo: downloading github.com/aws/aws-sdk-go-v2/config v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/credentials v1.17.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/dynamodb v1.32.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ec2 v1.160.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/iam v1.34.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/s3 v1.55.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sqs v1.32.0\ngo: downloading github.com/aws/smithy-go v1.20.2\ngo: downloading github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.15.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sso v1.19.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ssooidc v1.22.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sts v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.12\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.2\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.6\ngo: downloading github.com/jmespath/go-jmespath v0.4.0\ngo: downloading github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.8\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.8\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.12\nSDK 2026/10/26 22:24:09 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 22:24:09 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 22:24:09 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/26 22:24:09 WARN failed to close HTTP response body, this may affect connection reuse"
   },
   {
    "id": "offline-sdk-go-gcp",
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-go",
-   "duration_s": 12.6,
+   "duration_s": 12.0,
    "exit_code": 0,
    "passed": 5,
    "failed": 0,
@@ -2563,7 +2769,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-go",
-   "duration_s": 6.9,
+   "duration_s": 6.7,
    "exit_code": 0,
    "passed": 14,
    "failed": 0,
@@ -2575,7 +2781,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-java",
-   "duration_s": 8.5,
+   "duration_s": 9.2,
    "exit_code": 0,
    "passed": 13,
    "failed": 0,
@@ -2587,19 +2793,19 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-java",
-   "duration_s": 3.1,
+   "duration_s": 3.3,
    "exit_code": 0,
    "passed": 6,
    "failed": 0,
    "status": "pass",
-   "tail": "== google-cloud-storage (Java) against http://localhost:9000 project=gcp-dev ==\nPASS buckets.insert :: java-sdk-test-1793049683324\nPASS buckets.list contains new bucket\nPASS objects.insert (upload) :: greeting.txt\nPASS objects.get (download byte-exact) :: hello-from-java-sdk\nPASS objects.delete :: true\nPASS buckets.delete :: true\nRESULT pass=6 fail=0"
+   "tail": "== google-cloud-storage (Java) against http://localhost:9000 project=gcp-dev ==\nPASS buckets.insert :: java-sdk-test-1793053480133\nPASS buckets.list contains new bucket\nPASS objects.insert (upload) :: greeting.txt\nPASS objects.get (download byte-exact) :: hello-from-java-sdk\nPASS objects.delete :: true\nPASS buckets.delete :: true\nRESULT pass=6 fail=0"
   },
   {
    "id": "offline-sdk-java-azure",
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-java",
-   "duration_s": 19.4,
+   "duration_s": 19.0,
    "exit_code": 0,
    "passed": 5,
    "failed": 0,
@@ -2611,19 +2817,19 @@
    "target": "offline",
    "cloud": "all",
    "kind": "api",
-   "duration_s": 70.8,
+   "duration_s": 74.1,
    "exit_code": 1,
-   "passed": 2,
+   "passed": 4,
    "failed": 7,
    "status": "fail",
-   "tail": "== aws: S3 bucket ==\nFAIL: aws: creating a S3 bucket raises the space resource_count :: 18 \u2192 18\nFAIL: aws: creating a S3 bucket raises aws savings :: $158.2 \u2192 $158.2\nFAIL: aws: using the S3 bucket (5 \u00d7 2 MB uploads) raises savings :: $158.2 \u2192 $158.2 (real aws bills storage + requests)\n\n== gcp: Cloud Storage bucket ==\nFAIL: gcp: creating a Cloud Storage bucket raises the space resource_count :: 16 \u2192 16\nFAIL: gcp: creating a Cloud Storage bucket raises gcp savings :: $100.17 \u2192 $100.17\nFAIL: gcp: using the Cloud Storage bucket (5 \u00d7 2 MB uploads) raises savings :: $100.17 \u2192 $100.17 (real gcp bills storage + requests)\n\n== azure: Storage account ==\nPASS: azure: creating a Storage account raises the space resource_count\nPASS: azure: creating a Storage account raises azure savings\nFAIL: azure: using the Storage account (5 \u00d7 2 MB uploads) raises savings :: $0.5 \u2192 $0.5 (real azure bills storage + requests)\n\nRESULT fail=7"
+   "tail": "== aws: S3 bucket ==\nFAIL: aws: creating a S3 bucket raises the space resource_count :: 18 \u2192 18\nFAIL: aws: creating a S3 bucket raises aws savings :: $108.85 \u2192 $108.85\nFAIL: aws: using the S3 bucket (5 \u00d7 2 MB uploads) raises savings :: $108.85 \u2192 $108.85 (real aws bills storage + requests)\n\n== gcp: Cloud Storage bucket ==\nFAIL: gcp: creating a Cloud Storage bucket raises the space resource_count :: 16 \u2192 16\nFAIL: gcp: creating a Cloud Storage bucket raises gcp savings :: $63.37 \u2192 $63.37\nFAIL: gcp: using the Cloud Storage bucket (5 \u00d7 2 MB uploads) raises savings :: $63.37 \u2192 $63.37 (real gcp bills storage + requests)\n\n== azure: Storage account ==\nPASS: azure: creating a Storage account raises the space resource_count\nPASS: azure: creating a Storage account raises azure savings\nFAIL: azure: using the Storage account (5 \u00d7 2 MB uploads) raises savings :: $97.12 \u2192 $97.12 (real azure bills storage + requests)\n\n== azure: Virtual machine (Standard_B1s) ==\nPASS: azure: creating a VM raises the space resource_count\nPASS: azure: a Standard_B1s VM adds its 730 h list price ($7.59) to Azure savings\n\nRESULT fail=7"
   },
   {
    "id": "offline-cli-aws",
    "target": "offline",
    "cloud": "aws",
    "kind": "cli",
-   "duration_s": 18.2,
+   "duration_s": 16.4,
    "exit_code": 0,
    "passed": 15,
    "failed": 0,
@@ -2635,7 +2841,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "cli",
-   "duration_s": 11.9,
+   "duration_s": 12.9,
    "exit_code": 0,
    "passed": 6,
    "failed": 0,
@@ -2647,7 +2853,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "cli",
-   "duration_s": 17.2,
+   "duration_s": 14.8,
    "exit_code": 1,
    "passed": 5,
    "failed": 1,
@@ -2671,7 +2877,7 @@
    "target": "nano",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 788.2,
+   "duration_s": 992.8,
    "exit_code": 0,
    "broken_services": [
     {
@@ -2717,7 +2923,7 @@
        "kind": "page",
        "name": "EC2",
        "state": "live",
-       "calls": 54
+       "calls": 56
       },
       {
        "kind": "create",
@@ -2851,6 +3057,21 @@
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/s3~my-bucket-cloudlearn~encryption/get/_settings \u2192 404",
+       "tab": "Default encryption"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/s3~my-bucket-cloudlearn~blockPublic/get/_settings \u2192 404",
+       "tab": "Block Public Access"
       }
      ],
      "surfaces": [
@@ -2858,7 +3079,7 @@
        "kind": "page",
        "name": "S3",
        "state": "live",
-       "calls": 25
+       "calls": 20
       },
       {
        "kind": "create",
@@ -2876,71 +3097,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Objects",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Versions",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Bucket Versioning",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Event notifications",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Lifecycle rules",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Default encryption",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Block Public Access",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -2965,6 +3176,46 @@
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Endpoints: column \"ENDPOINT\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Endpoints"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PRIVATE IPV4 ADDRESS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PUBLIC IPV4 ADDRESS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PUBLIC IPV4 DNS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SUBNET ID\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SECURITY GROUPS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/rds~database-1~modify/get/_settings \u2192 404",
+       "tab": "Modify"
       }
      ],
      "surfaces": [
@@ -2990,71 +3241,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Endpoints",
        "state": "partial",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Networking",
        "state": "partial",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Configuration",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Modify",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Parameter groups",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Snapshots",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -3083,31 +3324,6 @@
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Activity"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/dynamodb~Music~streams/get/_settings \u2192 404",
-       "tab": "Streams and triggers"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/dynamodb~Music~capacity/get/_settings \u2192 404",
-       "tab": "Read/write capacity"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/dynamodb~Music~encryption/get/_settings \u2192 404",
-       "tab": "Encryption at rest"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/dynamodb~Music~ttl/get/_settings \u2192 404",
-       "tab": "Time to live"
       }
      ],
      "surfaces": [
@@ -3133,61 +3349,71 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Explore items",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Query/Scan",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Indexes",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Streams and triggers",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Read/write capacity",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Encryption at rest",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Time to live",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -3212,26 +3438,6 @@
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Activity"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/sqs~MyQueue~purge/get/_settings \u2192 404",
-       "tab": "Purge messages"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Dead-letter queue: column \"MAXIMUM RECEIVES\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Dead-letter queue"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/sqs~MyQueue~encryption/get/_settings \u2192 404",
-       "tab": "Encryption"
       }
      ],
      "surfaces": [
@@ -3257,61 +3463,71 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Send and receive messages",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Purge messages",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Configuration",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Dead-letter queue",
        "state": "partial",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Encryption",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Access policy",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Monitoring",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -3359,7 +3575,7 @@
        "kind": "page",
        "name": "EventBridge",
        "state": "live",
-       "calls": 22
+       "calls": 25
       },
       {
        "kind": "create",
@@ -3386,7 +3602,7 @@
        "kind": "page",
        "name": "VPC",
        "state": "live",
-       "calls": 26
+       "calls": 25
       },
       {
        "kind": "create",
@@ -3419,6 +3635,56 @@
       {
        "type": "HTTP_404",
        "detail": "resource detail: /api/iam/users/new-user \u2192 404"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Users"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "User groups"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Roles"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Policies"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Identity providers"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Password policy"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/iam~new-user~passwordPolicy/get/_settings \u2192 404",
+       "tab": "Password policy"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Access Analyzer"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/iam~new-user~accessAdvisor/get/_settings \u2192 404",
+       "tab": "Access Analyzer"
       }
      ],
      "surfaces": [
@@ -3426,7 +3692,7 @@
        "kind": "page",
        "name": "IAM",
        "state": "live",
-       "calls": 37
+       "calls": 33
       },
       {
        "kind": "create",
@@ -3444,57 +3710,49 @@
        "kind": "tab",
        "name": "Overview",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Users",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "User groups",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Roles",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Policies",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Identity providers",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Password policy",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Access Analyzer",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -3527,21 +3785,6 @@
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Activity"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/secretsmanager~my-secret~rotation/get/_settings \u2192 404",
-       "tab": "Rotation"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/secretsmanager~my-secret~kmsKey/get/_settings \u2192 404",
-       "tab": "Encryption key"
       }
      ],
      "surfaces": [
@@ -3567,61 +3810,71 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Secret value",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Versions",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Rotation",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Replication",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Resource policy",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Encryption key",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -3646,11 +3899,6 @@
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/kms~f83191d228cd4a898e0d4cf7854c263d~rotation/get/_settings \u2192 404",
-       "tab": "Key rotation"
       }
      ],
      "surfaces": [
@@ -3676,61 +3924,71 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "General configuration",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Key policy",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Aliases",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Key rotation",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Key users",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Key administrators",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Grants",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -3759,6 +4017,11 @@
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
       }
      ],
      "surfaces": [
@@ -3766,7 +4029,7 @@
        "kind": "page",
        "name": "Compute Engine",
        "state": "live",
-       "calls": 54
+       "calls": 55
       },
       {
        "kind": "create",
@@ -3784,71 +4047,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Networking",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Disks",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Machine size",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Metadata",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Startup script",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -4148,6 +4401,11 @@
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
       }
      ],
      "surfaces": [
@@ -4155,7 +4413,7 @@
        "kind": "page",
        "name": "Firestore",
        "state": "live",
-       "calls": 2
+       "calls": 1
       },
       {
        "kind": "create",
@@ -4172,72 +4430,62 @@
       {
        "kind": "tab",
        "name": "Overview",
-       "state": "static",
-       "calls": 0,
-       "carried": true
+       "state": "live",
+       "calls": 2
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 3,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Data",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Query builder",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Indexes",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Security rules",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Import / Export",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -4400,6 +4648,11 @@
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
       }
      ],
      "surfaces": [
@@ -4407,7 +4660,7 @@
        "kind": "page",
        "name": "Pub/Sub",
        "state": "live",
-       "calls": 3
+       "calls": 2
       },
       {
        "kind": "create",
@@ -4425,71 +4678,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 2,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Subscriptions",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Schema",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Messages",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Encryption",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Metrics",
        "state": "live",
-       "calls": 3,
-       "carried": true
+       "calls": 3
       }
      ],
      "status": "broken"
@@ -4548,6 +4791,16 @@
       {
        "type": "SAVINGS_MISSING",
        "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Metrics: column \"EVENT FILTERS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Metrics"
       }
      ],
      "surfaces": [
@@ -4573,64 +4826,55 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Event matching",
        "state": "live",
-       "calls": 3,
-       "carried": true
+       "calls": 3
       },
       {
        "kind": "tab",
        "name": "Destination",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Metrics",
        "state": "partial",
-       "calls": 2,
-       "carried": true
+       "calls": 2
       },
       {
        "kind": "tab",
        "name": "Logs",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -4833,37 +5077,43 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Members",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "live",
-       "calls": 2
+       "calls": 2,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Keys",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity log",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -4881,10 +5131,6 @@
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "list: column \"Virtual Machines\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "list: column \"Storage accounts\" shows \"-\"/blank in 1 row(s)"
       },
       {
        "type": "PLACEHOLDER_CELL",
@@ -4956,13 +5202,13 @@
        "kind": "page",
        "name": "Resource groups",
        "state": "unimplemented",
-       "calls": 54
+       "calls": 72
       },
       {
        "kind": "detail",
        "name": "resource detail",
        "state": "live",
-       "calls": 1
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -4971,11 +5217,35 @@
      "target": "nano",
      "cloud": "azure",
      "service": "Virtual Machines",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity log",
+      "Access control (IAM)",
+      "Tags",
+      "Diagnose and solve problems",
+      "Networking",
+      "Connect",
+      "Disks",
+      "Size",
+      "Identity"
+     ],
      "findings": [
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "HTTP_501",
+       "detail": "during create: /api/runtime/budget \u2192 501"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "during create: /api/runtime/budget \u2192 501"
+      },
+      {
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/runtime/budget \u2192 501",
+       "tab": "Diagnose and solve problems"
       }
      ],
      "surfaces": [
@@ -4990,6 +5260,72 @@
        "name": "create with defaults",
        "state": "unimplemented",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Access control (IAM)",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Diagnose and solve problems",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Connect",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Disks",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Size",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Identity",
+       "state": "live",
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -4998,7 +5334,18 @@
      "target": "nano",
      "cloud": "azure",
      "service": "Storage accounts",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity log",
+      "Access control (IAM)",
+      "Tags",
+      "Diagnose and solve problems",
+      "Containers",
+      "File shares",
+      "Queues",
+      "Tables",
+      "Networking"
+     ],
      "findings": [
       {
        "type": "HTTP_501",
@@ -5009,8 +5356,117 @@
        "detail": "/api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "HTTP_501",
+       "detail": "during create: /api/runtime/budget \u2192 501"
+      },
+      {
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/blobcontainers \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/cosmosdbs \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvsecrets \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvkeys \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/queues \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/azure/storage/stcloudlearn/containers \u2192 501",
+       "tab": "Containers"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/runtime/budget \u2192 501",
+       "tab": "File shares"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/azure/storage/stcloudlearn/queues \u2192 501",
+       "tab": "Queues"
       }
      ],
      "surfaces": [
@@ -5025,6 +5481,72 @@
        "name": "create with defaults",
        "state": "unimplemented",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Access control (IAM)",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Diagnose and solve problems",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Containers",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "File shares",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Queues",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Tables",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -5033,7 +5555,18 @@
      "target": "nano",
      "cloud": "azure",
      "service": "SQL servers",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity log",
+      "Access control (IAM)",
+      "Tags",
+      "Diagnose and solve problems",
+      "Databases",
+      "Pricing tier",
+      "Deleted databases",
+      "Failover groups",
+      "Backups"
+     ],
      "findings": [
       {
        "type": "HTTP_501",
@@ -5041,11 +5574,106 @@
       },
       {
        "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "detail": "during create: /api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/blobcontainers \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/cosmosdbs \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvsecrets \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvkeys \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/queues \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/runtime/budget \u2192 501",
+       "tab": "Pricing tier"
       }
      ],
      "surfaces": [
@@ -5060,6 +5688,72 @@
        "name": "create with defaults",
        "state": "unimplemented",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Access control (IAM)",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Diagnose and solve problems",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Databases",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Pricing tier",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Deleted databases",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Failover groups",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Backups",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -5068,7 +5762,18 @@
      "target": "nano",
      "cloud": "azure",
      "service": "Service Bus",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity log",
+      "Access control (IAM)",
+      "Tags",
+      "Diagnose and solve problems",
+      "Queues",
+      "Topics",
+      "Shared access policies",
+      "Geo-recovery",
+      "Networking"
+     ],
      "findings": [
       {
        "type": "HTTP_501",
@@ -5076,11 +5781,106 @@
       },
       {
        "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "detail": "during create: /api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/blobcontainers \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/cosmosdbs \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvsecrets \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvkeys \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/queues \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/runtime/budget \u2192 501",
+       "tab": "Shared access policies"
       }
      ],
      "surfaces": [
@@ -5095,6 +5895,72 @@
        "name": "create with defaults",
        "state": "unimplemented",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Access control (IAM)",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Diagnose and solve problems",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Queues",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Topics",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Shared access policies",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Geo-recovery",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -5103,7 +5969,18 @@
      "target": "nano",
      "cloud": "azure",
      "service": "Cosmos DB",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity log",
+      "Access control (IAM)",
+      "Tags",
+      "Diagnose and solve problems",
+      "Data Explorer",
+      "Throughput (RU/s)",
+      "Replicate data globally",
+      "Default consistency",
+      "Backup & Restore"
+     ],
      "findings": [
       {
        "type": "HTTP_501",
@@ -5111,11 +5988,106 @@
       },
       {
        "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "detail": "during create: /api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/blobcontainers \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/cosmosdbs \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvsecrets \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvkeys \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/queues \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/runtime/budget \u2192 501",
+       "tab": "Throughput (RU/s)"
       }
      ],
      "surfaces": [
@@ -5130,6 +6102,72 @@
        "name": "create with defaults",
        "state": "unimplemented",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Access control (IAM)",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Diagnose and solve problems",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Data Explorer",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Throughput (RU/s)",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Replicate data globally",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Default consistency",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Backup & Restore",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -5138,7 +6176,18 @@
      "target": "nano",
      "cloud": "azure",
      "service": "Function apps",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity log",
+      "Access control (IAM)",
+      "Tags",
+      "Diagnose and solve problems",
+      "Functions",
+      "App keys",
+      "Environment variables",
+      "Authentication",
+      "Identity"
+     ],
      "findings": [
       {
        "type": "HTTP_501",
@@ -5146,11 +6195,106 @@
       },
       {
        "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "detail": "during create: /api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/blobcontainers \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/cosmosdbs \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvsecrets \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvkeys \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/queues \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/runtime/budget \u2192 501",
+       "tab": "App keys"
       }
      ],
      "surfaces": [
@@ -5165,6 +6309,72 @@
        "name": "create with defaults",
        "state": "unimplemented",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Access control (IAM)",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Diagnose and solve problems",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Functions",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "App keys",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Environment variables",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Authentication",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Identity",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -5173,7 +6383,18 @@
      "target": "nano",
      "cloud": "azure",
      "service": "API Management",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity log",
+      "Access control (IAM)",
+      "Tags",
+      "Diagnose and solve problems",
+      "APIs",
+      "Products",
+      "Subscriptions",
+      "Policies",
+      "Named values"
+     ],
      "findings": [
       {
        "type": "HTTP_501",
@@ -5181,11 +6402,111 @@
       },
       {
        "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "detail": "during create: /api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/blobcontainers \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/cosmosdbs \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvsecrets \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvkeys \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/queues \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/runtime/budget \u2192 501",
+       "tab": "Subscriptions"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/apim-cloudlearn/policies/policy?api-version=2023-05-01-preview \u2192 404",
+       "tab": "Policies"
       }
      ],
      "surfaces": [
@@ -5200,6 +6521,72 @@
        "name": "create with defaults",
        "state": "unimplemented",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Access control (IAM)",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Diagnose and solve problems",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "APIs",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Products",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Subscriptions",
+       "state": "unimplemented",
+       "calls": 2
+      },
+      {
+       "kind": "tab",
+       "name": "Policies",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Named values",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -5208,7 +6595,18 @@
      "target": "nano",
      "cloud": "azure",
      "service": "Virtual networks",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity log",
+      "Access control (IAM)",
+      "Tags",
+      "Diagnose and solve problems",
+      "Address space",
+      "Subnets",
+      "Connected devices",
+      "Peerings",
+      "DNS servers"
+     ],
      "findings": [
       {
        "type": "HTTP_501",
@@ -5216,11 +6614,106 @@
       },
       {
        "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "detail": "during create: /api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/blobcontainers \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/cosmosdbs \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvsecrets \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvkeys \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/queues \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/runtime/budget \u2192 501",
+       "tab": "Subnets"
       }
      ],
      "surfaces": [
@@ -5228,12 +6721,78 @@
        "kind": "page",
        "name": "Virtual networks",
        "state": "unimplemented",
-       "calls": 63
+       "calls": 62
       },
       {
        "kind": "create",
        "name": "create with defaults",
        "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Access control (IAM)",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Diagnose and solve problems",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Address space",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Subnets",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Connected devices",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Peerings",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "DNS servers",
+       "state": "live",
        "calls": 1
       }
      ],
@@ -5250,12 +6809,8 @@
        "detail": "/api/runtime/budget \u2192 501"
       },
       {
-       "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
-      },
-      {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "CREATE_NO_ROW",
+       "detail": "create with defaults added no resource to the list"
       }
      ],
      "surfaces": [
@@ -5278,33 +6833,205 @@
      "target": "nano",
      "cloud": "azure",
      "service": "Event Grid topics",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity log",
+      "Access control (IAM)",
+      "Tags",
+      "Diagnose and solve problems",
+      "Event subscriptions",
+      "Topic types",
+      "Access keys",
+      "Networking",
+      "Identity"
+     ],
      "findings": [
       {
        "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "detail": "during create: /api/runtime/budget \u2192 501"
       },
       {
        "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "detail": "during create: /api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/blobcontainers \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/cosmosdbs \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvsecrets \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvkeys \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/queues \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/runtime/budget \u2192 501",
+       "tab": "Event subscriptions"
       }
      ],
      "surfaces": [
       {
        "kind": "page",
        "name": "Event Grid topics",
-       "state": "unimplemented",
-       "calls": 63
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "create",
        "name": "create with defaults",
        "state": "unimplemented",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Access control (IAM)",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Diagnose and solve problems",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Event subscriptions",
+       "state": "unimplemented",
+       "calls": 2
+      },
+      {
+       "kind": "tab",
+       "name": "Topic types",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Access keys",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Identity",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -5313,7 +7040,18 @@
      "target": "nano",
      "cloud": "azure",
      "service": "Key vaults",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity log",
+      "Access control (IAM)",
+      "Tags",
+      "Diagnose and solve problems",
+      "Secrets",
+      "Keys",
+      "Certificates",
+      "Access policies",
+      "Access configuration"
+     ],
      "findings": [
       {
        "type": "HTTP_501",
@@ -5321,11 +7059,116 @@
       },
       {
        "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "detail": "during create: /api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/blobcontainers \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/cosmosdbs \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvsecrets \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvkeys \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/queues \u2192 500",
+       "tab": "Activity log"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/azure-data/keyvault/kv-cloudlearn/secrets \u2192 404",
+       "tab": "Secrets"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/azure-data/keyvault/kv-cloudlearn/keys \u2192 404",
+       "tab": "Keys"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/runtime/budget \u2192 501",
+       "tab": "Certificates"
       }
      ],
      "surfaces": [
@@ -5340,6 +7183,72 @@
        "name": "create with defaults",
        "state": "unimplemented",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity log",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Access control (IAM)",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Diagnose and solve problems",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Secrets",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Keys",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Certificates",
+       "state": "unimplemented",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Access policies",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Access configuration",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -5355,12 +7264,8 @@
        "detail": "/api/runtime/budget \u2192 501"
       },
       {
-       "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
-      },
-      {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "CREATE_NO_ROW",
+       "detail": "create with defaults added no resource to the list"
       }
      ],
      "surfaces": [
@@ -5383,33 +7288,151 @@
      "target": "nano",
      "cloud": "azure",
      "service": "Entra ID / RBAC",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "JSON view",
+      "Conditions"
+     ],
      "findings": [
       {
        "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "detail": "during create: /api/runtime/budget \u2192 501"
       },
       {
        "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "detail": "during create: /api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/blobcontainers \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/cosmosdbs \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvsecrets \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvkeys \u2192 500",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/queues \u2192 500",
+       "tab": "Overview"
       }
      ],
      "surfaces": [
       {
        "kind": "page",
        "name": "Entra ID / RBAC",
-       "state": "unimplemented",
-       "calls": 63
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "create",
        "name": "create with defaults",
        "state": "unimplemented",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "JSON view",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Conditions",
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -5429,8 +7452,12 @@
        "detail": "/api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined/demo1?api-version=2023-01-01 \u2192 404"
       }
      ],
      "surfaces": [
@@ -5443,8 +7470,14 @@
       {
        "kind": "create",
        "name": "create with defaults",
-       "state": "unimplemented",
+       "state": "live",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -5456,16 +7489,88 @@
      "tabs": [],
      "findings": [
       {
-       "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/blobcontainers \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/cosmosdbs \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvsecrets \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvkeys \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/queues \u2192 500"
       },
       {
        "type": "HTTP_501",
        "detail": "/api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined/demo1?api-version=2023-01-01 \u2192 404"
       }
      ],
      "surfaces": [
@@ -5478,8 +7583,14 @@
       {
        "kind": "create",
        "name": "create with defaults",
-       "state": "unimplemented",
+       "state": "live",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -5491,16 +7602,88 @@
      "tabs": [],
      "findings": [
       {
-       "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/blobcontainers \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/cosmosdbs \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvsecrets \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvkeys \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/queues \u2192 500"
       },
       {
        "type": "HTTP_501",
        "detail": "/api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined/demo1?api-version=2023-01-01 \u2192 404"
       }
      ],
      "surfaces": [
@@ -5513,8 +7696,14 @@
       {
        "kind": "create",
        "name": "create with defaults",
-       "state": "unimplemented",
+       "state": "live",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -5526,16 +7715,88 @@
      "tabs": [],
      "findings": [
       {
-       "type": "HTTP_501",
-       "detail": "/api/runtime/budget \u2192 501"
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Sql/servers?api-version=2023-05-01-preview \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ServiceBus/namespaces?api-version=2022-10-01-preview \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Web/sites?api-version=2023-12-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service?api-version=2023-05-01-preview \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks?api-version=2023-11-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups?api-version=2023-11-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.EventGrid/topics?api-version=2024-06-01-preview \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/blobcontainers \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/cosmosdbs \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvsecrets \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/kvkeys \u2192 500"
+      },
+      {
+       "type": "HTTP_5XX",
+       "detail": "/api/azure/queues \u2192 500"
       },
       {
        "type": "HTTP_501",
        "detail": "/api/runtime/budget \u2192 501"
       },
       {
-       "type": "CREATE_FAILED",
-       "detail": "create with defaults failed: locator.click: Timeout 3000ms exceeded."
+       "type": "SAVINGS_MISSING",
+       "detail": "create: active space has no cost_savings metrics"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined/demo1?api-version=2023-01-01 \u2192 404"
       }
      ],
      "surfaces": [
@@ -5548,8 +7809,14 @@
       {
        "kind": "create",
        "name": "create with defaults",
-       "state": "unimplemented",
+       "state": "live",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -5579,19 +7846,19 @@
    "passed": 0,
    "failed": 43,
    "status": "fail",
-   "tail": "[nano/aws] 12 services crawled, 12 with findings\n[nano/gcp] 12 services crawled, 12 with findings\n[nano/azure] 19 services crawled, 19 with findings\nUI crawl nano: 0/43 services clean \u2192 tests/conformance/hourly/out/ui-nano.json\nConsole surfaces nano: {\"live\":106,\"partial\":31,\"static\":64,\"unimplemented\":64}"
+   "tail": "[nano/aws] 12 services crawled, 12 with findings\n[nano/gcp] 12 services crawled, 12 with findings\n[nano/azure] 19 services crawled, 19 with findings\nUI crawl nano: 0/43 services clean \u2192 tests/conformance/hourly/out/ui-nano.json\nConsole surfaces nano: {\"live\":161,\"partial\":31,\"static\":104,\"unimplemented\":87}"
   },
   {
    "id": "nano-cores",
    "target": "nano",
    "cloud": "all",
    "kind": "core",
-   "duration_s": 0.5,
+   "duration_s": 0.6,
    "exit_code": 5,
    "passed": 0,
    "failed": 1,
    "status": "fail",
-   "tail": "no tests ran in 0.39s"
+   "tail": "no tests ran in 0.46s"
   },
   {
    "id": "nano-ui-aws-api",
@@ -5610,19 +7877,19 @@
    "target": "nano",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 11.4,
+   "duration_s": 11.3,
    "exit_code": 0,
    "passed": 11,
    "failed": 0,
    "status": "pass",
-   "tail": "===== AWS s3 detail tabs \u2014 content check =====\n  [OK   ] (create)                           contentLen:999 200 {\"ok\":true,\"created\":true,\"name\":\"tabtest-bucket\",\"creation_date\":\"2026-10-26T21:37:18.000Z\",\"region\":\"us-east-1\",\"versioning\":\"Disabled\",\"versioning_enabled\":f\n  [OK   ] Overview                           contentLen:150 \n  [OK   ] Activity                           contentLen:239 \n  [OK   ] Tags                               contentLen:44 \n  [OK   ] Objects                            contentLen:107 \n  [OK   ] Versions                           contentLen:126 \n  [OK   ] Bucket Versioning                  contentLen:138 \n  [OK   ] Event notifications                contentLen:223 \n  [OK   ] Lifecycle rules                    contentLen:128 \n  [OK   ] Default encryption                 contentLen:149 \n  [OK   ] Block Public Access                contentLen:178 \n\n11/11 tabs render content \u2014 NO blank tabs"
+   "tail": "===== AWS s3 detail tabs \u2014 content check =====\n  [OK   ] (create)                           contentLen:999 200 {\"ok\":true,\"created\":true,\"name\":\"tabtest-bucket\",\"creation_date\":\"2026-10-26T22:43:59.000Z\",\"region\":\"us-east-1\",\"versioning\":\"Disabled\",\"versioning_enabled\":f\n  [OK   ] Overview                           contentLen:150 \n  [OK   ] Activity                           contentLen:239 \n  [OK   ] Tags                               contentLen:44 \n  [OK   ] Objects                            contentLen:107 \n  [OK   ] Versions                           contentLen:126 \n  [OK   ] Bucket Versioning                  contentLen:138 \n  [OK   ] Event notifications                contentLen:223 \n  [OK   ] Lifecycle rules                    contentLen:128 \n  [OK   ] Default encryption                 contentLen:149 \n  [OK   ] Block Public Access                contentLen:178 \n\n11/11 tabs render content \u2014 NO blank tabs"
   },
   {
    "id": "nano-ui-gcp-tabs",
    "target": "nano",
    "cloud": "gcp",
    "kind": "ui",
-   "duration_s": 2.2,
+   "duration_s": 2.1,
    "exit_code": 0,
    "passed": 0,
    "failed": 1,
@@ -5634,7 +7901,7 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 16.4,
+   "duration_s": 16.3,
    "exit_code": 0,
    "passed": 71,
    "failed": 0,
