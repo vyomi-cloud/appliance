@@ -9,7 +9,8 @@ name: Service gate
 #
 # Pass → merge the PR with the bot token (conformance-release.yml then cuts the
 # patch release, flipping the service to released and publishing services.json
-# for the portal). Set repo variable EXPANSION_REQUIRE_APPROVAL=true to merge by
+# for the portal; its Nano code reaches vyomi.cloud/nano in the nightly
+# portal-nano-sync.yml, the portal's one deploy of the day). Set repo variable EXPANSION_REQUIRE_APPROVAL=true to merge by
 # hand instead. Fail → the report goes on the PR + issue and the issue goes back
 # to the expansion agent's queue.
 
@@ -114,71 +115,50 @@ jobs:
             gh issue edit "$ISSUE" -R "$REPO" --remove-label in-review >/dev/null || true
           fi
 
-      # The portal serves its own copy of Nano (portal/app/nano), so the
-      # service's Nano changes go there as a patch (portal-only edits preserved,
-      # as in the daily PR). conformance-release.yml merges this portal PR with
-      # the release, so Nano at vyomi.cloud/nano ships the service at the same
-      # time as the offline appliance. If the patch doesn't apply, the service
-      # does not go live.
-      - name: Portal PR (this service's Nano changes)
+      # The portal serves its own copy of Nano (portal/app/nano) and each portal
+      # deploy costs money, so Nano reaches the portal once a day
+      # (portal-nano-sync.yml). Here we only prove it will get there: the
+      # service must change the Nano bundle, and its patch must apply on top of
+      # the portal's copy plus everything already waiting for tonight's sync.
+      - name: Nano changes apply to the portal (checked, not deployed)
         id: portal
         if: success()
         env: { PORTAL_TOKEN: '${{ secrets.CONFORMANCE_BOT_TOKEN }}' }
         run: |
-          B="${{ steps.pr.outputs.head }}"
           git fetch -q origin main
-          git diff --name-only "origin/main...HEAD" -- wasm/ > /tmp/changed.txt
-          python3 - > /tmp/bundle-files.txt <<'PY'
-          import sys
-          sys.path.insert(0, "wasm")
+          mk() {  # mk BASE HEAD OUT: Nano bundle patch, wasm/ → app/nano/
+            git diff --name-only "$1" "$2" -- wasm/ > /tmp/changed.txt
+            python3 -c "
+          import sys; sys.path.insert(0, 'wasm')
           from vendor_to_portal import in_bundle
-          for line in open("/tmp/changed.txt"):
-              rel = line.strip()[len("wasm/"):]
-              if rel and in_bundle(rel):
-                  print("wasm/" + rel)
-          PY
-          if [ ! -s /tmp/bundle-files.txt ]; then
+          print('\n'.join('wasm/' + l.strip()[5:] for l in open('/tmp/changed.txt') if l.strip()[5:] and in_bundle(l.strip()[5:])))" > /tmp/files.txt
+            [ -s /tmp/files.txt ] || { : > "$3"; return; }
+            git diff --binary "$1" "$2" -- $(cat /tmp/files.txt) \
+              | sed -e 's#^\(diff --git a/\)wasm/#\1app/nano/#' -e 's# b/wasm/# b/app/nano/#' \
+                    -e 's#^--- a/wasm/#--- a/app/nano/#' -e 's#^+++ b/wasm/#+++ b/app/nano/#' \
+                    -e 's#^\(rename\|copy\) \(from\|to\) wasm/#\1 \2 app/nano/#' > "$3"
+          }
+          mk "$(git merge-base origin/main HEAD)" HEAD /tmp/service.patch
+          if [ ! -s /tmp/service.patch ]; then
             echo "::error::No Nano bundle changes: a new service must ship in Nano too."; exit 1
           fi
-          git diff --binary "origin/main...HEAD" -- $(cat /tmp/bundle-files.txt) \
-            | sed -e 's#^\(diff --git a/\)wasm/#\1app/nano/#' -e 's# b/wasm/# b/app/nano/#' \
-                  -e 's#^--- a/wasm/#--- a/app/nano/#' -e 's#^+++ b/wasm/#+++ b/app/nano/#' \
-                  -e 's#^\(rename\|copy\) \(from\|to\) wasm/#\1 \2 app/nano/#' > /tmp/nano.patch
           git clone -q "https://x-access-token:${PORTAL_TOKEN}@github.com/vyomi-cloud/portal.git" /tmp/portal
+          BASE=$(python3 -c "import json;print(json.load(open('/tmp/portal/app/nano/APPLIANCE_SYNC.json'))['sha'])" 2>/dev/null || echo 38bfb70)
+          mk "$BASE" origin/main /tmp/pending.patch
           cd /tmp/portal
-          git config user.name "vyomi-expansion-bot"
-          git config user.email "conformance-bot@users.noreply.github.com"
-          git checkout -q -B "$B"
-          if ! git apply --check /tmp/nano.patch 2>/tmp/apply.err; then
+          [ ! -s /tmp/pending.patch ] || git apply /tmp/pending.patch
+          if ! git apply --check /tmp/service.patch 2>/tmp/apply.err; then
             cat /tmp/apply.err
-            echo "### Service gate — ❌ Nano changes don't apply to the portal's copy (portal/app/nano)" > /tmp/conflict.md
-            { echo; echo '```'; cat /tmp/apply.err; echo '```'; } >> /tmp/conflict.md
+            { echo "### Service gate — ❌ Nano changes don't apply to the portal's copy (portal/app/nano)"; echo; echo '```'; cat /tmp/apply.err; echo '```'; } > /tmp/conflict.md
             GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" gh pr comment "$PR" -R "$REPO" --body-file /tmp/conflict.md
             echo "::error::Nano patch doesn't apply to the portal copy; not going live."; exit 1
           fi
-          git apply /tmp/nano.patch
-          git add -A app/nano
-          git commit -q -m "nano: new service from appliance $B" \
-            -m "The service's Nano bundle changes, applied as a patch from vyomi-cloud/appliance PR #$PR (portal-only edits preserved)."
-          git push -q -f origin "$B"
-          URL=$(GH_TOKEN="$PORTAL_TOKEN" gh pr list -R vyomi-cloud/portal --head "$B" --state open --json url -q '.[0].url')
-          if [ -z "$URL" ]; then
-            URL=$(GH_TOKEN="$PORTAL_TOKEN" gh pr create -R vyomi-cloud/portal --base main --head "$B" \
-              --title "Nano: new service from appliance $B" \
-              --body "Nano bundle changes for the new service in vyomi-cloud/appliance#$PR, applied as a patch. Merged automatically with the appliance release, so Nano and the offline simulator ship the service together. Merging deploys the portal.")
-          fi
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
-          # Link it so conformance-release.yml merges it with the release.
-          cd "$GITHUB_WORKSPACE"
-          BODY=$(GH_TOKEN="$PORTAL_TOKEN" gh pr view "$PR" -R "$REPO" --json body -q .body | sed '/<!-- portal-pr: /d')
-          printf '%s\n\n<!-- portal-pr: %s -->\n' "$BODY" "$URL" > /tmp/body.md
-          GH_TOKEN="$PORTAL_TOKEN" gh pr edit "$PR" -R "$REPO" --body-file /tmp/body.md >/dev/null
-          echo "Portal PR: $URL"
+          echo "Nano changes apply cleanly; they ship with tonight's portal sync."
 
       - name: Back to the agent if the Nano sync failed
         if: failure() && steps.gate.outcome == 'success' && env.ISSUE != ''
         run: |
-          gh issue comment "$ISSUE" -R "$REPO" --body "The gate passed but the Nano changes couldn't be synced to the portal (no Nano bundle changes, or the patch doesn't apply to portal/app/nano). Nano and offline must ship together, so this service is not live yet. ${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }}"
+          gh issue comment "$ISSUE" -R "$REPO" --body "The gate passed but the Nano changes can't reach the portal (no Nano bundle changes, or the patch doesn't apply to portal/app/nano). Nano and offline must ship together, so this service is not live yet. ${{ github.server_url }}/$REPO/actions/runs/${{ github.run_id }}"
           gh issue edit "$ISSUE" -R "$REPO" --remove-label in-review >/dev/null || true
 
       - name: Go live (merge → patch release)
