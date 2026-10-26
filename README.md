@@ -1,23 +1,23 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-26 21:45 UTC · refreshes after every pipeline run_
+_Updated 2026-10-26 21:50 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 36 services (AWS 12 · GCP 12 · Azure 12) of 1,068 the clouds publish
-- **Building now:** nothing
+- **Building now:** Elastic Load Balancing (AWS, no manifest yet checks)
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS)
-- **Queued:** 74 services (P1 first, then P2)
-- **Consoles really implemented:** offline 38% · Nano 39%
-- **Hourly tests:** 13 of 22 suites passing (run 20:39 UTC)
+- **Queued:** 73 services (P1 first, then P2)
+- **Consoles really implemented:** offline 38% · Nano 40%
+- **Hourly tests:** 13 of 22 suites passing (run 21:37 UTC)
 - **Upstream watch:** 5 open changes from the real clouds to adopt
 
 ## By cloud
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 12 | 0 | 7 | 26 | 34% · 46% |
-| GCP | 12 | 0 | 0 | 24 | 38% · 44% |
+| AWS | 12 | 1 | 7 | 25 | 34% · 46% |
+| GCP | 12 | 0 | 0 | 24 | 38% · 45% |
 | Azure | 12 | 0 | 0 | 24 | 53% · 2% |
 
 ## In progress
@@ -31,6 +31,7 @@ _Updated 2026-10-26 21:45 UTC · refreshes after every pipeline run_
 | Amazon ElastiCache [#56](https://github.com/vyomi-cloud/appliance/issues/56) | AWS | 🔍 In gate ([PR #102](https://github.com/vyomi-cloud/appliance/pull/102)) | 20/20 | — |
 | AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | — |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | — |
+| Elastic Load Balancing [#57](https://github.com/vyomi-cloud/appliance/issues/57) | AWS | 🛠 Building | no manifest yet | — |
 
 ## Released services
 
@@ -41,43 +42,43 @@ _Updated 2026-10-26 21:45 UTC · refreshes after every pipeline run_
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| EC2 | 🧩 1/13 · 🧩 3/13 | 20 · 16 | ✅ watched | before gate |
+| EC2 | 🧩 1/13 · 🧩 3/13 | 2 · 5 | ✅ watched | before gate |
 | S3 | 🧩 5/13 · 🧩 8/13 | 1 · 1 | ✅ watched | before gate |
 | IAM | 🧩 7/11 · 🧩 2/11 | 2 · 2 | ✅ watched | before gate |
 | RDS | 🧩 8/13 · 🧩 8/13 | 0 · 1 | ✅ watched | before gate |
-| DynamoDB | 🧩 1/13 · 🧩 5/13 | 2 · 2 | ✅ watched | before gate |
-| SQS | 🧩 2/13 · 🧩 5/13 | 1 · 1 | ✅ watched | before gate |
+| DynamoDB | 🧩 1/13 · 🧩 5/13 | 13 · 7 | ✅ watched | before gate |
+| SQS | 🧩 2/13 · 🧩 5/13 | 12 · 5 | ✅ watched | before gate |
 | Lambda | 🧩 6/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
 | API Gateway | 🧩 6/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
 | VPC | 🧩 7/13 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
 | EventBridge | 🧩 1/13 · 🧩 1/2 | 6 · 1 | ✅ watched | before gate |
-| Secrets Manager | 🧩 4/13 · 🧩 6/13 | 5 · 3 | ✅ watched | before gate |
-| KMS | 🧩 5/13 · 🧩 10/13 | 2 · 1 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
+| Secrets Manager | 🧩 4/13 · 🧩 6/13 | 5 · 6 | ✅ watched | before gate |
+| KMS | 🧩 5/13 · 🧩 10/13 | 2 · 2 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
 
 ### GCP
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
 | Compute Engine | 🧩 5/13 · 🧩 6/13 | 0 · 2 | ✅ watched | before gate |
-| Cloud Storage | 🧩 7/13 · 🧩 7/13 | 2 · 2 | ✅ watched | before gate |
+| Cloud Storage | 🧩 7/13 · 🧩 7/13 | 2 · 1 | ✅ watched | before gate |
 | Cloud SQL | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
 | Pub/Sub | 🧩 4/13 · 🧩 6/13 | 5 · 4 | ✅ watched | before gate |
 | Firestore | 🧩 4/13 · 🧩 1/13 | 3 · 4 | ✅ watched | before gate |
-| Cloud Functions | 🧩 4/13 · 🧩 5/13 | 3 · 4 | ✅ watched | before gate |
+| Cloud Functions | 🧩 4/13 · 🧩 5/13 | 3 · 3 | ✅ watched | before gate |
 | API Gateway | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
-| VPC Network | 🧩 3/13 · 🧩 4/13 | 3 · 8 | ✅ watched | before gate |
-| IAM & Admin | 🧩 5/9 · 🧩 8/9 | 2 · 1 | ✅ watched | before gate |
+| VPC Network | 🧩 3/13 · 🧩 4/13 | 3 · 4 | ✅ watched | before gate |
+| IAM & Admin | 🧩 5/9 · ✅ 9/9 | 2 · 1 | ✅ watched | before gate |
 | Eventarc | 🧩 5/12 · 🧩 6/12 | 4 · 3 | ✅ watched | before gate |
 | Secret Manager | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
-| Cloud KMS | 🧩 6/13 · 🧩 7/13 | 2 · 6 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
+| Cloud KMS | 🧩 6/13 · 🧩 7/13 | 2 · 5 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
 
 ### Azure
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| Virtual Machines | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
-| Storage accounts | 🧩 1/2 · 🧩 0/2 | 1 · 1 | ✅ watched | before gate |
-| SQL servers | 🧩 1/2 · 🧩 0/2 | 1 · 2 | ✅ watched | before gate |
+| Virtual Machines | 🧩 1/2 · 🧩 0/2 | 1 · 1 | ✅ watched | before gate |
+| Storage accounts | 🧩 1/2 · 🧩 0/2 | 1 · 3 | ✅ watched | before gate |
+| SQL servers | 🧩 1/2 · 🧩 0/2 | 1 · 3 | ✅ watched | before gate |
 | Service Bus | 🧩 1/2 · 🧩 0/2 | 1 · 3 | ✅ watched | before gate |
 | Cosmos DB | 🧩 1/2 · 🧩 0/2 | 1 · 3 | ✅ watched | before gate |
 | Function apps | 🧩 1/2 · 🧩 0/2 | 1 · 3 | ✅ watched | before gate |
@@ -92,7 +93,7 @@ _Updated 2026-10-26 21:45 UTC · refreshes after every pipeline run_
 
 ## Up next
 
-<details><summary><b>AWS</b> — 26 queued</summary>
+<details><summary><b>AWS</b> — 25 queued</summary>
 
 | Service | Priority | Issue | Offline backend |
 |---|---|---|---|
@@ -104,7 +105,6 @@ _Updated 2026-10-26 21:45 UTC · refreshes after every pipeline run_
 | Amazon Simple Systems Manager (SSM) | P1 | [#63](https://github.com/vyomi-cloud/appliance/issues/63) | in-process |
 | AWS Security Token Service | P1 | [#65](https://github.com/vyomi-cloud/appliance/issues/65) | in-process |
 | AWS Step Functions | P1 | [#64](https://github.com/vyomi-cloud/appliance/issues/64) | in-process |
-| Elastic Load Balancing | P1 | [#57](https://github.com/vyomi-cloud/appliance/issues/57) | caddy · 15 MB · Lite |
 | Amazon Athena | P2 | not filed | duckdb |
 | Amazon Bedrock Runtime | P2 | not filed | ollama · 50 MB · Max |
 | Amazon DynamoDB Streams | P2 | not filed | in-process |
@@ -477,7 +477,7 @@ _Updated 2026-10-26 21:45 UTC · refreshes after every pipeline run_
 | KMS | offline | tab: Key users | static |
 | KMS | offline | tab: Key administrators | static |
 | KMS | offline | tab: Grants | static |
-| EC2 | nano | create: create with defaults | unimplemented |
+| EC2 | nano | create: create with defaults | partial |
 | EC2 | nano | tab: Activity | partial |
 | EC2 | nano | tab: Tags | static |
 | EC2 | nano | tab: Details | static |
@@ -539,7 +539,7 @@ _Updated 2026-10-26 21:45 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary>Console parts not live yet — GCP (137)</summary>
+<details><summary>Console parts not live yet — GCP (136)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -679,11 +679,10 @@ _Updated 2026-10-26 21:45 UTC · refreshes after every pipeline run_
 | Cloud KMS | nano | tab: Labels | static |
 | Cloud KMS | nano | tab: Key policy | static |
 | Cloud KMS | nano | tab: Import jobs | static |
-| IAM & Admin | nano | tab: Permissions | static |
 
 </details>
 
-<details><summary>Console parts not live yet — Azure (48)</summary>
+<details><summary>Console parts not live yet — Azure (49)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -701,8 +700,9 @@ _Updated 2026-10-26 21:45 UTC · refreshes after every pipeline run_
 | Role Definition | offline | create: create with defaults | unimplemented |
 | Entra ID / RBAC | offline | create: create with defaults | unimplemented |
 | Resource groups | nano | page: Resource groups | unimplemented |
-| Virtual Machines | nano | page: Virtual Machines | unimplemented |
-| Storage accounts | nano | page: Storage accounts | static |
+| Virtual Machines | nano | page: Virtual Machines | static |
+| Virtual Machines | nano | create: create with defaults | unimplemented |
+| Storage accounts | nano | page: Storage accounts | unimplemented |
 | Storage accounts | nano | create: create with defaults | unimplemented |
 | SQL servers | nano | page: SQL servers | unimplemented |
 | SQL servers | nano | create: create with defaults | unimplemented |
