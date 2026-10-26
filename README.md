@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-Updated **2026-10-26 14:54 UTC** · **36 services released** (AWS 12 / GCP 12 / Azure 12) · **81 in the pipeline** (P1 + P2).
+Updated **2026-10-26 14:55 UTC** · **36 services released** (AWS 12 / GCP 12 / Azure 12) · **81 in the pipeline** (P1 + P2).
 
 A new service goes live only when the service gate passes: engine, native SDK/CLI wire, console UI offline + Nano, Java + Go + CLI test beds, Playwright console tests offline + Nano, registered with the hourly conformance run and the upstream watcher. Then it is released (patch version) and handed off to both hourly jobs.
 
@@ -70,7 +70,7 @@ Released: **12** · 📋 Queued: **12** · · Not filed: **12**
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | **Compute Engine** | — | 🟢 Released | — | — | — | — | — | — | — | — | baseline (pre-gate) | <=3.0.8 | UI offline ✅ · UI nano ⚠️ 4 | 👁 watched (1018 ops) |
 | **Cloud Storage** | — | 🟢 Released | — | — | — | — | — | — | — | — | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 2 · UI nano ⚠️ 1 | 👁 watched (87 ops) |
-| **Cloud SQL** | — | 🟢 Released | — | — | — | — | — | — | — | — | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched (85 ops) |
+| **Cloud SQL** | — | 🟢 Released | — | — | — | — | — | — | — | — | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 1 · UI nano ⚠️ 1 | 👁 watched (85 ops) · [⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) |
 | **Pub/Sub** | — | 🟢 Released | — | — | — | — | — | — | — | — | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 5 · UI nano ⚠️ 7 | 👁 watched (46 ops) |
 | **Firestore** | — | 🟢 Released | — | — | — | — | — | — | — | — | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 3 · UI nano ⚠️ 7 | 👁 watched (60 ops) |
 | **Cloud Functions** | — | 🟢 Released | — | — | — | — | — | — | — | — | baseline (pre-gate) | <=3.0.8 | UI offline ⚠️ 4 · UI nano ⚠️ 5 | 👁 watched (21 ops) |
