@@ -1,22 +1,22 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-26 19:52 UTC · refreshes after every pipeline run_
+_Updated 2026-10-26 19:55 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 36 services (AWS 12 · GCP 12 · Azure 12) of 1,068 the clouds publish
-- **Building now:** nothing
+- **Building now:** Amazon Elastic Container Registry (AWS, no manifest yet checks)
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS)
-- **Queued:** 77 services (P1 first, then P2)
+- **Queued:** 76 services (P1 first, then P2)
 - **Consoles really implemented:** offline 36% · Nano 43%
 - **Hourly tests:** 14 of 23 suites passing (run 18:32 UTC)
-- **Upstream watch:** 2 open changes from the real clouds to adopt
+- **Upstream watch:** 5 open changes from the real clouds to adopt
 
 ## By cloud
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 12 | 0 | 4 | 29 | 36% · 46% |
+| AWS | 12 | 1 | 4 | 28 | 36% · 46% |
 | GCP | 12 | 0 | 0 | 24 | 38% · 47% |
 | Azure | 12 | 0 | 0 | 24 | 18% · 9% |
 
@@ -26,6 +26,7 @@ _Updated 2026-10-26 19:52 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|
 | Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🔍 In gate ([PR #95](https://github.com/vyomi-cloud/appliance/pull/95)) | 18/18 | — |
 | Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🔍 In gate ([PR #96](https://github.com/vyomi-cloud/appliance/pull/96)) | 18/18 | — |
+| Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🛠 Building | no manifest yet | — |
 | AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | — |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | — |
 
@@ -49,7 +50,7 @@ _Updated 2026-10-26 19:52 UTC · refreshes after every pipeline run_
 | VPC | 🧩 7/13 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
 | EventBridge | 🧩 1/13 · 🧩 1/2 | 6 · 1 | ✅ watched | before gate |
 | Secrets Manager | 🧩 4/13 · 🧩 6/13 | 5 · 6 | ✅ watched | before gate |
-| KMS | 🧩 5/13 · 🧩 10/13 | 2 · 2 | ✅ watched | before gate |
+| KMS | 🧩 5/13 · 🧩 10/13 | 2 · 2 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
 
 ### GCP
 
@@ -66,7 +67,7 @@ _Updated 2026-10-26 19:52 UTC · refreshes after every pipeline run_
 | IAM & Admin | 🧩 4/9 · 🧩 8/9 | 2 · 1 | ✅ watched | before gate |
 | Eventarc | 🧩 5/12 · 🧩 6/12 | 4 · 3 | ✅ watched | before gate |
 | Secret Manager | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
-| Cloud KMS | 🧩 6/13 · 🧩 7/13 | 2 · 5 | ✅ watched | before gate |
+| Cloud KMS | 🧩 6/13 · 🧩 7/13 | 2 · 5 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
 
 ### Azure
 
@@ -89,13 +90,12 @@ _Updated 2026-10-26 19:52 UTC · refreshes after every pipeline run_
 
 ## Up next
 
-<details><summary><b>AWS</b> — 29 queued</summary>
+<details><summary><b>AWS</b> — 28 queued</summary>
 
 | Service | Priority | Issue | Offline backend |
 |---|---|---|---|
 | Amazon CloudWatch Logs | P1 | [#59](https://github.com/vyomi-cloud/appliance/issues/59) | in-process |
 | Amazon EC2 Container Service | P1 | [#55](https://github.com/vyomi-cloud/appliance/issues/55) | docker · Pro |
-| Amazon Elastic Container Registry | P1 | [#54](https://github.com/vyomi-cloud/appliance/issues/54) | registry · 10 MB · Lite |
 | Amazon ElastiCache | P1 | [#56](https://github.com/vyomi-cloud/appliance/issues/56) | valkey · 8 MB · Lite |
 | Amazon Kinesis | P1 | [#58](https://github.com/vyomi-cloud/appliance/issues/58) | nats · 10 MB · Lite |
 | Amazon Route 53 | P1 | [#60](https://github.com/vyomi-cloud/appliance/issues/60) | coredns · 15 MB · Lite |
