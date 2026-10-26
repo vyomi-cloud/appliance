@@ -603,7 +603,7 @@ RESOURCE_CATALOG_AWS = [
     # REST facade is core/console_cognito_idp.py (same code offline and in Nano).
     # ========================================================================
     {
-        "key": "cognito-idp", "label": "Cognito", "icon": "badge",
+        "key": "cognito-idp", "label": "Amazon Cognito", "icon": "badge",
         "namespace": "AWS/Cognito", "service": "cognito-idp",
         "collection_path": "/api/cognito-idp/user-pools",
         "resource_path":   "/api/cognito-idp/user-pools/{name}",
