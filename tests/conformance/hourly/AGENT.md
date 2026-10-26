@@ -43,14 +43,30 @@ fast, and to prove it with conformance tests.
    never show `-`, `—`, blank, `undefined` or `null` for a field the real cloud fills.
    Fix PLACEHOLDER_CELL and CREATE_* findings at the source (the create handler / the
    provider model), not by hiding the column.
-3. **Upstream changes** (`upstream_issues.json`): keep Vyomi faithful to the
+3. **Implement the console: no static or unimplemented surfaces.** Each
+   `ui-*.json` service row has `surfaces`: the service page, create, resource
+   detail and every detail tab, each classified `live` (loads data from the API or
+   shows this resource's own data), `partial` (API-backed but blank fields),
+   `static` (hard-coded or generic text: synthesized metrics, a fixed `vol-root`,
+   "No X configured. Currently at defaults" on every service, "Missing instance_id")
+   or `unimplemented` (errors, 404/501, dead/empty). Turn `static` and
+   `unimplemented` surfaces into real ones, the way the cloud's own console works:
+   back them with the service's API (add the route/engine operation if missing),
+   show the resource's real values, and make their actions (Edit, Add tag, Save…)
+   persist through the API and show up when the tab is reopened. Do both consoles
+   (`static/*-console.html` and `wasm/*-console.html`; shared logic in `core/`).
+   Work service by service, most-used first (compute, storage, databases,
+   functions), finishing a service's tabs before moving on; each one gets a
+   Playwright check that the tab shows the resource's data and a saved edit
+   survives a reload.
+4. **Upstream changes** (`upstream_issues.json`): keep Vyomi faithful to the
    real clouds. Oldest first, prefer lifecycle (deprecation/retirement) and
    changed/removed operations over brand-new operations. Implement or adapt in
    `core/` (+ Nano via `wasm/build_cores.py`), add a conformance test with the
    official SDK/CLI, and put `Fixes #<issue>` in the commit subject so the daily
    PR closes it. If a change doesn't affect behaviour Vyomi simulates, comment on
    the issue why and leave it for a human to close — never close it yourself.
-4. **Every resource moves the cost-savings metrics, on every cloud.** Creating a
+5. **Every resource moves the cost-savings metrics, on every cloud.** Creating a
    resource (UI or SDK/CLI) must raise the active space's `cost_savings.resource_count`
    and that cloud's `by_provider` savings; using it (objects stored, items written,
    messages sent, instance hours) must raise `savings_usd` too, because the real
@@ -58,17 +74,17 @@ fast, and to prove it with conformance tests.
    in `core/cost_model.py` (add per-service and usage-based rates from the providers'
    public price lists) and in the space tick in `server.py`, for AWS, GCP and Azure,
    and mirror the change in Nano. Never inflate numbers to pass; use real list prices.
-5. **Failing suites** in `results.json`.
-6. **New features** (`new_features.json` → `new`): a new SDK operation with
+6. **Failing suites** in `results.json`.
+7. **New features** (`new_features.json` → `new`): a new SDK operation with
    `tested: false` gets a Java or Go test (official SDK, endpoint changed only); a
    new service/tab/action is crawled live — fix whatever the crawl finds and add a
    Playwright validator for its main flow. A `removed` feature is a likely
    regression: confirm it was intended (commit message) or restore it.
-7. **Nano ↔ offline parity** (`parity`): implement the missing side so both
+8. **Nano ↔ offline parity** (`parity`): implement the missing side so both
    targets expose the same services, tabs and operations (shared logic lives in
    `core/` and is vendored to `wasm/core/` by `wasm/build_cores.py`). If an entry is
    only a naming difference, not a missing feature, say so in the summary.
-8. **Untested SDK operations** (`untested_ops`) then **untested routes**
+9. **Untested SDK operations** (`untested_ops`) then **untested routes**
    (`uncovered`): add tests, a few per run.
 
 ## Product bug or harness bug?

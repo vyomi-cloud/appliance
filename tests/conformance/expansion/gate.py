@@ -230,7 +230,9 @@ def live(m: dict) -> None:
     tabs = {}
     for target in ("offline", "nano"):
         f = rel(f"tests/conformance/hourly/out/ui-{target}.json")
-        env = dict(os.environ, TARGET=target, OUT=f, CREATE="1")
+        # Only this service (the full console takes ~40 min per target).
+        only = "|".join(re.escape(x) for x in {m["name"], key, key.replace("-", " ")})
+        env = dict(os.environ, TARGET=target, OUT=f, CREATE="1", ONLY=only)
         if target == "nano":
             env["NANO_DIR"] = rel("wasm")
         subprocess.run(["node", rel("tests/conformance/hourly/ui_crawler.mjs")], cwd=ROOT, env=env, capture_output=True, text=True)

@@ -177,6 +177,23 @@ def main() -> int:
             return "✅ handed off (awaiting next hourly run)" if suites else "—"
         return " · ".join(parts)
 
+    # Console implementation (hourly crawl `surfaces`): live / partial /
+    # static / unimplemented per service page, create, detail and tab.
+    STATES = ("live", "partial", "static", "unimplemented")
+
+    def surf(target: str, cloud: str, svc: str | None = None) -> list:
+        return [x for r in (ui.get(target) or {}).get("services", []) if r["cloud"] == cloud and (svc is None or r["service"] == svc)
+                for x in r.get("surfaces", [])]
+
+    def console_cell(cloud: str, svc: str) -> str:
+        parts = []
+        for t, lbl in (("offline", "off"), ("nano", "Nano")):
+            xs = surf(t, cloud, svc)
+            if xs:
+                live = sum(x["state"] == "live" for x in xs)
+                parts.append(f"{lbl} {'✅' if live == len(xs) else '🧩'} {live}/{len(xs)}")
+        return " · ".join(parts) or "—"
+
     def par_cell(cloud: str, svc: str) -> str:
         tot, off_only, nano_only = parity(cloud, svc)
         if not tot:
@@ -205,7 +222,7 @@ def main() -> int:
             # Pre-gate (baseline) services weren't built through the gate: no
             # per-check claims for them, only their hourly + upstream status.
             rows.append([f"**{s['name']}**", "—", "🟢 Released", "—"] + (["✅"] * len(COLS) if suites else ["—"] * len(COLS)) +
-                        [par_cell(cloud, s["name"]), "✅ passed" if suites else "baseline (pre-gate)", rel, hourly_cell(cloud, s["name"], suites),
+                        [console_cell(cloud, s["name"]), par_cell(cloud, s["name"]), "✅ passed" if suites else "baseline (pre-gate)", rel, hourly_cell(cloud, s["name"], suites),
                          upstream_cell(cloud, s.get("upstream") or s["key"], [s["key"], s["name"]])])
 
         for s in queue:
@@ -247,14 +264,33 @@ def main() -> int:
                     mb = json.loads(sh("git", "show", f"origin/{branch}:services/manifests/{cloud}-{k}.json") or "{}").get("backend")
                 except ValueError:
                     mb = None
-            rows.append([f"{name}{issue}", s["priority"], stage, backend_cell(cloud, s["id"], mb)] + cells + ["⏳ gated", gcell, "—", "⏳ after release",
+            rows.append([f"{name}{issue}", s["priority"], stage, backend_cell(cloud, s["id"], mb)] + cells + ["⏳ after release", "⏳ gated", gcell, "—", "⏳ after release",
                         "⏳ registered at build" if not gate else
                         ("✅ registered" if gate.get("upstream id tracked by the hourly upstream watcher", (False,))[0] else "⬜ not yet")])
 
         totals[cloud] = {"released": len(released), "queue": len(queue), **stages}
-        head = ["Service", "Pri", "Stage", "Offline backend"] + [c for c, _ in COLS] + ["Nano ↔ offline", "Gate", "Release", "Hourly conformance hand-off", "Upstream watcher hand-off"]
+        head = ["Service", "Pri", "Stage", "Offline backend"] + [c for c, _ in COLS] + ["Console live", "Nano ↔ offline", "Gate", "Release", "Hourly conformance hand-off", "Upstream watcher hand-off"]
         t = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)] + ["| " + " | ".join(r) + " |" for r in rows]
         summary = " · ".join(f"{k}: **{v}**" for k, v in stages.items())
+        ctab = ["| Console | Surfaces | ✅ Live | 🟡 Partial (blank fields) | ⬜ Static | ❌ Unimplemented |", "|---|---|---|---|---|---|"]
+        notlive = []
+        for t, lbl in (("offline", "Offline"), ("nano", "Nano")):
+            xs = surf(t, cloud)
+            if not xs:
+                ctab.append(f"| {lbl} | not crawled yet | | | | |")
+                continue
+            c = {st: sum(x["state"] == st for x in xs) for st in STATES}
+            ctab.append(f"| {lbl} | {len(xs)} | " + " | ".join(f"{c[st]} ({100 * c[st] // len(xs)}%)" for st in STATES) + " |")
+            for r in (ui.get(t) or {}).get("services", []):
+                if r["cloud"] == cloud:
+                    for x in r.get("surfaces", []):
+                        if x["state"] != "live":
+                            notlive.append(f"| {r['service']} | {lbl} | {x['kind']} | {x['name']} | {x['state']} |")
+        summary += ("\n\n**Console implementation** (latest hourly crawl; the hourly agent implements static and "
+                    "unimplemented surfaces):\n\n" + "\n".join(ctab))
+        if notlive:
+            summary += (f"\n\n<details><summary>{len(notlive)} console surfaces not live yet</summary>\n\n"
+                        "| Service | Console | Surface | Name | State |\n|---|---|---|---|---|\n" + "\n".join(notlive) + "\n\n</details>")
         gaps = []
         for svc in sorted({k[2] for k in feats if k[1] == cloud}):
             tot, off_only, nano_only = parity(cloud, svc)
@@ -300,6 +336,10 @@ def main() -> int:
           "Offline backend is the cheap, permissively licensed software behind the service offline "
           "([rules + defaults](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/expansion/backends.json)); "
           "the gate checks its license, arch, pinning and idle memory. "
+          "Console live counts the console surfaces (service page, create, resource detail, each detail tab) that "
+          "are really implemented: ✅ live = loads data from the API or shows the resource's own data; 🟡 partial = "
+          "API-backed with blank fields; ⬜ static = hard-coded or generic text; ❌ unimplemented = errors, 404/501, "
+          "dead or empty. Classified by the hourly crawl on both consoles. "
           "Nano ↔ offline compares every console feature (pages, tabs, columns, create fields, actions, operations) "
           "between the two simulators from the latest hourly inventory; a new service can't pass the gate unless both match. "
           "Hourly hand-off shows the latest hourly UI crawl (⚠️ n = open findings) and the service's own suites; "
