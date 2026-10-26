@@ -25,3 +25,4 @@
 | 2026-10-26T20:46Z | #55 | aws/ecs | success | building | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40396745046) |
 | 2026-10-26T21:02Z | #55 | aws/ecs | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40398876185) |
 | 2026-10-26T21:33Z | #56 | aws/elasticache | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40401179769) |
+| 2026-10-26T21:38Z | #55 | aws/ecs | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40405640053) |
