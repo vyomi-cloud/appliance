@@ -319,6 +319,29 @@ async function providerOf(clientId) {
   return "aws";
 }
 
+// The provider of the CONSOLE page making the request (null for the dashboard /
+// other pages, which have no in-browser backend to ask).
+async function consoleProviderOf(clientId) {
+  try {
+    const c = clientId && await self.clients.get(clientId);
+    const m = c && c.url.match(/\/(aws|gcp|azure)-console\.html/);
+    if (m) return m[1];
+  } catch (_) {}
+  return null;
+}
+
+// Attach the space's cost-savings metrics (core/cost_model prices × the live census
+// of the in-browser backend). Best-effort: a slow backend never blocks /api/spaces.
+async function withSavings(space, clientId, prov) {
+  if (!(await consoleProviderOf(clientId))) return space;
+  try {
+    const sav = await Promise.race([runInPage([prov, "_savings", "Get", {}]),
+                                    new Promise((_, rej) => setTimeout(() => rej(new Error("slow")), 4000))]);
+    if (sav && sav.ok !== false) return { ...space, cost_savings: sav };
+  } catch (_) {}
+  return space;
+}
+
 // Ask the page (where Pyodide lives) to run a dispatch tuple.
 async function runInPage(tuple) {
   await readyPromise;
@@ -728,7 +751,7 @@ self.addEventListener("fetch", (event) => {
           match = created.find((s) => s.space_id === activeId && s.provider === prov)
                || created.filter((s) => s.provider === prov).pop();
         } catch (_) {}
-        return json({ space: match || nanoSpace(prov) });
+        return json({ space: await withSavings(match || nanoSpace(prov), event.clientId, prov) });
       }
       // Spaces list = fixture defaults + persisted user-created (deduped).
       if (apiPath === "/api/spaces" && method === "GET") {
@@ -738,6 +761,14 @@ self.addEventListener("fetch", (event) => {
         for (const s of [...(fx.spaces || []), ...created])
           if (!seen.has(s.space_id)) { seen.add(s.space_id); spaces.push(s); }
         let active = fx.active_space_id; try { active = (await metaGet("active")) || active; } catch (_) {}
+        // A console page also gets its provider's active space WITH the cost-savings
+        // metrics (same `active_space` the appliance's /api/spaces returns).
+        const cprov = await consoleProviderOf(event.clientId);
+        if (cprov) {
+          const sp = spaces.find((s) => s.space_id === active && s.provider === cprov)
+                  || spaces.filter((s) => s.provider === cprov).pop() || nanoSpace(cprov);
+          return json({ spaces, active_space_id: active, active_space: await withSavings(sp, event.clientId, cprov) });
+        }
         return json({ spaces, active_space_id: active });
       }
       // Appliance-health pies: per-cloud distribution computed live from the

@@ -207,6 +207,32 @@ def _weigh(resources: int, vms: int) -> dict:
     }
 
 
+def _logs_group_count() -> int:
+    """CloudWatch Logs groups held by the shared in-browser store (core/logs_core.py)."""
+    try:
+        from core import nano_registry
+        return len(nano_registry.get()["logs"].log_groups)
+    except Exception:
+        return 0
+
+
+def _savings_dispatch(backends: Backends, provider: str) -> dict:
+    """The space's cost-savings metrics, from the live census × real-cloud list
+    prices (core/cost_model.SERVICE_MONTHLY) — the in-browser analogue of the
+    appliance's /api/spaces cost_savings (what the user would have paid)."""
+    from core import cost_model
+    census = _census_dispatch(backends, provider)
+    by_service: dict[str, float] = {}
+    for svc, n in (census.get("by_service") or {}).items():
+        usd = round(cost_model.SERVICE_MONTHLY.get(f"{provider}.{svc}", 0.0) * n, 2)
+        by_service[f"{provider}.{svc}"] = usd
+    total = round(sum(by_service.values()), 2)
+    return {"ok": True, "resource_count": int(census.get("resources", 0)),
+            "real_cloud_cost_usd": total, "simulator_cost_usd": 0.0, "savings_usd": total,
+            "savings_pct": 100.0 if total > 0 else 0.0,
+            "by_provider": {provider: total}, "by_service": by_service}
+
+
 def _census_dispatch(backends: Backends, provider: str) -> dict:
     """Count the LIVE in-memory resources this page's backend holds for `provider`,
     across every core store, and weight them the same way the appliance does. The
@@ -232,6 +258,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                         len(A.iam_list_policies().get("policies", [])) +
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
+                "logs":           _logs_group_count(),
             }
             for svc, n in aws_counts.items():
                 if n:
@@ -315,6 +342,8 @@ def dispatch(backends: Backends, provider: str, service: str, operation: str,
     # Live resource census for the dashboard's per-cloud footprint pies.
     if service == "_census":
         return _census_dispatch(backends, provider)
+    if service == "_savings":
+        return _savings_dispatch(backends, provider)
     h = p.handlers().get((service, operation))
     if h is None:
         return {"ok": False, "code": "UnsupportedOperation",
