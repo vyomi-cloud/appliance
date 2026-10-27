@@ -737,7 +737,7 @@ function renderRail(){
       ["Compute", ["ec2", "lambda"]],
       ["Storage", ["s3"]],
       ["Databases", ["rds", "dynamodb"]],
-      ["Application Integration", ["sqs", "apigateway", "eventbridge"]],
+      ["Application Integration", ["sqs", "sns", "apigateway", "eventbridge"]],
       ["Networking & Content Delivery", ["vpc"]],
       ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
     ];
@@ -905,7 +905,7 @@ function renderHome(main){
   //    priced with rates that mirror core/cost_model. Simulator cost = $0, so every
   //    dollar of real-AWS cost for what you've spun up is a dollar saved.
   const _NANO_RATE = {
-    s3:0.50, dynamodb:1.25, kms:1.00, secretsmanager:0.40, sqs:0.40, iam:0, rds:25.55, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0,
+    s3:0.50, dynamodb:1.25, kms:1.00, secretsmanager:0.40, sqs:0.40, sns:0.50, iam:0, rds:25.55, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0,
     compute:24.53, storage:0.50, cloudsql:25.00, pubsub:0.40, firestore:0.18, functions:0.20, secretmanager:0.18,
     'microsoft.compute/virtualmachines':30.37, 'microsoft.sql/servers':4.99, 'microsoft.storage/storageaccounts':0.50,
     'microsoft.documentdb/databaseaccounts':24.48, 'microsoft.web/sites':0.20, 'microsoft.servicebus/namespaces':9.81, 'microsoft.keyvault/vaults':0.03
@@ -915,7 +915,7 @@ function renderHome(main){
   }
   // Friendly service label for a by_service census key.
   function nanoSvcLabel(k){
-    var M={s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",
+    var M={sns:"SNS",s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",
       compute:"Compute Engine",storage:"Cloud Storage",cloudsql:"Cloud SQL",pubsub:"Pub/Sub",firestore:"Firestore",functions:"Cloud Functions",secretmanager:"Secret Manager"};
     if (M[k]) return M[k];
     var s=String(k||""), i=s.lastIndexOf("/"); if(i>=0) s=s.slice(i+1); return s.charAt(0).toUpperCase()+s.slice(1);
@@ -1343,6 +1343,18 @@ function childSpec(svc, childType){
     },
     s3: {
       "objects":   {parent:true, msg:"Open a bucket from the list to browse its objects."},
+    },
+    sns: {
+      "subscriptions": {label:"Subscriptions", absolutePath:"/api/aws/sns/subscriptions", arrayKey:"items",
+        columns: [["name","Subscription ID"],["topic","Topic"],["protocol","Protocol"],["endpoint","Endpoint"],
+                  ["status","Status"],["filter_policy","Filter policy"],["created","Created"]]},
+      "platform-applications": {label:"Mobile push applications", absolutePath:"/api/aws/sns/platform-applications", arrayKey:"items",
+        columns: [["name","Application name"],["platform","Platform"],["enabled","Enabled"],["endpoints","Endpoints"],["created","Created"]]},
+      "sms-sandbox": {label:"SMS sandbox", absolutePath:"/api/aws/sns/sms-sandbox", arrayKey:"items",
+        columns: [["name","Phone number"],["status","Verification status"],["language","Language"]]},
+      "deliveries": {label:"Message log", absolutePath:"/api/aws/sns/deliveries", arrayKey:"items",
+        columns: [["kind","Type"],["topic","Topic"],["protocol","Protocol"],["endpoint","Endpoint"],
+                  ["subject","Subject"],["message","Message"],["timestamp","Time"]]},
     },
     // EC2 AMIs and IAM Groups/Roles/Policies/Providers all have real backend
     // endpoints — surface them as proper child lists instead of generic stubs.
@@ -3225,6 +3237,56 @@ SUB_RENDERERS.sqsdlq = function(svc, full, host){
   card.append(el("div",{class:"kv-grid"},
     el("div",{}, el("div",{class:"k"}, "Queue"), el("div",{class:"v"}, full.dlq_arn || "Not configured")),
     el("div",{}, el("div",{class:"k"}, "Maximum receives"), el("div",{class:"v"}, String(full.max_receive_count||"—")))));
+  host.append(card);
+};
+
+// SNS
+SUB_RENDERERS.snssubs = function(svc, full, host){
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Subscriptions ("+(full.subscription_list||[]).length+")"));
+  const rows = full.subscription_list || [];
+  if (!rows.length) card.append(el("div",{class:"empty"}, "No subscriptions yet — add one below."));
+  else {
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, ["Subscription ID","Protocol","Endpoint","Status"].map(h => el("th",{}, h))));
+    rows.forEach(s => tbl.append(el("tr",{}, el("td",{class:"mono small"}, s.name), el("td",{}, s.protocol),
+      el("td",{class:"mono small"}, s.endpoint), el("td",{}, s.status))));
+    card.append(tbl);
+  }
+  const proto = el("input",{value:"sqs",style:"width:110px"});
+  const ep = el("input",{value:"arn:aws:sqs:us-east-1:123456789012:MyQueue",style:"width:360px"});
+  card.append(el("div",{style:"margin-top:14px;display:flex;gap:8px;align-items:center"}, proto, ep,
+    el("button",{class:"btn primary",onclick:async()=>{
+      const r = await api(svc.api_paths.subscribe.method, fillPath(svc.api_paths.subscribe.path,{name:full.name}),
+        {protocol: proto.value, endpoint: ep.value});
+      if (r.ok) { toast("Subscription created"); navigate({view:"detail", item:full.name}); }
+      else toast((r.json && r.json.detail) || "Subscribe failed", "err");
+    }}, icon("add"), "Create subscription")));
+  host.append(card);
+};
+SUB_RENDERERS.snspublish = function(svc, full, host){
+  host.append(el("div",{class:"alert info"}, icon("send"),
+    el("div",{}, "Publish a message to this topic. SQS subscriptions receive it; other protocols appear in the Message log.")));
+  const subj = el("input",{value:"Hello from Vyomi",style:"width:100%"});
+  const ta = el("textarea",{style:"width:100%;min-height:80px"});
+  ta.value = '{"hello":"world"}';
+  host.append(el("div",{class:"field"}, subj), el("div",{class:"field"}, ta));
+  const out = el("pre",{class:"json",style:"margin-top:12px"});
+  host.append(el("div",{style:"margin-top:14px;display:flex;gap:8px"},
+    el("button",{class:"btn primary",onclick:async()=>{
+      const r = await api(svc.api_paths.publish.method, fillPath(svc.api_paths.publish.path,{name:full.name}),
+        {subject: subj.value, message: ta.value});
+      out.textContent = JSON.stringify(r.json, null, 2);
+      if (r.ok) toast("Message published"); else toast("Publish failed", "err");
+    }}, icon("send"), "Publish message")));
+  host.append(out);
+};
+SUB_RENDERERS.snspolicy = function(svc, full, host){
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Access policy"));
+  let doc = full.policy || "";
+  try { doc = JSON.stringify(JSON.parse(doc), null, 2); } catch(e){}
+  card.append(el("pre",{class:"json"}, doc));
   host.append(card);
 };
 

@@ -232,6 +232,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                         len(A.iam_list_policies().get("policies", [])) +
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
+                "sns":            len(A.MSG.topics),
             }
             for svc, n in aws_counts.items():
                 if n:

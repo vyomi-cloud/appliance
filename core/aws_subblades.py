@@ -342,6 +342,22 @@ _KMS_SUB = [
 ]
 
 
+# ===========================================================================
+# Amazon SNS — topic detail
+# ===========================================================================
+_SNS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Topic", "items": [
+        {"key": "subscriptions", "label": "Subscriptions",   "icon": "notifications_active", "type": "snssubs"},
+        {"key": "publish",       "label": "Publish message", "icon": "send",                 "type": "snspublish"},
+        {"key": "policy",        "label": "Access policy",   "icon": "policy",               "type": "snspolicy"},
+    ]},
+    {"group": "Configuration", "items": [
+        {"key": "properties",    "label": "Properties",      "icon": "info",                 "type": "properties"},
+    ]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -352,6 +368,7 @@ SUB_BLADES: dict[str, list] = {
     "rds":            _RDS_SUB,
     "dynamodb":       _DYNAMODB_SUB,
     "sqs":            _SQS_SUB,
+    "sns":            _SNS_SUB,
     "lambda":         _LAMBDA_SUB,
     "apigateway":     _APIGW_SUB,
     "vpc":            _VPC_SUB,

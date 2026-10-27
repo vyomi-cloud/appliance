@@ -2526,7 +2526,7 @@
         // Per-provider monthly savings from the LIVE census (/api/runtime/host-distribution).
         // Nano spaces carry no persistent cost_savings, so a card shows its provider's
         // live census savings (fresh only while a console is open), else $0.00.
-        const _NANO_RATE = {s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,'microsoft.compute/virtualmachines':30.37,'microsoft.sql/servers':4.99,'microsoft.storage/storageaccounts':0.50,'microsoft.documentdb/databaseaccounts':24.48,'microsoft.web/sites':0.20,'microsoft.servicebus/namespaces':9.81,'microsoft.keyvault/vaults':0.03};
+        const _NANO_RATE = {s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,sns:0.50,iam:0,rds:25.55,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,'microsoft.compute/virtualmachines':30.37,'microsoft.sql/servers':4.99,'microsoft.storage/storageaccounts':0.50,'microsoft.documentdb/databaseaccounts':24.48,'microsoft.web/sites':0.20,'microsoft.servicebus/namespaces':9.81,'microsoft.keyvault/vaults':0.03};
         const _savingsByProvider = { aws: 0, gcp: 0, azure: 0 };
         const _byServiceByProvider = {};
         try {

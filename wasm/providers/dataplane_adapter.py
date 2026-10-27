@@ -394,3 +394,14 @@ def extras_config_get(p):
 def extras_config_put(p):
     _EXTRAS_CFG[p.get("key", "")] = _extras_vals(p)
     return {"ok": True}
+
+
+# ── Amazon SNS (core/sns_core.py) — shares the messaging store with SQS + the native wire ──
+def sns_console(p):
+    from core import nano_registry, sns_core
+    store = nano_registry.get()["msg"]
+    status, out = sns_core.console_dispatch(store, str(p.get("method") or "GET"), str(p.get("path") or ""),
+                                            dict(p.get("query") or {}), dict(p.get("body") or {}))
+    if status >= 400:
+        return {"ok": False, "code": out.get("code", "Error"), "message": out.get("error", ""), "status": status}
+    return out

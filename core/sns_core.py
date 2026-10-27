@@ -1275,6 +1275,18 @@ def console_dispatch(store, method: str, path: str, query: dict | None, body: di
             topic = _find_topic_by_name(store, parts[1]) if len(parts) > 1 else None
             if len(parts) == 2 and method == "GET":
                 return 200, _topic_view(store, topic, True)
+            if len(parts) == 2 and method == "PATCH":
+                want = {str(k): str(v) for k, v in (body.get("tags") or {}).items() if str(k)}
+                drop = [k for k in topic.get("tags", {}) if k not in want]
+                if drop:
+                    _call(store, "UntagResource", ResourceArn=topic["topic_arn"],
+                          **{f"TagKeys.member.{i}": k for i, k in enumerate(drop, 1)})
+                if want:
+                    flat = {}
+                    for i, (k, v) in enumerate(want.items(), 1):
+                        flat[f"Tags.member.{i}.Key"], flat[f"Tags.member.{i}.Value"] = k, v
+                    _call(store, "TagResource", ResourceArn=topic["topic_arn"], **flat)
+                return 200, _topic_view(store, topic, True)
             if len(parts) == 2 and method == "DELETE":
                 _call(store, "DeleteTopic", TopicArn=topic["topic_arn"])
                 return 200, {"deleted": True, "name": topic["name"]}

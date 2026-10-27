@@ -60,6 +60,9 @@ CORES = [
     "nano_persist.py",                              # store serialize/restore + cross-context sync (persistence + console↔SDK parity)
 ]
 
+# Cores vendored as an exact copy (no generated-file header).
+VERBATIM = {"sns_core.py"}
+
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
 
@@ -128,7 +131,9 @@ def main():
         with open(os.path.join(SRC, name)) as f:
             src = f.read()
         with open(os.path.join(OUT, name), "w") as f:
-            f.write(HEADER + src)
+            # New services are vendored byte-identical (the service gate compares
+            # core/ and wasm/core/ verbatim); legacy cores keep the generated header.
+            f.write(src if name in VERBATIM else HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
     check_relay_cores()   # fail loudly if a relay loader lags the cores
 

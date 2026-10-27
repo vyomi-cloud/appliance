@@ -314,6 +314,66 @@ RESOURCE_CATALOG_AWS = [
         ],
         "endpoints": {},
     },
+    # ========================================================================
+    # Amazon SNS — topics, subscriptions, platform applications, SMS sandbox,
+    # and the delivery log. Engine: core/sns_core.py (native Query-protocol wire
+    # + this console REST); SQS subscriptions fan out for real, every other
+    # protocol is recorded in the message log. In-process, nothing is relayed.
+    # ========================================================================
+    {
+        "key": "sns", "label": "Amazon SNS", "icon": "campaign",
+        "namespace": "AWS/SNS", "service": "sns",
+        "collection_path": "/api/aws/sns/topics",
+        "resource_path":   "/api/aws/sns/topics/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "topics":                {"method": "GET",  "path": "/api/aws/sns/topics"},
+            "subscriptions":         {"method": "GET",  "path": "/api/aws/sns/subscriptions"},
+            "platform-applications": {"method": "GET",  "path": "/api/aws/sns/platform-applications"},
+            "deliveries":            {"method": "GET",  "path": "/api/aws/sns/deliveries"},
+            "sms-sandbox":           {"method": "GET",  "path": "/api/aws/sns/sms-sandbox"},
+            "publish":               {"method": "POST", "path": "/api/aws/sns/topics/{name}/publish"},
+            "subscribe":             {"method": "POST", "path": "/api/aws/sns/topics/{name}/subscriptions"},
+            "delete":                {"method": "DELETE", "path": "/api/aws/sns/topics/{name}"},
+        },
+        "rail_items": [
+            {"key": "topics", "label": "Topics", "icon": "campaign", "type": "primary"},
+            {"group": "Subscribers"},
+            {"key": "subscriptions", "label": "Subscriptions", "icon": "notifications_active",
+                "type": "child", "child_key": "subscriptions"},
+            {"key": "platform-applications", "label": "Mobile push applications", "icon": "phone_android",
+                "type": "child", "child_key": "platform-applications"},
+            {"group": "Text messaging (SMS)"},
+            {"key": "sms-sandbox", "label": "SMS sandbox", "icon": "sms",
+                "type": "child", "child_key": "sms-sandbox"},
+            {"group": "Activity"},
+            {"key": "deliveries", "label": "Message log", "icon": "outbox",
+                "type": "child", "child_key": "deliveries"},
+        ],
+        "children": [
+            {"type": "subscriptions", "label": "Subscriptions", "icon": "notifications_active"},
+            {"type": "platform-applications", "label": "Mobile push applications", "icon": "phone_android"},
+            {"type": "sms-sandbox", "label": "SMS sandbox", "icon": "sms"},
+            {"type": "deliveries", "label": "Message log", "icon": "outbox"},
+        ],
+        "columns": [
+            ["name",          "Name"],
+            ["type",          "Type"],
+            ["arn",           "ARN"],
+            ["subscriptions", "Subscriptions confirmed"],
+            ["pending",       "Subscriptions pending"],
+            ["display_name",  "Display name"],
+            ["encryption",    "Encryption"],
+            ["created",       "Created"],
+        ],
+        "createFields": [
+            {"name": "name",         "label": "Topic name",   "default": "MyTopic"},
+            {"name": "type",         "label": "Type",         "default": "Standard"},
+            {"name": "display_name", "label": "Display name", "default": "MyTopic"},
+        ],
+        "endpoints": {},
+    },
     {
         "key": "lambda", "label": "Lambda", "icon": "bolt",
         "namespace": "AWS/Lambda", "service": "lambda",
