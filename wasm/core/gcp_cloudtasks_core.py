@@ -233,7 +233,25 @@ def _task_view(t: dict, full: bool) -> dict:
     return out
 
 
+# Generated REST clients (Go/Java) send proto enums as numbers; accept numbers and names.
+_ENUMS = {"httpMethod": ["HTTP_METHOD_UNSPECIFIED", "POST", "GET", "HEAD", "PUT", "DELETE", "PATCH", "OPTIONS"],
+          "state": ["STATE_UNSPECIFIED", "RUNNING", "PAUSED", "DISABLED"],
+          "view": ["VIEW_UNSPECIFIED", "BASIC", "FULL"]}
+
+
+def _enum(kind, v):
+    if isinstance(v, bool):
+        return v
+    names = _ENUMS[kind]
+    if isinstance(v, int) or (isinstance(v, str) and v.isdigit()):
+        i = int(v)
+        if 0 <= i < len(names):
+            return names[i]
+    return v
+
+
 def _is_full(view) -> bool:
+    view = _enum("view", view)
     if view in (None, "", "BASIC", "VIEW_UNSPECIFIED"):
         return False
     if view == "FULL":
@@ -288,6 +306,8 @@ def _build_queue(name, body, base=None) -> dict:
             raise _E(400, f'Invalid JSON payload received. Unknown name "{k}" at \'queue\': Cannot find field.')
     q["rateLimits"] = _normalise_rate({**(q.get("rateLimits") or {}), **(body.get("rateLimits") or {})})
     q["retryConfig"] = _normalise_retry({**(q.get("retryConfig") or {}), **(body.get("retryConfig") or {})})
+    if "state" in body:
+        body = {**body, "state": _enum("state", body["state"])}
     if "state" in body and base is None:
         if body["state"] not in ("RUNNING", "PAUSED", "DISABLED", "STATE_UNSPECIFIED"):
             raise _E(400, f"Invalid value at 'queue.state': unknown enum value {body['state']!r}.")
@@ -439,7 +459,7 @@ def _validate_target(body: dict) -> None:
         url = http.get("url") or ""
         if not re.match(r"^https?://[^/\s]+", url):
             raise _E(400, "Invalid url: the url must be absolute and use the http or https scheme.")
-        method = http.get("httpMethod") or "POST"
+        method = _enum("httpMethod", http.get("httpMethod")) or "POST"
         if method not in HTTP_METHODS and method != "HTTP_METHOD_UNSPECIFIED":
             raise _E(400, f"Invalid value at 'task.http_request.http_method': unknown enum value {method!r}.")
         if http.get("oauthToken") and http.get("oidcToken"):
@@ -497,7 +517,12 @@ def create_task(store, parent: str, body: dict) -> dict:
            "dispatchCount": 0, "responseCount": 0}
     if task.get("httpRequest"):
         h = dict(task["httpRequest"])
-        h["httpMethod"] = h.get("httpMethod") if h.get("httpMethod") not in (None, "HTTP_METHOD_UNSPECIFIED") else "POST"
+        h["httpMethod"] = _enum("httpMethod", h.get("httpMethod"))
+        if h["httpMethod"] in (None, "HTTP_METHOD_UNSPECIFIED"):
+            h["httpMethod"] = "POST"
+        for tok in ("oauthToken", "oidcToken"):
+            if h.get(tok) is None:
+                h.pop(tok, None)
         hdrs = dict(h.get("headers") or {})
         if h.get("body") and not any(k.lower() == "content-type" for k in hdrs):
             hdrs["Content-Type"] = "application/octet-stream"
@@ -506,7 +531,9 @@ def create_task(store, parent: str, body: dict) -> dict:
         rec["httpRequest"] = h
     else:
         a = dict(task["appEngineHttpRequest"])
-        a["httpMethod"] = a.get("httpMethod") or "POST"
+        a["httpMethod"] = _enum("httpMethod", a.get("httpMethod")) or "POST"
+        if a["httpMethod"] == "HTTP_METHOD_UNSPECIFIED":
+            a["httpMethod"] = "POST"
         a.setdefault("relativeUri", "/")
         rec["appEngineHttpRequest"] = a
     store.tasks[name] = rec
