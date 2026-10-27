@@ -253,6 +253,36 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
             if svc.lower() in vm_svcs:
                 vms += n
 
+        # Data-plane cores (Azure blob/queue/cosmos/key vault/service bus/sql/rbac and
+        # GCP storage/firestore/kms/secrets/pubsub/iam/cloudsql) hold their resources in
+        # the cores' own stores, not the ResourceStore — count them via the same list
+        # handlers the console uses so created resources reach the savings metrics.
+        if provider == "azure":
+            from . import azure_core_adapter as AZ
+            from . import dataplane_adapter as DP
+            for svc in ("blobcontainers", "cosmosdbs", "kvsecrets", "kvkeys", "queues"):
+                n = len(AZ.resource_op(svc, "List").get("items", []))
+                if n:
+                    by_service[svc] = by_service.get(svc, 0) + n
+            dp_counts = {
+                "servicebus": len(DP.sb_list().get("topics", [])),
+                "azuresql":   len(DP.sql_list().get("servers", [])),
+                "azurerbac":  len(DP.rbac_list().get("assignments", [])),
+            }
+            for svc, n in dp_counts.items():
+                if n:
+                    by_service[svc] = by_service.get(svc, 0) + n
+        if provider == "gcp":
+            from . import gcp_core_adapter as GC
+            for svc in ("storage", "firestore", "kms", "secretmanager", "pubsub", "iam", "cloudsql"):
+                n = len(GC.resource_op(svc, "List").get("items", []))
+                if n:
+                    by_service[svc] = by_service.get(svc, 0) + n
+            # Artifact Registry repositories (core/gcp_artifactregistry_core.py)
+            n = len(GC.resource_op("artifactregistry", "List").get("items", []))
+            if n:
+                by_service["artifactregistry"] = by_service.get("artifactregistry", 0) + n
+
         # Azure resources live in the ARM core's flat state, keyed by resource id.
         if provider == "azure":
             arm = getattr(backends, "_azure_arm", None)
