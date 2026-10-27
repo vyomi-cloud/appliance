@@ -343,6 +343,18 @@ _KMS_SUB = [
 
 
 # ===========================================================================
+# ELBv2 — load balancer detail
+# ===========================================================================
+_ELBV2_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Load balancer", "items": [
+        {"key": "details",     "label": "Details",     "icon": "info",   "type": "properties"},
+        {"key": "config",      "label": "Configuration", "icon": "data_object", "type": "json"},
+    ]},
+]
+
+
+# ===========================================================================
 # CloudWatch Logs — log group detail
 # ===========================================================================
 _LOGS_SUB = [
@@ -384,5 +396,6 @@ SUB_BLADES: dict[str, list] = {
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
     "kms":            _KMS_SUB,
+    "elbv2":          _ELBV2_SUB,
     "logs":           _LOGS_SUB,
 }

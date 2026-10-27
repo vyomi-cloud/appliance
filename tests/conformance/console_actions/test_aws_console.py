@@ -147,6 +147,8 @@ _ENV_PATTERNS = (
     (507, "insufficient_disk"),       # disk preflight gate (EC2/Compute/VM)
     (503, "error: the remote"),       # LXD image-source remote missing (RDS/CloudSQL postgres)
     (503, "lxdunavailable"),          # LXD daemon not running
+    (503, "dockerunavailable"),       # Docker compute backend not reachable
+    (503, "runtimeunavailable"),      # no VM runtime on this host
 )
 
 

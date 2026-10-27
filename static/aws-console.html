@@ -710,7 +710,7 @@ function renderRail(){
       ["Storage", ["s3"]],
       ["Databases", ["rds", "dynamodb"]],
       ["Application Integration", ["sqs", "apigateway", "eventbridge"]],
-      ["Networking & Content Delivery", ["vpc"]],
+      ["Networking & Content Delivery", ["vpc", "elbv2"]],
       ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
       ["Management & Governance", ["logs"]],
     ];
@@ -1284,6 +1284,14 @@ function childSpec(svc, childType){
         columns: [["image_id","AMI ID"],["name","Name"],["state","State"],
                   ["architecture","Architecture"],["platform","Platform"]]},
     },
+    elbv2: {
+      "target-groups": {label:"Target groups", absolutePath:"/api/aws/elbv2/target-groups", arrayKey:"items",
+        columns: [["name","Name"],["protocol","Protocol"],["port","Port"],["target_type","Target type"],
+                  ["vpc_id","VPC ID"],["load_balancer","Load balancer"],["targets","Registered targets"],["health_check","Health check"]]},
+      "listeners":     {label:"Listeners", absolutePath:"/api/aws/elbv2/listeners", arrayKey:"items",
+        columns: [["name","Listener ID"],["load_balancer","Load balancer"],["protocol","Protocol"],["port","Port"],
+                  ["default_action","Default action"],["rules","Rules"]]},
+    },
     iam: {
       "iam-groups":    {label:"User groups",      absolutePath:"/api/iam/groups",    arrayKey:"groups",
         columns: [["group_name","Group name"],["arn","ARN"],["created","Created"]]},
@@ -1680,6 +1688,9 @@ async function renderDetail(main){
   const path = fillPath(svc.resource_path, {name});
   const r = await api("GET", path);
   const full = (r.ok && r.json) ? r.json : itemStub;
+  // Sub-renderers address the resource as full.name; engines whose payload
+  // keys it differently (table_name, queue_name) still get a usable name.
+  if (full && typeof full === "object" && !full.name && name) full.name = name;
 
   // Top: ID line + actions
   const top = el("div",{class:"detail-top"});
@@ -3225,7 +3236,7 @@ SUB_RENDERERS.rdsparametergroups = function(svc, full, host){
 
 // API Gateway
 SUB_RENDERERS.apiresources = function(svc, full, host){
-  fetch(ORIGIN+fillPath(svc.api_paths.resources.path, {name: full.id || full.name})).then(r=>r.json()).then(j=>{
+  fetch(ORIGIN+fillPath(svc.api_paths.resources.path, {name: full.rest_api_id || full.id || full.name})).then(r=>r.json()).then(j=>{
     const items = j.resources || j.value || j.items || [];
     if (!items.length) { host.append(el("div",{class:"empty"}, "No resources yet.")); return; }
     const tbl = el("table",{class:"aws"});
@@ -3237,7 +3248,7 @@ SUB_RENDERERS.apiresources = function(svc, full, host){
   });
 };
 SUB_RENDERERS.apistages = function(svc, full, host){
-  fetch(ORIGIN+fillPath(svc.api_paths.stages.path, {name: full.id || full.name})).then(r=>r.json()).then(j=>{
+  fetch(ORIGIN+fillPath(svc.api_paths.stages.path, {name: full.rest_api_id || full.id || full.name})).then(r=>r.json()).then(j=>{
     const items = j.stages || j.value || j.items || [];
     if (!items.length) { host.append(el("div",{class:"empty"}, "No stages.")); return; }
     const tbl = el("table",{class:"aws"});

@@ -43,6 +43,7 @@ import sys
 import threading
 import time
 import socket
+import tempfile
 import uuid
 import textwrap
 import traceback
@@ -180,12 +181,12 @@ register_azure_routes(app, None)
 # ── Route module registration ────────────────────────────────────────
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
-from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb
+from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2
 from routes import lazy_backends, shared, console_next, aws_logs
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
-            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb,
+            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2,
             lazy_backends, shared, console_next, aws_logs]:
     mod.register(app)
 
@@ -1566,6 +1567,8 @@ def _iam_route_action_resource(request: Request) -> tuple[str, str] | None:
             if not tail:
                 if method == "GET":
                     return ("ec2:DescribeInstances", resource)
+                if method == "DELETE":
+                    return ("ec2:TerminateInstances", resource)
             elif tail == ["start"] and method == "POST":
                 return ("ec2:StartInstances", resource)
             elif tail == ["stop"] and method == "POST":
@@ -2467,11 +2470,13 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             _cloudsim_add_runtime_instance(runtime_instances, resource_id, provider, service, bundle_key or "", resource)
         try:
             from core import cost_model as _cm
-            _cost = _cm.estimate_resource_cost(
-                provider, service, kind,
-                resource.get("instance_type") or resource.get("machine_type") or resource.get("machineType")
-                or resource.get("db_instance_class") or resource.get("vmSize") or "",
-            )
+            _props = resource.get("properties") if isinstance(resource.get("properties"), dict) else {}
+            _itype = (resource.get("instance_type") or resource.get("machine_type") or resource.get("machineType")
+                      or resource.get("db_instance_class") or resource.get("vmSize")
+                      or (_props.get("hardwareProfile") or {}).get("vmSize") or "")
+            if _itype:
+                node["instance_type"] = _itype   # estimate_space_savings prices VMs by size
+            _cost = _cm.estimate_resource_cost(provider, service, kind, _itype)
             node["estimated_real_cost_usd"] = _cost["monthly_usd"]
             node["estimated_hourly_usd"] = _cost["hourly_usd"]
         except Exception:
@@ -2535,6 +2540,13 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for queue_name, queue in aws_sqs.get("queues", {}).items():
         if isinstance(queue, dict):
             add("aws", "sqs", "queue", queue_name, queue)
+
+    aws_elbv2 = _cloudsim_service_state(space, "elbv2")
+    for lb_arn, lb in aws_elbv2.get("load_balancers", {}).items():
+        if isinstance(lb, dict):
+            add("aws", "elbv2", "load_balancer", lb.get("LoadBalancerName", lb_arn),
+                {**lb, "name": lb.get("LoadBalancerName", lb_arn), "instance_type": lb.get("Type", "application"),
+                 "state": (lb.get("State") or {}).get("Code", "active"), "created": lb.get("CreatedTime", "")})
 
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():
@@ -2611,6 +2623,25 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for policy_id, policy in gcp_iam.get("policies", {}).items():
         if isinstance(policy, dict):
             add("gcp", "iam", "policy", policy_id, policy)
+
+    # Rail extras (generic create backend): billable AWS/GCP resources that live
+    # under service_states["aws_extras"|"gcp_extras"][<svc>/<kind>]["items"].
+    # (service, kind) pairs priced in core/cost_model.SERVICE_MONTHLY.
+    for provider, extras_key, scan in (
+        ("aws", "aws_extras", (("secretsmanager", "secrets"), ("kms", "keys"),
+                               ("eventbridge", "rules"), ("eventbridge", "event-buses"))),
+        ("gcp", "gcp_extras", (("secretmanager", "secrets"), ("kms", "keys"),
+                               ("eventarc", "triggers"))),
+    ):
+        extras = service_states.get(extras_key, {})
+        if not isinstance(extras, dict):
+            continue
+        for svc, kind in scan:
+            slot = extras.get(f"{svc}/{kind}", {})
+            items = slot.get("items", {}) if isinstance(slot, dict) else {}
+            for item_id, item in (items.items() if isinstance(items, dict) else []):
+                if isinstance(item, dict):
+                    add(provider, svc, kind.rstrip("s"), str(item_id), item)
 
     # Azure ARM resources (space-scoped under service_states["azure_arm"]["resources"]).
     # Same DB-derived path as AWS/GCP: service + kind are mapped from the stored
@@ -5988,7 +6019,7 @@ api = APIRouter(prefix="/api/s3")
 def api_list_buckets():
     return {
         "owner": "cloudlearn-simulator",
-        "buckets": [{"name": n, **{k: v for k, v in m.items() if k not in {"tags", "notifications"}}} for n, m in buckets.items()],
+        "buckets": [{"name": n, **{k: v for k, v in m.items() if k not in {"tags", "notifications"}}, "creation_date": m.get("created", "")} for n, m in buckets.items()],
         "count": len(buckets),
     }
 
@@ -6684,13 +6715,30 @@ def _allocate_host_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _instance_work_root() -> Path:
+    root = INSTANCE_WORK_ROOT
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        probe = root / f".probe_{os.getpid()}"
+        probe.touch()
+        probe.unlink()
+        return root
+    except (PermissionError, OSError):
+        fallback = Path(tempfile.gettempdir()) / "cloudlearn" / "deployments"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
 def _instance_workspace(instance_id: str) -> Path:
-    return (INSTANCE_WORK_ROOT / instance_id).resolve()
+    return (_instance_work_root() / instance_id).resolve()
 
 
 def _ensure_instance_workspace(instance: dict) -> Path:
     workspace = _instance_workspace(instance["instance_id"])
-    workspace.mkdir(parents=True, exist_ok=True)
+    try:
+        workspace.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        pass
     instance["workspace"] = str(workspace)
     instance["deployment_path"] = str(workspace)
     return workspace
@@ -12045,6 +12093,13 @@ def api_ec2_list_instances():
     return {"instances": instances, "count": len(instances)}
 
 
+def api_ec2_get_instance(instance_id: str):
+    instance = ec2_state["instances"].get(instance_id)
+    if not instance:
+        raise HTTPException(404, detail="NoSuchInstance")
+    return instance
+
+
 def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True, host_os_hint: str = ""):
     # Host-budget gate (clamp 30%-50% of host CPU+RAM): reject upfront if the
     # chosen instance_type would push the simulator past its share of the host.
@@ -12084,7 +12139,10 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
     _cloudsim_validate_ec2_launch_policy(_cloudsim_active_space_ref(), req, profile, runtime_backend)
     host_port = _allocate_host_port()
     workspace = _instance_workspace(instance_id)
-    workspace.mkdir(parents=True, exist_ok=True)
+    try:
+        workspace.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        pass
     runtime_image = profile.get("runtime_image") or (LXD_RUNTIME_IMAGE if _appliance_mode_enabled() else MULTIPASS_RUNTIME_IMAGE if runtime_backend == "multipass" else LXD_RUNTIME_IMAGE)
     runtime_backend_requested = "lxd" if _appliance_mode_enabled() else (req.runtime_backend or "").strip().lower()
     instance = {
@@ -12138,8 +12196,10 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
         "runtime_bundle_name": _cloudsim_runtime_bundle("ec2").get("name", ""),
         "runtime_bundle_kind": _cloudsim_runtime_bundle("ec2").get("kind", ""),
     }
-    if req.command:
+    if req.command or not req.subnet_id:
+        # Real EC2 auto-assigns a public IPv4 to launches into the default VPC/subnet.
         instance["public_ip"] = _public_ip()
+        instance["public_dns"] = _ec2_public_dns_name(instance)
     ec2_state["instances"][instance_id] = instance
     _cloudsim_sync_ec2_resource(instance, "upsert")
     if auto_start:
@@ -12686,21 +12746,28 @@ def _gcp_compute_instance_bucket() -> dict[str, dict]:
 
 
 def _gcp_compute_find_instance(project: str, zone: str, instance_ref: str) -> dict | None:
-    instance = _gcp_compute_instance_bucket().get(instance_ref)
+    bucket = _gcp_compute_instance_bucket()
+    instance = bucket.get(instance_ref)
     if not isinstance(instance, dict):
-        for candidate in _gcp_compute_instance_bucket().values():
+        for candidate in list(bucket.values()) + list(gcp_compute_state.get("instances", {}).values()):
             if not isinstance(candidate, dict):
                 continue
-            if str(candidate.get("name") or "").strip() == str(instance_ref or "").strip():
+            cand_name = str(candidate.get("name") or "").strip()
+            cand_id = str(candidate.get("instance_id") or candidate.get("id") or "").strip()
+            target = str(instance_ref or "").strip()
+            if cand_name == target or cand_id == target:
                 instance = candidate
                 break
     if not isinstance(instance, dict):
         return None
-    if str(instance.get("project") or "").strip() != str(project or "").strip():
+    cand_proj = str(instance.get("project") or "cloudlearn").strip()
+    req_proj = str(project or "cloudlearn").strip()
+    if cand_proj != req_proj:
         return None
-    requested_zone = str(zone or "").strip().lower()
+    requested_zone = str(zone or "").strip().lower().rstrip("/").split("/")[-1]
     if requested_zone and requested_zone not in {"-", "*", "_all", "all"}:
-        if str(instance.get("zone") or instance.get("az") or "").strip() != zone:
+        instance_zone = str(instance.get("zone") or instance.get("az") or "us-central1-a").rstrip("/").split("/")[-1].lower()
+        if instance_zone != requested_zone:
             return None
     return instance
 
@@ -13090,7 +13157,10 @@ def _gcp_compute_create_instance_instance(project: str, zone: str, payload: dict
         # the instance and defer provisioning rather than failing the control-plane call.
         runtime_backend = "simulated"
     workspace = _instance_workspace(instance_id)
-    workspace.mkdir(parents=True, exist_ok=True)
+    try:
+        workspace.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        pass
     runtime_image = profile.get("runtime_image") or (
         MULTIPASS_RUNTIME_IMAGE if runtime_backend == "multipass" else LXD_RUNTIME_IMAGE
     )
@@ -13595,9 +13665,11 @@ def api_gcp_compute_reset_instance(project: str, zone: str, instance: str):
     if not instance:
         raise HTTPException(404, detail="NoSuchInstance")
     previous_state = instance.get("state", "running")
-    if previous_state != "running":
-        raise HTTPException(409, detail="InstanceNotRunning")
-    _reboot_runtime_process(instance)
+    if previous_state == "running":
+        _reboot_runtime_process(instance)
+    else:
+        _start_runtime_process(instance)
+        instance["state"] = "running"
     instance["launch_status"] = "ready"
     _gcp_compute_sync_resource_links()
     _cloudsim_sync_gcp_compute_resource(instance, "upsert")
@@ -15085,6 +15157,25 @@ async def api_gcp_pubsub_put_subscription(project: str, subscription: str, reque
     sub_id = str(subscription or payload.get("name") or "").split("/")[-1].strip()
     if not sub_id:
         raise HTTPException(400, detail="Subscription id is required")
+    from core import gcp_pubsub_emulator as _ps_emu
+    if _ps_emu.available():
+        topic_id = str(payload.get("topic") or "").split("/")[-1].strip()
+        if not topic_id:
+            raise HTTPException(400, detail="Topic is required")
+        from google.api_core import exceptions as _gax
+        try:
+            sub = await asyncio.to_thread(
+                _ps_emu.create_subscription, project, sub_id, topic_id,
+                int(payload.get("ackDeadlineSeconds") or 10),
+                str(payload.get("messageRetentionDuration") or ""),
+                payload.get("labels") if isinstance(payload.get("labels"), dict) else None,
+                bool(payload.get("enableMessageOrdering", False)),
+            )
+            return _gcp_pubsub_subscription_view(project, sub)
+        except _gax.AlreadyExists:
+            raise HTTPException(409, detail="Subscription already exists")
+        except _gax.NotFound:
+            raise HTTPException(404, detail="Topic not found")
     rec = _gcp_pubsub_subscription_record(project, sub_id, payload)
     if not rec.get("topic"):
         raise HTTPException(400, detail="Topic is required")

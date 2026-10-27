@@ -58,7 +58,8 @@ def _emit_event(provider: str, service: str, resource: str, action: str,
             ok = False
         status = "ok" if ok else (str(result.get("code")) if isinstance(result, dict) and result.get("code") else "error")
         nano_events.record(provider=provider, service=service, resource=resource or "",
-                           action=action, status=status)
+                           action=action, status=status,
+                           detail=f"{provider}/{service}: {action} {resource or ''}".rstrip() + ("" if ok else f" failed ({status})"))
     except Exception:
         pass
 
@@ -216,21 +217,9 @@ def _logs_group_count() -> int:
         return 0
 
 
-def _savings_dispatch(backends: Backends, provider: str) -> dict:
-    """The space's cost-savings metrics, from the live census × real-cloud list
-    prices (core/cost_model.SERVICE_MONTHLY) — the in-browser analogue of the
-    appliance's /api/spaces cost_savings (what the user would have paid)."""
-    from core import cost_model
-    census = _census_dispatch(backends, provider)
-    by_service: dict[str, float] = {}
-    for svc, n in (census.get("by_service") or {}).items():
-        usd = round(cost_model.SERVICE_MONTHLY.get(f"{provider}.{svc}", 0.0) * n, 2)
-        by_service[f"{provider}.{svc}"] = usd
-    total = round(sum(by_service.values()), 2)
-    return {"ok": True, "resource_count": int(census.get("resources", 0)),
-            "real_cloud_cost_usd": total, "simulator_cost_usd": 0.0, "savings_usd": total,
-            "savings_pct": 100.0 if total > 0 else 0.0,
-            "by_provider": {provider: total}, "by_service": by_service}
+def _elb_census():
+    from core import nano_registry
+    return nano_registry.get()["elbv2"].load_balancers
 
 
 def _census_dispatch(backends: Backends, provider: str) -> dict:
@@ -259,6 +248,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
                 "logs":           _logs_group_count(),
+                "elbv2":          len(_elb_census()),
             }
             for svc, n in aws_counts.items():
                 if n:
@@ -279,6 +269,32 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
             by_service[svc] = by_service.get(svc, 0) + n
             if svc.lower() in vm_svcs:
                 vms += n
+
+        # Data-plane cores (Azure blob/queue/cosmos/key vault/service bus/sql/rbac and
+        # GCP storage/firestore/kms/secrets/pubsub/iam/cloudsql) hold their resources in
+        # the cores' own stores, not the ResourceStore — count them via the same list
+        # handlers the console uses so created resources reach the savings metrics.
+        if provider == "azure":
+            from . import azure_core_adapter as AZ
+            from . import dataplane_adapter as DP
+            for svc in ("blobcontainers", "cosmosdbs", "kvsecrets", "kvkeys", "queues"):
+                n = len(AZ.resource_op(svc, "List").get("items", []))
+                if n:
+                    by_service[svc] = by_service.get(svc, 0) + n
+            dp_counts = {
+                "servicebus": len(DP.sb_list().get("topics", [])),
+                "azuresql":   len(DP.sql_list().get("servers", [])),
+                "azurerbac":  len(DP.rbac_list().get("assignments", [])),
+            }
+            for svc, n in dp_counts.items():
+                if n:
+                    by_service[svc] = by_service.get(svc, 0) + n
+        if provider == "gcp":
+            from . import gcp_core_adapter as GC
+            for svc in ("storage", "firestore", "kms", "secretmanager", "pubsub", "iam", "cloudsql"):
+                n = len(GC.resource_op(svc, "List").get("items", []))
+                if n:
+                    by_service[svc] = by_service.get(svc, 0) + n
 
         # Azure resources live in the ARM core's flat state, keyed by resource id.
         if provider == "azure":
@@ -342,8 +358,6 @@ def dispatch(backends: Backends, provider: str, service: str, operation: str,
     # Live resource census for the dashboard's per-cloud footprint pies.
     if service == "_census":
         return _census_dispatch(backends, provider)
-    if service == "_savings":
-        return _savings_dispatch(backends, provider)
     h = p.handlers().get((service, operation))
     if h is None:
         return {"ok": False, "code": "UnsupportedOperation",

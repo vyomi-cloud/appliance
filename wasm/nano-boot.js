@@ -88,7 +88,7 @@ const CORES = [
   "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
-  "messaging_store.py", "sqs_core.py", "sns_core.py",
+  "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py",
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
   "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
@@ -105,7 +105,7 @@ const CORES = [
   // dedicated console UI pages are a follow-up). Deps (messaging_store, sql_store,
   // iam_store, lambda_core) are already listed above.
   "azure_servicebus_core.py", "eventbridge_core.py", "lambda_core.py",
-  "apigateway_core.py", "vpc_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "cost_model.py",
+  "apigateway_core.py", "vpc_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py",
   // console-next capability manifest dependency (slice 1): the pure conformance
   // signal module (only imports `os` — safe in Pyodide, no FastAPI).
   "console_conformance.py",

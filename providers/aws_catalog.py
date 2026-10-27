@@ -241,7 +241,7 @@ RESOURCE_CATALOG_AWS = [
         "namespace": "AWS/DynamoDB", "service": "dynamodb",
         "collection_path": "/api/dynamodb/tables",
         "resource_path":   "/api/dynamodb/tables/{name}",
-        "name_field":      "name",
+        "name_field":      "table_name",
         "create_method":   "POST",
         "rail_items": [
             {"key": "dashboard",    "label": "Dashboard",         "icon": "dashboard",   "type": "stub"},
@@ -285,7 +285,7 @@ RESOURCE_CATALOG_AWS = [
         "namespace": "AWS/SQS", "service": "sqs",
         "collection_path": "/api/sqs/queues",
         "resource_path":   "/api/sqs/queues/{name}",
-        "name_field":      "name",
+        "name_field":      "queue_name",
         "create_method":   "POST",
         "rail_items": [
             {"key": "queues",     "label": "Queues",     "icon": "queue",   "type": "primary"},
@@ -633,6 +633,51 @@ RESOURCE_CATALOG_AWS = [
         "createFields": [
             {"name": "name",     "label": "Alias",    "default": "my-kms-key"},
             {"name": "key_spec", "label": "Key spec", "default": "SYMMETRIC_DEFAULT"},
+        ],
+        "endpoints": {},
+    },    # ========================================================================
+    # Elastic Load Balancing — application / network / gateway load balancers.
+    # Engine: core/elbv2_core.py (native Query wire + this console REST).
+    # ========================================================================
+    {
+        "key": "elbv2", "label": "Elastic Load Balancing", "icon": "alt_route",
+        "namespace": "AWS/ApplicationELB", "service": "elbv2",
+        "collection_path": "/api/aws/elbv2/load-balancers",
+        "resource_path":   "/api/aws/elbv2/load-balancers/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "loadBalancers": {"method": "GET",  "path": "/api/aws/elbv2/load-balancers"},
+            "targetGroups":  {"method": "GET",  "path": "/api/aws/elbv2/target-groups"},
+            "listeners":     {"method": "GET",  "path": "/api/aws/elbv2/listeners"},
+            "delete":        {"method": "DELETE", "path": "/api/aws/elbv2/load-balancers/{name}"},
+        },
+        "rail_items": [
+            {"key": "load-balancers", "label": "Load balancers", "icon": "alt_route", "type": "primary"},
+            {"group": "Routing"},
+            {"key": "target-groups",  "label": "Target groups",  "icon": "dns",
+                "type": "child", "child_key": "target-groups"},
+            {"key": "listeners",      "label": "Listeners",      "icon": "hearing",
+                "type": "child", "child_key": "listeners"},
+        ],
+        "children": [
+            {"type": "target-groups", "label": "Target groups", "icon": "dns"},
+            {"type": "listeners", "label": "Listeners", "icon": "hearing"},
+        ],
+        "columns": [
+            ["name",               "Name"],
+            ["dns_name",           "DNS name"],
+            ["state",              "State"],
+            ["type",               "Type"],
+            ["scheme",             "Scheme"],
+            ["vpc_id",             "VPC ID"],
+            ["availability_zones", "Availability Zones"],
+            ["created",            "Date created"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Load balancer name", "default": "my-alb"},
+            {"name": "type", "label": "Type (application, network, gateway)", "default": "application"},
+            {"name": "scheme", "label": "Scheme (internet-facing, internal)", "default": "internet-facing"},
         ],
         "endpoints": {},
     },

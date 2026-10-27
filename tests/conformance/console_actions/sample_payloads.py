@@ -105,9 +105,9 @@ _GCP_PAYLOADS: dict[str, dict] = {
     "apigateway":  {"apiId": "vyomi-conf-api", "displayName": "Conf"},
     "eventarc":    {"name": "vyomi-conf-trigger",
                     "destination": {"cloudRun": {"service": "demo"}}},
-    "secretmanager": {"secretId": "vyomi-conf-secret",
+    "secretmanager": {"name": "vyomi-conf-secret", "secretId": "vyomi-conf-secret",
                      "secret": {"replication": {"automatic": {}}}},
-    "kms":         {"keyRingId": "vyomi-conf-ring"},
+    "kms":         {"name": "vyomi-conf-key", "keyRingId": "vyomi-conf-ring"},
 }
 
 
@@ -210,6 +210,12 @@ _SUB_ACTION_PAYLOADS: dict[tuple[str, str, str], dict] = {
         "rules": [],
     },
     ("aws", "s3", "uploadObject"): {
+        "key": "conformance/hello.txt",
+        "content": "hello from conformance",
+        "content_type": "text/plain",
+    },
+    ("gcp", "storage", "uploadObject"): {
+        "name": "conformance/hello.txt",
         "key": "conformance/hello.txt",
         "content": "hello from conformance",
         "content_type": "text/plain",

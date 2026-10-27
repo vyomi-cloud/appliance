@@ -34,6 +34,10 @@ AWS_RDS_HOURLY: dict[str, float] = {
     "db.r5.large": 0.24, "db.r5.xlarge": 0.48, "db.r5.2xlarge": 0.96,
 }
 
+AWS_ELBV2_HOURLY: dict[str, float] = {   # us-east-1 on-demand, per load balancer-hour (excl. LCUs)
+    "application": 0.0225, "network": 0.0225, "gateway": 0.0125,
+}
+
 GCP_VM_HOURLY: dict[str, float] = {
     "e2-micro": 0.0084, "e2-small": 0.0168, "e2-medium": 0.0336,
     "e2-standard-2": 0.067, "e2-standard-4": 0.134, "e2-standard-8": 0.268,
@@ -80,6 +84,9 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.apigateway": 3.50,   # ~1M calls
     "aws.vpc": 0.00,          # free (NAT GW extra)
     "aws.logs": 2.53,         # CloudWatch Logs: ~5GB ingested ($0.50/GB) + ~1GB stored ($0.03/GB)
+    "aws.secretsmanager": 0.40,  # $0.40 per secret per month
+    "aws.kms": 1.00,             # $1.00 per customer-managed key per month
+    "aws.eventbridge": 0.00,     # rules / custom buses are free; events billed per use
     # GCP
     "gcp.sql": 25.00,         # db-f1-micro 730h
     "gcp.functions": 0.20,    # minimal invocations
@@ -89,6 +96,9 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.apigateway": 3.00,   # ~1M calls
     "gcp.vpc": 0.00,
     "gcp.iam": 0.00,
+    "gcp.secretmanager": 0.06,  # $0.06 per active secret version per month
+    "gcp.kms": 0.06,            # $0.06 per software key version per month
+    "gcp.eventarc": 0.00,       # triggers are free; events billed per use
     # Azure
     "azure.vm": 0.00,         # priced via VM hourly
     "azure.sql": 4.99,        # Basic DTU
@@ -142,7 +152,8 @@ def estimate_resource_cost(provider: str, service: str, kind: str,
         {hourly_usd, monthly_usd, uptime_cost_usd, uptime_hours, source}
     """
     # VM instances — use hourly pricing tables
-    if kind in ("instance", "vm") and service in ("ec2", "compute", "vm", "gcp_compute"):
+    # Azure ARM nodes carry the lower-cased ARM type as their kind ("virtualmachines").
+    if kind in ("instance", "vm", "virtualmachines") and service in ("ec2", "compute", "vm", "gcp_compute"):
         rate = vm_hourly_rate(provider, instance_type)
         return {
             "hourly_usd": round(rate, 4),
@@ -155,6 +166,17 @@ def estimate_resource_cost(provider: str, service: str, kind: str,
     # Database instances — use DB hourly pricing
     if kind in ("db_instance", "database") and service in ("rds", "sql", "gcp_sql", "cloudsql"):
         rate = db_hourly_rate(provider, instance_type)
+        return {
+            "hourly_usd": round(rate, 4),
+            "monthly_usd": round(rate * HOURS_PER_MONTH, 2),
+            "uptime_cost_usd": round(rate * uptime_hours, 2),
+            "uptime_hours": uptime_hours,
+            "source": "on-demand",
+        }
+
+    # ELBv2 load balancers — per-hour pricing by load balancer type
+    if provider == "aws" and service == "elbv2":
+        rate = AWS_ELBV2_HOURLY.get(instance_type, 0.0225)
         return {
             "hourly_usd": round(rate, 4),
             "monthly_usd": round(rate * HOURS_PER_MONTH, 2),

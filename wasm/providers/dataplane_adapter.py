@@ -18,6 +18,7 @@ import json
 import types
 
 from core import lambda_core, apigateway_core, vpc_core, eventbridge_core
+from core import elbv2_core
 from core import azure_servicebus_core, azure_sql_core, azure_iam_core
 from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
 
@@ -406,3 +407,46 @@ def logs_console(p):
         nano_registry.get()["logs"], p.get("method") or "GET", p.get("path") or "",
         p.get("query") or {}, p.get("body") or {})
     return {"ok": status < 400, "__http": {"status": status, "headers": {}, "body": body}}
+# ── ELBv2 (core/elbv2_core.py) — shared store with the native wire ──────────
+def _elb_store():
+    from core import nano_registry
+    return nano_registry.get()["elbv2"]
+
+
+def _elb_call(fn, *a):
+    try:
+        return fn(_elb_store(), *a)
+    except elbv2_core.Elbv2Error as e:
+        return {"ok": False, "code": e.code, "message": e.message}
+
+
+def elb_list(p=None):
+    return _elb_call(elbv2_core.console_list)
+
+
+def elb_create(p):
+    return _elb_call(elbv2_core.console_create, dict(p or {}))
+
+
+def elb_get(p):
+    return _elb_call(elbv2_core.console_get, str(p.get("name") or ""))
+
+
+def elb_delete(p):
+    return _elb_call(elbv2_core.console_delete, str(p.get("name") or ""))
+
+
+def elb_tags(p):
+    return _elb_call(elbv2_core.console_set_tags, str(p.get("name") or ""), p.get("tags") or {})
+
+
+def elb_children(p):
+    return _elb_call(elbv2_core.console_children, str(p.get("kind") or ""))
+
+
+def elb_child_create(p):
+    return _elb_call(elbv2_core.console_child_create, str(p.get("kind") or ""), dict(p))
+
+
+def elb_child_delete(p):
+    return _elb_call(elbv2_core.console_child_delete, str(p.get("kind") or ""), str(p.get("name") or ""))

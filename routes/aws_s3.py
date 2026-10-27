@@ -1104,6 +1104,11 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return await _aws_logs.wire(request)
         if service == "sqs":
             return await _srv().api_sqs_query(request)
+        if service == "elasticloadbalancing":
+            from core import elbv2_core as _elb
+            from routes.aws_elbv2 import STORE as _elb_store
+            _elb_r = _elb.dispatch(_elb_store, await _srv()._ec2_query_params(request))
+            return Response(content=_elb_r.body, status_code=_elb_r.status, media_type="text/xml")
         if service == "rds":
             return await _srv().api_rds_query(request)
         if service == "dynamodb":
