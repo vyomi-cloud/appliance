@@ -1,24 +1,24 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 14:19 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 14:27 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 44 services (AWS 16 · GCP 16 · Azure 12) of 1,068 the clouds publish
-- **Building now:** app (Azure, no manifest yet checks)
+- **Building now:** app (Azure, 18/18 checks)
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP)
 - **Queued:** 52 services (P1 first, then P2)
-- **Consoles really implemented:** offline 52% · Nano 71%
-- **Hourly tests:** 69 of 72 suites passing (run 13:55 UTC)
+- **Consoles really implemented:** offline not measured yet · Nano not measured yet
+- **Hourly tests:** 0 of 0 suites passing
 - **Upstream watch:** 5 open changes from the real clouds to adopt
 
 ## By cloud
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 16 | 0 | 12 | 17 | 46% · 76% |
-| GCP | 16 | 0 | 8 | 12 | 41% · 67% |
-| Azure | 12 | 1 | 0 | 23 | 68% · 70% |
+| AWS | 16 | 0 | 12 | 17 | not measured yet · not measured yet |
+| GCP | 16 | 0 | 8 | 12 | not measured yet · not measured yet |
+| Azure | 12 | 1 | 0 | 23 | not measured yet · not measured yet |
 
 ## In progress
 
@@ -44,7 +44,7 @@ _Updated 2026-10-27 14:19 UTC · refreshes after every pipeline run_
 | Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🔍 In gate ([PR #125](https://github.com/vyomi-cloud/appliance/pull/125)) | 19/19 | — |
 | Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | — |
 | Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #126](https://github.com/vyomi-cloud/appliance/pull/126)) | 18/18 | — |
-| app [#78](https://github.com/vyomi-cloud/appliance/issues/78) | Azure | 🛠 Building | no manifest yet | — |
+| app [#78](https://github.com/vyomi-cloud/appliance/issues/78) | Azure | 🛠 Building | 18/18 | — |
 
 ## Released services
 
@@ -55,18 +55,18 @@ _Updated 2026-10-27 14:19 UTC · refreshes after every pipeline run_
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| EC2 | 🧩 6/13 · 🧩 6/13 | 0 · 0 | ✅ watched | before gate |
-| S3 | 🧩 6/13 · 🧩 11/13 | 0 · 0 | ✅ watched | before gate |
-| IAM | 🧩 7/11 · ✅ 11/11 | 1 · 0 | ✅ watched | before gate |
-| RDS | 🧩 8/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
-| DynamoDB | 🧩 4/13 · 🧩 10/13 | 1 · 1 | ✅ watched | before gate |
-| SQS | 🧩 5/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
-| Lambda | 🧩 6/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
-| API Gateway | 🧩 8/13 · 🧩 10/13 | 0 · 1 | ✅ watched | before gate |
-| VPC | 🧩 7/13 · 🧩 12/13 | 2 · 0 | ✅ watched | before gate |
-| EventBridge | 🧩 6/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
-| Secrets Manager | 🧩 4/13 · 🧩 9/13 | 2 · 2 | ✅ watched | before gate |
-| KMS | 🧩 5/13 · 🧩 11/13 | 0 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
+| EC2 | — | – · – | ✅ watched | before gate |
+| S3 | — | – · – | ✅ watched | before gate |
+| IAM | — | – · – | ✅ watched | before gate |
+| RDS | — | – · – | ✅ watched | before gate |
+| DynamoDB | — | – · – | ✅ watched | before gate |
+| SQS | — | – · – | ✅ watched | before gate |
+| Lambda | — | – · – | ✅ watched | before gate |
+| API Gateway | — | – · – | ✅ watched | before gate |
+| VPC | — | – · – | ✅ watched | before gate |
+| EventBridge | — | – · – | ✅ watched | before gate |
+| Secrets Manager | — | – · – | ✅ watched | before gate |
+| KMS | — | – · – | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
 | CloudWatch Logs | — | – · – | ✅ watched | [v3.0.11](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.11) |
 | Elastic Load Balancing | — | – · – | ✅ watched | [v3.0.10](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.10) |
 | Systems Manager | — | – · – | ✅ watched | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
@@ -76,18 +76,18 @@ _Updated 2026-10-27 14:19 UTC · refreshes after every pipeline run_
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| Compute Engine | 🧩 5/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| Cloud Storage | 🧩 7/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
-| Cloud SQL | 🧩 5/13 · 🧩 9/13 | 0 · 0 | ⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
-| Pub/Sub | 🧩 5/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| Firestore | 🧩 5/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
-| Cloud Functions | 🧩 5/13 · 🧩 6/13 | 0 · 0 | ✅ watched | before gate |
-| API Gateway | 🧩 5/12 · 🧩 9/12 | 0 · 0 | ✅ watched | before gate |
-| VPC Network | 🧩 5/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
-| IAM & Admin | 🧩 4/9 · ✅ 9/9 | 0 · 0 | ✅ watched | before gate |
-| Eventarc | 🧩 5/12 · 🧩 9/12 | 0 · 0 | ✅ watched | before gate |
-| Secret Manager | 🧩 5/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
-| Cloud KMS | 🧩 6/13 · 🧩 10/13 | 0 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
+| Compute Engine | — | – · – | ✅ watched | before gate |
+| Cloud Storage | — | – · – | ✅ watched | before gate |
+| Cloud SQL | — | – · – | ⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
+| Pub/Sub | — | – · – | ✅ watched | before gate |
+| Firestore | — | – · – | ✅ watched | before gate |
+| Cloud Functions | — | – · – | ✅ watched | before gate |
+| API Gateway | — | – · – | ✅ watched | before gate |
+| VPC Network | — | – · – | ✅ watched | before gate |
+| IAM & Admin | — | – · – | ✅ watched | before gate |
+| Eventarc | — | – · – | ✅ watched | before gate |
+| Secret Manager | — | – · – | ✅ watched | before gate |
+| Cloud KMS | — | – · – | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
 | Cloud Scheduler | — | – · – | ✅ watched | [v3.0.14](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.14) |
 | Kubernetes Engine | — | – · – | ✅ watched | [v3.0.15](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.15) |
 | IAM Service Account Credentials | — | – · – | ✅ watched | [v3.0.16](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.16) |
@@ -97,20 +97,18 @@ _Updated 2026-10-27 14:19 UTC · refreshes after every pipeline run_
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| Virtual Machines | 🧩 10/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| Storage accounts | 🧩 9/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
-| SQL servers | 🧩 8/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
-| Service Bus | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| Cosmos DB | 🧩 8/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| Function apps | 🧩 7/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
-| API Management | 🧩 10/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
-| Virtual networks | 🧩 8/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| Network Security Group | ✅ 3/3 · ✅ 3/3 | 0 · 0 | ✅ watched | before gate |
-| Event Grid topics | 🧩 8/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| Key vaults | 🧩 9/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
-| Entra ID / RBAC | 🧩 5/6 · 🧩 5/6 | 0 · 0 | ✅ watched | before gate |
-
-- **Nano ↔ offline gaps:** Blob containers (Nano-only), Cosmos databases (Nano-only), Key Vault keys (Nano-only), Key Vault secrets (Nano-only), Storage queues (Nano-only), azure_subresource_core (Nano-only)
+| Virtual Machines | — | – · – | ✅ watched | before gate |
+| Storage accounts | — | – · – | ✅ watched | before gate |
+| SQL servers | — | – · – | ✅ watched | before gate |
+| Service Bus | — | – · – | ✅ watched | before gate |
+| Cosmos DB | — | – · – | ✅ watched | before gate |
+| Function apps | — | – · – | ✅ watched | before gate |
+| API Management | — | – · – | ✅ watched | before gate |
+| Virtual networks | — | – · – | ✅ watched | before gate |
+| Network Security Group | — | – · – | ✅ watched | before gate |
+| Event Grid topics | — | – · – | ✅ watched | before gate |
+| Key vaults | — | – · – | ✅ watched | before gate |
+| Entra ID / RBAC | — | – · – | ✅ watched | before gate |
 
 ## Up next
 
@@ -700,450 +698,28 @@ _Updated 2026-10-27 14:19 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary>Console parts not live yet — AWS (118)</summary>
+<details><summary>Gate checks — app (Azure)</summary>
 
-| Service | Console | Part | State |
-|---|---|---|---|
-| EC2 | offline | tab: Tags | static |
-| EC2 | offline | tab: Details | static |
-| EC2 | offline | tab: Monitoring | static |
-| EC2 | offline | tab: Networking | static |
-| EC2 | offline | tab: Security | partial |
-| EC2 | offline | tab: Storage | static |
-| EC2 | offline | tab: Connect | static |
-| Lambda | offline | tab: Tags | static |
-| Lambda | offline | tab: Code | static |
-| Lambda | offline | tab: Test | static |
-| Lambda | offline | tab: Environment variables | static |
-| Lambda | offline | tab: Versions | static |
-| Lambda | offline | tab: Aliases | static |
-| Lambda | offline | tab: Resource-based policy | static |
-| S3 | offline | tab: Tags | static |
-| S3 | offline | tab: Versions | static |
-| S3 | offline | tab: Bucket Versioning | static |
-| S3 | offline | tab: Event notifications | static |
-| S3 | offline | tab: Lifecycle rules | static |
-| S3 | offline | tab: Default encryption | static |
-| S3 | offline | tab: Block Public Access | static |
-| RDS | offline | tab: Tags | static |
-| RDS | offline | tab: Endpoints | static |
-| RDS | offline | tab: Networking | static |
-| RDS | offline | tab: Permissions | static |
-| RDS | offline | tab: Modify | static |
-| DynamoDB | offline | create: create with defaults | partial |
-| DynamoDB | offline | tab: Overview | static |
-| DynamoDB | offline | tab: Tags | static |
-| DynamoDB | offline | tab: Query/Scan | static |
-| DynamoDB | offline | tab: Indexes | static |
-| DynamoDB | offline | tab: Streams and triggers | static |
-| DynamoDB | offline | tab: Read/write capacity | static |
-| DynamoDB | offline | tab: Encryption at rest | static |
-| DynamoDB | offline | tab: Time to live | static |
-| SQS | offline | tab: Tags | static |
-| SQS | offline | tab: Send and receive messages | static |
-| SQS | offline | tab: Purge messages | static |
-| SQS | offline | tab: Configuration | static |
-| SQS | offline | tab: Dead-letter queue | static |
-| SQS | offline | tab: Encryption | static |
-| SQS | offline | tab: Access policy | static |
-| SQS | offline | tab: Monitoring | static |
-| API Gateway | offline | tab: Tags | static |
-| API Gateway | offline | tab: Authorizers | static |
-| API Gateway | offline | tab: Models | static |
-| API Gateway | offline | tab: Deployments | static |
-| API Gateway | offline | tab: Resource policy | static |
-| EventBridge | offline | tab: Tags | static |
-| EventBridge | offline | tab: Rule details | static |
-| EventBridge | offline | tab: Targets | static |
-| EventBridge | offline | tab: Event pattern | static |
-| EventBridge | offline | tab: Dead-letter queue | static |
-| EventBridge | offline | tab: Properties | static |
-| EventBridge | offline | tab: Permissions | static |
-| VPC | offline | tab: VPC details | static |
-| VPC | offline | tab: NAT gateways | static |
-| VPC | offline | tab: Endpoints | static |
-| VPC | offline | tab: Security groups | partial |
-| VPC | offline | tab: Network ACLs | static |
-| VPC | offline | tab: Flow logs | static |
-| IAM | offline | tab: Users | partial |
-| IAM | offline | tab: Identity providers | static |
-| IAM | offline | tab: Password policy | static |
-| IAM | offline | tab: Access Analyzer | static |
-| Secrets Manager | offline | create: create with defaults | partial |
-| Secrets Manager | offline | tab: Tags | static |
-| Secrets Manager | offline | tab: Secret value | static |
-| Secrets Manager | offline | tab: Versions | static |
-| Secrets Manager | offline | tab: Rotation | static |
-| Secrets Manager | offline | tab: Replication | static |
-| Secrets Manager | offline | tab: Resource policy | static |
-| Secrets Manager | offline | tab: Encryption key | static |
-| Secrets Manager | offline | tab: Properties | static |
-| KMS | offline | tab: Tags | static |
-| KMS | offline | tab: General configuration | static |
-| KMS | offline | tab: Key policy | static |
-| KMS | offline | tab: Aliases | static |
-| KMS | offline | tab: Key rotation | static |
-| KMS | offline | tab: Key users | static |
-| KMS | offline | tab: Key administrators | static |
-| KMS | offline | tab: Grants | static |
-| EC2 | nano | tab: Tags | static |
-| EC2 | nano | tab: Details | static |
-| EC2 | nano | tab: Monitoring | static |
-| EC2 | nano | tab: Networking | static |
-| EC2 | nano | tab: Security | partial |
-| EC2 | nano | tab: Storage | static |
-| EC2 | nano | tab: Connect | static |
-| Lambda | nano | tab: Tags | static |
-| Lambda | nano | tab: Code | static |
-| Lambda | nano | tab: Test | static |
-| S3 | nano | tab: Tags | static |
-| S3 | nano | tab: Bucket Versioning | static |
-| RDS | nano | tab: Tags | static |
-| RDS | nano | tab: Endpoints | static |
-| RDS | nano | tab: Networking | static |
-| DynamoDB | nano | create: create with defaults | partial |
-| DynamoDB | nano | tab: Tags | static |
-| DynamoDB | nano | tab: Query/Scan | static |
-| SQS | nano | tab: Tags | static |
-| SQS | nano | tab: Send and receive messages | static |
-| SQS | nano | tab: Configuration | static |
-| SQS | nano | tab: Dead-letter queue | static |
-| SQS | nano | tab: Monitoring | static |
-| API Gateway | nano | tab: Tags | static |
-| API Gateway | nano | tab: Stages | partial |
-| API Gateway | nano | tab: Settings | static |
-| EventBridge | nano | tab: Tags | static |
-| EventBridge | nano | tab: Rule details | static |
-| EventBridge | nano | tab: Properties | static |
-| VPC | nano | tab: VPC details | static |
-| Secrets Manager | nano | create: create with defaults | partial |
-| Secrets Manager | nano | tab: Tags | static |
-| Secrets Manager | nano | tab: Secret value | static |
-| Secrets Manager | nano | tab: Properties | static |
-| KMS | nano | tab: Tags | static |
-| KMS | nano | tab: General configuration | static |
-
-</details>
-
-<details><summary>Console parts not live yet — GCP (137)</summary>
-
-| Service | Console | Part | State |
-|---|---|---|---|
-| Compute Engine | offline | tab: Activity | static |
-| Compute Engine | offline | tab: Permissions | static |
-| Compute Engine | offline | tab: Labels | static |
-| Compute Engine | offline | tab: Networking | static |
-| Compute Engine | offline | tab: Disks | static |
-| Compute Engine | offline | tab: Machine size | static |
-| Compute Engine | offline | tab: Metadata | static |
-| Compute Engine | offline | tab: Startup script | static |
-| Cloud Functions | offline | tab: Activity | static |
-| Cloud Functions | offline | tab: Permissions | static |
-| Cloud Functions | offline | tab: Labels | static |
-| Cloud Functions | offline | tab: Source | static |
-| Cloud Functions | offline | tab: Trigger | static |
-| Cloud Functions | offline | tab: Variables | static |
-| Cloud Functions | offline | tab: Testing | static |
-| Cloud Functions | offline | tab: Networking | static |
-| Cloud Storage | offline | tab: Activity | static |
-| Cloud Storage | offline | tab: Permissions | static |
-| Cloud Storage | offline | tab: Labels | static |
-| Cloud Storage | offline | tab: Lifecycle | static |
-| Cloud Storage | offline | tab: Encryption | static |
-| Cloud Storage | offline | tab: Retention | static |
-| Cloud SQL | offline | tab: Activity | static |
-| Cloud SQL | offline | tab: Permissions | static |
-| Cloud SQL | offline | tab: Labels | static |
-| Cloud SQL | offline | tab: Databases | static |
-| Cloud SQL | offline | tab: Users | static |
-| Cloud SQL | offline | tab: Backups | static |
-| Cloud SQL | offline | tab: Replicas | static |
-| Cloud SQL | offline | tab: Connectivity | static |
-| Firestore | offline | tab: Activity | static |
-| Firestore | offline | tab: Permissions | static |
-| Firestore | offline | tab: Labels | static |
-| Firestore | offline | tab: Data | static |
-| Firestore | offline | tab: Query builder | static |
-| Firestore | offline | tab: Indexes | static |
-| Firestore | offline | tab: Security rules | static |
-| Firestore | offline | tab: Import / Export | static |
-| VPC Network | offline | tab: Activity | static |
-| VPC Network | offline | tab: Permissions | static |
-| VPC Network | offline | tab: Labels | static |
-| VPC Network | offline | tab: Subnets | static |
-| VPC Network | offline | tab: Firewall rules | static |
-| VPC Network | offline | tab: Routes | static |
-| VPC Network | offline | tab: VPC peering | static |
-| VPC Network | offline | tab: Properties | static |
-| Pub/Sub | offline | tab: Activity | static |
-| Pub/Sub | offline | tab: Permissions | static |
-| Pub/Sub | offline | tab: Labels | static |
-| Pub/Sub | offline | tab: Subscriptions | static |
-| Pub/Sub | offline | tab: Schema | static |
-| Pub/Sub | offline | tab: Messages | static |
-| Pub/Sub | offline | tab: Encryption | static |
-| Pub/Sub | offline | tab: Metrics | static |
-| API Gateway | offline | tab: Activity | static |
-| API Gateway | offline | tab: Permissions | static |
-| API Gateway | offline | tab: Labels | static |
-| API Gateway | offline | tab: Configs | static |
-| API Gateway | offline | tab: Routes | static |
-| API Gateway | offline | tab: Metrics | static |
-| API Gateway | offline | tab: Logs | static |
-| Eventarc | offline | tab: Activity | static |
-| Eventarc | offline | tab: Permissions | static |
-| Eventarc | offline | tab: Labels | static |
-| Eventarc | offline | tab: Event matching | static |
-| Eventarc | offline | tab: Destination | static |
-| Eventarc | offline | tab: Metrics | static |
-| Eventarc | offline | tab: Logs | static |
-| Secret Manager | offline | tab: Activity | static |
-| Secret Manager | offline | tab: Permissions | static |
-| Secret Manager | offline | tab: Labels | static |
-| Secret Manager | offline | tab: Secret value | static |
-| Secret Manager | offline | tab: Versions | static |
-| Secret Manager | offline | tab: Rotation | static |
-| Secret Manager | offline | tab: Replication | static |
-| Secret Manager | offline | tab: Encryption | static |
-| Cloud KMS | offline | tab: Activity | static |
-| Cloud KMS | offline | tab: Permissions | static |
-| Cloud KMS | offline | tab: Labels | static |
-| Cloud KMS | offline | tab: Versions | static |
-| Cloud KMS | offline | tab: Key policy | static |
-| Cloud KMS | offline | tab: Import jobs | static |
-| Cloud KMS | offline | tab: Metrics | static |
-| IAM & Admin | offline | tab: Members | static |
-| IAM & Admin | offline | tab: Permissions | static |
-| IAM & Admin | offline | tab: Keys | static |
-| IAM & Admin | offline | tab: Properties | static |
-| IAM & Admin | offline | tab: Activity log | static |
-| Compute Engine | nano | tab: Permissions | static |
-| Compute Engine | nano | tab: Labels | static |
-| Compute Engine | nano | tab: Networking | static |
-| Compute Engine | nano | tab: Startup script | static |
-| Cloud Functions | nano | tab: Permissions | static |
-| Cloud Functions | nano | tab: Labels | static |
-| Cloud Functions | nano | tab: Source | static |
-| Cloud Functions | nano | tab: Trigger | static |
-| Cloud Functions | nano | tab: Variables | static |
-| Cloud Functions | nano | tab: Testing | static |
-| Cloud Functions | nano | tab: Networking | static |
-| Cloud Storage | nano | tab: Permissions | static |
-| Cloud Storage | nano | tab: Labels | static |
-| Cloud Storage | nano | tab: Lifecycle | static |
-| Cloud Storage | nano | tab: Encryption | static |
-| Cloud Storage | nano | tab: Retention | static |
-| Cloud SQL | nano | tab: Permissions | static |
-| Cloud SQL | nano | tab: Labels | static |
-| Cloud SQL | nano | tab: Connectivity | static |
-| Cloud SQL | nano | tab: Flags | static |
-| Firestore | nano | tab: Permissions | static |
-| Firestore | nano | tab: Labels | static |
-| Firestore | nano | tab: Data | static |
-| Firestore | nano | tab: Query builder | static |
-| Firestore | nano | tab: Indexes | static |
-| Firestore | nano | tab: Import / Export | static |
-| VPC Network | nano | tab: Permissions | static |
-| VPC Network | nano | tab: Labels | static |
-| VPC Network | nano | tab: Subnets | static |
-| VPC Network | nano | tab: Routes | static |
-| VPC Network | nano | tab: VPC peering | static |
-| Pub/Sub | nano | tab: Permissions | static |
-| Pub/Sub | nano | tab: Labels | static |
-| Pub/Sub | nano | tab: Messages | static |
-| Pub/Sub | nano | tab: Encryption | static |
-| API Gateway | nano | tab: Permissions | static |
-| API Gateway | nano | tab: Labels | static |
-| API Gateway | nano | tab: Logs | static |
-| Eventarc | nano | tab: Permissions | static |
-| Eventarc | nano | tab: Labels | static |
-| Eventarc | nano | tab: Logs | static |
-| Secret Manager | nano | tab: Permissions | static |
-| Secret Manager | nano | tab: Labels | static |
-| Secret Manager | nano | tab: Secret value | static |
-| Secret Manager | nano | tab: Rotation | static |
-| Secret Manager | nano | tab: Encryption | static |
-| Cloud KMS | nano | tab: Permissions | static |
-| Cloud KMS | nano | tab: Labels | static |
-| Cloud KMS | nano | tab: Key policy | static |
-
-</details>
-
-<details><summary>Console parts not live yet — Azure (92)</summary>
-
-| Service | Console | Part | State |
-|---|---|---|---|
-| Virtual Machines | offline | tab: Tags | static |
-| Virtual Machines | offline | tab: Connect | static |
-| Virtual Machines | offline | tab: Identity | static |
-| Storage accounts | offline | tab: Tags | static |
-| Storage accounts | offline | tab: Diagnose and solve problems | static |
-| Storage accounts | offline | tab: Tables | static |
-| Storage accounts | offline | tab: Networking | static |
-| SQL servers | offline | tab: Tags | static |
-| SQL servers | offline | tab: Diagnose and solve problems | static |
-| SQL servers | offline | tab: Deleted databases | static |
-| SQL servers | offline | tab: Failover groups | static |
-| SQL servers | offline | tab: Backups | static |
-| Service Bus | offline | tab: Tags | static |
-| Service Bus | offline | tab: Diagnose and solve problems | static |
-| Service Bus | offline | tab: Geo-recovery | static |
-| Service Bus | offline | tab: Networking | static |
-| Cosmos DB | offline | tab: Tags | static |
-| Cosmos DB | offline | tab: Diagnose and solve problems | static |
-| Cosmos DB | offline | tab: Replicate data globally | static |
-| Cosmos DB | offline | tab: Default consistency | static |
-| Cosmos DB | offline | tab: Backup & Restore | static |
-| Function apps | offline | tab: Tags | static |
-| Function apps | offline | tab: Diagnose and solve problems | static |
-| Function apps | offline | tab: Functions | static |
-| Function apps | offline | tab: Environment variables | static |
-| Function apps | offline | tab: Authentication | static |
-| Function apps | offline | tab: Identity | static |
-| API Management | offline | tab: Tags | static |
-| API Management | offline | tab: Diagnose and solve problems | static |
-| API Management | offline | tab: Named values | static |
-| Virtual networks | offline | tab: Tags | static |
-| Virtual networks | offline | tab: Diagnose and solve problems | static |
-| Virtual networks | offline | tab: Address space | static |
-| Virtual networks | offline | tab: Subnets | static |
-| Virtual networks | offline | tab: DNS servers | static |
-| Event Grid topics | offline | tab: Tags | static |
-| Event Grid topics | offline | tab: Diagnose and solve problems | static |
-| Event Grid topics | offline | tab: Topic types | static |
-| Event Grid topics | offline | tab: Networking | static |
-| Event Grid topics | offline | tab: Identity | static |
-| Key vaults | offline | tab: Tags | static |
-| Key vaults | offline | tab: Diagnose and solve problems | static |
-| Key vaults | offline | tab: Access policies | static |
-| Key vaults | offline | tab: Access configuration | static |
-| Entra ID / RBAC | offline | tab: Conditions | static |
-| Virtual Machines | nano | page: Virtual Machines | static |
-| Virtual Machines | nano | tab: Tags | static |
-| Virtual Machines | nano | tab: Diagnose and solve problems | static |
-| Virtual Machines | nano | tab: Connect | static |
-| Storage accounts | nano | tab: Tags | static |
-| Storage accounts | nano | tab: Diagnose and solve problems | static |
-| Storage accounts | nano | tab: File shares | static |
-| Storage accounts | nano | tab: Tables | static |
-| Storage accounts | nano | tab: Networking | static |
-| SQL servers | nano | tab: Tags | static |
-| SQL servers | nano | tab: Diagnose and solve problems | static |
-| SQL servers | nano | tab: Pricing tier | static |
-| SQL servers | nano | tab: Deleted databases | static |
-| SQL servers | nano | tab: Failover groups | static |
-| SQL servers | nano | tab: Backups | static |
-| Service Bus | nano | tab: Tags | static |
-| Service Bus | nano | tab: Diagnose and solve problems | static |
-| Service Bus | nano | tab: Geo-recovery | static |
-| Service Bus | nano | tab: Networking | static |
-| Cosmos DB | nano | tab: Tags | static |
-| Cosmos DB | nano | tab: Throughput (RU/s) | static |
-| Cosmos DB | nano | tab: Replicate data globally | static |
-| Cosmos DB | nano | tab: Backup & Restore | static |
-| Function apps | nano | tab: Tags | static |
-| Function apps | nano | tab: Diagnose and solve problems | static |
-| Function apps | nano | tab: App keys | static |
-| Function apps | nano | tab: Environment variables | static |
-| Function apps | nano | tab: Authentication | static |
-| Function apps | nano | tab: Identity | static |
-| API Management | nano | tab: Tags | static |
-| API Management | nano | tab: Diagnose and solve problems | static |
-| API Management | nano | tab: Named values | static |
-| Virtual networks | nano | tab: Tags | static |
-| Virtual networks | nano | tab: Diagnose and solve problems | static |
-| Virtual networks | nano | tab: Address space | static |
-| Virtual networks | nano | tab: Connected devices | static |
-| Event Grid topics | nano | tab: Tags | static |
-| Event Grid topics | nano | tab: Diagnose and solve problems | static |
-| Event Grid topics | nano | tab: Networking | static |
-| Event Grid topics | nano | tab: Identity | static |
-| Key vaults | nano | tab: Tags | static |
-| Key vaults | nano | tab: Diagnose and solve problems | static |
-| Key vaults | nano | tab: Secrets | unimplemented |
-| Key vaults | nano | tab: Keys | unimplemented |
-| Key vaults | nano | tab: Access policies | static |
-| Key vaults | nano | tab: Access configuration | static |
-| Entra ID / RBAC | nano | tab: Conditions | static |
-
-</details>
-
-<details><summary>Latest hourly test results</summary>
-
-| Suite | Result | Checks |
+| | Check | Detail |
 |---|---|---|
-| offline-ui-crawl | ❌ | 34/38 |
-| offline-console-actions | ✅ | 246/246 |
-| offline-api-ec2-instance-detail | ✅ | 3/3 |
-| offline-api-s3-bucket-creation-date | ✅ | 3/3 |
-| offline-api-aws-provider-connect | ✅ | 11/11 |
-| offline-api-gcp-eventarc-trigger-defaults | ✅ | 6/6 |
-| offline-api-ec2-default-public-ip | ✅ | 3/3 |
-| offline-sdk-python-aws-ops | ✅ | 12/12 |
-| offline-sdk-python-aws | ✅ | 88/88 |
-| offline-sdk-go-aws | ✅ | 14/14 |
-| offline-sdk-go-gcp | ✅ | 5/5 |
-| offline-sdk-go-gcp-admin | ✅ | 14/14 |
-| offline-sdk-go-azure | ✅ | 14/14 |
-| offline-sdk-java-aws | ✅ | 13/13 |
-| offline-sdk-java-gcp | ✅ | 6/6 |
-| offline-sdk-java-azure | ✅ | 5/5 |
-| offline-cost-savings | ✅ | 11/11 |
-| offline-cli-aws | ✅ | 15/15 |
-| offline-cli-gcp | ✅ | 6/6 |
-| offline-cli-azure | ✅ | 6/6 |
-| offline-ui-core | ✅ | 9/9 |
-| nano-ui-crawl | ❌ | 40/43 |
-| nano-cores | ✅ | 37/37 |
-| nano-aws-iam-detail | ✅ | 8/8 |
-| nano-aws-ec2-launch | ✅ | 13/13 |
-| nano-ui-aws-api | ❌ | 5/6 |
-| nano-ui-aws-tabs | ✅ | 11/11 |
-| nano-ui-gcp-tabs | ✅ | 6/6 |
-| nano-ui-gcp-activity-detail | ✅ | 2/2 |
-| nano-ui-gcp-grid-defaults | ✅ | 39/39 |
-| nano-ui-gcp-pubsub-subscriptions | ✅ | 3/3 |
-| nano-ui-gcp-metrics-counts | ✅ | 3/3 |
-| offline-ui-gcp-pubsub-subscriptions | ✅ | 3/3 |
-| offline-ui-gcp-activity-detail | ✅ | 2/2 |
-| offline-ui-gcp-grid-defaults | ✅ | 39/39 |
-| nano-ui-gcp-pubsub-grid | ✅ | 3/3 |
-| offline-ui-gcp-pubsub-grid | ✅ | 3/3 |
-| offline-api-cost-savings-extras | ✅ | 12/12 |
-| nano-ui-aws-vpc-apigw-lists | ✅ | 5/5 |
-| nano-ui-aws-compute-reload | ✅ | 4/4 |
-| nano-ui-azure-savings | ✅ | 8/8 |
-| nano-ui-aws-compute-savings | ✅ | 6/6 |
-| nano-ui-aws-ec2-detail-tabs | ✅ | 5/5 |
-| offline-ui-aws-ec2-detail-tabs | ✅ | 5/5 |
-| offline-ui-aws-detail-name | ✅ | 4/4 |
-| offline-ui-aws-sqs-dlq-tab | ✅ | 2/2 |
-| nano-ui-aws-sqs-dlq-tab | ✅ | 2/2 |
-| nano-ui-aws-rds-connectivity-tabs | ✅ | 3/3 |
-| offline-ui-aws-rds-connectivity-tabs | ✅ | 3/3 |
-| nano-ui-aws-vpc-details-tab | ✅ | 2/2 |
-| offline-ui-aws-vpc-details-tab | ✅ | 2/2 |
-| offline-ui-aws-apigw-tabs | ✅ | 4/4 |
-| offline-api-gcp-pubsub-savings | ✅ | 8/8 |
-| offline-api-gcp-apigateway-savings | ✅ | 5/5 |
-| offline-api-gcp-console-next | ✅ | 28/28 |
-| offline-api-gcp-grid-columns | ✅ | 19/19 |
-| offline-api-gcp-vault-console-secrets | ✅ | 9/9 |
-| offline-api-aws-console-savings | ✅ | 12/12 |
-| offline-api-aws-eventbridge-rule-defaults | ✅ | 14/14 |
-| nano-ui-azure-tabs | ✅ | 71/71 |
-| nano-ui-azure-dp | ✅ | 5/5 |
-| nano-ui-azure-flat-create | ✅ | 8/8 |
-| offline-ui-azure-flat-create | ✅ | 8/8 |
-| nano-ui-azure-dp-detail | ✅ | 12/12 |
-| nano-ui-azure-rail-last | ✅ | 3/3 |
-| nano-ui-azure-home | ✅ | 7/7 |
-| nano-ui-budget-savings | ✅ | 5/5 |
-| nano-ui-reload-backend | ✅ | 3/3 |
-| nano-ui-azure-rg-nav | ✅ | 3/3 |
-| offline-ui-azure-rg-nav | ✅ | 3/3 |
-| nano-ui-azure-storage-console | ✅ | 12/12 |
-| nano-ui-azure-keyvault-tabs | ✅ | 9/9 |
+| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
+| ✅ | manifest status is ready | status=ready |
+| ✅ | engine exists in core/ | core/azure_app_core.py |
+| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/azure_app_core.py |
+| ✅ | engine listed in wasm/build_cores.py |  |
+| ✅ | service in the Nano console catalog (wasm/fixtures) | azure-catalog.json |
+| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
+| ✅ | registry entry (pending-release or released) |  |
+| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
+| ✅ | has a offline sdk-java test bed |  |
+| ✅ | has a offline sdk-go test bed |  |
+| ✅ | has a offline cli test bed |  |
+| ✅ | has a offline ui test bed |  |
+| ✅ | has a nano ui test bed |  |
+| ✅ | upstream id tracked by the hourly upstream watcher | app |
+| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'substrate', 'name': 'docker', 'tier': 'pro'} |
+| ✅ | backend is the recommended one, or the manifest says why not | recommended: docker; chose docker |
+| ✅ | substrate backends are Pro or Max only | tier=pro |
 
 </details>
 
