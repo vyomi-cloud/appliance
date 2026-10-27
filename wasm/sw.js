@@ -206,9 +206,12 @@ async function handleUpload(request, bucket, provider = "aws") {
   return json({ ok, uploaded: results.length, results }, ok ? 200 : 400);
 }
 
+// Rates for newer services live on their own line so the Nano patch applies to the portal copy.
+const NANO_RATE_EXTRA = {"microsoft.containerservice/managedclusters":73};
+
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,"microsoft.compute/virtualmachines":30.37,"microsoft.sql/servers":4.99,"microsoft.storage/storageaccounts":0.50,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.servicebus/namespaces":9.81,"microsoft.keyvault/vaults":0.03,"microsoft.app/containerapps":39.42,"microsoft.app/managedenvironments":0,"microsoft.app/jobs":0.20,"microsoft.appconfiguration/configurationstores":36.5,"microsoft.cognitiveservices/accounts":1.0,"microsoft.containerservice/managedclusters":73};
+const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,"microsoft.compute/virtualmachines":30.37,"microsoft.sql/servers":4.99,"microsoft.storage/storageaccounts":0.50,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.servicebus/namespaces":9.81,"microsoft.keyvault/vaults":0.03,"microsoft.app/containerapps":39.42,"microsoft.app/managedenvironments":0,"microsoft.app/jobs":0.20,"microsoft.appconfiguration/configurationstores":36.5,"microsoft.cognitiveservices/accounts":1.0};
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
@@ -219,7 +222,7 @@ async function nanoCostSavings() {
     resource_count += c.resources || 0;
     const bs = c.by_service || {};
     let usd = 0;
-    for (const k in bs) usd += (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+    for (const k in bs) usd += (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : Object.prototype.hasOwnProperty.call(NANO_RATE_EXTRA, k) ? NANO_RATE_EXTRA[k] : 1.0);
     by_provider[p] = Math.round(usd * 100) / 100;
   }
   const savings_usd = Math.round((by_provider.aws + by_provider.gcp + by_provider.azure) * 100) / 100;
