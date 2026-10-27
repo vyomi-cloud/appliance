@@ -208,7 +208,7 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,"microsoft.compute/virtualmachines":30.37,"microsoft.sql/servers":4.99,"microsoft.storage/storageaccounts":0.50,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.servicebus/namespaces":9.81,"microsoft.keyvault/vaults":0.03};
+const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,"microsoft.compute/virtualmachines":30.37,"microsoft.sql/servers":4.99,"microsoft.storage/storageaccounts":0.50,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.servicebus/namespaces":9.81,"microsoft.keyvault/vaults":0.03};
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
@@ -606,6 +606,9 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "extras", "List",   { key: _ex[1] }] };
     if (method === "POST") return { tuple: ["aws", "extras", "Create", { key: _ex[1], ...(body || {}) }] };
   }
+  // CloudWatch Logs (core/logs_core.py) — the console REST under /api/logs/*
+  m = path.match(/^\/api\/logs\/(.+)$/);
+  if (m) return { tuple: ["aws", "logs", "Console", { method, path: m[1], query: query || {}, body: body || {} }] };
   // Elastic Load Balancing (core/elbv2_core.py) — LBs + target groups + listeners
   if (path === "/api/aws/elbv2/load-balancers") {
     if (method === "GET")  return { tuple: ["aws", "elbv2", "ListLoadBalancers", {}] };

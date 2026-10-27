@@ -208,6 +208,15 @@ def _weigh(resources: int, vms: int) -> dict:
     }
 
 
+def _logs_group_count() -> int:
+    """CloudWatch Logs groups held by the shared in-browser store (core/logs_core.py)."""
+    try:
+        from core import nano_registry
+        return len(nano_registry.get()["logs"].log_groups)
+    except Exception:
+        return 0
+
+
 def _elb_census():
     from core import nano_registry
     return nano_registry.get()["elbv2"].load_balancers
@@ -238,6 +247,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                         len(A.iam_list_policies().get("policies", [])) +
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
+                "logs":           _logs_group_count(),
                 "elbv2":          len(_elb_census()),
             }
             for svc, n in aws_counts.items():

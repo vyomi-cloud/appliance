@@ -514,6 +514,44 @@ RESOURCE_CATALOG_AWS = [
         "endpoints": {},
     },
     # ========================================================================
+    # CloudWatch Logs — log groups are the primary entity. Engine:
+    # core/logs_core.py (same file Nano runs); console REST under /api/logs.
+    # ========================================================================
+    {
+        "key": "logs", "label": "CloudWatch Logs", "icon": "subject",
+        "namespace": "AWS/Logs", "service": "logs",
+        "collection_path": "/api/logs/log-groups",
+        "resource_path":   "/api/logs/log-groups/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "editable":        False,
+        "api_paths": {
+            "streams":              {"method": "GET", "path": "/api/logs/log-groups/{name}/streams"},
+            "events":               {"method": "GET", "path": "/api/logs/log-groups/{name}/events"},
+            "metric-filters":       {"method": "GET", "path": "/api/logs/log-groups/{name}/metric-filters"},
+            "subscription-filters": {"method": "GET", "path": "/api/logs/log-groups/{name}/subscription-filters"},
+            "delete":               {"method": "DELETE", "path": "/api/logs/log-groups/{name}"},
+        },
+        "rail_items": [
+            {"key": "log-groups", "label": "Log groups", "icon": "subject", "type": "primary"},
+        ],
+        "columns": [
+            ["name",                "Log group"],
+            ["log_class",           "Log class"],
+            ["retention",           "Retention"],
+            ["stream_count",        "Log streams"],
+            ["metric_filter_count", "Metric filters"],
+            ["stored",              "Stored bytes"],
+            ["created",             "Creation time"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Log group name", "default": "/aws/vyomi/my-app"},
+            {"name": "retention_in_days", "label": "Retention (days, 0 = never expire)", "default": "30"},
+            {"name": "log_group_class", "label": "Log class", "default": "Standard"},
+        ],
+        "endpoints": {},
+    },
+    # ========================================================================
     # Secrets Manager — secrets + rotation + replication
     # ========================================================================
     {

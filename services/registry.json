@@ -291,6 +291,13 @@
   },
   {
    "cloud": "aws",
+   "key": "logs",
+   "name": "CloudWatch Logs",
+   "upstream": "logs",
+   "status": "pending-release"
+  },
+  {
+   "cloud": "aws",
    "key": "elbv2",
    "name": "Elastic Load Balancing",
    "upstream": "elbv2",

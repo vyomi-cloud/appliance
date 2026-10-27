@@ -31,6 +31,7 @@ from core.azure_queue_core import AzureQueueStore
 from core.azure_arm_core import AzureArm
 from core.nano_events import EventStore
 from core.elbv2_core import Elbv2Store
+from core.logs_core import LogsStore
 
 _REG: dict | None = None
 
@@ -69,6 +70,7 @@ def get() -> dict:
             "rds": InMemorySqlStore(),
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
+            "logs": LogsStore(),               # CloudWatch Logs (core/logs_core.py)
             "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),

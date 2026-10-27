@@ -397,6 +397,16 @@ def extras_config_put(p):
     return {"ok": True}
 
 
+# ── CloudWatch Logs (core/logs_core.py) ─────────────────────────────────────
+def logs_console(p):
+    """Console REST for CloudWatch Logs: the SAME logs_core.console_dispatch the
+    offline appliance serves, on the shared registry store (so the console and an
+    SDK/CLI on the relay see one set of log groups)."""
+    from core import logs_core, nano_registry
+    status, body = logs_core.console_dispatch(
+        nano_registry.get()["logs"], p.get("method") or "GET", p.get("path") or "",
+        p.get("query") or {}, p.get("body") or {})
+    return {"ok": status < 400, "__http": {"status": status, "headers": {}, "body": body}}
 # ── ELBv2 (core/elbv2_core.py) — shared store with the native wire ──────────
 def _elb_store():
     from core import nano_registry

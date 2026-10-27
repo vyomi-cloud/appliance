@@ -121,6 +121,8 @@ class Aws(CloudProvider):
             ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),
             ("eventbridge", "DeleteRule"): lambda b, a, p: D.eb_delete(p),
             ("eventbridge", "PutEvent"):  lambda b, a, p: D.eb_put_event(p),
+            # CloudWatch Logs — console REST, via core/logs_core.py
+            ("logs", "Console"):          lambda b, a, p: D.logs_console(p),
         }
 
 

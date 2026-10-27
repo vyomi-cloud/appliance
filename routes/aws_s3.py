@@ -1054,6 +1054,8 @@ def _aws_query_target_service(request: Request) -> str:
         return "secretsmanager"
     if target.startswith("AWSEvents."):
         return "events"
+    if target.startswith("Logs_20140328."):
+        return "logs"
     return ""
 
 
@@ -1097,6 +1099,9 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             if str(params.get("Action", "")).strip() in _EC2_VPC_ACTIONS:
                 return await _srv().api_vpc_query(request)
             return await _srv().api_ec2_query(request)
+        if service == "logs":
+            from routes import aws_logs as _aws_logs
+            return await _aws_logs.wire(request)
         if service == "sqs":
             return await _srv().api_sqs_query(request)
         if service == "elasticloadbalancing":

@@ -52,6 +52,7 @@ CORES = [
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
     "elbv2_core.py",                                # AWS: Elastic Load Balancing v2 control plane — native Query wire + console REST
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)
+    "logs_core.py",                                # expansion AWS: CloudWatch Logs (log groups/streams/events/insights) — vendored VERBATIM
     "persistent_store.py",                          # v2.4.0: file-backed (sqlite) substrate — the anti-drift gate
     "aws_wire_router.py",                            # native-wire front door (relay/bridge)
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
@@ -61,8 +62,9 @@ CORES = [
     "nano_persist.py",                              # store serialize/restore + cross-context sync (persistence + console↔SDK parity)
 ]
 
-# Cores vendored as an exact copy (no generated-file header).
-VERBATIM = {"elbv2_core.py"}
+# Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
+# Nano copy of a new service's engine to be identical to core/.
+VERBATIM = {"logs_core.py", "elbv2_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
