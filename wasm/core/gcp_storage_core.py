@@ -84,7 +84,7 @@ def _json(status: int, obj: dict) -> GcsResponse:
 # ── resource views ────────────────────────────────────────────────────────
 def _bucket_view(store: ObjectStore, name: str) -> dict:
     meta = store.buckets.get(name, {})
-    return {
+    view = {
         "kind": "storage#bucket",
         "id": name,
         "name": name,
@@ -97,6 +97,13 @@ def _bucket_view(store: ObjectStore, name: str) -> dict:
         "timeCreated": meta.get("timeCreated", _now()),
         "updated": meta.get("updated", _now()),
     }
+    # Surface mutable settings (set via bucket PATCH) so the console's settings tabs
+    # — Lifecycle, Encryption, Retention, Versioning, Labels, … — read them back.
+    for k in ("lifecycle", "encryption", "retentionPolicy", "versioning", "labels",
+              "cors", "website", "logging", "iamConfiguration", "autoclass", "softDeletePolicy"):
+        if k in meta:
+            view[k] = meta[k]
+    return view
 
 
 def _object_view(bucket: str, name: str, entry: dict) -> dict:
@@ -233,6 +240,18 @@ def dispatch(store: ObjectStore, method: str, path: str,
             store.buckets.pop(bucket, None)
             store.objects.pop(bucket, None)
             return GcsResponse(status=204, body=b"", media_type=None)
+        if method in ("PATCH", "PUT"):   # update bucket settings (lifecycle, encryption, retention, …)
+            if not store.bucket_exists(bucket):
+                return _err(404, "notFound", "The specified bucket does not exist.")
+            try:
+                patch = json.loads(body.decode("utf-8")) if body else {}
+            except Exception:
+                patch = {}
+            for k in ("kind", "id", "name", "selfLink", "timeCreated", "projectNumber", "etag"):
+                patch.pop(k, None)
+            store.buckets[bucket].update(patch)
+            store.buckets[bucket]["updated"] = _now()
+            return _json(200, _bucket_view(store, bucket))
         return _err(400, "invalid", f"Unsupported method {method} on bucket")
 
     # ---- objects ----
