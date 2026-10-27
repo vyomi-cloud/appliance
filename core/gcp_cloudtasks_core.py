@@ -622,6 +622,10 @@ def dispatch(store, method: str, path: str, query: dict | None = None,
              headers: dict | None = None, body: bytes = b"") -> GcpResponse:
     query = dict(query or {})
     method = method.upper()
+    if method == "POST":   # java.net clients cannot send PATCH: they POST with X-HTTP-Method-Override
+        for hk, hv in (headers or {}).items():
+            if str(hk).lower() == "x-http-method-override" and str(hv).upper() in ("PATCH", "PUT", "DELETE"):
+                method = str(hv).upper()
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}
     except Exception:
