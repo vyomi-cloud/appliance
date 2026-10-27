@@ -410,10 +410,11 @@ def rbac_check(p):
 # keyed by the console's fullKey ("ec2/volumes"), returning the {value:[...]}
 # envelope the console expects. Console-only (not native-wire); session-scoped
 # (reload-persistence is a follow-up — would live in nano_registry).
-import itertools as _xit
-_EXTRAS = {}
-_EXTRAS_CFG = {}
-_EXTRAS_SEQ = _xit.count(1)
+# Held in the persisted registry ("extras": public dicts `items` / `cfg`) so the
+# rows survive a page reload like every other store.
+_XNS = _R.get()["extras"]
+_EXTRAS = _XNS.items
+_EXTRAS_CFG = _XNS.cfg
 
 
 def _extras_vals(p):
@@ -428,10 +429,15 @@ def extras_create(p):
     key = p.get("key", "")
     vals = _extras_vals(p)
     leaf = key.split("/")[-1].rstrip("s") or "resource"
-    name = str(vals.get("name") or vals.get("Name")
-               or f"{leaf}-{format(next(_EXTRAS_SEQ), '08x')}")
+    name = str(p.get("name") or vals.get("Name") or "")
+    if not name:
+        n = len(_EXTRAS.get(key, {})) + 1
+        while f"{leaf}-{n:08x}" in _EXTRAS.get(key, {}):
+            n += 1
+        name = f"{leaf}-{n:08x}"
     item = {"name": name, "id": vals.get("id") or name, "state": vals.get("state", "available"), **vals}
     item["name"] = name
+    item.setdefault("created", _now())
     _EXTRAS.setdefault(key, {})[name] = item
     return {"ok": True, **item}
 

@@ -75,6 +75,7 @@ def get() -> dict:
             # live here (not as module singletons) so nano_persist snapshots them.
             "compute": types.SimpleNamespace(),
             "vpc_net": types.SimpleNamespace(),
+            "extras": types.SimpleNamespace(items={}, cfg={}),   # console EC2/VPC/EventBridge sub-resource CRUD
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),
