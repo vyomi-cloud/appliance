@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 00:55 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 01:37 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 36 services (AWS 12 · GCP 12 · Azure 12) of 1,068 the clouds publish
-- **Building now:** Amazon CloudWatch Logs (AWS, no manifest yet checks)
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), Elastic Load Balancing (AWS)
+- **Building now:** nothing
+- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon CloudWatch Logs (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), Elastic Load Balancing (AWS)
 - **Queued:** 71 services (P1 first, then P2)
 - **Consoles really implemented:** offline 47% · Nano 47%
 - **Hourly tests:** 15 of 24 suites passing (run 00:45 UTC)
@@ -16,7 +16,7 @@ _Updated 2026-10-27 00:55 UTC · refreshes after every pipeline run_
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 12 | 1 | 9 | 23 | 36% · 46% |
+| AWS | 12 | 0 | 10 | 23 | 36% · 46% |
 | GCP | 12 | 0 | 0 | 24 | 39% · 45% |
 | Azure | 12 | 0 | 0 | 24 | 66% · 49% |
 
@@ -25,7 +25,7 @@ _Updated 2026-10-27 00:55 UTC · refreshes after every pipeline run_
 | Service | Cloud | Stage | Checks | Still missing |
 |---|---|---|---|---|
 | Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🔍 In gate ([PR #95](https://github.com/vyomi-cloud/appliance/pull/95)) | 18/18 | — |
-| Amazon CloudWatch Logs [#59](https://github.com/vyomi-cloud/appliance/issues/59) | AWS | 🛠 Building | no manifest yet | — |
+| Amazon CloudWatch Logs [#59](https://github.com/vyomi-cloud/appliance/issues/59) | AWS | 🔍 In gate ([PR #105](https://github.com/vyomi-cloud/appliance/pull/105)) | 18/18 | — |
 | Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🔍 In gate ([PR #96](https://github.com/vyomi-cloud/appliance/pull/96)) | 18/18 | — |
 | Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🔍 In gate ([PR #101](https://github.com/vyomi-cloud/appliance/pull/101)) | 19/19 | — |
 | Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🔍 In gate ([PR #100](https://github.com/vyomi-cloud/appliance/pull/100)) | 20/20 | — |
@@ -208,6 +208,31 @@ _Updated 2026-10-27 00:55 UTC · refreshes after every pipeline run_
 | ✅ | has a offline ui test bed |  |
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | cloudwatch |
+| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
+| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ✅ | claimed operations exist in the real API | not upstream: [] |
+
+</details>
+
+<details><summary>Gate checks — Amazon CloudWatch Logs (AWS)</summary>
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
+| ✅ | manifest status is ready | status=ready |
+| ✅ | engine exists in core/ | core/logs_core.py |
+| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/logs_core.py |
+| ✅ | engine listed in wasm/build_cores.py |  |
+| ✅ | service in the Nano console catalog (wasm/fixtures) | aws-catalog.json |
+| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
+| ✅ | registry entry (pending-release or released) |  |
+| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
+| ✅ | has a offline sdk-java test bed |  |
+| ✅ | has a offline sdk-go test bed |  |
+| ✅ | has a offline cli test bed |  |
+| ✅ | has a offline ui test bed |  |
+| ✅ | has a nano ui test bed |  |
+| ✅ | upstream id tracked by the hourly upstream watcher | logs |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
 | ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
