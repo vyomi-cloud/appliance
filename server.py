@@ -5985,7 +5985,7 @@ api = APIRouter(prefix="/api/s3")
 def api_list_buckets():
     return {
         "owner": "cloudlearn-simulator",
-        "buckets": [{"name": n, **{k: v for k, v in m.items() if k not in {"tags", "notifications"}}} for n, m in buckets.items()],
+        "buckets": [{"name": n, **{k: v for k, v in m.items() if k not in {"tags", "notifications"}}, "creation_date": m.get("created", "")} for n, m in buckets.items()],
         "count": len(buckets),
     }
 
