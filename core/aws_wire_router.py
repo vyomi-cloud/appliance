@@ -62,6 +62,7 @@ from core import gcp_cloudscheduler_core as gcp_sched
 from core import gcp_container_core as gcp_gke
 from core import gcp_iamcredentials_core as gcp_iamc
 from core import gcp_redis_core as gcp_redis
+from core import gcp_artifactregistry_core as gcp_ar
 
 
 def _gcp_service(path):
@@ -80,6 +81,8 @@ def _gcp_service(path):
             return "gcp-container"
         if re.search(r"/locations/[^/]+/jobs([/:]|$)", path) or re.search(r"^/v1(beta1)?/projects/[^/]+/locations/?$", path):
             return "gcp-cloudscheduler"
+        if "/locations/" in path and ("/repositories" in path or "/operations/" in path):
+            return "gcp-artifactregistry"
         if "/databases/" in path and "/documents" in path:
             return "gcp-firestore"
         if "/keyRings" in path:
@@ -259,6 +262,7 @@ class AwsWireRouter:
         self.gcp_gke = s.get("gcp_gke") or gcp_gke.ContainerStore()   # Kubernetes Engine clusters
         self.gcp_redis = s.get("gcp_redis") or gcp_redis.RedisStore()   # Memorystore for Redis instances
         self.gcp_iamc = s.get("gcp_iamc") or gcp_iamc.IamCredentialsStore()   # IAM Service Account Credentials issue log
+        self.gcp_ar = s.get("gcp_ar") or gcp_ar.ArtifactRegistryStore()
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -490,6 +494,7 @@ class AwsWireRouter:
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
                 "gcp-container": (gcp_gke, self.gcp_gke), "gcp-iamcredentials": (gcp_iamc, self.gcp_iamc),
                 "gcp-redis": (gcp_redis, self.gcp_redis),
+                "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store

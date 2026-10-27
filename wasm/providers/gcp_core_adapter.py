@@ -32,6 +32,7 @@ from core import gcp_cloudscheduler_core as _sched
 from core import gcp_container_core as _gke
 from core import gcp_iamcredentials_core as _iamc
 from core import gcp_redis_core as _redis
+from core import gcp_artifactregistry_core as _ar
 from core.sql_store import InMemorySqlStore
 
 PROJ = "demo"          # the console's default project
@@ -56,11 +57,12 @@ _STORES = {
     "container":     _R["gcp_gke"],
     "iamcredentials": _R["gcp_iamc"],
     "redis":         _R["gcp_redis"],
+    "artifactregistry": _R["gcp_ar"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis, "artifactregistry": _ar,
 }
 
 
@@ -547,6 +549,23 @@ def resource_op(service, operation, name="", body=None):
         if operation == "Delete":
             st, _ = _call(svc, "DELETE", f"{base}/{name}")
             return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+
+    # ---------------- ARTIFACT REGISTRY (repositories + packages/versions/tags/images) ----------------
+    if svc == "artifactregistry":
+        st_ = _STORES[svc]
+        if operation == "List":
+            return {"ok": True, "items": _ar.console_list(st_)}
+        if operation == "Create":
+            return _ar.console_create(st_, PROJ, {**body, "name": rid})
+        if operation == "Get":
+            full, repo = _ar.console_find(st_, name)
+            return {"ok": True, **_ar.console_row(repo)} if repo else {"ok": False, "code": "NotFound", "name": name}
+        if operation == "Delete":
+            return _ar.console_delete(st_, name)
+        if operation in ("ListPackages", "ListVersions", "ListTags", "ListImages"):
+            return {"ok": True, "items": _ar.console_children(st_, name, operation[4:].lower())}
+        if operation == "PushSample":
+            return _ar.console_push_sample(st_, name, body)
 
     # ---------------- CLOUD SQL (instances) ----------------
     if svc == "cloudsql":

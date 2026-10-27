@@ -32,7 +32,7 @@ _B64 = "__b64__"
 # cleanly onto either the router or the console adapter's registry.
 STORE_ATTRS = [
     "s3", "ddb", "kms", "sec", "rds", "iam", "msg", "logs", "elbv2", "kinesis",
-    "gcs", "gcp_fs", "gcp_kms", "gcp_sec", "gcp_msg", "gcp_iam", "gcp_sql",
+    "gcs", "gcp_fs", "gcp_kms", "gcp_sec", "gcp_msg", "gcp_iam", "gcp_sql", "gcp_ar",
     "az_blob", "az_cosmos", "az_kvsec", "az_kvkeys", "az_queue", "az_sb",
     "apigwv2",  # API Gateway V2 (core/apigatewayv2_core.ApiGwV2Store)
     "compute", "vpc_net", "extras",   # Lambda/API Gateway + VPC models (private _lambda_functions etc., see _DURABLE_PRIVATE)

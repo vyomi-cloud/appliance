@@ -285,6 +285,10 @@ _KMS_SUB = [
 # ============================================================================
 # Cloud Scheduler — job detail (generic `schedkv` renderer: `fields` is
 # [[field, label], …] read off the job's console view, every value filled)
+# =====================================================================    ]},
+]
+
+
 # ============================================================================
 _CLOUDSCHEDULER_SUB = [
     {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
@@ -397,6 +401,30 @@ _REDIS_SUB = [
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+=======
+# Artifact Registry — repository detail
+# ============================================================================
+_ARTIFACTREGISTRY_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Artifacts", "items": [
+        {"key": "images",   "label": "Images",   "icon": "deployed_code", "type": "sublist",
+         "source": "images", "empty": "No images yet. Push one with docker, or use Push sample image.",
+         "columns": [["name", "Image"], ["digest", "Digest"], ["tags", "Tags"], ["size", "Size"], ["uploaded", "Uploaded"]],
+         "actions": [{"label": "Push sample image", "op": "pushSample"}]},
+        {"key": "packages", "label": "Packages", "icon": "inventory_2", "type": "sublist",
+         "source": "packages", "empty": "No packages in this repository.",
+         "columns": [["name", "Package"], ["versions", "Versions"], ["tags", "Tags"], ["created", "Created"], ["updated", "Updated"]]},
+        {"key": "versions", "label": "Versions", "icon": "history", "type": "sublist",
+         "source": "versions", "empty": "No versions in this repository.",
+         "columns": [["name", "Version"], ["package", "Package"], ["tags", "Tags"], ["size", "Size"], ["created", "Created"]]},
+        {"key": "tags",     "label": "Tags",     "icon": "sell", "type": "sublist",
+         "source": "tags", "empty": "No tags in this repository.",
+         "columns": [["name", "Tag"], ["package", "Package"], ["version", "Version"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "labels", "label": "Labels", "icon": "sell", "type": "tags"},
+        {"key": "iam",    "label": "Permissions", "icon": "admin_panel_settings", "type": "iam"},
+        *_settings_props(),
     ]},
 ]
 
@@ -414,6 +442,7 @@ SUB_BLADES: dict[str, list] = {
     "iam":           _IAM_SUB,
     "eventarc":      _EVENTARC_SUB,
     "secretmanager": _SECRETMANAGER_SUB,
+    "artifactregistry": _ARTIFACTREGISTRY_SUB,
     "kms":           _KMS_SUB,
     "cloudscheduler": _CLOUDSCHEDULER_SUB,
     "iamcredentials": _IAMCREDENTIALS_SUB,
