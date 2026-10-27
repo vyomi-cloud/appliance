@@ -51,7 +51,7 @@ check("root rule can't be deleted", cp(st, "DELETE", ["namespaces", "ehns-one", 
 H = ["namespaces", "ehns-one", "eventhubs"]
 r = cp(st, "PUT", H + ["orders"], {"properties": {"partitionCount": 4, "messageRetentionInDays": 3}})
 hp = r["body"]["properties"]
-check("event hub create", r["status"] == 201 and hp["partitionIds"] == ["0", "1", "2", "3"] and hp["messageRetentionInDays"] == 3
+check("event hub create (200, as the real API)", r["status"] == 200 and hp["partitionIds"] == ["0", "1", "2", "3"] and hp["messageRetentionInDays"] == 3
       and hp["status"] == "Active", r["body"])
 check("partitionCount bounds", cp(st, "PUT", H + ["x"], {"properties": {"partitionCount": 99}})["status"] == 400)
 check("retention bounds (Standard ≤ 7)", cp(st, "PUT", H + ["x"], {"properties": {"messageRetentionInDays": 30}})["status"] == 400)
@@ -90,7 +90,7 @@ check("REST unknown hub → 404", eh.data_dispatch(st, "ehns-one", "POST", "/nop
 check("REST partition properties", eh.data_dispatch(st, "ehns-one", "GET", "/orders/partitions/2")["body"]["partitionId"] == "2")
 
 check("basic tier: one consumer group only", cp(st, "PUT", ["namespaces", "ehbasic"], {"location": "eastus", "sku": {"name": "Basic"}})["body"]["properties"]["kafkaEnabled"] is False
-      and cp(st, "PUT", ["namespaces", "ehbasic", "eventhubs", "h"], {})["status"] == 201
+      and cp(st, "PUT", ["namespaces", "ehbasic", "eventhubs", "h"], {})["status"] == 200
       and cp(st, "PUT", ["namespaces", "ehbasic", "eventhubs", "h", "consumergroups", "c"], {})["status"] == 400)
 check("basic tier: retention capped at 1 day", cp(st, "PUT", ["namespaces", "ehbasic", "eventhubs", "h2"], {"properties": {"messageRetentionInDays": 2}})["status"] == 400)
 check("network rule set default", cp(st, "PUT", ["namespaces", "ehns-one", "networkRuleSets", "default"], {"properties": {"defaultAction": "Deny", "ipRules": [{"ipMask": "1.2.3.4", "action": "Allow"}]}})["body"]["properties"]["defaultAction"] == "Deny")
@@ -109,6 +109,6 @@ base = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg/pr
 resp = arm.handle("PUT", f"{base}/namespaces/armns-one", {"api-version": "2024-01-01"}, NS)
 check("AzureArm routes Microsoft.EventHub to the engine (+ LRO headers)", resp["status"] == 200 and "Azure-AsyncOperation" in resp["headers"], resp)
 resp = arm.handle("PUT", f"{base}/namespaces/armns-one/eventhubs/h1", {"api-version": "2024-01-01"}, {"properties": {"partitionCount": 2}})
-check("AzureArm routes event hub children", resp["status"] == 201 and resp["body"]["properties"]["partitionCount"] == 2, resp)
+check("AzureArm routes event hub children", resp["status"] == 200 and resp["body"]["properties"]["partitionCount"] == 2, resp)
 print(f"{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

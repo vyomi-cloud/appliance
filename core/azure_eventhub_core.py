@@ -511,7 +511,7 @@ def _hub_ops(ns, rest, method, payload, query):
         return _ok(_hub_view(ns, hubs[key]))
     if method == "PUT":
         h, created = _put_hub(ns, name, payload)
-        return _ok(_hub_view(ns, h), 201 if created else 200)
+        return _ok(_hub_view(ns, h))
     if method == "DELETE":
         hubs.pop(key, None)
         return _ok(None, 200)

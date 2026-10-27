@@ -376,6 +376,13 @@
    "upstream": "cognitiveservices",
    "status": "released",
    "released_in": "3.0.20"
+  },
+  {
+   "cloud": "azure",
+   "key": "eventhub",
+   "name": "Event Hubs",
+   "upstream": "eventhub",
+   "status": "pending-release"
   }
  ]
 }
