@@ -35,6 +35,10 @@
       <groupId>com.google.cloud</groupId>
       <artifactId>google-cloud-scheduler</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-dns</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

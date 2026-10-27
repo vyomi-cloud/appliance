@@ -40,7 +40,7 @@ QUOTA = {"kind": "dns#quota", "managedZones": 10000, "rrsetsPerManagedZone": 100
          "policies": 1000, "targetNameServersPerManagedZone": 100,
          "targetNameServersPerPolicy": 100, "whitelistedKeySpecs": []}
 DEFAULT_TTL = 300
-NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,61}[a-z0-9]$")
+NAME_RE = re.compile(r"^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$")
 _NS_SETS = "abcd"
 
 
@@ -229,6 +229,7 @@ def create_zone(store, project, payload):
         zone["nameServers"] = _nameservers(project, name)
         zone["dnssecConfig"] = dict(payload.get("dnssecConfig") or {}, kind="dns#managedZoneDnsSecConfig")
         zone["dnssecConfig"].setdefault("state", "off")
+        zone["dnssecConfig"].setdefault("nonExistence", "nsec3")
         if payload.get("nameServerSet"):
             zone["nameServerSet"] = payload["nameServerSet"]
     else:
