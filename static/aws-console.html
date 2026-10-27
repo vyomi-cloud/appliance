@@ -1679,6 +1679,9 @@ async function renderDetail(main){
   const path = fillPath(svc.resource_path, {name});
   const r = await api("GET", path);
   const full = (r.ok && r.json) ? r.json : itemStub;
+  // Sub-renderers address the resource as full.name; engines whose payload
+  // keys it differently (table_name, queue_name) still get a usable name.
+  if (full && typeof full === "object" && !full.name && name) full.name = name;
 
   // Top: ID line + actions
   const top = el("div",{class:"detail-top"});
@@ -3204,7 +3207,7 @@ SUB_RENDERERS.rdsparametergroups = function(svc, full, host){
 
 // API Gateway
 SUB_RENDERERS.apiresources = function(svc, full, host){
-  fetch(ORIGIN+fillPath(svc.api_paths.resources.path, {name: full.id || full.name})).then(r=>r.json()).then(j=>{
+  fetch(ORIGIN+fillPath(svc.api_paths.resources.path, {name: full.rest_api_id || full.id || full.name})).then(r=>r.json()).then(j=>{
     const items = j.resources || j.value || j.items || [];
     if (!items.length) { host.append(el("div",{class:"empty"}, "No resources yet.")); return; }
     const tbl = el("table",{class:"aws"});
@@ -3216,7 +3219,7 @@ SUB_RENDERERS.apiresources = function(svc, full, host){
   });
 };
 SUB_RENDERERS.apistages = function(svc, full, host){
-  fetch(ORIGIN+fillPath(svc.api_paths.stages.path, {name: full.id || full.name})).then(r=>r.json()).then(j=>{
+  fetch(ORIGIN+fillPath(svc.api_paths.stages.path, {name: full.rest_api_id || full.id || full.name})).then(r=>r.json()).then(j=>{
     const items = j.stages || j.value || j.items || [];
     if (!items.length) { host.append(el("div",{class:"empty"}, "No stages.")); return; }
     const tbl = el("table",{class:"aws"});

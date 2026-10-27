@@ -33,8 +33,15 @@ self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 // ahead of Pyodide loading. We hold /api/* dispatch until the page signals the
 // backend is up, so early calls just wait instead of failing.
 let _ready, readyPromise = new Promise((r) => (_ready = r));
+// A page that reloads (or a second tab) boots its own Pyodide, so readiness is
+// per window client: dispatching to a client that hasn't signalled yet (or has
+// gone) would drop the message and surface as a 500 "backend timeout".
+const readyClients = new Set();
 self.addEventListener("message", (e) => {
-  if (e.data && e.data.type === "pyodide-ready") _ready();
+  if (e.data && e.data.type === "pyodide-ready") {
+    if (e.source && e.source.id) readyClients.add(e.source.id);
+    _ready();
+  }
 });
 
 // ── Route table (built once from the dumped catalog) ──────────────────
@@ -199,6 +206,26 @@ async function handleUpload(request, bucket, provider = "aws") {
   return json({ ok, uploaded: results.length, results }, ok ? 200 : 400);
 }
 
+// Real-cloud list price ($/month per resource) by census service key — mirrors the
+// table clouds.html uses for the Spaces cards, so both agree.
+const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,"microsoft.compute/virtualmachines":30.37,"microsoft.sql/servers":4.99,"microsoft.storage/storageaccounts":0.50,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.servicebus/namespaces":9.81,"microsoft.keyvault/vaults":0.03};
+async function nanoCostSavings() {
+  const now = Date.now();
+  const by_provider = { aws: 0, gcp: 0, azure: 0 };
+  let resource_count = 0;
+  for (const p of ["aws", "gcp", "azure"]) {
+    let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
+    if (!c || typeof c.ts !== "number" || (now - c.ts) >= 60000) continue;
+    resource_count += c.resources || 0;
+    const bs = c.by_service || {};
+    let usd = 0;
+    for (const k in bs) usd += (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+    by_provider[p] = Math.round(usd * 100) / 100;
+  }
+  const savings_usd = Math.round((by_provider.aws + by_provider.gcp + by_provider.azure) * 100) / 100;
+  return { resource_count, savings_usd, by_provider, period: "monthly" };
+}
+
 // Each console gates on an active space whose provider matches it. We derive
 // the provider from the page making the request, so aws/gcp/azure consoles all
 // pass their gate from the same in-browser substrate.
@@ -322,8 +349,16 @@ async function providerOf(clientId) {
 // Ask the page (where Pyodide lives) to run a dispatch tuple.
 async function runInPage(tuple) {
   await readyPromise;
-  const all = await self.clients.matchAll({ includeUncontrolled: true });
-  const client = all.find((c) => c.type === "window") || all[0];
+  // Wait (bounded) for a live window whose Pyodide has signalled ready; after a
+  // reload the old client id is gone and the new page is still booting.
+  let client = null;
+  for (let i = 0; i < 240 && !client; i++) {
+    const all = await self.clients.matchAll({ includeUncontrolled: true });
+    const wins = all.filter((c) => c.type === "window");
+    client = wins.find((c) => readyClients.has(c.id)) || null;
+    if (!client && !wins.length && all[0]) client = all[0];
+    if (!client) await new Promise((r) => setTimeout(r, 250));
+  }
   if (!client) throw new Error("no client to run the in-browser backend");
   return await new Promise((resolve, reject) => {
     const ch = new MessageChannel();
@@ -382,6 +417,22 @@ async function route(method, path, body, query) {
 
   // ── v2.9.0 Azure net-new data planes → real cores (dataplane_adapter) ──
   let am;
+  // Storage-account console routes (/api/azure/storage/{acct}/containers|queues…)
+  // → the same Azurite-equivalent blob/queue cores the native SDKs use.
+  am = path.match(/^\/api\/azure\/storage\/([^/]+)\/(containers|queues)(?:\/([^/]+))?(?:\/blobs(?:\/(.+))?)?$/);
+  if (am) {
+    const svc = am[2] === "queues" ? "queues" : "blobcontainers", item = am[3] ? decodeURIComponent(am[3]) : "";
+    const isBlobs = /\/blobs(\/|$)/.test(path), blob = am[4] ? decodeURIComponent(am[4]) : "";
+    if (!item) {
+      if (method === "GET")  return { tuple: ["azure", "_resource", "ConsoleList", { service: svc }] };
+      if (method === "POST") return { tuple: ["azure", "_resource", "Create", { service: svc, body: body || {} }] };
+    } else if (isBlobs && svc === "blobcontainers") {
+      if (method === "GET" && !blob)    return { tuple: ["azure", "_resource", "ListBlobs", { service: svc, name: item }] };
+      if (method === "DELETE" && blob)  return { tuple: ["azure", "_resource", "DeleteObject", { service: svc, name: item, body: { blob } }] };
+    } else if (method === "DELETE") {
+      return { tuple: ["azure", "_resource", "Delete", { service: svc, name: item }] };
+    }
+  }
   // Service Bus (core/azure_servicebus_core.py) — topics + subscriptions + send/receive
   if (path === "/api/servicebus/topics") {
     if (method === "GET")  return { tuple: ["azure", "servicebus", "ListTopics", {}] };
@@ -716,6 +767,15 @@ self.addEventListener("fetch", (event) => {
       // The active space is provider-specific (console gate) — derive it from
       // the requesting page so every console opens against a matching space.
       // Prefer a user-created space for that provider (honours its name/region).
+      // Host CPU/memory budget chip: Nano has no host to carve a budget from; report
+      // the browser's own CPU/memory so the chip renders instead of a 501.
+      if (apiPath === "/api/runtime/budget" && method === "GET") {
+        const cpu = (self.navigator && self.navigator.hardwareConcurrency) || 1;
+        const memMb = Math.round((((self.navigator && self.navigator.deviceMemory) || 4)) * 1024);
+        return json({ budget: { cpu, memory_mb: memMb }, used: { cpu: 0, memory_mb: 0 },
+                      free: { cpu, memory_mb: memMb }, host: { cpu, memory_mb: memMb },
+                      budget_pct: 100, clamp: [30, 100], bypassed: true });
+      }
       if (apiPath === "/api/spaces/active" && method === "GET") {
         const prov = await providerOf(event.clientId);
         let match = null;
@@ -735,6 +795,10 @@ self.addEventListener("fetch", (event) => {
         for (const s of [...(fx.spaces || []), ...created])
           if (!seen.has(s.space_id)) { seen.add(s.space_id); spaces.push(s); }
         let active = fx.active_space_id; try { active = (await metaGet("active")) || active; } catch (_) {}
+        // Every space reports the same cost_savings shape the appliance's core/cost_model
+        // produces, from the live census of the one shared in-browser substrate.
+        const cs = await nanoCostSavings();
+        for (const s of spaces) s.cost_savings = cs;
         return json({ spaces, active_space_id: active });
       }
       // Appliance-health pies: per-cloud distribution computed live from the

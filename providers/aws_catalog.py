@@ -241,7 +241,7 @@ RESOURCE_CATALOG_AWS = [
         "namespace": "AWS/DynamoDB", "service": "dynamodb",
         "collection_path": "/api/dynamodb/tables",
         "resource_path":   "/api/dynamodb/tables/{name}",
-        "name_field":      "name",
+        "name_field":      "table_name",
         "create_method":   "POST",
         "rail_items": [
             {"key": "dashboard",    "label": "Dashboard",         "icon": "dashboard",   "type": "stub"},
@@ -285,7 +285,7 @@ RESOURCE_CATALOG_AWS = [
         "namespace": "AWS/SQS", "service": "sqs",
         "collection_path": "/api/sqs/queues",
         "resource_path":   "/api/sqs/queues/{name}",
-        "name_field":      "name",
+        "name_field":      "queue_name",
         "create_method":   "POST",
         "rail_items": [
             {"key": "queues",     "label": "Queues",     "icon": "queue",   "type": "primary"},

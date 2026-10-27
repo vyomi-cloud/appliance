@@ -195,6 +195,13 @@ def register(app: FastAPI) -> None:
     @app.get("/api/spaces")
     def api_list_spaces():
         _srv()._refresh_cloudsim_gcp_summary()
+        # Resources created through paths that don't emit a usage event (rail
+        # extras, GCP console creates) must still move cost_savings: recompute
+        # the active space's inventory + savings from live state before reading.
+        try:
+            _srv()._cloudsim_refresh_bridge("spaces.list")
+        except Exception:
+            pass
         # SANDBOX TTL: in a cloud sandbox, make sure every space carries the
         # default TTL so the countdown shows (incl. the bootstrap default spaces).
         # No-op offline. Best-effort — never 500 the list.
