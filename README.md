@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 14:27 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 14:31 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 44 services (AWS 16 · GCP 16 · Azure 12) of 1,068 the clouds publish
-- **Building now:** app (Azure, 18/18 checks)
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP)
+- **Building now:** nothing
+- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), app (Azure)
 - **Queued:** 52 services (P1 first, then P2)
 - **Consoles really implemented:** offline not measured yet · Nano not measured yet
 - **Hourly tests:** 0 of 0 suites passing
@@ -18,7 +18,7 @@ _Updated 2026-10-27 14:27 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | not measured yet · not measured yet |
 | GCP | 16 | 0 | 8 | 12 | not measured yet · not measured yet |
-| Azure | 12 | 1 | 0 | 23 | not measured yet · not measured yet |
+| Azure | 12 | 0 | 1 | 23 | not measured yet · not measured yet |
 
 ## In progress
 
@@ -44,7 +44,7 @@ _Updated 2026-10-27 14:27 UTC · refreshes after every pipeline run_
 | Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🔍 In gate ([PR #125](https://github.com/vyomi-cloud/appliance/pull/125)) | 19/19 | — |
 | Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | — |
 | Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #126](https://github.com/vyomi-cloud/appliance/pull/126)) | 18/18 | — |
-| app [#78](https://github.com/vyomi-cloud/appliance/issues/78) | Azure | 🛠 Building | 18/18 | — |
+| app [#78](https://github.com/vyomi-cloud/appliance/issues/78) | Azure | 🔍 In gate ([PR #127](https://github.com/vyomi-cloud/appliance/pull/127)) | 18/18 | — |
 
 ## Released services
 
