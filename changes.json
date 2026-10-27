@@ -1,5 +1,5 @@
 {
- "at": "2026-10-27T17:50:09+00:00",
+ "at": "2026-10-27T18:50:18+00:00",
  "baseline": false,
  "changes": [
   {
@@ -12,23 +12,131 @@
    "actionable": false
   },
   {
-   "cloud": "azure",
-   "service": "Azure DNS",
+   "cloud": "sdk",
+   "service": "cli:aws",
+   "kind": "release",
+   "key": "ver:cli:aws:2.39.0",
+   "title": "cli:aws: 2.38.6 \u2192 2.39.0",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "EventBridge",
    "kind": "announcement",
-   "key": "feed:azure:1ec64717934c",
-   "title": "[Launched] Generally Available: Azure DNS enables DNS-based load balancing through Traffic Manager linked records",
-   "link": "https://azure.microsoft.com/updates?id=573917",
-   "detail": "Azure DNS now provides DNS based load balancing by seamless integration with Azure Traffic Manager. Customers can directly associate an Azure DNS record set with a Traffic Manager profile, eliminating the need to create a CNAME record pointing to the traf",
+   "key": "feed:aws:17cdf7d3957f",
+   "title": "Amazon IVS Low-Latency Streaming now provides a failover slate",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-ivs-low-latency-streaming-failover-slate",
+   "detail": "Amazon Interactive Video Service (Amazon IVS) Low-Latency Streaming now provides a failover slate, an animated image that IVS displays to viewers when a broadcaster's stream is unexpectedly interrupted. Instead of a buffering wheel or frozen frame, viewers see the slate until the broadcaster reconnects. Live playback then resumes automatically, without viewers needing to refresh their player. The failover slate helps you retain your audience during momentary disruptions and is ideal for broadcasters streaming from mobile devices or from locations with unreliable connectivity. You can enable th",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "AWS Lambda",
+   "kind": "announcement",
+   "key": "feed:aws:c0f31bbf7921",
+   "title": "Amazon Connect Customer now enables you to use flow modules in agentic CX designer",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/agentic-cx-designer-flow-modules/",
+   "detail": "Amazon Connect Customer now enables you to use flow modules as data requests in agentic CX designer, so you can build and apply reusable logic across your customer experience flows. You can run a flow module at a fixed step in a conversation with a Data request node, or give it to a Generative journey as a tool to call when the conversation needs it. With this launch, you can use flow modules to update customer profiles and cases, create tasks, look up data tables, send an SMS confirmation, or check hours of operation and staffing before escalating to a human agent. You can also retrieve data ",
    "actionable": false
   },
   {
    "cloud": "azure",
-   "service": "Azure DNS",
+   "service": "Azure Monitor",
    "kind": "announcement",
-   "key": "feed:azure:deee8ff3a24a",
-   "title": "[In preview] Public Preview: Azure DNS enables DNS-based load balancing through Traffic Manager integration",
-   "link": "https://azure.microsoft.com/updates?id=565214",
-   "detail": "Azure DNS now offers a seamless way to integrate with Azure Traffic Manager for DNS-based traffic routing. Customers can now directly associate Azure DNS record set with Traffic Manager profiles without creating CNAME record for trafficmanager.net domain.",
+   "key": "feed:azure:04ddf5b2b621",
+   "title": "[Launched] Generally Available: Advanced platform metrics for Azure Monitor",
+   "link": "https://azure.microsoft.com/updates?id=575329",
+   "detail": "Advanced platform metrics for Azure Monitor are now generally available. Advanced platform metrics provide finer-grained signals that help customers more quickly and accurately identify changes and trends within their resources.With this release, customer",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Monitor",
+   "kind": "announcement",
+   "key": "feed:azure:7e93f492fbf5",
+   "title": "[Launched] Generally Available: Metrics usage insights for Azure Monitor workspace",
+   "link": "https://azure.microsoft.com/updates?id=577165",
+   "detail": "Metrics usage insights is now generally available, giving you greater visibility into what\u2019s driving metrics usage across your Azure Monitor workspace. Monitor workspace utilization, identify unused metrics, understand usage trends, and investigate change",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Monitor",
+   "kind": "lifecycle",
+   "key": "feed:azure:1c7d96bf5146",
+   "title": "Retirement: Pod name dimension in AKS pod platform metrics",
+   "link": "https://azure.microsoft.com/updates?id=570232",
+   "detail": "Beginning September 30, 2027, support for the pod name dimension on the following Azure Monitor platform metrics is retiring, and these metrics are transitioning to aggregate pod counters:Number of pods by phase (kube_pod_status_phase)Number of pods in Re",
+   "actionable": true
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Monitor",
+   "kind": "lifecycle",
+   "key": "feed:azure:005782f449b8",
+   "title": "Retirement: Transition to using standard tests for single-step availability testing in Azure Monitor application insights by September 30, 2028",
+   "link": "https://azure.microsoft.com/updates?id=transition-to-using-standard-tests-for-singlestep-availability-testing-in-azure-monitor-application-insights-by-30-september",
+   "detail": "URL ping tests in Application Insights were originally planned for retirement on September 30, 2026. In response to customer feedback requesting more time to complete migration, the retirement date has been extended by 24 months to September 30, 2028. On",
+   "actionable": true
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Monitor",
+   "kind": "announcement",
+   "key": "feed:azure:be2d7aa9054c",
+   "title": "[Launched] Generally Available: Logical replication slot sync status metric for Azure PostgreSQL Flexible Server ",
+   "link": "https://azure.microsoft.com/updates?id=568414",
+   "detail": "You can now monitor the synchronization status of your logical replication slots in Azure Database for PostgreSQL \u2013 Flexible Server using the new logical_replication_slot_sync_status metric. This Azure Monitor metric shows whether each logical replication",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Monitor",
+   "kind": "announcement",
+   "key": "feed:azure:e0eb96f329e7",
+   "title": "[Launched] Generally Available: Azure Copilot Observability Agent supports Basic and Auxiliary table plans",
+   "link": "https://azure.microsoft.com/updates?id=570250",
+   "detail": "Azure Copilot Observability Agent, an AI-powered operational companion in Azure Monitor, is now covering Log Analytics data in Basic and Auxiliary table plans during interactive analysis and deep investigations. Teams can move high-volume telemetry - incl",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Monitor",
+   "kind": "announcement",
+   "key": "feed:azure:78cf758849f6",
+   "title": "[Launched] Generally Available: Azure Monitor Auxiliary Logs Plan in Azure Government and China regions",
+   "link": "https://azure.microsoft.com/updates?id=569899",
+   "detail": "The Auxiliary table plan in Azure Monitor Logs is a cost-effective option for ingesting and retaining high-volume, verbose logs used for compliance and auditing. Auxiliary Logs is now generally available in the sovereign clouds: Azure Government (Fairfax)",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Monitor",
+   "kind": "announcement",
+   "key": "feed:azure:5d0aebe31cd2",
+   "title": "[Launched] Generally Available: Azure Monitor Auxiliary Logs Plan support for Azure tables and plan switching",
+   "link": "https://azure.microsoft.com/updates?id=569904",
+   "detail": "The Auxiliary table plan in Azure Monitor Logs gives you a cost-effective way to ingest and retain high-volume, verbose logs that you keep for compliance and auditing but rarely query. Two highly requested capabilities are now generally available.Auxiliar",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Monitor",
+   "kind": "announcement",
+   "key": "feed:azure:7a200ba82298",
+   "title": "[Launched] Generally Available: Control plane metrics collection for AKS with Managed Prometheus",
+   "link": "https://azure.microsoft.com/updates?id=568830",
+   "detail": "Control plane metrics collection for Azure Kubernetes Service (AKS), powered by Azure Monitor Managed Service for Prometheus, is now generally available.This capability gives AKS customers native observability into key managed control plane components, in",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Monitor",
+   "kind": "announcement",
+   "key": "feed:azure:871b5a8acf0c",
+   "title": "[In preview] Public Preview: Azure Monitor Logs mirroring into Microsoft Fabric",
+   "link": "https://azure.microsoft.com/updates?id=568322",
+   "detail": "This capability shares telemetry from Azure Monitor Log Analytics workspaces into Microsoft Fabric, making observability data available in OneLake as Delta Parquet, the open format, without duplication and with near real-time availability. All Azure Monit",
    "actionable": false
   }
  ],
