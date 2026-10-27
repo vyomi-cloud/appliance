@@ -653,7 +653,11 @@ _EVENTBRIDGE = {
         "Rules match incoming events and route them to one or more targets.",
         [["name","Name"],["event_bus_name","Event bus"],["rule_type","Type"],
          ["state","Status"],["target_count","Targets"]],
-        [{"name":"name","label":"Rule name","required":True}],
+        [{"name":"name","label":"Rule name","required":True},
+         {"name":"event_bus_name","label":"Event bus","default":"default"},
+         {"name":"rule_type","label":"Rule type","type":"select","default":"EventPattern",
+          "options":[{"value":"EventPattern","label":"Rule with an event pattern"},
+                     {"value":"Schedule","label":"Schedule"}]}],
         seed=[
             {"name":"ec2-state-changes","event_bus_name":"default","rule_type":"EventPattern",
              "state":"ENABLED","target_count":1},
