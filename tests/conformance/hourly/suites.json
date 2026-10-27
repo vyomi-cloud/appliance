@@ -81,6 +81,11 @@
     {"id": "offline-sdk-go-azure-app", "target": "offline", "cloud": "azure", "kind": "sdk-go", "cwd": "tests/conformance/azure-sdk-go-app", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-azure-app", "target": "offline", "cloud": "azure", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-app-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-azure-app", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-app.mjs", "timeout": 600},
-    {"id": "nano-ui-azure-app", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-app.mjs", "timeout": 600}
+    {"id": "nano-ui-azure-app", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-app.mjs", "timeout": 600},
+    {"id": "offline-sdk-java-azure-appconfiguration", "target": "offline", "cloud": "azure", "kind": "sdk-java", "cwd": "tests/conformance/azure-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=cloudlearn.AppConfigurationConformance", "timeout": 900},
+    {"id": "offline-sdk-go-azure-appconfiguration", "target": "offline", "cloud": "azure", "kind": "sdk-go", "cwd": "tests/conformance/azure-sdk-go-appconfiguration", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-azure-appconfiguration", "target": "offline", "cloud": "azure", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-appconfiguration-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-azure-appconfiguration", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-appconfiguration.mjs", "timeout": 600},
+    {"id": "nano-ui-azure-appconfiguration", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-appconfiguration.mjs", "timeout": 600}
   ]
 }

@@ -1978,6 +1978,81 @@ SUB_RENDERERS.appsecrets = function(svc, full, host){
     "No secrets defined.");
 };
 
+// ---- App Configuration (Microsoft.AppConfiguration) renderers --------------------
+SUB_RENDERERS.appconfigexplorer = function(svc, full, host){
+  const base = ORIGIN + full.id + "/keyValues";
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"}, "Key-values in ", el("strong",{}, full.name),
+      ". The App Configuration SDKs and `az appconfig kv` read and write the same data at ", getPath(full,"properties.endpoint")||"the store endpoint", "."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center;flex-wrap:wrap"});
+    bar.append(el("button",{class:"btn",onclick:addKv}, icon("add"), "Create key-value"),
+               el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base + q).then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      if (!items.length){ listHost.append(emptyState("No key-values — click Create key-value to add one.")); return; }
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Key","Label","Value","Content type","Last modified",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      items.forEach(it=>{
+        const p = it.properties || {};
+        t.append(el("tr",{},
+          el("td",{}, p.key), el("td",{}, p.label || "(No label)"), el("td",{}, p.value == null ? "" : String(p.value)),
+          el("td",{}, p.contentType || "—"), el("td",{}, p.lastModified || "—"),
+          el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>{
+            fetch(base + "/" + encodeURIComponent(it.name) + q, {method:"DELETE"}).then(()=>{ toast("Key-value deleted"); render(); });
+          }}, "Delete"))));
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("No key-values — click Create key-value to add one.")));
+  }
+  function addKv(){
+    const key = (prompt("Key:")||"").trim(); if(!key) return;
+    const value = prompt("Value:");  if(value===null) return;
+    const label = (prompt("Label (optional):")||"").trim();
+    const name = label ? key + "$" + label : key;
+    fetch(base + "/" + encodeURIComponent(name) + q, {method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({properties:{value:value, contentType:"text/plain"}})})
+      .then(r=>r.json()).then(()=>{ toast("Key-value saved"); render(); });
+  }
+  render();
+};
+SUB_RENDERERS.appconfigaccess = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Access keys authenticate SDKs and the CLI with a connection string. Read-only keys cannot modify key-values."));
+  const url = ORIGIN + full.id + "/listKeys?api-version=" + svc.apiVersion;
+  if (getPath(full,"properties.disableLocalAuth") === true){
+    host.append(emptyState("Access keys are disabled for this store (Microsoft Entra ID authentication only)."));
+    return;
+  }
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    fetch(url, {method:"POST"}).then(r=>r.json()).then(j=>{
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Name","Id","Secret","Connection string","Read only"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      (j.value||[]).forEach(k=>t.append(el("tr",{},
+        el("td",{}, k.name), el("td",{}, k.id), el("td",{}, k.value), el("td",{}, k.connectionString), el("td",{}, k.readOnly ? "Yes" : "No"))));
+      wrap.append(t);
+    }).catch(()=>wrap.append(emptyState("Could not load access keys.")));
+  }
+  render();
+};
+SUB_RENDERERS.appconfigreplicas = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Replicas serve the same key-values from other regions (Standard and Premium tiers)."));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Name","Location","Endpoint","Status"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  t.append(el("tr",{}, el("td",{}, full.name + " (origin)"), el("td",{}, full.location||"—"),
+                       el("td",{}, getPath(full,"properties.endpoint")||"—"), el("td",{}, getPath(full,"properties.provisioningState")||"Succeeded")));
+  host.append(t);
+  fetch(ORIGIN + full.id + "/replicas?api-version=" + svc.apiVersion).then(r=>r.json()).then(j=>{
+    (j.value||[]).forEach(r=>t.append(el("tr",{}, el("td",{}, r.name), el("td",{}, r.location||"—"),
+      el("td",{}, getPath(r,"properties.endpoint")||"—"), el("td",{}, getPath(r,"properties.provisioningState")||"Succeeded"))));
+  }).catch(()=>{});
+};
+
 SUB_RENDERERS.databases = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Databases under this SQL server."));
   listChildResources(svc, full, host, "databases",

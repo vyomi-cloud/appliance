@@ -287,6 +287,23 @@ _APP_SUB = [
     ]},
 ]
 
+_APPCONFIG_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Operations", "items": [
+        {"key": "configExplorer", "label": "Configuration explorer", "icon": "list_alt",   "type": "appconfigExplorer"},
+        {"key": "replicas",       "label": "Geo-replication",        "icon": "public",     "type": "appconfigReplicas"},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "accessSettings", "label": "Access settings",        "icon": "vpn_key",    "type": "appconfigAccess"},
+        {"key": "identity",       "label": "Identity",               "icon": "badge",      "type": "identity"},
+        {"key": "networking",     "label": "Networking",             "icon": "lan",        "type": "networking"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",        "label": "Metrics",                "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
@@ -307,5 +324,6 @@ SUB_BLADES: dict[str, list] = {
     "keyvault":    _KEYVAULT_SUB,
     "eventgrid":   _EVENTGRID_SUB,
     "app":         _APP_SUB,
+    "appconfiguration": _APPCONFIG_SUB,
     "rbac":        _RBAC_SUB,
 }
