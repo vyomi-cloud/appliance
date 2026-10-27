@@ -409,5 +409,29 @@
   "gcp_findings": 56,
   "azure_checks_passed": 122,
   "azure_findings": 31
+ },
+ {
+  "at": "2026-10-27T02:34:16+00:00",
+  "commit": "b0068f095141",
+  "suites_green": 19,
+  "suites_total": 28,
+  "checks_passed": 570,
+  "checks_failed": 80,
+  "api_coverage_pct": 13.1,
+  "ui_findings": 144,
+  "agent": "Fixed 2 offline UI findings (EC2 blank Public IPv4/DNS, S3 blank Creation date), added 2 API tests, ran only the 3 related suites (not the full green set).",
+  "new_features": 0,
+  "parity_gaps": 9,
+  "ops_tested_pct": 72.9,
+  "ui_clean_nano": 15,
+  "ui_total_nano": 43,
+  "ui_clean_offline": 12,
+  "ui_total_offline": 38,
+  "aws_checks_passed": 148,
+  "aws_findings": 79,
+  "gcp_checks_passed": 23,
+  "gcp_findings": 53,
+  "azure_checks_passed": 122,
+  "azure_findings": 12
  }
 ]
