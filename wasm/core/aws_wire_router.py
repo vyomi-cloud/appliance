@@ -95,6 +95,7 @@ from core import azure_queue_core as az_queue
 from core.azure_queue_core import AzureQueueStore
 from core import azure_servicebus_core as az_sb
 from core import eventbridge_core as events
+from core import logs_core as logs
 from core import lambda_core as lam
 from core import apigateway_core as apigw
 from core import vpc_core as vpc
@@ -148,20 +149,21 @@ _SIGNING = {
     "dynamodb": "dynamodb", "kms": "kms", "secretsmanager": "secretsmanager",
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
-    "events": "events", "lambda": "lambda", "ec2": "vpc",
+    "events": "events", "lambda": "lambda", "ec2": "vpc", "logs": "logs",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
 _TARGET_PREFIX = {
     "DynamoDB_": "dynamodb", "TrentService": "kms",
     "secretsmanager": "secretsmanager", "AmazonSQS": "sqs", "AWSEvents": "events",
+    "Logs_20140328": "logs",
 }
 
 # Native JSON content-types the real SDK expects back per service.
 _JSON_CT = {
     "dynamodb": "application/x-amz-json-1.0", "kms": "application/x-amz-json-1.1",
     "secretsmanager": "application/x-amz-json-1.1", "sqs": "application/x-amz-json-1.0",
-    "events": "application/x-amz-json-1.1",
+    "events": "application/x-amz-json-1.1", "logs": "application/x-amz-json-1.1",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -235,6 +237,7 @@ class AwsWireRouter:
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
+        self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
 
     def _servicebus_service(self, method, path, lheaders):
         """Azure Service Bus (topics) — the pub/sub-fan-out peer of SNS/Pub-Sub.
@@ -429,6 +432,8 @@ class AwsWireRouter:
                 r = secrets.dispatch(self.sec, target, payload)
             elif svc == "events":
                 r = events.dispatch(self.events, target, payload)
+            elif svc == "logs":
+                r = logs.dispatch(self.logs, target, payload)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload)
             hdrs = dict(r.headers or {})

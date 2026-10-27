@@ -342,6 +342,32 @@ _KMS_SUB = [
 ]
 
 
+# ===========================================================================
+# CloudWatch Logs — log group detail
+# ===========================================================================
+_LOGS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Log group", "items": [
+        {"key": "streams", "label": "Log streams", "icon": "stream", "type": "apitable",
+         "api": "streams", "empty": "No log streams in this log group.",
+         "columns": [["name", "Log stream"], ["last_event", "Last event time"],
+                     ["event_count", "Events"], ["stored", "Stored bytes"], ["created", "Creation time"]]},
+        {"key": "events", "label": "Log events", "icon": "subject", "type": "apitable",
+         "api": "events", "empty": "No log events in this log group.",
+         "columns": [["timestamp", "Timestamp"], ["stream", "Log stream"], ["message", "Message"]]},
+        {"key": "metricFilters", "label": "Metric filters", "icon": "filter_alt", "type": "apitable",
+         "api": "metric-filters", "empty": "No metric filters.",
+         "columns": [["name", "Filter name"], ["pattern", "Filter pattern"], ["metric", "Metric"], ["created", "Creation time"]]},
+        {"key": "subscriptionFilters", "label": "Subscription filters", "icon": "send", "type": "apitable",
+         "api": "subscription-filters", "empty": "No subscription filters.",
+         "columns": [["name", "Filter name"], ["pattern", "Filter pattern"], ["destination", "Destination"], ["created", "Creation time"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+    ]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -358,4 +384,5 @@ SUB_BLADES: dict[str, list] = {
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
     "kms":            _KMS_SUB,
+    "logs":           _LOGS_SUB,
 }

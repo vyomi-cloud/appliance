@@ -991,6 +991,7 @@ apigw_state = _SpaceScopedDictProxy("apigateway", lambda: {"apis": {}, "logs": [
 lambda_state = _SpaceScopedDictProxy("lambda", lambda: {"functions": {}, "events": [], "invocations": []})
 sqs_state = _SpaceScopedDictProxy("sqs", lambda: {"queues": {}, "events": []})
 ddb_state = _SpaceScopedDictProxy("dynamodb", lambda: {"tables": {}, "events": []})
+logs_state = _SpaceScopedDictProxy("logs", lambda: {"log_groups": {}, "resource_policies": {}, "query_definitions": {}, "queries": {}})
 
 runtime_state = STATE.setdefault(
     "runtime",
@@ -1382,6 +1383,7 @@ def resolve_provider_service(request) -> tuple[str, str]:
     if target.startswith("secretsmanager."):        return "aws", "secretsmanager"
     if target.startswith("AWSEvents."):             return "aws", "eventbridge"
     if target.startswith("AmazonSQS."):             return "aws", "sqs"
+    if target.startswith("Logs_20140328."):         return "aws", "logs"
     # Auth-scope service inference for query-protocol APIs
     auth = request.headers.get("authorization", "") or ""
     m = re.search(r"Credential=[^/]+/\d+/[^/]+/(\w+)/aws4_request", auth)

@@ -2913,6 +2913,26 @@ SUB_RENDERERS.igws = function(svc, full, host){
   });
 };
 
+// Generic "table from an API path" tab — the catalog tab names an api_paths key
+// (tab.api), the columns ([[field, label], …]) and an empty-state message.
+SUB_RENDERERS.apitable = async function(svc, full, host, tab){
+  const ap = (svc.api_paths || {})[tab.api];
+  if (!ap) { host.append(el("div",{class:"empty"}, "Path not configured.")); return; }
+  const r = await api(ap.method, fillPath(ap.path, {name: itemKey(svc, full)}));
+  const items = (r.json || {}).items || (r.json || {}).value || [];
+  if (!r.ok) { host.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status)); return; }
+  if (!items.length) { host.append(el("div",{class:"empty"}, tab.empty || "No items.")); return; }
+  const cols = tab.columns || [];
+  const tbl = el("table",{class:"aws"});
+  const hdr = el("tr",{}); cols.forEach(c => hdr.append(el("th",{}, c[1]))); tbl.append(hdr);
+  items.forEach(it => {
+    const tr = el("tr",{});
+    cols.forEach(c => { const v = getPath(it, c[0]);
+      tr.append(el("td",{class: /message|arn|destination/.test(c[0]) ? "mono small" : ""}, v == null || v === "" ? "None" : String(v))); });
+    tbl.append(tr);
+  });
+  host.append(tbl);
+};
 // IAM composite — each sub-tab fetches a different IAM collection
 SUB_RENDERERS.iamusers    = (svc, full, host) => loadIamList(svc, host, "users",
   [["user_name","User name"],["arn","ARN"],["created","Created"]]);

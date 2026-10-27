@@ -790,3 +790,127 @@ def dispatch(store: LogsStore, target: str, payload: dict | None = None) -> Logs
         return op(store, body)
     except _E as e:
         return LogsResponse(status=400, body={"__type": e.code, "message": e.message})
+
+
+# ── console REST (shared by the offline appliance and Nano) ────────────────
+# The console speaks friendly REST under /api/logs/...; both consoles route it
+# here so the two can never drift. Pure: (store, method, subpath, query, body).
+def _human_bytes(n):
+    n = float(n)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{int(n)} B" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+
+
+def _iso_ms(ms):
+    return _iso(ms).replace(" ", "T") + "Z"
+
+
+def _group_row(g):
+    days = g.get("retentionInDays")
+    return {"name": g["name"], "arn": g["arn"],
+            "log_class": "Infrequent Access" if g.get("logGroupClass") == "INFREQUENT_ACCESS" else "Standard",
+            "retention": f"{days} days" if days else "Never expire",
+            "retention_in_days": days or 0,
+            "stream_count": len(g["streams"]),
+            "metric_filter_count": len(g["metricFilters"]),
+            "subscription_filter_count": len(g["subscriptionFilters"]),
+            "stored": _human_bytes(g["storedBytes"]),
+            "kms_key": g.get("kmsKeyId") or "Not associated",
+            "created": _iso_ms(g["creationTime"]),
+            "tags": dict(g["tags"])}
+
+
+def _cerr(status, msg):
+    return status, {"detail": msg}
+
+
+def console_dispatch(store: LogsStore, method: str, path: str, query: dict | None = None,
+                     body: dict | None = None):
+    """Console REST for CloudWatch Logs. Returns (status, json-able)."""
+    from urllib.parse import unquote
+    query, body = query or {}, body if isinstance(body, dict) else {}
+    method = method.upper()
+    p = unquote(path).strip("/")
+    if p.startswith("api/logs"):
+        p = p[len("api/logs"):].strip("/")
+
+    def run(op, payload):
+        r = _OPS[op](store, payload) if op in _OPS else None
+        return r
+
+    try:
+        if p == "log-groups":
+            if method == "GET":
+                rows = [_group_row(g) for g in sorted(store.log_groups.values(), key=lambda g: g["name"])]
+                return 200, {"items": rows}
+            if method == "POST":
+                name = str(body.get("name") or body.get("logGroupName") or "").strip()
+                cls = str(body.get("log_group_class") or "STANDARD")
+                _create_log_group(store, {"logGroupName": name, "tags": body.get("tags") or {},
+                                          "logGroupClass": {"Standard": "STANDARD", "Infrequent Access": "INFREQUENT_ACCESS"}.get(cls, cls),
+                                          "kmsKeyId": body.get("kms_key_id") or None})
+                days = body.get("retention_in_days")
+                if days not in (None, "", 0, "0", "never"):
+                    _put_retention_policy(store, {"logGroupName": name, "retentionInDays": int(days)})
+                return 201, _group_row(store.log_groups[name])
+            return _cerr(405, "method not allowed")
+        m = re.match(r"^log-groups/(.+?)(?:/(streams|events|metric-filters|subscription-filters))?$", p)
+        if not m:
+            return _cerr(404, "not found")
+        name, sub = m.group(1), m.group(2)
+        g = _group(store, name)
+        if sub is None:
+            if method == "GET":
+                return 200, _group_row(g)
+            if method == "DELETE":
+                _delete_log_group(store, {"logGroupName": name})
+                return 200, {"deleted": name}
+            if method in ("PUT", "PATCH"):
+                if "tags" in body:
+                    g["tags"] = {str(k): str(v) for k, v in (body["tags"] or {}).items()}
+                days = body.get("retention_in_days", body.get("value"))
+                if days is not None:
+                    if str(days) in ("", "0", "never"):
+                        g.pop("retentionInDays", None)
+                    else:
+                        _put_retention_policy(store, {"logGroupName": name, "retentionInDays": int(days)})
+                store.persist()
+                return 200, _group_row(g)
+            return _cerr(405, "method not allowed")
+        if sub == "streams":
+            if method == "POST":
+                sn = str(body.get("name") or body.get("logStreamName") or "")
+                _create_log_stream(store, {"logGroupName": name, "logStreamName": sn})
+                return 201, {"name": sn}
+            rows = [{"name": s["name"], "created": _iso_ms(s["creationTime"]),
+                     "first_event": _iso_ms(s["firstEventTimestamp"]) if s["events"] else "No events",
+                     "last_event": _iso_ms(s["lastEventTimestamp"]) if s["events"] else "No events",
+                     "event_count": len(s["events"]), "stored": _human_bytes(s["storedBytes"])}
+                    for s in sorted(g["streams"].values(), key=lambda s: s["name"])]
+            return 200, {"items": rows}
+        if sub == "events":
+            if method == "POST":
+                sn = str(body.get("stream") or "")
+                if sn not in g["streams"]:
+                    _create_log_stream(store, {"logGroupName": name, "logStreamName": sn})
+                _put_log_events(store, {"logGroupName": name, "logStreamName": sn,
+                                        "logEvents": [{"timestamp": store.now_ms(), "message": str(body.get("message", ""))}]})
+                return 201, {"stream": sn}
+            r = _filter_log_events(store, {"logGroupName": name, "filterPattern": query.get("filter", ""),
+                                           "logStreamNames": [query["stream"]] if query.get("stream") else None,
+                                           "limit": int(query.get("limit") or 100)})
+            evs = sorted(r.body["events"], key=lambda e: e["timestamp"], reverse=True)
+            return 200, {"items": [{"timestamp": _iso_ms(e["timestamp"]), "stream": e["logStreamName"],
+                                    "message": e["message"]} for e in evs]}
+        if sub == "metric-filters":
+            return 200, {"items": [{"name": f["filterName"], "pattern": f.get("filterPattern") or "(match all)",
+                                    "metric": ", ".join(f"{t['metricNamespace']}/{t['metricName']}" for t in f["metricTransformations"]),
+                                    "created": _iso_ms(f["creationTime"])} for f in g["metricFilters"].values()]}
+        return 200, {"items": [{"name": f["filterName"], "pattern": f.get("filterPattern") or "(match all)",
+                                "destination": f["destinationArn"], "created": _iso_ms(f["creationTime"])}
+                               for f in g["subscriptionFilters"].values()]}
+    except _E as e:
+        code = 404 if e.code == "ResourceNotFoundException" else 409 if e.code == "ResourceAlreadyExistsException" else 400
+        return _cerr(code, f"{e.code}: {e.message}")
