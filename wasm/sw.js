@@ -33,8 +33,15 @@ self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 // ahead of Pyodide loading. We hold /api/* dispatch until the page signals the
 // backend is up, so early calls just wait instead of failing.
 let _ready, readyPromise = new Promise((r) => (_ready = r));
+// A page that reloads (or a second tab) boots its own Pyodide, so readiness is
+// per window client: dispatching to a client that hasn't signalled yet (or has
+// gone) would drop the message and surface as a 500 "backend timeout".
+const readyClients = new Set();
 self.addEventListener("message", (e) => {
-  if (e.data && e.data.type === "pyodide-ready") _ready();
+  if (e.data && e.data.type === "pyodide-ready") {
+    if (e.source && e.source.id) readyClients.add(e.source.id);
+    _ready();
+  }
 });
 
 // ── Route table (built once from the dumped catalog) ──────────────────
@@ -342,8 +349,16 @@ async function providerOf(clientId) {
 // Ask the page (where Pyodide lives) to run a dispatch tuple.
 async function runInPage(tuple) {
   await readyPromise;
-  const all = await self.clients.matchAll({ includeUncontrolled: true });
-  const client = all.find((c) => c.type === "window") || all[0];
+  // Wait (bounded) for a live window whose Pyodide has signalled ready; after a
+  // reload the old client id is gone and the new page is still booting.
+  let client = null;
+  for (let i = 0; i < 240 && !client; i++) {
+    const all = await self.clients.matchAll({ includeUncontrolled: true });
+    const wins = all.filter((c) => c.type === "window");
+    client = wins.find((c) => readyClients.has(c.id)) || null;
+    if (!client && !wins.length && all[0]) client = all[0];
+    if (!client) await new Promise((r) => setTimeout(r, 250));
+  }
   if (!client) throw new Error("no client to run the in-browser backend");
   return await new Promise((resolve, reject) => {
     const ch = new MessageChannel();
