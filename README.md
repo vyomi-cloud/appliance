@@ -2,24 +2,30 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-10-27T18:50:18+00:00
+### Upstream watch — 2026-10-27T19:50:11+00:00
 
-Tracking 3922 AWS + GCP operations, 17 Azure spec areas, 50 SDK/CLI packages and 3 lifecycle feeds.
+Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**14 change(s), 2 actionable.**
-- 🔧 `lifecycle` Retirement: Pod name dimension in AKS pod platform metrics ([link](https://azure.microsoft.com/updates?id=570232))
-- 🔧 `lifecycle` Retirement: Transition to using standard tests for single-step availability testing in Azure Monitor application insights by September 30, 2028 ([link](https://azure.microsoft.com/updates?id=transition-to-using-standard-tests-for-singlestep-availability-testing-in-azure-monitor-application-insights-by-30-september))
-- · `announcement` Amazon Connect Customer now enables you to use flow modules in agentic CX designer ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/agentic-cx-designer-flow-modules/))
-- · `announcement` Amazon IVS Low-Latency Streaming now provides a failover slate ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-ivs-low-latency-streaming-failover-slate))
+**20 change(s), 5 actionable.**
+- 🔧 `operation-added` AWS ec2: new operation GetImageFindings
+- 🔧 `lifecycle` Google Kubernetes Engine: Change (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
+- 🔧 `lifecycle` Google Kubernetes Engine: No channel (deprecated) (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
+- 🔧 `lifecycle` Google Kubernetes Engine: Regular channel (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
+- 🔧 `lifecycle` Google Kubernetes Engine: Stable channel (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
 - · `spec-commit` Azure network: [Network] Update TypeSpec configuration for .NET SDK compatibility (#47643) ([link](https://github.com/Azure/azure-rest-api-specs/commit/5b3ac33ab54d588beaca346f351b95f5765e2457))
-- · `announcement` [In preview] Public Preview: Azure Monitor Logs mirroring into Microsoft Fabric ([link](https://azure.microsoft.com/updates?id=568322))
-- · `announcement` [Launched] Generally Available: Advanced platform metrics for Azure Monitor ([link](https://azure.microsoft.com/updates?id=575329))
-- · `announcement` [Launched] Generally Available: Azure Copilot Observability Agent supports Basic and Auxiliary table plans ([link](https://azure.microsoft.com/updates?id=570250))
-- · `announcement` [Launched] Generally Available: Azure Monitor Auxiliary Logs Plan in Azure Government and China regions ([link](https://azure.microsoft.com/updates?id=569899))
-- · `announcement` [Launched] Generally Available: Azure Monitor Auxiliary Logs Plan support for Azure tables and plan switching ([link](https://azure.microsoft.com/updates?id=569904))
-- · `announcement` [Launched] Generally Available: Control plane metrics collection for AKS with Managed Prometheus ([link](https://azure.microsoft.com/updates?id=568830))
-- · `announcement` [Launched] Generally Available: Logical replication slot sync status metric for Azure PostgreSQL Flexible Server  ([link](https://azure.microsoft.com/updates?id=568414))
-- · `announcement` [Launched] Generally Available: Metrics usage insights for Azure Monitor workspace ([link](https://azure.microsoft.com/updates?id=577165))
-- · `release` cli:aws: 2.38.6 → 2.39.0
+- · `announcement` Google Kubernetes Engine: Change (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
+- · `announcement` Google Kubernetes Engine: Change (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
+- · `announcement` Google Kubernetes Engine: Change (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
+- · `announcement` Google Kubernetes Engine: Change (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
+- · `announcement` Google Kubernetes Engine: Change (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
+- · `announcement` Google Kubernetes Engine: Extended channel (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
+- · `announcement` Google Kubernetes Engine: Rapid channel (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
+- · `announcement` Google Kubernetes Engine: Security (October 26, 2026) ([link](https://docs.cloud.google.com/release-notes#October_26_2026))
+- · `release` cli:gcloud: 590.0.1 → 591.0.0
+- · `release` go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.72.1 → v1.72.2
+- · `release` go:github.com/aws/aws-sdk-go-v2/service/s3: v1.114.5 → v1.114.6
+- · `release` go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.6 → v1.52.7
+- · `release` pypi:boto3: 1.43.119 → 1.43.120
+- · `release` pypi:botocore: 1.43.119 → 1.43.120
 
-Filed 2 backlog issue(s) labelled `upstream-drift`; 0 pending.
+Filed 5 backlog issue(s) labelled `upstream-drift`; 0 pending.
