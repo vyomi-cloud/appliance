@@ -433,5 +433,29 @@
   "gcp_findings": 53,
   "azure_checks_passed": 122,
   "azure_findings": 12
+ },
+ {
+  "at": "2026-10-27T03:33:05+00:00",
+  "commit": "2d1f143501ee",
+  "suites_green": 21,
+  "suites_total": 30,
+  "checks_passed": 577,
+  "checks_failed": 79,
+  "api_coverage_pct": 13.1,
+  "ui_findings": 111,
+  "agent": "Fixed 1 UI finding (offline GCP Eventarc triggers blank Region/State after default create), added 1 test, 0 known regressions (other suites not re-run).",
+  "new_features": 0,
+  "parity_gaps": 9,
+  "ops_tested_pct": 72.9,
+  "ui_clean_nano": 14,
+  "ui_total_nano": 43,
+  "ui_clean_offline": 14,
+  "ui_total_offline": 38,
+  "aws_checks_passed": 154,
+  "aws_findings": 51,
+  "gcp_checks_passed": 23,
+  "gcp_findings": 46,
+  "azure_checks_passed": 122,
+  "azure_findings": 14
  }
 ]
