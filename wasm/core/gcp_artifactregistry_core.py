@@ -37,8 +37,12 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-FORMATS = ("DOCKER", "MAVEN", "NPM", "PYTHON", "APT", "YUM", "KFP", "GO", "GENERIC")
+FORMATS = ("DOCKER", "MAVEN", "NPM", "PYTHON", "APT", "YUM", "KFP", "GO", "GENERIC", "GOOGET")
 MODES = ("STANDARD_REPOSITORY", "VIRTUAL_REPOSITORY", "REMOTE_REPOSITORY")
+# Proto enum numbers: the Go/Java REST clients send `$alt=json;enum-encoding=int`.
+_FORMAT_NUM = {1: "DOCKER", 2: "MAVEN", 3: "NPM", 5: "APT", 6: "YUM", 7: "GOOGET", 8: "PYTHON",
+               9: "KFP", 10: "GO", 11: "GENERIC"}
+_MODE_NUM = {0: "MODE_UNSPECIFIED", 1: "STANDARD_REPOSITORY", 2: "VIRTUAL_REPOSITORY", 3: "REMOTE_REPOSITORY"}
 LOCATIONS = ("us-central1", "us-east1", "us-east4", "us-west1", "us-west2", "europe-west1",
              "europe-west2", "europe-west4", "asia-east1", "asia-northeast1", "asia-southeast1",
              "us", "europe", "asia")
@@ -184,10 +188,16 @@ def _create_repo(store, project, loc, query, body) -> GcpResponse:
         return _err(400, f"Invalid repository ID \"{rid}\": must be 1-63 lowercase letters, digits or hyphens, "
                          "starting with a letter.")
     fmt = body.get("format") or "FORMAT_UNSPECIFIED"
+    if isinstance(fmt, int):
+        fmt = _FORMAT_NUM.get(fmt, "FORMAT_UNSPECIFIED")
     if fmt not in FORMATS:
         return _err(400, "Invalid repository format: a valid format is required "
                          f"({', '.join(FORMATS)}).")
     mode = body.get("mode") or "STANDARD_REPOSITORY"
+    if isinstance(mode, int):
+        mode = _MODE_NUM.get(mode, "")
+    if mode == "MODE_UNSPECIFIED":
+        mode = "STANDARD_REPOSITORY"
     if mode not in MODES:
         return _err(400, f"Invalid repository mode \"{mode}\".")
     name = _repo_name(project, loc, rid)
@@ -613,6 +623,9 @@ def dispatch(store: ArtifactRegistryStore, method: str, path: str,
              body: bytes = b"") -> GcpResponse:
     query = query or {}
     method = method.upper()
+    for k, v in (headers or {}).items():     # Java's HttpURLConnection has no PATCH: gax overrides POST
+        if k.lower() == "x-http-method-override" and v:
+            method = str(v).upper()
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}
     except Exception:

@@ -288,6 +288,13 @@
    "upstream": "Microsoft.Authorization",
    "status": "released",
    "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "gcp",
+   "key": "artifactregistry",
+   "name": "Artifact Registry",
+   "upstream": "artifactregistry/v1",
+   "status": "pending-release"
   }
  ]
 }
