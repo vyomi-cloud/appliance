@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 18:48 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 18:52 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-10-27 18:48 UTC · refreshes after every pipeline run_
 - **Queued:** 43 services (P1 first, then P2)
 - **Consoles really implemented:** offline 52% · Nano 71%
 - **Hourly tests:** 76 of 79 suites passing (run 18:08 UTC)
-- **Upstream watch:** 5 open changes from the real clouds to adopt
+- **Upstream watch:** 7 open changes from the real clouds to adopt
 
 ## By cloud
 
