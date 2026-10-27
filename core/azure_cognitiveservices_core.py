@@ -599,7 +599,7 @@ def _account_ops(state, rec, rest, method, payload, query):
             raise _E(400, "InvalidParameter", "keyName must be 'Key1' or 'Key2'.")
         rec["_keys"][kn] = _secret(rec["id"], kn, uuid.uuid4())
         return _ok(dict(rec["_keys"]))
-    if r0 == "listskus" and method == "GET":
+    if r0 in ("skus", "listskus") and method == "GET":
         return _ok({"value": [{"resourceType": "accounts", "sku": {"name": s, "tier": _tier(s)}} for s in KINDS[rec["kind"]][0]]})
     if r0 == "usages" and method == "GET":
         return _ok({"value": _usages(rec)})

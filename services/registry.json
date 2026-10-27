@@ -368,6 +368,13 @@
    "upstream": "appconfiguration",
    "status": "released",
    "released_in": "3.0.19"
+  },
+  {
+   "cloud": "azure",
+   "key": "cognitiveservices",
+   "name": "Azure AI services",
+   "upstream": "cognitiveservices",
+   "status": "pending-release"
   }
  ]
 }
