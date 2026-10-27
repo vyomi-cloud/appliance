@@ -92,3 +92,4 @@
 | 2026-10-27T17:12Z | #83 | azure/containerservice | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40547419515) |
 | 2026-10-27T17:40Z | #85 | azure/eventhub | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40548686039) |
 | 2026-10-27T17:46Z | #83 | azure/containerservice | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40553197354) |
+| 2026-10-27T18:05Z | #86 | azure/monitor | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40554105927) |
