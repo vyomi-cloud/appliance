@@ -2139,6 +2139,184 @@ SUB_RENDERERS.cogsquotas = function(svc, full, host){
   }).catch(()=>host.append(emptyState("Could not load quotas.")));
 };
 
+// ---- Event Hubs (Microsoft.EventHub) renderers ----------------------------------
+SUB_RENDERERS.ehhubs = function(svc, full, host){
+  const base = ORIGIN + full.id + "/eventhubs";
+  const q = "?api-version=" + svc.apiVersion;
+  const state = {hub:null};
+  const wrap = el("div",{}); host.append(wrap);
+  const call = (path, method, body) => fetch(base + path + q, {method:method||"GET",
+    headers: body ? {"Content-Type":"application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
+  function render(){
+    wrap.innerHTML = "";
+    if (state.hub) return renderHub();
+    wrap.append(el("div",{class:"sub-info"}, "Event hubs in ", el("strong",{}, full.name),
+      ". Each event hub is split into partitions; consumer groups give independent readers their own view of the stream."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"});
+    bar.append(el("button",{class:"btn",onclick:add}, icon("add"), "Event Hub"), el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    call("").then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      if (!items.length){ listHost.append(emptyState("No event hubs — click Event Hub to create one.")); return; }
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Name","Status","Partition count","Message retention (days)","Created",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      items.forEach(h=>{
+        const p = h.properties || {};
+        t.append(el("tr",{},
+          el("td",{}, el("a",{href:"#",onclick:(e)=>{ e.preventDefault(); state.hub = h.name; render(); }}, h.name)),
+          el("td",{}, p.status||"Active"), el("td",{}, String(p.partitionCount)), el("td",{}, String(p.messageRetentionInDays)),
+          el("td",{}, p.createdAt||""),
+          el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>{
+            call("/"+encodeURIComponent(h.name), "DELETE").then(()=>{ toast("Event hub deleted"); render(); });
+          }}, "Delete"))));
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load event hubs.")));
+  }
+  function add(){
+    const name = (prompt("Event hub name:", "orders")||"").trim(); if(!name) return;
+    const parts = parseInt(prompt("Partition count (1-32):", "4")||"4", 10);
+    const days = parseInt(prompt("Message retention (days):", "1")||"1", 10);
+    call("/"+encodeURIComponent(name), "PUT", {properties:{partitionCount:parts, messageRetentionInDays:days}})
+      .then(r=>r.json()).then(j=>{ if (j.error) toast(j.error.message, "err"); else toast("Event hub created"); render(); });
+  }
+  function renderHub(){
+    const hn = state.hub;
+    drillCrumbs(wrap, [{label:"Event Hubs", onClick:()=>{ state.hub=null; render(); }}, {label:hn}]);
+    const info = el("div",{}); wrap.append(info);
+    call("/"+encodeURIComponent(hn)).then(r=>r.json()).then(h=>{
+      const p = h.properties || {};
+      info.append(el("div",{class:"kv prop-kv"},
+        el("div",{class:"k"},"Name"), el("div",{class:"v"}, h.name||hn),
+        el("div",{class:"k"},"Status"), el("div",{class:"v"}, p.status||"Active"),
+        el("div",{class:"k"},"Partition count"), el("div",{class:"v"}, String(p.partitionCount)),
+        el("div",{class:"k"},"Message retention (days)"), el("div",{class:"v"}, String(p.messageRetentionInDays)),
+        el("div",{class:"k"},"Capture"), el("div",{class:"v"}, p.captureDescription && p.captureDescription.enabled ? "On" : "Off")));
+    });
+    wrap.append(el("h4",{style:"margin:16px 0 6px"}, "Consumer groups"));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:6px 0 10px"});
+    bar.append(el("button",{class:"btn",onclick:addCg}, icon("add"), "Consumer group"));
+    wrap.append(bar);
+    const cgHost = el("div",{}); wrap.append(cgHost);
+    function loadCg(){
+      cgHost.innerHTML = "";
+      call("/"+encodeURIComponent(hn)+"/consumergroups").then(r=>r.json()).then(j=>{
+        const t = el("table",{class:"sub-table"});
+        const hdr = el("tr",{}); ["Name","Created","User metadata",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+        (j.value||[]).forEach(c=>t.append(el("tr",{}, el("td",{}, c.name), el("td",{}, getPath(c,"properties.createdAt")||""),
+          el("td",{}, getPath(c,"properties.userMetadata")||"—"),
+          el("td",{style:"text-align:right"}, c.name === "$Default" ? "" : el("button",{class:"btn sec",onclick:()=>{
+            call("/"+encodeURIComponent(hn)+"/consumergroups/"+encodeURIComponent(c.name), "DELETE").then(()=>{ toast("Consumer group deleted"); loadCg(); });
+          }}, "Delete")))));
+        cgHost.append(t);
+      }).catch(()=>cgHost.append(emptyState("Could not load consumer groups.")));
+    }
+    function addCg(){
+      const n = (prompt("Consumer group name:", "analytics")||"").trim(); if(!n) return;
+      call("/"+encodeURIComponent(hn)+"/consumergroups/"+encodeURIComponent(n), "PUT", {properties:{}})
+        .then(r=>r.json()).then(j=>{ if (j.error) toast(j.error.message, "err"); else toast("Consumer group created"); loadCg(); });
+    }
+    loadCg();
+    wrap.append(el("h4",{style:"margin:16px 0 6px"}, "Partitions"));
+    const pHost = el("div",{}); wrap.append(pHost);
+    call("/"+encodeURIComponent(hn)+"/events/partitions").then(r=>r.json()).then(j=>{
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Partition","Beginning sequence","Last enqueued sequence","Last enqueued time"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      (j.value||[]).forEach(p=>t.append(el("tr",{}, el("td",{}, p.partitionId), el("td",{}, String(p.beginningSequenceNumber)),
+        el("td",{}, String(p.lastEnqueuedSequenceNumber)), el("td",{}, p.lastEnqueuedTimeUtc||"No events yet"))));
+      pHost.append(t);
+    }).catch(()=>pHost.append(emptyState("Could not load partitions.")));
+  }
+  render();
+};
+SUB_RENDERERS.ehdata = function(svc, full, host){
+  const base = ORIGIN + full.id + "/eventhubs";
+  const q = "?api-version=" + svc.apiVersion;
+  host.append(el("div",{class:"sub-info"}, "Send test events to an event hub and view what was received, per partition. Producers using the REST API at ",
+    getPath(full,"properties.serviceBusEndpoint")||"the namespace endpoint", " write to the same log."));
+  const sel = el("select",{id:"eh-hub"});
+  const key = el("input",{id:"eh-key",placeholder:"Partition key (optional)"});
+  const body = el("textarea",{id:"eh-body",rows:"3",style:"width:100%"});
+  body.value = '{"orderId": 1001, "status": "created"}';
+  const out = el("div",{});
+  host.append(el("div",{style:"display:flex;gap:8px;margin:10px 0;align-items:center;flex-wrap:wrap"}, el("span",{},"Event hub"), sel, key),
+              body,
+              el("div",{style:"display:flex;gap:8px;margin:10px 0"},
+                 el("button",{class:"btn",onclick:send}, icon("send"), "Send event"),
+                 el("button",{class:"btn",onclick:view}, icon("refresh"), "View events")),
+              out);
+  function view(){
+    out.innerHTML = "";
+    if (!sel.value){ out.append(emptyState("Create an event hub first (Event Hubs tab).")); return; }
+    fetch(base + "/" + encodeURIComponent(sel.value) + "/events" + q + "&maxCount=50").then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      if (!items.length){ out.append(emptyState("No events in this event hub yet — send one above.")); return; }
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Partition","Sequence","Offset","Enqueued (UTC)","Partition key","Body"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      items.forEach(e=>t.append(el("tr",{}, el("td",{}, e.partitionId), el("td",{}, String(e.sequenceNumber)), el("td",{}, e.offset),
+        el("td",{}, e.enqueuedTime), el("td",{}, e.partitionKey||"—"), el("td",{class:"mono small"}, e.body))));
+      out.append(t);
+    }).catch(()=>out.append(emptyState("Could not read events.")));
+  }
+  function send(){
+    if (!sel.value){ toast("Create an event hub first", "err"); return; }
+    fetch(base + "/" + encodeURIComponent(sel.value) + "/events" + q, {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({events:[{body: body.value, partitionKey: key.value || undefined}]})})
+      .then(r=>r.json()).then(j=>{ if (j.error) toast(j.error.message, "err"); else toast("Event sent"); view(); });
+  }
+  fetch(base + q).then(r=>r.json()).then(j=>{
+    (j.value||[]).forEach(h=>sel.append(el("option",{value:h.name}, h.name)));
+    view();
+  }).catch(()=>out.append(emptyState("Could not load event hubs.")));
+};
+SUB_RENDERERS.ehaccess = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Shared access policies authorize SDKs and the CLI with a SAS connection string. Listen reads, Send writes, Manage administers the namespace."));
+  const base = ORIGIN + full.id + "/authorizationRules";
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"});
+    bar.append(el("button",{class:"btn",onclick:add}, icon("add"), "Add policy"));
+    wrap.append(bar);
+    fetch(base + q).then(r=>r.json()).then(async j=>{
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Policy","Claims","Primary connection string",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      wrap.append(t);
+      for (const rule of (j.value||[])){
+        const k = getPath(full,"properties.disableLocalAuth") === true ? {} :
+          await fetch(base + "/" + encodeURIComponent(rule.name) + "/listKeys" + q, {method:"POST"}).then(r=>r.json()).catch(()=>({}));
+        t.append(el("tr",{}, el("td",{}, rule.name), el("td",{}, (getPath(rule,"properties.rights")||[]).join(", ")),
+          el("td",{class:"mono small"}, k.primaryConnectionString || "Local authentication is disabled"),
+          el("td",{style:"text-align:right"}, rule.name === "RootManageSharedAccessKey" ? "" : el("button",{class:"btn sec",onclick:()=>{
+            fetch(base + "/" + encodeURIComponent(rule.name) + q, {method:"DELETE"}).then(()=>{ toast("Policy deleted"); render(); });
+          }}, "Delete"))));
+      }
+    }).catch(()=>wrap.append(emptyState("Could not load shared access policies.")));
+  }
+  function add(){
+    const name = (prompt("Policy name:", "send-listen")||"").trim(); if(!name) return;
+    const rights = (prompt("Claims (comma separated: Listen, Send, Manage):", "Listen,Send")||"").split(",").map(s=>s.trim()).filter(Boolean);
+    fetch(base + "/" + encodeURIComponent(name) + q, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({properties:{rights}})})
+      .then(r=>r.json()).then(j=>{ if (j.error) toast(j.error.message, "err"); else toast("Policy created"); render(); });
+  }
+  render();
+};
+SUB_RENDERERS.ehgeo = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Geo-disaster recovery pairs this namespace with a secondary namespace so metadata can fail over to it."));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Alias","Role","Partner namespace","Status"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  host.append(t);
+  const st = el("div",{}); host.append(st);
+  fetch(ORIGIN + full.id + "/disasterRecoveryConfigs?api-version=" + svc.apiVersion).then(r=>r.json()).then(j=>{
+    const items = j.value || [];
+    if (!items.length){ st.append(emptyState("Geo-recovery is not configured. Pair a Standard or Premium namespace with another one using the SDK or `az eventhubs georecovery-alias set`.")); return; }
+    items.forEach(d=>t.append(el("tr",{}, el("td",{}, d.name), el("td",{}, getPath(d,"properties.role")||"—"),
+      el("td",{}, String(getPath(d,"properties.partnerNamespace")||"—").split("/").pop()), el("td",{}, getPath(d,"properties.provisioningState")||"Succeeded"))));
+  }).catch(()=>st.append(emptyState("Could not load geo-recovery configuration.")));
+};
+
 SUB_RENDERERS.databases = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Databases under this SQL server."));
   listChildResources(svc, full, host, "databases",

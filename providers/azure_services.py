@@ -421,6 +421,31 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
+        "key": "eventhub", "label": "Event Hubs", "icon": "bolt",
+        "namespace": "Microsoft.EventHub", "type": "namespaces",
+        "api_version": "2024-01-01", "scope": "rg",
+        "banner": "Event Hubs namespaces with event hubs, consumer groups, shared access policies and geo-recovery pairing behave like Azure (azure-mgmt-eventhub, `az eventhubs`). Events sent over the REST API or the Data Explorer are kept in an ordered per-partition log; AMQP and Kafka wire protocols are not exposed, so use the REST send API and the Data Explorer to produce and read events.",
+        "children": [{"type": "eventhubs", "label": "Event Hubs", "icon": "bolt"}],
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["sku.name", "Pricing tier"],
+                    ["sku.capacity", "Throughput units"],
+                    ["properties.serviceBusEndpoint", "Endpoint"],
+                    ["properties.status", "Status"]],
+        "create_fields": [
+            {"name": "name", "label": "Namespace name", "default": "eh-cloudlearn"},
+            {"name": "sku.name", "label": "Pricing tier", "type": "select",
+             "options": ["Basic", "Standard", "Premium"], "default": "Standard"},
+            {"name": "sku.capacity", "label": "Throughput units / processing units", "type": "number", "default": 1},
+            {"name": "properties.minimumTlsVersion", "label": "Minimum TLS version", "type": "select",
+             "options": ["1.0", "1.1", "1.2"], "default": "1.2"},
+        ],
+        "defaults": {
+            "sku": {"name": "Standard", "tier": "Standard", "capacity": 1},
+            "properties": {"provisioningState": "Succeeded", "status": "Active", "minimumTlsVersion": "1.2",
+                           "serviceBusEndpoint": "https://__NAME__.servicebus.windows.net:443/"},
+        },
+    },
+    {
         "key": "role_definition",
         "label": "Role Definition",
         "icon": "admin_panel_settings",
@@ -696,6 +721,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if namespace.lower() == "microsoft.cognitiveservices":
         return await _handle_cognitiveservices(request, method, sub, rg, chain, names, base)
 
+    if namespace.lower() == "microsoft.eventhub":
+        return await _handle_eventhub(request, method, sub, rg, chain, names, base)
+
     top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
     if top is None:
         return _error(404, "ResourceTypeNotSupported",
@@ -831,6 +859,24 @@ async def _handle_appconfiguration(request: Request, method: str, sub: str, rg: 
             resp.headers[hk] = hv
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.AppConfiguration/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_eventhub(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                           names: list[str], base: str) -> JSONResponse:
+    from core import azure_eventhub_core as _eh
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _eh.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    api_version = request.query_params.get("api-version") or _eh.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["lro"] and r["status"] < 300:
+        resp.status_code = 200 if r["status"] == 201 else r["status"]
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.EventHub/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
     return resp
 
