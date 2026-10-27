@@ -141,7 +141,9 @@ def _parse_duration(s, field_name):
 def _fmt_duration(sec: float) -> str:
     if sec == int(sec):
         return f"{int(sec)}s"
-    return f"{sec:.9f}".rstrip("0") + "s"
+    frac = f"{sec:.9f}".split(".")[1].rstrip("0")
+    frac = frac.ljust(3 if len(frac) <= 3 else 6 if len(frac) <= 6 else 9, "0")   # protobuf Duration: 0/3/6/9 digits
+    return f"{int(sec)}.{frac}s"
 
 
 def _qname(project, loc, queue) -> str:
