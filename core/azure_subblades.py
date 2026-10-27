@@ -321,6 +321,21 @@ _COGS_SUB = [
     ]},
 ]
 
+_DNS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "DNS Management", "items": [
+        {"key": "recordsets",  "label": "Recordsets",          "icon": "list_alt",   "type": "dnsRecordsets"},
+        {"key": "nameServers", "label": "Name servers",        "icon": "dns",        "type": "dnsNameServers"},
+        {"key": "testQuery",   "label": "Test query",          "icon": "travel_explore", "type": "dnsQuery"},
+    ]},
+    {"group": "Settings", "items": [
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",     "label": "Metrics",             "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
@@ -343,5 +358,6 @@ SUB_BLADES: dict[str, list] = {
     "app":         _APP_SUB,
     "appconfiguration": _APPCONFIG_SUB,
     "cognitiveservices": _COGS_SUB,
+    "dns":         _DNS_SUB,
     "rbac":        _RBAC_SUB,
 }
