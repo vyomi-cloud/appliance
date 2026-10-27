@@ -12730,6 +12730,51 @@ def _ec2_query_describe_volumes(params: dict[str, Any]) -> Response:
     return _ec2_success_response("DescribeVolumesResponse", build)
 
 
+_EC2_REGIONS = [
+    ("us-east-1", 6), ("us-east-2", 3), ("us-west-1", 2), ("us-west-2", 4),
+    ("eu-west-1", 3), ("eu-west-2", 3), ("eu-central-1", 3),
+    ("ap-south-1", 3), ("ap-southeast-1", 3), ("ap-southeast-2", 3), ("ap-northeast-1", 3),
+]
+
+
+def _ec2_query_describe_regions(params: dict[str, Any]) -> Response:
+    wanted = {str(v) for k, v in params.items() if k.lower().startswith("regionname") and v and not isinstance(v, list)}
+    for k, v in params.items():
+        if k.lower().startswith("regionname") and isinstance(v, list):
+            wanted.update(str(x) for x in v)
+    rows = [r for r, _ in _EC2_REGIONS if not wanted or r in wanted]
+
+    def build(root: ET.Element) -> None:
+        region_set = _ec2_sub(root, "regionInfo")
+        for r in rows:
+            item = _ec2_sub(region_set, "item")
+            _ec2_sub(item, "regionName", r)
+            _ec2_sub(item, "regionEndpoint", f"ec2.{r}.amazonaws.com")
+            _ec2_sub(item, "optInStatus", "opt-in-not-required")
+
+    return _ec2_success_response("DescribeRegionsResponse", build)
+
+
+def _ec2_query_describe_availability_zones(params: dict[str, Any]) -> Response:
+    region = os.environ.get("AWS_DEFAULT_REGION") or "us-east-1"
+    count = dict(_EC2_REGIONS).get(region, 3)
+    zones = [f"{region}{chr(97 + i)}" for i in range(count)]
+
+    def build(root: ET.Element) -> None:
+        zone_set = _ec2_sub(root, "availabilityZoneInfo")
+        for i, z in enumerate(zones):
+            item = _ec2_sub(zone_set, "item")
+            _ec2_sub(item, "zoneName", z)
+            _ec2_sub(item, "zoneState", "available")
+            _ec2_sub(item, "optInStatus", "opt-in-not-required")
+            _ec2_sub(item, "regionName", region)
+            _ec2_sub(item, "zoneId", f"{region.split('-')[0]}{region.split('-')[1][0]}{region[-1]}-az{i + 1}")
+            _ec2_sub(item, "groupName", region)
+            _ec2_sub(item, "zoneType", "availability-zone")
+
+    return _ec2_success_response("DescribeAvailabilityZonesResponse", build)
+
+
 def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
     # Tier quantity cap — Free=1 VM/space; Student=10; Developer=50; Enterprise=∞.
     # Enforced BEFORE consuming MinCount so we never partially create.
@@ -13535,6 +13580,10 @@ async def api_ec2_query(request: Request):
             return _ec2_query_describe_security_groups(params)
         if action == "DescribeVolumes":
             return _ec2_query_describe_volumes(params)
+        if action == "DescribeRegions":
+            return _ec2_query_describe_regions(params)
+        if action == "DescribeAvailabilityZones":
+            return _ec2_query_describe_availability_zones(params)
         if action == "RunInstances":
             return _ec2_query_run_instances(params)
         if action == "StartInstances":
