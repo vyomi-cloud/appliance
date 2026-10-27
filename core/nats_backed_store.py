@@ -38,7 +38,7 @@ def _hook(d):
 
 
 class NatsBackedMessagingStore(InMemoryMessagingStore):
-    _STATE = ("queues", "topics")
+    _STATE = ("queues", "topics", "sns")
 
     def __init__(self, servers: str = "nats://localhost:4222",
                  bucket: str = "v24_messaging", store_id: str = "msg",
