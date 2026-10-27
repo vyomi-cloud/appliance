@@ -60,5 +60,12 @@
     "offline-ui-aws-ssm",
     "nano-ui-aws-ssm"
   ],
-  "status": "ready"
+  "status": "ready",
+  "blank_like_real_console": [
+    {
+      "tab": "History",
+      "column": "Labels",
+      "why": "AWS Parameter Store shows - in the Labels column for a parameter version that has no labels"
+    }
+  ]
 }
