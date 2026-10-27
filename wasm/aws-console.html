@@ -2794,7 +2794,20 @@ SUB_RENDERERS.properties = function(svc, full, host){
   }
   walk(full, ""); card.append(grid); host.append(card);
 };
-SUB_RENDERERS.metrics = function(svc, full, host){
+SUB_RENDERERS.metrics = function(svc, full, host, tab){
+  if (svc.key === "ec2" && tab && tab.key === "statusChecks") {
+    // Status checks reflect the instance's own state (EC2 DescribeInstanceStatus).
+    const running = String(full.state || "").toLowerCase() === "running";
+    const res = running ? "Passed" : "Not applicable";
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Check"), el("th",{}, "Status"), el("th",{}, "Instance")));
+    ["System reachability","Instance reachability","Attached EBS status"].forEach(c => tbl.append(el("tr",{},
+      el("td",{}, c), el("td",{}, res), el("td",{}, el("span",{class:"mono"}, full.instance_id || full.name || "")))));
+    host.append(el("div",{class:"alert info"}, icon("monitor_heart"),
+      el("div",{}, "Instance state: " + (full.state || "unknown") + ". Status checks run while the instance is running.")));
+    host.append(tbl);
+    return;
+  }
   host.append(el("div",{class:"alert info"}, icon("show_chart"),
     el("div",{}, "Synthesized CloudWatch metrics. Real telemetry ingestion is future work.")));
   const series = svc.key === "ec2"
@@ -2915,9 +2928,9 @@ SUB_RENDERERS.ec2networking = function(svc, full, host){
     ["Public IPv4 address",  full.public_ip || "—"],
     ["Public IPv4 DNS",      full.public_dns || "—"],
     ["VPC ID",               full.vpc_id || "default"],
-    ["Subnet ID",            full.subnet_id || "—"],
+    ["Subnet ID",            full.subnet_id || "subnet-default"],
     ["Availability Zone",    full.availability_zone || REGION+"a"],
-    ["Security groups",      (full.security_groups || []).join(", ") || "—"],
+    ["Security groups",      ((full.security_groups && full.security_groups.length ? full.security_groups : (full.security_group_ids || [])).map(g => (g && (g.groupName || g.name || g.id)) || g).join(", ")) || "default (sg-default)"],
     ["Network interfaces",   String((full.network_interfaces||[]).length || 1)],
   ];
   rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k),
@@ -2931,7 +2944,7 @@ SUB_RENDERERS.ec2security = function(svc, full, host){
   [
     ["IAM role",       full.iam_instance_profile || "—"],
     ["Owner",          ACCOUNT],
-    ["Launch time",    full.launch_time || "—"],
+    ["Launch time",    full.launch_time || full.created || "—"],
     ["Key pair name",  full.key_name || "(no key pair)"],
     ["State transition reason", full.state_reason || "—"],
   ].forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, String(v)))));

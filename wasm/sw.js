@@ -593,6 +593,11 @@ async function route(method, path, body, query) {
   if (path === "/api/vpc/analyze" && method === "POST") return { tuple: ["aws", "vpc", "Analyze", body || {}] };
   // EC2 AMIs — a fresh account owns no custom images (CreateImage not modeled in
   // Nano yet); return an empty owned-AMIs list so the page renders instead of 501.
+  // Connect tab: Nano runs in the browser and has no instance runtime to SSH into, so
+  // answer with the same {detail:{error,hint}} shape the appliance uses for a
+  // not-connectable instance (the Connect pane renders it) instead of a 501.
+  if (/^\/api\/aws\/ec2\/instances\/[^/]+\/connect-info$/.test(path) && method === "GET")
+    return { response: json({ detail: { error: "NoRuntime", hint: "Nano has no instance runtime to SSH into; use the Vyomi appliance for SSH/console access." } }, 409) };
   if (path === "/api/ec2/amis" && method === "GET") return { response: json({ ok: true, amis: [] }) };
   // Console "extras" — generic EC2/VPC sub-resource CRUD (volumes, snapshots,
   // launch templates, spot requests, endpoint services). Specific extras + fixtures
