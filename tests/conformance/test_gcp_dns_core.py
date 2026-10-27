@@ -105,7 +105,12 @@ def main():
     check("cannot delete apex NS → 400", s == 400, b)
 
     s, b = call(st, "PATCH", Z + "/z1", {"description": "new", "labels": {"env": "dev"}})
-    check("patch zone returns operation", s == 200 and b["kind"] == "dns#operation" and b["status"] == "DONE", b)
+    check("patch zone returns operation", s == 200 and b["kind"] == "dns#operation" and b["status"] == "done", b)
+    op_id = call(st, "PATCH", Z + "/z1", {"description": "new"})[1]["id"]
+    s, b = call(st, "GET", Z + "/z1/operations/" + op_id)
+    check("zone operation retrievable (gcloud polls it)", s == 200 and b["status"] == "done", b)
+    s, b = call(st, "GET", Z + "/z1/operations")
+    check("zone operations list", s == 200 and len(b["operations"]) == 2, b)
     s, b = call(st, "GET", Z + "/z1")
     check("patch persisted", b["description"] == "new" and b["labels"] == {"env": "dev"}, b)
 

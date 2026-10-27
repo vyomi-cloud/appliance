@@ -417,6 +417,7 @@ RESOURCE_CATALOG_GCP = [
             ["zone_type",        "Type"],
             ["description_text", "Description"],
             ["record_count",     "Record sets"],
+            ["primary_ns",       "Primary name server"],
             ["dnssec_state",     "DNSSEC"],
             ["created",          "Created"],
         ],

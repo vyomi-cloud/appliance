@@ -12,6 +12,7 @@ Resources (Discovery doc `dns/v1`):
     managedZones/{z}/rrsets list / get / create / patch / delete
     managedZones/{z}/changes create / get / list     (atomic additions + deletions)
     managedZones/{z}/dnsKeys list / get              (populated when DNSSEC is on)
+    managedZones/{z}/operations list / get           (the operation a zone patch/update returns)
     policies                create / get / list / patch / update / delete
 
 A new zone gets the default apex `NS` + `SOA` record sets and the four
@@ -269,8 +270,10 @@ def patch_zone(store, project, name, payload, replace=False):
         elif replace and k in ("description", "labels"):
             z.pop(k, None)
     z.setdefault("description", "")
-    return {"kind": "dns#operation", "id": _num_id(project, name, _ts()), "startTime": _ts(), "status": "DONE",
-            "type": "update", "user": "", "zoneContext": {"oldValue": old, "newValue": _zone_view(rec)}}
+    op = {"kind": "dns#operation", "id": _num_id(project, name, _ts()), "startTime": _ts(), "status": "done",
+          "type": "update", "user": "", "zoneContext": {"oldValue": old, "newValue": _zone_view(rec)}}
+    rec.setdefault("ops", []).append(op)
+    return op
 
 
 def delete_zone(store, project, name):
@@ -510,6 +513,7 @@ def console_view(rec):
         "description_text": z.get("description") or "No description",
         "record_count": len(rec["rrsets"]),
         "name_servers_text": ", ".join(z.get("nameServers") or []) or "Not applicable (private zone)",
+        "primary_ns": (z.get("nameServers") or ["Not applicable (private zone)"])[0],
         "dnssec_state": {"on": "On", "off": "Off", "transfer": "Transfer"}.get(dnssec, dnssec),
         "created": z["creationTime"],
         "records": [{"name": r["name"], "type": r["type"], "ttl": r.get("ttl", DEFAULT_TTL),
@@ -619,6 +623,15 @@ def _zones(store, method, project, rest, query, payload):
                     return _json(200, c)
             raise _E(404, "NOT_FOUND", "notFound",
                      "The 'parameters.changeId' resource named '%s' does not exist." % rest[2])
+    elif sub == "operations" and method == "GET":   # managedZoneOperations (gcloud polls the patch operation)
+        ops = _zone_rec(store, project, zname).get("ops") or []
+        if len(rest) == 2:
+            return _json(200, dict(_page(json.loads(json.dumps(ops)), query, "operations"),
+                                   kind="dns#managedZoneOperationsListResponse", header={"operationId": ""}))
+        for o in ops:
+            if o["id"] == rest[2]:
+                return _json(200, o)
+        raise _E(404, "NOT_FOUND", "notFound", "The 'parameters.operation' resource named '%s' does not exist." % rest[2])
     elif sub == "dnsKeys" and method == "GET":
         keys = dns_keys(store, project, zname)
         if len(rest) == 2:
