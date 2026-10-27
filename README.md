@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 11:09 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 11:10 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -41,7 +41,7 @@ _Updated 2026-10-27 11:09 UTC · refreshes after every pipeline run_
 | Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🔍 In gate ([PR #120](https://github.com/vyomi-cloud/appliance/pull/120)) | 18/18 | — |
 | Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🔍 In gate ([PR #122](https://github.com/vyomi-cloud/appliance/pull/122)) | 18/18 | — |
 | Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | — |
-| IAM Service Account Credentials API [#72](https://github.com/vyomi-cloud/appliance/issues/72) | GCP | 🔍 In gate ([PR #121](https://github.com/vyomi-cloud/appliance/pull/121)) | 18/18 | — |
+| IAM Service Account Credentials API [#72](https://github.com/vyomi-cloud/appliance/issues/72) | GCP | 🚀 Releasing | 18/18 | — |
 
 ## Released services
 
