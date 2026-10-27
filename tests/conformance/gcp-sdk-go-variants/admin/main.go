@@ -15,6 +15,8 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	iam "google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
+	pubsubapi "google.golang.org/api/pubsub/v1"
+	secretmanager "google.golang.org/api/secretmanager/v1"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 )
 
@@ -135,6 +137,54 @@ func main() {
 			_, e = isvc.Projects.ServiceAccounts.Delete(sa.Name).Do()
 			chk("iam serviceAccounts.delete", e == nil, fmt.Sprint(e))
 		}
+	}
+
+	// Secret Manager: version state transitions.
+	if msvc, err := secretmanager.NewService(ctx, noauth, option.WithEndpoint(endpoint+"/")); err != nil {
+		chk("secretmanager NewService", false, err.Error())
+	} else {
+		sid := fmt.Sprintf("conf-sec-%d", time.Now().Unix())
+		parent := "projects/" + project
+		sec, e := msvc.Projects.Secrets.Create(parent, &secretmanager.Secret{
+			Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
+		}).SecretId(sid).Do()
+		chk("secretmanager secrets.create", e == nil, fmt.Sprint(e))
+		if e == nil {
+			v, e := msvc.Projects.Secrets.AddVersion(sec.Name, &secretmanager.AddSecretVersionRequest{
+				Payload: &secretmanager.SecretPayload{Data: "c2VjcmV0"},
+			}).Do()
+			chk("secretmanager addVersion", e == nil && v != nil && v.State == "ENABLED", fmt.Sprint(e))
+			if e == nil {
+				d, e := msvc.Projects.Secrets.Versions.Disable(v.Name, &secretmanager.DisableSecretVersionRequest{}).Do()
+				chk("secretmanager versions.disable", e == nil && d.State == "DISABLED", fmt.Sprint(e))
+				_, e = msvc.Projects.Secrets.Versions.Access(v.Name).Do()
+				chk("secretmanager access of disabled version fails", e != nil, "expected error")
+				en, e := msvc.Projects.Secrets.Versions.Enable(v.Name, &secretmanager.EnableSecretVersionRequest{}).Do()
+				chk("secretmanager versions.enable", e == nil && en.State == "ENABLED", fmt.Sprint(e))
+				x, e := msvc.Projects.Secrets.Versions.Destroy(v.Name, &secretmanager.DestroySecretVersionRequest{}).Do()
+				chk("secretmanager versions.destroy", e == nil && x.State == "DESTROYED", fmt.Sprint(e))
+			}
+			_, e = msvc.Projects.Secrets.Delete(sec.Name).Do()
+			chk("secretmanager secrets.delete", e == nil, fmt.Sprint(e))
+		}
+	}
+
+	// Pub/Sub (REST): subscription get.
+	if psvc, err := pubsubapi.NewService(ctx, noauth, option.WithEndpoint(endpoint+"/")); err != nil {
+		chk("pubsub NewService", false, err.Error())
+	} else {
+		tn := fmt.Sprintf("projects/%s/topics/conf-t-%d", project, time.Now().Unix())
+		sn := fmt.Sprintf("projects/%s/subscriptions/conf-s-%d", project, time.Now().Unix())
+		_, e := psvc.Projects.Topics.Create(tn, &pubsubapi.Topic{}).Do()
+		chk("pubsub topics.create", e == nil, fmt.Sprint(e))
+		_, e = psvc.Projects.Subscriptions.Create(sn, &pubsubapi.Subscription{Topic: tn, AckDeadlineSeconds: 30}).Do()
+		chk("pubsub subscriptions.create", e == nil, fmt.Sprint(e))
+		g, e := psvc.Projects.Subscriptions.Get(sn).Do()
+		chk("pubsub subscriptions.get", e == nil && g.Name == sn && g.Topic == tn, fmt.Sprint(e))
+		_, e = psvc.Projects.Subscriptions.Delete(sn).Do()
+		chk("pubsub subscriptions.delete", e == nil, fmt.Sprint(e))
+		_, e = psvc.Projects.Topics.Delete(tn).Do()
+		chk("pubsub topics.delete", e == nil, fmt.Sprint(e))
 	}
 
 	fmt.Printf("RESULT pass=%d fail=%d\n", pass, fail)

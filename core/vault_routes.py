@@ -401,6 +401,36 @@ def _register_gcp(app: FastAPI) -> None:
             "state": "ENABLED",
         }
 
+    # Version state transitions (:disable / :enable / :destroy). Vault KV keeps the
+    # value; the lifecycle state lives here and gates :access like the real service.
+    _gcp_ver_state: dict = {}
+
+    def _gcp_ver_set(request: Request, project: str, secret: str, version: str, state: str):
+        space = _active_space_id(request)
+        ver = version
+        if version == "latest":
+            ver = "1"
+        _gcp_ver_state[(space, secret, ver)] = state
+        return {
+            "name": f"projects/{project}/secrets/{secret}/versions/{ver}",
+            "createTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "state": state,
+            **({"destroyTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+               if state == "DESTROYED" else {}),
+        }
+
+    @app.post("/v1/projects/{project}/secrets/{secret}/versions/{version}:disable")
+    async def gcp_secrets_version_disable(project: str, secret: str, version: str, request: Request):
+        return _gcp_ver_set(request, project, secret, version, "DISABLED")
+
+    @app.post("/v1/projects/{project}/secrets/{secret}/versions/{version}:enable")
+    async def gcp_secrets_version_enable(project: str, secret: str, version: str, request: Request):
+        return _gcp_ver_set(request, project, secret, version, "ENABLED")
+
+    @app.post("/v1/projects/{project}/secrets/{secret}/versions/{version}:destroy")
+    async def gcp_secrets_version_destroy(project: str, secret: str, version: str, request: Request):
+        return _gcp_ver_set(request, project, secret, version, "DESTROYED")
+
     # Real Google Secret Manager allows BOTH GET and POST on :access; the
     # google-cloud-go SDK's REST transport uses GET (with the ?$alt=json query
     # param appended). Register both so unmodified SDK clients work.
@@ -408,6 +438,11 @@ def _register_gcp(app: FastAPI) -> None:
     @app.post("/v1/projects/{project}/secrets/{secret}/versions/{version}:access")
     async def gcp_secrets_access(project: str, secret: str, version: str, request: Request):
         space = _active_space_id(request)
+        st = _gcp_ver_state.get((space, secret, "1" if version == "latest" else version), "ENABLED")
+        if st != "ENABLED":
+            return JSONResponse({"error": {"code": 400, "status": "FAILED_PRECONDITION",
+                "message": f"Secret Version [projects/{project}/secrets/{secret}/versions/{version}] is in {st} state."}},
+                status_code=400)
         v = None if version == "latest" else int(version)
         got = vc.kv_get("gcp", space, secret, version=v)
         if got is None:

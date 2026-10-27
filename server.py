@@ -16664,9 +16664,12 @@ def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
 
 
 def _gcp_pubsub_topic_view(project: str, topic: dict) -> dict:
+    # Records store the full resource name; only prefix a bare id.
     name = str(topic.get("name") or "")
+    if not name.startswith("projects/"):
+        name = f"projects/{project}/topics/{name}"
     view = {
-        "name": f"projects/{project}/topics/{name}",
+        "name": name,
         "labels": topic.get("labels", {}),
         "messageStoragePolicy": topic.get("messageStoragePolicy", {
             "allowedPersistenceRegions": [],
@@ -16693,9 +16696,13 @@ def _gcp_pubsub_subscription_view(project: str, subscription: dict) -> dict:
     name = str(subscription.get("name") or "")
     if not name.startswith("projects/"):
         name = f"projects/{project}/subscriptions/{name}"
+    # The emulator hands back a bare topic id; the real API returns the full name.
+    topic = str(subscription.get("topic") or "")
+    if topic and not topic.startswith("projects/") and topic != "_deleted-topic_":
+        topic = f"projects/{project}/topics/{topic}"
     return {
         "name": name,
-        "topic": subscription.get("topic", ""),
+        "topic": topic,
         "ackDeadlineSeconds": subscription.get("ackDeadlineSeconds", 10),
         "retainAckedMessages": subscription.get("retainAckedMessages", False),
         "messageRetentionDuration": subscription.get("messageRetentionDuration", "604800s"),
