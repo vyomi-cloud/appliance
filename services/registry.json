@@ -304,6 +304,13 @@
    "upstream": "elbv2",
    "status": "released",
    "released_in": "3.0.10"
+  },
+  {
+   "cloud": "aws",
+   "key": "ssm",
+   "name": "Systems Manager",
+   "upstream": "ssm",
+   "status": "pending-release"
   }
  ]
 }
