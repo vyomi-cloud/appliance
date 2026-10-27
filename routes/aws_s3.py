@@ -1135,6 +1135,8 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return Response(content=json.dumps(resp), media_type="application/x-amz-json-1.1")
         params = await _srv()._ec2_query_params(request)
         action = str(params.get("Action", "")).strip()
+        if not service and action in ("AssumeRoleWithWebIdentity", "AssumeRoleWithSAML"):
+            return await _srv().api_sts_query(request)   # STS ops the SDKs send unsigned
         return _error_xml("InvalidAction", f"Root dispatch could not route service={service or 'unknown'!r} action={action or 'unknown'!r}.", "/", 400)
 
     # ── S3 REST API — root level ────────────────────────────────────────

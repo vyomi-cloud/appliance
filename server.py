@@ -21250,6 +21250,10 @@ _EC2_VPC_ACTIONS = {
 async def aws_query_root(request: Request) -> Response:
     """Root dispatch for real AWS SDK/CLI query + JSON protocol requests."""
     service = _aws_query_target_service(request)
+    if not service and request.headers.get("content-type", "").startswith("application/x-www-form-urlencoded"):
+        # STS ops the SDKs send unsigned (no SigV4 credential scope to route on).
+        if str((await _ec2_query_params(request)).get("Action", "")) in ("AssumeRoleWithWebIdentity", "AssumeRoleWithSAML"):
+            return await api_sts_query(request)
     if service == "ec2":
         # VPC/networking actions sign under the ec2 service scope but are served
         # by the dedicated VPC query handler.
