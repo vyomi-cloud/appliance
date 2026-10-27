@@ -34,6 +34,7 @@ from core.stepfunctions_core import StepFunctionsStore
 from core.gcp_cloudscheduler_core import CloudSchedulerStore
 from core.gcp_iamcredentials_core import IamCredentialsStore
 from core.gcp_container_core import ContainerStore
+from core.gcp_monitoring_core import MonitoringStore
 
 _REG: dict | None = None
 
@@ -62,6 +63,7 @@ def get() -> dict:
             "gcp_fs":  FirestoreStore(),
             "gcp_kms": InMemoryKeyStore(),
             "gcp_sec": InMemoryKvStore(),
+            "gcp_mon": MonitoringStore(),   # Cloud Monitoring
             "gcp_gke": ContainerStore(),   # Kubernetes Engine clusters
             "gcp_iamc": IamCredentialsStore(),   # IAM Credentials issue log
             "gcp_sched": CloudSchedulerStore(),   # Cloud Scheduler jobs

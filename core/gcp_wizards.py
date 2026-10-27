@@ -661,6 +661,39 @@ _IAMCREDENTIALS_WIZARD = _basic_wizard(
 )
 
 
+# ============================================================================
+# Cloud Monitoring — Create alert policy (core/gcp_monitoring_core.form_to_policy): one
+# threshold condition on a metric, with an e-mail notification channel
+# ============================================================================
+_MONITORING_WIZARD = _basic_wizard(
+    name_field=_name("Policy name", "High CPU utilization", r"^.{1,512}$", "1-512 characters"),
+    name_default="High CPU utilization", region_or_zone=None,
+    extra_basic_fields=[
+        {"name": "severity", "label": "Severity", "type": "select", "default": "WARNING", "options": [
+            {"value": "CRITICAL", "label": "Critical"}, {"value": "ERROR", "label": "Error"},
+            {"value": "WARNING", "label": "Warning"}]},
+        {"name": "email", "label": "Notification e-mail address", "default": "ops@example.com",
+         "help": "An e-mail notification channel is created (or reused) and attached."},
+        {"name": "documentation", "label": "Documentation", "default": "CPU utilization above 80% for 5 minutes. Check the instance for runaway processes."},
+    ],
+    sections=[
+        {"label": "Condition", "fields": [
+            {"name": "metricType", "label": "Metric type", "default": "compute.googleapis.com/instance/cpu/utilization", "required": True},
+            {"name": "resourceType", "label": "Resource type", "default": "gce_instance", "required": True},
+            {"name": "comparison", "label": "Condition", "type": "select", "default": "COMPARISON_GT", "options": [
+                {"value": "COMPARISON_GT", "label": "Above threshold"}, {"value": "COMPARISON_GE", "label": "At or above"},
+                {"value": "COMPARISON_LT", "label": "Below threshold"}, {"value": "COMPARISON_LE", "label": "At or below"},
+                {"value": "COMPARISON_EQ", "label": "Equal to"}, {"value": "COMPARISON_NE", "label": "Not equal to"}]},
+            {"name": "threshold", "label": "Threshold value", "type": "number", "default": 0.8},
+            {"name": "duration", "label": "Retest window", "default": "300s", "help": "Duration in seconds, e.g. 300s."},
+            {"name": "alignmentPeriod", "label": "Alignment period", "default": "60s"},
+            {"name": "aligner", "label": "Aligner", "type": "select", "default": "ALIGN_MEAN", "options": [
+                {"value": a, "label": a} for a in ("ALIGN_MEAN", "ALIGN_MAX", "ALIGN_MIN", "ALIGN_SUM", "ALIGN_COUNT", "ALIGN_RATE")]},
+        ]},
+    ],
+)
+
+
 WIZARDS: dict[str, dict] = {
     "compute":       _COMPUTE_WIZARD,
     "storage":       _STORAGE_WIZARD,
@@ -677,4 +710,5 @@ WIZARDS: dict[str, dict] = {
     "cloudscheduler": _CLOUDSCHEDULER_WIZARD,
     "iamcredentials": _IAMCREDENTIALS_WIZARD,
     "container":     _CONTAINER_WIZARD,
+    "monitoring":    _MONITORING_WIZARD,
 }

@@ -36,6 +36,7 @@ STORE_ATTRS = [
     "az_blob", "az_cosmos", "az_kvsec", "az_kvkeys", "az_queue", "az_sb",
     "ssm",      # Systems Manager (core/ssm_core.SsmStore)
     "gcp_gke",    # Kubernetes Engine (core/gcp_container_core.ContainerStore)
+    "gcp_mon",    # Cloud Monitoring (core/gcp_monitoring_core.MonitoringStore)
     "gcp_iamc",   # IAM Credentials issue log (core/gcp_iamcredentials_core.IamCredentialsStore)
     "gcp_sched",  # Cloud Scheduler (core/gcp_cloudscheduler_core.CloudSchedulerStore)
     "sfn",      # Step Functions (core/stepfunctions_core.StepFunctionsStore)

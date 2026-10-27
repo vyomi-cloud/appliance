@@ -471,6 +471,50 @@ RESOURCE_CATALOG_GCP = [
             {"name": "delegates",      "label": "Delegates (comma-separated service account emails)", "default": ""},
         ],
     },
+    # ========================================================================
+    # Cloud Monitoring — alert policies (+ notification channels, custom metrics, time series,
+    # uptime checks, groups over the native API; core/gcp_monitoring_core.py). Console REST at
+    # /api/gcp/monitoring/*; the native /v3/projects/* wire serves the SDKs / gcloud.
+    # ========================================================================
+    {
+        "key": "monitoring", "label": "Cloud Monitoring", "icon": "monitoring",
+        "namespace": "GCP/Monitoring", "service": "monitoring",
+        "collection_path": "/api/gcp/monitoring/policies",
+        "resource_path":   "/api/gcp/monitoring/policies/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "policies": {"method": "GET",    "path": "/api/gcp/monitoring/policies"},
+            "enable":   {"method": "POST",   "path": "/api/gcp/sub/monitoring/enable/{name}"},
+            "disable":  {"method": "POST",   "path": "/api/gcp/sub/monitoring/disable/{name}"},
+            "delete":   {"method": "DELETE", "path": "/api/gcp/monitoring/policies/{name}"},
+        },
+        "columns": [
+            ["display_name",      "Policy name"],
+            ["id",                "Policy ID"],
+            ["state",             "Status"],
+            ["severity_text",     "Severity"],
+            ["metric_type",       "Metric"],
+            ["threshold_text",    "Threshold"],
+            ["condition_count",   "Conditions"],
+            ["channels_text",     "Notification channels"],
+            ["incidents",         "Incidents"],
+            ["last_modified",     "Last modified"],
+        ],
+        "createFields": [
+            {"name": "name",             "label": "Policy name",                         "default": "High CPU utilization"},
+            {"name": "metricType",       "label": "Metric type",                         "default": "compute.googleapis.com/instance/cpu/utilization"},
+            {"name": "resourceType",     "label": "Resource type",                       "default": "gce_instance"},
+            {"name": "comparison",       "label": "Condition (COMPARISON_GT, _GE, _LT, _LE, _EQ, _NE)", "default": "COMPARISON_GT"},
+            {"name": "threshold",        "label": "Threshold value",                     "default": "0.8"},
+            {"name": "duration",         "label": "Retest window (duration)",            "default": "300s"},
+            {"name": "alignmentPeriod",  "label": "Alignment period",                    "default": "60s"},
+            {"name": "aligner",          "label": "Aligner (ALIGN_MEAN, ALIGN_MAX, ...)", "default": "ALIGN_MEAN"},
+            {"name": "email",            "label": "Notification e-mail address",         "default": "ops@example.com"},
+            {"name": "severity",         "label": "Severity (CRITICAL, ERROR or WARNING)", "default": "WARNING"},
+            {"name": "documentation",    "label": "Documentation",                       "default": "CPU utilization above 80% for 5 minutes. Check the instance for runaway processes."},
+        ],
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_GCP}

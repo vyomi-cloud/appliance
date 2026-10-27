@@ -369,6 +369,34 @@ _IAMCREDENTIALS_SUB = [
 ]
 
 
+# ============================================================================
+# Cloud Monitoring — alert policy detail (generic `schedkv` renderer; every value filled)
+# ============================================================================
+_MONITORING_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Alert policy", "items": [
+        {"key": "conditions", "label": "Conditions", "icon": "rule", "type": "schedkv",
+         "fields": [["condition_summary", "Conditions"], ["combiner_text", "Trigger when"], ["metric_type", "Metric"],
+                    ["threshold_text", "Threshold"], ["duration_text", "Retest window"]]},
+        {"key": "notifications", "label": "Notifications", "icon": "notifications", "type": "schedkv",
+         "fields": [["channels_text", "Notification channels"], ["channel_count", "Channel count"],
+                    ["severity_text", "Severity"], ["incidents", "Incidents"]]},
+        {"key": "documentation", "label": "Documentation", "icon": "description", "type": "schedkv",
+         "fields": [["documentation_text", "Documentation"], ["labels_text", "User labels"]]},
+        {"key": "history", "label": "History", "icon": "history", "type": "schedkv",
+         "fields": [["created", "Created"], ["created_by", "Created by"], ["last_modified", "Last modified"],
+                    ["state", "Status"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -386,4 +414,5 @@ SUB_BLADES: dict[str, list] = {
     "cloudscheduler": _CLOUDSCHEDULER_SUB,
     "iamcredentials": _IAMCREDENTIALS_SUB,
     "container":     _CONTAINER_SUB,
+    "monitoring":    _MONITORING_SUB,
 }
