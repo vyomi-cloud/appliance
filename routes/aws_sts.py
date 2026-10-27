@@ -65,6 +65,8 @@ def register(app: FastAPI) -> None:
         except Exception:
             body = {}
         out = sts_core.console_create(_STORE, body if isinstance(body, dict) else {})
+        if out.get("ok"):
+            ctx.record_usage("sts.create_session", {"access_key_id": out.get("access_key_id", "")})
         return JSONResponse(out, status_code=200 if out.get("ok") else 400)
 
     @app.get("/api/sts/sessions/{access_key_id}")
@@ -77,4 +79,6 @@ def register(app: FastAPI) -> None:
     @app.delete("/api/sts/sessions/{access_key_id}")
     def api_sts_delete_session(access_key_id: str):
         out = sts_core.console_delete(_STORE, access_key_id)
+        if out.get("ok"):
+            ctx.record_usage("sts.delete_session", {"access_key_id": access_key_id})
         return JSONResponse(out, status_code=200 if out.get("ok") else 404)
