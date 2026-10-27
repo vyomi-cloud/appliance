@@ -69,3 +69,4 @@
 | 2026-10-27T09:15Z | #68 | gcp/cloudscheduler | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40475145073) |
 | 2026-10-27T09:38Z | #69 | gcp/cloudtasks | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40479657276) |
 | 2026-10-27T09:56Z | #70 | gcp/container | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40482647263) |
+| 2026-10-27T10:17Z | #71 | gcp/dns | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40484915334) |
