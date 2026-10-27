@@ -3207,7 +3207,7 @@ SUB_RENDERERS.rdsparametergroups = function(svc, full, host){
 
 // API Gateway
 SUB_RENDERERS.apiresources = function(svc, full, host){
-  fetch(ORIGIN+fillPath(svc.api_paths.resources.path, {name: full.id || full.name})).then(r=>r.json()).then(j=>{
+  fetch(ORIGIN+fillPath(svc.api_paths.resources.path, {name: full.rest_api_id || full.id || full.name})).then(r=>r.json()).then(j=>{
     const items = j.resources || j.value || j.items || [];
     if (!items.length) { host.append(el("div",{class:"empty"}, "No resources yet.")); return; }
     const tbl = el("table",{class:"aws"});
@@ -3219,7 +3219,7 @@ SUB_RENDERERS.apiresources = function(svc, full, host){
   });
 };
 SUB_RENDERERS.apistages = function(svc, full, host){
-  fetch(ORIGIN+fillPath(svc.api_paths.stages.path, {name: full.id || full.name})).then(r=>r.json()).then(j=>{
+  fetch(ORIGIN+fillPath(svc.api_paths.stages.path, {name: full.rest_api_id || full.id || full.name})).then(r=>r.json()).then(j=>{
     const items = j.stages || j.value || j.items || [];
     if (!items.length) { host.append(el("div",{class:"empty"}, "No stages.")); return; }
     const tbl = el("table",{class:"aws"});
