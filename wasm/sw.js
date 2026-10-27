@@ -237,6 +237,35 @@ function nanoSpace(provider) {
            status: "running", active_region: region, active_account: acct };
 }
 
+// Per-service monthly list prices (mirror core/cost_model.py and the consoles'
+// _NANO_RATE) — Nano resources are priced from the live per-console census.
+const NANO_RATE = {
+  s3: 0.50, dynamodb: 1.25, kms: 1.00, secretsmanager: 0.40, sqs: 0.40, iam: 0, rds: 25.55, sns: 0.50, ec2: 30.37, lambda: 0.20, apigateway: 3.50, vpc: 0,
+  compute: 24.53, storage: 0.50, cloudsql: 25.00, pubsub: 0.40, firestore: 0.18, functions: 0.20, secretmanager: 0.18,
+  "microsoft.compute/virtualmachines": 30.37, "microsoft.sql/servers": 4.99, "microsoft.storage/storageaccounts": 0.50,
+  "microsoft.documentdb/databaseaccounts": 24.48, "microsoft.web/sites": 0.20, "microsoft.servicebus/namespaces": 9.81, "microsoft.keyvault/vaults": 0.03,
+};
+// Same shape the appliance puts on a space (/api/spaces → cost_savings), so the
+// dashboard, the crawler and the gate see identical metrics offline and in Nano.
+async function nanoCostSavings() {
+  const now = Date.now();
+  const by_provider = {}, by_service = {};
+  let total = 0, count = 0;
+  for (const p of ["aws", "gcp", "azure"]) {
+    let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
+    if (!c || typeof c.ts !== "number" || (now - c.ts) >= 60000) continue;
+    for (const [k, n] of Object.entries(c.by_service || {})) {
+      const cnt = Number(n) || 0, usd = cnt * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+      by_provider[p] = Math.round(((by_provider[p] || 0) + usd) * 100) / 100;
+      by_service[p + "." + k] = Math.round(usd * 100) / 100;
+      total += usd; count += cnt;
+    }
+  }
+  total = Math.round(total * 100) / 100;
+  return { real_cloud_cost_usd: total, simulator_cost_usd: 0.0, savings_usd: total,
+           savings_pct: total > 0 ? 100.0 : 0.0, by_provider, by_service, resource_count: count };
+}
+
 // ── User-created spaces (persisted) ───────────────────────────────────
 // Nano's default spaces come from the fixture (read-only); spaces the user
 // creates are persisted in IndexedDB so they survive reloads AND show up in the
@@ -703,6 +732,10 @@ async function route(method, path, body, query) {
   if (m && method === "POST") return { tuple: ["aws", "elbv2", "CreateChild", { ...(body || {}), kind: m[1] }] };
   m = path.match(/^\/api\/aws\/elbv2\/(target-groups|listeners)\/([^/]+)$/);
   if (m && method === "DELETE") return { tuple: ["aws", "elbv2", "DeleteChild", { kind: m[1], name: dec(m[2]) }] };
+  // Amazon SNS (core/sns_core.py) — topics, subscriptions, platform applications, message log
+  if (path.startsWith("/api/aws/sns/") && (method === "GET" || method === "POST" || method === "DELETE" || method === "PATCH"))
+    return { tuple: ["aws", "sns", method === "GET" ? "GetSnsResource" : "WriteSnsResource",
+                     { method, path, query: query || {}, body: body || {} }] };
   // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
   if (path === "/api/eventbridge/rules") {
     if (method === "GET")  return { tuple: ["aws", "eventbridge", "ListRules", {}] };
@@ -905,6 +938,8 @@ self.addEventListener("fetch", (event) => {
         const cs = await nanoCostSavings();
         for (const s of spaces) s.cost_savings = cs;
         return json({ spaces, active_space_id: active });
+        const cost_savings = await nanoCostSavings();
+        return json({ spaces: spaces.map((s) => ({ ...s, cost_savings })), active_space_id: active });
       }
       // Appliance-health pies: per-cloud distribution computed live from the
       // in-browser spaces (the only CENTRAL resource data — the cores' resources

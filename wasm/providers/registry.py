@@ -348,6 +348,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 "rds":            len(A.rds_list().get("databases", [])),
                 "logs":           _logs_group_count(),
                 "elbv2":          len(_elb_census()),
+                "sns":            len(A.MSG.topics),
             }
             try:   # API Gateway V2 lives in the shared registry store (console + relay wire)
                 from core import nano_registry

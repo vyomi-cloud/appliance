@@ -73,10 +73,10 @@ async def sns_query(request: Request) -> Response:
 
 
 def register(app: FastAPI) -> None:
-    @app.api_route("/api/aws/sns/{rest:path}", methods=["GET", "POST", "DELETE"], include_in_schema=False)
+    @app.api_route("/api/aws/sns/{rest:path}", methods=["GET", "POST", "DELETE", "PATCH"], include_in_schema=False)
     async def sns_console(rest: str, request: Request) -> JSONResponse:
         body: dict = {}
-        if request.method == "POST":
+        if request.method in ("POST", "PATCH"):
             try:
                 body = await request.json()
             except Exception:
