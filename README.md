@@ -1,15 +1,15 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 18:23 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 48 services (AWS 16 · GCP 16 · Azure 16) of 1,068 the clouds publish
-- **Building now:** msi (Azure, no manifest yet checks)
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), applicationinsights (Azure), containerregistry (Azure), containerservice (Azure), eventhub (Azure), monitor (Azure)
+- **Building now:** nothing
+- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), applicationinsights (Azure), containerregistry (Azure), containerservice (Azure), eventhub (Azure), monitor (Azure), msi (Azure)
 - **Queued:** 43 services (P1 first, then P2)
 - **Consoles really implemented:** offline 52% · Nano 71%
-- **Hourly tests:** 74 of 77 suites passing (run 17:09 UTC)
+- **Hourly tests:** 76 of 79 suites passing (run 18:08 UTC)
 - **Upstream watch:** 5 open changes from the real clouds to adopt
 
 ## By cloud
@@ -17,8 +17,8 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | 48% · 76% |
-| GCP | 16 | 0 | 8 | 12 | 42% · 65% |
-| Azure | 16 | 1 | 5 | 14 | 68% · 71% |
+| GCP | 16 | 0 | 8 | 12 | 42% · 66% |
+| Azure | 16 | 0 | 6 | 14 | 68% · 71% |
 
 ## In progress
 
@@ -49,7 +49,7 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 | containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🔍 In gate ([PR #132](https://github.com/vyomi-cloud/appliance/pull/132)) | 17/17 | — |
 | eventhub [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🔍 In gate ([PR #134](https://github.com/vyomi-cloud/appliance/pull/134)) | 17/17 | — |
 | monitor [#86](https://github.com/vyomi-cloud/appliance/issues/86) | Azure | 🔍 In gate ([PR #135](https://github.com/vyomi-cloud/appliance/pull/135)) | 17/17 | — |
-| msi [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🛠 Building | no manifest yet | — |
+| msi [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🔍 In gate ([PR #136](https://github.com/vyomi-cloud/appliance/pull/136)) | 17/17 | — |
 
 ## Released services
 
@@ -60,14 +60,14 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| EC2 | 🧩 6/13 · 🧩 6/13 | 0 · 0 | ✅ watched | before gate |
+| EC2 | 🧩 6/13 · 🧩 6/13 | 2 · 2 | ✅ watched | before gate |
 | S3 | 🧩 6/13 · 🧩 11/13 | 0 · 0 | ✅ watched | before gate |
 | IAM | 🧩 8/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
 | RDS | 🧩 8/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | DynamoDB | 🧩 4/13 · 🧩 10/13 | 1 · 1 | ✅ watched | before gate |
 | SQS | 🧩 5/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
 | Lambda | 🧩 6/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
-| API Gateway | 🧩 8/13 · 🧩 10/13 | 0 · 1 | ✅ watched | before gate |
+| API Gateway | 🧩 8/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | VPC | 🧩 8/13 · 🧩 12/13 | 0 · 0 | ✅ watched | before gate |
 | EventBridge | 🧩 6/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | Secrets Manager | 🧩 4/13 · 🧩 9/13 | 2 · 2 | ✅ watched | before gate |
@@ -82,17 +82,17 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
 | Compute Engine | 🧩 5/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| Cloud Storage | 🧩 7/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
+| Cloud Storage | 🧩 7/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
 | Cloud SQL | 🧩 5/13 · 🧩 10/13 | 0 · 0 | ⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
 | Pub/Sub | 🧩 5/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
 | Firestore | 🧩 5/13 · 🧩 6/13 | 0 · 0 | ✅ watched | before gate |
 | Cloud Functions | 🧩 5/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
 | API Gateway | 🧩 6/12 · 🧩 8/12 | 0 · 0 | ✅ watched | before gate |
-| VPC Network | 🧩 4/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
+| VPC Network | 🧩 5/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
 | IAM & Admin | 🧩 4/9 · 🧩 8/9 | 0 · 0 | ✅ watched | before gate |
 | Eventarc | 🧩 5/12 · 🧩 9/12 | 0 · 0 | ✅ watched | before gate |
-| Secret Manager | 🧩 5/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
-| Cloud KMS | 🧩 7/13 · 🧩 9/13 | 0 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
+| Secret Manager | 🧩 5/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
+| Cloud KMS | 🧩 6/13 · 🧩 10/13 | 0 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
 | Cloud Scheduler | — | – · – | ✅ watched | [v3.0.14](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.14) |
 | Kubernetes Engine | — | – · – | ✅ watched | [v3.0.15](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.15) |
 | IAM Service Account Credentials | — | – · – | ✅ watched | [v3.0.16](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.16) |
@@ -823,6 +823,30 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 
 </details>
 
+<details><summary>Gate checks — msi (Azure)</summary>
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
+| ✅ | manifest status is ready | status=ready |
+| ✅ | engine exists in core/ | core/azure_msi_core.py |
+| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/azure_msi_core.py |
+| ✅ | engine listed in wasm/build_cores.py |  |
+| ✅ | service in the Nano console catalog (wasm/fixtures) | azure-catalog.json |
+| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
+| ✅ | registry entry (pending-release or released) |  |
+| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
+| ✅ | has a offline sdk-java test bed |  |
+| ✅ | has a offline sdk-go test bed |  |
+| ✅ | has a offline cli test bed |  |
+| ✅ | has a offline ui test bed |  |
+| ✅ | has a nano ui test bed |  |
+| ✅ | upstream id tracked by the hourly upstream watcher | msi |
+| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
+| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+
+</details>
+
 <details><summary>Console parts not live yet — AWS (116)</summary>
 
 | Service | Console | Part | State |
@@ -946,7 +970,7 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary>Console parts not live yet — GCP (139)</summary>
+<details><summary>Console parts not live yet — GCP (137)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -996,7 +1020,6 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 | VPC Network | offline | tab: Routes | static |
 | VPC Network | offline | tab: VPC peering | static |
 | VPC Network | offline | tab: Properties | static |
-| VPC Network | offline | tab: Network metrics | static |
 | Pub/Sub | offline | tab: Activity | static |
 | Pub/Sub | offline | tab: Permissions | static |
 | Pub/Sub | offline | tab: Labels | static |
@@ -1029,6 +1052,7 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 | Cloud KMS | offline | tab: Activity | static |
 | Cloud KMS | offline | tab: Permissions | static |
 | Cloud KMS | offline | tab: Labels | static |
+| Cloud KMS | offline | tab: Versions | static |
 | Cloud KMS | offline | tab: Key policy | static |
 | Cloud KMS | offline | tab: Import jobs | static |
 | Cloud KMS | offline | tab: Metrics | static |
@@ -1051,6 +1075,7 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 | Cloud Storage | nano | tab: Labels | static |
 | Cloud Storage | nano | tab: Lifecycle | static |
 | Cloud Storage | nano | tab: Encryption | static |
+| Cloud Storage | nano | tab: Retention | static |
 | Cloud SQL | nano | tab: Permissions | static |
 | Cloud SQL | nano | tab: Labels | static |
 | Cloud SQL | nano | tab: Flags | static |
@@ -1065,7 +1090,6 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 | VPC Network | nano | tab: Labels | static |
 | VPC Network | nano | tab: Subnets | static |
 | VPC Network | nano | tab: Routes | static |
-| VPC Network | nano | tab: VPC peering | static |
 | VPC Network | nano | tab: Properties | static |
 | Pub/Sub | nano | tab: Permissions | static |
 | Pub/Sub | nano | tab: Labels | static |
@@ -1081,12 +1105,10 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 | Secret Manager | nano | tab: Permissions | static |
 | Secret Manager | nano | tab: Labels | static |
 | Secret Manager | nano | tab: Secret value | static |
-| Secret Manager | nano | tab: Rotation | static |
 | Secret Manager | nano | tab: Replication | static |
 | Secret Manager | nano | tab: Encryption | static |
 | Cloud KMS | nano | tab: Permissions | static |
 | Cloud KMS | nano | tab: Labels | static |
-| Cloud KMS | nano | tab: Key policy | static |
 | Cloud KMS | nano | tab: Import jobs | static |
 | IAM & Admin | nano | tab: Permissions | static |
 
@@ -1194,7 +1216,7 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 
 | Suite | Result | Checks |
 |---|---|---|
-| offline-ui-crawl | ❌ | 36/38 |
+| offline-ui-crawl | ❌ | 35/38 |
 | offline-console-actions | ✅ | 246/246 |
 | offline-api-ec2-instance-detail | ✅ | 3/3 |
 | offline-api-s3-bucket-creation-date | ✅ | 3/3 |
@@ -1204,6 +1226,7 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 | offline-api-gcp-eventarc-trigger-defaults | ✅ | 6/6 |
 | offline-api-ec2-default-public-ip | ✅ | 3/3 |
 | offline-sdk-python-aws-kms-kem | ✅ | 6/6 |
+| offline-sdk-python-aws-ops2 | ✅ | 20/20 |
 | offline-sdk-python-aws-ops | ✅ | 12/12 |
 | offline-sdk-python-aws | ✅ | 88/88 |
 | offline-sdk-go-aws | ✅ | 14/14 |
@@ -1219,7 +1242,7 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 | offline-cli-azure | ✅ | 6/6 |
 | offline-ui-core | ✅ | 9/9 |
 | nano-ui-crawl | ❌ | 40/43 |
-| nano-cores | ✅ | 37/37 |
+| nano-cores | ✅ | 48/48 |
 | nano-aws-iam-detail | ✅ | 8/8 |
 | nano-aws-ec2-launch | ✅ | 13/13 |
 | nano-ui-aws-api | ❌ | 5/6 |
@@ -1255,6 +1278,7 @@ _Updated 2026-10-27 18:10 UTC · refreshes after every pipeline run_
 | offline-api-gcp-apigateway-savings | ✅ | 5/5 |
 | offline-api-gcp-console-next | ✅ | 28/28 |
 | offline-api-gcp-grid-columns | ✅ | 19/19 |
+| offline-api-gcp-console-vault-lens | ✅ | 15/15 |
 | offline-api-gcp-vault-console-secrets | ✅ | 9/9 |
 | offline-api-aws-console-savings | ✅ | 12/12 |
 | offline-api-aws-eventbridge-rule-defaults | ✅ | 14/14 |
