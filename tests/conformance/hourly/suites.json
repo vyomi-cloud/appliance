@@ -12,6 +12,7 @@
     {"id": "offline-sdk-python-aws", "target": "offline", "cloud": "aws", "kind": "sdk-python", "cmd": "python3 tests/conformance/run_conformance.py --endpoint {ENDPOINT}", "timeout": 600},
     {"id": "offline-sdk-go-aws", "target": "offline", "cloud": "aws", "kind": "sdk-go", "cwd": "tests/conformance/aws-sdk-go", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-sdk-go-gcp", "target": "offline", "cloud": "gcp", "kind": "sdk-go", "cwd": "tests/conformance/gcp-sdk-go", "cmd": "STORAGE_EMULATOR_HOST={ENDPOINT_HOSTPORT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-sdk-go-gcp-admin", "target": "offline", "cloud": "gcp", "kind": "sdk-go", "cwd": "tests/conformance/gcp-sdk-go-variants/admin", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-sdk-go-azure", "target": "offline", "cloud": "azure", "kind": "sdk-go", "cwd": "tests/conformance/azure-sdk-go", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-sdk-java-aws", "target": "offline", "cloud": "aws", "kind": "sdk-java", "cwd": "tests/conformance/aws-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java", "timeout": 900},
     {"id": "offline-sdk-java-gcp", "target": "offline", "cloud": "gcp", "kind": "sdk-java", "cwd": "tests/conformance/gcp-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java", "timeout": 900},

@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	cloudfunctions "google.golang.org/api/cloudfunctions/v1"
 	compute "google.golang.org/api/compute/v1"
@@ -68,6 +69,29 @@ func main() {
 		if e == nil {
 			fmt.Printf("   (sql instances=%d)\n", len(l.Items))
 		}
+		// Instance lifecycle: insert, get, database insert, delete.
+		name := fmt.Sprintf("conf-sql-%d", time.Now().Unix())
+		_, e = ssvc.Instances.Insert(project, &sqladmin.DatabaseInstance{
+			Name: name, DatabaseVersion: "POSTGRES_15", Region: location,
+			Settings: &sqladmin.Settings{Tier: "db-f1-micro"},
+		}).Do()
+		chk("sqladmin instances.insert", e == nil, fmt.Sprint(e))
+		if e == nil {
+			g, e := ssvc.Instances.Get(project, name).Do()
+			chk("sqladmin instances.get", e == nil && g.Name == name, fmt.Sprint(e))
+			l2, e := ssvc.Instances.List(project).Do()
+			found := false
+			if e == nil {
+				for _, it := range l2.Items {
+					found = found || it.Name == name
+				}
+			}
+			chk("sqladmin instances.list contains new instance", found, fmt.Sprint(e))
+			_, e = ssvc.Databases.Insert(project, name, &sqladmin.Database{Name: "appdb"}).Do()
+			chk("sqladmin databases.insert", e == nil, fmt.Sprint(e))
+			_, e = ssvc.Instances.Delete(project, name).Do()
+			chk("sqladmin instances.delete", e == nil, fmt.Sprint(e))
+		}
 	}
 
 	// Cloud Functions
@@ -90,6 +114,26 @@ func main() {
 		chk("iam serviceAccounts.list", e == nil, fmt.Sprint(e))
 		if e == nil {
 			fmt.Printf("   (service accounts=%d)\n", len(l.Accounts))
+		}
+		// Service account lifecycle: create, get, list, delete.
+		acct := fmt.Sprintf("conf-sa-%d", time.Now().Unix()%100000000)
+		sa, e := isvc.Projects.ServiceAccounts.Create("projects/"+project, &iam.CreateServiceAccountRequest{
+			AccountId: acct, ServiceAccount: &iam.ServiceAccount{DisplayName: "Conformance"},
+		}).Do()
+		chk("iam serviceAccounts.create", e == nil && sa != nil && sa.Email != "", fmt.Sprint(e))
+		if e == nil && sa != nil {
+			g, e := isvc.Projects.ServiceAccounts.Get(sa.Name).Do()
+			chk("iam serviceAccounts.get", e == nil && g.Email == sa.Email, fmt.Sprint(e))
+			l3, e := isvc.Projects.ServiceAccounts.List("projects/" + project).Do()
+			found := false
+			if e == nil {
+				for _, a := range l3.Accounts {
+					found = found || a.Email == sa.Email
+				}
+			}
+			chk("iam serviceAccounts.list contains new account", found, fmt.Sprint(e))
+			_, e = isvc.Projects.ServiceAccounts.Delete(sa.Name).Do()
+			chk("iam serviceAccounts.delete", e == nil, fmt.Sprint(e))
 		}
 	}
 
