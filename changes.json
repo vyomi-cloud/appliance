@@ -1,17 +1,17 @@
 {
- "at": "2026-10-27T22:50:16+00:00",
+ "at": "2026-10-27T23:50:17+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:fd389969f2ca",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStartRequest",
-     "now": "WorkloadCapturesStartRequest"
+     "was": "WorkloadCapturesStartRequest",
+     "now": "SqlWorkloadCapturesStartRequest"
     }
    },
    "actionable": true
@@ -20,12 +20,12 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:f421c3d61dc0",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStartReplayRequest",
-     "now": "WorkloadCapturesStartReplayRequest"
+     "was": "WorkloadCapturesStartReplayRequest",
+     "now": "SqlWorkloadCapturesStartReplayRequest"
     }
    },
    "actionable": true
@@ -34,12 +34,12 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:c8c00d855f73",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStopRequest",
-     "now": "WorkloadCapturesStopRequest"
+     "was": "WorkloadCapturesStopRequest",
+     "now": "SqlWorkloadCapturesStopRequest"
     }
    },
    "actionable": true
@@ -48,12 +48,12 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:acd5b7e919b1",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStopReplayRequest",
-     "now": "WorkloadCapturesStopReplayRequest"
+     "was": "WorkloadCapturesStopReplayRequest",
+     "now": "SqlWorkloadCapturesStopReplayRequest"
     }
    },
    "actionable": true
@@ -74,16 +74,6 @@
    "key": "azure:network:5b3ac33ab5",
    "title": "Azure network: [Network] Update TypeSpec configuration for .NET SDK compatibility (#47643)",
    "link": "https://github.com/Azure/azure-rest-api-specs/commit/5b3ac33ab54d588beaca346f351b95f5765e2457",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Blob Storage, Azure Storage",
-   "kind": "announcement",
-   "key": "feed:azure:4dd8ea3819c5",
-   "title": "[Launched] Generally Available: Higher limit of Azure Blob Storage accounts per region per subscription",
-   "link": "https://azure.microsoft.com/updates?id=578358",
-   "detail": "Higher Azure Storage account resource quotas are now generally available, supporting up to 1,000 storage accounts with standard endpoints per region, per subscription, up from the default of 250. Manage more accounts in a single subscription, reducing the",
    "actionable": false
   }
  ],
