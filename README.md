@@ -1,13 +1,13 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 15:48 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 16:06 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 46 services (AWS 16 · GCP 16 · Azure 14) of 1,068 the clouds publish
-- **Building now:** nothing
+- **Building now:** containerregistry (Azure, 19/20 checks)
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), applicationinsights (Azure), cognitiveservices (Azure)
-- **Queued:** 49 services (P1 first, then P2)
+- **Queued:** 48 services (P1 first, then P2)
 - **Consoles really implemented:** offline not measured yet · Nano not measured yet
 - **Hourly tests:** 0 of 0 suites passing
 - **Upstream watch:** 5 open changes from the real clouds to adopt
@@ -18,7 +18,7 @@ _Updated 2026-10-27 15:48 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | not measured yet · not measured yet |
 | GCP | 16 | 0 | 8 | 12 | not measured yet · not measured yet |
-| Azure | 14 | 0 | 2 | 20 | not measured yet · not measured yet |
+| Azure | 14 | 1 | 2 | 19 | not measured yet · not measured yet |
 
 ## In progress
 
@@ -45,7 +45,8 @@ _Updated 2026-10-27 15:48 UTC · refreshes after every pipeline run_
 | Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | — |
 | Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #126](https://github.com/vyomi-cloud/appliance/pull/126)) | 18/18 | — |
 | applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🔍 In gate ([PR #129](https://github.com/vyomi-cloud/appliance/pull/129)) | 17/17 | — |
-| cognitiveservices [#81](https://github.com/vyomi-cloud/appliance/issues/81) | Azure | 🔍 In gate ([PR #130](https://github.com/vyomi-cloud/appliance/pull/130)) | 17/17 | — |
+| cognitiveservices [#81](https://github.com/vyomi-cloud/appliance/issues/81) | Azure | 🚀 Releasing | 17/17 | — |
+| containerregistry [#82](https://github.com/vyomi-cloud/appliance/issues/82) | Azure | 🛠 Building | 19/20 | manifest status is ready |
 
 ## Released services
 
@@ -158,11 +159,10 @@ _Updated 2026-10-27 15:48 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary><b>Azure</b> — 20 queued</summary>
+<details><summary><b>Azure</b> — 19 queued</summary>
 
 | Service | Priority | Issue | Offline backend |
 |---|---|---|---|
-| containerregistry | P1 | [#82](https://github.com/vyomi-cloud/appliance/issues/82) | registry · 10 MB · Lite |
 | containerservice | P1 | [#83](https://github.com/vyomi-cloud/appliance/issues/83) | k3s · 500 MB · Max |
 | dns | P1 | [#84](https://github.com/vyomi-cloud/appliance/issues/84) | coredns · 15 MB · Lite |
 | eventhub | P1 | [#85](https://github.com/vyomi-cloud/appliance/issues/85) | nats · 10 MB · Lite |
@@ -743,6 +743,33 @@ _Updated 2026-10-27 15:48 UTC · refreshes after every pipeline run_
 | ✅ | upstream id tracked by the hourly upstream watcher | cognitiveservices |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process', 'reason': 'This release is control plane only (accounts, keys, deployments, commitment plans, soft-delete); t |
 | ✅ | backend is the recommended one, or the manifest says why not | recommended: ollama; chose in-process |
+
+</details>
+
+<details><summary>Gate checks — containerregistry (Azure)</summary>
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
+| ❌ | manifest status is ready | status=building |
+| ✅ | engine exists in core/ | core/azure_containerregistry_core.py |
+| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/azure_containerregistry_core.py |
+| ✅ | engine listed in wasm/build_cores.py |  |
+| ✅ | service in the Nano console catalog (wasm/fixtures) | azure-catalog.json |
+| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
+| ✅ | registry entry (pending-release or released) |  |
+| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
+| ✅ | has a offline sdk-java test bed |  |
+| ✅ | has a offline sdk-go test bed |  |
+| ✅ | has a offline cli test bed |  |
+| ✅ | has a offline ui test bed |  |
+| ✅ | has a nano ui test bed |  |
+| ✅ | upstream id tracked by the hourly upstream watcher | containerregistry |
+| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'container', 'name': 'registry', 'image': 'registry:2.8.3', 'license': 'Apache-2.0', 'tier': 'lite', 'compose_service': 'vy |
+| ✅ | backend is the recommended one, or the manifest says why not | recommended: registry; chose registry |
+| ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=Apache-2.0 |
+| ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=Apache-2.0 |
+| ✅ | backend image is pinned to a version (not latest) | registry:2.8.3 |
 
 </details>
 
