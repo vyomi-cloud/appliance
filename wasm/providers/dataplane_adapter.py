@@ -209,6 +209,12 @@ def _vpc_row(v, m):
     return {"id": v["id"], "cidr": v["cidr"],
             "vpc_id": v["id"], "name": v.get("name") or v["id"], "cidr_block": v["cidr"],
             "state": "available", "tenancy": "default", "created": v.get("created", ""),
+            "dhcp_options_id": "dopt-" + v["id"].split("-", 1)[-1][:8],
+            "main_route_table_id": next((r["id"] for r in m.get("route_tables", {}).values()
+                                         if r.get("vpc_id") == v["id"] and r.get("main")), ""),
+            "default_security_group_id": next((g["id"] for g in m.get("sgs", {}).values()
+                                               if g.get("vpc_id") == v["id"] and g.get("name") == "default"), ""),
+            "internet_gateway_id": v.get("igw") or "",
             "subnet_count": sum(1 for s in m.get("subnets", {}).values() if s.get("vpc_id") == v["id"])}
 
 

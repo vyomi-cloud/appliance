@@ -2644,7 +2644,23 @@ SUB_RENDERERS.kmsconfig = function(svc, full, host){
   render();
 };
 
-SUB_RENDERERS.overview = function(svc, full, host){
+SUB_RENDERERS.overview = function(svc, full, host, tab){
+  if (svc.key === "vpc" && tab && tab.key === "details"){
+    // VPC console "Details" card: the VPC's own attributes (not the generic summary)
+    const card = el("div",{class:"kv-card"});
+    card.append(el("div",{class:"h"}, "Details"));
+    const grid = el("div",{class:"kv-grid"});
+    [["VPC ID", full.vpc_id], ["State", full.state], ["IPv4 CIDR", full.cidr_block],
+     ["Tenancy", full.tenancy], ["DHCP option set", full.dhcp_options_id],
+     ["Main route table", full.main_route_table_id], ["Default security group", full.default_security_group_id],
+     ["Internet gateway", full.internet_gateway_id || "No internet gateway attached"],
+     ["IPv6 mode", full.ipv6_mode], ["Encryption control", full.encryption_controls],
+     ["Created", full.created], ["Owner ID", ACCOUNT]
+    ].forEach(([k,v])=>{ if (v == null || v === "") return;
+      grid.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"+(/id|table|group|set/i.test(k)?" mono":"")}, String(v)))); });
+    card.append(grid); host.append(card);
+    return;
+  }
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Resource details"));
   const grid = el("div",{class:"kv-grid"});
