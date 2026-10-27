@@ -397,6 +397,26 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
+        "key": "dns", "label": "DNS zones", "icon": "dns",
+        "namespace": "Microsoft.Network", "type": "dnsZones",
+        "api_version": "2018-05-01", "scope": "rg",
+        "banner": "Host a domain's DNS records in Azure DNS. Record sets (A, AAAA, CNAME, MX, NS, TXT, SRV, CAA, PTR) behave like Azure: the SDKs, `az network dns` and the Record sets tab edit the same data, and Test query answers from the zone offline (no registrar delegation happens).",
+        "children": [{"type": "A", "label": "Record sets", "icon": "list"}],
+        "columns": [["name", "Name"], ["properties.zoneType", "Type"],
+                    ["properties.numberOfRecordSets", "Record sets"],
+                    ["properties.nameServers", "Name servers"],
+                    ["location", "Location"]],
+        "create_fields": [
+            {"name": "name", "label": "Zone name", "default": "cloudlearn.example.com"},
+            {"name": "properties.zoneType", "label": "Zone type", "type": "select",
+             "options": ["Public", "Private"], "default": "Public"},
+        ],
+        "defaults": {
+            "location": "global",
+            "properties": {"zoneType": "Public"},
+        },
+    },
+    {
         "key": "cognitiveservices", "label": "Azure AI services", "icon": "psychology",
         "namespace": "Microsoft.CognitiveServices", "type": "accounts",
         "api_version": "2024-10-01", "scope": "rg",
@@ -693,6 +713,11 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if namespace.lower() == "microsoft.appconfiguration":
         return await _handle_appconfiguration(request, method, sub, rg, chain, names, base)
 
+    if namespace.lower() == "microsoft.network":
+        from core import azure_dns_core as _dns_probe
+        if _dns_probe.handles(chain):
+            return await _handle_dns(request, method, sub, rg, chain, names, base)
+
     if namespace.lower() == "microsoft.cognitiveservices":
         return await _handle_cognitiveservices(request, method, sub, rg, chain, names, base)
 
@@ -831,6 +856,23 @@ async def _handle_appconfiguration(request: Request, method: str, sub: str, rg: 
             resp.headers[hk] = hv
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.AppConfiguration/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_dns(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                      names: list[str], base: str) -> JSONResponse:
+    from core import azure_dns_core as _dn
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _dn.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    api_version = request.query_params.get("api-version") or _dn.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["lro"] and r["status"] < 300:
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Network/dnsZones", "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
     return resp
 

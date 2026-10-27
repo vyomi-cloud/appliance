@@ -23189,6 +23189,13 @@ try:
 except Exception as _e:   # never let this break appliance boot
     print(f"[azure-appconfig] routes skipped: {_e}")
 
+# Azure DNS resolution (/azure-data/dns/query); the ARM control plane (dnsZones) is in azure_services.
+try:
+    from providers import azure_dns_routes as _azure_dns_routes
+    _azure_dns_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-dns] routes skipped: {_e}")
+
 # Memorystore for Redis: native /v1/projects/*/locations/*/instances wire + console REST (/api/gcp/redis/*).
 try:
     from providers import gcp_redis_console as _redis_console

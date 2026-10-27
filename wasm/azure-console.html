@@ -2491,6 +2491,115 @@ SUB_RENDERERS.cogsquotas = function(svc, full, host){
   }).catch(()=>host.append(emptyState("Could not load quotas.")));
 };
 
+// ---- Azure DNS (Microsoft.Network/dnsZones) renderers ---------------------------
+const DNS_FIELDS = {A:"ARecords",AAAA:"AAAARecords",CAA:"caaRecords",CNAME:"CNAMERecord",DS:"DSRecords",MX:"MXRecords",NAPTR:"NAPTRRecords",
+  NS:"NSRecords",PTR:"PTRRecords",SOA:"SOARecord",SRV:"SRVRecords",TLSA:"TLSARecords",TXT:"TXTRecords"};
+function dnsValues(type, props){
+  const v = props[DNS_FIELDS[type]];
+  const list = Array.isArray(v) ? v : (v ? [v] : []);
+  const out = list.map(r=>{
+    switch(type){
+      case "A": return r.ipv4Address; case "AAAA": return r.ipv6Address; case "CNAME": return r.cname;
+      case "NS": return r.nsdname; case "PTR": return r.ptrdname; case "MX": return r.preference+" "+r.exchange;
+      case "SRV": return r.priority+" "+r.weight+" "+r.port+" "+r.target; case "TXT": return (r.value||[]).join("");
+      case "CAA": return r.flags+" "+r.tag+" \""+r.value+"\"";
+      case "SOA": return r.host+" "+r.email+" "+r.serialNumber+" "+r.refreshTime+" "+r.retryTime+" "+r.expireTime+" "+r.minimumTTL;
+      default: return JSON.stringify(r);
+    }
+  });
+  if (!out.length && props.targetResource && props.targetResource.id) return "Alias: " + props.targetResource.id;
+  return out.join(", ") || "—";
+}
+function dnsBuildRecord(type, text){
+  const t = text.trim(), p = t.split(/\s+/);
+  switch(type){
+    case "A": return {ARecords: t.split(/[\s,]+/).filter(Boolean).map(x=>({ipv4Address:x}))};
+    case "AAAA": return {AAAARecords: t.split(/[\s,]+/).filter(Boolean).map(x=>({ipv6Address:x}))};
+    case "CNAME": return {CNAMERecord:{cname:t}};
+    case "NS": return {NSRecords:[{nsdname:t}]};
+    case "PTR": return {PTRRecords:[{ptrdname:t}]};
+    case "MX": return {MXRecords:[{preference:+p[0], exchange:p[1]}]};
+    case "SRV": return {SRVRecords:[{priority:+p[0], weight:+p[1], port:+p[2], target:p[3]}]};
+    case "CAA": return {caaRecords:[{flags:+p[0], tag:p[1], value:(p.slice(2).join(" ")).replace(/^"|"$/g,"")}]};
+    default: return {TXTRecords:[{value:[t]}]};
+  }
+}
+SUB_RENDERERS.dnsrecordsets = function(svc, full, host){
+  const base = ORIGIN + full.id;
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"}, "Record sets in ", el("strong",{}, full.name),
+      ". The Azure DNS SDKs and `az network dns record-set` read and write the same data."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center;flex-wrap:wrap"});
+    bar.append(el("button",{class:"btn",onclick:addSet}, icon("add"), "Add record set"),
+               el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base + "/recordsets" + q).then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Name","Type","TTL","Value","Alias resource",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      items.forEach(it=>{
+        const p = it.properties || {}, type = it.type.split("/").pop();
+        const locked = type === "SOA" || (type === "NS" && it.name === "@");
+        t.append(el("tr",{},
+          el("td",{}, it.name), el("td",{}, type), el("td",{}, String(p.TTL)), el("td",{}, dnsValues(type, p)),
+          el("td",{}, (p.targetResource && p.targetResource.id) || "—"),
+          el("td",{style:"text-align:right"}, locked ? "" : el("button",{class:"btn sec",onclick:()=>{
+            fetch(base + "/" + type + "/" + encodeURIComponent(it.name) + q, {method:"DELETE"}).then(()=>{ toast("Record set deleted"); render(); });
+          }}, "Delete"))));
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load record sets.")));
+  }
+  function addSet(){
+    const name = (prompt("Name (use @ for the zone apex):", "www")||"").trim(); if(!name) return;
+    const type = (prompt("Type (A, AAAA, CNAME, MX, NS, PTR, SRV, TXT, CAA):", "A")||"").trim().toUpperCase(); if(!type) return;
+    const ttl = parseInt(prompt("TTL (seconds):", "3600")||"3600", 10);
+    const value = prompt("Value (e.g. 10.0.0.4 · target host · \"10 mail.example.com\" for MX):", "10.0.0.4"); if(value===null) return;
+    const props = Object.assign({TTL: ttl}, dnsBuildRecord(type, value));
+    fetch(base + "/" + type + "/" + encodeURIComponent(name) + q, {method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({properties: props})})
+      .then(r=>r.json().then(j=>({ok:r.ok, j}))).then(({ok,j})=>{
+        if(ok) toast("Record set saved"); else toast((j.error&&j.error.message)||"Could not save record set","err");
+        render(); });
+  }
+  render();
+};
+SUB_RENDERERS.dnsnameservers = function(svc, full, host){
+  const ns = getPath(full,"properties.nameServers") || [];
+  host.append(el("div",{class:"sub-info"},"Delegate your domain to these Azure DNS name servers at your registrar. Delegation is not performed in the simulator; use Test query to check answers."));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["#","Name server"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  if (!ns.length) t.append(el("tr",{}, el("td",{colspan:2}, "Private zones are resolved inside linked virtual networks and have no public name servers.")));
+  ns.forEach((n,i)=>t.append(el("tr",{}, el("td",{}, String(i+1)), el("td",{}, n))));
+  host.append(t);
+};
+SUB_RENDERERS.dnsquery = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Ask this zone a DNS question (what `dig` would receive). Also available over HTTP at /azure-data/dns/query."));
+  const form = el("div",{style:"display:flex;gap:8px;margin:10px 0;align-items:center;flex-wrap:wrap"});
+  const nm = el("input",{value:full.name, style:"min-width:260px"});
+  const ty = el("select",{}); ["A","AAAA","CNAME","MX","NS","PTR","SOA","SRV","TXT","CAA"].forEach(t=>ty.append(el("option",{value:t},t)));
+  const out = el("div",{});
+  const go = el("button",{class:"btn",onclick:run}, icon("search"), "Query");
+  form.append(nm, ty, go); host.append(form, out);
+  function run(){
+    out.innerHTML = "";
+    const u = ORIGIN + full.id + "/resolve?api-version=" + svc.apiVersion + "&name=" + encodeURIComponent(nm.value) + "&type=" + ty.value;
+    fetch(u).then(r=>r.json()).then(j=>{
+      const status = j.Status === 0 ? "NOERROR" : j.Status === 3 ? "NXDOMAIN" : "REFUSED";
+      out.append(el("div",{class:"sub-info"}, "Status: ", el("strong",{}, status), " · ", (j.Answer||[]).length + " answer(s)"));
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Name","Type","TTL","Data"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      (j.Answer||[]).forEach(a=>t.append(el("tr",{}, el("td",{}, a.name), el("td",{}, a.type), el("td",{}, String(a.TTL)), el("td",{}, a.data))));
+      out.append(t);
+    }).catch(()=>out.append(emptyState("Query failed.")));
+  }
+  run();
+};
+
 SUB_RENDERERS.databases = function(svc, full, host){
   subResourceCrud(svc, full, host, {
     service: "sql", child: "Database",

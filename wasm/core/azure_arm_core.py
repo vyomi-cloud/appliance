@@ -47,6 +47,11 @@ try:                                              # Cognitive Services engine (M
 except ImportError:
     import azure_cognitiveservices_core as cogs_engine   # type: ignore
 
+try:                                              # Azure DNS engine (Microsoft.Network/dnsZones)
+    from core import azure_dns_core as dns_engine
+except ImportError:
+    import azure_dns_core as dns_engine            # type: ignore
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -245,6 +250,10 @@ class AzureArm:
         if namespace.lower() == "microsoft.appconfiguration":
             return self._appconfig(method, sub, rg, chain, payload, query)
 
+        # Microsoft.Network/dnsZones (+ record sets): the Azure DNS engine owns the zone semantics.
+        if namespace.lower() == "microsoft.network" and dns_engine.handles(chain):
+            return self._dns(method, sub, rg, chain, payload, query)
+
         if namespace.lower() == "microsoft.cognitiveservices":
             return self._cogs(method, sub, rg, chain, payload, query)
 
@@ -293,6 +302,16 @@ class AzureArm:
             rec = self.state.pop(key, None)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+    def _dns(self, method, sub, rg, chain, payload, query):
+        dn = dns_engine
+        r = dn.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or dn.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
 
     def _cogs(self, method, sub, rg, chain, payload, query):
         cs = cogs_engine
