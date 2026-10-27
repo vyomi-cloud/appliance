@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 from typing import Any
 
 from fastapi import Request
@@ -198,7 +199,12 @@ def register(app, h) -> None:
     @app.get("/v1/projects/{project}/locations/{location}/operations")
     @app.get("/api/gcp/v1/projects/{project}/locations/{location}/operations")
     def api_gcp_functions_list_operations(project: str, location: str):
-        return {"operations": []}
+        # Cloud Functions LROs complete synchronously (nothing to list); the same path
+        # family also serves Kubernetes Engine operations (core/gcp_container_core).
+        from core import gcp_container_core as _gke
+        r = _gke.dispatch(_gke.shared_store(), "GET", f"/v1/projects/{project}/locations/{location}/operations")
+        ops = json.loads(r.body).get("operations", []) if r.status == 200 else []
+        return {"operations": ops, "missingZones": []} if ops else {"operations": []}
 
     @app.get("/v1/operations/{operation}")
     @app.get("/api/gcp/v1/operations/{operation}")
