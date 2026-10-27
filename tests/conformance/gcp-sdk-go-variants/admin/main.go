@@ -67,7 +67,7 @@ func main() {
 		chk("sqladmin NewService", false, err.Error())
 	} else {
 		l, e := ssvc.Instances.List(project).Do()
-		chk("sqladmin instances.list", e == nil, fmt.Sprint(e))
+		chk("sqladmin instances.list (ListInstances, ListInstancesResp)", e == nil, fmt.Sprint(e))
 		if e == nil {
 			fmt.Printf("   (sql instances=%d)\n", len(l.Items))
 		}
@@ -77,10 +77,10 @@ func main() {
 			Name: name, DatabaseVersion: "POSTGRES_15", Region: location,
 			Settings: &sqladmin.Settings{Tier: "db-f1-micro"},
 		}).Do()
-		chk("sqladmin instances.insert", e == nil, fmt.Sprint(e))
+		chk("sqladmin instances.insert (InsertInstance)", e == nil, fmt.Sprint(e))
 		if e == nil {
 			g, e := ssvc.Instances.Get(project, name).Do()
-			chk("sqladmin instances.get", e == nil && g.Name == name, fmt.Sprint(e))
+			chk("sqladmin instances.get (GetInstanceResp)", e == nil && g.Name == name, fmt.Sprint(e))
 			l2, e := ssvc.Instances.List(project).Do()
 			found := false
 			if e == nil {
@@ -90,9 +90,9 @@ func main() {
 			}
 			chk("sqladmin instances.list contains new instance", found, fmt.Sprint(e))
 			_, e = ssvc.Databases.Insert(project, name, &sqladmin.Database{Name: "appdb"}).Do()
-			chk("sqladmin databases.insert", e == nil, fmt.Sprint(e))
+			chk("sqladmin databases.insert (InsertDatabase)", e == nil, fmt.Sprint(e))
 			_, e = ssvc.Instances.Delete(project, name).Do()
-			chk("sqladmin instances.delete", e == nil, fmt.Sprint(e))
+			chk("sqladmin instances.delete (DeleteInstance)", e == nil, fmt.Sprint(e))
 		}
 	}
 
@@ -113,7 +113,7 @@ func main() {
 		chk("iam NewService", false, err.Error())
 	} else {
 		l, e := isvc.Projects.ServiceAccounts.List("projects/" + project).Do()
-		chk("iam serviceAccounts.list", e == nil, fmt.Sprint(e))
+		chk("iam serviceAccounts.list (ListServiceAccounts)", e == nil, fmt.Sprint(e))
 		if e == nil {
 			fmt.Printf("   (service accounts=%d)\n", len(l.Accounts))
 		}
@@ -122,10 +122,10 @@ func main() {
 		sa, e := isvc.Projects.ServiceAccounts.Create("projects/"+project, &iam.CreateServiceAccountRequest{
 			AccountId: acct, ServiceAccount: &iam.ServiceAccount{DisplayName: "Conformance"},
 		}).Do()
-		chk("iam serviceAccounts.create", e == nil && sa != nil && sa.Email != "", fmt.Sprint(e))
+		chk("iam serviceAccounts.create (CreateServiceAccount)", e == nil && sa != nil && sa.Email != "", fmt.Sprint(e))
 		if e == nil && sa != nil {
 			g, e := isvc.Projects.ServiceAccounts.Get(sa.Name).Do()
-			chk("iam serviceAccounts.get", e == nil && g.Email == sa.Email, fmt.Sprint(e))
+			chk("iam serviceAccounts.get (GetServiceAccount)", e == nil && g.Email == sa.Email, fmt.Sprint(e))
 			l3, e := isvc.Projects.ServiceAccounts.List("projects/" + project).Do()
 			found := false
 			if e == nil {
@@ -135,7 +135,7 @@ func main() {
 			}
 			chk("iam serviceAccounts.list contains new account", found, fmt.Sprint(e))
 			_, e = isvc.Projects.ServiceAccounts.Delete(sa.Name).Do()
-			chk("iam serviceAccounts.delete", e == nil, fmt.Sprint(e))
+			chk("iam serviceAccounts.delete (DeleteServiceAccount)", e == nil, fmt.Sprint(e))
 		}
 	}
 
@@ -156,7 +156,7 @@ func main() {
 			chk("secretmanager addVersion", e == nil && v != nil && v.State == "ENABLED", fmt.Sprint(e))
 			if e == nil {
 				d, e := msvc.Projects.Secrets.Versions.Disable(v.Name, &secretmanager.DisableSecretVersionRequest{}).Do()
-				chk("secretmanager versions.disable", e == nil && d.State == "DISABLED", fmt.Sprint(e))
+				chk("secretmanager versions.disable (SetVersionState)", e == nil && d.State == "DISABLED", fmt.Sprint(e))
 				_, e = msvc.Projects.Secrets.Versions.Access(v.Name).Do()
 				chk("secretmanager access of disabled version fails", e != nil, "expected error")
 				en, e := msvc.Projects.Secrets.Versions.Enable(v.Name, &secretmanager.EnableSecretVersionRequest{}).Do()
@@ -180,7 +180,7 @@ func main() {
 		_, e = psvc.Projects.Subscriptions.Create(sn, &pubsubapi.Subscription{Topic: tn, AckDeadlineSeconds: 30}).Do()
 		chk("pubsub subscriptions.create", e == nil, fmt.Sprint(e))
 		g, e := psvc.Projects.Subscriptions.Get(sn).Do()
-		chk("pubsub subscriptions.get", e == nil && g.Name == sn && g.Topic == tn, fmt.Sprint(e))
+		chk("pubsub subscriptions.get (GetSubscription)", e == nil && g.Name == sn && g.Topic == tn, fmt.Sprint(e))
 		_, e = psvc.Projects.Subscriptions.Delete(sn).Do()
 		chk("pubsub subscriptions.delete", e == nil, fmt.Sprint(e))
 		_, e = psvc.Projects.Topics.Delete(tn).Do()
