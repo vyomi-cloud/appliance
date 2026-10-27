@@ -202,6 +202,8 @@ def _lifetime(v):
     if not m:
         raise _E(400, "INVALID_ARGUMENT", "Invalid value at 'lifetime' (type google.protobuf.Duration), \"%s\"" % v)
     secs = int(m.group(1))
+    if secs == 0:   # the proto3 default Duration means "unset"
+        return DEFAULT_LIFETIME
     if secs < 1 or secs > MAX_LIFETIME:
         raise _E(400, "INVALID_ARGUMENT",
                  "The requested lifetime of %ds is invalid; it must be between 1s and %ds." % (secs, MAX_LIFETIME))
