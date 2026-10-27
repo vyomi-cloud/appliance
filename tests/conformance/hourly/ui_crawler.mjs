@@ -221,6 +221,15 @@ async function createWithDefaults(page, drain, cloud, backToList) {
     }
     const dialog = (await blade.count()) ? blade : page.locator("[role=dialog]:visible, .modal:visible, .drawer:visible").last();
     const scope = (await dialog.count()) ? dialog : page.locator("#main");
+    // Fields the real cloud also leaves empty and requires (a database admin
+    // password, a required name with no default) cannot be "accepted as default":
+    // fill them as a user would so the crawl can reach the created resource.
+    for (const inp of await scope.locator("input[type=password]").all()) {
+      if (!(await inp.inputValue().catch(() => "x"))) await inp.fill("Vyomi-Crawl-1a!").catch(() => {});
+    }
+    for (const inp of await scope.locator("input[required]:not([type=radio]):not([type=checkbox]):not([type=password])").all()) {
+      if (!(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl-${Date.now().toString(36)}`).catch(() => {});
+    }
     const submit = scope.locator("button, [type=submit]").filter({ hasText: SUBMIT_BTN }).filter({ hasNotText: NOT_SUBMIT }).last();
     if (!(await submit.count())) { f.push({ type: "CREATE_NO_SUBMIT", detail: "create form has no submit button" }); return f; }
     await submit.click({ timeout: 3000 });
