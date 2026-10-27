@@ -336,6 +336,13 @@
    "upstream": "container/v1",
    "status": "released",
    "released_in": "3.0.15"
+  },
+  {
+   "cloud": "gcp",
+   "key": "logging",
+   "name": "Cloud Logging",
+   "upstream": "logging/v2",
+   "status": "pending-release"
   }
  ]
 }
