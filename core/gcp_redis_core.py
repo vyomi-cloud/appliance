@@ -274,7 +274,7 @@ def console_view(i):
     pers = i.get("persistenceConfig") or {}
     mw = ((i.get("maintenancePolicy") or {}).get("weeklyMaintenanceWindow") or [])
     v.update({
-        "id": seg[5], "resourceName": i["name"], "project": seg[1], "region": seg[3],
+        "id": seg[5], "name": seg[5], "resourceName": i["name"], "project": seg[1], "region": seg[3],
         "status": i["state"],
         "tier_label": "Standard (HA)" if ha else "Basic",
         "version": i["redisVersion"].replace("REDIS_", "Redis ").replace("_X", ".x").replace("_", "."),
