@@ -471,6 +471,47 @@ RESOURCE_CATALOG_GCP = [
             {"name": "delegates",      "label": "Delegates (comma-separated service account emails)", "default": ""},
         ],
     },
+    # ========================================================================
+    # Memorystore for Redis — instances (core/gcp_redis_core.py). Console REST at
+    # /api/gcp/redis/*; the native /v1/projects/*/locations/*/instances wire serves the SDKs /
+    # gcloud. Data plane: the shared Valkey container offline (control plane only in Nano).
+    # ========================================================================
+    {
+        "key": "redis", "label": "Memorystore for Redis", "icon": "memory",
+        "namespace": "GCP/Redis", "service": "redis",
+        "collection_path": "/api/gcp/redis/instances",
+        "resource_path":   "/api/gcp/redis/instances/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "instances": {"method": "GET",    "path": "/api/gcp/redis/instances"},
+            "resize":    {"method": "POST",   "path": "/api/gcp/sub/redis/resize/{name}"},
+            "failover":  {"method": "POST",   "path": "/api/gcp/sub/redis/failover/{name}"},
+            "delete":    {"method": "DELETE", "path": "/api/gcp/redis/instances/{name}"},
+        },
+        "columns": [
+            ["id",          "Instance ID"],
+            ["region",      "Location"],
+            ["status",      "Status"],
+            ["tier_label",  "Tier"],
+            ["version",     "Redis version"],
+            ["capacity",    "Capacity"],
+            ["endpoint",    "Primary endpoint"],
+            ["replicas",    "Replicas"],
+            ["network",     "Network"],
+            ["auth",        "AUTH"],
+        ],
+        "createFields": [
+            {"name": "name",        "label": "Instance ID",                      "default": "my-redis"},
+            {"name": "region",      "label": "Region",                           "default": "us-central1"},
+            {"name": "tier",        "label": "Tier (BASIC or STANDARD_HA)",      "default": "BASIC"},
+            {"name": "memorySizeGb", "label": "Capacity (GB)",                   "default": "1"},
+            {"name": "redisVersion", "label": "Redis version",                   "default": "REDIS_7_0"},
+            {"name": "network",     "label": "Authorized network",               "default": "default"},
+            {"name": "authEnabled", "label": "Enable AUTH (true or false)",      "default": "false"},
+            {"name": "displayName", "label": "Display name",                     "default": "Demo Redis cache"},
+        ],
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_GCP}

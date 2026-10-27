@@ -41,6 +41,10 @@
     </dependency>
     <dependency>
       <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-redis</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.cloud</groupId>
       <artifactId>google-cloud-iamcredentials</artifactId>
     </dependency>
   </dependencies>

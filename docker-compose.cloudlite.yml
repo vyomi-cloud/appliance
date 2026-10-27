@@ -73,6 +73,8 @@ services:
       CLOUDLEARN_VAULT_URL: http://vyomi-vault:8200
       CLOUDLEARN_VAULT_TOKEN: vyomi-dev-token
       CLOUDLEARN_NATS_URL: nats://vyomi-nats:4222
+      CLOUDLEARN_VALKEY_HOST: vyomi-valkey
+      CLOUDLEARN_VALKEY_PORT: "6379"
       CLOUDLEARN_MINIO_URL: http://vyomi-minio:9000
       CLOUDLEARN_MINIO_ACCESS_KEY: cloudlearn
       CLOUDLEARN_MINIO_SECRET_KEY: cloudlearn-dev-secret-key
@@ -157,6 +159,21 @@ services:
     profiles: ["full"]
     image: nats:2-alpine
     networks: [vyomi-net]
+    restart: unless-stopped
+
+  vyomi-valkey:
+    profiles: ["full"]
+    # Shared Redis-protocol data plane for Memorystore (and, later, ElastiCache / Azure Cache).
+    # Valkey (BSD-3), not Redis 7.4+ (RSALv2/SSPL). In-memory only: instances are control-plane state.
+    image: valkey/valkey:8.0.1-alpine
+    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    networks: [vyomi-net]
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
   vyomi-minio:

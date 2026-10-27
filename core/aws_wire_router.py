@@ -61,6 +61,7 @@ from core import gcp_cloudsql_core as gcp_sql
 from core import gcp_cloudscheduler_core as gcp_sched
 from core import gcp_container_core as gcp_gke
 from core import gcp_iamcredentials_core as gcp_iamc
+from core import gcp_redis_core as gcp_redis
 
 
 def _gcp_service(path):
@@ -73,6 +74,8 @@ def _gcp_service(path):
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if "/projects/" in path:
+        if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/instances([/:]|$)", path):
+            return "gcp-redis"
         if re.search(r"^/v1(beta1)?/projects/[^/]+/(locations|zones)/[^/]+/(clusters|operations|serverConfig)([/:]|$)", path):
             return "gcp-container"
         if re.search(r"/locations/[^/]+/jobs([/:]|$)", path) or re.search(r"^/v1(beta1)?/projects/[^/]+/locations/?$", path):
@@ -248,6 +251,7 @@ class AwsWireRouter:
         self.gcp_sql = s.get("gcp_sql") or InMemorySqlStore()
         self.gcp_sched = s.get("gcp_sched") or gcp_sched.CloudSchedulerStore()   # Cloud Scheduler jobs
         self.gcp_gke = s.get("gcp_gke") or gcp_gke.ContainerStore()   # Kubernetes Engine clusters
+        self.gcp_redis = s.get("gcp_redis") or gcp_redis.RedisStore()   # Memorystore for Redis instances
         self.gcp_iamc = s.get("gcp_iamc") or gcp_iamc.IamCredentialsStore()   # IAM Service Account Credentials issue log
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
@@ -457,12 +461,16 @@ class AwsWireRouter:
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
                 "gcp-container": (gcp_gke, self.gcp_gke), "gcp-iamcredentials": (gcp_iamc, self.gcp_iamc),
+                "gcp-redis": (gcp_redis, self.gcp_redis),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), resolver=self._iamc_resolve)
             elif svc == "gcp-cloudscheduler":   # a pubsub target publishes into the Pub/Sub core
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), invoker=self._sched_invoke)
+            elif svc == "gcp-container" and re.search(r"/operations([/:]|$)", path):   # operations are shared with Memorystore
+                r = gcp_redis.dispatch_shared_operations(
+                    self.gcp_redis, lambda *a: gcp_gke.dispatch(self.gcp_gke, *a), method, path, query or {}, headers or {}, bytes(body))
             else:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})

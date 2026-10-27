@@ -98,6 +98,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.apigateway": 3.00,   # ~1M calls
     "gcp.vpc": 0.00,
     "gcp.iam": 0.00,
+    "gcp.redis": 35.77,         # Basic tier $0.049/GB-hr × 1 GB × ~730 h (Standard doubles it)
     "gcp.container": 73.00,     # $0.10/hr cluster management fee (~730 h); one zonal/Autopilot cluster per account is free
     "gcp.iamcredentials": 0.03,  # per issued credential: the API itself is free; priced at the Cloud KMS software-key signing rate (~$0.03 per 10k ops) it replaces
     "gcp.cloudscheduler": 0.10, # $0.10 per job per month (first 3 jobs per billing account free)

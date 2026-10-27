@@ -2553,6 +2553,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # Memorystore for Redis — the shared wire/console store (console + SDK/CLI created instances)
+        from core.gcp_redis_core import shared_store as _redis_store
+        for _rn, _ri in _redis_store().instances.items():
+            add("gcp", "redis", "instance", _rn.rsplit("/", 1)[-1],
+                {"name": _rn.rsplit("/", 1)[-1], "created": _ri.get("createTime", "")})
+    except Exception:
+        pass
+
     try:   # Kubernetes Engine — the shared wire/console store (console + SDK/CLI created clusters)
         from core.gcp_container_core import shared_store as _gke_store
         for _cn, _cl in _gke_store().clusters.items():
@@ -23166,6 +23174,23 @@ try:
     _gke_console.register(app, _gke_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[container] routes skipped: {_e}")
+
+# Memorystore for Redis: native /v1/projects/*/locations/*/instances wire + console REST (/api/gcp/redis/*).
+try:
+    from providers import gcp_redis_console as _redis_console
+
+    def _redis_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "redis", "instance", payload, {}, None, action="delete")
+            _record_usage("gcp.redis.delete_instance", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "redis", "instance", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("status", "READY")}, None,
+                                            region=payload.get("region", "us-central1"))
+            _record_usage("gcp.redis.create_instance", {"name": payload["id"]})
+    _redis_console.register(app, _redis_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[redis] routes skipped: {_e}")
 
 # IAM Service Account Credentials: native /v1/projects/-/serviceAccounts/{sa}:verb wire + console REST (/api/gcp/iamcredentials/*).
 try:
