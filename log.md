@@ -95,3 +95,4 @@
 | 2026-10-27T18:05Z | #86 | azure/monitor | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40554105927) |
 | 2026-10-27T18:22Z | #87 | azure/msi | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40557060262) |
 | 2026-10-27T18:35Z | #86 | azure/monitor | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40559713954) |
+| 2026-10-27T18:52Z | #87 | azure/msi | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40561700720) |
