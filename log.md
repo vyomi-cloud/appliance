@@ -77,3 +77,4 @@
 | 2026-10-27T11:54Z | #74 | gcp/monitoring | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40496121586) |
 | 2026-10-27T12:11Z | #75 | gcp/redis | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40499972855) |
 | 2026-10-27T12:22Z | #74 | gcp/monitoring | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40502150079) |
+| 2026-10-27T12:32Z | #75 | gcp/redis | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40503566761) |
