@@ -448,6 +448,28 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
+        "key": "operationalinsights", "label": "Log Analytics", "icon": "query_stats",
+        "namespace": "Microsoft.OperationalInsights", "type": "workspaces",
+        "api_version": "2022-10-01", "scope": "rg",
+        "banner": "Log Analytics workspaces (Microsoft.OperationalInsights). Saved searches, tables (retention, plan, custom _CL tables), data sources and shared keys are managed in the detail tabs; the Log Analytics management SDKs, `az monitor log-analytics` and these blades edit the same data. The KQL query data plane is not emulated.",
+        "children": [{"type": "savedSearches", "label": "Saved searches", "icon": "bookmark"}],
+        "columns": [["name", "Name"], ["properties.sku.name", "Pricing tier"],
+                    ["properties.retentionInDays", "Retention (days)"],
+                    ["properties.customerId", "Workspace ID"],
+                    ["properties.provisioningState", "Provisioning state"],
+                    ["location", "Location"]],
+        "create_fields": [
+            {"name": "name", "label": "Workspace name", "default": "cloudlearn-law"},
+            {"name": "properties.sku.name", "label": "Pricing tier", "type": "select",
+             "options": ["PerGB2018", "Free", "Standalone", "PerNode", "Standard", "Premium"], "default": "PerGB2018"},
+            {"name": "properties.retentionInDays", "label": "Retention (days)", "default": "30"},
+        ],
+        "defaults": {
+            "location": "eastus",
+            "properties": {"sku": {"name": "PerGB2018"}, "retentionInDays": 30},
+        },
+    },
+    {
         "key": "cognitiveservices", "label": "Azure AI services", "icon": "psychology",
         "namespace": "Microsoft.CognitiveServices", "type": "accounts",
         "api_version": "2024-10-01", "scope": "rg",
@@ -754,6 +776,11 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         if _mon_probe.handles(chain):
             return await _handle_monitor(request, method, sub, rg, chain, names, base)
 
+    if namespace.lower() == "microsoft.operationalinsights":
+        from core import azure_operationalinsights_core as _oi_probe
+        if _oi_probe.handles(chain):
+            return await _handle_operationalinsights(request, method, sub, rg, chain, names, base)
+
     if namespace.lower() == "microsoft.cognitiveservices":
         return await _handle_cognitiveservices(request, method, sub, rg, chain, names, base)
 
@@ -924,6 +951,23 @@ async def _handle_monitor(request: Request, method: str, sub: str, rg: str | Non
         resp.headers[hk] = hv
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Insights/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_operationalinsights(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                                      names: list[str], base: str) -> JSONResponse:
+    from core import azure_operationalinsights_core as _oi
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _oi.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    api_version = request.query_params.get("api-version") or _oi.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["lro"] and r["status"] < 300:
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.OperationalInsights/workspaces", "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
     return resp
 

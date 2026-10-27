@@ -392,6 +392,13 @@
    "upstream": "monitor",
    "status": "released",
    "released_in": "3.0.22"
+  },
+  {
+   "cloud": "azure",
+   "key": "operationalinsights",
+   "name": "Log Analytics",
+   "upstream": "operationalinsights",
+   "status": "pending-release"
   }
  ]
 }

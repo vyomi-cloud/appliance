@@ -2339,6 +2339,112 @@ SUB_RENDERERS.monitorautoscale = function(svc, full, host){
     });
 };
 
+// ---- Azure Log Analytics (Microsoft.OperationalInsights) renderers --------------
+const OI_AV = "?api-version=2022-10-01";
+function oiTable(host, cols, rows, emptyMsg, onDelete){
+  if (!rows.length) { host.append(emptyState(emptyMsg)); return; }
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); cols.forEach(c=>hdr.append(el("th",{},c[1]))); if (onDelete) hdr.append(el("th",{},"")); t.append(hdr);
+  rows.forEach(it=>{
+    const tr = el("tr",{});
+    cols.forEach(c=>{ const v = getPath(it,c[0]); tr.append(el("td",{}, v==null||v==="" ? "—" : (typeof v==="object" ? JSON.stringify(v) : String(v)))); });
+    if (onDelete) tr.append(el("td",{style:"text-align:right"}, onDelete(it)));
+    t.append(tr);
+  });
+  host.append(t);
+}
+function oiCollection(full, host, coll, cols, label, makeBody, opts){
+  opts = opts || {};
+  const base = ORIGIN + full.id + "/" + coll;
+  const wrap = el("div",{}); host.append(wrap);
+  function load(){
+    if (!opts.kinds) return fetch(base + OI_AV).then(r=>r.json()).then(j=>j.value||[]);
+    return Promise.all(opts.kinds.map(k=>fetch(base + OI_AV + "&$filter=" + encodeURIComponent("kind eq '" + k + "'")).then(r=>r.json()).then(j=>j.value||[]))).then(a=>[].concat(...a));
+  }
+  function render(){
+    wrap.innerHTML = "";
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center"});
+    if (makeBody) bar.append(el("button",{class:"btn",onclick:add}, icon("add"), "Add " + label));
+    bar.append(el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    load().then(items=>{
+      oiTable(listHost, cols, items, "No " + label + "s in workspace " + full.name + ".", it=>{
+        if (opts.canDelete && !opts.canDelete(it)) return el("span",{}, "");
+        return el("button",{class:"btn sec",onclick:()=>{
+          fetch(base + "/" + encodeURIComponent(it.name) + OI_AV, {method:"DELETE"}).then(r=>r.ok ? r.text() : r.json().then(j=>{ throw new Error((j.error&&j.error.message)||"Could not delete"); }))
+            .then(()=>{ toast(label + " deleted"); render(); }).catch(e=>toast(e.message,"err"));
+        }}, "Delete");
+      });
+    }).catch(()=>listHost.append(emptyState("Could not load " + label + "s.")));
+  }
+  function add(){
+    const b = makeBody(); if(!b) return;
+    fetch(base + "/" + encodeURIComponent(b.name) + OI_AV, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(b.body)})
+      .then(r=>r.json().then(j=>({ok:r.ok, j}))).then(({ok,j})=>{
+        if(ok) toast(label + " saved"); else toast((j.error&&j.error.message)||"Could not save","err");
+        render(); });
+  }
+  render();
+}
+SUB_RENDERERS.oisavedsearches = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Saved KQL searches in this workspace (also reachable with the Log Analytics SDKs and `az monitor log-analytics workspace saved-search`)."));
+  oiCollection(full, host, "savedSearches",
+    [["name","Id"],["properties.displayName","Display name"],["properties.category","Category"],["properties.query","Query"],["properties.version","Version"]],
+    "saved search", ()=>{
+      const name = (prompt("Saved search id:", "top-heartbeats")||"").trim(); if(!name) return null;
+      const query = (prompt("KQL query:", "Heartbeat | summarize count() by Computer")||"").trim(); if(!query) return null;
+      return {name, body:{properties:{category:"General", displayName:name, query, version:2}}};
+    });
+};
+SUB_RENDERERS.oitables = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Tables hold the workspace's data. Built-in tables follow the workspace retention; custom tables (_CL) can be added and removed."));
+  oiCollection(full, host, "tables",
+    [["name","Name"],["properties.schema.tableType","Type"],["properties.plan","Plan"],["properties.retentionInDays","Interactive retention (days)"],["properties.totalRetentionInDays","Total retention (days)"]],
+    "table", ()=>{
+      const name = (prompt("Custom table name (must end in _CL):", "AppEvents_CL")||"").trim(); if(!name) return null;
+      return {name, body:{properties:{retentionInDays:30, totalRetentionInDays:30, plan:"Analytics",
+        schema:{name, columns:[{name:"TimeGenerated", type:"dateTime"},{name:"Message", type:"string"}]}}}};
+    }, {canDelete: it=>/_(CL|RST)$/.test(it.name)});
+};
+SUB_RENDERERS.oidatasources = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Data sources decide which events and counters agents send to this workspace."));
+  oiCollection(full, host, "dataSources",
+    [["name","Name"],["kind","Kind"],["properties","Settings"]],
+    "data source", ()=>{
+      const name = (prompt("Data source name:", "WindowsApplicationLog")||"").trim(); if(!name) return null;
+      return {name, body:{kind:"WindowsEvent", properties:{eventLogName:"Application", eventTypes:[{eventType:"Error"},{eventType:"Warning"}]}}};
+    }, {kinds:["WindowsEvent","WindowsPerformanceCounter","LinuxSyslog","LinuxPerformanceObject","CustomLog","IISLogs","AzureActivityLog"]});
+};
+SUB_RENDERERS.oikeys = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Workspace ID and shared keys that agents use to connect to this workspace."));
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    fetch(ORIGIN + full.id + "/sharedKeys" + OI_AV, {method:"POST"}).then(r=>r.json()).then(k=>{
+      const kv = el("div",{class:"kv prop-kv"});
+      [["Workspace ID", (full.properties||{}).customerId],["Primary key", k.primarySharedKey],["Secondary key", k.secondarySharedKey]]
+        .forEach(([a,b])=>kv.append(el("div",{class:"k"},a), el("div",{class:"v",style:"word-break:break-all"}, String(b))));
+      wrap.append(kv);
+      const bar = el("div",{style:"display:flex;gap:8px;margin:14px 0"});
+      ["primary","secondary"].forEach(w=>bar.append(el("button",{class:"btn sec",onclick:()=>{
+        fetch(ORIGIN + full.id + "/regenerateSharedKey" + OI_AV, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name:w})})
+          .then(()=>{ toast("Regenerated " + w + " key"); render(); });
+      }}, "Regenerate " + w + " key")));
+      wrap.append(bar);
+    }).catch(()=>wrap.append(emptyState("Could not load workspace keys.")));
+  }
+  render();
+};
+SUB_RENDERERS.oiusage = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Usage and quota for this workspace (daily cap: ", el("strong",{}, String(((full.properties||{}).workspaceCapping||{}).dailyQuotaGb)), " GB, -1 = no cap)."));
+  const wrap = el("div",{}); host.append(wrap);
+  fetch(ORIGIN + full.id + "/usages" + OI_AV).then(r=>r.json()).then(j=>{
+    const rows = (j.value||[]).map(u=>({name:u.name.localizedValue, unit:u.unit, currentValue:u.currentValue, limit:u.limit, nextResetTime:u.nextResetTime}));
+    oiTable(wrap, [["name","Metric"],["unit","Unit"],["currentValue","Current"],["limit","Limit"],["nextResetTime","Resets"]], rows, "No usage reported.");
+  }).catch(()=>wrap.append(emptyState("Could not load usage.")));
+};
+
 SUB_RENDERERS.databases = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Databases under this SQL server."));
   listChildResources(svc, full, host, "databases",

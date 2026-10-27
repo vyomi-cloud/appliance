@@ -64,6 +64,11 @@
     </dependency>
     <dependency>
       <groupId>com.azure.resourcemanager</groupId>
+      <artifactId>azure-resourcemanager-loganalytics</artifactId>
+      <version>1.1.0</version>
+    </dependency>
+    <dependency>
+      <groupId>com.azure.resourcemanager</groupId>
       <artifactId>azure-resourcemanager-monitor</artifactId>
       <version>2.41.0</version>
     </dependency>

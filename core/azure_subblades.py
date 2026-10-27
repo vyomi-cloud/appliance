@@ -352,6 +352,23 @@ _MONITOR_SUB = [
     ]},
 ]
 
+_OI_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Log Analytics", "items": [
+        {"key": "savedSearches", "label": "Saved searches",      "icon": "bookmark",   "type": "oiSavedSearches"},
+        {"key": "tables",        "label": "Tables",              "icon": "table_chart", "type": "oiTables"},
+        {"key": "dataSources",   "label": "Data sources",        "icon": "input",      "type": "oiDataSources"},
+        {"key": "agents",        "label": "Agents (keys)",       "icon": "vpn_key",    "type": "oiKeys"},
+        {"key": "usage",         "label": "Usage and quota",     "icon": "data_usage", "type": "oiUsage"},
+    ]},
+    {"group": "Settings", "items": [
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",       "label": "Metrics",             "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
@@ -375,6 +392,7 @@ SUB_BLADES: dict[str, list] = {
     "appconfiguration": _APPCONFIG_SUB,
     "cognitiveservices": _COGS_SUB,
     "dns":         _DNS_SUB,
+    "operationalinsights": _OI_SUB,
     "monitor":     _MONITOR_SUB,
     "rbac":        _RBAC_SUB,
 }
