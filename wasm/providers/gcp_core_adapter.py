@@ -28,6 +28,7 @@ from core.messaging_store import InMemoryMessagingStore
 from core import gcp_iam_core as _iam
 from core.iam_store import InMemoryIamStore
 from core import gcp_cloudsql_core as _sql
+from core import gcp_bigquery_core as _bq
 from core.sql_store import InMemorySqlStore
 
 PROJ = "demo"          # the console's default project
@@ -48,11 +49,12 @@ _STORES = {
     "pubsub":        _R["gcp_msg"],
     "iam":           _R["gcp_iam"],
     "cloudsql":      _R["gcp_sql"],
+    "bigquery":      _R["gcp_bq"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "bigquery": _bq,
 }
 
 
@@ -339,6 +341,25 @@ def resource_op(service, operation, name="", body=None):
         if operation == "Delete":
             st, _ = _call(svc, "DELETE", f"{base}/{name}")
             return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+
+    # ---------------- BIGQUERY (datasets + tables/jobs/routines) ----------------
+    if svc == "bigquery":
+        st_ = _STORES[svc]
+        if operation == "List":
+            return {"ok": True, "items": _bq.console_list(st_)}
+        if operation == "Create":
+            return _bq.console_create(st_, PROJ, {**body, "name": rid})
+        if operation == "Get":
+            _, ds = _bq.console_find(st_, name)
+            return {"ok": True, **_bq.console_row(ds)} if ds else {"ok": False, "code": "NotFound", "name": name}
+        if operation == "Delete":
+            return _bq.console_delete(st_, name)
+        if operation in ("ListTables", "ListJobs", "ListRoutines"):
+            return {"ok": True, "items": _bq.console_children(st_, name, operation[4:].lower())}
+        if operation == "CreateSampleTable":
+            return _bq.console_sample(st_, name, "createTable")
+        if operation == "RunSampleQuery":
+            return _bq.console_sample(st_, name, "runQuery")
 
     # ---------------- CLOUD SQL (instances) ----------------
     if svc == "cloudsql":

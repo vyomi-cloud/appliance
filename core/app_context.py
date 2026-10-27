@@ -264,6 +264,8 @@ def is_gcp_native_path(path: str) -> bool:
         "/upload/storage/v1/",
         "/download/storage/v1/",
         "/sql/v1beta4/",
+        "/bigquery/v2/",
+        "/upload/bigquery/v2/",
         "/pubsub/v1/",
         "/firestore/v1/",
         "/v1/projects/",
@@ -286,6 +288,8 @@ def is_gcp_native_path(path: str) -> bool:
         "/api/gcp/catalog",   # standalone console payload -- must NOT be path-stripped
         "/api/gcp/extras/",   # reserved for GCP-D (parity with /api/aws/extras)
         "/api/gcp/extras-config/",
+        "/api/gcp/bigquery/",   # BigQuery console CRUD
+        "/api/gcp/sub/",        # generic detail-tab sub-resources (same shape as Nano)
         "/api/gcp/secrets",   # v2.0.9 console CRUD — Vault-backed Secret Manager
         "/api/gcp/kms/",      # v2.0.9 console CRUD — Vault-backed Cloud KMS
     ))
@@ -1333,6 +1337,8 @@ def resolve_provider_service(request) -> tuple[str, str]:
         return "gcp", "storage"
     if path.startswith("/sql/v1beta4/"):
         return "gcp", "cloudsql"
+    if path.startswith(("/bigquery/v2/", "/upload/bigquery/v2/")):
+        return "gcp", "bigquery"
     if path.startswith("/pubsub/v1/"):
         return "gcp", "pubsub"
     if path.startswith("/firestore/v1/"):

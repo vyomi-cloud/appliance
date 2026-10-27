@@ -39,6 +39,7 @@ CORES = [
     "gcp_pubsub_core.py",                           # GCP: Pub/Sub REST (native google-cloud-pubsub)
     "gcp_iam_core.py",                              # GCP: Cloud IAM REST (SA + policy eval)
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
+    "gcp_bigquery_core.py",                         # GCP: BigQuery REST v2 (datasets, tables, jobs, SQL on sqlite) — vendored VERBATIM
     "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
     "azure_cosmos_core.py",                         # Azure: Cosmos DB SQL/Core API (native azure-cosmos)
     "azure_keyvault_secrets_core.py",               # Azure: Key Vault secrets (native azure-keyvault-secrets)
@@ -65,7 +66,7 @@ CORES = [
 
 # Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
 # Nano copy of a new service's engine to be identical to core/.
-VERBATIM = {"logs_core.py", "elbv2_core.py", "ssm_core.py"}
+VERBATIM = {"logs_core.py", "elbv2_core.py", "ssm_core.py", "gcp_bigquery_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")

@@ -282,6 +282,34 @@ _KMS_SUB = [
 ]
 
 
+# ============================================================================
+# BigQuery — dataset detail
+# ============================================================================
+_BIGQUERY_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Explorer", "items": [
+        {"key": "tables", "label": "Tables", "icon": "table_chart", "type": "sublist",
+         "source": "tables", "empty": "No tables yet. Create one with the SDK, bq, or Create sample table.",
+         "columns": [["name", "Table ID"], ["type", "Type"], ["rows", "Rows"], ["columns", "Columns"],
+                     ["size", "Size"], ["created", "Created"]],
+         "actions": [{"label": "Create sample table", "op": "createSampleTable"}]},
+        {"key": "jobs", "label": "Jobs", "icon": "work_history", "type": "sublist",
+         "source": "jobs", "empty": "No jobs for this dataset yet. Run a query, or use Run sample query.",
+         "columns": [["name", "Job ID"], ["type", "Type"], ["statementType", "Statement"], ["state", "State"],
+                     ["bytes", "Bytes processed"], ["created", "Created"]],
+         "actions": [{"label": "Run sample query", "op": "runSampleQuery"}]},
+        {"key": "routines", "label": "Routines", "icon": "function", "type": "sublist",
+         "source": "routines", "empty": "No routines in this dataset.",
+         "columns": [["name", "Routine ID"], ["type", "Type"], ["language", "Language"],
+                     ["created", "Created"], ["modified", "Last modified"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "labels", "label": "Labels", "icon": "sell", "type": "tags"},
+        *_settings_props(),
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -296,4 +324,5 @@ SUB_BLADES: dict[str, list] = {
     "eventarc":      _EVENTARC_SUB,
     "secretmanager": _SECRETMANAGER_SUB,
     "kms":           _KMS_SUB,
+    "bigquery":      _BIGQUERY_SUB,
 }

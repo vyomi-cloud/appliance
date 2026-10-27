@@ -321,6 +321,42 @@ RESOURCE_CATALOG_GCP = [
         ],
     },
     # ========================================================================
+    # BigQuery — datasets holding tables, SQL jobs and routines
+    # (core/gcp_bigquery_core.py, the engine the native bigquery/v2 wire serves).
+    # ========================================================================
+    {
+        "key": "bigquery", "label": "BigQuery", "icon": "query_stats",
+        "namespace": "GCP/BigQuery", "service": "bigquery",
+        "collection_path": "/api/gcp/bigquery/datasets",
+        "resource_path":   "/api/gcp/bigquery/datasets/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "datasets":      {"method": "GET",    "path": "/api/gcp/bigquery/datasets"},
+            "tables":        {"method": "GET",    "path": "/api/gcp/sub/bigquery/listTables/{name}"},
+            "jobs":          {"method": "GET",    "path": "/api/gcp/sub/bigquery/listJobs/{name}"},
+            "routines":      {"method": "GET",    "path": "/api/gcp/sub/bigquery/listRoutines/{name}"},
+            "createSampleTable": {"method": "POST", "path": "/api/gcp/sub/bigquery/createSampleTable/{name}"},
+            "runSampleQuery":    {"method": "POST", "path": "/api/gcp/sub/bigquery/runSampleQuery/{name}"},
+            "delete":        {"method": "DELETE", "path": "/api/gcp/bigquery/datasets/{name}"},
+        },
+        "columns": [
+            ["name",       "Dataset ID"],
+            ["location",   "Location"],
+            ["tables",     "Tables"],
+            ["size",       "Size"],
+            ["expiration", "Default table expiration"],
+            ["encryption", "Encryption"],
+            ["created",    "Created"],
+            ["modified",   "Last modified"],
+        ],
+        "createFields": [
+            {"name": "name",        "label": "Dataset ID",  "default": "my_dataset"},
+            {"name": "location",    "label": "Location",    "default": "US"},
+            {"name": "description", "label": "Description", "default": "Created in Vyomi"},
+        ],
+    },
+    # ========================================================================
     # Cloud KMS — keys + key rings + versions + EKM
     # ========================================================================
     {
