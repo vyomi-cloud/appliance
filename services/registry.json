@@ -376,6 +376,13 @@
    "upstream": "cognitiveservices",
    "status": "released",
    "released_in": "3.0.20"
+  },
+  {
+   "cloud": "azure",
+   "key": "dns",
+   "name": "DNS zones",
+   "upstream": "dns",
+   "status": "pending-release"
   }
  ]
 }
