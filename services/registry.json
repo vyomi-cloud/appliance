@@ -294,7 +294,8 @@
    "key": "logs",
    "name": "CloudWatch Logs",
    "upstream": "logs",
-   "status": "pending-release"
+   "status": "released",
+   "released_in": "3.0.11"
   },
   {
    "cloud": "aws",
