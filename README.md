@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 15:13 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 15:29 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 46 services (AWS 16 · GCP 16 · Azure 14) of 1,068 the clouds publish
-- **Building now:** applicationinsights (Azure, no manifest yet checks)
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP)
+- **Building now:** nothing
+- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), applicationinsights (Azure)
 - **Queued:** 50 services (P1 first, then P2)
 - **Consoles really implemented:** offline not measured yet · Nano not measured yet
 - **Hourly tests:** 0 of 0 suites passing
@@ -18,7 +18,7 @@ _Updated 2026-10-27 15:13 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | not measured yet · not measured yet |
 | GCP | 16 | 0 | 8 | 12 | not measured yet · not measured yet |
-| Azure | 14 | 1 | 0 | 21 | not measured yet · not measured yet |
+| Azure | 14 | 0 | 1 | 21 | not measured yet · not measured yet |
 
 ## In progress
 
@@ -44,7 +44,7 @@ _Updated 2026-10-27 15:13 UTC · refreshes after every pipeline run_
 | Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🔍 In gate ([PR #125](https://github.com/vyomi-cloud/appliance/pull/125)) | 19/19 | — |
 | Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | — |
 | Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #126](https://github.com/vyomi-cloud/appliance/pull/126)) | 18/18 | — |
-| applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🛠 Building | no manifest yet | — |
+| applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🔍 In gate ([PR #129](https://github.com/vyomi-cloud/appliance/pull/129)) | 17/17 | — |
 
 ## Released services
 
@@ -695,6 +695,30 @@ _Updated 2026-10-27 15:13 UTC · refreshes after every pipeline run_
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
 | ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
+
+</details>
+
+<details><summary>Gate checks — applicationinsights (Azure)</summary>
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
+| ✅ | manifest status is ready | status=ready |
+| ✅ | engine exists in core/ | core/azure_applicationinsights_core.py |
+| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/azure_applicationinsights_core.py |
+| ✅ | engine listed in wasm/build_cores.py |  |
+| ✅ | service in the Nano console catalog (wasm/fixtures) | azure-catalog.json |
+| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
+| ✅ | registry entry (pending-release or released) |  |
+| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
+| ✅ | has a offline sdk-java test bed |  |
+| ✅ | has a offline sdk-go test bed |  |
+| ✅ | has a offline cli test bed |  |
+| ✅ | has a offline ui test bed |  |
+| ✅ | has a nano ui test bed |  |
+| ✅ | upstream id tracked by the hourly upstream watcher | applicationinsights |
+| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
+| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
 
 </details>
 
