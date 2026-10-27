@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 18:46 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 18:48 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
-- **Released:** 48 services (AWS 16 · GCP 16 · Azure 16) of 1,068 the clouds publish
+- **Released:** 49 services (AWS 16 · GCP 16 · Azure 17) of 1,068 the clouds publish
 - **Building now:** nothing
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), applicationinsights (Azure), containerregistry (Azure), containerservice (Azure), eventhub (Azure), monitor (Azure), msi (Azure)
+- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), applicationinsights (Azure), containerregistry (Azure), containerservice (Azure), eventhub (Azure), msi (Azure)
 - **Queued:** 43 services (P1 first, then P2)
 - **Consoles really implemented:** offline 52% · Nano 71%
 - **Hourly tests:** 76 of 79 suites passing (run 18:08 UTC)
@@ -18,7 +18,7 @@ _Updated 2026-10-27 18:46 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | 48% · 76% |
 | GCP | 16 | 0 | 8 | 12 | 42% · 66% |
-| Azure | 16 | 0 | 6 | 14 | 68% · 71% |
+| Azure | 17 | 0 | 5 | 14 | 68% · 71% |
 
 ## In progress
 
@@ -48,7 +48,6 @@ _Updated 2026-10-27 18:46 UTC · refreshes after every pipeline run_
 | containerregistry [#82](https://github.com/vyomi-cloud/appliance/issues/82) | Azure | 🔍 In gate ([PR #131](https://github.com/vyomi-cloud/appliance/pull/131)) | 20/20 | — |
 | containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🔍 In gate ([PR #132](https://github.com/vyomi-cloud/appliance/pull/132)) | 17/17 | — |
 | eventhub [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🔍 In gate ([PR #134](https://github.com/vyomi-cloud/appliance/pull/134)) | 17/17 | — |
-| monitor [#86](https://github.com/vyomi-cloud/appliance/issues/86) | Azure | 🚀 Releasing | 17/17 | — |
 | msi [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🔍 In gate ([PR #136](https://github.com/vyomi-cloud/appliance/pull/136)) | 17/17 | — |
 
 ## Released services
@@ -118,6 +117,7 @@ _Updated 2026-10-27 18:46 UTC · refreshes after every pipeline run_
 | App Configuration | — | – · – | ✅ watched | [v3.0.19](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.19) |
 | Azure AI services | — | – · – | ✅ watched | [v3.0.20](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.20) |
 | DNS zones | — | – · – | ✅ watched | [v3.0.21](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.21) |
+| Monitor alerts | — | – · – | ✅ watched | [v3.0.22](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.22) |
 
 - **Nano ↔ offline gaps:** Blob containers (Nano-only), Cosmos databases (Nano-only), Key Vault keys (Nano-only), Key Vault secrets (Nano-only), Storage queues (Nano-only), azure_subresource_core (Nano-only)
 
@@ -796,30 +796,6 @@ _Updated 2026-10-27 18:46 UTC · refreshes after every pipeline run_
 | ✅ | upstream id tracked by the hourly upstream watcher | eventhub |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process', 'reason': "Event Hubs' native wire is AMQP 1.0 / Kafka, which no Vyomi tier exposes; the engine keeps the par |
 | ✅ | backend is the recommended one, or the manifest says why not | recommended: nats; chose in-process |
-
-</details>
-
-<details><summary>Gate checks — monitor (Azure)</summary>
-
-| | Check | Detail |
-|---|---|---|
-| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
-| ✅ | manifest status is ready | status=ready |
-| ✅ | engine exists in core/ | core/azure_monitor_core.py |
-| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/azure_monitor_core.py |
-| ✅ | engine listed in wasm/build_cores.py |  |
-| ✅ | service in the Nano console catalog (wasm/fixtures) | azure-catalog.json |
-| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
-| ✅ | registry entry (pending-release or released) |  |
-| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
-| ✅ | has a offline sdk-java test bed |  |
-| ✅ | has a offline sdk-go test bed |  |
-| ✅ | has a offline cli test bed |  |
-| ✅ | has a offline ui test bed |  |
-| ✅ | has a nano ui test bed |  |
-| ✅ | upstream id tracked by the hourly upstream watcher | monitor |
-| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process', 'reason': 'Alert rules, action groups and autoscale settings are plain control-plane data the engine already  |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
 
 </details>
 
