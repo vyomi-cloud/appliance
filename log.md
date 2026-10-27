@@ -61,3 +61,4 @@
 | 2026-10-27T06:32Z | #59 | aws/logs | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40459618946) |
 | 2026-10-27T06:44Z | #60 | aws/route53 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40461965363) |
 | 2026-10-27T06:52Z | #61 | aws/sesv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40463125951) |
+| 2026-10-27T07:08Z | #62 | aws/sns | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40463949882) |
