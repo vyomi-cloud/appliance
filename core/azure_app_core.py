@@ -123,6 +123,20 @@ def _mem_gi(v):
     return n / 1024.0 if m.group(2) == "Mi" else n
 
 
+def _to_int(v, default=None):
+    """Console forms submit every field as a string."""
+    if isinstance(v, bool):
+        return default
+    try:
+        return int(v) if not isinstance(v, float) else int(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_bool(v):
+    return v if isinstance(v, bool) else str(v).strip().lower() in ("true", "1", "yes", "on")
+
+
 def _fmt_gi(n):
     return ("%g" % n) + "Gi"
 
@@ -165,7 +179,7 @@ def _norm_containers(items, what="containers", require=True):
 
 def _norm_scale(scale):
     s = dict(scale or {})
-    mn, mx = s.get("minReplicas", 0), s.get("maxReplicas", 10)
+    mn, mx = _to_int(s.get("minReplicas", 0)), _to_int(s.get("maxReplicas", 10))
     if not isinstance(mn, int) or not isinstance(mx, int) or mn < 0 or mx < 1 or mx > MAX_REPLICAS_LIMIT or mn > mx:
         raise _E(400, "InvalidParameterValueInContainerTemplate",
                  f"The following field(s) are either invalid or missing. Invalid scale: minReplicas={mn}, maxReplicas={mx} "
@@ -189,22 +203,21 @@ def _norm_ingress(ing, app_name, domain, revisions_mode):
     if not ing:
         return None
     ing = dict(ing)
-    ing["external"] = bool(ing.get("external", False))
+    ing["external"] = _to_bool(ing.get("external", False))
     ing["transport"] = ing.get("transport") or "Auto"
     if str(ing["transport"]).lower() not in TRANSPORTS:
         raise _E(400, "ContainerAppInvalidIngress", f"Invalid ingress transport '{ing['transport']}'; use auto, http, http2 or tcp.")
-    port = ing.get("targetPort", 80)
+    port = _to_int(ing.get("targetPort", 80))
     if not isinstance(port, int) or not 1 <= port <= 65535:
         raise _E(400, "ContainerAppInvalidIngress", f"Invalid ingress targetPort '{port}'.")
     ing["targetPort"] = port
     ing["fqdn"] = f"{app_name}.{domain}" if ing["external"] else f"{app_name}.internal.{domain}"
-    ing["allowInsecure"] = bool(ing.get("allowInsecure", False))
+    ing["allowInsecure"] = _to_bool(ing.get("allowInsecure", False))
     ing.setdefault("traffic", [{"latestRevision": True, "weight": 100}])
     total = sum(int(t.get("weight", 0)) for t in ing["traffic"])
     if total != 100:
         raise _E(400, "ContainerAppInvalidTraffic",
                  f"Traffic weights must add up to 100, got {total}.")
-    ing.setdefault("customDomains", None)
     return ing
 
 
@@ -404,7 +417,7 @@ def _put_app(state, sub, rg, rid, name, payload, method):
                "systemData": _sysdata(), "_type": f"{NAMESPACE}/containerApps", "_sub": sub, "_rg": rg,
                "_created": _now(), "_revisions": {}, "_children": {}, "_runtime": {},
                "properties": {"provisioningState": "Succeeded", "runningStatus": "Running",
-                              "customDomainVerificationId": uniq, "workloadProfileName": None,
+                              "customDomainVerificationId": uniq,
                               "outboundIpAddresses": [env["properties"]["staticIp"]],
                               "eventStreamEndpoint": f"https://{loc}.azurecontainerapps.dev/subscriptions/{sub}/resourceGroups/{rg}/containerApps/{name}/eventstream"}}
     else:

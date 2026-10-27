@@ -35,6 +35,7 @@ from core.gcp_cloudscheduler_core import CloudSchedulerStore
 from core.gcp_iamcredentials_core import IamCredentialsStore
 from core.gcp_redis_core import RedisStore
 from core.gcp_container_core import ContainerStore
+from core.azure_arm_core import AzureArm
 
 _REG: dict | None = None
 
@@ -77,6 +78,7 @@ def get() -> dict:
             "az_kvkeys": InMemoryKeyStore(),
             "az_queue":  AzureQueueStore(),
             "az_sb":     InMemoryMessagingStore(),   # Service Bus (router-only today)
+            "az_arm":    AzureArm(),                 # ARM control plane (VMs, apps, …): public `state` map → persisted + synced
             # ── cross-cloud ── per-resource cloudsim event / activity log. DURABLE
             # + bounded: recorded on every mutating dispatch; persisted + cross-tab
             # synced via nano_persist (public dict attr `by_resource`, union-merge).
