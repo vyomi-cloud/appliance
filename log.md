@@ -68,3 +68,4 @@
 | 2026-10-27T08:38Z | #67 | gcp/bigquery | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40474109471) |
 | 2026-10-27T09:15Z | #68 | gcp/cloudscheduler | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40475145073) |
 | 2026-10-27T09:38Z | #69 | gcp/cloudtasks | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40479657276) |
+| 2026-10-27T09:56Z | #70 | gcp/container | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40482647263) |
