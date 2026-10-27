@@ -1,17 +1,6 @@
 {
- "at": "2026-10-27T00:54:58+00:00",
+ "at": "2026-10-27T01:55:02+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "AWS IAM",
-   "kind": "announcement",
-   "key": "feed:aws:e3586a1f97c1",
-   "title": "AWS Glue Data Catalog now supports OAuth for Apache Iceberg REST Catalog APIs",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/glue-catalog-oauth-iceberg-rest/",
-   "detail": "AWS Glue Data Catalog now supports OAuth 2.0 bearer token authentication for Apache Iceberg REST Catalog (IRC) APIs using AWS Sign-In. The Apache Iceberg REST Catalog specification defines OAuth 2.0 as its standard authentication mechanism, and query engines such as Apache Spark, Trino, and Apache Flink implement it natively. These engines and external integration partners can now authenticate to the Glue Data Catalog Iceberg endpoint using standard OAuth 2.0 bearer tokens, in addition to AWS Signature Version 4 (SigV4). You can now grant partners federated access to your Iceberg tables withou",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
