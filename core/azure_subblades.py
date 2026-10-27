@@ -304,6 +304,23 @@ _APPCONFIG_SUB = [
     ]},
 ]
 
+_COGS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Resource Management", "items": [
+        {"key": "keys",        "label": "Keys and Endpoint",   "icon": "vpn_key",     "type": "cogsKeys"},
+        {"key": "deployments", "label": "Model deployments",   "icon": "model_training", "type": "cogsDeployments"},
+        {"key": "quotas",      "label": "Quotas",              "icon": "speed",       "type": "cogsQuotas"},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "identity",    "label": "Identity",            "icon": "badge",       "type": "identity"},
+        {"key": "networking",  "label": "Networking",          "icon": "lan",         "type": "networking"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",     "label": "Metrics",             "icon": "show_chart",  "type": "metrics"},
+    ]},
+]
+
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
@@ -325,5 +342,6 @@ SUB_BLADES: dict[str, list] = {
     "eventgrid":   _EVENTGRID_SUB,
     "app":         _APP_SUB,
     "appconfiguration": _APPCONFIG_SUB,
+    "cognitiveservices": _COGS_SUB,
     "rbac":        _RBAC_SUB,
 }
