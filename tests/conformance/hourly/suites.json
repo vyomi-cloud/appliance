@@ -39,6 +39,8 @@
     {"id": "offline-api-aws-eventbridge-rule-defaults", "target": "offline", "cloud": "aws", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_eventbridge_rule_defaults_api.py", "timeout": 120},
     {"id": "nano-ui-azure-tabs", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-tabs.mjs", "timeout": 600},
     {"id": "nano-ui-azure-dp", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-dp.mjs", "timeout": 600},
+    {"id": "nano-ui-azure-flat-create", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-flat-create.mjs", "timeout": 300},
+    {"id": "offline-ui-azure-flat-create", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/azure node wasm/ui-tests/validate-azure-flat-create.mjs", "timeout": 300},
     {"id": "nano-ui-azure-home", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-home.mjs", "timeout": 600},
     {"id": "nano-ui-budget-savings", "target": "nano", "cloud": "all", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-nano-budget-savings.mjs", "timeout": 300},
     {"id": "nano-ui-reload-backend", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-nano-reload-backend.mjs", "timeout": 300},

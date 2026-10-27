@@ -215,8 +215,17 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     // Azure's create form is a multi-step wizard in the #blade side pane (no
     // dialog role): step through Next / Review + create to the final Create.
     const blade = page.locator("#blade.open");
+    // The wizard marks required fields with a "*" (.req) rather than the
+    // `required` attribute, and refuses to advance until they are filled.
+    const fillWizardRequired = async () => {
+      for (const w of await blade.locator(".wiz-field:has(.req)").all()) {
+        const inp = w.locator("input[type=text], input:not([type])").first();
+        if (await inp.count() && !(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl-${Date.now().toString(36)}`).catch(() => {});
+      }
+    };
     if (await blade.count()) {
       for (let step = 0; step < 12; step++) {
+        await fillWizardRequired();
         const fin = blade.locator("button").filter({ hasText: /^\s*create\s*$/i });
         if (await fin.count()) break;
         const next = blade.locator("button").filter({ hasText: /^\s*(next|review \+ create)\s*$/i }).last();
@@ -239,6 +248,12 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     }
     for (const inp of await scope.locator("input[type=password]").all()) {
       if (!(await inp.inputValue().catch(() => "x"))) await inp.fill("Vyomi-Crawl-1a!").catch(() => {});
+    }
+    // Flat Azure create blades ("Name" with no default) mark nothing as required.
+    for (const f of await scope.locator(".field").all()) {
+      if (!/^\s*name\s*\*?\s*$/i.test(await f.locator("label").first().innerText().catch(() => "")) && !(await f.locator(".req").count())) continue;
+      const inp = f.locator("input").first();
+      if (await inp.count() && !(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl-${Date.now().toString(36)}`).catch(() => {});
     }
     for (const inp of await scope.locator("input[required]:not([type=radio]):not([type=checkbox]):not([type=password])").all()) {
       if (!(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl-${Date.now().toString(36)}`).catch(() => {});
