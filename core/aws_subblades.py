@@ -342,6 +342,17 @@ _KMS_SUB = [
 ]
 
 
+# ===========================================================================
+# Amazon SES — verified identity detail
+# ===========================================================================
+_SESV2_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Identity", "items": [
+        {"key": "details",       "label": "Details",        "icon": "info",   "type": "properties"},
+    ]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -358,4 +369,5 @@ SUB_BLADES: dict[str, list] = {
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
     "kms":            _KMS_SUB,
+    "sesv2":          _SESV2_SUB,
 }

@@ -18,6 +18,7 @@ import json
 import types
 
 from core import lambda_core, apigateway_core, vpc_core, eventbridge_core
+from core import sesv2_core
 from core import azure_servicebus_core, azure_sql_core, azure_iam_core
 from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
 
@@ -394,3 +395,15 @@ def extras_config_get(p):
 def extras_config_put(p):
     _EXTRAS_CFG[p.get("key", "")] = _extras_vals(p)
     return {"ok": True}
+
+
+# ── Amazon SES v2 (core/sesv2_core.py) — shared store with the native wire ──
+def ses_console(p):
+    from core import nano_registry
+    store = nano_registry.get()["sesv2"]
+    status, out = sesv2_core.console_dispatch(store, str(p.get("method") or "GET"), str(p.get("path") or ""),
+                                              dict(p.get("query") or {}), dict(p.get("body") or {}))
+    if status >= 400:
+        return {"ok": False, "code": out.get("code", "Error"), "message": out.get("error", ""), "status": status}
+    store.persist()
+    return out

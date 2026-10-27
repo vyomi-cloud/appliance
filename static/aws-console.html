@@ -711,6 +711,7 @@ function renderRail(){
       ["Databases", ["rds", "dynamodb"]],
       ["Application Integration", ["sqs", "apigateway", "eventbridge"]],
       ["Networking & Content Delivery", ["vpc"]],
+      ["Business Applications", ["sesv2"]],
       ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
     ];
     groups.forEach(([label, keys]) => {
@@ -1278,6 +1279,19 @@ function childSpec(svc, childType){
     },
     // EC2 AMIs and IAM Groups/Roles/Policies/Providers all have real backend
     // endpoints — surface them as proper child lists instead of generic stubs.
+    sesv2: {
+      "configuration-sets": {label:"Configuration sets", absolutePath:"/api/aws/sesv2/configuration-sets", arrayKey:"items",
+        columns: [["name","Configuration set"],["sending","Sending"],["reputation_metrics","Reputation metrics"],
+                  ["tls_policy","TLS policy"],["event_destinations","Event destinations"],["created","Created"]]},
+      "templates": {label:"Email templates", absolutePath:"/api/aws/sesv2/templates", arrayKey:"items",
+        columns: [["name","Template name"],["subject","Subject"],["has_html","HTML body"],["has_text","Text body"],["created","Created"]]},
+      "contact-lists": {label:"Contact lists", absolutePath:"/api/aws/sesv2/contact-lists", arrayKey:"items",
+        columns: [["name","Contact list"],["description","Description"],["topics","Topics"],["contacts","Contacts"],["last_updated","Last updated"]]},
+      "suppression": {label:"Suppression list", absolutePath:"/api/aws/sesv2/suppression", arrayKey:"items",
+        columns: [["name","Email address"],["reason","Reason"],["last_updated","Date added"]]},
+      "sent-emails": {label:"Sent emails", absolutePath:"/api/aws/sesv2/sent-emails", arrayKey:"items",
+        columns: [["name","Message ID"],["from","From"],["to","To"],["subject","Subject"],["config_set","Configuration set"],["sent","Sent"]]},
+    },
     ec2: {
       "amis": {key:"amis", label:"AMIs", absolutePath:"/api/ec2/amis", arrayKey:"amis",
         columns: [["image_id","AMI ID"],["name","Name"],["state","State"],

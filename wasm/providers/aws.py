@@ -107,6 +107,10 @@ class Aws(CloudProvider):
             ("extras", "Delete"):    lambda b, a, p: D.extras_delete(p),
             ("extras", "ConfigGet"): lambda b, a, p: D.extras_config_get(p),
             ("extras", "ConfigPut"): lambda b, a, p: D.extras_config_put(p),
+            # Amazon SES v2 — identities, templates, contact lists (core/sesv2_core.py)
+            ("sesv2", "GetSesResource"):    lambda b, a, p: D.ses_console(p),
+            ("sesv2", "CreateSesResource"): lambda b, a, p: D.ses_console(p),
+            ("sesv2", "DeleteSesResource"): lambda b, a, p: D.ses_console(p),
             # EventBridge — rules → SQS delivery, via core/eventbridge_core.py
             ("eventbridge", "ListRules"): lambda b, a, p: D.eb_list(p),
             ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),

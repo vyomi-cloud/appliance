@@ -598,6 +598,65 @@ RESOURCE_CATALOG_AWS = [
         ],
         "endpoints": {},
     },
+    # ========================================================================
+    # Amazon SES (v2) — verified identities, configuration sets, templates,
+    # contact lists, suppression list. Engine: core/sesv2_core.py (native
+    # REST-JSON wire + this console REST); in-process, no mail is relayed.
+    # ========================================================================
+    {
+        "key": "sesv2", "label": "Amazon SES", "icon": "mail",
+        "namespace": "AWS/SES", "service": "sesv2",
+        "collection_path": "/api/aws/sesv2/identities",
+        "resource_path":   "/api/aws/sesv2/identities/{name}",
+        "name_field":      "identity",
+        "create_method":   "POST",
+        "api_paths": {
+            "identities":         {"method": "GET",  "path": "/api/aws/sesv2/identities"},
+            "configuration-sets": {"method": "GET",  "path": "/api/aws/sesv2/configuration-sets"},
+            "templates":          {"method": "GET",  "path": "/api/aws/sesv2/templates"},
+            "contact-lists":      {"method": "GET",  "path": "/api/aws/sesv2/contact-lists"},
+            "suppression":        {"method": "GET",  "path": "/api/aws/sesv2/suppression"},
+            "sent-emails":        {"method": "GET",  "path": "/api/aws/sesv2/sent-emails"},
+            "delete":             {"method": "DELETE", "path": "/api/aws/sesv2/identities/{name}"},
+        },
+        "rail_items": [
+            {"key": "identities", "label": "Verified identities", "icon": "verified_user", "type": "primary"},
+            {"group": "Configuration"},
+            {"key": "configuration-sets", "label": "Configuration sets", "icon": "tune",
+                "type": "child", "child_key": "configuration-sets"},
+            {"key": "templates", "label": "Email templates", "icon": "article",
+                "type": "child", "child_key": "templates"},
+            {"key": "contact-lists", "label": "Contact lists", "icon": "contacts",
+                "type": "child", "child_key": "contact-lists"},
+            {"group": "Reputation & activity"},
+            {"key": "suppression", "label": "Suppression list", "icon": "block",
+                "type": "child", "child_key": "suppression"},
+            {"key": "sent-emails", "label": "Sent emails", "icon": "outbox",
+                "type": "child", "child_key": "sent-emails"},
+        ],
+        "children": [
+            {"type": "configuration-sets", "label": "Configuration sets", "icon": "tune"},
+            {"type": "templates", "label": "Email templates", "icon": "article"},
+            {"type": "contact-lists", "label": "Contact lists", "icon": "contacts"},
+            {"type": "suppression", "label": "Suppression list", "icon": "block"},
+            {"type": "sent-emails", "label": "Sent emails", "icon": "outbox"},
+        ],
+        "columns": [
+            ["identity",   "Identity"],
+            ["type",       "Identity type"],
+            ["status",     "Identity status"],
+            ["sending",    "Sending status"],
+            ["dkim",       "DKIM"],
+            ["mail_from",  "Custom MAIL FROM domain"],
+            ["config_set", "Default configuration set"],
+            ["region",     "Region"],
+        ],
+        "createFields": [
+            {"name": "identity",   "label": "Identity (domain or email address)", "default": "noreply@vyomi.example.com"},
+            {"name": "config_set", "label": "Default configuration set",          "default": "None"},
+        ],
+        "endpoints": {},
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_AWS}
