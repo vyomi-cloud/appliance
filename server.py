@@ -2687,7 +2687,62 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             kind = full_type.split("/")[-1] if full_type else "resource"
             add("azure", service or "resource", kind, str(rec.get("id") or rid), rec)
 
+    _cloudsim_attach_storage_usage(nodes, space)
     return nodes, counts, runtime_instances
+
+
+_AZURITE_USAGE_CACHE: dict = {"at": 0.0, "bytes": 0, "blobs": 0}
+
+
+def _azurite_usage() -> tuple[int, int]:
+    """(bytes, blob count) stored in the Azurite blob service, cached for a few
+    seconds because every /api/spaces read recomputes savings."""
+    now = time.time()
+    if now - _AZURITE_USAGE_CACHE["at"] < 4.0:
+        return _AZURITE_USAGE_CACHE["bytes"], _AZURITE_USAGE_CACHE["blobs"]
+    total = blobs = 0
+    try:
+        from core import azure_blob_store as _abs
+        if _abs.available():
+            svc = _abs._svc()
+            for c in svc.list_containers():
+                for b in svc.get_container_client(c.name).list_blobs():
+                    total += int(b.size or 0)
+                    blobs += 1
+    except Exception:
+        pass
+    _AZURITE_USAGE_CACHE.update({"at": now, "bytes": total, "blobs": blobs})
+    return total, blobs
+
+
+def _cloudsim_attach_storage_usage(nodes: list[dict], space: dict) -> None:
+    """Stamp bucket / storage-account nodes with stored bytes and write-request
+    counts so core.cost_model bills usage (GB-month + PUTs), not just existence.
+    Azure blob data lives in Azurite, which is not keyed by ARM account, so its
+    total is attributed to the first storage account in the space."""
+    try:
+        azure_done = False
+        s3_objects = _cloudsim_service_state(space, "s3").get("objects", {}) or {}
+        gcs_objects = _cloudsim_service_state(space, "gcp_storage").get("objects", {}) or {}
+        for node in nodes:
+            prov, svc = node.get("provider"), node.get("service")
+            if prov == "aws" and svc == "s3" and node.get("kind") == "bucket":
+                size = cnt = 0
+                for ent in (s3_objects.get(node["resource_id"]) or {}).values():
+                    for v in (ent.get("versions") or []) if isinstance(ent, dict) else []:
+                        if isinstance(v, dict) and not v.get("is_delete_marker"):
+                            size += int(v.get("size") or len(v.get("data") or b""))
+                            cnt += 1
+                node["stored_bytes"], node["write_requests"] = size, cnt
+            elif prov == "gcp" and svc == "storage" and node.get("kind") == "bucket":
+                objs = gcs_objects.get(node["resource_id"]) or {}
+                node["stored_bytes"] = sum(int(o.get("size") or 0) for o in objs.values() if isinstance(o, dict))
+                node["write_requests"] = len(objs)
+            elif prov == "azure" and svc == "storage" and not azure_done:
+                azure_done = True
+                node["stored_bytes"], node["write_requests"] = _azurite_usage()
+    except Exception:
+        pass
 
 
 def _cloudsim_refresh_bridge(reason: str, detail: dict | None = None) -> None:

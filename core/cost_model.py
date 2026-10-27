@@ -108,6 +108,19 @@ SERVICE_MONTHLY: dict[str, float] = {
     "azure.rbac": 0.00,
 }
 
+# ── Usage-based storage pricing (public list prices, USD) ────────────
+# Real clouds bill object storage by GB-month stored plus per-request fees, so
+# data written to a bucket / storage account raises the savings, not just its
+# existence. Per key: (USD per GB-month, USD per 1,000 write requests).
+#   aws.s3         S3 Standard, us-east-1: $0.023/GB-mo, PUT/COPY/POST/LIST $0.005 per 1,000
+#   gcp.storage    Cloud Storage Standard, us-central1: $0.020/GB-mo, Class A ops $0.005 per 1,000
+#   azure.storage  Blob Hot LRS, East US: $0.0184/GB-mo, write ops $0.055 per 10,000
+STORAGE_USAGE_RATES: dict[str, tuple[float, float]] = {
+    "aws.s3": (0.023, 0.005),
+    "gcp.storage": (0.020, 0.005),
+    "azure.storage": (0.0184, 0.0055),
+}
+
 # Fallback hourly rates by provider for unknown instance types
 _DEFAULT_VM_HOURLY = {"aws": 0.0416, "gcp": 0.0336, "azure": 0.0416}
 
@@ -205,11 +218,16 @@ def estimate_space_savings(nodes: list[dict],
 
         cost = estimate_resource_cost(provider, service, kind, itype, uptime_hours)
         usd = cost["uptime_cost_usd"]
+        rates = STORAGE_USAGE_RATES.get(f"{provider}.{service}")
+        if rates and (node.get("stored_bytes") or node.get("write_requests")):
+            gb = float(node.get("stored_bytes") or 0) / (1024 ** 3)
+            usd += (gb * rates[0] * (uptime_hours / HOURS_PER_MONTH)
+                    + float(node.get("write_requests") or 0) / 1000.0 * rates[1])
         total += usd
 
-        by_provider[provider] = round(by_provider.get(provider, 0.0) + usd, 2)
+        by_provider[provider] = round(by_provider.get(provider, 0.0) + usd, 6)
         svc_key = f"{provider}.{service}"
-        by_service[svc_key] = round(by_service.get(svc_key, 0.0) + usd, 2)
+        by_service[svc_key] = round(by_service.get(svc_key, 0.0) + usd, 6)
 
         per_resource.append({
             "resource_id": node.get("resource_id", ""),
@@ -218,15 +236,15 @@ def estimate_space_savings(nodes: list[dict],
             "kind": kind,
             "name": node.get("name", ""),
             "instance_type": itype,
-            "real_cloud_cost_usd": round(usd, 2),
+            "real_cloud_cost_usd": round(usd, 6),
             "monthly_rate_usd": cost["monthly_usd"],
             "hourly_rate_usd": cost["hourly_usd"],
         })
 
     return {
-        "real_cloud_cost_usd": round(total, 2),
+        "real_cloud_cost_usd": round(total, 6),
         "simulator_cost_usd": 0.0,
-        "savings_usd": round(total, 2),
+        "savings_usd": round(total, 6),
         "savings_pct": 100.0 if total > 0 else 0.0,
         "uptime_hours": uptime_hours,
         "resource_count": len(nodes),
