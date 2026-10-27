@@ -128,6 +128,10 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
         return {"ok": True, **r.create(provider, account, svc, body)}
     if operation == "Get":
         rec = r.get(provider, account, svc, name)
+        if not rec and name == "_settings":
+            # Detail-tab settings that were never saved: an empty record, so the
+            # tab renders each field's default (not a 404 for a normal state).
+            return {"ok": True, "name": name}
         return {"ok": True, **rec} if rec else {"ok": False, "code": "NotFound", "name": name}
     if operation == "Update":
         rec = r.update(provider, account, svc, name, body)

@@ -516,9 +516,13 @@ async function route(method, path, body, query) {
   if (path === "/api/iam/groups" && method === "GET")   return { tuple: ["aws", "iam", "ListGroups", {}] };
   if (path === "/api/iam/attachments" && method === "GET") return { tuple: ["aws", "iam", "ListAttachments", {}] };
   m = path.match(/^\/api\/iam\/users\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "iam", "GetUser", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "iam", "DeleteUser", { name: dec(m[1]) }] };
   m = path.match(/^\/api\/iam\/roles\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "iam", "GetRole", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "iam", "DeleteRole", { name: dec(m[1]) }] };
+  m = path.match(/^\/api\/iam\/groups\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "iam", "GetGroup", { name: dec(m[1]) }] };
   m = path.match(/^\/api\/iam\/policies\/([^/]+)$/);
   if (m && method === "DELETE") return { tuple: ["aws", "iam", "DeletePolicy", { name: dec(m[1]) }] };
   // ── RDS (core/rds_core.py) ──────────────────────────────────────────
