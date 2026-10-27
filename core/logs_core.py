@@ -836,10 +836,6 @@ def console_dispatch(store: LogsStore, method: str, path: str, query: dict | Non
     if p.startswith("api/logs"):
         p = p[len("api/logs"):].strip("/")
 
-    def run(op, payload):
-        r = _OPS[op](store, payload) if op in _OPS else None
-        return r
-
     try:
         if p == "log-groups":
             if method == "GET":
