@@ -42,6 +42,15 @@ def register(app, on_change=None):
     async def native(request: Request):
         body = await request.body()
         path = request.url.path
+        if "/operations" in path:
+            # `projects/*/locations/*/operations` is one URL family shared with Memorystore and
+            # Workflows (this route is registered first): an operation goes to whoever owns the id.
+            from core import gcp_redis_core as _redis, gcp_workflows_core as _wf
+            r = _wf.dispatch_operations_chain(
+                [lambda *a: core.dispatch(store(), *a), lambda *a: _redis.dispatch(_redis.shared_store(), *a),
+                 lambda *a: _wf.dispatch(_wf.shared_store(), *a)],
+                request.method, path, dict(request.query_params), dict(request.headers), body)
+            return Response(content=r.body, status_code=r.status, media_type=r.media_type)
         r = call(request.method, path, dict(request.query_params), body, dict(request.headers))
         if r.status == 200 and request.method in ("POST", "DELETE", "PUT") and "/clusters" in path:
             segs = path.split("/clusters", 1)[1].strip("/").split("/")
