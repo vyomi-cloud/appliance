@@ -4,6 +4,21 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.16] — 2026-10-27
+
+New service release.
+
+- New service: GCP IAM Service Account Credentials
+- expansion(gcp/iamcredentials): IAM Credentials engine core + unit tests
+- expansion(gcp/iamcredentials): wire, console REST + catalog, Nano ven…
+- expansion(gcp/iamcredentials): Go SDK test bed; signBlob takes 'paylo…
+- expansion(gcp/iamcredentials): Java SDK test bed; proto3 default life…
+- expansion(gcp/iamcredentials): gcloud CLI test bed
+- expansion(gcp/iamcredentials): console tests (offline), wizard name f…
+- expansion(gcp/iamcredentials): hourly hand-over, upstream watch, regi…
+- expansion(gcp/iamcredentials): manifest ready
+- expansion(gcp/iamcredentials): 'Create credential' button so the craw…
+
 ## [3.0.15] — 2026-10-27
 
 New service release.
