@@ -50,7 +50,7 @@ check("generateIdToken: RS256 verifies, aud/email claims", s == 200 and jwt_ok(r
 check("id token without includeEmail has no email", "email" not in seg(call(st, "generateIdToken", {"audience": "a"})[1]["token"], 1))
 check("missing audience -> 400", call(st, "generateIdToken", {})[0] == 400)
 blob = b"sign me"
-s, r = call(st, "signBlob", {"bytesToSign": base64.b64encode(blob).decode()})
+s, r = call(st, "signBlob", {"payload": base64.b64encode(blob).decode()})
 check("signBlob verifies against the public key", s == 200 and ic.rsa_verify(blob, base64.b64decode(r["signedBlob"])) and r["keyId"] == ic.key_id(SA), r)
 check("signBlob tampered data fails", not ic.rsa_verify(b"other", base64.b64decode(r["signedBlob"])))
 check("signBlob missing bytes -> 400", call(st, "signBlob", {})[0] == 400)
@@ -61,17 +61,17 @@ check("signJwt non-object payload -> 400", call(st, "signJwt", {"payload": "[1]"
 check("public JWK shape", ic.public_jwk(SA)["kty"] == "RSA" and ic.public_jwk()["alg"] == "RS256")
 
 # project wildcard, verbs, methods
-check("non-wildcard project -> 400", call(st, "signBlob", {"bytesToSign": "aGk="}, path="/v1/projects/demo/serviceAccounts/" + SA)[0] == 400)
+check("non-wildcard project -> 400", call(st, "signBlob", {"payload": "aGk="}, path="/v1/projects/demo/serviceAccounts/" + SA)[0] == 400)
 check("unknown verb -> 404", call(st, "frobnicate", {}, )[0] == 404)
 check("GET on a verb -> 405", call(st, "signBlob", None, method="GET")[0] == 405)
-check("malformed account -> 400", call(st, "signBlob", {"bytesToSign": "aGk="}, path="/v1/projects/-/serviceAccounts/not-an-email")[0] == 400)
-check("unique id without resolver -> 403", call(st, "signBlob", {"bytesToSign": "aGk="}, path="/v1/projects/-/serviceAccounts/123456789012345678901")[0] == 403)
+check("malformed account -> 400", call(st, "signBlob", {"payload": "aGk="}, path="/v1/projects/-/serviceAccounts/not-an-email")[0] == 400)
+check("unique id without resolver -> 403", call(st, "signBlob", {"payload": "aGk="}, path="/v1/projects/-/serviceAccounts/123456789012345678901")[0] == 403)
 
 # resolver / delegates
 res = KNOWN.get
-check("resolver: known account ok", call(st, "signBlob", {"bytesToSign": "aGk="}, resolver=res)[0] == 200)
+check("resolver: known account ok", call(st, "signBlob", {"payload": "aGk="}, resolver=res)[0] == 200)
 check("resolver: unique id resolves to the email", call(st, "generateAccessToken", {"scope": ["a"]}, path="/v1/projects/-/serviceAccounts/123456789012345678901", resolver=res)[0] == 200)
-s, r = call(st, "signBlob", {"bytesToSign": "aGk="}, path="/v1/projects/-/serviceAccounts/ghost@demo.iam.gserviceaccount.com", resolver=res)
+s, r = call(st, "signBlob", {"payload": "aGk="}, path="/v1/projects/-/serviceAccounts/ghost@demo.iam.gserviceaccount.com", resolver=res)
 check("resolver: unknown account -> 403 PERMISSION_DENIED", s == 403 and r["error"]["status"] == "PERMISSION_DENIED", r)
 d = "projects/-/serviceAccounts/other@demo.iam.gserviceaccount.com"
 before = len(st.issued)

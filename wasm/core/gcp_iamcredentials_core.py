@@ -256,13 +256,13 @@ def generate_id_token(store, ident, body, resolver=None):
 def sign_blob(store, ident, body, resolver=None):
     email = _resolve(ident, resolver)
     delegates = _check_delegates(body.get("delegates"), resolver)
-    raw = body.get("bytesToSign")
+    raw = body.get("payload")
     if not raw or not isinstance(raw, str):
-        raise _E(400, "INVALID_ARGUMENT", "Invalid value at 'payload': bytesToSign is required.")
+        raise _E(400, "INVALID_ARGUMENT", "Invalid value at 'payload': the bytes to sign are required.")
     try:
         data = base64.b64decode(raw + "=" * (-len(raw) % 4), validate=False)
     except Exception:
-        raise _E(400, "INVALID_ARGUMENT", "Invalid value at 'bytes_to_sign' (TYPE_BYTES), base64 decoding failed.")
+        raise _E(400, "INVALID_ARGUMENT", "Invalid value at 'payload' (TYPE_BYTES), base64 decoding failed.")
     _record(store, "signBlob", email, delegates, "%d bytes" % len(data), 0, _now())
     return {"keyId": key_id(email), "signedBlob": base64.b64encode(rsa_sign(data)).decode()}
 
@@ -333,7 +333,7 @@ def issue_from_form(store, b, resolver=None):
     elif kind == "generateIdToken":
         req = {"audience": detail or "https://example.com", "includeEmail": True, "delegates": delegates}
     elif kind == "signBlob":
-        req = {"bytesToSign": base64.b64encode((detail or "hello vyomi").encode()).decode(), "delegates": delegates}
+        req = {"payload": base64.b64encode((detail or "hello vyomi").encode()).decode(), "delegates": delegates}
     else:
         req = {"payload": json.dumps({"iss": sa, "sub": sa, "aud": detail or "https://example.com",
                                       "iat": int(_now().timestamp()), "exp": int(_now().timestamp()) + 3600}), "delegates": delegates}
