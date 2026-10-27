@@ -4,6 +4,7 @@
     {"id": "offline-ui-crawl", "target": "offline", "cloud": "all", "kind": "ui", "cmd": "TARGET=offline OUT=tests/conformance/hourly/out/ui-offline.json node tests/conformance/hourly/ui_crawler.mjs", "timeout": 1500},
     {"id": "offline-console-actions", "target": "offline", "cloud": "all", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} VYOMI_CONFORMANCE_REPORT=tests/conformance/console_actions/REPORT.md python3 -m pytest tests/conformance/console_actions/ -q --tb=line", "timeout": 1200},
     {"id": "offline-api-ec2-instance-detail", "target": "offline", "cloud": "aws", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_ec2_instance_detail_api.py", "timeout": 120},
+    {"id": "offline-api-ec2-default-public-ip", "target": "offline", "cloud": "aws", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_ec2_default_public_ip_api.py", "timeout": 120},
     {"id": "offline-sdk-python-aws", "target": "offline", "cloud": "aws", "kind": "sdk-python", "cmd": "python3 tests/conformance/run_conformance.py --endpoint {ENDPOINT}", "timeout": 600},
     {"id": "offline-sdk-go-aws", "target": "offline", "cloud": "aws", "kind": "sdk-go", "cwd": "tests/conformance/aws-sdk-go", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-sdk-go-gcp", "target": "offline", "cloud": "gcp", "kind": "sdk-go", "cwd": "tests/conformance/gcp-sdk-go", "cmd": "STORAGE_EMULATOR_HOST={ENDPOINT_HOSTPORT} GOFLAGS=-mod=mod go run .", "timeout": 600},

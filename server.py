@@ -12135,8 +12135,10 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
         "runtime_bundle_name": _cloudsim_runtime_bundle("ec2").get("name", ""),
         "runtime_bundle_kind": _cloudsim_runtime_bundle("ec2").get("kind", ""),
     }
-    if req.command:
+    if req.command or not req.subnet_id:
+        # Real EC2 auto-assigns a public IPv4 to launches into the default VPC/subnet.
         instance["public_ip"] = _public_ip()
+        instance["public_dns"] = _ec2_public_dns_name(instance)
     ec2_state["instances"][instance_id] = instance
     _cloudsim_sync_ec2_resource(instance, "upsert")
     if auto_start:
