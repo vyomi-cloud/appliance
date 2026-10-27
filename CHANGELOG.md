@@ -4,6 +4,15 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.13] — 2026-10-27
+
+New service release.
+
+- New service: AWS Step Functions
+- expansion(aws/stepfunctions): ASL engine core + unit tests
+- expansion(aws/stepfunctions): wire, console catalog, Nano vendoring, …
+- expansion(aws/stepfunctions): console UI tests (offline + Nano), hour…
+
 ## [3.0.12] — 2026-10-27
 
 New service release.
