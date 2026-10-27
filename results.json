@@ -1,145 +1,15 @@
 {
- "at": "2026-10-27T03:33:05+00:00",
- "commit": "2d1f143501eeb0003c7c5f85c5daa4f3b1e664c8",
+ "at": "2026-10-27T04:36:36+00:00",
+ "commit": "75f640a555cb04e6dfc04cc6dd31ab3da385a4da",
  "suites": [
   {
    "id": "offline-ui-crawl",
    "target": "offline",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 808.3,
+   "duration_s": 843.8,
    "exit_code": 0,
    "broken_services": [
-    {
-     "target": "offline",
-     "cloud": "aws",
-     "service": "EC2",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Tags",
-      "Details",
-      "Status and alarms",
-      "Monitoring",
-      "Networking",
-      "Security",
-      "Storage",
-      "Connect"
-     ],
-     "findings": [
-      {
-       "type": "DEAD_TAB",
-       "tab": "Monitoring",
-       "detail": "clicking the tab changes nothing"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Networking: column \"SUBNET ID\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Networking"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Networking: column \"SECURITY GROUPS\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Networking"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Security: column \"IAM ROLE\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Security"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Security: column \"LAUNCH TIME\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Security"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Security: column \"STATE TRANSITION REASON\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Security"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "EC2",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Tags",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Details",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Status and alarms",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Monitoring",
-       "state": "unimplemented",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Networking",
-       "state": "partial",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Security",
-       "state": "partial",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Storage",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Connect",
-       "state": "static",
-       "calls": 0
-      }
-     ],
-     "status": "broken"
-    },
     {
      "target": "offline",
      "cloud": "aws",
@@ -164,6 +34,61 @@
       {
        "type": "HTTP_404",
        "detail": "resource detail: /api/dynamodb/tables/ \u2192 404"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Activity"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Tags"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Explore items"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables//items \u2192 404",
+       "tab": "Explore items"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Query/Scan"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Indexes"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Streams and triggers"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Read/write capacity"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Encryption at rest"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/dynamodb/tables/ \u2192 404",
+       "tab": "Time to live"
       }
      ],
      "surfaces": [
@@ -189,71 +114,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Explore items",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Query/Scan",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Indexes",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Streams and triggers",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Read/write capacity",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Encryption at rest",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Time to live",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -278,6 +193,61 @@
       {
        "type": "HTTP_404",
        "detail": "resource detail: /api/sqs/queues/ \u2192 404"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Activity"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Tags"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Send and receive messages"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Purge messages"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Configuration"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Dead-letter queue"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Dead-letter queue: column \"MAXIMUM RECEIVES\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Dead-letter queue"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Encryption"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Access policy"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/sqs/queues/ \u2192 404",
+       "tab": "Monitoring"
       }
      ],
      "surfaces": [
@@ -285,7 +255,7 @@
        "kind": "page",
        "name": "SQS",
        "state": "live",
-       "calls": 6
+       "calls": 7
       },
       {
        "kind": "create",
@@ -303,71 +273,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Send and receive messages",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Purge messages",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Configuration",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Dead-letter queue",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Encryption",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Access policy",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Monitoring",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -783,71 +743,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Secret value",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Versions",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Rotation",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Replication",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Resource policy",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Encryption key",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -883,7 +833,7 @@
        "kind": "page",
        "name": "KMS",
        "state": "live",
-       "calls": 6
+       "calls": 7
       },
       {
        "kind": "create",
@@ -901,71 +851,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "General configuration",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Key policy",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Aliases",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Key rotation",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Key users",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Key administrators",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Grants",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -1023,61 +963,71 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Source",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Trigger",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Variables",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Testing",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Networking",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -1125,67 +1075,77 @@
        "kind": "detail",
        "name": "resource detail",
        "state": "live",
-       "calls": 0
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Objects",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Lifecycle",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Configuration",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Encryption",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Retention",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -1392,61 +1352,71 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Subnets",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Firewall rules",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Routes",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "VPC peering",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Network metrics",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -1482,7 +1452,7 @@
        "kind": "page",
        "name": "Pub/Sub",
        "state": "live",
-       "calls": 2
+       "calls": 3
       },
       {
        "kind": "create",
@@ -1613,14 +1583,6 @@
      ],
      "findings": [
       {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"REGION\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"STATE\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
        "type": "SAVINGS_NOT_UPDATED",
        "detail": "create: resource_count stayed 1 after creating a resource"
       },
@@ -1639,7 +1601,7 @@
       {
        "kind": "create",
        "name": "create with defaults",
-       "state": "partial",
+       "state": "live",
        "calls": 1
       },
       {
@@ -1790,61 +1752,71 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Versions",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Rotation & labels",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Key policy",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Import jobs",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Metrics",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -1894,146 +1866,35 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Members",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Keys",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Activity log",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "azure",
-     "service": "API Management",
-     "tabs": [
-      "Overview",
-      "Activity log",
-      "Access control (IAM)",
-      "Tags",
-      "Diagnose and solve problems",
-      "APIs",
-      "Products",
-      "Subscriptions",
-      "Policies",
-      "Named values"
-     ],
-     "findings": [
-      {
-       "type": "HTTP_404",
-       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/apim-cloudlearn/policies/policy?api-version=2023-05-01-preview \u2192 404",
-       "tab": "Policies"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "API Management",
-       "state": "live",
-       "calls": 18
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Activity log",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Access control (IAM)",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Tags",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Diagnose and solve problems",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "APIs",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Products",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Subscriptions",
-       "state": "live",
-       "calls": 2
-      },
-      {
-       "kind": "tab",
-       "name": "Policies",
-       "state": "unimplemented",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Named values",
        "state": "static",
        "calls": 0
       }
@@ -2085,71 +1946,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity log",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Access control (IAM)",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Diagnose and solve problems",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Address space",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Subnets",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Connected devices",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Peerings",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "DNS servers",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -2267,22 +2118,22 @@
      "status": "broken"
     }
    ],
-   "passed": 14,
-   "failed": 24,
+   "passed": 16,
+   "failed": 22,
    "status": "fail",
-   "tail": "[offline/aws] 12 services crawled, 8 with findings\n[offline/gcp] 12 services crawled, 11 with findings\n[offline/azure] 14 services crawled, 5 with findings\nUI crawl offline: 14/38 services clean \u2192 tests/conformance/hourly/out/ui-offline.json\nConsole surfaces offline: {\"live\":202,\"static\":156,\"unimplemented\":32,\"partial\":24}"
+   "tail": "[offline/aws] 12 services crawled, 7 with findings\n[offline/gcp] 12 services crawled, 11 with findings\n[offline/azure] 14 services crawled, 4 with findings\nUI crawl offline: 16/38 services clean \u2192 tests/conformance/hourly/out/ui-offline.json\nConsole surfaces offline: {\"live\":203,\"static\":156,\"unimplemented\":32,\"partial\":23}"
   },
   {
    "id": "offline-console-actions",
    "target": "offline",
    "cloud": "all",
    "kind": "api",
-   "duration_s": 8.2,
+   "duration_s": 7.6,
    "exit_code": 1,
    "passed": 232,
    "failed": 14,
    "status": "fail",
-   "tail": "conf-test-vm-48c70770/start \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-48c70770/stop \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-48c70770/reset \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-48c70770 \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-48c70770/documents \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-48c70770/collectionGroups/-/indexes \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.kms.create] - AssertionError: GCP kms.create POST /api/gcp/kms/keys \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.create] - AssertionError: GCP secretmanager.create POST /api/gcp/secrets \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-48c70770/o/{object} \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Object not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-48c70770/upload \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"missing 'file' field\"}\nassert False\n14 failed, 232 passed, 10 skipped in 7.76s"
+   "tail": "conf-test-vm-3b0bdecb/start \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.stop] - AssertionError: GCP compute.stop POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-3b0bdecb/stop \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.reset] - AssertionError: GCP compute.reset POST /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-3b0bdecb/reset \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.compute.delete] - AssertionError: GCP compute.delete DELETE /api/gcp/compute/v1/projects/cloudlearn/zones/us-central1-a/instances/insert-conf-test-vm-3b0bdecb \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"NoSuchInstance\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.documents] - AssertionError: GCP firestore.documents GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-3b0bdecb/documents \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.firestore.indexes] - AssertionError: GCP firestore.indexes GET /api/gcp/firestore/v1/projects/cloudlearn/databases/(default)-3b0bdecb/collectionGroups/-/indexes \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.kms.create] - AssertionError: GCP kms.create POST /api/gcp/kms/keys \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.create] - AssertionError: GCP secretmanager.create POST /api/gcp/secrets \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"missing 'name'\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.deleteObject] - AssertionError: GCP storage.deleteObject DELETE /api/gcp/storage/v1/b/vyomi-conf-gcs-3b0bdecb/o/{object} \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"Object not found\"}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.storage.uploadObject] - AssertionError: GCP storage.uploadObject POST /api/gcp/storage/v1/b/vyomi-conf-gcs-3b0bdecb/upload \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"detail\":\"missing 'file' field\"}\nassert False\n14 failed, 232 passed, 10 skipped in 7.35s"
   },
   {
    "id": "offline-api-ec2-instance-detail",
@@ -2301,7 +2152,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "api",
-   "duration_s": 0.2,
+   "duration_s": 0.3,
    "exit_code": 0,
    "passed": 3,
    "failed": 0,
@@ -2309,11 +2160,23 @@
    "tail": "[PASS] create bucket\n[PASS] list row has creation_date\n[PASS] creation_date matches created"
   },
   {
+   "id": "offline-api-gcp-eventarc-trigger-defaults",
+   "target": "offline",
+   "cloud": "gcp",
+   "kind": "api",
+   "duration_s": 0.2,
+   "exit_code": 0,
+   "passed": 6,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] create trigger\n[PASS] event_provider filled (google.cloud.pubsub.topic.v1.messagePublished)\n[PASS] destination filled (projects/cloudlearn/locations/us-central1/services/my-service)\n[PASS] region filled (us-central1)\n[PASS] state filled (ACTIVE)\n[PASS] state is ACTIVE"
+  },
+  {
    "id": "offline-api-ec2-default-public-ip",
    "target": "offline",
    "cloud": "aws",
    "kind": "api",
-   "duration_s": 0.2,
+   "duration_s": 0.3,
    "exit_code": 0,
    "passed": 3,
    "failed": 0,
@@ -2325,7 +2188,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-python",
-   "duration_s": 315.4,
+   "duration_s": 314.6,
    "exit_code": 1,
    "passed": 87,
    "failed": 1,
@@ -2337,31 +2200,31 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-go",
-   "duration_s": 27.6,
+   "duration_s": 41.3,
    "exit_code": 0,
    "passed": 14,
    "failed": 0,
    "status": "pass",
-   "tail": "PASS sqs ListQueues\nRESULT pass=14 fail=0\ngo: downloading github.com/aws/aws-sdk-go-v2 v1.30.0\ngo: downloading github.com/aws/aws-sdk-go-v2/config v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/credentials v1.17.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/dynamodb v1.32.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ec2 v1.160.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/iam v1.34.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/s3 v1.55.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sqs v1.32.0\ngo: downloading github.com/aws/smithy-go v1.20.2\ngo: downloading github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.15.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sso v1.19.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ssooidc v1.22.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sts v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.12\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.2\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.6\ngo: downloading github.com/jmespath/go-jmespath v0.4.0\ngo: downloading github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.8\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.8\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.12\nSDK 2026/10/27 03:12:52 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/27 03:12:52 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/27 03:12:52 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/27 03:12:52 WARN failed to close HTTP response body, this may affect connection reuse"
+   "tail": "PASS sqs ListQueues\nRESULT pass=14 fail=0\ngo: downloading github.com/aws/aws-sdk-go-v2 v1.30.0\ngo: downloading github.com/aws/aws-sdk-go-v2/config v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/credentials v1.17.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/dynamodb v1.32.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ec2 v1.160.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/iam v1.34.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/s3 v1.55.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sqs v1.32.0\ngo: downloading github.com/aws/smithy-go v1.20.2\ngo: downloading github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.15.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sso v1.19.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ssooidc v1.22.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sts v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.12\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.2\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.6\ngo: downloading github.com/jmespath/go-jmespath v0.4.0\ngo: downloading github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.8\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.8\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.12\nSDK 2026/10/27 04:16:07 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/27 04:16:07 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/27 04:16:07 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/27 04:16:07 WARN failed to close HTTP response body, this may affect connection reuse"
   },
   {
    "id": "offline-sdk-go-gcp",
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-go",
-   "duration_s": 12.1,
+   "duration_s": 15.9,
    "exit_code": 0,
    "passed": 5,
    "failed": 0,
    "status": "pass",
-   "tail": "go: downloading github.com/google/uuid v1.6.0\ngo: downloading github.com/googleapis/gax-go/v2 v2.12.5\ngo: downloading golang.org/x/oauth2 v0.21.0\ngo: downloading google.golang.org/api v0.187.0\ngo: downloading google.golang.org/genproto v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/grpc v1.64.0\ngo: downloading google.golang.org/protobuf v1.34.2\ngo: downloading go.opencensus.io v0.24.0\ngo: downloading go.opentelemetry.io/otel v1.24.0\ngo: downloading go.opentelemetry.io/otel/trace v1.24.0\ngo: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/genproto/googleapis/api v0.0.0-20240617180043-68d350f18fd4\ngo: downloading cloud.google.com/go/auth v0.6.1\ngo: downloading cloud.google.com/go/auth/oauth2adapt v0.2.2\ngo: downloading go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0\ngo: downloading golang.org/x/net v0.26.0\ngo: downloading github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da\ngo: downloading github.com/go-logr/logr v1.4.1\ngo: downloading go.opentelemetry.io/otel/metric v1.24.0\ngo: downloading go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0\ngo: downloading golang.org/x/time v0.5.0\ngo: downloading github.com/google/s2a-go v0.1.7\ngo: downloading github.com/googleapis/enterprise-certificate-proxy v0.3.2\ngo: downloading golang.org/x/sys v0.21.0\ngo: downloading github.com/felixge/httpsnoop v1.0.4\ngo: downloading github.com/go-logr/stdr v1.2.2\ngo: downloading github.com/golang/protobuf v1.5.4\ngo: downloading golang.org/x/text v0.16.0\ngo: downloading golang.org/x/sync v0.7.0\ngo: downloading golang.org/x/crypto v0.24.0"
+   "tail": "go: downloading github.com/google/uuid v1.6.0\ngo: downloading github.com/googleapis/gax-go/v2 v2.12.5\ngo: downloading golang.org/x/oauth2 v0.21.0\ngo: downloading google.golang.org/api v0.187.0\ngo: downloading google.golang.org/genproto v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/grpc v1.64.0\ngo: downloading google.golang.org/protobuf v1.34.2\ngo: downloading go.opencensus.io v0.24.0\ngo: downloading go.opentelemetry.io/otel v1.24.0\ngo: downloading go.opentelemetry.io/otel/trace v1.24.0\ngo: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/genproto/googleapis/api v0.0.0-20240617180043-68d350f18fd4\ngo: downloading cloud.google.com/go/auth v0.6.1\ngo: downloading cloud.google.com/go/auth/oauth2adapt v0.2.2\ngo: downloading go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0\ngo: downloading golang.org/x/net v0.26.0\ngo: downloading github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da\ngo: downloading github.com/go-logr/logr v1.4.1\ngo: downloading go.opentelemetry.io/otel/metric v1.24.0\ngo: downloading go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0\ngo: downloading golang.org/x/time v0.5.0\ngo: downloading github.com/google/s2a-go v0.1.7\ngo: downloading golang.org/x/sys v0.21.0\ngo: downloading github.com/googleapis/enterprise-certificate-proxy v0.3.2\ngo: downloading github.com/felixge/httpsnoop v1.0.4\ngo: downloading github.com/go-logr/stdr v1.2.2\ngo: downloading github.com/golang/protobuf v1.5.4\ngo: downloading golang.org/x/text v0.16.0\ngo: downloading golang.org/x/sync v0.7.0\ngo: downloading golang.org/x/crypto v0.24.0"
   },
   {
    "id": "offline-sdk-go-azure",
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-go",
-   "duration_s": 6.8,
+   "duration_s": 10.0,
    "exit_code": 0,
    "passed": 14,
    "failed": 0,
@@ -2385,19 +2248,19 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-java",
-   "duration_s": 3.6,
+   "duration_s": 4.9,
    "exit_code": 0,
    "passed": 6,
    "failed": 0,
    "status": "pass",
-   "tail": "== google-cloud-storage (Java) against http://localhost:9000 project=gcp-dev ==\nPASS buckets.insert :: java-sdk-test-1793070806689\nPASS buckets.list contains new bucket\nPASS objects.insert (upload) :: greeting.txt\nPASS objects.get (download byte-exact) :: hello-from-java-sdk\nPASS objects.delete :: true\nPASS buckets.delete :: true\nRESULT pass=6 fail=0"
+   "tail": "== google-cloud-storage (Java) against http://localhost:9000 project=gcp-dev ==\nPASS buckets.insert :: java-sdk-test-1793074609863\nPASS buckets.list contains new bucket\nPASS objects.insert (upload) :: greeting.txt\nPASS objects.get (download byte-exact) :: hello-from-java-sdk\nPASS objects.delete :: true\nPASS buckets.delete :: true\nRESULT pass=6 fail=0"
   },
   {
    "id": "offline-sdk-java-azure",
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-java",
-   "duration_s": 20.2,
+   "duration_s": 21.8,
    "exit_code": 0,
    "passed": 5,
    "failed": 0,
@@ -2409,7 +2272,7 @@
    "target": "offline",
    "cloud": "all",
    "kind": "api",
-   "duration_s": 74.5,
+   "duration_s": 69.9,
    "exit_code": 1,
    "passed": 4,
    "failed": 7,
@@ -2421,7 +2284,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "cli",
-   "duration_s": 19.4,
+   "duration_s": 21.2,
    "exit_code": 0,
    "passed": 15,
    "failed": 0,
@@ -2433,7 +2296,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "cli",
-   "duration_s": 16.6,
+   "duration_s": 8.0,
    "exit_code": 0,
    "passed": 6,
    "failed": 0,
@@ -2445,7 +2308,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "cli",
-   "duration_s": 17.8,
+   "duration_s": 11.6,
    "exit_code": 1,
    "passed": 5,
    "failed": 1,
@@ -2457,7 +2320,7 @@
    "target": "offline",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 24.4,
+   "duration_s": 22.2,
    "exit_code": 0,
    "passed": 9,
    "failed": 0,
@@ -2469,7 +2332,7 @@
    "target": "nano",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 936.2,
+   "duration_s": 953.9,
    "exit_code": 0,
    "broken_services": [
     {
@@ -2628,6 +2491,261 @@
     {
      "target": "nano",
      "cloud": "aws",
+     "service": "S3",
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Objects",
+      "Versions",
+      "Bucket Versioning",
+      "Event notifications",
+      "Lifecycle rules",
+      "Default encryption",
+      "Block Public Access"
+     ],
+     "findings": [
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/s3~my-bucket-cloudlearn~encryption/get/_settings \u2192 404",
+       "tab": "Default encryption"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/s3~my-bucket-cloudlearn~blockPublic/get/_settings \u2192 404",
+       "tab": "Block Public Access"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "S3",
+       "state": "live",
+       "calls": 23
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Objects",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Versions",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Bucket Versioning",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Event notifications",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Lifecycle rules",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Default encryption",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Block Public Access",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
+     "status": "broken"
+    },
+    {
+     "target": "nano",
+     "cloud": "aws",
+     "service": "RDS",
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Endpoints",
+      "Networking",
+      "Permissions",
+      "Configuration",
+      "Modify",
+      "Parameter groups",
+      "Snapshots"
+     ],
+     "findings": [
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Endpoints: column \"ENDPOINT\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Endpoints"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PRIVATE IPV4 ADDRESS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PUBLIC IPV4 ADDRESS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"PUBLIC IPV4 DNS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SUBNET ID\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SECURITY GROUPS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/rds~database-1~modify/get/_settings \u2192 404",
+       "tab": "Modify"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "RDS",
+       "state": "live",
+       "calls": 64
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "partial",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Endpoints",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Configuration",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Modify",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Parameter groups",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Snapshots",
+       "state": "live",
+       "calls": 1
+      }
+     ],
+     "status": "broken"
+    },
+    {
+     "target": "nano",
+     "cloud": "aws",
      "service": "DynamoDB",
      "tabs": [
       "Overview",
@@ -2645,31 +2763,6 @@
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "after create: column \"Sort key\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Activity"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/dynamodb~Music~streams/get/_settings \u2192 404",
-       "tab": "Streams and triggers"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/dynamodb~Music~capacity/get/_settings \u2192 404",
-       "tab": "Read/write capacity"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/dynamodb~Music~encryption/get/_settings \u2192 404",
-       "tab": "Encryption at rest"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/dynamodb~Music~ttl/get/_settings \u2192 404",
-       "tab": "Time to live"
       }
      ],
      "surfaces": [
@@ -2695,181 +2788,71 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Explore items",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Query/Scan",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Indexes",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Streams and triggers",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Read/write capacity",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Encryption at rest",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Time to live",
        "state": "unimplemented",
-       "calls": 0
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "aws",
-     "service": "SQS",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Tags",
-      "Send and receive messages",
-      "Purge messages",
-      "Configuration",
-      "Dead-letter queue",
-      "Encryption",
-      "Access policy",
-      "Monitoring"
-     ],
-     "findings": [
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Activity"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/sqs~MyQueue~purge/get/_settings \u2192 404",
-       "tab": "Purge messages"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Dead-letter queue: column \"MAXIMUM RECEIVES\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Dead-letter queue"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/sqs~MyQueue~encryption/get/_settings \u2192 404",
-       "tab": "Encryption"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "SQS",
-       "state": "live",
-       "calls": 64
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "partial",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Tags",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Send and receive messages",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Purge messages",
-       "state": "unimplemented",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Configuration",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Dead-letter queue",
-       "state": "partial",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Encryption",
-       "state": "unimplemented",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Access policy",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Monitoring",
-       "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -2917,7 +2900,7 @@
        "kind": "page",
        "name": "EventBridge",
        "state": "live",
-       "calls": 29
+       "calls": 28
       },
       {
        "kind": "create",
@@ -2944,7 +2927,7 @@
        "kind": "page",
        "name": "VPC",
        "state": "live",
-       "calls": 30
+       "calls": 26
       },
       {
        "kind": "create",
@@ -2977,6 +2960,56 @@
       {
        "type": "HTTP_404",
        "detail": "resource detail: /api/iam/users/new-user \u2192 404"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Overview"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Users"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "User groups"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Roles"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Policies"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Identity providers"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Password policy"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/iam~new-user~passwordPolicy/get/_settings \u2192 404",
+       "tab": "Password policy"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/iam/users/new-user \u2192 404",
+       "tab": "Access Analyzer"
+      },
+      {
+       "type": "HTTP_404",
+       "detail": "/api/aws/sub/iam~new-user~accessAdvisor/get/_settings \u2192 404",
+       "tab": "Access Analyzer"
       }
      ],
      "surfaces": [
@@ -3002,57 +3035,49 @@
        "kind": "tab",
        "name": "Overview",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Users",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "User groups",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Roles",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Policies",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Identity providers",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Password policy",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Access Analyzer",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -3081,21 +3106,6 @@
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "after create: column \"Next rotation\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
-       "tab": "Activity"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/secretsmanager~my-secret~rotation/get/_settings \u2192 404",
-       "tab": "Rotation"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/secretsmanager~my-secret~kmsKey/get/_settings \u2192 404",
-       "tab": "Encryption key"
       }
      ],
      "surfaces": [
@@ -3121,166 +3131,71 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Tags",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Secret value",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Versions",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Rotation",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Replication",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Resource policy",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Encryption key",
        "state": "unimplemented",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "static",
-       "calls": 0
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "aws",
-     "service": "KMS",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Tags",
-      "General configuration",
-      "Key policy",
-      "Aliases",
-      "Key rotation",
-      "Key users",
-      "Key administrators",
-      "Grants"
-     ],
-     "findings": [
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/kms~a9228a4b599a416aab3542b3118846c6~rotation/get/_settings \u2192 404",
-       "tab": "Key rotation"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "KMS",
-       "state": "live",
-       "calls": 64
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Tags",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "General configuration",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Key policy",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Aliases",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Key rotation",
-       "state": "unimplemented",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Key users",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Key administrators",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Grants",
-       "state": "live",
-       "calls": 1
+       "calls": 0,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -3305,6 +3220,11 @@
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "after create: column \"ZONE\" shows \"-\"/blank in 1 row(s)"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
       }
      ],
      "surfaces": [
@@ -3330,71 +3250,61 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Networking",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Disks",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Machine size",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Metadata",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Startup script",
-       "state": "static",
-       "calls": 0,
-       "carried": true
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -3572,6 +3482,11 @@
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "after create: column \"STATE\" shows \"-\"/blank in 1 row(s)"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
       }
      ],
      "surfaces": [
@@ -3579,7 +3494,7 @@
        "kind": "page",
        "name": "Firestore",
        "state": "live",
-       "calls": 2
+       "calls": 1
       },
       {
        "kind": "create",
@@ -3590,78 +3505,68 @@
       {
        "kind": "detail",
        "name": "resource detail",
+       "state": "live",
+       "calls": 2
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
        "state": "static",
        "calls": 0
       },
       {
        "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 2,
-       "carried": true
-      },
-      {
-       "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Data",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Query builder",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Indexes",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Security rules",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Import / Export",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -3717,7 +3622,7 @@
        "kind": "detail",
        "name": "resource detail",
        "state": "live",
-       "calls": 2
+       "calls": 0
       },
       {
        "kind": "tab",
@@ -3816,6 +3721,11 @@
       {
        "type": "HTTP_501",
        "detail": "during create: /api/gcp/pubsub/v1/projects/nano-project/subscriptions \u2192 501"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
       }
      ],
      "surfaces": [
@@ -3823,7 +3733,7 @@
        "kind": "page",
        "name": "Pub/Sub",
        "state": "unimplemented",
-       "calls": 1
+       "calls": 2
       },
       {
        "kind": "create",
@@ -3835,77 +3745,67 @@
        "kind": "detail",
        "name": "resource detail",
        "state": "live",
-       "calls": 0
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Subscriptions",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Schema",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Messages",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Encryption",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Properties",
-       "state": "static",
-       "calls": 0,
-       "carried": true
+       "state": "live",
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Metrics",
        "state": "live",
-       "calls": 3,
-       "carried": true
+       "calls": 3
       }
      ],
      "status": "broken"
@@ -3926,7 +3826,7 @@
        "kind": "page",
        "name": "API Gateway",
        "state": "live",
-       "calls": 1
+       "calls": 2
       },
       {
        "kind": "create",
@@ -3960,6 +3860,16 @@
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "after create: column \"STATE\" shows \"-\"/blank in 1 row(s)"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Activity: column \"Detail\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Activity"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Metrics: column \"EVENT FILTERS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Metrics"
       }
      ],
      "surfaces": [
@@ -3985,64 +3895,55 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "partial",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Labels",
-       "state": "static",
-       "calls": 0,
-       "carried": true
+       "state": "live",
+       "calls": 2
       },
       {
        "kind": "tab",
        "name": "Event matching",
        "state": "live",
-       "calls": 3,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Destination",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Metrics",
        "state": "partial",
-       "calls": 2,
-       "carried": true
+       "calls": 2
       },
       {
        "kind": "tab",
        "name": "Logs",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -4063,7 +3964,7 @@
        "kind": "page",
        "name": "Secret Manager",
        "state": "live",
-       "calls": 2
+       "calls": 1
       },
       {
        "kind": "create",
@@ -4241,37 +4142,43 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Members",
        "state": "live",
-       "calls": 3
+       "calls": 3,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Keys",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 0
+       "calls": 0,
+       "carried": true
       },
       {
        "kind": "tab",
        "name": "Activity log",
        "state": "live",
-       "calls": 1
+       "calls": 1,
+       "carried": true
       }
      ],
      "status": "broken"
@@ -4299,116 +4206,6 @@
        "name": "create with defaults",
        "state": "unimplemented",
        "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "azure",
-     "service": "Key vaults",
-     "tabs": [
-      "Overview",
-      "Activity log",
-      "Access control (IAM)",
-      "Tags",
-      "Diagnose and solve problems",
-      "Secrets",
-      "Keys",
-      "Certificates",
-      "Access policies",
-      "Access configuration"
-     ],
-     "findings": [
-      {
-       "type": "HTTP_404",
-       "detail": "/azure-data/keyvault/kv-cloudlearn/secrets \u2192 404",
-       "tab": "Secrets"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/azure-data/keyvault/kv-cloudlearn/keys \u2192 404",
-       "tab": "Keys"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Key vaults",
-       "state": "live",
-       "calls": 81
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Activity log",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Access control (IAM)",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Tags",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Diagnose and solve problems",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Secrets",
-       "state": "unimplemented",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Keys",
-       "state": "unimplemented",
-       "calls": 2
-      },
-      {
-       "kind": "tab",
-       "name": "Certificates",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Access policies",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Access configuration",
-       "state": "static",
-       "calls": 0
       }
      ],
      "status": "broken"
@@ -4522,7 +4319,7 @@
        "kind": "page",
        "name": "Key Vault secrets",
        "state": "live",
-       "calls": 80
+       "calls": 81
       },
       {
        "kind": "create",
@@ -4594,29 +4391,29 @@
      "status": "broken"
     }
    ],
-   "passed": 14,
-   "failed": 29,
+   "passed": 15,
+   "failed": 28,
    "status": "fail",
-   "tail": "[nano/aws] 12 services crawled, 10 with findings\n[nano/gcp] 12 services crawled, 11 with findings\n[nano/azure] 19 services crawled, 8 with findings\nUI crawl nano: 14/43 services clean \u2192 tests/conformance/hourly/out/ui-nano.json\nConsole surfaces nano: {\"live\":202,\"partial\":30,\"static\":110,\"unimplemented\":41}"
+   "tail": "[nano/aws] 12 services crawled, 10 with findings\n[nano/gcp] 12 services crawled, 11 with findings\n[nano/azure] 19 services crawled, 7 with findings\nUI crawl nano: 15/43 services clean \u2192 tests/conformance/hourly/out/ui-nano.json\nConsole surfaces nano: {\"live\":205,\"partial\":30,\"static\":107,\"unimplemented\":41}"
   },
   {
    "id": "nano-cores",
    "target": "nano",
    "cloud": "all",
    "kind": "core",
-   "duration_s": 0.6,
+   "duration_s": 0.8,
    "exit_code": 5,
    "passed": 0,
    "failed": 1,
    "status": "fail",
-   "tail": "no tests ran in 0.46s"
+   "tail": "no tests ran in 0.64s"
   },
   {
    "id": "nano-ui-aws-api",
    "target": "nano",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 2.2,
+   "duration_s": 3.0,
    "exit_code": 0,
    "passed": 5,
    "failed": 1,
@@ -4628,19 +4425,19 @@
    "target": "nano",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 11.3,
+   "duration_s": 12.2,
    "exit_code": 0,
    "passed": 11,
    "failed": 0,
    "status": "pass",
-   "tail": "===== AWS s3 detail tabs \u2014 content check =====\n  [OK   ] (create)                           contentLen:999 200 {\"ok\":true,\"created\":true,\"name\":\"tabtest-bucket\",\"creation_date\":\"2026-10-27T03:32:00.000Z\",\"region\":\"us-east-1\",\"versioning\":\"Disabled\",\"versioning_enabled\":f\n  [OK   ] Overview                           contentLen:150 \n  [OK   ] Activity                           contentLen:239 \n  [OK   ] Tags                               contentLen:44 \n  [OK   ] Objects                            contentLen:107 \n  [OK   ] Versions                           contentLen:126 \n  [OK   ] Bucket Versioning                  contentLen:138 \n  [OK   ] Event notifications                contentLen:223 \n  [OK   ] Lifecycle rules                    contentLen:128 \n  [OK   ] Default encryption                 contentLen:149 \n  [OK   ] Block Public Access                contentLen:178 \n\n11/11 tabs render content \u2014 NO blank tabs"
+   "tail": "===== AWS s3 detail tabs \u2014 content check =====\n  [OK   ] (create)                           contentLen:999 200 {\"ok\":true,\"created\":true,\"name\":\"tabtest-bucket\",\"creation_date\":\"2026-10-27T04:35:25.000Z\",\"region\":\"us-east-1\",\"versioning\":\"Disabled\",\"versioning_enabled\":f\n  [OK   ] Overview                           contentLen:150 \n  [OK   ] Activity                           contentLen:239 \n  [OK   ] Tags                               contentLen:44 \n  [OK   ] Objects                            contentLen:107 \n  [OK   ] Versions                           contentLen:126 \n  [OK   ] Bucket Versioning                  contentLen:138 \n  [OK   ] Event notifications                contentLen:223 \n  [OK   ] Lifecycle rules                    contentLen:128 \n  [OK   ] Default encryption                 contentLen:149 \n  [OK   ] Block Public Access                contentLen:178 \n\n11/11 tabs render content \u2014 NO blank tabs"
   },
   {
    "id": "nano-ui-gcp-tabs",
    "target": "nano",
    "cloud": "gcp",
    "kind": "ui",
-   "duration_s": 2.2,
+   "duration_s": 3.0,
    "exit_code": 0,
    "passed": 0,
    "failed": 1,
@@ -4652,7 +4449,7 @@
    "target": "nano",
    "cloud": "gcp",
    "kind": "ui",
-   "duration_s": 4.9,
+   "duration_s": 5.6,
    "exit_code": 0,
    "passed": 3,
    "failed": 0,
@@ -4664,7 +4461,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "ui",
-   "duration_s": 3.1,
+   "duration_s": 3.2,
    "exit_code": 0,
    "passed": 3,
    "failed": 0,
@@ -4676,7 +4473,7 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 16.3,
+   "duration_s": 17.1,
    "exit_code": 0,
    "passed": 71,
    "failed": 0,
@@ -4688,7 +4485,7 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 9.6,
+   "duration_s": 9.7,
    "exit_code": 0,
    "passed": 5,
    "failed": 0,
@@ -4700,7 +4497,7 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 3.6,
+   "duration_s": 3.7,
    "exit_code": 0,
    "passed": 7,
    "failed": 0,
@@ -4712,7 +4509,7 @@
    "target": "nano",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 3.7,
+   "duration_s": 4.4,
    "exit_code": 0,
    "passed": 5,
    "failed": 0,
@@ -4724,19 +4521,19 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 6.2,
+   "duration_s": 8.0,
    "exit_code": 0,
    "passed": 3,
    "failed": 0,
    "status": "pass",
-   "tail": "[PASS] ARM list OK on first load status 200\n[PASS] ARM list OK right after reload #1 status 200 757ms \n[PASS] ARM list OK right after reload #2 status 200 759ms"
+   "tail": "[PASS] ARM list OK on first load status 200\n[PASS] ARM list OK right after reload #1 status 200 757ms \n[PASS] ARM list OK right after reload #2 status 200 767ms"
   },
   {
    "id": "nano-ui-azure-storage-console",
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 5.9,
+   "duration_s": 7.2,
    "exit_code": 0,
    "passed": 12,
    "failed": 0,

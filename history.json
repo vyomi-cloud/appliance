@@ -457,5 +457,29 @@
   "gcp_findings": 46,
   "azure_checks_passed": 122,
   "azure_findings": 14
+ },
+ {
+  "at": "2026-10-27T04:36:36+00:00",
+  "commit": "75f640a555cb",
+  "suites_green": 22,
+  "suites_total": 31,
+  "checks_passed": 586,
+  "checks_failed": 76,
+  "api_coverage_pct": 14.0,
+  "ui_findings": 135,
+  "agent": "Fixed 2 offline findings (DynamoDB/SQS detail 404 with empty name; Secrets Manager/KMS/Secret Manager/Eventarc not moving cost savings), added 2 tests, 0 regressions in re-run suites.",
+  "new_features": 0,
+  "parity_gaps": 9,
+  "ops_tested_pct": 72.9,
+  "ui_clean_nano": 15,
+  "ui_total_nano": 43,
+  "ui_clean_offline": 16,
+  "ui_total_offline": 38,
+  "aws_checks_passed": 154,
+  "aws_findings": 75,
+  "gcp_checks_passed": 29,
+  "gcp_findings": 49,
+  "azure_checks_passed": 122,
+  "azure_findings": 11
  }
 ]
