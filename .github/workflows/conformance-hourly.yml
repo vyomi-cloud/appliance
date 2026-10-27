@@ -2,9 +2,11 @@ name: Hourly conformance agent
 
 # Every hour: boot the offline appliance + serve Nano, crawl every console for
 # broken/unimplemented UI (incl. blank grid cells, default-create gaps and
-# cost-savings updates), run the Java/Go/Python SDK, CLI and API test beds,
-# detect features without coverage, let the conformance agent fix findings and
-# add tests (pushing to today's conformance/daily-* branch), then publish the coverage page to GitHub Pages.
+# cost-savings updates), run the Java/Go/Python SDK, CLI and API test beds and
+# detect features without coverage (detect job); triage the findings into one
+# slice per cloud and let three conformance agents fix them IN PARALLEL, each on
+# its own cloud, pushing to today's conformance/daily-* branch (fix jobs); then
+# publish the coverage page to GitHub Pages (publish job).
 # Agent instructions: tests/conformance/hourly/AGENT.md
 
 on:
@@ -20,40 +22,38 @@ on:
         default: false
 
 # One run at a time; a run that overlaps the next hour queues instead of racing
-# the agent's pushes.
+# the agents' pushes.
 concurrency:
   group: conformance-hourly
   cancel-in-progress: false
 
+env:
+  VYOMI_BASE_URL: http://localhost:9000
+  RELAY_HTTP: http://127.0.0.1:8090
+  NODE_PATH: ${{ github.workspace }}/.ci-node/node_modules
+  PAGE_URL: https://vyomi-cloud.github.io/appliance
+  TAB_SHARDS: '3'   # each run walks the detail tabs of 1/3 of the services
+
 jobs:
-  hourly:
+  detect:
     runs-on: ubuntu-latest
-    timeout-minutes: 200
+    timeout-minutes: 60
     permissions:
-      contents: write     # agent pushes fixes to the daily branch
-      actions: write      # chain the next hourly run
+      contents: write     # pushes today's daily branch (merged with main) for the fixers
       issues: read        # the upstream-drift backlog
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    env:
-      VYOMI_BASE_URL: http://localhost:9000
-      RELAY_HTTP: http://127.0.0.1:8090
-      NODE_PATH: ${{ github.workspace }}/.ci-node/node_modules
-      PAGE_URL: https://vyomi-cloud.github.io/appliance
-      TAB_SHARDS: '3'   # each run walks the detail tabs of 1/3 of the services
+    outputs:
+      daily_branch: ${{ steps.branch.outputs.name }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      # The agent works on one branch per day (India time); the daily PR workflow
+      # The agents work on one branch per day (India time); the daily PR workflow
       # opens it as a PR into main at 23:45 IST. Tests run on that branch so the
       # day's fixes build on each other.
       - name: Use today's daily branch
+        id: branch
         run: |
           git config user.name "vyomi-conformance-bot"
           git config user.email "conformance-bot@users.noreply.github.com"
@@ -66,50 +66,14 @@ jobs:
           else
             git checkout -q -B "$B"
           fi
-          echo "DAILY_BRANCH=$B" >> "$GITHUB_ENV"
+          # Publish it so all three fixers start from the same commit.
+          git push -q origin "HEAD:refs/heads/$B"
+          echo "name=$B" >> "$GITHUB_OUTPUT"
           echo "Working on $B"
 
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - uses: actions/setup-go@v5
-        with: { go-version: '1.22', cache: false }
-      - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '17', cache: maven }
-
-      - name: Install test tooling
-        run: |
-          pip install --quiet requests pytest boto3 azure-storage-blob
-          mkdir -p .ci-node && cd .ci-node
-          echo '{"name":"vyomi-ci-node","private":true}' > package.json
-          npm install --silent playwright@1.47.2 ws@8.18.0
-          npx playwright install --with-deps chromium
-
-      - name: Boot offline appliance stack
-        run: |
-          docker build -t cloudlearn/simulator:ci .
-          CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:ci \
-            docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml up -d \
-              $(grep -v '^#' tests/conformance/hourly/ci-services.txt)
-          for i in $(seq 1 90); do curl -fs "$VYOMI_BASE_URL/healthz" >/dev/null && break; sleep 2; done
-          curl -f "$VYOMI_BASE_URL/healthz"
-
-      - name: Apply test license
-        env:
-          VYOMI_TEST_LICENSE_JWT: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
-        run: |
-          if [ -n "$VYOMI_TEST_LICENSE_JWT" ]; then
-            curl -fs -X POST -H 'Content-Type: application/json' \
-              -d "{\"license_key\":\"$VYOMI_TEST_LICENSE_JWT\"}" "$VYOMI_BASE_URL/api/license/activate" >/dev/null
-          else
-            echo "No VYOMI_TEST_LICENSE_JWT secret: tier-gated services will show as locked."
-          fi
-
-      - name: Start Nano relay
-        run: |
-          nohup node wasm/relay/local-relay.mjs > relay.log 2>&1 &
-          for i in $(seq 1 20); do curl -fs "$RELAY_HTTP/health" >/dev/null && break; sleep 1; done
+      - uses: ./.github/actions/conformance-stack
+        with:
+          test-license-jwt: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
 
       - name: Fetch previous history + feature inventory
         run: |
@@ -140,10 +104,71 @@ jobs:
       - name: Run conformance test beds
         run: python3 tests/conformance/hourly/run_suites.py
 
-      - name: Conformance agent (fix findings, add tests, push to the daily branch)
-        if: ${{ !inputs.skip_agent }}
+      - name: Triage findings into one slice per cloud
+        if: always()
+        run: |
+          python3 tests/conformance/hourly/triage.py
+          cat tests/conformance/hourly/out/slices/*.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Hand findings to the fixers and the publisher
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hourly-findings-${{ github.run_id }}
+          path: |
+            tests/conformance/hourly/out/
+            prev/
+            relay.log
+          include-hidden-files: true
+          retention-days: 7
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml down -v
+
+  # Three agents fix in parallel, one cloud each, on their own stack. Clouds map
+  # to mostly separate files (static|wasm/<cloud>-console.html, providers/<cloud>_*),
+  # so pushes rarely collide; each rebases before pushing and leaves a conflicting
+  # fix for the next run.
+  fix:
+    needs: detect
+    if: ${{ !inputs.skip_agent }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud: [aws, gcp, azure]
+    permissions:
+      contents: write     # agent pushes fixes to the daily branch
+      issues: read
+      id-token: write
+    env:
+      DAILY_BRANCH: ${{ needs.detect.outputs.daily_branch }}
+      SLICE: ${{ matrix.cloud }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.detect.outputs.daily_branch }}
+          fetch-depth: 0
+
+      - name: Bot identity
+        run: |
+          git config user.name "vyomi-conformance-bot"
+          git config user.email "conformance-bot@users.noreply.github.com"
+
+      - uses: ./.github/actions/conformance-stack
+        with:
+          test-license-jwt: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
+
+      - name: This hour's findings
+        uses: actions/download-artifact@v4
+        with:
+          name: hourly-findings-${{ github.run_id }}
+
+      - name: Conformance agent — ${{ matrix.cloud }} slice
         continue-on-error: true
-        timeout-minutes: 45
+        timeout-minutes: 85
         uses: anthropics/claude-code-action@v1
         with:
           # Either auth works: a Claude Max/Pro OAuth token (claude setup-token)
@@ -155,12 +180,58 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
-            Follow tests/conformance/hourly/AGENT.md exactly. This hour's inputs are in
-            tests/conformance/hourly/out/. Start with the UI findings.
+            Follow tests/conformance/hourly/AGENT.md exactly, including "Parallel fixers".
+            You are the ${{ matrix.cloud }} fixer: your work list is
+            tests/conformance/hourly/out/slices/${{ matrix.cloud }}.json (summary in
+            slices/${{ matrix.cloud }}.md); other inputs are in tests/conformance/hourly/out/.
+            Two other agents are fixing the other clouds at the same time.
             Push only to the daily branch ${{ env.DAILY_BRANCH }} (never to main).
           claude_args: >-
-            --max-turns 120
+            --max-turns 200
             --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+
+      - name: Keep the agent's summary
+        if: always()
+        run: |
+          mkdir -p summary
+          cp tests/conformance/hourly/out/agent_summary.md "summary/${{ matrix.cloud }}.md" 2>/dev/null \
+            || echo "No summary written." > "summary/${{ matrix.cloud }}.md"
+          { echo "## ${{ matrix.cloud }} fixer"; cat "summary/${{ matrix.cloud }}.md"; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-summary-${{ matrix.cloud }}-${{ github.run_id }}
+          path: summary/
+          retention-days: 7
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml down -v
+
+  publish:
+    needs: [detect, fix]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write     # conformance-report branch
+      actions: write      # chain the next hourly run
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: This hour's findings
+        uses: actions/download-artifact@v4
+        with:
+          name: hourly-findings-${{ github.run_id }}
 
       - name: Build coverage page
         if: always()
@@ -203,16 +274,6 @@ jobs:
       - id: deploy
         if: always()
         uses: actions/deploy-pages@v4
-
-      - name: Keep logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: conformance-hourly-${{ github.run_id }}
-          path: |
-            tests/conformance/hourly/out/
-            relay.log
-          retention-days: 7
 
       - name: Refresh the service pipeline page
         if: always()
@@ -264,6 +325,3 @@ jobs:
           gh workflow run conformance-hourly.yml -R "${{ github.repository }}" --ref main
           echo "Next hourly run dispatched."
 
-      - name: Tear down
-        if: always()
-        run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml down -v

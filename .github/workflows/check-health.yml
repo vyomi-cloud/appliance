@@ -1,0 +1,55 @@
+name: Check health
+
+# A check that stays red on main stops being a signal: console-actions failed on
+# every main run for a week (Oct 19-27) and hid a real EC2/GCE regression. When a
+# gating workflow fails twice in a row on main, open (or update) an issue; when
+# it goes green again, close it.
+
+on:
+  workflow_run:
+    workflows: ["CI", "Console actions conformance", "Release checks report"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  issues: write
+
+concurrency:
+  group: check-health-${{ github.event.workflow_run.name }}
+  cancel-in-progress: false
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      WF_NAME: ${{ github.event.workflow_run.name }}
+      WF_ID: ${{ github.event.workflow_run.workflow_id }}
+      RUN_URL: ${{ github.event.workflow_run.html_url }}
+    steps:
+      - name: Open or close the red-check issue
+        run: |
+          TITLE="Red on main: $WF_NAME"
+          # Last two completed runs of this workflow on main (newest first).
+          mapfile -t LAST < <(gh run list -R "$REPO" --workflow "$WF_ID" --branch main --status completed \
+            -L 2 --json conclusion -q '.[].conclusion')
+          OPEN=$(gh issue list -R "$REPO" --state open --search "\"$TITLE\" in:title" --json number -q '.[0].number')
+          if [ "${LAST[0]}" = "success" ]; then
+            if [ -n "$OPEN" ]; then
+              gh issue close "$OPEN" -R "$REPO" --comment "Green again: $RUN_URL"
+            fi
+            exit 0
+          fi
+          if [ "${#LAST[@]}" -ge 2 ] && [ "${LAST[0]}" = "failure" ] && [ "${LAST[1]}" = "failure" ]; then
+            BODY="**$WF_NAME** has failed on \`main\` twice in a row. A permanently red check hides real regressions — fix it or the test, don't let it stay red.
+
+          Latest run: $RUN_URL"
+            if [ -n "$OPEN" ]; then
+              gh issue comment "$OPEN" -R "$REPO" --body "Still red: $RUN_URL"
+            else
+              gh issue create -R "$REPO" --title "$TITLE" --body "$BODY"
+            fi
+          fi
