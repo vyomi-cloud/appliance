@@ -948,9 +948,12 @@ async function selectHome(){
 }
 async function selectRG(){
   markActive("__rg__");
-  const res=await arm("GET", `/subscriptions/${SUB}/resourcegroups`, undefined, "2021-04-01");
   const main=document.getElementById("main"); main.innerHTML="";
   main.append(crumb(["Home","Resource groups"]), pageHead("folder","Resource groups",""));
+  main.append(el("div",{class:"empty",id:"rgLoading"},"Loading…"));
+  const res=await arm("GET", `/subscriptions/${SUB}/resourcegroups`, undefined, "2021-04-01");
+  if(CURRENT!=="__rg__") return;
+  document.getElementById("rgLoading")?.remove();
   const wrap=el("div",{class:"wrap"});
   const t=el("table"); t.append(el("tr",{},el("th",{},"Name"),el("th",{},"Location"),el("th",{},"Status")));
   (res.json.value||[]).forEach(g=>{
