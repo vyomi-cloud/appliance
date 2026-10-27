@@ -64,3 +64,4 @@
 | 2026-10-27T07:08Z | #62 | aws/sns | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40463949882) |
 | 2026-10-27T07:19Z | #63 | aws/ssm | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40465532932) |
 | 2026-10-27T07:29Z | #64 | aws/stepfunctions | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40466614192) |
+| 2026-10-27T08:29Z | #67 | gcp/bigquery | failure | n/a | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40467693113) |
