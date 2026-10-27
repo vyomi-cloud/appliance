@@ -112,6 +112,10 @@ class Aws(CloudProvider):
             ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),
             ("eventbridge", "DeleteRule"): lambda b, a, p: D.eb_delete(p),
             ("eventbridge", "PutEvent"):  lambda b, a, p: D.eb_put_event(p),
+            # STS — sessions (temporary credentials), via core/sts_core.py
+            ("sts", "ListSessions"):  lambda b, a, p: D.sts_list(p),
+            ("sts", "CreateSession"): lambda b, a, p: D.sts_create(p),
+            ("sts", "DeleteSession"): lambda b, a, p: D.sts_delete(p),
         }
 
 

@@ -564,6 +564,14 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/eventbridge\/rules\/([^/]+)$/);
   if (m && method === "DELETE") return { tuple: ["aws", "eventbridge", "DeleteRule", { name: dec(m[1]) }] };
 
+  // STS (core/sts_core.py) — sessions = temporary credentials issued by AssumeRole
+  if (path === "/api/sts/sessions") {
+    if (method === "GET")  return { tuple: ["aws", "sts", "ListSessions", {}] };
+    if (method === "POST") return { tuple: ["aws", "sts", "CreateSession", body || {}] };
+  }
+  m = path.match(/^\/api\/sts\/sessions\/([^/]+)$/);
+  if (m && method === "DELETE") return { tuple: ["aws", "sts", "DeleteSession", { name: dec(m[1]) }] };
+
   // 3. generic catalog-driven CRUD, from the route table
   for (const r of await routes()) {
     if (path === r.collection) {

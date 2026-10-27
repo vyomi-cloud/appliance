@@ -181,12 +181,12 @@ register_azure_routes(app, None)
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb
-from routes import lazy_backends, shared, console_next
+from routes import lazy_backends, shared, console_next, aws_sts
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb,
-            lazy_backends, shared, console_next]:
+            lazy_backends, shared, console_next, aws_sts]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -21229,25 +21229,12 @@ async def api_iam_query(request: Request) -> Response:
 
 
 async def api_sts_query(request: Request) -> Response:
+    """STS Query wire — served by core/sts_core.py (shared with Nano)."""
+    from routes.aws_sts import get_store
+    from core import sts_core
     params = await _ec2_query_params(request)
-    action = str(params.get("Action", "")).strip()
-    if action == "GetCallerIdentity":
-        body = (
-            '<?xml version="1.0" encoding="UTF-8"?>'
-            f'<GetCallerIdentityResponse xmlns="{STS_XML_NS}"><GetCallerIdentityResult>'
-            f"<Arn>{_iam_root_principal()}</Arn><UserId>AIDACLOUDLEARNSIMULATOR</UserId>"
-            f"<Account>{AWS_ACCOUNT_ID}</Account></GetCallerIdentityResult>"
-            f"<ResponseMetadata><RequestId>{_iam_request_id()}</RequestId></ResponseMetadata>"
-            "</GetCallerIdentityResponse>"
-        )
-        return _xml_response(body)
-    return _xml_response(
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        f'<ErrorResponse xmlns="{STS_XML_NS}"><Error><Type>Sender</Type><Code>InvalidAction</Code>'
-        f"<Message>Unsupported STS action '{xml_escape(action)}'.</Message></Error>"
-        f"<RequestId>{_iam_request_id()}</RequestId></ErrorResponse>",
-        400,
-    )
+    r = sts_core.dispatch(get_store(), params, dict(request.headers))
+    return _xml_response(r.body, r.status)
 
 
 _EC2_VPC_ACTIONS = {

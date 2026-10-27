@@ -342,6 +342,20 @@ _KMS_SUB = [
 ]
 
 
+# ===========================================================================
+# STS — session detail
+# ===========================================================================
+_STS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Session", "items": [
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",       "label": "Metrics",                "icon": "show_chart",    "type": "metrics"},
+    ]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
@@ -358,4 +372,5 @@ SUB_BLADES: dict[str, list] = {
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
     "kms":            _KMS_SUB,
+    "sts":            _STS_SUB,
 }

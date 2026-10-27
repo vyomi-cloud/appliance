@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import types
 
-from core import lambda_core, apigateway_core, vpc_core, eventbridge_core
+from core import lambda_core, apigateway_core, vpc_core, eventbridge_core, sts_core
 from core import azure_servicebus_core, azure_sql_core, azure_iam_core
 from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
 
@@ -193,6 +193,24 @@ def vpc_analyze(p):
     res = vpc_core.analyze_reachability(_VPC, _ep("source"), _ep("dest"),
                                         int(p.get("port") or 0), str(p.get("protocol") or "tcp"))
     return {"ok": True, **res}
+
+
+# ── STS (sessions = temporary credentials) ─────────────────────────────────
+def _sts_store():
+    from core import nano_registry
+    return nano_registry.get()["sts"]
+
+
+def sts_list(p=None):
+    return {"ok": True, "items": sts_core.list_sessions(_sts_store())}
+
+
+def sts_create(p):
+    return sts_core.console_create(_sts_store(), p)
+
+
+def sts_delete(p):
+    return sts_core.console_delete(_sts_store(), str(p.get("name") or ""))
 
 
 # ── EventBridge (rules → SQS delivery) ─────────────────────────────────────

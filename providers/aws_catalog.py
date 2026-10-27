@@ -598,6 +598,41 @@ RESOURCE_CATALOG_AWS = [
         ],
         "endpoints": {},
     },
+    # ========================================================================
+    # STS — temporary security credentials. The console resource is a Session:
+    # "Assume role" issues one (core/sts_core.py, same engine the native
+    # Query-protocol wire serves); deleting revokes it in the simulator.
+    # ========================================================================
+    {
+        "key": "sts", "label": "STS", "icon": "badge",
+        "namespace": "AWS/STS", "service": "sts",
+        "collection_path": "/api/sts/sessions",
+        "resource_path":   "/api/sts/sessions/{name}",
+        "name_field":      "access_key_id",
+        "create_method":   "POST",
+        "api_paths": {
+            "sessions": {"method": "GET",    "path": "/api/sts/sessions"},
+            "create":   {"method": "POST",   "path": "/api/sts/sessions"},
+            "delete":   {"method": "DELETE", "path": "/api/sts/sessions/{name}"},
+        },
+        "rail_items": [
+            {"key": "sessions", "label": "Sessions", "icon": "badge", "type": "primary"},
+        ],
+        "columns": [
+            ["access_key_id", "Access key ID"],
+            ["session_name",  "Session name"],
+            ["role_name",     "Role"],
+            ["type",          "Type"],
+            ["expiration",    "Expires"],
+            ["status",        "Status"],
+        ],
+        "createFields": [
+            {"name": "role_name",        "label": "Role name",        "default": "my-role"},
+            {"name": "session_name",     "label": "Session name",     "default": "console-session"},
+            {"name": "duration_seconds", "label": "Duration (seconds)", "default": "3600"},
+        ],
+        "endpoints": {},
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_AWS}
