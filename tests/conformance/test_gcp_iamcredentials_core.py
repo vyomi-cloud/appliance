@@ -84,6 +84,7 @@ check("malformed delegate -> 400", call(st, "generateAccessToken", {"scope": ["a
 row = ic.issue_from_form(st, {"serviceAccount": SA, "credentialType": "ID token", "detail": "https://x.example"}, res)
 check("console issue: every field filled", all(str(row.get(k, "")).strip() for k in
       ("id", "service_account", "type", "issued", "expires", "lifetime", "scope_or_audience", "delegation", "key_id", "state")), row)
+check("console issue accepts the wizard's name field", ic.issue_from_form(st, {"name": SA}, res)["service_account"] == SA)
 check("list_all covers the log", len(ic.list_all(st)) == len(st.issued))
 for t in ("Access token", "Signed blob", "Signed JWT"):
     check("console issue: " + t, ic.issue_from_form(st, {"serviceAccount": SA, "credentialType": t}, res)["type"] == t)

@@ -293,7 +293,7 @@ def _iamc_op(operation, name, body):
     if operation == "List":
         return {"ok": True, "items": _iamc.list_all(store)}
     if operation == "Create":
-        sa = str(body.get("serviceAccount") or "").rsplit("/", 1)[-1]
+        sa = _iamc.form_service_account(body)
         if "@" in sa and not _iamc_resolve(sa):   # the console issues for the account, creating it if absent
             acct, _, rest = sa.partition("@")
             _call("iam", "POST", "/v1/projects/%s/serviceAccounts" % rest.split(".")[0], {}, {"accountId": acct})

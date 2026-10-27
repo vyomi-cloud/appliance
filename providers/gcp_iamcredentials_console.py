@@ -84,7 +84,7 @@ def register(app, on_change=None):
     @app.post("/api/iamcredentials/credentials")
     async def issue_credential(request: Request):
         b = await request.json()
-        sa = str(b.get("serviceAccount") or "").rsplit("/", 1)[-1]
+        sa = core.form_service_account(b)
         if "@" in sa and not resolve(sa):   # the console issues for the account, creating it if absent
             acct, _, rest = sa.partition("@")
             from providers import gcp_iam

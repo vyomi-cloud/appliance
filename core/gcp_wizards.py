@@ -639,7 +639,7 @@ _CONTAINER_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
 # IAM Service Account Credentials — Issue credential (core/gcp_iamcredentials_core.issue_from_form)
 # ============================================================================
 _IAMCREDENTIALS_WIZARD = _basic_wizard(
-    name_field={"name": "serviceAccount", "label": "Service account", "default": "vyomi-sa@demo.iam.gserviceaccount.com",
+    name_field={"name": "name", "label": "Service account", "default": "vyomi-sa@demo.iam.gserviceaccount.com",
                 "required": True, "validate": {"regex": r"^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*\.gserviceaccount\.com$",
                                                "message": "A service account email, e.g. my-sa@my-project.iam.gserviceaccount.com"}},
     name_default="vyomi-sa@demo.iam.gserviceaccount.com", region_or_zone=None,

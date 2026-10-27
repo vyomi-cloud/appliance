@@ -315,6 +315,12 @@ def list_all(store):
     return [console_view(r) for r in store.issued.values()]
 
 
+def form_service_account(b):
+    """The service-account email in a console form (the wizard's `name` field)."""
+    sa = str(b.get("serviceAccount") or b.get("name") or "").strip()
+    return sa.rsplit("/", 1)[-1] if sa.startswith("projects/") else sa
+
+
 def issue_from_form(store, b, resolver=None):
     """Console create form → issue a credential via the same code path as the API.
     Returns the new console row."""
@@ -322,9 +328,7 @@ def issue_from_form(store, b, resolver=None):
             "signed blob": "signBlob", "signed jwt": "signJwt"}.get(str(b.get("credentialType") or "Access token").strip().lower())
     if not kind:
         raise _E(400, "INVALID_ARGUMENT", "credentialType must be Access token, ID token, Signed blob or Signed JWT.")
-    sa = str(b.get("serviceAccount") or "").strip()
-    if sa.startswith("projects/-/serviceAccounts/"):
-        sa = sa.rsplit("/", 1)[-1]
+    sa = form_service_account(b)
     delegates = [("projects/-/serviceAccounts/" + d.strip()) for d in str(b.get("delegates") or "").split(",") if d.strip()]
     detail = str(b.get("detail") or "").strip()
     life = str(b.get("lifetime") or "").strip()

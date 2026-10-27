@@ -464,7 +464,7 @@ RESOURCE_CATALOG_GCP = [
             ["state",             "Status"],
         ],
         "createFields": [
-            {"name": "serviceAccount", "label": "Service account",             "default": "vyomi-sa@demo.iam.gserviceaccount.com"},
+            {"name": "name",           "label": "Service account",             "default": "vyomi-sa@demo.iam.gserviceaccount.com"},
             {"name": "credentialType", "label": "Credential type (Access token, ID token, Signed blob or Signed JWT)", "default": "Access token"},
             {"name": "detail",         "label": "Scopes / audience / data",    "default": "https://www.googleapis.com/auth/cloud-platform"},
             {"name": "lifetime",       "label": "Lifetime (access tokens)",    "default": "3600s"},
