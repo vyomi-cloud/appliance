@@ -4,64 +4,31 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 
 | Suites green | Checks passing | Checks failing | Nano UI clean | Offline UI clean | Open UI findings | API routes with tests |
 |---|---|---|---|---|---|---|
-| 0/0 | 0 | 0 | 27/52 | 30/52 | 96 | 14.3% (46/322) |
+| 0/0 | 0 | 0 | 27/52 | 30/52 | 95 | 14.3% (46/322) |
 
 ## By cloud
 
 | Cloud | Suites green | Checks ✓ | Checks ✗ | Nano UI clean | Offline UI clean | Open findings |
 |---|---|---|---|---|---|---|
-| [AWS](#aws) | 0/0 | 0 | 0 | 5/16 | 8/16 | 53 |
-| [GCP](#gcp) | 0/0 | 0 | 0 | 5/16 | 6/16 | 36 |
-| [Azure](#azure) | 0/0 | 0 | 0 | 17/20 | 16/20 | 7 |
+| [AWS](#aws) | 0/0 | 0 | 0 | 8/16 | 9/16 | 28 |
+| [GCP](#gcp) | 0/0 | 0 | 0 | 5/16 | 6/16 | 38 |
+| [Azure](#azure) | 0/0 | 0 | 0 | 14/20 | 15/20 | 29 |
 
 <a id="aws"></a>
 ## AWS
 
-**UI findings: 53**
+**UI findings: 28**
 
-<details><summary><b>IAM</b> (nano) — 12 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $46.63 (real aws would bill this resource) |
-| `HTTP_404` |  | resource detail: /api/iam/users/new-user → 404 |
-| `HTTP_404` | Overview | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Users | /api/iam/users/new-user → 404 |
-| `HTTP_404` | User groups | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Roles | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Policies | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Identity providers | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Password policy | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Password policy | /api/aws/sub/iam~new-user~passwordPolicy/get/_settings → 404 |
-| `HTTP_404` | Access Analyzer | /api/iam/users/new-user → 404 |
-| `HTTP_404` | Access Analyzer | /api/aws/sub/iam~new-user~accessAdvisor/get/_settings → 404 |
-
-</details>
-
-<details><summary><b>RDS</b> (nano) — 7 finding(s)</summary>
+<details><summary><b>EC2</b> (offline) — 6 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` | Endpoints | tab Endpoints: column "ENDPOINT" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PRIVATE IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
+| `DEAD_TAB` | Monitoring | clicking the tab changes nothing |
 | `PLACEHOLDER_CELL` | Networking | tab Networking: column "SUBNET ID" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` | Networking | tab Networking: column "SECURITY GROUPS" shows "-"/blank in 1 row(s) |
-| `HTTP_404` | Modify | /api/aws/sub/rds~database-1~modify/get/_settings → 404 |
-
-</details>
-
-<details><summary><b>RDS</b> (offline) — 6 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | Endpoints | tab Endpoints: column "ENDPOINT" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PRIVATE IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SUBNET ID" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "SECURITY GROUPS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "IAM ROLE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "LAUNCH TIME" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "STATE TRANSITION REASON" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -77,33 +44,12 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 
 </details>
 
-<details><summary><b>VPC</b> (offline) — 4 finding(s)</summary>
+<details><summary><b>IAM</b> (nano) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $79.45 (real aws would bill this resource) |
-| `DEAD_TAB` | VPC details | clicking the tab changes nothing |
-| `PLACEHOLDER_CELL` | Security groups | tab Security groups: column "Security group ID" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Security groups | tab Security groups: column "Name" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>IAM</b> (offline) — 3 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 17 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $95.88 (real aws would bill this resource) |
-| `PLACEHOLDER_CELL` | Users | tab Users: column "ARN" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>S3</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_404` | Default encryption | /api/aws/sub/s3~my-bucket-cloudlearn~encryption/get/_settings → 404 |
-| `HTTP_404` | Block Public Access | /api/aws/sub/s3~my-bucket-cloudlearn~blockPublic/get/_settings → 404 |
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $46.63 (real aws would bill this resource) |
+| `HTTP_404` |  | resource detail: /api/iam/users/new-user → 404 |
 
 </details>
 
@@ -113,6 +59,15 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 |---|---|---|
 | `PLACEHOLDER_CELL` |  | after create: column "Last rotated" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "Next rotation" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>IAM</b> (offline) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 17 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $95.88 (real aws would bill this resource) |
 
 </details>
 
@@ -173,14 +128,6 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 
 </details>
 
-<details><summary><b>Systems Manager</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | History | tab History: column "Labels" shows "-"/blank in 1 row(s) |
-
-</details>
-
 <details><summary><b>DynamoDB</b> (offline) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
@@ -197,20 +144,20 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 
 </details>
 
-<details><summary><b>Systems Manager</b> (offline) — 1 finding(s)</summary>
+<details><summary><b>VPC</b> (offline) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` | History | tab History: column "Labels" shows "-"/blank in 1 row(s) |
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $79.45 (real aws would bill this resource) |
 
 </details>
 
 <a id="gcp"></a>
 ## GCP
 
-**UI findings: 36**
+**UI findings: 38**
 
-<details><summary><b>VPC Network</b> (nano) — 4 finding(s)</summary>
+<details><summary><b>VPC Network</b> (nano) — 7 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
@@ -218,6 +165,9 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 | `PLACEHOLDER_CELL` |  | after create: column "ROUTING MODE" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $134.18 (real gcp would bill this resource) |
+| `PLACEHOLDER_CELL` | Network metrics | tab Network metrics: column "SUBNETS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Network metrics | tab Network metrics: column "FIREWALL RULES" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Network metrics | tab Network metrics: column "ROUTES" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -242,16 +192,6 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 
 </details>
 
-<details><summary><b>Eventarc</b> (nano) — 3 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "REGION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Metrics | tab Metrics: column "EVENT FILTERS" shows "-"/blank in 1 row(s) |
-
-</details>
-
 <details><summary><b>Cloud Functions</b> (nano) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
@@ -267,6 +207,15 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 |---|---|---|
 | `HTTP_501` |  | /api/gcp/pubsub/v1/projects/nano-project/subscriptions → 501 |
 | `HTTP_501` |  | during create: /api/gcp/pubsub/v1/projects/nano-project/subscriptions → 501 |
+
+</details>
+
+<details><summary><b>Eventarc</b> (nano) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "REGION" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "STATE" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -396,7 +345,49 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 <a id="azure"></a>
 ## Azure
 
-**UI findings: 7**
+**UI findings: 29**
+
+<details><summary><b>Resource groups</b> (nano) — 19 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | list: column "Virtual Machines" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Storage accounts" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "SQL servers" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Service Bus" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Cosmos DB" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Function apps" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "API Management" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Virtual networks" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Network Security Group" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Event Grid topics" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Key vaults" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Container Apps" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "App Configuration" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "DNS zones" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Monitor alerts" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Log Analytics" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Azure AI services" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Role Definition" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Entra ID / RBAC" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>Virtual Machines</b> (nano) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PAGE_ERROR` |  | Cannot set properties of null (setting 'innerHTML') |
+
+</details>
+
+<details><summary><b>API Management</b> (nano) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_404` | Policies | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/apim-cloudlearn/policies/policy?api-version=2023-05-01-preview → 404 |
+
+</details>
 
 <details><summary><b>Network Security Group</b> (nano) — 1 finding(s)</summary>
 
@@ -419,6 +410,14 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 | Problem | Tab | Detail |
 |---|---|---|
 | `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
+
+</details>
+
+<details><summary><b>API Management</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_404` | Policies | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/apim-cloudlearn/policies/policy?api-version=2023-05-01-preview → 404 |
 
 </details>
 
@@ -456,115 +455,22 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 
 ## New features since the last run
 
-| Target | Cloud | Service | Kind | Feature | SDK test |
-|---|---|---|---|---|---|
-| offline | AWS | Systems Manager | service | Systems Manager | — |
-| offline | AWS | Systems Manager | tab | Overview | — |
-| offline | AWS | Systems Manager | tab | Activity | — |
-| offline | AWS | Systems Manager | tab | Tags | — |
-| offline | AWS | Systems Manager | tab | Value | — |
-| offline | AWS | Systems Manager | tab | History | — |
-| offline | AWS | Systems Manager | tab | Properties | — |
-| offline | AWS | Systems Manager | tab | Monitoring | — |
-| offline | AWS | Systems Manager | create_field | Name | — |
-| offline | AWS | Systems Manager | create_field | Type (String, StringList or SecureString) | — |
-| offline | AWS | Systems Manager | create_field | Tier (Standard or Advanced) | — |
-| offline | AWS | Systems Manager | create_field | Value | — |
-| offline | AWS | Systems Manager | create_field | Description | — |
-| offline | AWS | Systems Manager | column | Name | — |
-| offline | AWS | Systems Manager | column | Type | — |
-| offline | AWS | Systems Manager | column | Tier | — |
-| offline | AWS | Systems Manager | column | Version | — |
-| offline | AWS | Systems Manager | column | Data type | — |
-| offline | AWS | Systems Manager | column | Last modified | — |
-| offline | AWS | Systems Manager | action | history | — |
-| offline | AWS | Systems Manager | action | delete | — |
-| offline | AWS | Step Functions | service | Step Functions | — |
-| offline | AWS | Step Functions | tab | Overview | — |
-| offline | AWS | Step Functions | tab | Activity | — |
-| offline | AWS | Step Functions | tab | Tags | — |
-| offline | AWS | Step Functions | tab | Executions | — |
-| offline | AWS | Step Functions | tab | Definition | — |
-| offline | AWS | Step Functions | tab | Versions | — |
-| offline | AWS | Step Functions | tab | Aliases | — |
-| offline | AWS | Step Functions | tab | Properties | — |
-| offline | AWS | Step Functions | tab | Monitoring | — |
-| offline | AWS | Step Functions | create_field | State machine name | — |
-| offline | AWS | Step Functions | create_field | Type (STANDARD or EXPRESS) | — |
-| offline | AWS | Step Functions | create_field | Execution role ARN | — |
-| offline | AWS | Step Functions | create_field | Definition (Amazon States Language) | — |
-| offline | AWS | Step Functions | column | Name | — |
-| offline | AWS | Step Functions | column | Type | — |
-| offline | AWS | Step Functions | column | Status | — |
-| offline | AWS | Step Functions | column | States | — |
-| offline | AWS | Step Functions | column | Executions | — |
-| offline | AWS | Step Functions | column | Created | — |
-| offline | AWS | Step Functions | action | executions | — |
-| offline | AWS | Step Functions | action | versions | — |
-| offline | AWS | Step Functions | action | aliases | — |
-| offline | AWS | Step Functions | action | delete | — |
-| offline | AWS | CloudWatch Logs | service | CloudWatch Logs | — |
-| offline | AWS | CloudWatch Logs | tab | Overview | — |
-| offline | AWS | CloudWatch Logs | tab | Activity | — |
-| offline | AWS | CloudWatch Logs | tab | Tags | — |
-| offline | AWS | CloudWatch Logs | tab | Log streams | — |
-| offline | AWS | CloudWatch Logs | tab | Log events | — |
-| offline | AWS | CloudWatch Logs | tab | Metric filters | — |
-| offline | AWS | CloudWatch Logs | tab | Subscription filters | — |
-| offline | AWS | CloudWatch Logs | tab | Properties | — |
-| offline | AWS | CloudWatch Logs | create_field | Log group name | — |
-| offline | AWS | CloudWatch Logs | create_field | Retention (days, 0 = never expire) | — |
-| offline | AWS | CloudWatch Logs | create_field | Log class | — |
-| offline | AWS | CloudWatch Logs | column | Log group | — |
-| offline | AWS | CloudWatch Logs | column | Log class | — |
-| offline | AWS | CloudWatch Logs | column | Retention | — |
-| offline | AWS | CloudWatch Logs | column | Log streams | — |
-| offline | AWS | CloudWatch Logs | column | Metric filters | — |
-| offline | AWS | CloudWatch Logs | column | Stored bytes | — |
-| offline | AWS | CloudWatch Logs | column | Creation time | — |
-| offline | AWS | CloudWatch Logs | action | streams | — |
-| offline | AWS | CloudWatch Logs | action | events | — |
-| offline | AWS | CloudWatch Logs | action | metric-filters | — |
-| offline | AWS | CloudWatch Logs | action | subscription-filters | — |
-| offline | AWS | CloudWatch Logs | action | delete | — |
-| offline | AWS | Elastic Load Balancing | service | Elastic Load Balancing | — |
-| offline | AWS | Elastic Load Balancing | tab | Overview | — |
-| offline | AWS | Elastic Load Balancing | tab | Activity | — |
-| offline | AWS | Elastic Load Balancing | tab | Tags | — |
-| offline | AWS | Elastic Load Balancing | tab | Details | — |
-| offline | AWS | Elastic Load Balancing | tab | Configuration | — |
-| offline | AWS | Elastic Load Balancing | create_field | Load balancer name | — |
-| offline | AWS | Elastic Load Balancing | create_field | Type (application, network, gateway) | — |
-| offline | AWS | Elastic Load Balancing | create_field | Scheme (internet-facing, internal) | — |
-| offline | AWS | Elastic Load Balancing | column | Name | — |
-| offline | AWS | Elastic Load Balancing | column | DNS name | — |
-| offline | AWS | Elastic Load Balancing | column | State | — |
-| offline | AWS | Elastic Load Balancing | column | Type | — |
-| offline | AWS | Elastic Load Balancing | column | Scheme | — |
-| offline | AWS | Elastic Load Balancing | column | VPC ID | — |
-| offline | AWS | Elastic Load Balancing | column | Availability Zones | — |
-| offline | AWS | Elastic Load Balancing | column | Date created | — |
-| offline | AWS | Elastic Load Balancing | action | loadBalancers | — |
-| offline | AWS | Elastic Load Balancing | action | targetGroups | — |
-| offline | AWS | Elastic Load Balancing | action | listeners | — |
-| offline | AWS | Elastic Load Balancing | action | delete | — |
-| offline | GCP | Firestore | column | State | — |
-| offline | GCP | VPC Network | column | IPv4 range | — |
-| offline | GCP | Cloud Scheduler | service | Cloud Scheduler | — |
-| offline | GCP | Cloud Scheduler | tab | Overview | — |
-| offline | GCP | Cloud Scheduler | tab | Last execution | — |
-| offline | GCP | Cloud Scheduler | tab | Target | — |
-| offline | GCP | Cloud Scheduler | tab | Retry policy | — |
-| offline | GCP | Cloud Scheduler | tab | Schedule | — |
-| offline | GCP | Cloud Scheduler | tab | Properties | — |
-| offline | GCP | Cloud Scheduler | tab | JSON | — |
+None.
 
 ## Upstream changes (AWS / GCP / Azure backlog)
 
-7 open `upstream-drift` issue(s) — real cloud changes the agent is working through. [All](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) · [watcher log](https://github.com/vyomi-cloud/appliance/tree/upstream-state)
+15 open `upstream-drift` issue(s) — real cloud changes the agent is working through. [All](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) · [watcher log](https://github.com/vyomi-cloud/appliance/tree/upstream-state)
 
 | Issue | Cloud | Kind | Change | Opened |
 |---|---|---|---|---|
+| #149 | GCP |  | [gcp] Cloud Scheduler → Pub/Sub: scheduled message must reach gcloud pubsub subscriptions pull (offline appliance) | 2026-10-27 |
+| #148 | GCP |  | [gcp] Cloud Scheduler: deliver httpTarget jobs with a real HTTP request (offline appliance) | 2026-10-27 |
+| #147 | GCP |  | [gcp] Cloud Scheduler: fire jobs on time with a background timer (offline appliance) | 2026-10-27 |
+| #146 | GCP | lifecycle | Google Kubernetes Engine: Change (October 26, 2026) | 2026-10-27 |
+| #144 | GCP | lifecycle | Google Kubernetes Engine: Stable channel (October 26, 2026) | 2026-10-27 |
+| #145 | GCP | lifecycle | Google Kubernetes Engine: No channel (deprecated) (October 26, 2026) | 2026-10-27 |
+| #143 | GCP | lifecycle | Google Kubernetes Engine: Regular channel (October 26, 2026) | 2026-10-27 |
+| #142 | AWS | operation-added | AWS ec2: new operation GetImageFindings | 2026-10-27 |
 | #139 | Azure | lifecycle | Retirement: Transition to using standard tests for single-step availability testing in Azure Monitor application insights by September 30, 2028 | 2026-10-27 |
 | #138 | Azure | lifecycle | Retirement: Pod name dimension in AKS pod platform metrics | 2026-10-27 |
 | #99 | AWS | operation-changed | AWS kms: operation GetPublicKey changed | 2026-10-26 |
@@ -912,6 +818,7 @@ SetVersionState
 
 | Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |
 |---|---|---|---|---|---|---|
+|  | 0/0 | 0 | 0 | 95 | 14.3% |  |
 |  | 0/0 | 0 | 0 | 96 | 14.3% |  |
 | 2026-10-27T19:14:57+00:00 | 78/81 | 1213 | 5 | 6 | 28.0% |  |
 | 2026-10-27T18:08:29+00:00 | 76/79 | 1167 | 7 | 10 | 20.2% |  |
