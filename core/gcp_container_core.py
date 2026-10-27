@@ -12,8 +12,8 @@ Resources (Discovery doc `container/v1`):
     projects/{p}/locations/{l}/clusters/{c}
     projects/{p}/locations/{l}/clusters/{c}/nodePools/{np}
     projects/{p}/locations/{l}/operations/{op}
-Methods: clusters.create/get/list/update/delete/setResourceLabels/setLoggingService/
-setMonitoringService/setMaintenancePolicy/setLegacyAbac, nodePools.create/get/list/update/
+Methods: clusters.create/get/list/update/delete/setResourceLabels/setLogging/
+setMonitoring/setMaintenancePolicy/setLegacyAbac, nodePools.create/get/list/update/
 delete/setSize/setAutoscaling/setManagement, operations.get/list/cancel,
 locations.getServerConfig. The legacy `projects/{p}/zones/{z}/...` paths are served too.
 Every mutation returns a completed `Operation` (DONE) like a very fast real cloud; errors
@@ -423,8 +423,8 @@ def cluster_setting(store, project, location, cid, verb, payload):
         c["resourceLabels"] = dict(labels or {})
         c["labelFingerprint"] = _fingerprint(c["resourceLabels"])
         return _operation(store, project, location, "SET_LABELS", "clusters/" + cid)
-    if verb in ("setLoggingService", "setMonitoringService"):
-        key = "loggingService" if verb == "setLoggingService" else "monitoringService"
+    if verb in ("setLogging", "setMonitoring", "setLoggingService", "setMonitoringService"):
+        key = "loggingService" if "Logging" in verb else "monitoringService"
         if not payload.get(key):
             raise _E(400, "INVALID_ARGUMENT", "%s is required." % key)
         c[key] = payload[key]
