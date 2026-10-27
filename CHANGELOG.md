@@ -4,6 +4,17 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.22] — 2026-10-27
+
+New service release.
+
+- New service: AZURE Monitor alerts
+- expansion(azure/monitor): Azure Monitor engine (action groups, metric…
+- expansion(azure/monitor): Java, Go and CLI test beds
+- expansion(azure/monitor): offline console test
+- expansion(azure/monitor): Nano UI test, hand-over (suites, upstream w…
+- expansion(azure/monitor): portal-style create wizard so Create is rea…
+
 ## [3.0.21] — 2026-10-27
 
 New service release.
