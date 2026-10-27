@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-27 10:18 UTC",
+ "updated": "2026-10-27 10:37 UTC",
  "totals": {
   "aws": {
    "released": 16,
@@ -12,7 +12,7 @@
    "released": 14,
    "queue": 22,
    "building": 0,
-   "in_gate": 4,
+   "in_gate": 5,
    "upstream": 316
   },
   "azure": {
