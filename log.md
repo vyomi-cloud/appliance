@@ -71,3 +71,4 @@
 | 2026-10-27T09:56Z | #70 | gcp/container | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40482647263) |
 | 2026-10-27T10:17Z | #71 | gcp/dns | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40484915334) |
 | 2026-10-27T10:37Z | #72 | gcp/iamcredentials | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40487624270) |
+| 2026-10-27T10:55Z | #73 | gcp/logging | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40490131715) |
