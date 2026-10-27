@@ -29,6 +29,7 @@ from core import gcp_iam_core as _iam
 from core.iam_store import InMemoryIamStore
 from core import gcp_cloudsql_core as _sql
 from core import gcp_cloudscheduler_core as _sched
+from core import gcp_dns_core as _dns
 from core.sql_store import InMemorySqlStore
 
 PROJ = "demo"          # the console's default project
@@ -50,11 +51,12 @@ _STORES = {
     "iam":           _R["gcp_iam"],
     "cloudsql":      _R["gcp_sql"],
     "cloudscheduler": _R["gcp_sched"],
+    "dns":           _R["gcp_dns"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "dns": _dns,
 }
 
 
@@ -230,12 +232,54 @@ def _sched_op(operation, name, body):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "cloudscheduler"}
 
 
+def _dns_op(operation, name, body):
+    """Cloud DNS console CRUD over core/gcp_dns_core (managed zones; records come with the zone view)."""
+    store = _STORES["dns"]
+
+    def run(method, path, payload=None):
+        r = _dns.dispatch(store, method, "/dns/v1/projects/%s/managedZones%s" % (PROJ, path), {}, {},
+                          json.dumps(payload).encode() if payload is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    def fail(p, default, nm):
+        e = p.get("error", {})
+        return {"ok": False, "code": (e.get("errors") or [{}])[0].get("reason") or default,
+                "message": e.get("message", ""), "name": nm}
+
+    if operation == "List":
+        return {"ok": True, "items": _dns.list_all(store, PROJ)}
+    if operation == "Create":
+        z = _dns.zone_from_form(body)
+        st, p = run("POST", "", z)
+        if st < 300:
+            return {"ok": True, **_dns.console_view(store.zones["%s/%s" % (PROJ, z["name"])])}
+        return fail(p, "CreateFailed", body.get("name"))
+    key = "%s/%s" % (PROJ, name)
+    if key not in store.zones:
+        return {"ok": False, "code": "NotFound", "name": name}
+    if operation == "Get":
+        return {"ok": True, **_dns.console_view(store.zones[key])}
+    if operation == "Delete":
+        _dns.delete_zone_with_records(store, PROJ, name)
+        return {"ok": True, "name": name}
+    if operation == "Update":
+        upd = {k: body[k] for k in ("description", "labels") if k in body}
+        st, p = run("PATCH", "/" + name, upd)
+        return {"ok": True, **_dns.console_view(store.zones[key])} if st < 300 else fail(p, "UpdateFailed", name)
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "dns"}
+
+
 def resource_op(service, operation, name="", body=None):
     """Console CRUD → GCP core. Returns the registry _resource_dispatch envelope."""
     body = body or {}
     svc = service
     if svc == "cloudscheduler":
         return _sched_op(operation, name, body)
+    if svc == "dns":
+        return _dns_op(operation, name, body)
     rid = str(body.get("name") or body.get("accountId") or body.get("secretId")
               or body.get("topicId") or name or "").strip()
 

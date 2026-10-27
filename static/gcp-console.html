@@ -637,7 +637,7 @@ function renderRail(){
     ["COMPUTE",       ["compute", "functions"]],
     ["STORAGE",       ["storage"]],
     ["DATABASES",     ["cloudsql", "firestore"]],
-    ["NETWORKING",    ["vpc"]],
+    ["NETWORKING",    ["vpc", "dns"]],
     ["INTEGRATION",   ["pubsub", "apigateway", "eventarc", "cloudscheduler"]],
     ["SECURITY",      ["secretmanager", "kms"]],
     ["IAM & ADMIN",   ["iam"]],
@@ -742,6 +742,7 @@ async function renderList(main){
                      : svc.key === "functions" ? "Create function"
                      : svc.key === "vpc" ? "Create VPC network"
                      : svc.key === "iam" ? "Create service account"
+                     : svc.key === "dns" ? "Create zone"
                      : svc.key === "cloudscheduler" ? "Create job"
                      : "Create";
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
@@ -960,6 +961,7 @@ async function renderDetail(main){
     if (t === "secretvalue") return renderSecretValueTab(content, svc, STATE.item);
   if (t === "kmsconfig") return renderKmsConfigTab(content, svc, STATE.item);
     if (t === "schedkv")  return renderSchedKvTab(content, STATE.item, item.fields || []);
+    if (t === "dnsrecords") return renderDnsRecordsTab(content, STATE.item);
     if (t === "objects")  return renderObjectsTab(content, svc, STATE.item);
     if (t === "tags")     return renderLabelsTab(content, svc, STATE.item);
     if (t === "json")     return content.append(el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto"}, JSON.stringify(STATE.item, null, 2)));
@@ -1197,6 +1199,18 @@ function renderSchedKvTab(host, item, fields){
     g.append(el("div",{}, el("div",{class:"k"}, label), el("div",{class:"v"}, (v == null || v === "") ? "None" : String(v))));
   });
   card.append(g); host.append(card);
+}
+// Cloud DNS — the zone's record sets (the zone's console view carries them as `records`).
+function renderDnsRecordsTab(host, item){
+  const recs = Array.isArray(item && item.records) ? item.records : [];
+  const tbl = el("table",{class:"gc",style:"width:100%"});
+  tbl.append(el("thead",{}, el("tr",{}, ...["DNS name","Type","TTL (seconds)","Routing data"].map(h => el("th",{}, h)))));
+  const tb = el("tbody",{});
+  recs.forEach(r => tb.append(el("tr",{},
+    el("td",{}, r.name), el("td",{}, r.type), el("td",{}, String(r.ttl)),
+    el("td",{style:"white-space:pre-line"}, r.data))));
+  tbl.append(tb);
+  host.append(el("div",{class:"panel"}, tbl));
 }
 function renderLabelsTab(host, svc, item){
   const labels = (item.labels && typeof item.labels === "object") ? item.labels : {};

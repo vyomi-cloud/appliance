@@ -61,6 +61,7 @@ from core import gcp_pubsub_core as gcp_ps
 from core import gcp_iam_core as gcp_iam
 from core import gcp_cloudsql_core as gcp_sql
 from core import gcp_cloudscheduler_core as gcp_sched
+from core import gcp_dns_core as gcp_dns
 
 
 def _gcp_service(path):
@@ -70,6 +71,8 @@ def _gcp_service(path):
         return "gcp-gcs"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
         return "gcp-cloudsql"
+    if path.startswith("/dns/v1"):   # Cloud DNS (dns/v1: /dns/v1/projects/{p}/managedZones...)
+        return "gcp-dns"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if "/projects/" in path:
@@ -243,6 +246,7 @@ class AwsWireRouter:
         self.gcp_iam = s.get("gcp_iam") or InMemoryIamStore()
         self.gcp_sql = s.get("gcp_sql") or InMemorySqlStore()
         self.gcp_sched = s.get("gcp_sched") or gcp_sched.CloudSchedulerStore()   # Cloud Scheduler jobs
+        self.gcp_dns = s.get("gcp_dns") or gcp_dns.CloudDnsStore()   # Cloud DNS zones / policies
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -434,6 +438,7 @@ class AwsWireRouter:
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
+                "gcp-dns": (gcp_dns, self.gcp_dns),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-cloudscheduler":   # a pubsub target publishes into the Pub/Sub core

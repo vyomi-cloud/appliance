@@ -35,6 +35,7 @@ STORE_ATTRS = [
     "gcs", "gcp_fs", "gcp_kms", "gcp_sec", "gcp_msg", "gcp_iam", "gcp_sql",
     "az_blob", "az_cosmos", "az_kvsec", "az_kvkeys", "az_queue", "az_sb",
     "ssm",      # Systems Manager (core/ssm_core.SsmStore)
+    "gcp_dns",    # Cloud DNS (core/gcp_dns_core.CloudDnsStore)
     "gcp_sched",  # Cloud Scheduler (core/gcp_cloudscheduler_core.CloudSchedulerStore)
     "sfn",      # Step Functions (core/stepfunctions_core.StepFunctionsStore)
     "events",   # per-resource cloudsim event/activity log (core/nano_events.EventStore)

@@ -310,6 +310,32 @@ _CLOUDSCHEDULER_SUB = [
 ]
 
 
+# ============================================================================
+# Cloud DNS — managed zone detail (`schedkv` = generic key/value pane over the zone's
+# console view, `dnsrecords` = the zone's record-set table; every value filled)
+# ============================================================================
+_DNS_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Zone", "items": [
+        {"key": "records",  "label": "Record sets",  "icon": "list_alt",    "type": "dnsrecords"},
+        {"key": "zone",     "label": "Zone details", "icon": "dns",         "type": "schedkv",
+         "fields": [["dns_name", "DNS name"], ["zone_type", "Type"], ["description_text", "Description"],
+                    ["created", "Created"]]},
+        {"key": "nameservers", "label": "Name servers", "icon": "lan",      "type": "schedkv",
+         "fields": [["name_servers_text", "Name servers"], ["zone_type", "Zone type"]]},
+        {"key": "dnssec",   "label": "DNSSEC",       "icon": "verified_user", "type": "schedkv",
+         "fields": [["dnssec_state", "DNSSEC state"], ["zone_type", "Zone type"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -325,4 +351,5 @@ SUB_BLADES: dict[str, list] = {
     "secretmanager": _SECRETMANAGER_SUB,
     "kms":           _KMS_SUB,
     "cloudscheduler": _CLOUDSCHEDULER_SUB,
+    "dns":           _DNS_SUB,
 }

@@ -395,6 +395,40 @@ RESOURCE_CATALOG_GCP = [
             {"name": "message",     "label": "Message body (Pub/Sub target)", "default": "scheduled"},
         ],
     },
+    # ========================================================================
+    # Cloud DNS — managed zones + record sets (core/gcp_dns_core.py). Console REST at
+    # /api/gcp/dns/zones; the native /dns/v1/projects/*/managedZones wire serves the
+    # SDKs / gcloud dns.
+    # ========================================================================
+    {
+        "key": "dns", "label": "Cloud DNS", "icon": "dns",
+        "namespace": "GCP/DNS", "service": "dns",
+        "collection_path": "/api/gcp/dns/zones",
+        "resource_path":   "/api/gcp/dns/zones/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "zones":  {"method": "GET",    "path": "/api/gcp/dns/zones"},
+            "delete": {"method": "DELETE", "path": "/api/gcp/dns/zones/{name}"},
+        },
+        "columns": [
+            ["id",               "Zone name"],
+            ["dns_name",         "DNS name"],
+            ["zone_type",        "Type"],
+            ["description_text", "Description"],
+            ["record_count",     "Record sets"],
+            ["dnssec_state",     "DNSSEC"],
+            ["created",          "Created"],
+        ],
+        "createFields": [
+            {"name": "name",        "label": "Zone name",   "default": "my-zone"},
+            {"name": "dnsName",     "label": "DNS name",    "default": "example.com."},
+            {"name": "description", "label": "Description", "default": "Managed by Vyomi"},
+            {"name": "visibility",  "label": "Zone type (public or private)", "default": "public"},
+            {"name": "dnssec",      "label": "DNSSEC (on or off, public zones)", "default": "off"},
+            {"name": "network",     "label": "VPC network (private zones)", "default": "projects/demo/global/networks/default"},
+        ],
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_GCP}

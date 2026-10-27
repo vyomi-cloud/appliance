@@ -282,6 +282,17 @@ def delete_zone(store, project, name):
     del store.zones[_zkey(project, name)]
 
 
+def delete_zone_with_records(store, project, name):
+    """Console "Delete zone": clear every non-default record set (as separate changes would),
+    then delete the zone. Shared by the offline console REST and the Nano adapter."""
+    rec = _zone_rec(store, project, name)
+    apex = rec["zone"]["dnsName"]
+    extra = [r for r in rec["rrsets"] if not (r["name"] == apex and r["type"] in ("NS", "SOA"))]
+    if extra:
+        apply_change(store, project, name, {"deletions": extra})
+    delete_zone(store, project, name)
+
+
 def _page(items, query, key):
     try:
         size = int(query.get("maxResults") or 0)

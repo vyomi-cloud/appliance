@@ -2553,6 +2553,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # Cloud DNS — the shared wire/console store (console + SDK/CLI created zones)
+        from core.gcp_dns_core import shared_store as _gcp_dns_store
+        for _zk, _zr in _gcp_dns_store().zones.items():
+            add("gcp", "dns", "managed-zone", _zr["zone"]["name"],
+                {"name": _zr["zone"]["name"], "created": _zr["zone"].get("creationTime", "")})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -23133,6 +23141,23 @@ try:
     _gcs_sched_console.register(app, _gcs_sched_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[cloudscheduler] routes skipped: {_e}")
+
+# Cloud DNS: native /dns/v1/projects/*/managedZones wire + console REST (/api/gcp/dns/*).
+try:
+    from providers import gcp_dns_console as _gcp_dns_console
+
+    def _gcp_dns_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "dns", "managed-zone", payload, {}, None, action="delete")
+            _record_usage("gcp.dns.delete_managed_zone", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "dns", "managed-zone", payload["id"],
+                                            {"name": payload["id"], "dnsName": payload.get("dnsName", "")}, None,
+                                            region="global")
+            _record_usage("gcp.dns.create_managed_zone", {"name": payload["id"]})
+    _gcp_dns_console.register(app, _gcp_dns_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[gcp-dns] routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)
