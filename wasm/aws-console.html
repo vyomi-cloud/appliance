@@ -3235,9 +3235,13 @@ SUB_RENDERERS.sqsmessages = function(svc, full, host){
 SUB_RENDERERS.sqsdlq = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Dead-letter queue"));
+  // Like the real console: with no redrive policy the tab only says "Disabled"
+  // (no queue / maximum-receives fields to fill).
   card.append(el("div",{class:"kv-grid"},
-    el("div",{}, el("div",{class:"k"}, "Queue"), el("div",{class:"v"}, full.dlq_arn || "Not configured")),
-    el("div",{}, el("div",{class:"k"}, "Maximum receives"), el("div",{class:"v"}, String(full.max_receive_count||"—")))));
+    ...(full.dlq_arn ? [
+      el("div",{}, el("div",{class:"k"}, "Queue"), el("div",{class:"v"}, full.dlq_arn)),
+      el("div",{}, el("div",{class:"k"}, "Maximum receives"), el("div",{class:"v"}, String(full.max_receive_count||5)))]
+    : [el("div",{}, el("div",{class:"k"}, "Dead-letter queue"), el("div",{class:"v"}, "Disabled"))])));
   host.append(card);
 };
 

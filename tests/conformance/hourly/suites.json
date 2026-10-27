@@ -43,6 +43,8 @@
     {"id": "nano-ui-aws-ec2-detail-tabs", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-ec2-detail-tabs.mjs", "timeout": 600},
     {"id": "offline-ui-aws-ec2-detail-tabs", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/aws node wasm/ui-tests/validate-aws-ec2-detail-tabs.mjs", "timeout": 300},
     {"id": "offline-ui-aws-detail-name", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/aws node wasm/ui-tests/validate-aws-detail-name.mjs", "timeout": 300},
+    {"id": "offline-ui-aws-sqs-dlq-tab", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/aws node wasm/ui-tests/validate-aws-sqs-dlq-tab.mjs", "timeout": 300},
+    {"id": "nano-ui-aws-sqs-dlq-tab", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-sqs-dlq-tab.mjs", "timeout": 600},
     {"id": "offline-ui-aws-apigw-tabs", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/aws node wasm/ui-tests/validate-aws-apigw-tabs.mjs", "timeout": 300},
     {"id": "offline-api-gcp-pubsub-savings", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_pubsub_savings_api.py", "timeout": 180},
     {"id": "offline-api-gcp-apigateway-savings", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_apigateway_savings_api.py", "timeout": 180},
