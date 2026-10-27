@@ -11,7 +11,7 @@ often explains many findings, and a fixer should fix the cause, not the rows.
 Cross-cloud items (suites with cloud "all", non-cloud routes) go to whichever
 slice is smallest so the three fixers stay balanced.
 
-    python3 tests/conformance/hourly/triage.py
+    python3 tests/conformance/hourly/triage.py [--out tests/conformance/hourly/out]
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ import re
 from collections import OrderedDict
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "out")
+OUT = os.path.join(HERE, "out")   # --out overrides (CI runs this from a tools checkout)
 CLOUDS = ("aws", "gcp", "azure")
 
 
@@ -55,6 +55,11 @@ def _cloud_of(text: str) -> str:
 
 
 def main() -> int:
+    global OUT
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default=OUT)
+    OUT = os.path.abspath(ap.parse_args().out)
     slices = {c: {"cloud": c, "ui_root_causes": [], "failing_suites": [], "parity": [],
                   "new": [], "untested_ops": [], "uncovered": [], "upstream_issues": []}
               for c in CLOUDS}

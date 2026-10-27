@@ -71,7 +71,18 @@ jobs:
           echo "name=$B" >> "$GITHUB_OUTPUT"
           echo "Working on $B"
 
-      - uses: ./.github/actions/conformance-stack
+      # Tooling comes from THIS workflow's commit, not the daily branch (which
+      # may predate it); kept out of git so agents never commit it.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .ci-tools
+          sparse-checkout: |
+            .github/actions
+            tests/conformance/hourly/triage.py
+      - run: echo ".ci-tools/" >> .git/info/exclude
+
+      - uses: ./.ci-tools/.github/actions/conformance-stack
         with:
           test-license-jwt: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
 
@@ -107,7 +118,7 @@ jobs:
       - name: Triage findings into one slice per cloud
         if: always()
         run: |
-          python3 tests/conformance/hourly/triage.py
+          python3 .ci-tools/tests/conformance/hourly/triage.py --out tests/conformance/hourly/out
           cat tests/conformance/hourly/out/slices/*.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Hand findings to the fixers and the publisher
@@ -157,7 +168,18 @@ jobs:
           git config user.name "vyomi-conformance-bot"
           git config user.email "conformance-bot@users.noreply.github.com"
 
-      - uses: ./.github/actions/conformance-stack
+      # Tooling comes from THIS workflow's commit, not the daily branch (which
+      # may predate it); kept out of git so agents never commit it.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .ci-tools
+          sparse-checkout: |
+            .github/actions
+            tests/conformance/hourly/triage.py
+      - run: echo ".ci-tools/" >> .git/info/exclude
+
+      - uses: ./.ci-tools/.github/actions/conformance-stack
         with:
           test-license-jwt: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
 
