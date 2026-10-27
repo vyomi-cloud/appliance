@@ -350,7 +350,8 @@
    "key": "redis",
    "name": "Memorystore for Redis",
    "upstream": "redis/v1",
-   "status": "pending-release"
+   "status": "released",
+   "released_in": "3.0.17"
   }
  ]
 }

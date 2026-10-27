@@ -4,6 +4,15 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.17] — 2026-10-27
+
+New service release.
+
+- New service: GCP Memorystore for Redis
+- expansion(gcp/redis): Memorystore engine, wire, console REST + catalo…
+- expansion(gcp/redis): Java + Go SDK test beds, console tests (offline…
+- expansion(gcp/redis): console view name = instance id so Nano Metrics…
+
 ## [3.0.16] — 2026-10-27
 
 New service release.
