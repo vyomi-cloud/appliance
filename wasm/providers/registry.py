@@ -326,6 +326,21 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                     by_service[svc] = by_service.get(svc, 0) + n
             vms += aws_counts["rds"]  # DB instances are VM-like
 
+            # Console compute/network models (dataplane_adapter, persisted registry):
+            # Lambda functions, API Gateway APIs, VPCs, and the generic "extras" CRUD
+            # (EventBridge rules, EBS volumes, snapshots, …) keyed "service/kind".
+            from . import dataplane_adapter as DP
+            dp_counts = {
+                "lambda":     len(DP.lambda_list().get("functions", [])),
+                "apigateway": len(DP.apigw_list().get("apis", [])),
+                "vpc":        len(DP.vpc_list().get("vpcs", [])),
+            }
+            for key, coll in DP._EXTRAS.items():
+                dp_counts[key.split("/")[0]] = dp_counts.get(key.split("/")[0], 0) + len(coll)
+            for svc, n in dp_counts.items():
+                if n:
+                    by_service[svc] = by_service.get(svc, 0) + n
+
         # Generic catalog CRUD collections (EC2, Lambda, and every GCP service)
         # live in the shared ResourceStore, namespaced "provider/account/service".
         vm_svcs = _VM_SERVICES.get(provider, set())

@@ -438,6 +438,8 @@ def extras_create(p):
     item = {"name": name, "id": vals.get("id") or name, "state": vals.get("state", "available"), **vals}
     item["name"] = name
     item.setdefault("created", _now())
+    if key.endswith("eventbridge/rules"):
+        item.setdefault("target_count", 0)   # a new rule has no targets yet
     _EXTRAS.setdefault(key, {})[name] = item
     return {"ok": True, **item}
 
