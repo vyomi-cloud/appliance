@@ -2644,6 +2644,29 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    # Vault-backed AWS Secrets Manager secrets / KMS keys (console + SDK write
+    # to Vault and _kms_keys, not to service_states["aws_extras"]).
+    try:
+        from core import vault_routes as _vr
+        _sid = next((k for k, v in _spaces_state().get("spaces", {}).items() if v is space), "")
+        if _sid:
+            _aws_v = _vr.aws_vault_resources(_sid)
+            for _svc, _kind, _bucket in (("secretsmanager", "secret", "secrets"), ("kms", "key", "keys")):
+                for _name, _created in _aws_v[_bucket].items():
+                    add("aws", _svc, _kind, f"vault:{_bucket}:{_name}", {"name": _name, "created": _created})
+    except Exception:
+        pass
+
+    # AWS IAM identities (free, but they are resources of the space).
+    _aws_iam = service_states.get("iam") or {}
+    if not _aws_iam.get("users") and not _aws_iam.get("roles") and not _aws_iam.get("groups"):
+        _aws_iam = iam_state   # IAM console/API writes land in the process-wide IAM store
+    if isinstance(_aws_iam, dict):
+        for _bucket, _kind in (("users", "user"), ("groups", "group"), ("roles", "role")):
+            for _iid, _item in (_aws_iam.get(_bucket) or {}).items():
+                if isinstance(_item, dict):
+                    add("aws", "iam", _kind, str(_iid), _item)
+
     # Azure ARM resources (space-scoped under service_states["azure_arm"]["resources"]).
     # Same DB-derived path as AWS/GCP: service + kind are mapped from the stored
     # ARM type via the catalog (nested children fold to their parent service).

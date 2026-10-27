@@ -874,15 +874,43 @@ def _aws_secret_index_get(space: str) -> list:
         return []
 
 
+def _aws_secret_created(space: str) -> dict:
+    """name -> RFC3339 creation time, kept beside the name index."""
+    got = vc.kv_get("aws", space, "__idx__secrets_created")
+    try:
+        raw = (got.get("data") or {}).get("value", "{}") if got else "{}"
+        d = json.loads(raw) if isinstance(raw, str) else dict(raw)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
 def _aws_secret_index_add(space: str, name: str) -> None:
     names = _aws_secret_index_get(space)
     if name not in names:
         vc.kv_put("aws", space, "__idx__secrets", json.dumps(sorted(names + [name])))
+        created = _aws_secret_created(space)
+        created.setdefault(name, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
+        vc.kv_put("aws", space, "__idx__secrets_created", json.dumps(created))
 
 
 def _aws_secret_index_remove(space: str, name: str) -> None:
     names = [n for n in _aws_secret_index_get(space) if n != name]
     vc.kv_put("aws", space, "__idx__secrets", json.dumps(names))
+    created = _aws_secret_created(space)
+    if created.pop(name, None) is not None:
+        vc.kv_put("aws", space, "__idx__secrets_created", json.dumps(created))
+
+
+def aws_vault_resources(space: str) -> dict:
+    """Vault-backed AWS Secrets Manager secrets / KMS keys as {kind: {id: created}};
+    used by the cost-savings collector so console/SDK-created ones are billed."""
+    created = _aws_secret_created(space)
+    secrets = {n: created.get(n, "") for n in _aws_secret_index_get(space)}
+    keys = {k: v.get("CreationDate") or ""
+            for k, v in _kms_keys.items()
+            if v.get("KeyState", "Enabled") != "PendingDeletion"}
+    return {"secrets": secrets, "keys": keys}
 
 
 def _aws_alias_for(key_id: str) -> str:
@@ -896,8 +924,18 @@ def _register_aws_console(app: FastAPI) -> None:
     @app.get("/api/aws/secrets")
     async def aws_console_secrets_list(request: Request):
         space = _active_space_id(request)
-        return {"items": [{"name": n, "secret_type": "SecretString"}
-                          for n in _aws_secret_index_get(space)]}
+        created = _aws_secret_created(space)
+        names = _aws_secret_index_get(space)
+        if any(n not in created for n in names):   # indexed before creation times were recorded
+            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            for n in names:
+                created.setdefault(n, stamp)
+            vc.kv_put("aws", space, "__idx__secrets_created", json.dumps(created))
+        return {"items": [{"name": n, "secret_type": "SecretString",
+                           "created": created.get(n, ""),
+                           "kms_key_id": "aws/secretsmanager",
+                           "arn": f"arn:aws:secretsmanager:us-east-1:000000000000:secret:{n}"}
+                          for n in names]}
 
     @app.post("/api/aws/secrets")
     async def aws_console_secret_create(request: Request):
