@@ -361,5 +361,29 @@
   "gcp_findings": 64,
   "azure_checks_passed": 107,
   "azure_findings": 295
+ },
+ {
+  "at": "2026-10-27T00:45:10+00:00",
+  "commit": "2b9fcfbaed63",
+  "suites_green": 15,
+  "suites_total": 24,
+  "checks_passed": 542,
+  "checks_failed": 87,
+  "api_coverage_pct": 13.1,
+  "ui_findings": 389,
+  "agent": "Fixed 2 Nano UI findings (236 Azure HTTP_5XX \"backend timeout\" cascade; Azure storage Containers/Queues 501), added 2 validators, 0 regressions in the suites re-run.",
+  "new_features": 0,
+  "parity_gaps": 9,
+  "ops_tested_pct": 72.9,
+  "ui_clean_nano": 6,
+  "ui_total_nano": 43,
+  "ui_clean_offline": 14,
+  "ui_total_offline": 38,
+  "aws_checks_passed": 148,
+  "aws_findings": 69,
+  "gcp_checks_passed": 17,
+  "gcp_findings": 50,
+  "azure_checks_passed": 107,
+  "azure_findings": 270
  }
 ]
