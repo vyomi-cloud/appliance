@@ -292,7 +292,7 @@
   {
    "cloud": "aws",
    "key": "sesv2",
-   "name": "Amazon Simple Email Service",
+   "name": "Amazon SES",
    "upstream": "sesv2",
    "status": "pending-release"
   }

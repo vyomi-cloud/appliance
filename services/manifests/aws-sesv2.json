@@ -1,7 +1,7 @@
 {
  "cloud": "aws",
  "key": "sesv2",
- "name": "Amazon Simple Email Service",
+ "name": "Amazon SES",
  "upstream": "sesv2",
  "issue": 61,
  "core": "core/sesv2_core.py",

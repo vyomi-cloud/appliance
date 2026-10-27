@@ -1170,7 +1170,7 @@ def console_identity(store, i: dict) -> dict:
         "sending": "Enabled" if i["SendingEnabled"] else "Disabled",
         "dkim": "Successful" if dk.get("Status") == "SUCCESS" and dk.get("SigningEnabled") else "Not configured",
         "mail_from": mf["MailFromDomain"] or "Default (amazonses.com)",
-        "config_set": i["ConfigurationSetName"] or "None",
+        "config_set": i["ConfigurationSetName"] or "Not set",
         "region": store.region, "created": i["created"],
         "arn": _arn(store, "identity", i["EmailIdentity"]),
         "feedback_forwarding": "Enabled" if i["FeedbackForwardingStatus"] else "Disabled",
@@ -1187,7 +1187,7 @@ def console_list(store) -> dict:
 def console_create(store, body: dict) -> dict:
     name = (body.get("identity") or body.get("name") or "").strip()
     payload = {"EmailIdentity": name}
-    if body.get("config_set") and body["config_set"] != "None":
+    if body.get("config_set") and body["config_set"] not in ("None", "Not set"):
         payload["ConfigurationSetName"] = body["config_set"]
     r = create_email_identity(store, {}, {}, payload)
     if r.status >= 300:
@@ -1228,7 +1228,7 @@ def console_children(store, kind: str) -> dict:
                 for n, s in sorted(store.suppression.items())]
     elif kind == "sent-emails":
         rows = [{"name": m["MessageId"], "from": m["From"], "to": ", ".join(m["To"]) or "-",
-                 "subject": m.get("Subject") or f"({m['Kind']})", "config_set": m["ConfigurationSetName"] or "None",
+                 "subject": m.get("Subject") or f"({m['Kind']})", "config_set": m["ConfigurationSetName"] or "Not set",
                  "sent": m["sent"]} for m in reversed(store.messages)]
     else:
         raise _notfound(f"Unknown collection {kind}")
