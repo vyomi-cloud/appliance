@@ -1141,7 +1141,7 @@ async function renderList(main){
         return av.localeCompare(bv) * state.sortDir;
       });
     }
-    document.getElementById("countChip").textContent = `(${filtered.length})`;
+    { const chip = document.getElementById("countChip"); if (chip) chip.textContent = `(${filtered.length})`; }
     statsSpan.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;
@@ -1427,7 +1427,7 @@ async function renderChildList(main){
     if (q) filtered = filtered.filter(it => spec.columns.some(c => {
       const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
     }));
-    document.getElementById("childCountChip").textContent = `(${filtered.length})`;
+    { const chip = document.getElementById("childCountChip"); if (chip) chip.textContent = `(${filtered.length})`; }
     statsSpan.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;
@@ -1526,7 +1526,7 @@ async function renderCrudStub(main, svc, fullKey, schema){
     if (q) f = f.filter(it => schema.columns.some(c => {
       const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
     }));
-    document.getElementById("stubCountChip").textContent = `(${f.length})`;
+    { const chip = document.getElementById("stubCountChip"); if (chip) chip.textContent = `(${f.length})`; }
     statsSpan.textContent = f.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${f.length} of ${items.length} match`;
@@ -2921,9 +2921,18 @@ SUB_RENDERERS.connect = function(svc, full, host){
 };
 SUB_RENDERERS.ec2networking = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Networking details"));
+  card.append(el("div",{class:"h"}, svc.key === "rds" ? "Connectivity & security" : "Networking details"));
   const g = el("div",{class:"kv-grid"});
-  const rows = [
+  // RDS instances have an endpoint / subnet group, not EC2 IPv4 addresses.
+  const rows = svc.key === "rds" ? [
+    ["Endpoint",             full.endpoint_address || full.endpoint || (full.db_instance_identifier ? full.db_instance_identifier+"."+REGION+".rds.amazonaws.com" : "")],
+    ["Port",                 full.endpoint_port || full.port || 5432],
+    ["VPC ID",               full.vpc_id || "default"],
+    ["Subnet group",         full.db_subnet_group_name || "default"],
+    ["Availability Zone",    full.availability_zone || REGION+"a"],
+    ["Security groups",      (full.security_group_ids||[]).join(", ") || "default (sg-default)"],
+    ["Publicly accessible",  full.publicly_accessible ? "Yes" : "No"],
+  ] : [
     ["Private IPv4 address", full.private_ip || "—"],
     ["Public IPv4 address",  full.public_ip || "—"],
     ["Public IPv4 DNS",      full.public_dns || "—"],
@@ -3288,8 +3297,8 @@ SUB_RENDERERS.rdsendpoints = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Endpoint & port"));
   card.append(el("div",{class:"kv-grid"},
-    el("div",{}, el("div",{class:"k"}, "Endpoint"), el("div",{class:"v mono"}, full.endpoint || "—")),
-    el("div",{}, el("div",{class:"k"}, "Port"),     el("div",{class:"v"}, String(full.port || 5432))),
+    el("div",{}, el("div",{class:"k"}, "Endpoint"), el("div",{class:"v mono"}, full.endpoint_address || full.endpoint || (full.db_instance_identifier ? full.db_instance_identifier+"."+REGION+".rds.amazonaws.com" : "—"))),
+    el("div",{}, el("div",{class:"k"}, "Port"),     el("div",{class:"v"}, String(full.endpoint_port || full.port || 5432))),
     el("div",{}, el("div",{class:"k"}, "Status"),   el("div",{class:"v"}, full.status || "available")),
     el("div",{}, el("div",{class:"k"}, "Master username"), el("div",{class:"v"}, full.master_username || "postgres"))));
   host.append(card);
