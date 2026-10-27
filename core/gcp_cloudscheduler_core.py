@@ -506,6 +506,25 @@ def list_all(store, project=None):
             if project is None or n.startswith("projects/%s/" % project)]
 
 
+def job_from_form(b, project="demo"):
+    """Console create form (catalog createFields) → REST Job, shared by the offline
+    console REST and the Nano adapter so both consoles create identical jobs."""
+    region = str(b.get("region") or "us-central1")
+    job = {"name": job_name(project, region, str(b.get("name") or "").strip()),
+           "schedule": str(b.get("schedule") or "").strip(),
+           "timeZone": str(b.get("timeZone") or DEFAULT_TIMEZONE).strip()}
+    if b.get("description"):
+        job["description"] = str(b["description"])
+    kind = str(b.get("targetType") or "HTTP").upper().replace("/", "")
+    if kind == "PUBSUB":
+        job["pubsubTarget"] = {"topicName": str(b.get("topic") or "").strip(),
+                               "data": base64.b64encode(str(b.get("message") or "").encode()).decode()}
+    else:
+        job["httpTarget"] = {"uri": str(b.get("url") or "").strip(),
+                             "httpMethod": str(b.get("httpMethod") or "POST").upper()}
+    return job
+
+
 # ── dispatch ───────────────────────────────────────────────────────────────
 def _location_view(project, loc):
     return {"name": "projects/%s/locations/%s" % (project, loc), "locationId": loc,

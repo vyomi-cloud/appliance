@@ -60,6 +60,7 @@ from core import gcp_secretmanager_core as gcp_sec
 from core import gcp_pubsub_core as gcp_ps
 from core import gcp_iam_core as gcp_iam
 from core import gcp_cloudsql_core as gcp_sql
+from core import gcp_cloudscheduler_core as gcp_sched
 
 
 def _gcp_service(path):
@@ -72,6 +73,8 @@ def _gcp_service(path):
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if "/projects/" in path:
+        if re.search(r"/locations/[^/]+/jobs([/:]|$)", path) or re.search(r"^/v1(beta1)?/projects/[^/]+/locations/?$", path):
+            return "gcp-cloudscheduler"
         if "/databases/" in path and "/documents" in path:
             return "gcp-firestore"
         if "/keyRings" in path:
@@ -239,6 +242,7 @@ class AwsWireRouter:
         self.gcp_msg = s.get("gcp_msg") or InMemoryMessagingStore()
         self.gcp_iam = s.get("gcp_iam") or InMemoryIamStore()
         self.gcp_sql = s.get("gcp_sql") or InMemorySqlStore()
+        self.gcp_sched = s.get("gcp_sched") or gcp_sched.CloudSchedulerStore()   # Cloud Scheduler jobs
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -258,6 +262,16 @@ class AwsWireRouter:
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
+
+    def _sched_invoke(self, kind, d):
+        """Cloud Scheduler firing a job: deliver a pubsub target via the Pub/Sub core
+        (returns True, or an error string recorded on the job's status)."""
+        if kind != "pubsub":
+            return True
+        topic = d["topicName"]
+        msg = {"messages": [{"data": d.get("data", ""), "attributes": d.get("attributes") or {}}]}
+        r = gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/%s:publish" % topic, {}, {}, json.dumps(msg).encode())
+        return True if r.status < 300 else "Topic %s not found." % topic
 
     def _servicebus_service(self, method, path, lheaders):
         """Azure Service Bus (topics) — the pub/sub-fan-out peer of SNS/Pub-Sub.
@@ -419,10 +433,13 @@ class AwsWireRouter:
                 "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs),
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
-                "gcp-cloudsql": (gcp_sql, self.gcp_sql),
+                "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
             }[svc]
             mod, store = _gcp_core
-            r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
+            if svc == "gcp-cloudscheduler":   # a pubsub target publishes into the Pub/Sub core
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), invoker=self._sched_invoke)
+            else:
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type

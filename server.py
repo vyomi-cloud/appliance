@@ -2545,6 +2545,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # Cloud Scheduler — the shared wire/console store (console + SDK/CLI created jobs)
+        from core.gcp_cloudscheduler_core import shared_store as _gcs_sched_store
+        for _jn, _job in _gcs_sched_store().jobs.items():
+            add("gcp", "cloudscheduler", "job", _jn.rsplit("/", 1)[-1],
+                {"name": _jn.rsplit("/", 1)[-1], "created": _job.get("userUpdateTime", "")})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -23108,6 +23116,23 @@ try:
     _sfn_console.register(app, _sfn_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[stepfunctions] console routes skipped: {_e}")
+
+# Cloud Scheduler: native /v1/projects/*/locations/*/jobs wire + console REST (/api/gcp/cloudscheduler/*).
+try:
+    from providers import gcp_cloudscheduler_console as _gcs_sched_console
+
+    def _gcs_sched_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "cloudscheduler", "job", payload, {}, None, action="delete")
+            _record_usage("gcp.cloudscheduler.delete_job", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "cloudscheduler", "job", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("state", "ENABLED")}, None,
+                                            region=payload.get("region", "us-central1"))
+            _record_usage("gcp.cloudscheduler.create_job", {"name": payload["id"]})
+    _gcs_sched_console.register(app, _gcs_sched_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[cloudscheduler] routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)

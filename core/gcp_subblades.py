@@ -282,6 +282,34 @@ _KMS_SUB = [
 ]
 
 
+# ============================================================================
+# Cloud Scheduler — job detail (generic `schedkv` renderer: `fields` is
+# [[field, label], …] read off the job's console view, every value filled)
+# ============================================================================
+_CLOUDSCHEDULER_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Job", "items": [
+        {"key": "execution", "label": "Last execution", "icon": "history", "type": "schedkv",
+         "fields": [["last_run", "Last attempt"], ["last_status", "Result"], ["next_run", "Next run"],
+                    ["state", "State"]]},
+        {"key": "target",    "label": "Target",        "icon": "ads_click",   "type": "schedkv",
+         "fields": [["target_type", "Target type"], ["target", "Target"], ["attempt_deadline", "Attempt deadline"]]},
+        {"key": "retry",     "label": "Retry policy",  "icon": "restart_alt", "type": "schedkv",
+         "fields": [["retry_summary", "Retry configuration"], ["attempt_deadline", "Attempt deadline"]]},
+        {"key": "schedule",  "label": "Schedule",      "icon": "schedule",    "type": "schedkv",
+         "fields": [["frequency", "Frequency (unix-cron)"], ["timezone", "Time zone"],
+                    ["description_text", "Description"], ["created", "Last updated"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -296,4 +324,5 @@ SUB_BLADES: dict[str, list] = {
     "eventarc":      _EVENTARC_SUB,
     "secretmanager": _SECRETMANAGER_SUB,
     "kms":           _KMS_SUB,
+    "cloudscheduler": _CLOUDSCHEDULER_SUB,
 }
