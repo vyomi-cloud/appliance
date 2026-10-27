@@ -250,6 +250,11 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 "logs":           _logs_group_count(),
                 "elbv2":          len(_elb_census()),
             }
+            try:   # Systems Manager parameters live in the shared registry store
+                from core import nano_registry
+                aws_counts["ssm"] = len(nano_registry.get()["ssm"].parameters)
+            except Exception:
+                pass
             for svc, n in aws_counts.items():
                 if n:
                     by_service[svc] = by_service.get(svc, 0) + n

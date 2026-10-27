@@ -1056,6 +1056,8 @@ def _aws_query_target_service(request: Request) -> str:
         return "events"
     if target.startswith("Logs_20140328."):
         return "logs"
+    if target.startswith("AmazonSSM."):
+        return "ssm"
     return ""
 
 
@@ -1118,6 +1120,18 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return await _srv().api_iam_query(request)
         if service == "sts":
             return await _srv().api_sts_query(request)
+        if service == "ssm":
+            # Systems Manager: in-process engine (core/ssm_core.py), same store as the console REST.
+            from core import ssm_core as _ssm_core
+            try:
+                _payload = json.loads(await request.body() or b"{}")
+            except Exception:
+                _payload = {}
+            _tgt = request.headers.get("x-amz-target", "")
+            _r = _ssm_core.dispatch(_ssm_core.shared_store(), _tgt, _payload)
+            _srv()._ssm_usage(_tgt, _payload, _r)
+            return Response(content=json.dumps(_r.body), status_code=_r.status,
+                            media_type="application/x-amz-json-1.1", headers=dict(_r.headers or {}))
         if service in ("kms", "secretsmanager", "events"):
             target = request.headers.get("x-amz-target", "")
             prefix = target.split(".", 1)[0] if "." in target else ""
