@@ -4,6 +4,18 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.23] — 2026-10-27
+
+New service release.
+
+- New service: AZURE Log Analytics
+- expansion(azure/operationalinsights): Log Analytics engine (workspace…
+- expansion(azure/operationalinsights): Java and Go SDK test beds
+- expansion(azure/operationalinsights): CLI smoke
+- expansion(azure/operationalinsights): offline console test
+- expansion(azure/operationalinsights): Nano console test
+- expansion(azure/operationalinsights): unit tests, hand-over (suites, …
+
 ## [3.0.22] — 2026-10-27
 
 New service release.
