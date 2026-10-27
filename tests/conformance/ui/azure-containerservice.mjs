@@ -19,7 +19,7 @@ for (const p of ["playwright", resolve(HERE, "../../../.ci-node/node_modules/pla
   try { ({ chromium } = require(p)); break; } catch (_) {}
 }
 const BASE = (process.env.VYOMI_BASE_URL || "http://localhost:9000").replace(/\/$/, "");
-const SERVICE = /Kubernetes services/i;
+const SERVICE = /Azure Kubernetes Service/i;
 const BLANK = /^\s*(|-|—|–|n\/a|undefined|null)\s*$/i;
 let fails = 0;
 const check = (ok, what, detail = "") => {

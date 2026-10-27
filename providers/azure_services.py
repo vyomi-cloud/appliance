@@ -421,7 +421,7 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
-        "key": "containerservice", "label": "Kubernetes services", "icon": "hub",
+        "key": "containerservice", "label": "Azure Kubernetes Service", "icon": "hub",
         "namespace": "Microsoft.ContainerService", "type": "managedClusters",
         "api_version": "2024-09-01", "scope": "rg",
         "banner": "Azure Kubernetes Service (AKS) managed clusters. Control plane only: clusters, node pools, upgrades, credentials and maintenance windows behave like Azure; no Kubernetes API server runs behind the cluster FQDN.",

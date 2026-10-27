@@ -9,7 +9,7 @@
  */
 import { startServer, bootConsole, chromium, sleep, RAIL_SEL } from "./lib.mjs";
 
-const SERVICE = /Kubernetes services/i;
+const SERVICE = /Azure Kubernetes Service/i;
 const BLANK = /^\s*(|-|—|–|n\/a|undefined|null)\s*$/i;
 const AV = "api-version=2024-09-01";
 let fails = 0;
