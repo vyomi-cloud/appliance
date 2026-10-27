@@ -35,6 +35,22 @@ if [ -z "$COMPOSE_FILE" ] || [ ! -f "$COMPOSE_FILE" ]; then
   echo "vyomi: bundled docker-compose.cloudlite.yml not found (set VYOMI_COMPOSE_FILE)." >&2
   exit 1
 fi
+
+# Release images are pinned in the compose file (vyomi/appliance:X.Y.Z), so a
+# plain `pull` never moves past the installed package. `vyomi update` fetches
+# the latest release's compose file into $VYOMI_HOME; use it whenever it pins a
+# newer release than the bundled one (a later package upgrade wins again).
+VYOMI_HOME="${VYOMI_HOME:-$HOME/.vyomi}"
+VYOMI_REPO="vyomi-cloud/appliance"
+pinned_ver() { sed -nE 's#.*vyomi/appliance:([0-9]+\.[0-9]+\.[0-9]+).*#\1#p' "$1" | head -1; }
+ver_gt() {  # true when $1 is a strictly newer X.Y.Z than $2
+  [ -n "$1" ] && [ "$1" != "$2" ] && \
+    [ "$(printf '%s\n%s\n' "$1" "${2:-0.0.0}" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)" = "$1" ]
+}
+if [ -z "${VYOMI_COMPOSE_FILE:-}" ] && [ -f "$VYOMI_HOME/docker-compose.cloudlite.yml" ] && \
+   ver_gt "$(pinned_ver "$VYOMI_HOME/docker-compose.cloudlite.yml")" "$(pinned_ver "$COMPOSE_FILE")"; then
+  COMPOSE_FILE="$VYOMI_HOME/docker-compose.cloudlite.yml"
+fi
 PROJECT="${VYOMI_PROJECT:-vyomi}"
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -65,6 +81,52 @@ wave2_full_bg() {
       </dev/null >"${TMPDIR:-/tmp}/vyomi-wave2.log" 2>&1 & )
 }
 
+# Move COMPOSE_FILE to the latest GitHub release when it is newer: download
+# that release's tarball, check it against SHA256SUMS, and keep its (already
+# pinned) compose file in $VYOMI_HOME. Network failures fall back to the
+# current version.
+fetch_latest_release() {
+  local cur latest tmp base tgz want got
+  cur="$(pinned_ver "$COMPOSE_FILE")"
+  latest="$(curl -fsSL --max-time 15 "https://api.github.com/repos/$VYOMI_REPO/releases/latest" 2>/dev/null \
+    | sed -nE 's/.*"tag_name": *"v?([0-9]+\.[0-9]+\.[0-9]+)".*/\1/p' | head -1)" || true
+  if [ -z "$latest" ]; then
+    echo "vyomi: couldn't reach GitHub to check for a new release; updating ${cur:-current} images only." >&2
+    return 0
+  fi
+  if ! ver_gt "$latest" "$cur"; then
+    echo "==> Vyomi ${cur:-?} is the latest release."
+    return 0
+  fi
+  echo "==> Updating Vyomi ${cur:-?} -> $latest"
+  tmp="$(mktemp -d)"; base="https://github.com/$VYOMI_REPO/releases/download/v$latest"
+  tgz="cloud-learn-$latest.tar.gz"
+  if ! curl -fsSL --max-time 300 -o "$tmp/$tgz" "$base/$tgz" || \
+     ! curl -fsSL --max-time 30 -o "$tmp/SHA256SUMS" "$base/SHA256SUMS"; then
+    echo "vyomi: download of $latest failed; staying on ${cur:-current}." >&2
+    rm -rf "$tmp"; return 0
+  fi
+  want="$(awk -v f="$tgz" '{n=$2; sub(/^\*/,"",n); sub(/.*\//,"",n)} n==f {print $1}' "$tmp/SHA256SUMS")"
+  if command -v sha256sum >/dev/null 2>&1; then got="$(sha256sum "$tmp/$tgz" | awk '{print $1}')"
+  else got="$(shasum -a 256 "$tmp/$tgz" | awk '{print $1}')"; fi
+  if [ -z "$want" ] || [ "$want" != "$got" ]; then
+    echo "vyomi: checksum mismatch for $tgz; staying on ${cur:-current}." >&2
+    rm -rf "$tmp"; return 1
+  fi
+  tar -xzf "$tmp/$tgz" -C "$tmp" "cloud-learn-$latest/docker-compose.cloudlite.yml"
+  if [ "$(pinned_ver "$tmp/cloud-learn-$latest/docker-compose.cloudlite.yml")" != "$latest" ]; then
+    echo "vyomi: release $latest compose file isn't pinned to $latest; staying on ${cur:-current}." >&2
+    rm -rf "$tmp"; return 1
+  fi
+  mkdir -p "$VYOMI_HOME"
+  mv "$tmp/cloud-learn-$latest/docker-compose.cloudlite.yml" "$VYOMI_HOME/docker-compose.cloudlite.yml"
+  rm -rf "$tmp"
+  COMPOSE_FILE="$VYOMI_HOME/docker-compose.cloudlite.yml"
+  if command -v brew >/dev/null 2>&1 && [ "$SELF_DIR" = "$(brew --prefix 2>/dev/null)/bin" ]; then
+    echo "    (To update the vyomi command itself: brew trust vyomi-cloud/tap && brew upgrade vyomi-docker)"
+  fi
+}
+
 case "${1:-up}" in
   up|start)
     # Wave 1 — base only (simulator + required deps). Fast: the console is
@@ -82,12 +144,17 @@ case "${1:-up}" in
   restart)         dc --profile full down; dc up -d; wave2_full_bg ;;
   status|ps)       dc --profile full ps ;;
   logs)            shift; dc --profile full logs "$@" ;;
-  update|upgrade)  dc --profile full pull && dc up -d && wave2_full_bg ;;
+  update|upgrade)
+    fetch_latest_release
+    dc --profile full pull && dc up -d --remove-orphans && wave2_full_bg
+    echo "==> Vyomi $(pinned_ver "$COMPOSE_FILE") is starting. Open http://localhost:9000 in ~30s."
+    ;;
   doctor)
     # Environment report (was falling through to `docker compose doctor`,
     # which isn't a compose command, so it printed compose's usage text).
     echo "vyomi (Docker substrate) doctor"
     echo "  compose file : $COMPOSE_FILE"
+    echo "  version      : $(pinned_ver "$COMPOSE_FILE")"
     echo "  docker       : $(docker --version 2>/dev/null || echo missing)"
     echo "  compose      : $("${DC[@]}" version --short 2>/dev/null || "${DC[@]}" version 2>/dev/null | head -1 || echo missing)"
     if docker info >/dev/null 2>&1; then echo "  engine       : running"; else echo "  engine       : NOT reachable (start Docker Desktop / dockerd)"; fi
