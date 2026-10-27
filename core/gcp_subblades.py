@@ -369,6 +369,38 @@ _IAMCREDENTIALS_SUB = [
 ]
 
 
+# ============================================================================
+# Memorystore for Redis — instance detail (reuses the generic `schedkv` key/value renderer:
+# `fields` is [[field, label], …] read off the instance's console view, every value filled)
+# ============================================================================
+_REDIS_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Instance", "items": [
+        {"key": "details", "label": "Details", "icon": "info", "type": "schedkv",
+         "fields": [["status", "Status"], ["tier_label", "Tier"], ["version", "Redis version"],
+                    ["capacity", "Capacity"], ["display_name", "Display name"], ["created", "Created"],
+                    ["data_plane", "Data plane"]]},
+        {"key": "connection", "label": "Connection", "icon": "cable", "type": "schedkv",
+         "fields": [["endpoint", "Primary endpoint"], ["read_endpoint", "Read endpoint"], ["connect_cmd", "Connect with"],
+                    ["auth", "AUTH"], ["encryption", "In-transit encryption"], ["network", "Authorized network"],
+                    ["reservedIpRange", "Reserved IP range"], ["connectMode", "Connect mode"]]},
+        {"key": "replication", "label": "Replication", "icon": "dns", "type": "schedkv",
+         "fields": [["zone", "Primary zone"], ["alt_zone", "Secondary zone"], ["replicas", "Replica count"],
+                    ["read_replicas", "Read replicas"], ["node_summary", "Nodes"]]},
+        {"key": "configuration", "label": "Configuration", "icon": "tune", "type": "schedkv",
+         "fields": [["redis_configs_text", "Redis configs"], ["persistence", "Persistence"],
+                    ["maintenance_window", "Maintenance window"], ["labels_text", "Labels"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -386,4 +418,5 @@ SUB_BLADES: dict[str, list] = {
     "cloudscheduler": _CLOUDSCHEDULER_SUB,
     "iamcredentials": _IAMCREDENTIALS_SUB,
     "container":     _CONTAINER_SUB,
+    "redis":         _REDIS_SUB,
 }

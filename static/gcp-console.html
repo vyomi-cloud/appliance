@@ -636,7 +636,7 @@ function renderRail(){
   const groups = [
     ["COMPUTE",       ["compute", "functions", "container"]],
     ["STORAGE",       ["storage"]],
-    ["DATABASES",     ["cloudsql", "firestore"]],
+    ["DATABASES",     ["cloudsql", "firestore", "redis"]],
     ["NETWORKING",    ["vpc"]],
     ["INTEGRATION",   ["pubsub", "apigateway", "eventarc", "cloudscheduler"]],
     ["SECURITY",      ["secretmanager", "kms"]],
@@ -744,6 +744,7 @@ async function renderList(main){
                      : svc.key === "iam" ? "Create service account"
                      : svc.key === "cloudscheduler" ? "Create job"
                      : svc.key === "container" ? "Create cluster"
+                     : svc.key === "redis" ? "Create instance"
                      : svc.key === "iamcredentials" ? "Create credential"
                      : "Create";
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
@@ -918,6 +919,13 @@ async function renderDetail(main){
         else toast(act+" failed ("+r.status+")", "err");
       }}, icon(act === "pause" ? "pause" : act === "resume" ? "play_arrow" : "bolt"),
          act === "pause" ? "Pause" : act === "resume" ? "Resume" : "Force run")) : []),
+      ...(svc.key === "redis" ? [el("button",{class:"btn",onclick:async()=>{
+        const n = prompt("Capacity in GB", String(parseInt(STATE.item.capacity, 10) || 1));
+        if (n === null) return;
+        const r = await api("POST", fillCommon((svc.api_paths||{}).resize.path, {name}), {memorySizeGb: parseInt(n, 10)});
+        if (r.ok) { toast("Instance "+name+": resized to "+n+" GB"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
+        else toast("resize failed ("+r.status+")", "err");
+      }}, icon("open_in_full"), "Resize")] : []),
       ...(svc.key === "container" ? [el("button",{class:"btn",onclick:async()=>{
         const n = prompt("Number of nodes for the first node pool", String(STATE.item.nodes || 3));
         if (n === null) return;
