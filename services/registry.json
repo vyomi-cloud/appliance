@@ -374,7 +374,8 @@
    "key": "cognitiveservices",
    "name": "Azure AI services",
    "upstream": "cognitiveservices",
-   "status": "pending-release"
+   "status": "released",
+   "released_in": "3.0.20"
   }
  ]
 }

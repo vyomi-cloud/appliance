@@ -4,6 +4,14 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.20] — 2026-10-27
+
+New service release.
+
+- New service: AZURE Azure AI services
+- expansion(azure/cognitiveservices): engine, ARM wire, catalog, Nano w…
+- expansion(azure/cognitiveservices): AI services engine (ARM), console…
+
 ## [3.0.19] — 2026-10-27
 
 New service release.
