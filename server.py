@@ -2569,6 +2569,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # Cloud Run — the shared wire/console store (console + SDK/CLI created services)
+        from core.gcp_run_core import shared_store as _run_store
+        for _rn, _rs in _run_store().services.items():
+            add("gcp", "run", "service", _rn.rsplit("/", 1)[-1],
+                {"name": _rn.rsplit("/", 1)[-1], "created": _rs.get("createTime", "")})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -23183,6 +23191,23 @@ try:
     _iamc_console.register(app, _iamc_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[iamcredentials] routes skipped: {_e}")
+
+# Cloud Run: native /v2/projects/*/locations/*/services|jobs wire + console REST (/api/gcp/run/*).
+try:
+    from providers import gcp_run_console as _run_console
+
+    def _run_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "run", "service", payload, {}, None, action="delete")
+            _record_usage("gcp.run.delete_service", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "run", "service", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("status", "Ready")}, None,
+                                            region=payload.get("region", "us-central1"))
+            _record_usage("gcp.run.create_service", {"name": payload["id"]})
+    _run_console.register(app, _run_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[run] routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)

@@ -369,6 +369,42 @@ _IAMCREDENTIALS_SUB = [
 ]
 
 
+# ============================================================================
+# Cloud Run — service detail (generic `schedkv` renderer: `fields` is [[field, label], …]
+# read off the service's console view, every value filled)
+# ============================================================================
+_RUN_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Service", "items": [
+        {"key": "details", "label": "Details", "icon": "info", "type": "schedkv",
+         "fields": [["status", "Status"], ["url", "URL"], ["revision", "Latest revision"], ["image", "Container image"],
+                    ["deployment", "Deployment type"], ["created", "Created"], ["creator_text", "Created by"],
+                    ["description_text", "Description"], ["data_plane", "Containers"]]},
+        {"key": "revisions", "label": "Revisions", "icon": "history", "type": "schedkv",
+         "fields": [["revisions_count", "Revisions"], ["revisions_text", "Revision names"], ["revision", "Serving (latest)"],
+                    ["traffic_text", "Traffic split"]]},
+        {"key": "container", "label": "Container", "icon": "deployed_code", "type": "schedkv",
+         "fields": [["image", "Image"], ["port", "Container port"], ["cpu", "CPU"], ["memory", "Memory"],
+                    ["cpu_allocation", "CPU allocation"], ["exec_env", "Execution environment"]]},
+        {"key": "scaling", "label": "Scaling", "icon": "open_in_full", "type": "schedkv",
+         "fields": [["instances", "Instances (min-max)"], ["concurrency", "Max concurrent requests per instance"],
+                    ["timeout", "Request timeout"]]},
+        {"key": "networking", "label": "Networking", "icon": "lan", "type": "schedkv",
+         "fields": [["ingress_text", "Ingress"], ["url", "Endpoint URL"], ["authentication", "Authentication"]]},
+        {"key": "security", "label": "Security", "icon": "security", "type": "schedkv",
+         "fields": [["service_account", "Service account"], ["authentication", "Invoker access"],
+                    ["labels_text", "Labels"], ["deployed_by", "Last deployed by"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -386,4 +422,5 @@ SUB_BLADES: dict[str, list] = {
     "cloudscheduler": _CLOUDSCHEDULER_SUB,
     "iamcredentials": _IAMCREDENTIALS_SUB,
     "container":     _CONTAINER_SUB,
+    "run":           _RUN_SUB,
 }

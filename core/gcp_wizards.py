@@ -661,6 +661,41 @@ _IAMCREDENTIALS_WIZARD = _basic_wizard(
 )
 
 
+# ============================================================================
+# Cloud Run — Create service (core/gcp_run_core.job_from_form)
+# ============================================================================
+_RUN_WIZARD = _basic_wizard(
+    name_field=_name("Service name", "hello", r"^[a-z]([-a-z0-9]{0,47}[a-z0-9])?$",
+                     "Up to 49 chars: lowercase letters, digits, hyphens; start with a letter"),
+    name_default="hello", region_or_zone="region",
+    extra_basic_fields=[
+        {"name": "image", "label": "Container image URL", "default": "us-docker.pkg.dev/cloudrun/container/hello"},
+        {"name": "description", "label": "Description", "default": "Demo Cloud Run service"},
+        {"name": "allowUnauthenticated", "label": "Authentication", "type": "radio", "default": "true", "options": [
+            {"value": "true",  "label": "Allow unauthenticated invocations"},
+            {"value": "false", "label": "Require authentication"},
+        ]},
+        {"name": "ingress", "label": "Ingress", "type": "select", "default": "all", "options": [
+            {"value": "all", "label": "All"},
+            {"value": "internal", "label": "Internal"},
+            {"value": "internal-and-cloud-load-balancing", "label": "Internal and Cloud Load Balancing"},
+        ]},
+    ],
+    sections=[
+        {"label": "Container, networking, security", "fields": [
+            {"name": "cpu", "label": "CPU", "default": "1"},
+            {"name": "memory", "label": "Memory", "default": "512Mi"},
+            {"name": "port", "label": "Container port", "type": "number", "default": 8080},
+            {"name": "concurrency", "label": "Maximum concurrent requests per instance", "type": "number", "default": 80},
+            {"name": "timeoutSeconds", "label": "Request timeout (seconds)", "type": "number", "default": 300},
+            {"name": "minInstances", "label": "Minimum number of instances", "type": "number", "default": 0},
+            {"name": "maxInstances", "label": "Maximum number of instances", "type": "number", "default": 100},
+        ]},
+    ],
+)
+_RUN_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
+
+
 WIZARDS: dict[str, dict] = {
     "compute":       _COMPUTE_WIZARD,
     "storage":       _STORAGE_WIZARD,
@@ -677,4 +712,5 @@ WIZARDS: dict[str, dict] = {
     "cloudscheduler": _CLOUDSCHEDULER_WIZARD,
     "iamcredentials": _IAMCREDENTIALS_WIZARD,
     "container":     _CONTAINER_WIZARD,
+    "run":           _RUN_WIZARD,
 }

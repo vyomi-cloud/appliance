@@ -344,6 +344,13 @@
    "upstream": "iamcredentials/v1",
    "status": "released",
    "released_in": "3.0.16"
+  },
+  {
+   "cloud": "gcp",
+   "key": "run",
+   "name": "Cloud Run",
+   "upstream": "run/v2",
+   "status": "pending-release"
   }
  ]
 }

@@ -662,7 +662,7 @@ function renderRail(){
   const rail = document.getElementById("rail"); rail.innerHTML = "";
   rail.append(el("div",{class:"rail-h"}, "All products"));
   const groups = [
-    ["COMPUTE",       ["compute", "functions", "container"]],
+    ["COMPUTE",       ["compute", "functions", "container", "run"]],
     ["STORAGE",       ["storage"]],
     ["DATABASES",     ["cloudsql", "firestore"]],
     ["NETWORKING",    ["vpc"]],
@@ -820,6 +820,7 @@ async function renderList(main){
                      : svc.key === "iam" ? "Create service account"
                      : svc.key === "cloudscheduler" ? "Create job"
                      : svc.key === "container" ? "Create cluster"
+                     : svc.key === "run" ? "Create service"
                      : svc.key === "iamcredentials" ? "Create credential"
                      : "Create";
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
@@ -994,6 +995,13 @@ async function renderDetail(main){
         else toast(act+" failed ("+r.status+")", "err");
       }}, icon(act === "pause" ? "pause" : act === "resume" ? "play_arrow" : "bolt"),
          act === "pause" ? "Pause" : act === "resume" ? "Resume" : "Force run")) : []),
+      ...(svc.key === "run" ? [el("button",{class:"btn",onclick:async()=>{
+        const img = prompt("Container image to deploy as a new revision", String(STATE.item.image || ""));
+        if (!img) return;
+        const r = await api("POST", fillCommon((svc.api_paths||{}).deploy.path, {name}), {image: img});
+        if (r.ok) { toast("Service "+name+": deployed a new revision"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
+        else toast("deploy failed ("+r.status+")", "err");
+      }}, icon("rocket_launch"), "Deploy revision")] : []),
       ...(svc.key === "container" ? [el("button",{class:"btn",onclick:async()=>{
         const n = prompt("Number of nodes for the first node pool", String(STATE.item.nodes || 3));
         if (n === null) return;

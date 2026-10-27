@@ -471,6 +471,49 @@ RESOURCE_CATALOG_GCP = [
             {"name": "delegates",      "label": "Delegates (comma-separated service account emails)", "default": ""},
         ],
     },
+    # ========================================================================
+    # Cloud Run — services + revisions (core/gcp_run_core.py; jobs/executions via the API).
+    # Console REST at /api/gcp/run/*; the native /v2/projects/*/locations/*/services wire
+    # serves the SDKs / gcloud run. Control plane: containers are not executed.
+    # ========================================================================
+    {
+        "key": "run", "label": "Cloud Run", "icon": "directions_run",
+        "namespace": "GCP/Run", "service": "run",
+        "collection_path": "/api/gcp/run/services",
+        "resource_path":   "/api/gcp/run/services/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "services": {"method": "GET",    "path": "/api/gcp/run/services"},
+            "deploy":   {"method": "POST",   "path": "/api/gcp/sub/run/deploy/{name}"},
+            "delete":   {"method": "DELETE", "path": "/api/gcp/run/services/{name}"},
+        },
+        "columns": [
+            ["id",             "Name"],
+            ["deployment",     "Deployment type"],
+            ["region",         "Region"],
+            ["authentication", "Authentication"],
+            ["ingress_text",   "Ingress"],
+            ["revision",       "Latest revision"],
+            ["last_deployed",  "Last deployed"],
+            ["deployed_by",    "Deployed by"],
+        ],
+        "createFields": [
+            {"name": "name",        "label": "Service name",               "default": "hello"},
+            {"name": "region",      "label": "Region",                     "default": "us-central1"},
+            {"name": "image",       "label": "Container image URL",        "default": "us-docker.pkg.dev/cloudrun/container/hello"},
+            {"name": "allowUnauthenticated", "label": "Allow unauthenticated invocations (true or false)", "default": "true"},
+            {"name": "ingress",     "label": "Ingress (all, internal or internal-and-cloud-load-balancing)", "default": "all"},
+            {"name": "cpu",         "label": "CPU",                        "default": "1"},
+            {"name": "memory",      "label": "Memory",                     "default": "512Mi"},
+            {"name": "port",        "label": "Container port",             "default": "8080"},
+            {"name": "concurrency", "label": "Max concurrent requests per instance", "default": "80"},
+            {"name": "timeoutSeconds", "label": "Request timeout (seconds)", "default": "300"},
+            {"name": "minInstances", "label": "Minimum instances",         "default": "0"},
+            {"name": "maxInstances", "label": "Maximum instances",         "default": "100"},
+            {"name": "description", "label": "Description",                "default": "Demo Cloud Run service"},
+        ],
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_GCP}
