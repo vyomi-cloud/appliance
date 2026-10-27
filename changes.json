@@ -1,6 +1,16 @@
 {
- "at": "2026-10-27T13:55:17+00:00",
+ "at": "2026-10-27T16:50:02+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "azure",
+   "service": "network",
+   "kind": "spec-commit",
+   "key": "azure:network:5b3ac33ab5",
+   "title": "Azure network: [Network] Update TypeSpec configuration for .NET SDK compatibility (#47643)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/5b3ac33ab54d588beaca346f351b95f5765e2457",
+   "actionable": false
+  }
+ ],
  "errors": []
 }

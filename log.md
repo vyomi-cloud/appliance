@@ -1,3 +1,12 @@
+### Upstream watch — 2026-10-27T16:50:02+00:00
+
+Tracking 3922 AWS + GCP operations, 15 Azure spec areas, 47 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `spec-commit` Azure network: [Network] Update TypeSpec configuration for .NET SDK compatibility (#47643) ([link](https://github.com/Azure/azure-rest-api-specs/commit/5b3ac33ab54d588beaca346f351b95f5765e2457))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-10-27T13:55:17+00:00
 
 Tracking 3922 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and 3 lifecycle feeds.
