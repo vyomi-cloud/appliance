@@ -328,6 +328,13 @@
    "upstream": "cloudscheduler/v1",
    "status": "released",
    "released_in": "3.0.14"
+  },
+  {
+   "cloud": "gcp",
+   "key": "dns",
+   "name": "Cloud DNS",
+   "upstream": "dns/v1",
+   "status": "pending-release"
   }
  ]
 }

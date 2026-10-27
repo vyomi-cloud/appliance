@@ -61,6 +61,11 @@
     {"id": "offline-sdk-go-gcp-cloudscheduler", "target": "offline", "cloud": "gcp", "kind": "sdk-go", "cwd": "tests/conformance/gcp-sdk-go-cloudscheduler", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-gcp-cloudscheduler", "target": "offline", "cloud": "gcp", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-cloudscheduler-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-gcp-cloudscheduler", "target": "offline", "cloud": "gcp", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-cloudscheduler.mjs", "timeout": 600},
-    {"id": "nano-ui-gcp-cloudscheduler", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-cloudscheduler.mjs", "timeout": 600}
+    {"id": "nano-ui-gcp-cloudscheduler", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-cloudscheduler.mjs", "timeout": 600},
+    {"id": "offline-sdk-java-gcp-dns", "target": "offline", "cloud": "gcp", "kind": "sdk-java", "cwd": "tests/conformance/gcp-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=DnsConformance", "timeout": 900},
+    {"id": "offline-sdk-go-gcp-dns", "target": "offline", "cloud": "gcp", "kind": "sdk-go", "cwd": "tests/conformance/gcp-sdk-go-dns", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-gcp-dns", "target": "offline", "cloud": "gcp", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-dns-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-gcp-dns", "target": "offline", "cloud": "gcp", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-dns.mjs", "timeout": 600},
+    {"id": "nano-ui-gcp-dns", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-dns.mjs", "timeout": 600}
   ]
 }
