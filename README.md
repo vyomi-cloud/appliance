@@ -1,44 +1,49 @@
 # Vyomi Conformance — hourly report
 
-Run **2026-10-27T10:35:59+00:00** · commit `7f847af5bfab` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
+Run **2026-10-27T11:50:53+00:00** · commit `276ed25b2c75` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
 
 | Suites green | Checks passing | Checks failing | Nano UI clean | Offline UI clean | Open UI findings | API routes with tests |
 |---|---|---|---|---|---|---|
-| 55/58 | 956 | 24 | 23/43 | 35/38 | 41 | 15.9% (51/321) |
+| 61/64 | 993 | 11 | 36/43 | 35/38 | 32 | 15.9% (51/321) |
 
 ## By cloud
 
 | Cloud | Suites green | Checks ✓ | Checks ✗ | Nano UI clean | Offline UI clean | Open findings |
 |---|---|---|---|---|---|---|
-| [AWS](#aws) | 19/20 | 242 | 1 | 6/12 | 9/12 | 18 |
-| [GCP](#gcp) | 19/19 | 194 | 0 | 11/12 | 12/12 | 1 |
-| [Azure](#azure) | 12/12 | 154 | 0 | 6/19 | 14/14 | 22 |
+| [AWS](#aws) | 24/25 | 257 | 1 | 7/12 | 9/12 | 12 |
+| [GCP](#gcp) | 19/19 | 195 | 0 | 12/12 | 12/12 | 0 |
+| [Azure](#azure) | 13/13 | 162 | 0 | 17/19 | 14/14 | 20 |
 
 <a id="aws"></a>
 ## AWS
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-aws-api` | nano | ui | 5 | 1 | 2.0 |
+| ❌ | `nano-ui-aws-api` | nano | ui | 5 | 1 | 3.2 |
 | ✅ | `nano-aws-ec2-launch` | nano | core | 13 | 0 | 0.1 |
-| ✅ | `nano-aws-iam-detail` | nano | core | 8 | 0 | 0.1 |
-| ✅ | `nano-ui-aws-compute-reload` | nano | ui | 4 | 0 | 5.3 |
-| ✅ | `nano-ui-aws-compute-savings` | nano | ui | 6 | 0 | 8.0 |
-| ✅ | `nano-ui-aws-ec2-detail-tabs` | nano | ui | 5 | 0 | 10.4 |
-| ✅ | `nano-ui-aws-tabs` | nano | ui | 11 | 0 | 11.2 |
-| ✅ | `offline-api-aws-console-savings` | offline | api | 12 | 0 | 5.6 |
-| ✅ | `offline-api-aws-eventbridge-rule-defaults` | offline | api | 14 | 0 | 2.0 |
-| ✅ | `offline-api-cost-savings-extras` | offline | api | 12 | 0 | 4.3 |
-| ✅ | `offline-api-ec2-default-public-ip` | offline | api | 3 | 0 | 0.5 |
-| ✅ | `offline-api-ec2-instance-detail` | offline | api | 3 | 0 | 0.3 |
+| ✅ | `nano-aws-iam-detail` | nano | core | 8 | 0 | 0.2 |
+| ✅ | `nano-ui-aws-compute-reload` | nano | ui | 4 | 0 | 7.2 |
+| ✅ | `nano-ui-aws-compute-savings` | nano | ui | 6 | 0 | 9.2 |
+| ✅ | `nano-ui-aws-ec2-detail-tabs` | nano | ui | 5 | 0 | 11.8 |
+| ✅ | `nano-ui-aws-rds-connectivity-tabs` | nano | ui | 3 | 0 | 10.2 |
+| ✅ | `nano-ui-aws-sqs-dlq-tab` | nano | ui | 2 | 0 | 8.9 |
+| ✅ | `nano-ui-aws-tabs` | nano | ui | 11 | 0 | 12.3 |
+| ✅ | `nano-ui-aws-vpc-apigw-lists` | nano | ui | 5 | 0 | 3.1 |
+| ✅ | `offline-api-aws-console-savings` | offline | api | 12 | 0 | 7.2 |
+| ✅ | `offline-api-aws-eventbridge-rule-defaults` | offline | api | 14 | 0 | 2.6 |
+| ✅ | `offline-api-cost-savings-extras` | offline | api | 12 | 0 | 5.5 |
+| ✅ | `offline-api-ec2-default-public-ip` | offline | api | 3 | 0 | 0.4 |
+| ✅ | `offline-api-ec2-instance-detail` | offline | api | 3 | 0 | 0.2 |
 | ✅ | `offline-api-s3-bucket-creation-date` | offline | api | 3 | 0 | 0.4 |
-| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 22.2 |
-| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 31.4 |
-| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 13 | 0 | 11.7 |
-| ✅ | `offline-sdk-python-aws` | offline | sdk-python | 88 | 0 | 4.4 |
-| ✅ | `offline-ui-aws-apigw-tabs` | offline | ui | 4 | 0 | 10.8 |
-| ✅ | `offline-ui-aws-detail-name` | offline | ui | 4 | 0 | 16.4 |
-| ✅ | `offline-ui-aws-ec2-detail-tabs` | offline | ui | 5 | 0 | 13.1 |
+| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 27.0 |
+| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 39.2 |
+| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 13 | 0 | 15.5 |
+| ✅ | `offline-sdk-python-aws` | offline | sdk-python | 88 | 0 | 3.8 |
+| ✅ | `offline-ui-aws-apigw-tabs` | offline | ui | 4 | 0 | 11.8 |
+| ✅ | `offline-ui-aws-detail-name` | offline | ui | 4 | 0 | 18.2 |
+| ✅ | `offline-ui-aws-ec2-detail-tabs` | offline | ui | 5 | 0 | 14.3 |
+| ✅ | `offline-ui-aws-rds-connectivity-tabs` | offline | ui | 3 | 0 | 10.0 |
+| ✅ | `offline-ui-aws-sqs-dlq-tab` | offline | ui | 2 | 0 | 9.7 |
 
 <details><summary>❌ <code>nano-ui-aws-api</code> log</summary>
 
@@ -56,36 +61,14 @@ Run **2026-10-27T10:35:59+00:00** · commit `7f847af5bfab` · Nano (in-browser) 
 
 </details>
 
-**UI findings: 18**
+**UI findings: 12**
 
-<details><summary><b>RDS</b> (nano) — 4 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | Endpoints | tab Endpoints: column "ENDPOINT" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PRIVATE IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>VPC</b> (nano) — 4 finding(s)</summary>
+<details><summary><b>EC2</b> (nano) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `DEAD_TAB` | VPC details | clicking the tab changes nothing |
-| `HTTP_501` | Subnets | /api/vpc/subnets → 501 |
-| `HTTP_501` | Route tables | /api/vpc/route-tables → 501 |
-| `HTTP_501` | Internet gateways | /api/vpc/internet-gateways → 501 |
-
-</details>
-
-<details><summary><b>API Gateway</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `HTTP_501` | Resources | /api/apigateway/apis/bb0aa5fcb5/resources → 501 |
-| `HTTP_501` | Stages | /api/apigateway/apis/bb0aa5fcb5/stages → 501 |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "IAM ROLE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "STATE TRANSITION REASON" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -98,20 +81,21 @@ Run **2026-10-27T10:35:59+00:00** · commit `7f847af5bfab` · Nano (in-browser) 
 
 </details>
 
+<details><summary><b>EC2</b> (offline) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` | Security | tab Security: column "IAM ROLE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "STATE TRANSITION REASON" shows "-"/blank in 1 row(s) |
+
+</details>
+
 <details><summary><b>Secrets Manager</b> (offline) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
 | `PLACEHOLDER_CELL` |  | after create: column "Last rotated" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "Next rotation" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>EC2</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PAGE_ERROR` |  | during create: Cannot set properties of null (setting 'textContent') |
 
 </details>
 
@@ -123,6 +107,22 @@ Run **2026-10-27T10:35:59+00:00** · commit `7f847af5bfab` · Nano (in-browser) 
 
 </details>
 
+<details><summary><b>API Gateway</b> (nano) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` | Stages | tab Stages: column "Description" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>VPC</b> (nano) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `DEAD_TAB` | VPC details | clicking the tab changes nothing |
+
+</details>
+
 <details><summary><b>DynamoDB</b> (offline) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
@@ -131,179 +131,87 @@ Run **2026-10-27T10:35:59+00:00** · commit `7f847af5bfab` · Nano (in-browser) 
 
 </details>
 
-<details><summary><b>SQS</b> (offline) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | Dead-letter queue | tab Dead-letter queue: column "MAXIMUM RECEIVES" shows "-"/blank in 1 row(s) |
-
-</details>
-
 <a id="gcp"></a>
 ## GCP
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ✅ | `nano-ui-gcp-activity-detail` | nano | ui | 2 | 0 | 2.0 |
-| ✅ | `nano-ui-gcp-grid-defaults` | nano | ui | 38 | 0 | 2.0 |
-| ✅ | `nano-ui-gcp-metrics-counts` | nano | ui | 3 | 0 | 1.9 |
-| ✅ | `nano-ui-gcp-pubsub-grid` | nano | ui | 3 | 0 | 4.5 |
-| ✅ | `nano-ui-gcp-pubsub-subscriptions` | nano | ui | 3 | 0 | 2.0 |
-| ✅ | `nano-ui-gcp-tabs` | nano | ui | 6 | 0 | 2.0 |
-| ✅ | `offline-api-gcp-apigateway-savings` | offline | api | 5 | 0 | 6.5 |
-| ✅ | `offline-api-gcp-console-next` | offline | api | 28 | 0 | 1.4 |
+| ✅ | `nano-ui-gcp-activity-detail` | nano | ui | 2 | 0 | 3.1 |
+| ✅ | `nano-ui-gcp-grid-defaults` | nano | ui | 39 | 0 | 3.2 |
+| ✅ | `nano-ui-gcp-metrics-counts` | nano | ui | 3 | 0 | 3.1 |
+| ✅ | `nano-ui-gcp-pubsub-grid` | nano | ui | 3 | 0 | 5.6 |
+| ✅ | `nano-ui-gcp-pubsub-subscriptions` | nano | ui | 3 | 0 | 3.1 |
+| ✅ | `nano-ui-gcp-tabs` | nano | ui | 6 | 0 | 3.2 |
+| ✅ | `offline-api-gcp-apigateway-savings` | offline | api | 5 | 0 | 8.1 |
+| ✅ | `offline-api-gcp-console-next` | offline | api | 28 | 0 | 2.3 |
 | ✅ | `offline-api-gcp-eventarc-trigger-defaults` | offline | api | 6 | 0 | 0.2 |
-| ✅ | `offline-api-gcp-grid-columns` | offline | api | 19 | 0 | 2.5 |
-| ✅ | `offline-api-gcp-pubsub-savings` | offline | api | 8 | 0 | 8.5 |
-| ✅ | `offline-api-gcp-vault-console-secrets` | offline | api | 9 | 0 | 1.6 |
-| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 15.2 |
-| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 11.5 |
-| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 4.1 |
-| ✅ | `offline-ui-gcp-activity-detail` | offline | ui | 2 | 0 | 1.5 |
-| ✅ | `offline-ui-gcp-grid-defaults` | offline | ui | 39 | 0 | 3.1 |
+| ✅ | `offline-api-gcp-grid-columns` | offline | api | 19 | 0 | 3.1 |
+| ✅ | `offline-api-gcp-pubsub-savings` | offline | api | 8 | 0 | 10.5 |
+| ✅ | `offline-api-gcp-vault-console-secrets` | offline | api | 9 | 0 | 2.2 |
+| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 22.7 |
+| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 14.7 |
+| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 4.8 |
+| ✅ | `offline-ui-gcp-activity-detail` | offline | ui | 2 | 0 | 1.7 |
+| ✅ | `offline-ui-gcp-grid-defaults` | offline | ui | 39 | 0 | 4.2 |
 | ✅ | `offline-ui-gcp-pubsub-grid` | offline | ui | 3 | 0 | 3.7 |
-| ✅ | `offline-ui-gcp-pubsub-subscriptions` | offline | ui | 3 | 0 | 1.6 |
+| ✅ | `offline-ui-gcp-pubsub-subscriptions` | offline | ui | 3 | 0 | 2.1 |
 
-**UI findings: 1**
+**UI findings: 0**
 
-<details><summary><b>VPC Network</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
-
-</details>
+No open UI findings.
 
 <a id="azure"></a>
 ## Azure
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 9.5 |
-| ✅ | `nano-ui-azure-dp-detail` | nano | ui | 12 | 0 | 25.6 |
-| ✅ | `nano-ui-azure-flat-create` | nano | ui | 8 | 0 | 16.9 |
-| ✅ | `nano-ui-azure-home` | nano | ui | 7 | 0 | 3.5 |
-| ✅ | `nano-ui-azure-rail-last` | nano | ui | 3 | 0 | 2.6 |
-| ✅ | `nano-ui-azure-storage-console` | nano | ui | 12 | 0 | 5.2 |
-| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 16.0 |
-| ✅ | `nano-ui-reload-backend` | nano | ui | 3 | 0 | 5.4 |
-| ✅ | `offline-cli-azure` | offline | cli | 6 | 0 | 19.0 |
-| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 7.5 |
-| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 21.1 |
-| ✅ | `offline-ui-azure-flat-create` | offline | ui | 8 | 0 | 19.6 |
+| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 9.7 |
+| ✅ | `nano-ui-azure-dp-detail` | nano | ui | 12 | 0 | 26.7 |
+| ✅ | `nano-ui-azure-flat-create` | nano | ui | 8 | 0 | 17.8 |
+| ✅ | `nano-ui-azure-home` | nano | ui | 7 | 0 | 3.7 |
+| ✅ | `nano-ui-azure-rail-last` | nano | ui | 3 | 0 | 2.4 |
+| ✅ | `nano-ui-azure-savings` | nano | ui | 8 | 0 | 7.6 |
+| ✅ | `nano-ui-azure-storage-console` | nano | ui | 12 | 0 | 7.5 |
+| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 17.2 |
+| ✅ | `nano-ui-reload-backend` | nano | ui | 3 | 0 | 7.7 |
+| ✅ | `offline-cli-azure` | offline | cli | 6 | 0 | 21.5 |
+| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 9.0 |
+| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 21.2 |
+| ✅ | `offline-ui-azure-flat-create` | offline | ui | 8 | 0 | 19.9 |
 
-**UI findings: 22**
+**UI findings: 20**
 
-<details><summary><b>Virtual Machines</b> (nano) — 2 finding(s)</summary>
+<details><summary><b>Resource groups</b> (nano) — 19 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 0 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: azure savings stayed $0 (real azure would bill this resource) |
+| `BAD_TEXT` |  | shows 'undefined' |
+| `PLACEHOLDER_CELL` |  | list: column "Virtual Machines" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Storage accounts" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "SQL servers" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Service Bus" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Cosmos DB" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Function apps" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "API Management" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Virtual networks" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Network Security Group" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Event Grid topics" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Key vaults" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Role Definition" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Entra ID / RBAC" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Blob containers" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Cosmos databases" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Key Vault secrets" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Key Vault keys" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Storage queues" shows "-"/blank in 1 row(s) |
 
 </details>
 
-<details><summary><b>Storage accounts</b> (nano) — 2 finding(s)</summary>
+<details><summary><b>Virtual Machines</b> (nano) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 0 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: azure savings stayed $0 (real azure would bill this resource) |
-
-</details>
-
-<details><summary><b>SQL servers</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 0 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: azure savings stayed $0 (real azure would bill this resource) |
-
-</details>
-
-<details><summary><b>Service Bus</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 0 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: azure savings stayed $0 (real azure would bill this resource) |
-
-</details>
-
-<details><summary><b>Cosmos DB</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 0 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: azure savings stayed $0 (real azure would bill this resource) |
-
-</details>
-
-<details><summary><b>Function apps</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 0 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: azure savings stayed $0 (real azure would bill this resource) |
-
-</details>
-
-<details><summary><b>API Management</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 0 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: azure savings stayed $0 (real azure would bill this resource) |
-
-</details>
-
-<details><summary><b>Event Grid topics</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 0 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: azure savings stayed $0 (real azure would bill this resource) |
-
-</details>
-
-<details><summary><b>Key vaults</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 0 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: azure savings stayed $0 (real azure would bill this resource) |
-
-</details>
-
-<details><summary><b>Virtual networks</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 0 after creating a resource |
-
-</details>
-
-<details><summary><b>Network Security Group</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 0 after creating a resource |
-
-</details>
-
-<details><summary><b>Role Definition</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 0 after creating a resource |
-
-</details>
-
-<details><summary><b>Entra ID / RBAC</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 0 after creating a resource |
+| `PAGE_ERROR` |  | Cannot set properties of null (setting 'innerHTML') |
 
 </details>
 
@@ -312,13 +220,13 @@ Run **2026-10-27T10:35:59+00:00** · commit `7f847af5bfab` · Nano (in-browser) 
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-crawl` | nano | ui | 23 | 20 | 1008.9 |
-| ❌ | `offline-ui-crawl` | offline | ui | 35 | 3 | 867.6 |
-| ✅ | `nano-cores` | nano | core | 37 | 0 | 1.3 |
-| ✅ | `nano-ui-budget-savings` | nano | ui | 5 | 0 | 3.6 |
-| ✅ | `offline-console-actions` | offline | api | 246 | 0 | 15.1 |
-| ✅ | `offline-cost-savings` | offline | api | 11 | 0 | 20.5 |
-| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 26.3 |
+| ❌ | `nano-ui-crawl` | nano | ui | 36 | 7 | 981.5 |
+| ❌ | `offline-ui-crawl` | offline | ui | 35 | 3 | 837.9 |
+| ✅ | `nano-cores` | nano | core | 37 | 0 | 1.9 |
+| ✅ | `nano-ui-budget-savings` | nano | ui | 5 | 0 | 4.6 |
+| ✅ | `offline-console-actions` | offline | api | 246 | 0 | 10.7 |
+| ✅ | `offline-cost-savings` | offline | api | 11 | 0 | 22.1 |
+| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 27.6 |
 
 <details><summary>❌ <code>offline-ui-crawl</code> log</summary>
 
@@ -327,7 +235,7 @@ Run **2026-10-27T10:35:59+00:00** · commit `7f847af5bfab` · Nano (in-browser) 
 [offline/gcp] 12 services crawled, 0 with findings
 [offline/azure] 14 services crawled, 0 with findings
 UI crawl offline: 35/38 services clean → tests/conformance/hourly/out/ui-offline.json
-Console surfaces offline: {"live":228,"static":196,"unimplemented":5,"partial":19}
+Console surfaces offline: {"live":228,"static":180,"partial":17,"unimplemented":23}
 ```
 
 </details>
@@ -335,18 +243,21 @@ Console surfaces offline: {"live":228,"static":196,"unimplemented":5,"partial":1
 <details><summary>❌ <code>nano-ui-crawl</code> log</summary>
 
 ```
-[nano/aws] 12 services crawled, 6 with findings
-[nano/gcp] 12 services crawled, 1 with findings
-[nano/azure] 19 services crawled, 13 with findings
-UI crawl nano: 23/43 services clean → tests/conformance/hourly/out/ui-nano.json
-Console surfaces nano: {"live":295,"unimplemented":23,"static":126,"partial":19}
+[nano/aws] 12 services crawled, 5 with findings
+[nano/gcp] 12 services crawled, 0 with findings
+[nano/azure] 19 services crawled, 2 with findings
+UI crawl nano: 36/43 services clean → tests/conformance/hourly/out/ui-nano.json
+Console surfaces nano: {"live":289,"static":127,"partial":20,"unimplemented":25}
 ```
 
 </details>
 
 ## New features since the last run
 
-None.
+| Target | Cloud | Service | Kind | Feature | SDK test |
+|---|---|---|---|---|---|
+| nano | GCP | Firestore | column | Created | — |
+| nano | GCP | VPC Network | column | MTU | — |
 
 ## Upstream changes (AWS / GCP / Azure backlog)
 
@@ -584,6 +495,7 @@ SetVersionState
 
 | Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |
 |---|---|---|---|---|---|---|
+| 2026-10-27T11:50:53+00:00 | 61/64 | 993 | 11 | 32 | 15.9% |  |
 | 2026-10-27T10:35:59+00:00 | 55/58 | 956 | 24 | 41 | 15.9% |  |
 | 2026-10-27T09:18:09+00:00 | 40/45 | 799 | 33 | 68 | 14.0% |  |
 | 2026-10-27T06:28:14+00:00 | 28/35 | 638 | 58 | 93 | 14.0% | Fixed offline GCP Secret Manager / Cloud KMS (blank Created, wrong value stored, not counted in cost savings) and two crawler false positives; added 1 test, 0 regressions. |
@@ -607,6 +519,5 @@ SetVersionState
 |  | 0/0 | 0 | 0 | 69 | 12.8% |  |
 | 2026-10-26T08:41:08+00:00 | 1/2 | 20 | 1 | 86 | 10.3% | Fixed /api/spaces 500 (binary S3 objects), EC2/GCE create 500 (unwritable deploy dir) and Nano Azure home `providers/undefined/undefined` 404s; fixed 2 crawler bugs that hid most AWS/GCP findings; add |
 | 2026-10-26T08:05:52+00:00 | 9/20 | 147 | 220 | 86 | 10.3% |  |
-| 2026-10-26T07:46:18+00:00 | 9/20 | 137 | 228 | 86 | 10.3% |  |
 
 Raw data in this branch: `results.json`, `ui-findings.json`, `history.json`.
