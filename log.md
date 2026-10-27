@@ -45,3 +45,4 @@
 | 2026-10-27T03:20Z | #62 | aws/sns | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40441536301) |
 | 2026-10-27T03:26Z | #61 | aws/sesv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40443819844) |
 | 2026-10-27T03:32Z | #62 | aws/sns | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40444365630) |
+| 2026-10-27T03:38Z | #61 | aws/sesv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40444910382) |
