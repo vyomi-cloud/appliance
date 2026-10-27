@@ -210,6 +210,19 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
         stored["Enabled"] = False
         stored["KeyState"] = "Disabled"
         return {}
+    if op in ("EnableKeyRotation", "DisableKeyRotation", "GetKeyRotationStatus"):
+        stored = _kms_keys.get(key_name)
+        if not stored:
+            return {"__type": "NotFoundException", "message": f"Key '{key}' does not exist."}
+        if op == "GetKeyRotationStatus":
+            out = {"KeyId": stored["KeyId"], "KeyRotationEnabled": bool(stored.get("KeyRotationEnabled"))}
+            if out["KeyRotationEnabled"]:
+                out["RotationPeriodInDays"] = int(stored.get("RotationPeriodInDays", 365))
+            return out
+        stored["KeyRotationEnabled"] = op == "EnableKeyRotation"
+        if stored["KeyRotationEnabled"]:
+            stored["RotationPeriodInDays"] = int(body.get("RotationPeriodInDays") or stored.get("RotationPeriodInDays") or 365)
+        return {}
     if op == "CreateAlias":
         alias_name = body.get("AliasName", "")
         target_key_id = body.get("TargetKeyId", "")
