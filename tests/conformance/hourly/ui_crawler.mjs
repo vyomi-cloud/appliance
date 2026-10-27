@@ -159,8 +159,9 @@ const savingsSnapshot = (page) => page.evaluate(async () => {
 // Every resource created must show up in the space's savings: resource_count
 // goes up, and the creating cloud's saved dollars go up (real cloud would bill it).
 // Services whose resources the real cloud does not bill at all (AWS IAM identities,
-// VPCs, EventBridge rules/buses): the dollar check does not apply, only resource_count.
-const FREE_RESOURCES = new Set(["aws:IAM", "aws:VPC", "aws:EventBridge"]);
+// VPCs, EventBridge rules/buses; Azure VNets, NSGs, RBAC): the dollar check does not apply, only resource_count.
+const FREE_RESOURCES = new Set(["aws:IAM", "aws:VPC", "aws:EventBridge",
+  "azure:Virtual networks", "azure:Network Security Group", "azure:Role Definition", "azure:Entra ID / RBAC"]);
 
 function savingsFindings(cloud, before, after, stage, service) {
   const f = [];
