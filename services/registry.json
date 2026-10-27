@@ -334,7 +334,8 @@
    "key": "container",
    "name": "Kubernetes Engine",
    "upstream": "container/v1",
-   "status": "pending-release"
+   "status": "released",
+   "released_in": "3.0.15"
   }
  ]
 }

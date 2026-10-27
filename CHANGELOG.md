@@ -4,6 +4,19 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.15] — 2026-10-27
+
+New service release.
+
+- New service: GCP Kubernetes Engine
+- expansion(gcp/container): GKE engine core + unit tests
+- expansion(gcp/container): wire, console REST + catalog, Nano vendorin…
+- expansion(gcp/container): gcloud CLI test bed; share the /operations …
+- expansion(gcp/container): Java SDK test bed
+- expansion(gcp/container): Go SDK test bed
+- expansion(gcp/container): console tests (offline + Nano)
+- expansion(gcp/container): hourly hand-over, upstream watch, registry …
+
 ## [3.0.14] — 2026-10-27
 
 New service release.
