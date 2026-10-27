@@ -1,13 +1,13 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 15:08 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 15:12 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 45 services (AWS 16 · GCP 16 · Azure 13) of 1,068 the clouds publish
-- **Building now:** nothing
+- **Building now:** applicationinsights (Azure, no manifest yet checks)
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), appconfiguration (Azure)
-- **Queued:** 51 services (P1 first, then P2)
+- **Queued:** 50 services (P1 first, then P2)
 - **Consoles really implemented:** offline not measured yet · Nano not measured yet
 - **Hourly tests:** 0 of 0 suites passing
 - **Upstream watch:** 5 open changes from the real clouds to adopt
@@ -18,7 +18,7 @@ _Updated 2026-10-27 15:08 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | not measured yet · not measured yet |
 | GCP | 16 | 0 | 8 | 12 | not measured yet · not measured yet |
-| Azure | 13 | 0 | 1 | 22 | not measured yet · not measured yet |
+| Azure | 13 | 1 | 1 | 21 | not measured yet · not measured yet |
 
 ## In progress
 
@@ -44,7 +44,8 @@ _Updated 2026-10-27 15:08 UTC · refreshes after every pipeline run_
 | Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🔍 In gate ([PR #125](https://github.com/vyomi-cloud/appliance/pull/125)) | 19/19 | — |
 | Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | — |
 | Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #126](https://github.com/vyomi-cloud/appliance/pull/126)) | 18/18 | — |
-| appconfiguration [#79](https://github.com/vyomi-cloud/appliance/issues/79) | Azure | 🔍 In gate ([PR #128](https://github.com/vyomi-cloud/appliance/pull/128)) | 17/17 | — |
+| appconfiguration [#79](https://github.com/vyomi-cloud/appliance/issues/79) | Azure | 🚀 Releasing | 17/17 | — |
+| applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🛠 Building | no manifest yet | — |
 
 ## Released services
 
@@ -156,11 +157,10 @@ _Updated 2026-10-27 15:08 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary><b>Azure</b> — 22 queued</summary>
+<details><summary><b>Azure</b> — 21 queued</summary>
 
 | Service | Priority | Issue | Offline backend |
 |---|---|---|---|
-| applicationinsights | P1 | [#80](https://github.com/vyomi-cloud/appliance/issues/80) | in-process |
 | cognitiveservices | P1 | [#81](https://github.com/vyomi-cloud/appliance/issues/81) | ollama · 50 MB · Max |
 | containerregistry | P1 | [#82](https://github.com/vyomi-cloud/appliance/issues/82) | registry · 10 MB · Lite |
 | containerservice | P1 | [#83](https://github.com/vyomi-cloud/appliance/issues/83) | k3s · 500 MB · Max |
