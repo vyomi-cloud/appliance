@@ -65,6 +65,7 @@
     {"id": "offline-api-gcp-console-next", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_console_next_api.py", "timeout": 180},
     {"id": "offline-api-gcp-grid-columns", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_grid_columns_api.py", "timeout": 120},
     {"id": "offline-api-azure-console-lens", "target": "offline", "cloud": "azure", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_azure_console_lens_api.py", "timeout": 120},
+    {"id": "offline-api-azure-console-routes", "target": "offline", "cloud": "azure", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_azure_console_routes_api.py", "timeout": 120},
     {"id": "offline-api-gcp-console-vault-lens", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_console_vault_lens_api.py", "timeout": 120},
     {"id": "offline-api-gcp-console-pubsub-lens", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_console_pubsub_lens_api.py", "timeout": 120},
     {"id": "offline-api-gcp-vault-console-secrets", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_vault_console_secrets_api.py", "timeout": 120},
