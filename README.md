@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 06:02 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 06:07 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -39,7 +39,7 @@ _Updated 2026-10-27 06:02 UTC · refreshes after every pipeline run_
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | — |
 | AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #112](https://github.com/vyomi-cloud/appliance/pull/112)) | 18/18 | — |
 | AWS Step Functions [#64](https://github.com/vyomi-cloud/appliance/issues/64) | AWS | 🔍 In gate ([PR #110](https://github.com/vyomi-cloud/appliance/pull/110)) | 18/18 | — |
-| Elastic Load Balancing [#57](https://github.com/vyomi-cloud/appliance/issues/57) | AWS | 🔍 In gate ([PR #103](https://github.com/vyomi-cloud/appliance/pull/103)) | 18/18 | — |
+| Elastic Load Balancing [#57](https://github.com/vyomi-cloud/appliance/issues/57) | AWS | 🚀 Releasing | 18/18 | — |
 | Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🔍 In gate ([PR #114](https://github.com/vyomi-cloud/appliance/pull/114)) | 18/18 | — |
 
 ## Released services
