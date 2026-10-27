@@ -101,6 +101,11 @@
     {"id": "offline-sdk-go-azure-monitor", "target": "offline", "cloud": "azure", "kind": "sdk-go", "cwd": "tests/conformance/azure-sdk-go-monitor", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-azure-monitor", "target": "offline", "cloud": "azure", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-monitor-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-azure-monitor", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-monitor.mjs", "timeout": 600},
-    {"id": "nano-ui-azure-monitor", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-monitor.mjs", "timeout": 600}
+    {"id": "nano-ui-azure-monitor", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-monitor.mjs", "timeout": 600},
+    {"id": "offline-sdk-java-azure-operationalinsights", "target": "offline", "cloud": "azure", "kind": "sdk-java", "cwd": "tests/conformance/azure-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=cloudlearn.LogAnalyticsConformance", "timeout": 900},
+    {"id": "offline-sdk-go-azure-operationalinsights", "target": "offline", "cloud": "azure", "kind": "sdk-go", "cwd": "tests/conformance/azure-sdk-go-operationalinsights", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-azure-operationalinsights", "target": "offline", "cloud": "azure", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-operationalinsights-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-azure-operationalinsights", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-operationalinsights.mjs", "timeout": 600},
+    {"id": "nano-ui-azure-operationalinsights", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-operationalinsights.mjs", "timeout": 600}
   ]
 }
