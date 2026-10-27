@@ -75,3 +75,4 @@
 | 2026-10-27T11:05Z | #72 | gcp/iamcredentials | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40492477099) |
 | 2026-10-27T11:24Z | #73 | gcp/logging | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40493786280) |
 | 2026-10-27T11:54Z | #74 | gcp/monitoring | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40496121586) |
+| 2026-10-27T12:11Z | #75 | gcp/redis | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40499972855) |
