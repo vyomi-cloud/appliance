@@ -47,6 +47,10 @@
       <groupId>com.google.cloud</groupId>
       <artifactId>google-cloud-iamcredentials</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-artifact-registry</artifactId>
+    </dependency>
   </dependencies>
 
   <build>
