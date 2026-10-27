@@ -366,7 +366,8 @@
    "key": "appconfiguration",
    "name": "App Configuration",
    "upstream": "appconfiguration",
-   "status": "pending-release"
+   "status": "released",
+   "released_in": "3.0.19"
   }
  ]
 }

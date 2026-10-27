@@ -4,6 +4,13 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.19] — 2026-10-27
+
+New service release.
+
+- New service: AZURE App Configuration
+- expansion(azure/appconfiguration): App Configuration engine (ARM + da…
+
 ## [3.0.18] — 2026-10-27
 
 New service release.
