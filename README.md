@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 05:12 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 05:18 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 36 services (AWS 12 · GCP 12 · Azure 12) of 1,068 the clouds publish
-- **Building now:** AWS Security Token Service (AWS, 17/18 checks)
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon CloudWatch Logs (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), Amazon Simple Systems Manager (SSM) (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Step Functions (AWS), Elastic Load Balancing (AWS)
+- **Building now:** nothing
+- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon CloudWatch Logs (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), Amazon Simple Systems Manager (SSM) (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), AWS Step Functions (AWS), Elastic Load Balancing (AWS)
 - **Queued:** 65 services (P1 first, then P2)
 - **Consoles really implemented:** offline 49% · Nano 53%
 - **Hourly tests:** 22 of 31 suites passing (run 04:36 UTC)
@@ -16,7 +16,7 @@ _Updated 2026-10-27 05:12 UTC · refreshes after every pipeline run_
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 12 | 1 | 15 | 17 | 37% · 46% |
+| AWS | 12 | 0 | 16 | 17 | 37% · 46% |
 | GCP | 12 | 0 | 0 | 24 | 42% · 47% |
 | Azure | 12 | 0 | 0 | 24 | 66% · 63% |
 
@@ -37,7 +37,7 @@ _Updated 2026-10-27 05:12 UTC · refreshes after every pipeline run_
 | Amazon Simple Systems Manager (SSM) [#63](https://github.com/vyomi-cloud/appliance/issues/63) | AWS | 🔍 In gate ([PR #109](https://github.com/vyomi-cloud/appliance/pull/109)) | 19/19 | — |
 | AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | — |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | — |
-| AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🛠 Building | 17/18 | manifest status is ready |
+| AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #112](https://github.com/vyomi-cloud/appliance/pull/112)) | 18/18 | — |
 | AWS Step Functions [#64](https://github.com/vyomi-cloud/appliance/issues/64) | AWS | 🔍 In gate ([PR #110](https://github.com/vyomi-cloud/appliance/pull/110)) | 18/18 | — |
 | Elastic Load Balancing [#57](https://github.com/vyomi-cloud/appliance/issues/57) | AWS | 🔍 In gate ([PR #103](https://github.com/vyomi-cloud/appliance/pull/103)) | 18/18 | — |
 
@@ -530,7 +530,7 @@ _Updated 2026-10-27 05:12 UTC · refreshes after every pipeline run_
 | | Check | Detail |
 |---|---|---|
 | ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
-| ❌ | manifest status is ready | status=building |
+| ✅ | manifest status is ready | status=ready |
 | ✅ | engine exists in core/ | core/sts_core.py |
 | ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/sts_core.py |
 | ✅ | engine listed in wasm/build_cores.py |  |
