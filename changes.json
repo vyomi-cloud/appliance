@@ -1,6 +1,47 @@
 {
- "at": "2026-10-27T09:55:12+00:00",
+ "at": "2026-10-27T10:55:13+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:4e5b5ca63d64",
+   "title": "Google Kubernetes Engine: Feature (October 26, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_26_2026",
+   "detail": "The C4D bare metal machine types ( c4d-standard-384-metal , c4d-highcpu-384-metal , and c4d-highmem-384-metal ) are generally available on GKE. You can create C4D bare metal node pools in Standard clusters that run version 1.36 or later. In version 1.37.0-gke.4713000 or later, you can also use C4D bare metal nodes with cluster autoscaler, node auto-provisioning, and custom ComputeClasses, including in Autopilot clusters that use a custom ComputeClass. In earlier versions, you must scale C4D bare metal node pools manually. For more information, see Machine support with GKE .",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:43657faf2ef1",
+   "title": "Google Kubernetes Engine: Fixed (October 20, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_20_2026",
+   "detail": "A security issue in GKE fleet management that could have allowed unauthorized configuration changes to clusters registered to a fleet has been resolved. The fixes are rolled out to all regions, and no action is required.",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:a462ee621cd7",
+   "title": "Google Kubernetes Engine: Fixed (October 20, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_20_2026",
+   "detail": "This is an update to the release note regarding the Cloud Storage FUSE CSI driver issue published on October 2, 2026 . This issue has been resolved. You can upgrade your cluster control plane to the following versions to fix the issue for ubuntu_containerd and older cos_containerd node pools: 1.36.5-gke.1032000 or later 1.37.1-gke.1552000 or later Specific 1.36.4 mitigation patches: 1.36.4-gke.1247001, 1.36.4-gke.1247002, 1.36.4-gke.1391001, 1.36.4-gke.1391003, 1.36.4-gke.1495001, 1.36.4-gke.1495003, 1.36.4-gke.2046001, 1.36.4-gke.2202002",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:84cfa663b33d",
+   "title": "Google Kubernetes Engine: Feature (October 19, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_19_2026",
+   "detail": "You can now provision GKE nodes from storage-optimized Z4M machine series : Manually: starting from GKE version 1.36.3-gke.1767000 and later. Using compute classes, cluster autoscaler, node pool auto-creation and in Autopilot clusters: starting from GKE version 1.37.0-gke.4713000 and later. Z4M machine series are suited for large parallel file systems to support AI/ML workloads and for I/O intensive workloads such as databases. GKE does not support Z4M bare metal instances at this time. See Machine support with GKE .",
+   "actionable": false
+  }
+ ],
  "errors": []
 }
