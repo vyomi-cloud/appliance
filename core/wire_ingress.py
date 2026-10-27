@@ -83,6 +83,8 @@ def build_backed_router() -> AwsWireRouter:
         "msg": NatsBackedMessagingStore(servers=nats_servers, bucket="aws_msg"),
         "gcp_msg": NatsBackedMessagingStore(servers=nats_servers, bucket="gcp_msg"),
     }
+    from core.stepfunctions_core import shared_store as _sfn_store
+    stores["sfn"] = _sfn_store()   # shared with the console REST (/api/stepfunctions)
     return AwsWireRouter(stores=stores)
 
 
@@ -127,7 +129,9 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     unified ingress (mount())."""
     from fastapi import Request, Response
 
-    r = router or AwsWireRouter()
+    from core.stepfunctions_core import shared_store as _sfn_store, set_lambda_store as _sfn_lambda
+    r = router or AwsWireRouter(stores={"sfn": _sfn_store()})
+    _sfn_lambda(r.lam)   # Step Functions Task states invoke the Lambdas this router serves
 
     async def _proxy(request: Request):
         body = await request.body()

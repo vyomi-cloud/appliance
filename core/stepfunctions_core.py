@@ -72,6 +72,10 @@ class _E(Exception):
         self.code, self.message, self.status = code, message, status
 
 
+def _dumps(o):
+    return json.dumps(o, separators=(",", ":"))
+
+
 def _now() -> float:
     return round(time.time(), 3)
 
@@ -215,7 +219,7 @@ def _path_get(doc, path):
                 if isinstance(c, dict) and key in c:
                     nxt.append(c[key])
                 else:
-                    raise _E("States.Runtime", f"The JSONPath '{path}' could not be found in the input '{json.dumps(doc)[:200]}'")
+                    raise _E("States.Runtime", f"The JSONPath '{path}' could not be found in the input '{_dumps(doc)[:200]}'")
             elif idx == "*":
                 if isinstance(c, list):
                     nxt.extend(c)
@@ -294,9 +298,9 @@ def _intrinsic(expr, data, ctx):
     if fn == "Format":
         s = str(args[0])
         for a in args[1:]:
-            s = s.replace("{}", a if isinstance(a, str) else json.dumps(a), 1)
+            s = s.replace("{}", a if isinstance(a, str) else _dumps(a), 1)
         return s
-    if fn == "JsonToString": return json.dumps(args[0], separators=(",", ":"))
+    if fn == "JsonToString": return _dumps(args[0], separators=(",", ":"))
     if fn == "StringToJson": return json.loads(args[0])
     if fn == "Array": return list(args)
     if fn == "ArrayLength": return len(args[0])
@@ -318,7 +322,7 @@ def _intrinsic(expr, data, ctx):
     if fn == "UUID": return str(uuid.uuid4())
     if fn == "Hash":
         import hashlib
-        return hashlib.new(str(args[1]).lower().replace("-", ""), (args[0] if isinstance(args[0], str) else json.dumps(args[0])).encode()).hexdigest()
+        return hashlib.new(str(args[1]).lower().replace("-", ""), (args[0] if isinstance(args[0], str) else _dumps(args[0])).encode()).hexdigest()
     if fn == "Base64Encode":
         import base64
         return base64.b64encode(str(args[0]).encode()).decode()
@@ -457,7 +461,7 @@ class _Run:
         t = st["Type"]
         self.ctx["State"] = {"Name": name, "EnteredTime": _iso8601(_now())}
         entered = self.event(t + "StateEntered", prev, stateEnteredEventDetails={
-            "name": name, "input": json.dumps(data), "inputDetails": {"truncated": False}})
+            "name": name, "input": _dumps(data), "inputDetails": {"truncated": False}})
         nxt = st.get("Next")
         try:
             if t == "Succeed":
@@ -499,12 +503,12 @@ class _Run:
             rp = catch.get("ResultPath", "$")
             d = err_out if rp == "$" else _path_set(data, rp, err_out) if rp else data
             ex_id = self.event(t + "StateExited", entered, stateExitedEventDetails={
-                "name": name, "output": json.dumps(d), "outputDetails": {"truncated": False}})
+                "name": name, "output": _dumps(d), "outputDetails": {"truncated": False}})
             return d, catch["Next"], ex_id
         if st.get("End") or nxt is None:
             nxt = None
         exited = self.event(t + "StateExited", entered, stateExitedEventDetails={
-            "name": name, "output": json.dumps(out), "outputDetails": {"truncated": False}})
+            "name": name, "output": _dumps(out), "outputDetails": {"truncated": False}})
         return out, nxt, exited
 
     @staticmethod
@@ -539,7 +543,7 @@ class _Run:
         d = self._io_in(st, data)
         sched = self.event("TaskScheduled", entered, taskScheduledEventDetails={
             "resourceType": "lambda" if "lambda" in res else "activity", "resource": res,
-            "region": REGION, "parameters": json.dumps(d)})
+            "region": REGION, "parameters": _dumps(d)})
         self.event("TaskStarted", sched, taskStartedEventDetails={
             "resourceType": "lambda" if "lambda" in res else "activity", "resource": res})
         wait_token = res.endswith(".waitForTaskToken")
@@ -575,13 +579,13 @@ class _Run:
                 "resourceType": "lambda", "resource": res, "error": f.error, "cause": f.cause})
             raise
         self.event("TaskSucceeded", sched, taskSucceededEventDetails={
-            "resourceType": "lambda", "resource": res, "output": json.dumps(result)})
+            "resourceType": "lambda", "resource": res, "output": _dumps(result)})
         return self._io_out(st, data, result)
 
     def _new_token(self, activity=None, payload=None):
         token = uuid.uuid4().hex + uuid.uuid4().hex
         self.store.tokens[token] = {"executionArn": self.ex["executionArn"], "activityArn": activity,
-                                    "input": json.dumps(payload), "delivered": False}
+                                    "input": _dumps(payload), "delivered": False}
         return token
 
     def _invoke_lambda(self, fn_name, payload, token=None):
@@ -592,7 +596,7 @@ class _Run:
             payload = dict(payload)
             payload["TaskToken"] = token
         out = lambda_core.dispatch(store, "POST", f"/2015-03-31/functions/{fn_name}/invocations", {}, {},
-                                   json.dumps(payload if payload is not None else {}).encode())
+                                   _dumps(payload if payload is not None else {}).encode())
         if out.status == 404:
             raise _Fail("Lambda.ResourceNotFoundException",
                         f"Function not found: arn:aws:lambda:{REGION}:{ACCOUNT}:function:{fn_name}")
@@ -602,7 +606,7 @@ class _Run:
             val = None
         if (out.headers or {}).get("X-Amz-Function-Error"):
             err = val if isinstance(val, dict) else {}
-            raise _Fail(err.get("errorType", "Lambda.Unknown"), json.dumps(err))
+            raise _Fail(err.get("errorType", "Lambda.Unknown"), _dumps(err))
         return val
 
     # -- Parallel / Map ------------------------------------------------------
@@ -639,7 +643,7 @@ def _finish(store, ex, status, output=None, error=None, cause=None):
     ex["status"] = status
     ex["stopDate"] = _now()
     if output is not None:
-        ex["output"] = output if isinstance(output, str) else json.dumps(output)
+        ex["output"] = output if isinstance(output, str) else _dumps(output)
     if error is not None:
         ex["error"] = error
     if cause is not None:
@@ -660,7 +664,7 @@ def _step(store, ex, gen, send=None, throw=None):
     except StopIteration as done:
         out, prev = done.value
         h.append({"timestamp": _now(), "type": "ExecutionSucceeded", "id": len(h) + 1, "previousEventId": prev,
-                  "executionSucceededEventDetails": {"output": json.dumps(out), "outputDetails": {"truncated": False}}})
+                  "executionSucceededEventDetails": {"output": _dumps(out), "outputDetails": {"truncated": False}}})
         _finish(store, ex, "SUCCEEDED", output=out)
     except _Fail as f:
         h.append({"timestamp": _now(), "type": "ExecutionFailed", "id": len(h) + 1, "previousEventId": 0,
@@ -1193,11 +1197,11 @@ def op_test_state(store, b):
             raise _Fail("States.Runtime", "TestState does not support callback/activity tasks")
         except StopIteration as done:
             res, nxt, _ = done.value
-        out = {"output": json.dumps(res), "status": "SUCCEEDED"}
+        out = {"output": _dumps(res), "status": "SUCCEEDED"}
         if nxt:
             out["nextState"] = nxt
         if b.get("inspectionLevel") in ("DEBUG", "TRACE"):
-            out["inspectionData"] = {"input": json.dumps(data), "result": json.dumps(res)}
+            out["inspectionData"] = {"input": _dumps(data), "result": _dumps(res)}
     except _Fail as f:
         out = {"error": f.error, "cause": f.cause, "status": "FAILED"}
         if run._find_catch(st, f.error):
@@ -1231,9 +1235,13 @@ _OPS = {
 }
 
 
-def dispatch(store, target: str, payload: dict | None = None) -> SfnResponse:
+def dispatch(store, target: str, payload: dict | None = None, lambda_store=None) -> SfnResponse:
     """Native Step Functions JSON router. `target` is the X-Amz-Target header,
-    e.g. "AWSStepFunctions.CreateStateMachine"."""
+    e.g. "AWSStepFunctions.CreateStateMachine". `lambda_store` is the Lambda function
+    registry Task states invoke (the wire router's / console adapter's own)."""
+    global _LAMBDA_STORE
+    if lambda_store is not None:
+        _LAMBDA_STORE = lambda_store
     body = payload if isinstance(payload, dict) else {}
     action = target.rsplit(".", 1)[-1] if target else ""
     op = _OPS.get(action)
@@ -1274,3 +1282,38 @@ def execution_view(ex) -> dict:
             "started": _iso(ex["startDate"]), "stopped": _iso(ex.get("stopDate")) if ex.get("stopDate") else "Running",
             "input": ex["input"], "output": ex.get("output", ""), "error": ex.get("error", ""),
             "state_machine_arn": ex["stateMachineArn"]}
+
+
+def default_role_arn() -> str:
+    return f"arn:aws:iam::{ACCOUNT}:role/service-role/StepFunctions-ExecutionRole"
+
+
+def default_definition() -> str:
+    return json.dumps({"Comment": "A Hello World example of the Amazon States Language using Pass states",
+                       "StartAt": "Hello", "States": {
+                           "Hello": {"Type": "Pass", "Result": "Hello", "Next": "World"},
+                           "World": {"Type": "Pass", "Result": "World", "End": True}}}, indent=2)
+
+
+def children(store, sm, kind) -> dict:
+    """Console detail-tab rows for a state machine: {items: [...]}; every cell populated."""
+    if kind == "executions":
+        rows = [execution_view(e) for e in store.executions.values() if e["stateMachineArn"] == sm["stateMachineArn"]]
+        rows.sort(key=lambda r: r["started"], reverse=True)
+        for r in rows:
+            r["output"] = r["output"] or ("(none yet)" if r["status"] == "RUNNING" else "(none)")
+            r["error"] = r["error"] or "(none)"
+        return {"items": rows}
+    if kind == "versions":
+        return {"items": [{"version": q, "arn": v["stateMachineVersionArn"], "created": _iso(v["creationDate"]),
+                           "description": v.get("description") or "(none)"}
+                          for q, v in sorted(sm["versions"].items(), key=lambda kv: -int(kv[0]))]}
+    if kind == "aliases":
+        return {"items": [{"name": a["name"], "arn": a["stateMachineAliasArn"],
+                           "routing": ", ".join(f"{r['stateMachineVersionArn'].rsplit(':', 1)[1]}:{r['weight']}%"
+                                                for r in a["routingConfiguration"]),
+                           "created": _iso(a["creationDate"])} for a in sm["aliases"].values()]}
+    if kind == "activities":
+        return {"items": [{"name": a["name"], "arn": a["activityArn"], "created": _iso(a["creationDate"])}
+                          for a in store.activities.values()]}
+    return {"items": []}

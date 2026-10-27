@@ -98,6 +98,7 @@ from core import logs_core as logs
 from core import lambda_core as lam
 from core import apigateway_core as apigw
 from core import ssm_core as ssm
+from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
@@ -149,7 +150,7 @@ _SIGNING = {
     "dynamodb": "dynamodb", "kms": "kms", "secretsmanager": "secretsmanager",
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
-    "events": "events", "lambda": "lambda", "ec2": "vpc", "logs": "logs",
+    "events": "events", "lambda": "lambda", "ec2": "vpc", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
     "ssm": "ssm",
 }
@@ -160,6 +161,7 @@ _TARGET_PREFIX = {
     "secretsmanager": "secretsmanager", "AmazonSQS": "sqs", "AWSEvents": "events",
     "Logs_20140328": "logs",
     "AmazonSSM": "ssm",
+    "AWSStepFunctions": "stepfunctions",
 }
 
 # Native JSON content-types the real SDK expects back per service.
@@ -168,6 +170,7 @@ _JSON_CT = {
     "secretsmanager": "application/x-amz-json-1.1", "sqs": "application/x-amz-json-1.0",
     "events": "application/x-amz-json-1.1", "logs": "application/x-amz-json-1.1",
     "ssm": "application/x-amz-json-1.1",
+    "stepfunctions": "application/x-amz-json-1.0",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -252,6 +255,7 @@ class AwsWireRouter:
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
+        self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
 
     def _servicebus_service(self, method, path, lheaders):
         """Azure Service Bus (topics) — the pub/sub-fan-out peer of SNS/Pub-Sub.
@@ -450,6 +454,8 @@ class AwsWireRouter:
                 r = logs.dispatch(self.logs, target, payload)
             elif svc == "ssm":
                 r = ssm.dispatch(self.ssm, target, payload)
+            elif svc == "stepfunctions":
+                r = sfn.dispatch(self.sfn, target, payload, lambda_store=self.lam)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload)
             hdrs = dict(r.headers or {})

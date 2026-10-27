@@ -430,6 +430,43 @@ RESOURCE_CATALOG_AWS = [
         "endpoints": {},
     },
     {
+        # Step Functions — state machines + executions (core/stepfunctions_core.py). Console
+        # REST at /api/stepfunctions/*; the native AWSStepFunctions.* JSON wire serves
+        # SDKs/CLI off the same store.
+        "key": "stepfunctions", "label": "Step Functions", "icon": "account_tree",
+        "namespace": "AWS/States", "service": "stepfunctions",
+        "collection_path": "/api/stepfunctions/machines",
+        "resource_path":   "/api/stepfunctions/machines/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "rail_items": [
+            {"key": "machines", "label": "State machines", "icon": "account_tree", "type": "primary"},
+        ],
+        "api_paths": {
+            "executions": {"method": "GET",    "path": "/api/stepfunctions/machines/{name}/executions"},
+            "versions":   {"method": "GET",    "path": "/api/stepfunctions/machines/{name}/versions"},
+            "aliases":    {"method": "GET",    "path": "/api/stepfunctions/machines/{name}/aliases"},
+            "delete":     {"method": "DELETE", "path": "/api/stepfunctions/machines/{name}"},
+        },
+        "children": [],
+        "columns": [
+            ["name",           "Name"],
+            ["type",           "Type"],
+            ["status",         "Status"],
+            ["state_count",    "States"],
+            ["execution_count", "Executions"],
+            ["created",        "Created"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "State machine name", "default": "my-state-machine"},
+            {"name": "type", "label": "Type (STANDARD or EXPRESS)", "default": "STANDARD"},
+            {"name": "role_arn", "label": "Execution role ARN", "default": "arn:aws:iam::000000000000:role/service-role/StepFunctions-ExecutionRole"},
+            {"name": "definition", "label": "Definition (Amazon States Language)",
+             "default": "{\"Comment\": \"A Hello World example\", \"StartAt\": \"Hello\", \"States\": {\"Hello\": {\"Type\": \"Pass\", \"Result\": \"Hello\", \"Next\": \"World\"}, \"World\": {\"Type\": \"Pass\", \"Result\": \"World\", \"End\": true}}}"},
+        ],
+        "endpoints": {},
+    },
+    {
         "key": "vpc", "label": "VPC", "icon": "lan",
         "namespace": "AWS/EC2", "service": "vpc",
         "collection_path": "/api/vpc/vpcs",

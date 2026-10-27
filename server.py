@@ -2538,6 +2538,13 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # Step Functions — the shared wire/console store (console + SDK/CLI created state machines)
+        from core.stepfunctions_core import shared_store as _sfn_store
+        for sm_name, sm in _sfn_store().machines.items():
+            add("aws", "stepfunctions", "state_machine", sm_name, {"name": sm_name, "created": sm["creationDate"]})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -23086,6 +23093,21 @@ try:
     _ssm_console.register(app, _ssm_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[ssm] console routes skipped: {_e}")
+# Step Functions console REST (/api/stepfunctions/*) — shares its store with the native JSON wire.
+try:
+    from providers import aws_stepfunctions_console as _sfn_console
+
+    def _sfn_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("aws", "stepfunctions", "state_machine", payload, {}, None, action="delete")
+            _record_usage("stepfunctions.delete_state_machine", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("aws", "stepfunctions", "state_machine", payload["name"],
+                                            {"name": payload["name"], "created": payload["created"]}, None)
+            _record_usage("stepfunctions.create_state_machine", {"name": payload["name"]})
+    _sfn_console.register(app, _sfn_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[stepfunctions] console routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)

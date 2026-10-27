@@ -1058,6 +1058,8 @@ def _aws_query_target_service(request: Request) -> str:
         return "logs"
     if target.startswith("AmazonSSM."):
         return "ssm"
+    if target.startswith("AWSStepFunctions."):
+        return "states"
     return ""
 
 
@@ -1096,6 +1098,16 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     async def aws_query_root(request: Request) -> Response:
         """Root dispatch for real AWS SDK/CLI query + JSON protocol requests."""
         service = _aws_query_target_service(request)
+        if service == "states":
+            # Step Functions (X-Amz-Target AWSStepFunctions.*) — in-process engine, shared with the console REST.
+            from core import stepfunctions_core as _sfn
+            try:
+                _sfn_body = json.loads(await request.body() or b"{}")
+            except Exception:
+                _sfn_body = {}
+            _r = _sfn.dispatch(_sfn.shared_store(), request.headers.get("x-amz-target", ""), _sfn_body)
+            return Response(content=json.dumps(_r.body), status_code=_r.status, headers=dict(_r.headers or {}),
+                            media_type="application/x-amz-json-1.0")
         if service == "ec2":
             params = await _srv()._ec2_query_params(request)
             if str(params.get("Action", "")).strip() in _EC2_VPC_ACTIONS:

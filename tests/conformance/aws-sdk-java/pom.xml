@@ -60,6 +60,10 @@
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>ssm</artifactId>
     </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>sfn</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

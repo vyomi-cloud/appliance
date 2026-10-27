@@ -270,6 +270,31 @@ _SSM_SUB = [
 
 
 # ===========================================================================
+# Step Functions — state machine detail (generic `sfnlist` tab renderer;
+# `list_key` names the api_paths entry, `cols` the [field, label] grid columns)
+# ===========================================================================
+_SFN_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Workflow", "items": [
+        {"key": "executions", "label": "Executions", "icon": "play_circle", "type": "sfnlist", "list_key": "executions",
+         "cols": [["name", "Execution name"], ["status", "Status"], ["started", "Started"], ["stopped", "Ended"],
+                  ["output", "Output"], ["error", "Error"]]},
+        {"key": "definition", "label": "Definition", "icon": "data_object", "type": "sfndefinition"},
+    ]},
+    {"group": "Versions", "items": [
+        {"key": "versions", "label": "Versions", "icon": "history", "type": "sfnlist", "list_key": "versions",
+         "cols": [["version", "Version"], ["arn", "ARN"], ["created", "Created"], ["description", "Description"]]},
+        {"key": "aliases", "label": "Aliases", "icon": "label", "type": "sfnlist", "list_key": "aliases",
+         "cols": [["name", "Alias"], ["routing", "Routing (version:weight)"], ["created", "Created"], ["arn", "ARN"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "monitoring", "label": "Monitoring", "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
+# ===========================================================================
 # VPC — composite (VPCs / Subnets / SGs / Route tables / IGWs)
 # ===========================================================================
 _VPC_SUB = [
@@ -411,6 +436,7 @@ SUB_BLADES: dict[str, list] = {
     "lambda":         _LAMBDA_SUB,
     "apigateway":     _APIGW_SUB,
     "ssm":            _SSM_SUB,
+    "stepfunctions":  _SFN_SUB,
     "vpc":            _VPC_SUB,
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,

@@ -100,6 +100,14 @@ class Aws(CloudProvider):
             ("ssm", "TagParameter"):      lambda b, a, p: D.ssm_tag(p),
             ("ssm", "DeleteParameter"):   lambda b, a, p: D.ssm_delete(p),
             ("ssm", "ParameterHistory"):  lambda b, a, p: D.ssm_history(p),
+            # Step Functions — state machines + executions, via core/stepfunctions_core.py
+            ("stepfunctions", "ListMachines"):   lambda b, a, p: D.sfn_list(p),
+            ("stepfunctions", "CreateMachine"):  lambda b, a, p: D.sfn_create(p),
+            ("stepfunctions", "GetMachine"):     lambda b, a, p: D.sfn_get(p),
+            ("stepfunctions", "UpdateMachine"):  lambda b, a, p: D.sfn_patch(p),
+            ("stepfunctions", "DeleteMachine"):  lambda b, a, p: D.sfn_delete(p),
+            ("stepfunctions", "StartExecution"): lambda b, a, p: D.sfn_start(p),
+            ("stepfunctions", "ListChildren"):   lambda b, a, p: D.sfn_children(p),
             # VPC — topology + reachability analyzer, via core/vpc_core.py
             ("vpc", "List"):              lambda b, a, p: D.vpc_list(p),
             ("vpc", "CreateVpc"):         lambda b, a, p: D.vpc_create(p),

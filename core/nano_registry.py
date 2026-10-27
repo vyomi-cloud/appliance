@@ -30,6 +30,7 @@ from core.nano_events import EventStore
 from core.logs_core import LogsStore
 from core.elbv2_core import Elbv2Store
 from core.ssm_core import SsmStore
+from core.stepfunctions_core import StepFunctionsStore
 
 _REG: dict | None = None
 
@@ -52,6 +53,7 @@ def get() -> dict:
             "logs": LogsStore(),               # CloudWatch Logs (core/logs_core.py)
             "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
             "ssm": SsmStore(),
+            "sfn": StepFunctionsStore(),
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),
