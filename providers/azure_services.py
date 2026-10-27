@@ -397,6 +397,30 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
+        "key": "cognitiveservices", "label": "Azure AI services", "icon": "psychology",
+        "namespace": "Microsoft.CognitiveServices", "type": "accounts",
+        "api_version": "2024-10-01", "scope": "rg",
+        "banner": "Azure AI services accounts (OpenAI, AI Services, Language, Vision, Speech, Document Intelligence, Content Safety). Control plane only: accounts, keys, model deployments, commitment plans and content filters behave like Azure; model inference is not served.",
+        "children": [{"type": "deployments", "label": "Model deployments", "icon": "model_training"}],
+        "columns": [["name", "Name"], ["location", "Location"], ["kind", "Kind"],
+                    ["sku.name", "Pricing tier"],
+                    ["properties.endpoint", "Endpoint"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [
+            {"name": "name", "label": "Resource name", "default": "ai-cloudlearn"},
+            {"name": "kind", "label": "Kind (OpenAI, AIServices, TextAnalytics, ComputerVision, SpeechServices, FormRecognizer, ContentSafety, ...)", "default": "OpenAI"},
+            {"name": "sku.name", "label": "Pricing tier (F0, S0, S, S1, ...)", "default": "S0"},
+            {"name": "properties.customSubDomainName", "label": "Custom subdomain name", "default": "ai-cloudlearn"},
+            {"name": "properties.publicNetworkAccess", "label": "Public network access", "type": "select",
+             "options": ["Enabled", "Disabled"], "default": "Enabled"},
+        ],
+        "defaults": {
+            "kind": "OpenAI",
+            "sku": {"name": "S0"},
+            "properties": {"provisioningState": "Succeeded", "publicNetworkAccess": "Enabled"},
+        },
+    },
+    {
         "key": "role_definition",
         "label": "Role Definition",
         "icon": "admin_panel_settings",
@@ -669,6 +693,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if namespace.lower() == "microsoft.appconfiguration":
         return await _handle_appconfiguration(request, method, sub, rg, chain, names, base)
 
+    if namespace.lower() == "microsoft.cognitiveservices":
+        return await _handle_cognitiveservices(request, method, sub, rg, chain, names, base)
+
     top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
     if top is None:
         return _error(404, "ResourceTypeNotSupported",
@@ -804,6 +831,24 @@ async def _handle_appconfiguration(request: Request, method: str, sub: str, rg: 
             resp.headers[hk] = hv
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.AppConfiguration/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_cognitiveservices(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                                    names: list[str], base: str) -> JSONResponse:
+    from core import azure_cognitiveservices_core as _cs
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _cs.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    api_version = request.query_params.get("api-version") or _cs.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["lro"] and r["status"] < 300:
+        resp.status_code = 200 if r["status"] == 201 else r["status"]
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.CognitiveServices/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
     return resp
 

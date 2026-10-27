@@ -118,6 +118,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "azure.keyvault": 0.03,   # per 10K ops
     "azure.rbac": 0.00,
     "azure.appconfiguration": 36.50,  # Standard tier: $1.20 per store per day (~30.4 days/month); requests included to 200K/day
+    "azure.cognitiveservices": 1.00,  # S0 pay-as-you-go: ~1K transactions/month (~$1 per 1K text records / transactions); F0 is free
     "azure.app": 39.42,       # Container Apps Consumption: one always-on 0.5 vCPU / 1 GiB replica (~$0.000024/vCPU-s + $0.000003/GiB-s, ~2.63M s/month)
 }
 

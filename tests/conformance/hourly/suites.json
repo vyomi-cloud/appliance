@@ -86,6 +86,11 @@
     {"id": "offline-sdk-go-azure-appconfiguration", "target": "offline", "cloud": "azure", "kind": "sdk-go", "cwd": "tests/conformance/azure-sdk-go-appconfiguration", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-azure-appconfiguration", "target": "offline", "cloud": "azure", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-appconfiguration-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-azure-appconfiguration", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-appconfiguration.mjs", "timeout": 600},
-    {"id": "nano-ui-azure-appconfiguration", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-appconfiguration.mjs", "timeout": 600}
+    {"id": "nano-ui-azure-appconfiguration", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-appconfiguration.mjs", "timeout": 600},
+    {"id": "offline-sdk-java-azure-cognitiveservices", "target": "offline", "cloud": "azure", "kind": "sdk-java", "cwd": "tests/conformance/azure-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=cloudlearn.CognitiveServicesConformance", "timeout": 900},
+    {"id": "offline-sdk-go-azure-cognitiveservices", "target": "offline", "cloud": "azure", "kind": "sdk-go", "cwd": "tests/conformance/azure-sdk-go-cognitiveservices", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-azure-cognitiveservices", "target": "offline", "cloud": "azure", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-cognitiveservices-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-azure-cognitiveservices", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-cognitiveservices.mjs", "timeout": 600},
+    {"id": "nano-ui-azure-cognitiveservices", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-cognitiveservices.mjs", "timeout": 600}
   ]
 }
