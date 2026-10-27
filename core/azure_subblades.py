@@ -269,6 +269,24 @@ _EVENTGRID_SUB = [
     ]},
 ]
 
+_APP_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Application", "items": [
+        {"key": "revisions",   "label": "Revisions and replicas", "icon": "history",   "type": "revisionsList"},
+        {"key": "containers",  "label": "Containers",        "icon": "deployed_code", "type": "appContainers"},
+        {"key": "scale",       "label": "Scale",             "icon": "trending_up",  "type": "appScale"},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "ingress",     "label": "Ingress",           "icon": "input",        "type": "appIngress"},
+        {"key": "secrets",     "label": "Secrets",           "icon": "key",          "type": "appSecrets"},
+        {"key": "identity",    "label": "Identity",          "icon": "badge",        "type": "identity"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",     "label": "Metrics",           "icon": "show_chart",   "type": "metrics"},
+    ]},
+]
+
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
@@ -288,5 +306,6 @@ SUB_BLADES: dict[str, list] = {
     "vnet":        _VNET_SUB,
     "keyvault":    _KEYVAULT_SUB,
     "eventgrid":   _EVENTGRID_SUB,
+    "app":         _APP_SUB,
     "rbac":        _RBAC_SUB,
 }

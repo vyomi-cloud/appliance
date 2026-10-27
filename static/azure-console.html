@@ -1926,6 +1926,57 @@ function listChildResources(svc, full, host, childTypeKey, columns, emptyMsg){
   }).catch(()=>host.append(emptyState(emptyMsg)));
 }
 
+// ---- Container Apps (Microsoft.App) renderers -----------------------------------
+function appKv(host, rows){
+  const kv = el("div",{class:"kv prop-kv"});
+  rows.forEach(([k,v])=>kv.append(el("div",{class:"k"},k), el("div",{class:"v"}, String(v))));
+  host.append(kv);
+}
+function appTable(host, cols, rows, emptyMsg){
+  if (!rows.length) { host.append(emptyState(emptyMsg)); return; }
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); cols.forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  rows.forEach(r=>{ const tr = el("tr",{}); r.forEach(v=>tr.append(el("td",{}, String(v)))); t.append(tr); });
+  host.append(t);
+}
+SUB_RENDERERS.revisionslist = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Revisions of this container app and their traffic split. Single revision mode keeps only the latest revision active."));
+  fetch(ORIGIN + full.id + "/revisions?api-version=" + svc.apiVersion).then(r=>r.json()).then(j=>{
+    appTable(host, ["Name","Active","Traffic %","Replicas","Health","Created"],
+      (j.value||[]).map(r=>[r.name, r.properties.active ? "Yes" : "No", r.properties.trafficWeight, r.properties.replicas,
+                            r.properties.healthState, r.properties.createdTime]),
+      "No revisions yet.");
+  }).catch(()=>host.append(emptyState("No revisions yet.")));
+};
+SUB_RENDERERS.appcontainers = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Containers in the latest revision template."));
+  const t = getPath(full,"properties.template") || {};
+  appTable(host, ["Name","Image","CPU (cores)","Memory","Environment variables"],
+    (t.containers||[]).map(c=>[c.name, c.image, (c.resources||{}).cpu, (c.resources||{}).memory, (c.env||[]).length]),
+    "No containers.");
+};
+SUB_RENDERERS.appingress = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Ingress routes HTTP/TCP traffic to the app."));
+  const ing = getPath(full,"properties.configuration.ingress");
+  if (!ing) { host.append(emptyState("Ingress is disabled for this container app.")); return; }
+  appKv(host, [["Ingress","Enabled"], ["Ingress traffic", ing.external ? "Accepting traffic from anywhere" : "Limited to the Container Apps environment"],
+               ["Target port", ing.targetPort], ["Transport", ing.transport],
+               ["Insecure connections", ing.allowInsecure ? "Allowed" : "Not allowed"],
+               ["Application URL", "https://" + ing.fqdn],
+               ["Revision mode", getPath(full,"properties.configuration.activeRevisionsMode")]]);
+};
+SUB_RENDERERS.appscale = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Replica range and scale rules for the latest revision."));
+  const sc = getPath(full,"properties.template.scale") || {};
+  appKv(host, [["Min replicas", sc.minReplicas], ["Max replicas", sc.maxReplicas],
+               ["Scale rules", (sc.rules||[]).length ? sc.rules.map(r=>r.name).join(", ") : "None (default HTTP scaling)"]]);
+};
+SUB_RENDERERS.appsecrets = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Secret names. Values are never returned by the API (POST listSecrets returns them)."));
+  appTable(host, ["Name","Source"], (getPath(full,"properties.configuration.secrets")||[]).map(s=>[s.name, "Container Apps secret"]),
+    "No secrets defined.");
+};
+
 SUB_RENDERERS.databases = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Databases under this SQL server."));
   listChildResources(svc, full, host, "databases",
