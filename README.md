@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 07:19 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 07:24 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -33,7 +33,7 @@ _Updated 2026-10-27 07:19 UTC · refreshes after every pipeline run_
 | Amazon Route 53 [#60](https://github.com/vyomi-cloud/appliance/issues/60) | AWS | 🔍 In gate ([PR #106](https://github.com/vyomi-cloud/appliance/pull/106)) | 20/20 | — |
 | Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🔍 In gate ([PR #107](https://github.com/vyomi-cloud/appliance/pull/107)) | 18/18 | — |
 | Amazon Simple Notification Service [#62](https://github.com/vyomi-cloud/appliance/issues/62) | AWS | 🔍 In gate ([PR #108](https://github.com/vyomi-cloud/appliance/pull/108)) | 18/18 | — |
-| Amazon Simple Systems Manager (SSM) [#63](https://github.com/vyomi-cloud/appliance/issues/63) | AWS | 🔍 In gate ([PR #109](https://github.com/vyomi-cloud/appliance/pull/109)) | 19/19 | — |
+| Amazon Simple Systems Manager (SSM) [#63](https://github.com/vyomi-cloud/appliance/issues/63) | AWS | 🚀 Releasing | 19/19 | — |
 | AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | — |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | — |
 | AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #112](https://github.com/vyomi-cloud/appliance/pull/112)) | 18/18 | — |
