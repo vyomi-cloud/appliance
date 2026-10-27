@@ -2,12 +2,12 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-10-27T02:55:01+00:00
+### Upstream watch — 2026-10-27T03:55:02+00:00
 
 Tracking 3423 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and 3 lifecycle feeds.
 
 **0 change(s), 0 actionable.**
 
-Sources that failed this run (1): maven/com.azure:azure-storage-blob: The read operation timed out
+Sources that failed this run (1): maven/com.azure:azure-cosmos: The read operation timed out
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
