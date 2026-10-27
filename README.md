@@ -1,13 +1,13 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 12:33 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 12:38 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
-- **Released:** 43 services (AWS 16 · GCP 15 · Azure 12) of 1,068 the clouds publish
-- **Building now:** nothing
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Tasks API (GCP), Google Cloud Memorystore for Redis API (GCP)
-- **Queued:** 55 services (P1 first, then P2)
+- **Released:** 44 services (AWS 16 · GCP 16 · Azure 12) of 1,068 the clouds publish
+- **Building now:** Cloud Run Admin API (GCP, no manifest yet checks)
+- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Tasks API (GCP)
+- **Queued:** 54 services (P1 first, then P2)
 - **Consoles really implemented:** offline 50% · Nano 62%
 - **Hourly tests:** 61 of 64 suites passing (run 11:50 UTC)
 - **Upstream watch:** 5 open changes from the real clouds to adopt
@@ -17,7 +17,7 @@ _Updated 2026-10-27 12:33 UTC · refreshes after every pipeline run_
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | 40% · 60% |
-| GCP | 15 | 0 | 7 | 14 | 43% · 58% |
+| GCP | 16 | 1 | 6 | 13 | 43% · 58% |
 | Azure | 12 | 0 | 0 | 24 | 69% · 68% |
 
 ## In progress
@@ -41,8 +41,8 @@ _Updated 2026-10-27 12:33 UTC · refreshes after every pipeline run_
 | Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🔍 In gate ([PR #120](https://github.com/vyomi-cloud/appliance/pull/120)) | 18/18 | — |
 | Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🔍 In gate ([PR #122](https://github.com/vyomi-cloud/appliance/pull/122)) | 18/18 | — |
 | Cloud Monitoring API [#74](https://github.com/vyomi-cloud/appliance/issues/74) | GCP | 🔍 In gate ([PR #123](https://github.com/vyomi-cloud/appliance/pull/123)) | 18/18 | — |
+| Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🛠 Building | no manifest yet | — |
 | Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | — |
-| Google Cloud Memorystore for Redis API [#75](https://github.com/vyomi-cloud/appliance/issues/75) | GCP | 🔍 In gate ([PR #124](https://github.com/vyomi-cloud/appliance/pull/124)) | 20/20 | — |
 
 ## Released services
 
@@ -89,6 +89,7 @@ _Updated 2026-10-27 12:33 UTC · refreshes after every pipeline run_
 | Cloud Scheduler | — | – · – | ✅ watched | [v3.0.14](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.14) |
 | Kubernetes Engine | — | – · – | ✅ watched | [v3.0.15](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.15) |
 | IAM Service Account Credentials | — | – · – | ✅ watched | [v3.0.16](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.16) |
+| Memorystore for Redis | — | – · – | ✅ watched | [v3.0.17](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.17) |
 
 ### Azure
 
@@ -135,11 +136,10 @@ _Updated 2026-10-27 12:33 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary><b>GCP</b> — 14 queued</summary>
+<details><summary><b>GCP</b> — 13 queued</summary>
 
 | Service | Priority | Issue | Offline backend |
 |---|---|---|---|
-| Cloud Run Admin API | P1 | [#76](https://github.com/vyomi-cloud/appliance/issues/76) | docker · Pro |
 | Workflows API | P1 | [#77](https://github.com/vyomi-cloud/appliance/issues/77) | in-process |
 | Agent Platform API | P2 | not filed | ollama · 50 MB · Max |
 | Batch API | P2 | not filed | docker · Pro |
@@ -646,33 +646,6 @@ _Updated 2026-10-27 12:33 UTC · refreshes after every pipeline run_
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
 | ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
-
-</details>
-
-<details><summary>Gate checks — Google Cloud Memorystore for Redis API (GCP)</summary>
-
-| | Check | Detail |
-|---|---|---|
-| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
-| ✅ | manifest status is ready | status=ready |
-| ✅ | engine exists in core/ | core/gcp_redis_core.py |
-| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/gcp_redis_core.py |
-| ✅ | engine listed in wasm/build_cores.py |  |
-| ✅ | service in the Nano console catalog (wasm/fixtures) | gcp-catalog.json |
-| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
-| ✅ | registry entry (pending-release or released) |  |
-| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
-| ✅ | has a offline sdk-java test bed |  |
-| ✅ | has a offline sdk-go test bed |  |
-| ✅ | has a offline cli test bed |  |
-| ✅ | has a offline ui test bed |  |
-| ✅ | has a nano ui test bed |  |
-| ✅ | upstream id tracked by the hourly upstream watcher | redis/v1 |
-| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'container', 'name': 'valkey', 'image': 'valkey/valkey:8.0.1-alpine', 'license': 'BSD-3-Clause', 'tier': 'lite', 'compose_s |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: valkey; chose valkey |
-| ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=BSD-3-Clause |
-| ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=BSD-3-Clause |
-| ✅ | backend image is pinned to a version (not latest) | valkey/valkey:8.0.1-alpine |
 
 </details>
 
