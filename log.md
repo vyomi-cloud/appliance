@@ -1,3 +1,12 @@
+### Upstream watch — 2026-10-27T00:54:58+00:00
+
+Tracking 3423 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `announcement` AWS Glue Data Catalog now supports OAuth for Apache Iceberg REST Catalog APIs ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/glue-catalog-oauth-iceberg-rest/))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-10-26T23:54:56+00:00
 
 Tracking 3423 AWS + GCP operations, 12 Azure spec areas, 35 SDK/CLI packages and 3 lifecycle feeds.
