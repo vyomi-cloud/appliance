@@ -2248,6 +2248,62 @@ SUB_RENDERERS.dnsquery = function(svc, full, host){
   run();
 };
 
+// ---- Managed Identities (Microsoft.ManagedIdentity/userAssignedIdentities) renderers ----------
+SUB_RENDERERS.msifedcreds = function(svc, full, host){
+  const base = ORIGIN + full.id + "/federatedIdentityCredentials";
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"}, "Federated credentials let workloads outside Azure (GitHub Actions, Kubernetes, any OIDC issuer) exchange their token for ",
+      el("strong",{}, full.name), ". Up to 20 per identity; `az identity federated-credential` and the SDKs edit the same data."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center;flex-wrap:wrap"});
+    bar.append(el("button",{class:"btn",onclick:addCred}, icon("add"), "Add credential"),
+               el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base + q).then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Name","Issuer","Subject identifier","Audience",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      if (!items.length) t.append(el("tr",{}, el("td",{colspan:5}, "No federated credentials yet. Add one to trust an external OIDC issuer.")));
+      items.forEach(it=>{
+        const p = it.properties || {};
+        t.append(el("tr",{}, el("td",{}, it.name), el("td",{}, p.issuer||""), el("td",{}, p.subject||""),
+          el("td",{}, (p.audiences||[]).join(", ")),
+          el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>{
+            fetch(base + "/" + encodeURIComponent(it.name) + q, {method:"DELETE"}).then(()=>{ toast("Credential deleted"); render(); });
+          }}, "Delete"))));
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load federated credentials.")));
+  }
+  function addCred(){
+    const name = (prompt("Credential name:", "github-actions")||"").trim(); if(!name) return;
+    const issuer = (prompt("Issuer URL:", "https://token.actions.githubusercontent.com")||"").trim(); if(!issuer) return;
+    const subject = (prompt("Subject identifier:", "repo:cloudlearn/demo:ref:refs/heads/main")||"").trim(); if(!subject) return;
+    fetch(base + "/" + encodeURIComponent(name) + q, {method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({properties:{issuer, subject, audiences:["api://AzureADTokenExchange"]}})})
+      .then(r=>r.json().then(j=>({ok:r.ok, j}))).then(({ok,j})=>{
+        if(ok) toast("Credential saved"); else toast((j.error&&j.error.message)||"Could not save credential","err");
+        render(); });
+  }
+  render();
+};
+SUB_RENDERERS.msiassociated = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Resources that use ", el("strong",{}, full.name),
+    " as a user-assigned identity (VMs, Container Apps, Functions, AI services…)."));
+  const out = el("div",{}); host.append(out);
+  fetch(ORIGIN + full.id + "/listAssociatedResources?api-version=" + svc.apiVersion, {method:"POST"}).then(r=>r.json()).then(j=>{
+    const items = j.value || [];
+    const t = el("table",{class:"sub-table"});
+    const hdr = el("tr",{}); ["Name","Type","Resource group","Subscription"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+    if (!items.length) t.append(el("tr",{}, el("td",{colspan:4}, "No resources are using this identity yet. Attach it from a resource's Identity blade.")));
+    items.forEach(it=>t.append(el("tr",{}, el("td",{}, it.name), el("td",{}, it.type), el("td",{}, it.resourceGroup), el("td",{}, it.subscriptionId))));
+    out.append(t);
+  }).catch(()=>out.append(emptyState("Could not load associated resources.")));
+};
+
 SUB_RENDERERS.databases = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Databases under this SQL server."));
   listChildResources(svc, full, host, "databases",

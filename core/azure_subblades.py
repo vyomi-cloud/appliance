@@ -336,6 +336,18 @@ _DNS_SUB = [
     ]},
 ]
 
+_MSI_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Settings", "items": [
+        {"key": "fedcreds",   "label": "Federated credentials", "icon": "key",       "type": "msiFedCreds"},
+        {"key": "assoc",      "label": "Associated resources",  "icon": "link",      "type": "msiAssociated"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",               "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
@@ -359,5 +371,6 @@ SUB_BLADES: dict[str, list] = {
     "appconfiguration": _APPCONFIG_SUB,
     "cognitiveservices": _COGS_SUB,
     "dns":         _DNS_SUB,
+    "msi":         _MSI_SUB,
     "rbac":        _RBAC_SUB,
 }

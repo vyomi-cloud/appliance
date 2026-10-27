@@ -119,6 +119,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "azure.rbac": 0.00,
     "azure.appconfiguration": 36.50,  # Standard tier: $1.20 per store per day (~30.4 days/month); requests included to 200K/day
     "azure.cognitiveservices": 1.00,  # S0 pay-as-you-go: ~1K transactions/month (~$1 per 1K text records / transactions); F0 is free
+    "azure.msi": 0.00,        # Managed identities are free (no charge for user-assigned identities or federated credentials)
     "azure.dns": 0.50,        # Azure DNS: $0.50 per hosted zone per month (first 25 zones; $0.10 beyond) + $0.40 per million queries
     "azure.app": 39.42,       # Container Apps Consumption: one always-on 0.5 vCPU / 1 GiB replica (~$0.000024/vCPU-s + $0.000003/GiB-s, ~2.63M s/month)
 }

@@ -417,6 +417,25 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
+        "key": "msi", "label": "Managed Identities", "icon": "badge",
+        "namespace": "Microsoft.ManagedIdentity", "type": "userAssignedIdentities",
+        "api_version": "2023-01-31", "scope": "rg",
+        "banner": "User-assigned managed identities: create an identity once, attach it to VMs, Container Apps, Functions and more, and let those resources authenticate without secrets. Federated credentials trust tokens from an external OIDC issuer (GitHub Actions, Kubernetes). The SDKs, `az identity` and this console edit the same data.",
+        "children": [{"type": "federatedIdentityCredentials", "label": "Federated credentials", "icon": "key"}],
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["properties.clientId", "Client ID"], ["properties.principalId", "Principal (object) ID"],
+                    ["properties.tenantId", "Tenant ID"]],
+        "create_fields": [
+            {"name": "name", "label": "Identity name", "default": "cloudlearn-identity"},
+            {"name": "location", "label": "Region", "type": "select",
+             "options": ["eastus", "eastus2", "westus2", "westeurope", "northeurope", "centralindia"], "default": "eastus"},
+        ],
+        "defaults": {
+            "location": "eastus",
+            "properties": {},
+        },
+    },
+    {
         "key": "cognitiveservices", "label": "Azure AI services", "icon": "psychology",
         "namespace": "Microsoft.CognitiveServices", "type": "accounts",
         "api_version": "2024-10-01", "scope": "rg",
@@ -718,6 +737,11 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         if _dns_probe.handles(chain):
             return await _handle_dns(request, method, sub, rg, chain, names, base)
 
+    if namespace.lower() == "microsoft.managedidentity":
+        from core import azure_msi_core as _msi_probe
+        if _msi_probe.handles(chain):
+            return await _handle_msi(request, method, sub, rg, chain, names, base)
+
     if namespace.lower() == "microsoft.cognitiveservices":
         return await _handle_cognitiveservices(request, method, sub, rg, chain, names, base)
 
@@ -874,6 +898,19 @@ async def _handle_dns(request: Request, method: str, sub: str, rg: str | None, c
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Network/dnsZones", "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_msi(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                      names: list[str], base: str) -> JSONResponse:
+    from core import azure_msi_core as _mi
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _mi.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+                                             "name": r["rid"].rsplit("/", 1)[-1], "resource_id": r["rid"]})
     return resp
 
 
