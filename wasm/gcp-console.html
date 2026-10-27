@@ -897,7 +897,7 @@ async function renderList(main){
       const path = svc.columns[state.sortBy][0];
       filtered.sort((a,b) => String(getPath(a,path)||"").localeCompare(String(getPath(b,path)||"")) * state.sortDir);
     }
-    document.getElementById("countChip").textContent = filtered.length ? `(${filtered.length})` : "";
+    const chip = document.getElementById("countChip"); if (chip) chip.textContent = filtered.length ? `(${filtered.length})` : "";
     stats.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;
@@ -1647,7 +1647,8 @@ function _recordFieldCount(field){
     try {
       const r = await api("GET", fillCommon(svc.resource_path, {name}));
       if (r.ok && r.json) { const v = getPath(r.json, field); if (Array.isArray(v)) return v.length;
-        if (v && typeof v === "object") return Object.keys(v).length; }
+        if (v && typeof v === "object") return Object.keys(v).length;
+        return 0; }   // the resource loaded and has no such children yet: a count of 0, not "-"
     } catch(_){}
     return null;
   };

@@ -297,7 +297,7 @@ async function crawlConsole(browser, base, con, needsSW) {
       net.push({ status: s, url: u.replace(base, "").slice(0, 200), body });
     }
   });
-  page.on("pageerror", (e) => errs.push(String(e.message).split("\n")[0].slice(0, 300)));
+  page.on("pageerror", (e) => { if (process.env.CRAWL_STACK) console.error("PAGEERROR", e.stack); errs.push(String(e.message).split("\n")[0].slice(0, 300)); });
   // Successful data calls (the console's /api/* fetches, served by the
   // appliance offline or the service worker in Nano) per surface.
   // Any data fetch counts (Nano serves cloud-native paths like

@@ -821,7 +821,7 @@ async function renderList(main){
       const path = svc.columns[state.sortBy][0];
       filtered.sort((a,b) => String(getPath(a,path)||"").localeCompare(String(getPath(b,path)||"")) * state.sortDir);
     }
-    document.getElementById("countChip").textContent = filtered.length ? `(${filtered.length})` : "";
+    const chip = document.getElementById("countChip"); if (chip) chip.textContent = filtered.length ? `(${filtered.length})` : "";
     stats.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;

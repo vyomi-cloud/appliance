@@ -668,6 +668,14 @@ async function route(method, path, body, query) {
   let gs = path.match(/^\/api\/gcp\/subresource\/pubsub\/([^/]+)\/subscriptions\/?$/);
   if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListSubscriptions", { service: "pubsub", name: dec(gs[1]) }] };
   if (gs && method === "POST") return { tuple: ["gcp", "_resource", "CreateSubscription", { service: "pubsub", name: dec(gs[1]), body: body || {} }] };
+  // Project-level Pub/Sub subscriptions collection (the topics grid counts them; the
+  // catalog lists it as the topic's `subscriptions` api path).
+  gs = path.match(/^\/api\/gcp\/pubsub\/v1\/projects\/[^/]+\/subscriptions\/?$/);
+  if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListAllSubscriptions", { service: "pubsub" }] };
+  if (gs && method === "POST") return { tuple: ["gcp", "_resource", "CreateSubscription", { service: "pubsub", name: String(((body || {}).topic) || "").split("/").pop(), body: { ...(body || {}), name: (body || {}).name || (body || {}).subscriptionId } }] };
+  // Real Pub/Sub create: PUT .../subscriptions/{id} with {topic} (client libraries, gcloud).
+  gs = path.match(/^\/api\/gcp\/pubsub\/v1\/projects\/[^/]+\/subscriptions\/([^/]+)$/);
+  if (gs && method === "PUT") return { tuple: ["gcp", "_resource", "CreateSubscription", { service: "pubsub", name: String(((body || {}).topic) || "").split("/").pop(), body: { ...(body || {}), name: dec(gs[1]) } }] };
   gs = path.match(/^\/api\/gcp\/subresource\/cloudsql\/([^/]+)\/databases\/?$/);
   if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListDatabases", { service: "cloudsql", name: dec(gs[1]) }] };
   if (gs && method === "POST") return { tuple: ["gcp", "_resource", "CreateDatabase", { service: "cloudsql", name: dec(gs[1]), body: body || {} }] };
