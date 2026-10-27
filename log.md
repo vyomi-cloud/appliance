@@ -48,3 +48,4 @@
 | 2026-10-27T03:38Z | #61 | aws/sesv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40444910382) |
 | 2026-10-27T04:02Z | #63 | aws/ssm | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40445464202) |
 | 2026-10-27T04:07Z | #61 | aws/sesv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40447681621) |
+| 2026-10-27T04:12Z | #63 | aws/ssm | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40448163606) |
