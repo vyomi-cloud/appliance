@@ -376,8 +376,10 @@ async def azure_blob_dispatch_middleware(request, call_next):
         # blob rule below, since queue requests also carry x-ms-version.
         _m_kv = re.match(r"^([a-z0-9][a-z0-9-]*)\.vault\.", host)
         _m_q = re.match(r"^([a-z0-9][a-z0-9-]*)\.queue\.", host)
-        if (_m_kv or _m_q) and not path.startswith("/azure-data"):
-            kind, name = ("keyvault", _m_kv.group(1)) if _m_kv else ("queue", _m_q.group(1))
+        _m_ac = re.match(r"^([a-z0-9][a-z0-9-]*)\.azconfig\.", host)   # App Configuration: {store}.azconfig.*
+        if (_m_kv or _m_q or _m_ac) and not path.startswith("/azure-data"):
+            kind, name = (("keyvault", _m_kv.group(1)) if _m_kv else
+                          ("appconfig", _m_ac.group(1)) if _m_ac else ("queue", _m_q.group(1)))
             tail = "" if path == "/" else path
             new_path = f"/azure-data/{kind}/{name}{tail}"
             request.scope["path"] = new_path

@@ -376,6 +376,27 @@ RESOURCE_CATALOG: list[dict] = [
         "defaults": {"properties": {"provisioningState": "Succeeded"}},
     },
     {
+        "key": "appconfiguration", "label": "App Configuration", "icon": "tune",
+        "namespace": "Microsoft.AppConfiguration", "type": "configurationStores",
+        "api_version": "2024-05-01", "scope": "rg",
+        "banner": "Centralized key-values and feature flags. The native App Configuration SDKs and `az appconfig kv` talk to this store's endpoint (connection string from Access settings); the Configuration explorer edits the same data.",
+        "children": [{"type": "keyValues", "label": "Key-values", "icon": "list"}],
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["sku.name", "Pricing tier"],
+                    ["properties.endpoint", "Endpoint"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [
+            {"name": "name", "label": "Resource name", "default": "appconfig-cloudlearn"},
+            {"name": "sku.name", "label": "Pricing tier (Free, Developer, Standard, Premium)", "default": "Standard"},
+            {"name": "properties.disableLocalAuth", "label": "Disable access keys, Entra ID only (true/false)", "default": "false"},
+            {"name": "properties.softDeleteRetentionInDays", "label": "Soft-delete retention (days)", "type": "number", "default": 7},
+        ],
+        "defaults": {
+            "sku": {"name": "Standard"},
+            "properties": {"provisioningState": "Succeeded", "disableLocalAuth": False, "publicNetworkAccess": "Enabled"},
+        },
+    },
+    {
         "key": "role_definition",
         "label": "Role Definition",
         "icon": "admin_panel_settings",
@@ -643,6 +664,11 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             names.append(token)
     is_collection = (len(chain) % 2 == 1)  # ends on a type → LIST
 
+    # Microsoft.AppConfiguration: a dedicated engine (core/azure_appconfiguration_core.py) owns the
+    # store / key-value / replica semantics; the ARM store below is its resource map.
+    if namespace.lower() == "microsoft.appconfiguration":
+        return await _handle_appconfiguration(request, method, sub, rg, chain, names, base)
+
     top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
     if top is None:
         return _error(404, "ResourceTypeNotSupported",
@@ -762,6 +788,24 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         # exercises real LRO polling.
         return Response(status_code=200 if rec is not None else 204)
     return _error(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+async def _handle_appconfiguration(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                                   names: list[str], base: str) -> JSONResponse:
+    from core import azure_appconfiguration_core as _ac
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _ac.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    api_version = request.query_params.get("api-version") or _ac.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["lro"] and r["status"] < 300:
+        resp.status_code = 200 if r["status"] == 201 else r["status"]
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.AppConfiguration/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
 
 
 async def _handle_app(request: Request, method: str, sub: str, rg: str | None, chain: list[str],

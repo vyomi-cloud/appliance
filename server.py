@@ -23182,6 +23182,13 @@ try:
 except Exception as _e:   # never let this break appliance boot
     print(f"[azure-app] runtime skipped: {_e}")
 
+# Azure App Configuration data plane (/azure-data/appconfig/{store}/kv …); the ARM control plane is in azure_services.
+try:
+    from providers import azure_appconfiguration_routes as _azure_appconfig_routes
+    _azure_appconfig_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-appconfig] routes skipped: {_e}")
+
 # Memorystore for Redis: native /v1/projects/*/locations/*/instances wire + console REST (/api/gcp/redis/*).
 try:
     from providers import gcp_redis_console as _redis_console
