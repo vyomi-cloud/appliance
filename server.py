@@ -15156,6 +15156,9 @@ async def api_gcp_pubsub_put_topic(project: str, topic: str, request: Request):
                 t = _pe.create_topic(project, topic_id, labels)
             except _gax.AlreadyExists:
                 t = _pe.get_topic(project, topic_id) or {"name": topic_id}
+            _ps_rec = _gcp_pubsub_topic_record(project, topic_id, payload)
+            gcp_pubsub_state.setdefault("topics", {})[topic_id] = _ps_rec
+            _cloudsim_sync_service_resource("gcp", "pubsub", "topic", topic_id, _ps_rec, "gcp_pubsub")
             return _gcp_pubsub_topic_view(project, t)
     except HTTPException:
         raise
@@ -15195,6 +15198,9 @@ async def api_gcp_pubsub_put_subscription(project: str, subscription: str, reque
                 payload.get("labels") if isinstance(payload.get("labels"), dict) else None,
                 bool(payload.get("enableMessageOrdering", False)),
             )
+            _ps_rec = _gcp_pubsub_subscription_record(project, sub_id, payload)
+            gcp_pubsub_state.setdefault("subscriptions", {})[sub_id] = _ps_rec
+            _cloudsim_sync_service_resource("gcp", "pubsub", "subscription", sub_id, _ps_rec, "gcp_pubsub")
             return _gcp_pubsub_subscription_view(project, sub)
         except _gax.AlreadyExists:
             raise HTTPException(409, detail="Subscription already exists")

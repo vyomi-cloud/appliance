@@ -536,6 +536,31 @@ def api_gcp_sql_delete_database(project: str, instance: str, database: str):
     return s._gcp_sql_make_operation(project, instance, "DELETE_DATABASE")
 
 
+def _pubsub_mirror(s, kind: str, project: str, rid: str, payload: dict | None = None, delete: bool = False) -> None:
+    """The Pub/Sub emulator owns topics/subscriptions, but the space's inventory
+    (resource_count, cost savings) reads gcp_pubsub_state — keep a metadata record
+    there for every emulator-backed resource so it is counted and billed."""
+    bucket = "topics" if kind == "topic" else "subscriptions"
+    try:
+        if delete:
+            gcp_pubsub_state.get(bucket, {}).pop(rid, None)
+            if kind == "topic":
+                for sid, sub in list(gcp_pubsub_state.get("subscriptions", {}).items()):
+                    if str(sub.get("topic") or "").split("/")[-1] == rid:
+                        gcp_pubsub_state["subscriptions"].pop(sid, None)
+                        s._cloudsim_sync_service_resource("gcp", "pubsub", "subscription", sid, {}, "gcp_pubsub", action="delete")
+            s._cloudsim_sync_service_resource("gcp", "pubsub", kind, rid, {}, "gcp_pubsub", action="delete")
+            return
+        if kind == "topic":
+            rec = s._gcp_pubsub_topic_record(project, rid, payload)
+        else:
+            rec = s._gcp_pubsub_subscription_record(project, rid, payload)
+        gcp_pubsub_state.setdefault(bucket, {})[rid] = rec
+        s._cloudsim_sync_service_resource("gcp", "pubsub", kind, rid, rec, "gcp_pubsub")
+    except Exception:
+        pass
+
+
 def api_gcp_pubsub_list_topics(project: str):
     s = _server()
     project = _gcp_project_name(project)
@@ -563,6 +588,7 @@ async def api_gcp_pubsub_create_topic(project: str, request: Request):
             t = await asyncio.to_thread(_ps_emu.create_topic, project, topic_id, labels)
         except _gax.AlreadyExists:
             raise HTTPException(409, detail="Topic already exists")
+        _pubsub_mirror(s, "topic", project, topic_id, payload)
         return s._gcp_pubsub_topic_view(project, t)
     topic = s._gcp_pubsub_topic_record(project, topic_id, payload)
     gcp_pubsub_state.setdefault("topics", {})[topic_id] = topic
@@ -626,6 +652,7 @@ def api_gcp_pubsub_delete_topic(project: str, topic: str):
     if _ps_emu.available():
         if not _ps_emu.delete_topic(project, topic):
             raise HTTPException(404, detail="Topic not found")
+        _pubsub_mirror(s, "topic", project, topic, delete=True)
         return {"done": True}
     rec = gcp_pubsub_state.get("topics", {}).get(topic)
     if not rec or str(rec.get("project") or project) != project:
@@ -727,6 +754,7 @@ async def api_gcp_pubsub_create_subscription(project: str, request: Request, que
             raise HTTPException(409, detail="Subscription already exists")
         except _gax.NotFound:
             raise HTTPException(404, detail="Topic not found")
+        _pubsub_mirror(s, "subscription", project, sub_id, payload)
         return s._gcp_pubsub_subscription_view(project, sub)
     sub = s._gcp_pubsub_subscription_record(project, sub_id, payload)
     if not sub.get("topic"):
@@ -821,6 +849,7 @@ def api_gcp_pubsub_delete_subscription(project: str, subscription: str):
     if _ps_emu.available():
         if not _ps_emu.delete_subscription(project, subscription):
             raise HTTPException(404, detail="Subscription not found")
+        _pubsub_mirror(s, "subscription", project, subscription, delete=True)
         return {"done": True}
     rec = gcp_pubsub_state.get("subscriptions", {}).get(subscription)
     if not rec or str(rec.get("project") or project) != project:
