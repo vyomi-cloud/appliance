@@ -21,9 +21,11 @@ on:
         description: 'Daily branch date (YYYY-MM-DD, IST). Blank = today.'
         required: false
 
-# Wait for an in-flight hourly run so the PR includes its fixes.
+# Own group: sharing `conformance-hourly` let each queued hourly run replace
+# (cancel) this pending run, so the daily PR never ran. Fixes an in-flight
+# hourly run pushes later still land on the PR, since its head is the branch.
 concurrency:
-  group: conformance-hourly
+  group: conformance-daily-pr
   cancel-in-progress: false
 
 permissions:
