@@ -4,6 +4,18 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.14] — 2026-10-27
+
+New service release.
+
+- New service: GCP Cloud Scheduler
+- expansion(gcp/cloudscheduler): Cloud Scheduler engine core + unit tests
+- expansion(gcp/cloudscheduler): wire, console catalog, Nano vendoring …
+- expansion(gcp/cloudscheduler): Java SDK test bed, enum-encoding=int +…
+- expansion(gcp/cloudscheduler): Go SDK + gcloud CLI test beds
+- expansion(gcp/cloudscheduler): create wizard, console tests (offline …
+- expansion(gcp/cloudscheduler): console record name is the short job i…
+
 ## [3.0.13] — 2026-10-27
 
 New service release.

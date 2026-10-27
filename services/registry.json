@@ -326,7 +326,8 @@
    "key": "cloudscheduler",
    "name": "Cloud Scheduler",
    "upstream": "cloudscheduler/v1",
-   "status": "pending-release"
+   "status": "released",
+   "released_in": "3.0.14"
   }
  ]
 }
