@@ -123,7 +123,7 @@ function banner(text, bad) {
     b = document.createElement("div");
     b.id = "nano-banner";
     b.style.cssText =
-      "position:fixed;left:0;right:0;bottom:0;z-index:99999;font:12px/1.4 ui-monospace,Menlo,monospace;" +
+      "position:fixed;left:0;right:0;bottom:0;z-index:99999;pointer-events:none;font:12px/1.4 ui-monospace,Menlo,monospace;" +
       "padding:6px 12px;text-align:center;color:#fff;background:" + (bad ? "#b91c1c" : "#065f46");
     document.body.appendChild(b);
   }
