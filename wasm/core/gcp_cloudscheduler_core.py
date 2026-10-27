@@ -531,15 +531,63 @@ def _location_view(project, loc):
             "labels": {"cloud.googleapis.com/region": loc}}
 
 
+# Proto enums are strings on the wire by default, but the Java / .NET / Go-gapic REST clients
+# send `$alt=json;enum-encoding=int` and expect integers back (and send integers in bodies).
+_STATE_INT = {ENABLED: 1, PAUSED: 2, DISABLED: 3, UPDATE_FAILED: 4}
+_METHOD_INT = {"HTTP_METHOD_UNSPECIFIED": 0, "POST": 1, "GET": 2, "HEAD": 3, "PUT": 4, "DELETE": 5,
+               "PATCH": 6, "OPTIONS": 7}
+_METHOD_NAME = {v: k for k, v in _METHOD_INT.items()}
+
+
+def _enum_int(obj):
+    if isinstance(obj, dict) and "jobs" in obj:
+        return dict(obj, jobs=[_enum_int(j) for j in obj["jobs"]])
+    if isinstance(obj, dict) and "name" in obj and "/jobs/" in obj["name"]:
+        obj = dict(obj)
+        if obj.get("state") in _STATE_INT:
+            obj["state"] = _STATE_INT[obj["state"]]
+        for t in ("httpTarget", "appEngineHttpTarget"):
+            if isinstance(obj.get(t), dict) and obj[t].get("httpMethod") in _METHOD_INT:
+                obj[t] = dict(obj[t], httpMethod=_METHOD_INT[obj[t]["httpMethod"]])
+    return obj
+
+
+def _wants_int_enums(query):
+    return "enum-encoding=int" in (query.get("$alt") or query.get("alt") or "").replace("%3D", "=")
+
+
+def _normalize_in(payload):
+    """Accept integer enums in request bodies (httpMethod) as the wire clients send them."""
+    for t in ("httpTarget", "appEngineHttpTarget"):
+        tgt = payload.get(t)
+        if isinstance(tgt, dict) and isinstance(tgt.get("httpMethod"), int):
+            tgt["httpMethod"] = _METHOD_NAME.get(tgt["httpMethod"], tgt["httpMethod"])
+    return payload
+
+
 def dispatch(store, method, path, query=None, headers=None, body=b"", invoker=None):
     query = query or {}
+    r = _dispatch(store, method, path, query, headers or {}, body, invoker)
+    if r.status == 200 and _wants_int_enums(query):
+        try:
+            r.body = json.dumps(_enum_int(json.loads(r.body))).encode()
+        except Exception:
+            pass
+    return r
+
+
+def _dispatch(store, method, path, query, headers, body, invoker):
     method = method.upper()
+    for k, v in headers.items():   # REST clients without PATCH (JDK HttpURLConnection) tunnel it over POST
+        if k.lower() == "x-http-method-override" and method == "POST" and v:
+            method = str(v).upper()
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}
     except Exception:
         return _err(400, "INVALID_ARGUMENT", "Invalid JSON payload received.")
     if not isinstance(payload, dict):
         payload = {}
+    payload = _normalize_in(payload)
     p = path.split("?", 1)[0]
     for pre in ("/v1beta1", "/v1"):
         if p.startswith(pre + "/") or p == pre:

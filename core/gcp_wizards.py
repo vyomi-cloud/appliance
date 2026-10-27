@@ -570,6 +570,42 @@ _KMS_WIZARD = _basic_wizard(
 )
 
 
+# ============================================================================
+# Cloud Scheduler — Create job (the REST fields: name, region, description, schedule,
+# timeZone + an HTTP or Pub/Sub target; core/gcp_cloudscheduler_core.job_from_form)
+# ============================================================================
+_CLOUDSCHEDULER_WIZARD = _basic_wizard(
+    name_field=_name("Name", "my-job", r"^[A-Za-z0-9_-]{1,500}$",
+                     "Letters, numbers, hyphens and underscores"),
+    name_default="my-job", region_or_zone="region",
+    extra_basic_fields=[
+        {"name": "description", "label": "Description", "default": "Runs every five minutes"},
+        {"name": "schedule", "label": "Frequency (unix-cron)", "default": "*/5 * * * *", "required": True,
+         "help": "Five fields: minute hour day-of-month month day-of-week, e.g. 0 9 * * 1-5",
+         "validate": {"regex": r"^\S+(\s+\S+){4}$|^@\w+$", "message": "Use five space-separated cron fields"}},
+        {"name": "timeZone", "label": "Time zone", "default": "Etc/UTC", "required": True},
+    ],
+    sections=[
+        {"label": "Configure the execution", "fields": [
+            {"name": "targetType", "label": "Target type", "type": "radio", "default": "HTTP", "options": [
+                {"value": "HTTP",    "label": "HTTP"},
+                {"value": "Pub/Sub", "label": "Pub/Sub"},
+            ]},
+            {"name": "url", "label": "URL", "default": "https://example.com/hook",
+             "ifEquals": {"targetType": "HTTP"}},
+            {"name": "httpMethod", "label": "HTTP method", "type": "select", "default": "POST",
+             "ifEquals": {"targetType": "HTTP"}, "options": [
+                {"value": m, "label": m} for m in ("POST", "GET", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")]},
+            {"name": "topic", "label": "Cloud Pub/Sub topic", "default": "projects/demo/topics/my-topic",
+             "ifEquals": {"targetType": "Pub/Sub"}},
+            {"name": "message", "label": "Message body", "default": "scheduled",
+             "ifEquals": {"targetType": "Pub/Sub"}},
+        ]},
+    ],
+)
+_CLOUDSCHEDULER_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
+
+
 WIZARDS: dict[str, dict] = {
     "compute":       _COMPUTE_WIZARD,
     "storage":       _STORAGE_WIZARD,
@@ -583,4 +619,5 @@ WIZARDS: dict[str, dict] = {
     "eventarc":      _EVENTARC_WIZARD,
     "secretmanager": _SECRETMANAGER_WIZARD,
     "kms":           _KMS_WIZARD,
+    "cloudscheduler": _CLOUDSCHEDULER_WIZARD,
 }

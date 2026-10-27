@@ -5,8 +5,8 @@
     "keywords": ["Amazon S3", "DynamoDB", "Amazon SQS", "Amazon SNS", "AWS IAM", "Identity and Access Management", "AWS KMS", "Key Management Service", "Secrets Manager", "Amazon RDS", "Aurora", "AWS Lambda", "Amazon EC2", "Amazon VPC", "API Gateway", "EventBridge", "Elastic Load Balancing", "CloudWatch Logs"]
   },
   "gcp": {
-    "discovery": ["storage/v1", "pubsub/v1", "compute/v1", "sqladmin/v1beta4", "firestore/v1", "cloudfunctions/v2", "secretmanager/v1", "cloudkms/v1", "iam/v1", "apigateway/v1", "eventarc/v1"],
-    "products": ["Cloud Storage", "Pub/Sub", "Compute Engine", "Cloud SQL", "Firestore", "Cloud Functions", "Cloud Run functions", "Secret Manager", "Cloud Key Management Service", "Identity and Access Management", "API Gateway", "Eventarc", "Virtual Private Cloud"]
+    "discovery": ["storage/v1", "pubsub/v1", "compute/v1", "sqladmin/v1beta4", "firestore/v1", "cloudfunctions/v2", "secretmanager/v1", "cloudkms/v1", "iam/v1", "apigateway/v1", "eventarc/v1", "cloudscheduler/v1"],
+    "products": ["Cloud Storage", "Pub/Sub", "Compute Engine", "Cloud SQL", "Firestore", "Cloud Functions", "Cloud Run functions", "Secret Manager", "Cloud Key Management Service", "Identity and Access Management", "API Gateway", "Eventarc", "Virtual Private Cloud", "Cloud Scheduler"]
   },
   "azure": {
     "specs": ["storage", "compute", "sql", "web", "apimanagement", "keyvault", "eventgrid", "servicebus", "cosmos-db", "network", "authorization", "resources"],
