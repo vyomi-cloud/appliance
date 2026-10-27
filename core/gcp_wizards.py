@@ -486,6 +486,29 @@ _EVENTARC_WIZARD = _basic_wizard(
 # ============================================================================
 # Secret Manager — Create secret
 # ============================================================================
+def _artifactregistry_wizard():
+    w = _basic_wizard(
+        name_field=_name("Name", "my-repo", r"^[a-z][a-z0-9-]{0,61}[a-z0-9]$",
+                         "1-63 chars, lowercase letters, digits, hyphens; start with a letter"),
+        name_default="my-repo", region_or_zone="region",
+        extra_basic_fields=[
+            {"name": "format", "label": "Format", "type": "select", "required": True, "default": "DOCKER",
+             "options": [{"value": "DOCKER", "label": "Docker"}, {"value": "MAVEN", "label": "Maven"},
+                         {"value": "NPM", "label": "npm"}, {"value": "PYTHON", "label": "Python"},
+                         {"value": "APT", "label": "Apt"}, {"value": "YUM", "label": "Yum"},
+                         {"value": "GO", "label": "Go"}, {"value": "GENERIC", "label": "Generic"}]},
+            {"name": "mode", "label": "Mode", "type": "select", "default": "STANDARD_REPOSITORY",
+             "options": [{"value": "STANDARD_REPOSITORY", "label": "Standard"},
+                         {"value": "VIRTUAL_REPOSITORY", "label": "Virtual"},
+                         {"value": "REMOTE_REPOSITORY", "label": "Remote"}]},
+            {"name": "description", "label": "Description", "default": "Created in Vyomi"},
+        ])
+    w["synthetic_map"] = {"__region__": {"location": "$value"}}
+    return w
+
+
+_ARTIFACTREGISTRY_WIZARD = _artifactregistry_wizard()
+
 _SECRETMANAGER_WIZARD = _basic_wizard(
     name_field=_name("Name", "my-secret",
                      r"^[A-Za-z0-9_-]{1,255}$",
@@ -582,5 +605,6 @@ WIZARDS: dict[str, dict] = {
     "iam":           _IAM_WIZARD,
     "eventarc":      _EVENTARC_WIZARD,
     "secretmanager": _SECRETMANAGER_WIZARD,
+    "artifactregistry": _ARTIFACTREGISTRY_WIZARD,
     "kms":           _KMS_WIZARD,
 }

@@ -88,6 +88,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.apigateway": 3.00,   # ~1M calls
     "gcp.vpc": 0.00,
     "gcp.iam": 0.00,
+    "gcp.artifactregistry": 0.50,  # ~5 GB stored at $0.10/GB-month (first 0.5 GB free)
     # Azure
     "azure.vm": 0.00,         # priced via VM hourly
     "azure.sql": 4.99,        # Basic DTU

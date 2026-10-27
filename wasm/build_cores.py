@@ -39,6 +39,7 @@ CORES = [
     "gcp_pubsub_core.py",                           # GCP: Pub/Sub REST (native google-cloud-pubsub)
     "gcp_iam_core.py",                              # GCP: Cloud IAM REST (SA + policy eval)
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
+    "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
     "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
     "azure_cosmos_core.py",                         # Azure: Cosmos DB SQL/Core API (native azure-cosmos)
     "azure_keyvault_secrets_core.py",               # Azure: Key Vault secrets (native azure-keyvault-secrets)
@@ -59,6 +60,10 @@ CORES = [
     "nano_registry.py",                             # shared in-context store registry (console adapter + relay router draw from ONE set)
     "nano_persist.py",                              # store serialize/restore + cross-context sync (persistence + console↔SDK parity)
 ]
+
+# Cores vendored VERBATIM (no GENERATED header): the expansion service gate requires
+# wasm/core/<core>.py to be byte-identical to core/<core>.py. Add new-service cores here.
+BYTE_IDENTICAL = {"gcp_artifactregistry_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
@@ -128,7 +133,7 @@ def main():
         with open(os.path.join(SRC, name)) as f:
             src = f.read()
         with open(os.path.join(OUT, name), "w") as f:
-            f.write(HEADER + src)
+            f.write(src if name in BYTE_IDENTICAL else HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
     check_relay_cores()   # fail loudly if a relay loader lags the cores
 

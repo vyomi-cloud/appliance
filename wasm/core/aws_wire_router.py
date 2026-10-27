@@ -59,6 +59,7 @@ from core import gcp_secretmanager_core as gcp_sec
 from core import gcp_pubsub_core as gcp_ps
 from core import gcp_iam_core as gcp_iam
 from core import gcp_cloudsql_core as gcp_sql
+from core import gcp_artifactregistry_core as gcp_ar
 
 
 def _gcp_service(path):
@@ -71,6 +72,8 @@ def _gcp_service(path):
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if "/projects/" in path:
+        if "/locations/" in path and ("/repositories" in path or "/operations/" in path):
+            return "gcp-artifactregistry"
         if "/databases/" in path and "/documents" in path:
             return "gcp-firestore"
         if "/keyRings" in path:
@@ -220,6 +223,7 @@ class AwsWireRouter:
         self.gcp_msg = s.get("gcp_msg") or InMemoryMessagingStore()
         self.gcp_iam = s.get("gcp_iam") or InMemoryIamStore()
         self.gcp_sql = s.get("gcp_sql") or InMemorySqlStore()
+        self.gcp_ar = s.get("gcp_ar") or gcp_ar.ArtifactRegistryStore()
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -397,6 +401,7 @@ class AwsWireRouter:
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql),
+                "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
             }[svc]
             mod, store = _gcp_core
             r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))

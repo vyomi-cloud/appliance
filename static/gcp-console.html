@@ -933,6 +933,7 @@ async function renderDetail(main){
     const t = (item.type||"").toLowerCase();
     if (t === "overview") return renderOverviewTab(content, svc, STATE.item);
     if (t === "secretvalue") return renderSecretValueTab(content, svc, STATE.item);
+    if (t === "sublist")  return renderSublistTab(content, svc, STATE.item, item);
   if (t === "kmsconfig") return renderKmsConfigTab(content, svc, STATE.item);
     if (t === "objects")  return renderObjectsTab(content, svc, STATE.item);
     if (t === "tags")     return renderLabelsTab(content, svc, STATE.item);
@@ -1161,6 +1162,30 @@ function renderOverviewTab(host, svc, item){
     c2.append(el("div",{style:"font-size:11.5px;color:var(--hint);margin-top:8px"}, ch.note));
     host.append(c2);
   }
+}
+// Generic child-resource list tab (Artifact Registry images/packages/versions/tags):
+// rows come from /api/gcp/sub/{service}/list{Source}/{name}; optional header actions.
+async function renderSublistTab(host, svc, item, tab){
+  const name = String((item && item.name) || getPath(item, svc.name_field) || "");
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  async function load(){
+    panel.innerHTML = "";
+    const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:12px"});
+    (tab.actions||[]).forEach(a => bar.append(el("button",{class:"btn",onclick:async()=>{
+      const r = await api("POST", "/api/gcp/sub/"+svc.service+"/"+a.op+"/"+encodeURIComponent(name), {});
+      if (r.ok) { toast(a.label+" done"); load(); } else toast(a.label+" failed ("+r.status+")", "err");
+    }}, icon("add"), a.label)));
+    if ((tab.actions||[]).length) panel.append(bar);
+    const r = await api("GET", "/api/gcp/sub/"+svc.service+"/list"+cap(tab.source)+"/"+encodeURIComponent(name));
+    const rows = (r.json && r.json.items) || [];
+    if (!rows.length) { panel.append(el("div",{class:"empty"}, tab.empty || "Nothing to show.")); return; }
+    const tbl = el("table",{class:"gc",style:"width:100%"});
+    tbl.append(el("tr",{}, ...(tab.columns||[]).map(c => el("th",{}, c[1]))));
+    rows.forEach(row => tbl.append(el("tr",{}, ...(tab.columns||[]).map(c => el("td",{}, String(row[c[0]] ?? "—"))))));
+    panel.append(tbl);
+  }
+  await load();
 }
 function renderLabelsTab(host, svc, item){
   const labels = (item.labels && typeof item.labels === "object") ? item.labels : {};

@@ -25,6 +25,7 @@ from core.sql_store import InMemorySqlStore
 from core.iam_store import InMemoryIamStore
 from core.messaging_store import InMemoryMessagingStore
 from core.gcp_firestore_core import FirestoreStore
+from core.gcp_artifactregistry_core import ArtifactRegistryStore
 from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
@@ -76,6 +77,7 @@ def get() -> dict:
             "gcp_msg": InMemoryMessagingStore(),
             "gcp_iam": InMemoryIamStore(),
             "gcp_sql": InMemorySqlStore(),
+            "gcp_ar":  ArtifactRegistryStore(),   # Artifact Registry repositories/packages
             # ── Azure ── (blob/cosmos/keyvault secrets+keys/queue/servicebus)
             "az_blob":   AzureBlobStore(),
             "az_cosmos": CosmosStore(),
