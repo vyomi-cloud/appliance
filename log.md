@@ -59,3 +59,4 @@
 | 2026-10-27T06:01Z | #57 | aws/elbv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40458245032) |
 | 2026-10-27T06:09Z | #58 | aws/kinesis | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40458855931) |
 | 2026-10-27T06:32Z | #59 | aws/logs | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40459618946) |
+| 2026-10-27T06:44Z | #60 | aws/route53 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40461965363) |
