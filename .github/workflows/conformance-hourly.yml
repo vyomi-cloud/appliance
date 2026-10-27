@@ -80,6 +80,7 @@ jobs:
           sparse-checkout: |
             .github/actions
             tests/conformance/hourly/triage.py
+            tests/conformance/hourly/AGENT.md
       - run: echo ".ci-tools/" >> .git/info/exclude
 
       - uses: ./.ci-tools/.github/actions/conformance-stack
@@ -177,6 +178,7 @@ jobs:
           sparse-checkout: |
             .github/actions
             tests/conformance/hourly/triage.py
+            tests/conformance/hourly/AGENT.md
       - run: echo ".ci-tools/" >> .git/info/exclude
 
       - uses: ./.ci-tools/.github/actions/conformance-stack
@@ -202,7 +204,8 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
-            Follow tests/conformance/hourly/AGENT.md exactly, including "Parallel fixers".
+            Follow .ci-tools/tests/conformance/hourly/AGENT.md exactly (this run's copy of the
+            instructions — not the daily branch's), including "Parallel fixers".
             You are the ${{ matrix.cloud }} fixer: your work list is
             tests/conformance/hourly/out/slices/${{ matrix.cloud }}.json (summary in
             slices/${{ matrix.cloud }}.md); other inputs are in tests/conformance/hourly/out/.
