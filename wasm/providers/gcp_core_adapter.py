@@ -340,8 +340,10 @@ def _mon_op(operation, name, body):
             return {"ok": False, "code": e.gcp_status, "message": e.message, "name": body.get("name")}
         try:   # the Metrics tab reads events by policy id
             from core import nano_events
-            nano_events.record(provider="gcp", service="monitoring", resource=str(out.get("id") or ""),
-                               action="Create", status="ok", detail="gcp/monitoring: Create %s" % out.get("id"))
+            # the detail view's `name` is the full resource path, the id is what the grid links on
+            for res in {str(out.get("id") or ""), str(out.get("name") or "")} - {""}:
+                nano_events.record(provider="gcp", service="monitoring", resource=res,
+                                   action="Create", status="ok", detail="gcp/monitoring: Create %s" % out.get("id"))
         except Exception:
             pass
         return out
