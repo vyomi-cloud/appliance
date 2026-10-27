@@ -1,8 +1,7086 @@
 {
  "nano": {
-  "services": []
+  "target": "nano",
+  "at": "2026-10-27T16:03:10.216Z",
+  "services": [
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "EC2",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Details",
+     "Status and alarms",
+     "Monitoring",
+     "Networking",
+     "Security",
+     "Storage",
+     "Connect"
+    ],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "tab Security: column \"IAM ROLE\" shows \"-\"/blank in 1 row(s)",
+      "tab": "Security"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "tab Security: column \"STATE TRANSITION REASON\" shows \"-\"/blank in 1 row(s)",
+      "tab": "Security"
+     }
+    ],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "EC2",
+      "state": "live",
+      "calls": 50
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Details",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Status and alarms",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Monitoring",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Security",
+      "state": "partial",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Storage",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Connect",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "Lambda",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Code",
+     "Test",
+     "Environment variables",
+     "Configuration",
+     "Versions",
+     "Aliases",
+     "Resource-based policy"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Lambda",
+      "state": "live",
+      "calls": 64
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Code",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Test",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Environment variables",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Configuration",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Versions",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Aliases",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Resource-based policy",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "S3",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Objects",
+     "Versions",
+     "Bucket Versioning",
+     "Event notifications",
+     "Lifecycle rules",
+     "Default encryption",
+     "Block Public Access"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "S3",
+      "state": "live",
+      "calls": 64
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Objects",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Versions",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Bucket Versioning",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Event notifications",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Lifecycle rules",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Default encryption",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Block Public Access",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "RDS",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Endpoints",
+     "Networking",
+     "Permissions",
+     "Configuration",
+     "Modify",
+     "Parameter groups",
+     "Snapshots"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "RDS",
+      "state": "live",
+      "calls": 64
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Endpoints",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Configuration",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Modify",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Parameter groups",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Snapshots",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "DynamoDB",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Explore items",
+     "Query/Scan",
+     "Indexes",
+     "Streams and triggers",
+     "Read/write capacity",
+     "Encryption at rest",
+     "Time to live"
+    ],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"Sort key\" shows \"-\"/blank in 1 row(s)"
+     }
+    ],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "DynamoDB",
+      "state": "live",
+      "calls": 64
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "partial",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Explore items",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Query/Scan",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Indexes",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Streams and triggers",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Read/write capacity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Encryption at rest",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Time to live",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "SQS",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Send and receive messages",
+     "Purge messages",
+     "Configuration",
+     "Dead-letter queue",
+     "Encryption",
+     "Access policy",
+     "Monitoring"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "SQS",
+      "state": "live",
+      "calls": 64
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Send and receive messages",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Purge messages",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Configuration",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Dead-letter queue",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Encryption",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access policy",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Monitoring",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "API Gateway",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Resources",
+     "Authorizers",
+     "Models",
+     "Stages",
+     "Deployments",
+     "Settings",
+     "Resource policy"
+    ],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "tab Stages: column \"Description\" shows \"-\"/blank in 1 row(s)",
+      "tab": "Stages"
+     }
+    ],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "API Gateway",
+      "state": "live",
+      "calls": 64
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Resources",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Authorizers",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Models",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Stages",
+      "state": "partial",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Deployments",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Settings",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Resource policy",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "EventBridge",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Rule details",
+     "Targets",
+     "Event pattern",
+     "Invocations",
+     "Dead-letter queue",
+     "Properties",
+     "Permissions"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "EventBridge",
+      "state": "live",
+      "calls": 64
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Rule details",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Targets",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Event pattern",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Invocations",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Dead-letter queue",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "VPC",
+    "tabs": [
+     "Overview",
+     "VPC details",
+     "Subnets",
+     "Route tables",
+     "Internet gateways",
+     "NAT gateways",
+     "Endpoints",
+     "Security groups",
+     "Network ACLs",
+     "Flow logs"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "VPC",
+      "state": "live",
+      "calls": 64
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "VPC details",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Subnets",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Route tables",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Internet gateways",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "NAT gateways",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Endpoints",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Security groups",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Network ACLs",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Flow logs",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "IAM",
+    "tabs": [
+     "Overview",
+     "Users",
+     "User groups",
+     "Roles",
+     "Policies",
+     "Identity providers",
+     "Password policy",
+     "Access Analyzer"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "IAM",
+      "state": "live",
+      "calls": 64
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Users",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "User groups",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Roles",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Policies",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Identity providers",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Password policy",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access Analyzer",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "Secrets Manager",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Secret value",
+     "Versions",
+     "Rotation",
+     "Replication",
+     "Resource policy",
+     "Encryption key",
+     "Properties"
+    ],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"Last rotated\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"Next rotation\" shows \"-\"/blank in 1 row(s)"
+     }
+    ],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Secrets Manager",
+      "state": "live",
+      "calls": 64
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "partial",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Secret value",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Versions",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Rotation",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Replication",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Resource policy",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Encryption key",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "aws",
+    "service": "KMS",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "General configuration",
+     "Key policy",
+     "Aliases",
+     "Key rotation",
+     "Key users",
+     "Key administrators",
+     "Grants"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "KMS",
+      "state": "live",
+      "calls": 64
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "General configuration",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Key policy",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Aliases",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Key rotation",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Key users",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Key administrators",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Grants",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Compute Engine",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Networking",
+     "Disks",
+     "Machine size",
+     "Metadata",
+     "Startup script",
+     "Properties"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Compute Engine",
+      "state": "live",
+      "calls": 50
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Disks",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Machine size",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metadata",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Startup script",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Cloud Functions",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Source",
+     "Trigger",
+     "Variables",
+     "Testing",
+     "Networking",
+     "Properties"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Cloud Functions",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Source",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Trigger",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Variables",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Testing",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Cloud Storage",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Objects",
+     "Lifecycle",
+     "Configuration",
+     "Encryption",
+     "Retention",
+     "Properties"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Cloud Storage",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Objects",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Lifecycle",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Configuration",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Encryption",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Retention",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Cloud SQL",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Databases",
+     "Users",
+     "Backups",
+     "Replicas",
+     "Connectivity",
+     "Flags"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Cloud SQL",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Databases",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Users",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Backups",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Replicas",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Connectivity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Flags",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Firestore",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Data",
+     "Query builder",
+     "Indexes",
+     "Security rules",
+     "Import / Export",
+     "Properties"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Firestore",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Data",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Query builder",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Indexes",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Security rules",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Import / Export",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "VPC Network",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Subnets",
+     "Firewall rules",
+     "Routes",
+     "VPC peering",
+     "Properties",
+     "Network metrics"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "VPC Network",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Subnets",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Firewall rules",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Routes",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "VPC peering",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Network metrics",
+      "state": "live",
+      "calls": 3
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Pub/Sub",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Subscriptions",
+     "Schema",
+     "Messages",
+     "Encryption",
+     "Properties",
+     "Metrics"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Pub/Sub",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Subscriptions",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Schema",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Messages",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Encryption",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 4
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "API Gateway",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Configs",
+     "Routes",
+     "Properties",
+     "Metrics",
+     "Logs"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "API Gateway",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Configs",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Routes",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Logs",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Eventarc",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Event matching",
+     "Destination",
+     "Properties",
+     "Metrics",
+     "Logs"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Eventarc",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Event matching",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Destination",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "tab",
+      "name": "Logs",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Secret Manager",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Secret value",
+     "Versions",
+     "Rotation",
+     "Replication",
+     "Encryption",
+     "Properties"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Secret Manager",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Secret value",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Versions",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Rotation",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Replication",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Encryption",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "Cloud KMS",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Versions",
+     "Rotation & labels",
+     "Key policy",
+     "Import jobs",
+     "Properties",
+     "Metrics"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Cloud KMS",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Versions",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Rotation & labels",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Key policy",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Import jobs",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 2
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "gcp",
+    "service": "IAM & Admin",
+    "tabs": [
+     "Overview",
+     "Members",
+     "Permissions",
+     "Keys",
+     "Properties",
+     "Activity log"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "IAM & Admin",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Members",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Keys",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Resource groups",
+    "tabs": [],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Resource groups",
+      "state": "live",
+      "calls": 73
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Virtual Machines",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Networking",
+     "Connect",
+     "Disks",
+     "Size",
+     "Identity"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Virtual Machines",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 3
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Connect",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Disks",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Size",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Identity",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Storage accounts",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Containers",
+     "File shares",
+     "Queues",
+     "Tables",
+     "Networking"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Storage accounts",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Containers",
+      "state": "live",
+      "calls": 3
+     },
+     {
+      "kind": "tab",
+      "name": "File shares",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Queues",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tables",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "SQL servers",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Databases",
+     "Pricing tier",
+     "Deleted databases",
+     "Failover groups",
+     "Backups"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "SQL servers",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Databases",
+      "state": "live",
+      "calls": 3
+     },
+     {
+      "kind": "tab",
+      "name": "Pricing tier",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Deleted databases",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Failover groups",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Backups",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Service Bus",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Queues",
+     "Topics",
+     "Shared access policies",
+     "Geo-recovery",
+     "Networking"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Service Bus",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Queues",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Topics",
+      "state": "live",
+      "calls": 3
+     },
+     {
+      "kind": "tab",
+      "name": "Shared access policies",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Geo-recovery",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Cosmos DB",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Data Explorer",
+     "Throughput (RU/s)",
+     "Replicate data globally",
+     "Default consistency",
+     "Backup & Restore"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Cosmos DB",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Data Explorer",
+      "state": "live",
+      "calls": 3
+     },
+     {
+      "kind": "tab",
+      "name": "Throughput (RU/s)",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Replicate data globally",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Default consistency",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Backup & Restore",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Function apps",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Functions",
+     "App keys",
+     "Environment variables",
+     "Authentication",
+     "Identity"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Function apps",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Functions",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "tab",
+      "name": "App keys",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Environment variables",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Authentication",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Identity",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "API Management",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "APIs",
+     "Products",
+     "Subscriptions",
+     "Policies",
+     "Named values"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "API Management",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "APIs",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Products",
+      "state": "live",
+      "calls": 3
+     },
+     {
+      "kind": "tab",
+      "name": "Subscriptions",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Policies",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Named values",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Virtual networks",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Address space",
+     "Subnets",
+     "Connected devices",
+     "Peerings",
+     "DNS servers"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Virtual networks",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Address space",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Subnets",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Connected devices",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "tab",
+      "name": "Peerings",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "DNS servers",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Network Security Group",
+    "tabs": [],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Network Security Group",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Event Grid topics",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Event subscriptions",
+     "Topic types",
+     "Access keys",
+     "Networking",
+     "Identity"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Event Grid topics",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Event subscriptions",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Topic types",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "tab",
+      "name": "Access keys",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Identity",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Key vaults",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Secrets",
+     "Keys",
+     "Certificates",
+     "Access policies",
+     "Access configuration"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Key vaults",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Secrets",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Keys",
+      "state": "live",
+      "calls": 3
+     },
+     {
+      "kind": "tab",
+      "name": "Certificates",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Access policies",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Access configuration",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Role Definition",
+    "tabs": [],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Role Definition",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Entra ID / RBAC",
+    "tabs": [
+     "Overview",
+     "JSON view",
+     "Conditions"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Entra ID / RBAC",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "JSON view",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Conditions",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Blob containers",
+    "tabs": [],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Blob containers",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Cosmos databases",
+    "tabs": [],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Cosmos databases",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Key Vault secrets",
+    "tabs": [],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Key Vault secrets",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Key Vault keys",
+    "tabs": [],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Key Vault keys",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Storage queues",
+    "tabs": [],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Storage queues",
+      "state": "live",
+      "calls": 81
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   }
+  ]
  },
  "offline": {
-  "services": []
+  "target": "offline",
+  "at": "2026-10-27T15:39:14.413Z",
+  "services": [
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "EC2",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Details",
+     "Status and alarms",
+     "Monitoring",
+     "Networking",
+     "Security",
+     "Storage",
+     "Connect"
+    ],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "tab Security: column \"IAM ROLE\" shows \"-\"/blank in 1 row(s)",
+      "tab": "Security"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "tab Security: column \"STATE TRANSITION REASON\" shows \"-\"/blank in 1 row(s)",
+      "tab": "Security"
+     }
+    ],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "EC2",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Details",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Status and alarms",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Monitoring",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Security",
+      "state": "partial",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Storage",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Connect",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "Lambda",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Code",
+     "Test",
+     "Environment variables",
+     "Configuration",
+     "Versions",
+     "Aliases",
+     "Resource-based policy"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Lambda",
+      "state": "live",
+      "calls": 7
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Code",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Test",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Environment variables",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Configuration",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Versions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Aliases",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Resource-based policy",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "S3",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Objects",
+     "Versions",
+     "Bucket Versioning",
+     "Event notifications",
+     "Lifecycle rules",
+     "Default encryption",
+     "Block Public Access"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "S3",
+      "state": "live",
+      "calls": 7
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Objects",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Versions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Bucket Versioning",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Event notifications",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Lifecycle rules",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Default encryption",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Block Public Access",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "RDS",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Endpoints",
+     "Networking",
+     "Permissions",
+     "Configuration",
+     "Modify",
+     "Parameter groups",
+     "Snapshots"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "RDS",
+      "state": "live",
+      "calls": 7
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Endpoints",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Configuration",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Modify",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Parameter groups",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Snapshots",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "DynamoDB",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Explore items",
+     "Query/Scan",
+     "Indexes",
+     "Streams and triggers",
+     "Read/write capacity",
+     "Encryption at rest",
+     "Time to live"
+    ],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"Sort key\" shows \"-\"/blank in 1 row(s)"
+     }
+    ],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "DynamoDB",
+      "state": "live",
+      "calls": 7
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "partial",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Explore items",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Query/Scan",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Indexes",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Streams and triggers",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Read/write capacity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Encryption at rest",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Time to live",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "SQS",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Send and receive messages",
+     "Purge messages",
+     "Configuration",
+     "Dead-letter queue",
+     "Encryption",
+     "Access policy",
+     "Monitoring"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "SQS",
+      "state": "live",
+      "calls": 7
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Send and receive messages",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Purge messages",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Configuration",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Dead-letter queue",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Encryption",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Access policy",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Monitoring",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "API Gateway",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Resources",
+     "Authorizers",
+     "Models",
+     "Stages",
+     "Deployments",
+     "Settings",
+     "Resource policy"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "API Gateway",
+      "state": "live",
+      "calls": 7
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Resources",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Authorizers",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Models",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Stages",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Deployments",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Settings",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Resource policy",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "EventBridge",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Rule details",
+     "Targets",
+     "Event pattern",
+     "Invocations",
+     "Dead-letter queue",
+     "Properties",
+     "Permissions"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "EventBridge",
+      "state": "live",
+      "calls": 7
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Rule details",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Targets",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Event pattern",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Invocations",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Dead-letter queue",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "VPC",
+    "tabs": [
+     "Overview",
+     "VPC details",
+     "Subnets",
+     "Route tables",
+     "Internet gateways",
+     "NAT gateways",
+     "Endpoints",
+     "Security groups",
+     "Network ACLs",
+     "Flow logs"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "VPC",
+      "state": "live",
+      "calls": 7
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "VPC details",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Subnets",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Route tables",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Internet gateways",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "NAT gateways",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Endpoints",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Security groups",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Network ACLs",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Flow logs",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "IAM",
+    "tabs": [
+     "Overview",
+     "Users",
+     "User groups",
+     "Roles",
+     "Policies",
+     "Identity providers",
+     "Password policy",
+     "Access Analyzer"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "IAM",
+      "state": "live",
+      "calls": 7
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Users",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "User groups",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Roles",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Policies",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Identity providers",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Password policy",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Access Analyzer",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "Secrets Manager",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "Secret value",
+     "Versions",
+     "Rotation",
+     "Replication",
+     "Resource policy",
+     "Encryption key",
+     "Properties"
+    ],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"Last rotated\" shows \"-\"/blank in 1 row(s)"
+     },
+     {
+      "type": "PLACEHOLDER_CELL",
+      "detail": "after create: column \"Next rotation\" shows \"-\"/blank in 1 row(s)"
+     }
+    ],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Secrets Manager",
+      "state": "live",
+      "calls": 7
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "partial",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Secret value",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Versions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Rotation",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Replication",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Resource policy",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Encryption key",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "offline",
+    "cloud": "aws",
+    "service": "KMS",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Tags",
+     "General configuration",
+     "Key policy",
+     "Aliases",
+     "Key rotation",
+     "Key users",
+     "Key administrators",
+     "Grants"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "KMS",
+      "state": "live",
+      "calls": 7
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "General configuration",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Key policy",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Aliases",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Key rotation",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Key users",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Key administrators",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Grants",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Compute Engine",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Networking",
+     "Disks",
+     "Machine size",
+     "Metadata",
+     "Startup script",
+     "Properties"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Compute Engine",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Disks",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Machine size",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metadata",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Startup script",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Cloud Functions",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Source",
+     "Trigger",
+     "Variables",
+     "Testing",
+     "Networking",
+     "Properties"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Cloud Functions",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Source",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Trigger",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Variables",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Testing",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Cloud Storage",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Objects",
+     "Lifecycle",
+     "Configuration",
+     "Encryption",
+     "Retention",
+     "Properties"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Cloud Storage",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Objects",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Lifecycle",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Configuration",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Encryption",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Retention",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Cloud SQL",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Databases",
+     "Users",
+     "Backups",
+     "Replicas",
+     "Connectivity",
+     "Flags"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Cloud SQL",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Databases",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Users",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Backups",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Replicas",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Connectivity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Flags",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Firestore",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Data",
+     "Query builder",
+     "Indexes",
+     "Security rules",
+     "Import / Export",
+     "Properties"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Firestore",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Data",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Query builder",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Indexes",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Security rules",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Import / Export",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "VPC Network",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Subnets",
+     "Firewall rules",
+     "Routes",
+     "VPC peering",
+     "Properties",
+     "Network metrics"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "VPC Network",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Subnets",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Firewall rules",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Routes",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "VPC peering",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Network metrics",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Pub/Sub",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Subscriptions",
+     "Schema",
+     "Messages",
+     "Encryption",
+     "Properties",
+     "Metrics"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Pub/Sub",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Subscriptions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Schema",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Messages",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Encryption",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "API Gateway",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Configs",
+     "Routes",
+     "Properties",
+     "Metrics",
+     "Logs"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "API Gateway",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Configs",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Routes",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Logs",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Eventarc",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Event matching",
+     "Destination",
+     "Properties",
+     "Metrics",
+     "Logs"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Eventarc",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Event matching",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Destination",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Logs",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Secret Manager",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Secret value",
+     "Versions",
+     "Rotation",
+     "Replication",
+     "Encryption",
+     "Properties"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Secret Manager",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Secret value",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Versions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Rotation",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Replication",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Encryption",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "Cloud KMS",
+    "tabs": [
+     "Overview",
+     "Activity",
+     "Permissions",
+     "Labels",
+     "Versions",
+     "Rotation & labels",
+     "Key policy",
+     "Import jobs",
+     "Properties",
+     "Metrics"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Cloud KMS",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Labels",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Versions",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Rotation & labels",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Key policy",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Import jobs",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "gcp",
+    "service": "IAM & Admin",
+    "tabs": [
+     "Overview",
+     "Members",
+     "Permissions",
+     "Keys",
+     "Properties",
+     "Activity log"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "IAM & Admin",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Members",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Keys",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Resource groups",
+    "tabs": [],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Resource groups",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Virtual Machines",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Networking",
+     "Connect",
+     "Disks",
+     "Size",
+     "Identity"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Virtual Machines",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Connect",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Disks",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Size",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Identity",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Storage accounts",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Containers",
+     "File shares",
+     "Queues",
+     "Tables",
+     "Networking"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Storage accounts",
+      "state": "live",
+      "calls": 19
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Containers",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "File shares",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Queues",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tables",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "SQL servers",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Databases",
+     "Pricing tier",
+     "Deleted databases",
+     "Failover groups",
+     "Backups"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "SQL servers",
+      "state": "live",
+      "calls": 19
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Databases",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Pricing tier",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Deleted databases",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Failover groups",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Backups",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Service Bus",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Queues",
+     "Topics",
+     "Shared access policies",
+     "Geo-recovery",
+     "Networking"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Service Bus",
+      "state": "live",
+      "calls": 19
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Queues",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Topics",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Shared access policies",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Geo-recovery",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Cosmos DB",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Data Explorer",
+     "Throughput (RU/s)",
+     "Replicate data globally",
+     "Default consistency",
+     "Backup & Restore"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Cosmos DB",
+      "state": "live",
+      "calls": 18
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Data Explorer",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Throughput (RU/s)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Replicate data globally",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Default consistency",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Backup & Restore",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Function apps",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Functions",
+     "App keys",
+     "Environment variables",
+     "Authentication",
+     "Identity"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Function apps",
+      "state": "live",
+      "calls": 19
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Functions",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "App keys",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Environment variables",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Authentication",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Identity",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "API Management",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "APIs",
+     "Products",
+     "Subscriptions",
+     "Policies",
+     "Named values"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "API Management",
+      "state": "live",
+      "calls": 19
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "APIs",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Products",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Subscriptions",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "tab",
+      "name": "Policies",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Named values",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Virtual networks",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Address space",
+     "Subnets",
+     "Connected devices",
+     "Peerings",
+     "DNS servers"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Virtual networks",
+      "state": "live",
+      "calls": 18
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Address space",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Subnets",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Connected devices",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Peerings",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "DNS servers",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Network Security Group",
+    "tabs": [],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Network Security Group",
+      "state": "live",
+      "calls": 19
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Event Grid topics",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Event subscriptions",
+     "Topic types",
+     "Access keys",
+     "Networking",
+     "Identity"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Event Grid topics",
+      "state": "live",
+      "calls": 17
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Event subscriptions",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Topic types",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Access keys",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Identity",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Key vaults",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Secrets",
+     "Keys",
+     "Certificates",
+     "Access policies",
+     "Access configuration"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Key vaults",
+      "state": "live",
+      "calls": 18
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Secrets",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Keys",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Certificates",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Access policies",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Access configuration",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Role Definition",
+    "tabs": [],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Role Definition",
+      "state": "live",
+      "calls": 18
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     }
+    ],
+    "status": "ok"
+   },
+   {
+    "target": "offline",
+    "cloud": "azure",
+    "service": "Entra ID / RBAC",
+    "tabs": [
+     "Overview",
+     "JSON view",
+     "Conditions"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Entra ID / RBAC",
+      "state": "live",
+      "calls": 17
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "JSON view",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Conditions",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "ok"
+   }
+  ]
  }
 }
