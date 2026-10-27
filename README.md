@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 12:56 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 13:08 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 44 services (AWS 16 · GCP 16 · Azure 12) of 1,068 the clouds publish
-- **Building now:** Cloud Run Admin API (GCP, 18/19 checks)
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Tasks API (GCP)
+- **Building now:** nothing
+- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP)
 - **Queued:** 54 services (P1 first, then P2)
 - **Consoles really implemented:** offline 51% · Nano 66%
 - **Hourly tests:** 66 of 69 suites passing (run 12:41 UTC)
@@ -17,7 +17,7 @@ _Updated 2026-10-27 12:56 UTC · refreshes after every pipeline run_
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | 43% · 68% |
-| GCP | 16 | 1 | 6 | 13 | 42% · 62% |
+| GCP | 16 | 0 | 7 | 13 | 42% · 62% |
 | Azure | 12 | 0 | 0 | 24 | 68% · 70% |
 
 ## In progress
@@ -41,7 +41,7 @@ _Updated 2026-10-27 12:56 UTC · refreshes after every pipeline run_
 | Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🔍 In gate ([PR #120](https://github.com/vyomi-cloud/appliance/pull/120)) | 18/18 | — |
 | Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🔍 In gate ([PR #122](https://github.com/vyomi-cloud/appliance/pull/122)) | 18/18 | — |
 | Cloud Monitoring API [#74](https://github.com/vyomi-cloud/appliance/issues/74) | GCP | 🔍 In gate ([PR #123](https://github.com/vyomi-cloud/appliance/pull/123)) | 18/18 | — |
-| Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🛠 Building | 18/19 | manifest status is ready |
+| Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🔍 In gate ([PR #125](https://github.com/vyomi-cloud/appliance/pull/125)) | 19/19 | — |
 | Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | — |
 
 ## Released services
@@ -629,7 +629,7 @@ _Updated 2026-10-27 12:56 UTC · refreshes after every pipeline run_
 | | Check | Detail |
 |---|---|---|
 | ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
-| ❌ | manifest status is ready | status=building |
+| ✅ | manifest status is ready | status=ready |
 | ✅ | engine exists in core/ | core/gcp_run_core.py |
 | ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/gcp_run_core.py |
 | ✅ | engine listed in wasm/build_cores.py |  |
