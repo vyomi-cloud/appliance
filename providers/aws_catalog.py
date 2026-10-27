@@ -652,7 +652,7 @@ RESOURCE_CATALOG_AWS = [
             ["region",     "Region"],
         ],
         "createFields": [
-            {"name": "identity",   "label": "Identity (domain or email address)", "default": "noreply@vyomi.example.com"},
+            {"name": "name",       "label": "Identity (domain or email address)", "default": "noreply@vyomi.example.com"},
             {"name": "config_set", "label": "Default configuration set",          "default": "None"},
         ],
         "endpoints": {},

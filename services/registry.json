@@ -288,6 +288,13 @@
    "upstream": "Microsoft.Authorization",
    "status": "released",
    "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "sesv2",
+   "name": "Amazon Simple Email Service",
+   "upstream": "sesv2",
+   "status": "pending-release"
   }
  ]
 }
