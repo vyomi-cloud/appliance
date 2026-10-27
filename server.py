@@ -18075,7 +18075,7 @@ def _vpc_query_delete_vpc(params: dict[str, Any]) -> Response:
     return _ec2_success_response("DeleteVpcResponse", build)
 
 
-def _vpc_query_authorize_security_group_ingress(params: dict[str, Any]) -> Response:
+def _vpc_query_authorize_security_group_ingress(params: dict[str, Any], direction: str = "ingress") -> Response:
     group_id = str(params.get("GroupId", params.get("groupId", ""))).strip()
     group_name = str(params.get("GroupName", params.get("groupName", ""))).strip()
     if not group_id and not group_name:
@@ -18118,14 +18118,14 @@ def _vpc_query_authorize_security_group_ingress(params: dict[str, Any]) -> Respo
             "protocol": str(entry.get("IpProtocol", "tcp")),
             "from_port": int(str(entry.get("FromPort", 0)) or 0),
             "to_port": int(str(entry.get("ToPort", 65535)) or 65535),
-            "cidr": str(entry.get("CidrIp", entry.get("CidrIpv6", "0.0.0.0/0"))),
-            "source_sg": str(entry.get("GroupId", entry.get("SourceSecurityGroupName", ""))),
-            "description": str(entry.get("Description", "")),
+            "cidr": str(entry.get("CidrIp", entry.get("IpRanges.1.CidrIp", entry.get("CidrIpv6", entry.get("Ipv6Ranges.1.CidrIpv6", "0.0.0.0/0"))))),
+            "source_sg": str(entry.get("GroupId", entry.get("Groups.1.GroupId", entry.get("SourceSecurityGroupName", "")))),
+            "description": str(entry.get("Description", entry.get("IpRanges.1.Description", ""))),
             "created": _now(),
         }
-        target_group.setdefault("ingress", [])
-        if rule not in target_group["ingress"]:
-            target_group["ingress"].append(rule)
+        target_group.setdefault(direction, [])
+        if rule not in target_group[direction]:
+            target_group[direction].append(rule)
 
     def build(root: ET.Element) -> None:
         _ec2_sub(root, "return", "true")
@@ -18135,20 +18135,21 @@ def _vpc_query_authorize_security_group_ingress(params: dict[str, Any]) -> Respo
             _ec2_sub(item, "securityGroupRuleId", f"sgr-{secrets.token_hex(4)}")
             _ec2_sub(item, "groupId", target_group_id)
             _ec2_sub(item, "groupOwnerId", AWS_ACCOUNT_ID)
-            _ec2_sub(item, "isEgress", "false")
+            _ec2_sub(item, "isEgress", "true" if direction == "egress" else "false")
             _ec2_sub(item, "ipProtocol", str(rule.get("IpProtocol", "tcp")))
             _ec2_sub(item, "fromPort", str(rule.get("FromPort", 0)))
             _ec2_sub(item, "toPort", str(rule.get("ToPort", 65535)))
-            if str(rule.get("CidrIp", "")).startswith("::"):
+            cidr_in = str(rule.get("CidrIp", rule.get("IpRanges.1.CidrIp", "0.0.0.0/0")))
+            if cidr_in.startswith("::"):
                 rng = _ec2_sub(item, "referencedGroupInfo")
                 _ec2_sub(rng, "groupId", str(rule.get("GroupId", "")))
             else:
                 ranges = _ec2_sub(item, "ipRanges")
                 range_item = _ec2_sub(ranges, "item")
-                _ec2_sub(range_item, "cidrIp", str(rule.get("CidrIp", "0.0.0.0/0")))
-                _ec2_sub(range_item, "description", str(rule.get("Description", "")))
+                _ec2_sub(range_item, "cidrIp", cidr_in)
+                _ec2_sub(range_item, "description", str(rule.get("Description", rule.get("IpRanges.1.Description", ""))))
 
-    return _ec2_success_response("AuthorizeSecurityGroupIngressResponse", build)
+    return _ec2_success_response("AuthorizeSecurityGroupEgressResponse" if direction == "egress" else "AuthorizeSecurityGroupIngressResponse", build)
 
 
 RDS_ENGINE_CATALOG = {
@@ -20829,6 +20830,8 @@ async def api_vpc_query(request: Request):
             return _vpc_query_describe_security_groups(params)
         if action == "AuthorizeSecurityGroupIngress":
             return _vpc_query_authorize_security_group_ingress(params)
+        if action == "AuthorizeSecurityGroupEgress":
+            return _vpc_query_authorize_security_group_ingress(params, "egress")
         if action == "CreateRouteTable":
             return _vpc_query_create_route_table(params)
         if action == "DescribeRouteTables":
@@ -21391,6 +21394,12 @@ async def api_iam_query(request: Request) -> Response:
         if action == "ListPolicies":
             members = "".join(f"<member>{_iam_policy_fields(p)}</member>" for p in iam_state["policies"].values())
             return _iam_envelope("ListPolicies", f"<IsTruncated>false</IsTruncated><Policies>{members}</Policies>")
+        if action == "GetPolicy":
+            name = params.get("PolicyArn", "").rsplit("/", 1)[-1]
+            target = next((p for pid, p in iam_state["policies"].items() if p.get("policy_name") == name or pid == name), None)
+            if not target:
+                return _iam_query_error("NoSuchEntity", f"Policy {params.get('PolicyArn', '')} was not found.", 404)
+            return _iam_envelope("GetPolicy", f"<Policy>{_iam_policy_fields(target)}</Policy>")
         if action == "CreatePolicy":
             raw_doc = params.get("PolicyDocument", "")
             try:
