@@ -4,6 +4,18 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.10] — 2026-10-27
+
+New service release.
+
+- New service: AWS Elastic Load Balancing
+- expansion(aws/elbv2): engine, native Query wire, offline console REST…
+- expansion(aws/elbv2): Java, Go and aws-cli conformance beds
+- expansion(aws/elbv2): console tests (offline + Nano), engine unit tes…
+- expansion(aws/elbv2): rail label matches service name so the UI crawl…
+- expansion(aws/elbv2): Nano serves cost_savings on /api/spaces and fil…
+- expansion(aws/elbv2): rebase on main; regenerate Nano catalog fixture…
+
 ## [3.0.9] — 2026-10-27
 
 Daily conformance release.
