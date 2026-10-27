@@ -71,10 +71,13 @@ def _gcp_service(path):
         return "gcp-gcs"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
         return "gcp-cloudsql"
+    if path.startswith("/apis/serving.knative.dev/v1/namespaces/"):   # gcloud run (Knative-style API)
+        return "gcp-run"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if "/projects/" in path:
-        if re.search(r"^/v2/projects/[^/]+/locations/[^/]+/(services|jobs|operations)([/:]|$)", path):
+        if re.search(r"^/v2/projects/[^/]+/locations/[^/]+/(services|jobs|operations)([/:]|$)", path) or \
+                re.search(r"^/v1/projects/[^/]+/locations/[^/]+/services/[^/:]+:(get|set|test)IamPolicy$", path):
             return "gcp-run"
         if re.search(r"^/v1(beta1)?/projects/[^/]+/(locations|zones)/[^/]+/(clusters|operations|serverConfig)([/:]|$)", path):
             return "gcp-container"

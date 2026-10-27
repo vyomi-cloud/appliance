@@ -23,6 +23,7 @@ long-running Operation like a very fast real cloud; errors use the Google shape
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
@@ -466,7 +467,12 @@ def update_service(store, project, location, sid, query, payload):
             tpl = _revision_template(project, spec["template"], False)
             cur = _copy(svc["template"])
             cur.pop("revision", None)
-            if tpl.get("revision") or json.dumps(cur, sort_keys=True) != json.dumps({k: v for k, v in tpl.items() if k != "revision"}, sort_keys=True):
+            differs = json.dumps(cur, sort_keys=True) != json.dumps({k: v for k, v in tpl.items() if k != "revision"}, sort_keys=True)
+            named = ("%s/revisions/%s" % (full, tpl["revision"])) if tpl.get("revision") else ""
+            if named and named in store.revisions:   # re-sending an existing revision's name (gcloud update-traffic does)
+                if differs:
+                    raise _E(409, "ALREADY_EXISTS", "Revision named %s with different configuration already exists." % tpl["revision"])
+            elif differs or named:
                 changed_template = True
             new["template"] = tpl
         else:
@@ -745,7 +751,7 @@ def set_iam_policy(store, full, payload):
             raise _E(400, "INVALID_ARGUMENT", "Each binding needs a role and at least one member.")
         bindings.append({"role": b["role"], "members": list(b["members"])})
     new = {"version": pol.get("version", 1) or 1, "bindings": bindings,
-           "etag": "CAE=" if not bindings else _h("pol", json.dumps(bindings, sort_keys=True))[:10]}
+           "etag": "CAE=" if not bindings else base64.b64encode(bytes.fromhex(_h("pol", json.dumps(bindings, sort_keys=True))[:16])).decode()}
     store.policies[full] = new
     return _copy(new)
 
@@ -837,6 +843,212 @@ def job_from_form(b, project="demo"):
             "service": body, "allowUnauthenticated": unauth}
 
 
+# ── Knative v1 façade (what `gcloud run services|revisions ...` speaks) ─────────────────────────
+# gcloud's Cloud Run commands use the regional Knative-style API
+#   {region}-run.googleapis.com/apis/serving.knative.dev/v1/namespaces/{project}/services[/{name}]
+# rather than the v2 Admin API. It is a second view of the SAME services and revisions: the region
+# comes from the Host header's `{region}-` prefix; bodies are converted to/from the v2 resources.
+_KN = "apis/serving.knative.dev/v1/namespaces/"
+_INGRESS_KN = {"all": "INGRESS_TRAFFIC_ALL", "internal": "INGRESS_TRAFFIC_INTERNAL_ONLY",
+               "internal-and-cloud-load-balancing": "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER", "none": "INGRESS_TRAFFIC_NONE"}
+_INGRESS_V2 = {v: k for k, v in _INGRESS_KN.items()}
+
+
+def _kn_region(headers):
+    for k, v in headers.items():
+        if k.lower() == "host":
+            m = re.match(r"^([a-z]+-[a-z]+[0-9]+)-", str(v))
+            if m:
+                return m.group(1)
+    return "us-central1"
+
+
+def _kn_conditions(conds):
+    return [{"type": c["type"], "status": "True", "lastTransitionTime": c["lastTransitionTime"]} for c in conds]
+
+
+def _kn_service(store, full):
+    svc = store.services[full]
+    parts = full.split("/")
+    project, location, sid = parts[1], parts[3], parts[5]
+    t = svc["template"]
+    ann = dict(svc.get("annotations") or {})
+    ann["run.googleapis.com/ingress"] = _INGRESS_V2.get(svc["ingress"], "all")
+    ann["run.googleapis.com/urls"] = json.dumps(svc.get("urls") or [svc["uri"]])
+    ann["serving.knative.dev/creator"] = svc["creator"]
+    ann["serving.knative.dev/lastModifier"] = svc["lastModifier"]
+    tann = {"autoscaling.knative.dev/maxScale": str(t["scaling"]["maxInstanceCount"])}
+    if t["scaling"]["minInstanceCount"]:
+        tann["autoscaling.knative.dev/minScale"] = str(t["scaling"]["minInstanceCount"])
+    tann["run.googleapis.com/execution-environment"] = "gen2" if t["executionEnvironment"].endswith("GEN2") else "gen1"
+    containers = []
+    for c in t["containers"]:
+        kc = {"name": c.get("name", ""), "image": c["image"], "resources": {"limits": dict(c["resources"]["limits"])}}
+        for key in ("command", "args", "env", "ports"):
+            if c.get(key):
+                kc[key] = c[key]
+        containers.append(kc)
+    traffic = []
+    for tt in svc["traffic"]:
+        e = {"percent": tt.get("percent", 0)}
+        if tt.get("type", LATEST) == LATEST:
+            e["latestRevision"] = True
+        else:
+            e["revisionName"] = tt.get("revision", "")
+        if tt.get("tag"):
+            e["tag"] = tt["tag"]
+        traffic.append(e)
+    latest = (svc.get("latestReadyRevision") or "").rsplit("/", 1)[-1]
+    return {"apiVersion": "serving.knative.dev/v1", "kind": "Service",
+            "metadata": {"name": sid, "namespace": project, "uid": svc["uid"], "resourceVersion": "AAZ" + svc["generation"],
+                         "generation": int(svc["generation"]), "creationTimestamp": svc["createTime"],
+                         "selfLink": "/apis/serving.knative.dev/v1/namespaces/%s/services/%s" % (project, sid),
+                         "labels": dict(svc.get("labels") or {}, **{"cloud.googleapis.com/location": location}),
+                         "annotations": ann},
+            "spec": {"template": {"metadata": {"name": latest, "annotations": tann, "labels": {}},
+                                  "spec": {"containerConcurrency": t["maxInstanceRequestConcurrency"],
+                                           "timeoutSeconds": int(float(t["timeout"][:-1])),
+                                           "serviceAccountName": t["serviceAccount"], "containers": containers}},
+                     "traffic": traffic},
+            "status": {"observedGeneration": int(svc["observedGeneration"]), "conditions": _kn_conditions(svc["conditions"]),
+                       "latestReadyRevisionName": latest, "latestCreatedRevisionName": latest,
+                       "traffic": [dict({"revisionName": ts["revision"], "percent": ts["percent"]},
+                                        **({"latestRevision": True} if ts["type"] == LATEST else {}))
+                                   for ts in svc["trafficStatuses"]],
+                       "url": svc["uri"], "address": {"url": svc["uri"]}}}
+
+
+def _kn_to_v2(body):
+    """A Knative Service body → the v2 Service fields it sets."""
+    meta, spec = body.get("metadata") or {}, body.get("spec") or {}
+    out = {}
+    ann = dict(meta.get("annotations") or {})
+    ing = ann.pop("run.googleapis.com/ingress", None)
+    for k in [k for k in ann if k.startswith(("serving.knative.dev/", "run.googleapis.com/urls", "run.googleapis.com/operation-id"))]:
+        ann.pop(k)
+    labels = {}
+    for k, v in (meta.get("labels") or {}).items():
+        if k == "cloud.googleapis.com/location":
+            continue
+        if _LABEL.match(str(k)):
+            labels[k] = v
+        else:   # Knative-qualified labels (client.knative.dev/nonce, ...) aren't v2 labels; keep them as annotations
+            ann[k] = v
+    out["labels"], out["annotations"] = labels, ann
+    if ing:
+        out["ingress"] = _INGRESS_KN.get(ing, ing)
+    tpl = spec.get("template") or {}
+    tmeta, tspec = tpl.get("metadata") or {}, tpl.get("spec") or {}
+    tann = tmeta.get("annotations") or {}
+    v2t = {"containers": [dict(c) for c in tspec.get("containers") or []]}
+    for c in v2t["containers"]:
+        if not c.get("name"):
+            c.pop("name", None)
+    scaling = {}
+    if "autoscaling.knative.dev/minScale" in tann:
+        scaling["minInstanceCount"] = int(tann["autoscaling.knative.dev/minScale"])
+    if "autoscaling.knative.dev/maxScale" in tann:
+        scaling["maxInstanceCount"] = int(tann["autoscaling.knative.dev/maxScale"])
+    if scaling:
+        v2t["scaling"] = scaling
+    if tspec.get("containerConcurrency") is not None:
+        v2t["maxInstanceRequestConcurrency"] = tspec["containerConcurrency"]
+    if tspec.get("timeoutSeconds"):
+        v2t["timeout"] = "%ds" % tspec["timeoutSeconds"]
+    if tspec.get("serviceAccountName"):
+        v2t["serviceAccount"] = tspec["serviceAccountName"]
+    if tann.get("run.googleapis.com/execution-environment"):
+        v2t["executionEnvironment"] = "EXECUTION_ENVIRONMENT_" + tann["run.googleapis.com/execution-environment"].upper()
+    if tmeta.get("name"):
+        v2t["revision"] = tmeta["name"]
+    tl = {k: v for k, v in (tmeta.get("labels") or {}).items() if _LABEL.match(str(k))}
+    if tl:
+        v2t["labels"] = tl
+    out["template"] = v2t
+    traffic = []
+    for tt in spec.get("traffic") or []:
+        e = {"percent": tt.get("percent", 0)}
+        if tt.get("revisionName"):
+            e.update({"type": REVISION, "revision": tt["revisionName"]})
+        else:
+            e["type"] = LATEST
+        if tt.get("tag"):
+            e["tag"] = tt["tag"]
+        traffic.append(e)
+    if traffic:
+        out["traffic"] = traffic
+    return out
+
+
+def _kn_revision(store, rev):
+    t = rev
+    sname = rev["service"].rsplit("/", 1)[-1]
+    short = rev["name"].rsplit("/", 1)[-1]
+    containers = [{"name": c.get("name", ""), "image": c["image"], "resources": {"limits": dict(c["resources"]["limits"])}}
+                  for c in t["containers"]]
+    return {"apiVersion": "serving.knative.dev/v1", "kind": "Revision",
+            "metadata": {"name": short, "namespace": rev["name"].split("/")[1], "uid": rev["uid"], "generation": 1,
+                         "creationTimestamp": rev["createTime"],
+                         "labels": {"serving.knative.dev/service": sname, "serving.knative.dev/configuration": sname,
+                                    "cloud.googleapis.com/location": rev["name"].split("/")[3]},
+                         "annotations": {"serving.knative.dev/creator": "admin@vyomi.cloud"},
+                         "ownerReferences": [{"kind": "Service", "name": sname, "apiVersion": "serving.knative.dev/v1"}]},
+            "spec": {"containerConcurrency": t["maxInstanceRequestConcurrency"], "timeoutSeconds": int(float(t["timeout"][:-1])),
+                     "serviceAccountName": t["serviceAccount"], "containers": containers},
+            "status": {"observedGeneration": 1, "conditions": _kn_conditions(rev["conditions"]), "logUrl": rev["logUri"]}}
+
+
+def _kn_status(code, status, message):
+    return _json(code, {"kind": "Status", "apiVersion": "v1", "metadata": {}, "status": status, "message": message, "code": code})
+
+
+def _knative(store, method, ns, rest, query, headers, payload):
+    region = _kn_region(headers)
+    try:
+        if rest[0] == "services":
+            if len(rest) == 1 and method == "GET":
+                names = sorted(n for n in store.services if n.startswith("projects/%s/locations/%s/services/" % (ns, region)))
+                return _json(200, {"apiVersion": "serving.knative.dev/v1", "kind": "ServiceList", "metadata": {},
+                                   "items": [_kn_service(store, n) for n in names]})
+            if len(rest) == 1 and method == "POST":
+                sid = (payload.get("metadata") or {}).get("name") or ""
+                op = create_service(store, ns, region, {"serviceId": sid}, _kn_to_v2(payload))
+                return _json(200, _kn_service(store, service_name(ns, region, sid)))
+            if len(rest) == 2:
+                full, svc = _get_service(store, ns, region, rest[1])
+                if method == "GET":
+                    return _json(200, _kn_service(store, full))
+                if method == "PUT":
+                    update_service(store, ns, region, rest[1], {}, _kn_to_v2(payload))
+                    return _json(200, _kn_service(store, full))
+                if method == "DELETE":
+                    delete_service(store, ns, region, rest[1], {})
+                    return _kn_status(200, "Success", "")
+        elif rest[0] == "revisions":
+            if len(rest) == 1 and method == "GET":
+                want = ""
+                for sel in (query.get("labelSelector") or "").split(","):
+                    if sel.startswith("serving.knative.dev/service="):
+                        want = sel.split("=", 1)[1]
+                revs = sorted((r for r in store.revisions.values() if r["name"].startswith("projects/%s/locations/%s/" % (ns, region))
+                               and (not want or r["service"].rsplit("/", 1)[-1] == want)), key=lambda r: (r["createTime"], r["name"]), reverse=True)
+                return _json(200, {"apiVersion": "serving.knative.dev/v1", "kind": "RevisionList", "metadata": {},
+                                   "items": [_kn_revision(store, r) for r in revs]})
+            if len(rest) == 2:
+                rev = next((r for r in store.revisions.values() if r["name"].startswith("projects/%s/locations/%s/" % (ns, region))
+                            and r["name"].rsplit("/", 1)[-1] == rest[1]), None)
+                if not rev:
+                    raise _E(404, "NOT_FOUND", "Revision '%s' does not exist." % rest[1])
+                if method == "GET":
+                    return _json(200, _kn_revision(store, rev))
+                if method == "DELETE":
+                    delete_revision(store, ns, region, rev["service"].rsplit("/", 1)[-1], rest[1], {})
+                    return _kn_status(200, "Success", "")
+    except _E as e:
+        return _err(e.status, e.gcp_status, e.message)
+    return _err(404, "NOT_FOUND", "Unknown path or method: %s %s" % (method, "/".join(rest)))
+
+
 # ── dispatch ───────────────────────────────────────────────────────────────
 def dispatch(store, method, path, query=None, headers=None, body=b""):
     return _dispatch(store, method, path, query or {}, headers or {}, body)
@@ -854,7 +1066,12 @@ def _dispatch(store, method, path, query, headers, body):
     if not isinstance(payload, dict):
         payload = {}
     p = path.split("?", 1)[0]
-    for pre in ("/v2",):
+    if p.lstrip("/").startswith(_KN):
+        segs = [x for x in p.lstrip("/")[len(_KN):].split("/") if x]
+        if len(segs) < 2:
+            return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
+        return _knative(store, method, segs[0], segs[1:], query, headers, payload)
+    for pre in ("/v2", "/v1"):   # /v1 only carries the v1 Admin IAM verbs on services (gcloud run)
         if p.startswith(pre + "/"):
             p = p[len(pre):]
             break
@@ -871,6 +1088,8 @@ def _dispatch(store, method, path, query, headers, body):
         if not rest:
             return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
         kind = rest[0]
+        if path.startswith("/v1/") and kind != "services":
+            return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
         if kind == "services":
             return _services(store, method, project, location, rest[1:], verb, query, payload)
         if kind == "jobs":

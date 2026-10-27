@@ -55,7 +55,27 @@ def register(app, on_change=None):
                     changed("delete", parts[6].split(":")[0])
         return Response(content=r.body, status_code=r.status, media_type=r.media_type)
 
+    async def native_kn(request: Request):
+        body = await request.body()
+        r = call(request.method, request.url.path, dict(request.query_params), body, dict(request.headers))
+        if r.status == 200 and request.method in ("POST", "PUT", "DELETE") and "/services" in request.url.path:
+            segs = request.url.path.split("/services", 1)[1].strip("/").split("/")
+            try:
+                if request.method == "POST" and not segs[0]:
+                    ns = request.url.path.split("/namespaces/")[1].split("/")[0]
+                    reg = core._kn_region(dict(request.headers))
+                    changed("create", core.view_by_name(store(), core.service_name(ns, reg, json.loads(body)["metadata"]["name"])))
+                elif request.method == "DELETE" and segs[0]:
+                    changed("delete", segs[0])
+            except Exception:
+                pass
+        return Response(content=r.body, status_code=r.status, media_type=r.media_type)
+
     methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
+    # gcloud run: the regional Knative-style API + the v1 Admin IAM verbs on services
+    for tail in ("/services", "/services/{name}", "/revisions", "/revisions/{name}"):
+        app.add_api_route("/apis/serving.knative.dev/v1/namespaces/{ns}" + tail, native_kn, methods=methods, include_in_schema=False)
+    app.add_api_route("/v1/projects/{project}/locations/{loc}/services/{service}", native_kn, methods=methods, include_in_schema=False)
     base = "/v2/projects/{project}/locations/{loc}"
     for tail in ("/services", "/services/{service}", "/services/{service}/revisions",
                  "/services/{service}/revisions/{revision}", "/jobs", "/jobs/{job}", "/jobs/{job}/executions",

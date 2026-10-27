@@ -109,5 +109,23 @@ s, pg = call(st, "GET", L + "/services", None, {"pageSize": "2"})
 check("pagination", len(pg["services"]) == 2 and pg["nextPageToken"] and len(call(st, "GET", L + "/services", None, {"pageSize": "2", "pageToken": pg["nextPageToken"]})[1]["services"]) == 1)
 f = rn.job_from_form({"name": "svc9", "region": "europe-west1", "image": "gcr.io/x/y", "allowUnauthenticated": "true"})
 check("form -> request", f["serviceId"] == "svc9" and f["parent"].endswith("europe-west1") and f["service"]["template"]["containers"][0]["image"] == "gcr.io/x/y" and f["allowUnauthenticated"])
+st2 = rn.RunStore()
+call(st2, "POST", L + "/services", svc_body, {"serviceId": "rv"})
+cur = call(st2, "GET", L + "/services/rv")[1]
+rname = cur["latestReadyRevision"].rsplit("/", 1)[-1]
+same = dict(cur["template"], revision=rname)
+check("re-sending the current revision name is a no-op (gcloud update-traffic)", call(st2, "PATCH", L + "/services/rv", {"template": same, "traffic": cur["traffic"]})[0] == 200
+      and len(call(st2, "GET", L + "/services/rv/revisions")[1]["revisions"]) == 1)
+diff = dict(same, timeout="60s")
+check("same revision name with a different template -> 409", call(st2, "PATCH", L + "/services/rv", {"template": diff})[0] == 409)
+kn = "/apis/serving.knative.dev/v1/namespaces/p1/services"
+r = rn.dispatch(st2, "GET", kn + "/rv", {}, {"Host": "us-central1-run.googleapis.com"}, b"")
+k = json.loads(r.body)
+check("Knative view of the same service (gcloud run)", r.status == 200 and k["kind"] == "Service" and k["status"]["latestReadyRevisionName"] == rname
+      and k["spec"]["template"]["spec"]["containers"][0]["image"] == "gcr.io/x/app:1" and k["status"]["conditions"][0]["status"] == "True", k)
+k["spec"]["template"]["spec"]["containers"][0]["image"] = "gcr.io/x/app:3"
+k["spec"]["template"]["metadata"]["name"] = ""
+r = rn.dispatch(st2, "PUT", kn + "/rv", {}, {"Host": "us-central1-run.googleapis.com"}, json.dumps(k).encode())
+check("Knative PUT creates a new revision", r.status == 200 and len(call(st2, "GET", L + "/services/rv/revisions")[1]["revisions"]) == 2, r.body)
 print(f"RESULT pass={PASS} fail={FAIL}")
 sys.exit(1 if FAIL else 0)
