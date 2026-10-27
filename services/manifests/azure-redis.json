@@ -1,0 +1,51 @@
+{
+  "cloud": "azure",
+  "key": "redis",
+  "name": "Azure Cache for Redis",
+  "upstream": "redis",
+  "issue": 89,
+  "core": "core/azure_redis_core.py",
+  "operations": [
+    "Redis_Create",
+    "Redis_Update",
+    "Redis_Delete",
+    "Redis_Get",
+    "Redis_ListByResourceGroup",
+    "Redis_ListBySubscription",
+    "Redis_CheckNameAvailability",
+    "Redis_ListKeys",
+    "Redis_RegenerateKey",
+    "Redis_ForceReboot",
+    "Redis_ImportData",
+    "Redis_ExportData",
+    "FirewallRules_CreateOrUpdate",
+    "FirewallRules_Get",
+    "FirewallRules_Delete",
+    "FirewallRules_List",
+    "PatchSchedules_CreateOrUpdate",
+    "PatchSchedules_Get",
+    "PatchSchedules_Delete",
+    "PatchSchedules_ListByRedisResource",
+    "LinkedServer_Create",
+    "LinkedServer_Delete",
+    "LinkedServer_Get",
+    "LinkedServer_List",
+    "AsyncOperationStatus_Get"
+  ],
+  "backend": {
+    "kind": "container",
+    "name": "valkey",
+    "image": "valkey/valkey:8.0.1-alpine",
+    "license": "BSD-3-Clause",
+    "tier": "lite",
+    "compose_service": "vyomi-valkey"
+  },
+  "suites": [
+    "offline-sdk-java-azure-redis",
+    "offline-sdk-go-azure-redis",
+    "offline-cli-azure-redis",
+    "offline-ui-azure-redis",
+    "nano-ui-azure-redis"
+  ],
+  "status": "ready"
+}

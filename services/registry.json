@@ -392,6 +392,13 @@
    "upstream": "monitor",
    "status": "released",
    "released_in": "3.0.22"
+  },
+  {
+   "cloud": "azure",
+   "key": "redis",
+   "name": "Azure Cache for Redis",
+   "upstream": "redis",
+   "status": "pending-release"
   }
  ]
 }
