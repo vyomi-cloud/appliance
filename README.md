@@ -1,13 +1,13 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 04:37 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 04:42 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 36 services (AWS 12 · GCP 12 · Azure 12) of 1,068 the clouds publish
-- **Building now:** nothing
+- **Building now:** AWS Security Token Service (AWS, no manifest yet checks)
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon CloudWatch Logs (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), Amazon Simple Systems Manager (SSM) (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Step Functions (AWS), Elastic Load Balancing (AWS)
-- **Queued:** 66 services (P1 first, then P2)
+- **Queued:** 65 services (P1 first, then P2)
 - **Consoles really implemented:** offline 48% · Nano 52%
 - **Hourly tests:** 21 of 30 suites passing (run 03:33 UTC)
 - **Upstream watch:** 5 open changes from the real clouds to adopt
@@ -16,7 +16,7 @@ _Updated 2026-10-27 04:37 UTC · refreshes after every pipeline run_
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 12 | 0 | 15 | 18 | 37% · 46% |
+| AWS | 12 | 1 | 15 | 17 | 37% · 46% |
 | GCP | 12 | 0 | 0 | 24 | 41% · 44% |
 | Azure | 12 | 0 | 0 | 24 | 66% · 63% |
 
@@ -37,6 +37,7 @@ _Updated 2026-10-27 04:37 UTC · refreshes after every pipeline run_
 | Amazon Simple Systems Manager (SSM) [#63](https://github.com/vyomi-cloud/appliance/issues/63) | AWS | 🔍 In gate ([PR #109](https://github.com/vyomi-cloud/appliance/pull/109)) | 19/19 | — |
 | AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | — |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | — |
+| AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🛠 Building | no manifest yet | — |
 | AWS Step Functions [#64](https://github.com/vyomi-cloud/appliance/issues/64) | AWS | 🔍 In gate ([PR #110](https://github.com/vyomi-cloud/appliance/pull/110)) | 18/18 | — |
 | Elastic Load Balancing [#57](https://github.com/vyomi-cloud/appliance/issues/57) | AWS | 🔍 In gate ([PR #103](https://github.com/vyomi-cloud/appliance/pull/103)) | 18/18 | — |
 
@@ -100,11 +101,10 @@ _Updated 2026-10-27 04:37 UTC · refreshes after every pipeline run_
 
 ## Up next
 
-<details><summary><b>AWS</b> — 18 queued</summary>
+<details><summary><b>AWS</b> — 17 queued</summary>
 
 | Service | Priority | Issue | Offline backend |
 |---|---|---|---|
-| AWS Security Token Service | P1 | [#65](https://github.com/vyomi-cloud/appliance/issues/65) | in-process |
 | Amazon Athena | P2 | not filed | duckdb |
 | Amazon Bedrock Runtime | P2 | not filed | ollama · 50 MB · Max |
 | Amazon DynamoDB Streams | P2 | not filed | in-process |
