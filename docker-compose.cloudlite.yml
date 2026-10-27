@@ -78,6 +78,8 @@ services:
       CLOUDLEARN_MINIO_SECRET_KEY: cloudlearn-dev-secret-key
       CLOUDLEARN_DYNAMODB_URL: http://vyomi-dynamodb:8000
       CLOUDLEARN_ELASTICMQ_URL: http://vyomi-elasticmq:9324
+      # Route 53: hosted zones are rendered as zone files for CoreDNS.
+      VYOMI_DNS_ZONES_DIR: /zones
       CLOUDLEARN_AZURITE_URL: http://vyomi-azurite:10000
       CLOUDLEARN_AZURITE_QUEUE_URL: http://vyomi-azurite:10001
       PUBSUB_EMULATOR_HOST: vyomi-pubsub:8085
@@ -86,6 +88,7 @@ services:
       CLOUDLEARN_FIRESTORE_EMULATOR_HOST: vyomi-firestore:8080
     volumes:
       - vyomi-data:/data
+      - vyomi-dns-zones:/zones
       # Docker compute backend + lazy backend provisioner drive the host daemon.
       - /var/run/docker.sock:/var/run/docker.sock
     # Give the non-root `cloudlearn` user access to the docker socket (owned by
@@ -159,6 +162,27 @@ services:
     networks: [vyomi-net]
     restart: unless-stopped
 
+  # Route 53 DNS data plane — CoreDNS (Apache-2.0), shared by Route 53, Cloud DNS
+  # and Azure DNS. The appliance writes zone files into the vyomi-dns-zones volume.
+  vyomi-coredns:
+    profiles: ["full"]
+    image: coredns/coredns:1.11.3
+    command: ["-conf", "/etc/coredns/Corefile"]
+    networks: [vyomi-net]
+    ports:
+      - "1053:53/udp"
+      - "1053:53/tcp"
+    volumes:
+      - ./deployments/coredns/Corefile:/etc/coredns/Corefile:ro
+      - vyomi-dns-zones:/zones:ro
+    mem_limit: 96m
+    healthcheck:
+      test: ["CMD", "/coredns", "-version"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
   vyomi-minio:
     profiles: ["full"]
     # MinIO removed its public Docker Hub image (docker.io/minio/minio → 404);
@@ -207,6 +231,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  vyomi-dns-zones:
   vyomi-data:
   cloudsim-data:
   vyomi-sql-pg:

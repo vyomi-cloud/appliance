@@ -433,7 +433,9 @@ def r53_tags(p):
 
 
 def r53_record_upsert(p):
-    return _r53_call(route53_core.console_record_upsert, str(p.get("name") or ""), dict(p))
+    body = dict(p)
+    body["name"] = p.get("record")   # `name` is the zone key; the record name rides in `record`
+    return _r53_call(route53_core.console_record_upsert, str(p.get("name") or ""), body)
 
 
 def r53_record_delete(p):

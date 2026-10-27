@@ -1,0 +1,13 @@
+# Shared CoreDNS data plane for Route 53 / Cloud DNS / Azure DNS.
+# The appliance renders every hosted zone as /zones/db.<zone> (RFC 1035 zone file);
+# the `auto` plugin loads new/changed/removed files within 2s, so
+#   dig @127.0.0.1 -p 1053 www.example.com
+# answers from the records you created through the API or console.
+. {
+    auto {
+        directory /zones db\.(.*) {1}
+        reload 2s
+    }
+    errors
+    log
+}

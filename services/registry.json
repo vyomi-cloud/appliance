@@ -288,6 +288,13 @@
    "upstream": "Microsoft.Authorization",
    "status": "released",
    "released_in": "<=3.0.8"
+  },
+  {
+   "cloud": "aws",
+   "key": "route53",
+   "name": "Amazon Route 53",
+   "upstream": "route53",
+   "status": "pending-release"
   }
  ]
 }
