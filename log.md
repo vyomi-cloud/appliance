@@ -57,3 +57,4 @@
 | 2026-10-27T05:48Z | #65 | aws/sts | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40457021245) |
 | 2026-10-27T05:55Z | #66 | gcp/artifactregistry | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40457651906) |
 | 2026-10-27T06:01Z | #57 | aws/elbv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40458245032) |
+| 2026-10-27T06:09Z | #58 | aws/kinesis | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40458855931) |
