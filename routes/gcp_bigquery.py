@@ -27,8 +27,11 @@ def _slot() -> dict | None:
     if not active_id:
         return None
     space = spaces_state.setdefault("spaces", {}).setdefault(active_id, {})
-    return space.setdefault("service_states", {}).setdefault(
-        "gcp_bigquery", {"datasets": {}, "jobs": {}, "iam": {}})
+    # The cloudsim inventory may have created an empty `gcp_bigquery` dict before the first write.
+    slot = space.setdefault("service_states", {}).setdefault("gcp_bigquery", {})
+    for k in ("datasets", "jobs", "iam"):
+        slot.setdefault(k, {})
+    return slot
 
 
 class SpaceBqStore(bq.BigQueryStore):
@@ -38,10 +41,8 @@ class SpaceBqStore(bq.BigQueryStore):
         self._fallback = {"datasets": {}, "jobs": {}, "iam": {}}
 
     def _s(self) -> dict:
-        s = _slot() or self._fallback
-        for k in ("datasets", "jobs", "iam"):
-            s.setdefault(k, {})
-        return s
+        s = _slot()
+        return self._fallback if s is None else s
 
     @property
     def datasets(self) -> dict:
@@ -76,11 +77,21 @@ def _project() -> str:
     return str(space.get("active_account") or "cloudlearn")
 
 
+def _record(op: str, name: str = "") -> None:
+    """Mutations feed the cloudsim inventory so the space's resource count and the
+    cost-savings metrics follow datasets as they are created / changed / deleted."""
+    ctx.record_usage("bigquery." + op, {"name": name, "resource_id": name})
+
+
 def register(app: FastAPI) -> None:
     async def _wire(request: Request):
         body = await request.body()
         r = bq.dispatch(_STORE, request.method, request.url.path, dict(request.query_params),
                         {k.lower(): v for k, v in request.headers.items()}, body)
+        if request.method != "GET" and r.status < 300:
+            segs = [s for s in request.url.path.split("/") if s]
+            kind = segs[segs.index("projects") + 2] if "projects" in segs and len(segs) > segs.index("projects") + 2 else "op"
+            _record(f"{request.method.lower()}_{kind}", "/".join(segs[segs.index("projects") + 1:]) if "projects" in segs else "")
         return Response(content=r.body, status_code=r.status, media_type=r.media_type)
 
     methods = ["GET", "POST", "PATCH", "PUT", "DELETE"]
@@ -102,6 +113,8 @@ def register(app: FastAPI) -> None:
     @app.post("/api/gcp/bigquery/datasets")
     async def api_bq_create(request: Request):
         out = bq.console_create(_STORE, _project(), await _json(request))
+        if out.get("ok"):
+            _record("create_dataset", out["name"])
         return JSONResponse(out, status_code=200 if out.get("ok") else (409 if out.get("code") == "AlreadyExists" else 400))
 
     @app.get("/api/gcp/bigquery/datasets/{name}")
@@ -127,6 +140,8 @@ def register(app: FastAPI) -> None:
     @app.delete("/api/gcp/bigquery/datasets/{name}")
     def api_bq_delete(name: str):
         out = bq.console_delete(_STORE, name)
+        if out.get("ok"):
+            _record("delete_dataset", name)
         return JSONResponse(out, status_code=200 if out.get("ok") else 404)
 
     @app.get("/api/gcp/sub/bigquery/{op}/{name}")

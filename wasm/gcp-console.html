@@ -665,6 +665,7 @@ function renderRail(){
     ["COMPUTE",       ["compute", "functions"]],
     ["STORAGE",       ["storage"]],
     ["DATABASES",     ["cloudsql", "firestore"]],
+    ["ANALYTICS",     ["bigquery"]],
     ["NETWORKING",    ["vpc"]],
     ["INTEGRATION",   ["pubsub", "apigateway", "eventarc"]],
     ["SECURITY",      ["secretmanager", "kms"]],
@@ -690,7 +691,7 @@ function renderRail(){
 // what this console currently holds; simulator cost = $0 → all of it is saved.
 var _NANO_RATE = {
   s3:0.50, dynamodb:1.25, kms:1.00, secretsmanager:0.40, sqs:0.40, iam:0, rds:25.55, elbv2:16.43, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0,
-  compute:24.53, storage:0.50, cloudsql:25.00, pubsub:0.40, firestore:0.18, functions:0.20, secretmanager:0.18,
+  compute:24.53, storage:0.50, cloudsql:25.00, pubsub:0.40, firestore:0.18, functions:0.20, secretmanager:0.18, bigquery:1.25,
   'microsoft.compute/virtualmachines':30.37, 'microsoft.sql/servers':4.99, 'microsoft.storage/storageaccounts':0.50,
   'microsoft.documentdb/databaseaccounts':24.48, 'microsoft.web/sites':0.20, 'microsoft.servicebus/namespaces':9.81, 'microsoft.keyvault/vaults':0.03
 };
@@ -700,7 +701,7 @@ function nanoSavingsFromByService(bs){
 // Friendly service label for a by_service census key (aws/gcp/azure).
 function nanoSvcLabel(k){
   var M={s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",
-    compute:"Compute Engine",storage:"Cloud Storage",cloudsql:"Cloud SQL",pubsub:"Pub/Sub",firestore:"Firestore",functions:"Cloud Functions",secretmanager:"Secret Manager",
+    compute:"Compute Engine",storage:"Cloud Storage",cloudsql:"Cloud SQL",pubsub:"Pub/Sub",firestore:"Firestore",functions:"Cloud Functions",secretmanager:"Secret Manager",bigquery:"BigQuery",
     'microsoft.compute/virtualmachines':"Virtual Machines",'microsoft.sql/servers':"SQL Database",'microsoft.storage/storageaccounts':"Storage Account",'microsoft.documentdb/databaseaccounts':"Cosmos DB",'microsoft.web/sites':"App Service",'microsoft.servicebus/namespaces':"Service Bus",'microsoft.keyvault/vaults':"Key Vault"};
   if (M[k]) return M[k];
   var s=String(k||""), i=s.lastIndexOf("/"); if(i>=0) s=s.slice(i+1); return s.charAt(0).toUpperCase()+s.slice(1);

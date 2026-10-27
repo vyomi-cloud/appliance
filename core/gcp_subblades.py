@@ -305,7 +305,6 @@ _BIGQUERY_SUB = [
     ]},
     {"group": "Settings", "items": [
         {"key": "labels", "label": "Labels", "icon": "sell", "type": "tags"},
-        *_settings_props(),
     ]},
 ]
 
