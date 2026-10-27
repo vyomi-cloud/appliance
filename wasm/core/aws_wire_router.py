@@ -62,6 +62,7 @@ from core import gcp_iam_core as gcp_iam
 from core import gcp_cloudsql_core as gcp_sql
 from core import gcp_cloudscheduler_core as gcp_sched
 from core import gcp_container_core as gcp_gke
+from core import gcp_iamcredentials_core as gcp_iamc
 
 
 def _gcp_service(path):
@@ -86,6 +87,8 @@ def _gcp_service(path):
             return "gcp-secretmanager"
         if "/topics" in path or "/subscriptions" in path:
             return "gcp-pubsub"
+        if re.search(r"^/v1/projects/[^/]+/serviceAccounts/[^/:]+:(generateAccessToken|generateIdToken|signBlob|signJwt)$", path):
+            return "gcp-iamcredentials"
         if "/serviceAccounts" in path or path.endswith(
                 (":getIamPolicy", ":setIamPolicy", ":testIamPermissions")):
             return "gcp-iam"
@@ -247,6 +250,7 @@ class AwsWireRouter:
         self.gcp_sql = s.get("gcp_sql") or InMemorySqlStore()
         self.gcp_sched = s.get("gcp_sched") or gcp_sched.CloudSchedulerStore()   # Cloud Scheduler jobs
         self.gcp_gke = s.get("gcp_gke") or gcp_gke.ContainerStore()   # Kubernetes Engine clusters
+        self.gcp_iamc = s.get("gcp_iamc") or gcp_iamc.IamCredentialsStore()   # IAM Service Account Credentials issue log
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -266,6 +270,22 @@ class AwsWireRouter:
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
+
+    def _iamc_resolve(self, ident):
+        """IAM Credentials: service-account email / uniqueId -> email, or None if unknown
+        (IAM core store, then the appliance's console-side IAM state when present)."""
+        for email, sa in (getattr(self.gcp_iam, "gcp_service_accounts", None) or {}).items():
+            if ident in (email, sa.get("uniqueId")):
+                return email
+        try:
+            from providers.gcp_iam import gcp_iam_state
+            for accts in gcp_iam_state.get("service_accounts", {}).values():
+                for rec in accts.values():
+                    if ident in (rec.get("email"), rec.get("uniqueId")):
+                        return rec["email"]
+        except Exception:
+            pass
+        return None
 
     def _sched_invoke(self, kind, d):
         """Cloud Scheduler firing a job: deliver a pubsub target via the Pub/Sub core
@@ -438,10 +458,12 @@ class AwsWireRouter:
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
-                "gcp-container": (gcp_gke, self.gcp_gke),
+                "gcp-container": (gcp_gke, self.gcp_gke), "gcp-iamcredentials": (gcp_iamc, self.gcp_iamc),
             }[svc]
             mod, store = _gcp_core
-            if svc == "gcp-cloudscheduler":   # a pubsub target publishes into the Pub/Sub core
+            if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), resolver=self._iamc_resolve)
+            elif svc == "gcp-cloudscheduler":   # a pubsub target publishes into the Pub/Sub core
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), invoker=self._sched_invoke)
             else:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))

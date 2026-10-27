@@ -336,6 +336,13 @@
    "upstream": "container/v1",
    "status": "released",
    "released_in": "3.0.15"
+  },
+  {
+   "cloud": "gcp",
+   "key": "iamcredentials",
+   "name": "IAM Service Account Credentials",
+   "upstream": "iamcredentials/v1",
+   "status": "pending-release"
   }
  ]
 }

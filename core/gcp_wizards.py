@@ -635,6 +635,32 @@ _CONTAINER_WIZARD = _basic_wizard(
 _CONTAINER_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
 
 
+# ============================================================================
+# IAM Service Account Credentials — Issue credential (core/gcp_iamcredentials_core.issue_from_form)
+# ============================================================================
+_IAMCREDENTIALS_WIZARD = _basic_wizard(
+    name_field={"name": "name", "label": "Service account", "default": "vyomi-sa@demo.iam.gserviceaccount.com",
+                "required": True, "validate": {"regex": r"^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*\.gserviceaccount\.com$",
+                                               "message": "A service account email, e.g. my-sa@my-project.iam.gserviceaccount.com"}},
+    name_default="vyomi-sa@demo.iam.gserviceaccount.com", region_or_zone=None,
+    extra_basic_fields=[
+        {"name": "credentialType", "label": "Credential type", "type": "radio", "default": "Access token", "options": [
+            {"value": "Access token", "label": "Access token"},
+            {"value": "ID token",     "label": "ID token"},
+            {"value": "Signed blob",  "label": "Signed blob"},
+            {"value": "Signed JWT",   "label": "Signed JWT"},
+        ]},
+        {"name": "detail", "label": "Scopes (access token), audience (ID token) or data to sign",
+         "default": "https://www.googleapis.com/auth/cloud-platform", "required": True,
+         "help": "Space-separated OAuth scopes for an access token; the audience URL for an ID token; text to sign for a blob."},
+        {"name": "lifetime", "label": "Lifetime", "default": "3600s", "ifEquals": {"credentialType": "Access token"},
+         "help": "Up to 43200s (12 hours)."},
+        {"name": "delegates", "label": "Delegates (comma-separated service account emails)", "default": "",
+         "help": "Optional delegation chain; each must exist."},
+    ],
+)
+
+
 WIZARDS: dict[str, dict] = {
     "compute":       _COMPUTE_WIZARD,
     "storage":       _STORAGE_WIZARD,
@@ -649,5 +675,6 @@ WIZARDS: dict[str, dict] = {
     "secretmanager": _SECRETMANAGER_WIZARD,
     "kms":           _KMS_WIZARD,
     "cloudscheduler": _CLOUDSCHEDULER_WIZARD,
+    "iamcredentials": _IAMCREDENTIALS_WIZARD,
     "container":     _CONTAINER_WIZARD,
 }

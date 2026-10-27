@@ -668,7 +668,7 @@ function renderRail(){
     ["NETWORKING",    ["vpc"]],
     ["INTEGRATION",   ["pubsub", "apigateway", "eventarc", "cloudscheduler"]],
     ["SECURITY",      ["secretmanager", "kms"]],
-    ["IAM & ADMIN",   ["iam"]],
+    ["IAM & ADMIN",   ["iam", "iamcredentials"]],
   ];
   groups.forEach(([label, keys]) => {
     rail.append(el("div",{class:"group"}, label));
@@ -820,6 +820,7 @@ async function renderList(main){
                      : svc.key === "iam" ? "Create service account"
                      : svc.key === "cloudscheduler" ? "Create job"
                      : svc.key === "container" ? "Create cluster"
+                     : svc.key === "iamcredentials" ? "Create credential"
                      : "Create";
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
     icon("add"), primaryLabel));

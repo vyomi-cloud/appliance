@@ -2561,6 +2561,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # IAM Credentials — the shared wire/console issue log (never the secrets)
+        from core.gcp_iamcredentials_core import shared_store as _iamc_store
+        for _cid, _cr in _iamc_store().issued.items():
+            add("gcp", "iamcredentials", "credential", _cid,
+                {"name": _cid, "created": _cr.get("issueTime", "")})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -23158,6 +23166,23 @@ try:
     _gke_console.register(app, _gke_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[container] routes skipped: {_e}")
+
+# IAM Service Account Credentials: native /v1/projects/-/serviceAccounts/{sa}:verb wire + console REST (/api/gcp/iamcredentials/*).
+try:
+    from providers import gcp_iamcredentials_console as _iamc_console
+
+    def _iamc_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "iamcredentials", "credential", payload, {}, None, action="delete")
+            _record_usage("gcp.iamcredentials.delete_credential", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "iamcredentials", "credential", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("state", "ISSUED")}, None,
+                                            region="global")
+            _record_usage("gcp.iamcredentials.%s" % payload.get("method", "issue"), {"name": payload["id"]})
+    _iamc_console.register(app, _iamc_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[iamcredentials] routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)
