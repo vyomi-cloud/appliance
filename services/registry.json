@@ -358,7 +358,8 @@
    "key": "app",
    "name": "Container Apps",
    "upstream": "app",
-   "status": "pending-release"
+   "status": "released",
+   "released_in": "3.0.18"
   }
  ]
 }

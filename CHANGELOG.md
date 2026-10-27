@@ -4,6 +4,15 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.18] — 2026-10-27
+
+New service release.
+
+- New service: AZURE Container Apps
+- expansion(azure/app): Container Apps engine, ARM wiring (offline + Na…
+- expansion(azure/app): Go + Java SDK test beds, Docker runtime hook, c…
+- expansion(azure/app): CLI smoke, console tests (offline + Nano), unit…
+
 ## [3.0.17] — 2026-10-27
 
 New service release.
