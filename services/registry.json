@@ -382,7 +382,8 @@
    "key": "dns",
    "name": "DNS zones",
    "upstream": "dns",
-   "status": "pending-release"
+   "status": "released",
+   "released_in": "3.0.21"
   }
  ]
 }
