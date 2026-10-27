@@ -26,6 +26,7 @@
     {"id": "nano-ui-azure-dp", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-dp.mjs", "timeout": 600},
     {"id": "nano-ui-azure-home", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-home.mjs", "timeout": 600},
     {"id": "nano-ui-budget-savings", "target": "nano", "cloud": "all", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-nano-budget-savings.mjs", "timeout": 300},
-    {"id": "nano-ui-reload-backend", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-nano-reload-backend.mjs", "timeout": 300}
+    {"id": "nano-ui-reload-backend", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-nano-reload-backend.mjs", "timeout": 300},
+    {"id": "nano-ui-azure-storage-console", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-storage-console-api.mjs", "timeout": 300}
   ]
 }

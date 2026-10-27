@@ -417,6 +417,22 @@ async function route(method, path, body, query) {
 
   // ── v2.9.0 Azure net-new data planes → real cores (dataplane_adapter) ──
   let am;
+  // Storage-account console routes (/api/azure/storage/{acct}/containers|queues…)
+  // → the same Azurite-equivalent blob/queue cores the native SDKs use.
+  am = path.match(/^\/api\/azure\/storage\/([^/]+)\/(containers|queues)(?:\/([^/]+))?(?:\/blobs(?:\/(.+))?)?$/);
+  if (am) {
+    const svc = am[2] === "queues" ? "queues" : "blobcontainers", item = am[3] ? decodeURIComponent(am[3]) : "";
+    const isBlobs = /\/blobs(\/|$)/.test(path), blob = am[4] ? decodeURIComponent(am[4]) : "";
+    if (!item) {
+      if (method === "GET")  return { tuple: ["azure", "_resource", "ConsoleList", { service: svc }] };
+      if (method === "POST") return { tuple: ["azure", "_resource", "Create", { service: svc, body: body || {} }] };
+    } else if (isBlobs && svc === "blobcontainers") {
+      if (method === "GET" && !blob)    return { tuple: ["azure", "_resource", "ListBlobs", { service: svc, name: item }] };
+      if (method === "DELETE" && blob)  return { tuple: ["azure", "_resource", "DeleteObject", { service: svc, name: item, body: { blob } }] };
+    } else if (method === "DELETE") {
+      return { tuple: ["azure", "_resource", "Delete", { service: svc, name: item }] };
+    }
+  }
   // Service Bus (core/azure_servicebus_core.py) — topics + subscriptions + send/receive
   if (path === "/api/servicebus/topics") {
     if (method === "GET")  return { tuple: ["azure", "servicebus", "ListTopics", {}] };
