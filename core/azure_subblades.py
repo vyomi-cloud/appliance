@@ -336,6 +336,25 @@ _DNS_SUB = [
     ]},
 ]
 
+_REDIS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Settings", "items": [
+        {"key": "connect",      "label": "Connect",             "icon": "cable",       "type": "redisConnect"},
+        {"key": "accessKeys",   "label": "Access keys",         "icon": "key",         "type": "redisKeys"},
+        {"key": "config",       "label": "Advanced settings",   "icon": "tune",        "type": "redisConfig"},
+        {"key": "firewall",     "label": "Firewall",            "icon": "security",    "type": "redisFirewall"},
+        {"key": "patch",        "label": "Schedule updates",    "icon": "update",      "type": "redisPatch"},
+        {"key": "geo",          "label": "Geo-replication",     "icon": "public",      "type": "redisGeo"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Administration", "items": [
+        {"key": "dataops",      "label": "Reboot, import & export", "icon": "restart_alt", "type": "redisAdmin"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",      "label": "Metrics",             "icon": "show_chart",  "type": "metrics"},
+    ]},
+]
+
 _MONITOR_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Alerting", "items": [
@@ -376,5 +395,6 @@ SUB_BLADES: dict[str, list] = {
     "cognitiveservices": _COGS_SUB,
     "dns":         _DNS_SUB,
     "monitor":     _MONITOR_SUB,
+    "redis":       _REDIS_SUB,
     "rbac":        _RBAC_SUB,
 }

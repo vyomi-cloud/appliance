@@ -2339,6 +2339,152 @@ SUB_RENDERERS.monitorautoscale = function(svc, full, host){
     });
 };
 
+// ---- Azure Cache for Redis (Microsoft.Cache/redis) renderers --------------------
+function redisApi(svc, full, suffix, method, body){
+  const opt = {method: method || "GET", headers: {}};
+  if (body !== undefined){ opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  return fetch(ORIGIN + full.id + suffix + "?api-version=" + svc.apiVersion, opt)
+    .then(r => r.text().then(t => { let j = null; try { j = t ? JSON.parse(t) : null; } catch(e){} return {ok: r.ok, status: r.status, j}; }));
+}
+function redisKv(rows){
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Setting","Value"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  rows.forEach(([k,v])=>t.append(el("tr",{}, el("td",{}, k), el("td",{style:"word-break:break-all"}, String(v)))));
+  return t;
+}
+SUB_RENDERERS.redisconnect = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Connection details for this cache. Offline, the Redis protocol is served by the shared Valkey container; the host name below is the Azure endpoint your connection strings use."));
+  const out = el("div",{}); host.append(out);
+  redisApi(svc, full, "/connectionInfo").then(({j}) => {
+    if (!j) { out.append(emptyState("Could not load connection info.")); return; }
+    out.append(redisKv([["Host name", j.hostName], ["Non-TLS port", j.port], ["TLS port", j.sslPort], ["Cache size", j.size],
+      ["Max clients", j.maxClients], ["Data plane", j.dataPlane], ["redis-cli", j.redisCli],
+      ["Primary connection string (StackExchange.Redis)", j.primaryConnectionString],
+      ["Secondary connection string", j.secondaryConnectionString]]));
+    const bar = el("div",{style:"margin:12px 0"});
+    bar.append(el("button",{class:"btn",onclick:()=>{
+      fetch(ORIGIN + "/azure-data/redis/ping").then(r=>r.json()).then(p=>toast(p.dataPlane ? "Data plane answered " + p.reply : (p.message || "Control plane only"), p.dataPlane ? "ok" : "err"))
+        .catch(()=>toast("Data plane check failed","err"));
+    }}, icon("network_check"), "Test data plane (PING)"));
+    out.append(bar);
+  });
+};
+SUB_RENDERERS.rediskeys = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Access keys authenticate clients to the cache. Regenerate one key at a time to rotate without downtime."));
+  const out = el("div",{}); host.append(out);
+  function load(){
+    out.innerHTML = "";
+    redisApi(svc, full, "/listKeys", "POST", {}).then(({j}) => {
+      if (!j) { out.append(emptyState("Could not load access keys.")); return; }
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Key","Value",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      [["Primary","primaryKey"],["Secondary","secondaryKey"]].forEach(([label,f])=>t.append(el("tr",{},
+        el("td",{}, label), el("td",{style:"font-family:monospace;word-break:break-all"}, j[f]),
+        el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>{
+          redisApi(svc, full, "/regenerateKey", "POST", {keyType: label}).then(r=>{ toast(r.ok ? label + " key regenerated" : "Could not regenerate key", r.ok ? "ok" : "err"); load(); });
+        }}, "Regenerate")))));
+      out.append(t);
+    });
+  }
+  load();
+};
+SUB_RENDERERS.redisconfig = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Redis configuration (maxmemory policy, reserved memory, TLS). Values marked computed are set by Azure from the cache size."));
+  const cfg = getPath(full,"properties.redisConfiguration") || {};
+  const rows = Object.keys(cfg).sort().map(k=>[k, cfg[k]]);
+  rows.push(["enableNonSslPort", getPath(full,"properties.enableNonSslPort")], ["minimumTlsVersion", getPath(full,"properties.minimumTlsVersion")],
+            ["publicNetworkAccess", getPath(full,"properties.publicNetworkAccess")], ["redisVersion", getPath(full,"properties.redisVersion")]);
+  host.append(redisKv(rows));
+  const form = el("div",{style:"display:flex;gap:8px;margin:14px 0;align-items:center;flex-wrap:wrap"});
+  const pol = el("select",{}); ["volatile-lru","allkeys-lru","volatile-lfu","allkeys-lfu","volatile-random","allkeys-random","volatile-ttl","noeviction"]
+    .forEach(p=>pol.append(el("option",{value:p, selected: p===cfg["maxmemory-policy"]}, p)));
+  form.append(el("span",{}, "Maxmemory policy:"), pol, el("button",{class:"btn",onclick:()=>{
+    redisApi(svc, full, "", "PATCH", {properties:{redisConfiguration:{"maxmemory-policy": pol.value}}}).then(r=>{
+      toast(r.ok ? "Configuration saved" : ((r.j&&r.j.error&&r.j.error.message)||"Could not save"), r.ok ? "ok" : "err"); if (r.ok) selectService(svc.key); });
+  }}, icon("save"), "Save"));
+  host.append(form);
+};
+SUB_RENDERERS.redisfirewall = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Firewall rules allow client IP ranges to reach the cache."));
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"}, el("button",{class:"btn",onclick:add}, icon("add"), "Add rule"), el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh")));
+    redisApi(svc, full, "/firewallRules").then(({j}) => {
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Rule name","Start IP","End IP",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      const items = (j && j.value) || [];
+      if (!items.length) t.append(el("tr",{}, el("td",{colspan:4}, "No firewall rules: all client IPs are allowed.")));
+      items.forEach(it=>t.append(el("tr",{}, el("td",{}, it.name), el("td",{}, it.properties.startIP), el("td",{}, it.properties.endIP),
+        el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>redisApi(svc, full, "/firewallRules/"+encodeURIComponent(it.name), "DELETE").then(()=>{ toast("Rule deleted"); render(); })}, "Delete")))));
+      wrap.append(t);
+    });
+  }
+  function add(){
+    const name = (prompt("Rule name:", "office")||"").trim(); if(!name) return;
+    const s = (prompt("Start IP:", "10.0.0.1")||"").trim(); if(!s) return;
+    const e = (prompt("End IP:", "10.0.0.255")||"").trim(); if(!e) return;
+    redisApi(svc, full, "/firewallRules/"+encodeURIComponent(name), "PUT", {properties:{startIP:s, endIP:e}}).then(r=>{
+      toast(r.ok ? "Rule saved" : ((r.j&&r.j.error&&r.j.error.message)||"Could not save rule"), r.ok ? "ok" : "err"); render(); });
+  }
+  render();
+};
+SUB_RENDERERS.redispatch = function(svc, full, host){
+  const premium = getPath(full,"properties.sku.name") === "Premium";
+  host.append(el("div",{class:"sub-info"}, premium ? "Choose the maintenance window in which Azure may apply Redis updates." : "Schedule updates is available on the Premium tier. This cache is " + getPath(full,"properties.sku.name") + "."));
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    redisApi(svc, full, "/patchSchedules/default").then(({ok, j}) => {
+      const entries = ok && j ? (j.properties.scheduleEntries || []) : [];
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Day","Start (UTC hour)","Maintenance window"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      if (!entries.length) t.append(el("tr",{}, el("td",{colspan:3}, "No schedule: updates are applied at any time.")));
+      entries.forEach(e=>t.append(el("tr",{}, el("td",{}, e.dayOfWeek), el("td",{}, String(e.startHourUtc)), el("td",{}, e.maintenanceWindow || "PT5H (default)"))));
+      wrap.append(t);
+      if (premium) wrap.append(el("div",{style:"display:flex;gap:8px;margin:12px 0"},
+        el("button",{class:"btn",onclick:()=>{
+          const day = (prompt("Day of week (Monday…Sunday, Everyday, Weekend):", "Sunday")||"").trim(); if(!day) return;
+          const hr = parseInt(prompt("Start hour (UTC, 0-23):", "2")||"2", 10);
+          redisApi(svc, full, "/patchSchedules/default", "PUT", {properties:{scheduleEntries:[{dayOfWeek:day, startHourUtc:hr, maintenanceWindow:"PT5H"}]}}).then(r=>{
+            toast(r.ok ? "Schedule saved" : ((r.j&&r.j.error&&r.j.error.message)||"Could not save schedule"), r.ok ? "ok" : "err"); render(); });
+        }}, icon("schedule"), "Set schedule"),
+        el("button",{class:"btn sec",onclick:()=>redisApi(svc, full, "/patchSchedules/default", "DELETE").then(()=>{ toast("Schedule removed"); render(); })}, "Remove")));
+    });
+  }
+  render();
+};
+SUB_RENDERERS.redisgeo = function(svc, full, host){
+  const premium = getPath(full,"properties.sku.name") === "Premium";
+  host.append(el("div",{class:"sub-info"}, premium ? "Link this cache to another Premium cache for geo-replication." : "Geo-replication is available on the Premium tier. This cache is " + getPath(full,"properties.sku.name") + "."));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Linked cache","Location","Role"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  host.append(t);
+  redisApi(svc, full, "/linkedServers").then(({j}) => {
+    const items = (j && j.value) || [];
+    if (!items.length) t.append(el("tr",{}, el("td",{colspan:3}, "No linked caches.")));
+    items.forEach(it=>t.append(el("tr",{}, el("td",{}, it.name), el("td",{}, it.properties.linkedRedisCacheLocation), el("td",{}, it.properties.serverRole))));
+  });
+};
+SUB_RENDERERS.redisadmin = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Reboot nodes, or import / export data (Premium) through the same operations the SDKs and `az redis` call."));
+  const bar = el("div",{style:"display:flex;gap:8px;margin:12px 0;flex-wrap:wrap"});
+  const out = el("div",{}); host.append(bar, out);
+  [["AllNodes","Reboot all nodes"],["PrimaryNode","Reboot primary"],["SecondaryNode","Reboot secondary"]].forEach(([rt,label])=>bar.append(el("button",{class:"btn sec",onclick:()=>{
+    redisApi(svc, full, "/forceReboot", "POST", {rebootType: rt}).then(r=>{
+      out.innerHTML = ""; out.append(el("div",{class:"sub-info"}, r.ok ? ((r.j&&r.j.message)||"Reboot done") : ((r.j&&r.j.error&&r.j.error.message)||"Reboot failed")));
+      toast(r.ok ? "Reboot completed" : "Reboot failed", r.ok ? "ok" : "err"); });
+  }}, icon("restart_alt"), label)));
+  bar.append(el("button",{class:"btn sec",onclick:()=>{
+    redisApi(svc, full, "/export", "POST", {format:"RDB", prefix:"export", container:"https://cloudlearn.blob.core.windows.net/backups"}).then(r=>{
+      toast(r.ok ? "Export started" : ((r.j&&r.j.error&&r.j.error.message)||"Export failed"), r.ok ? "ok" : "err"); });
+  }}, icon("upload"), "Export data"));
+  bar.append(el("button",{class:"btn sec",onclick:()=>{
+    redisApi(svc, full, "/import", "POST", {format:"RDB", files:["https://cloudlearn.blob.core.windows.net/backups/export.rdb"]}).then(r=>{
+      toast(r.ok ? "Import started" : ((r.j&&r.j.error&&r.j.error.message)||"Import failed"), r.ok ? "ok" : "err"); });
+  }}, icon("download"), "Import data"));
+};
+
 SUB_RENDERERS.databases = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Databases under this SQL server."));
   listChildResources(svc, full, host, "databases",

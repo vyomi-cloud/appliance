@@ -55,6 +55,11 @@ try:                                              # Azure Monitor engine (Micros
 except ImportError:
     import azure_monitor_core as monitor_engine    # type: ignore
 
+try:                                              # Azure Cache for Redis engine (Microsoft.Cache)
+    from core import azure_redis_core as redis_engine
+except ImportError:
+    import azure_redis_core as redis_engine        # type: ignore
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -261,6 +266,10 @@ class AzureArm:
         if namespace.lower() == "microsoft.insights" and monitor_engine.handles(chain):
             return self._monitor(method, sub, rg, chain, payload, query)
 
+        # Microsoft.Cache/redis (caches, keys, firewall rules, patch schedules, linked servers).
+        if namespace.lower() == "microsoft.cache" and redis_engine.handles(chain):
+            return self._redis(method, sub, rg, chain, payload, query)
+
         if namespace.lower() == "microsoft.cognitiveservices":
             return self._cogs(method, sub, rg, chain, payload, query)
 
@@ -317,6 +326,15 @@ class AzureArm:
         if r["lro"] and r["status"] < 300:
             op_id = self._make_operation(r["rid"], method)
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or dn.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
+    def _redis(self, method, sub, rg, chain, payload, query):
+        r = redis_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        resp = {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or redis_engine.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
 

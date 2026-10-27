@@ -23189,6 +23189,13 @@ try:
 except Exception as _e:   # never let this break appliance boot
     print(f"[azure-appconfig] routes skipped: {_e}")
 
+# Azure Cache for Redis data plane (shared Valkey; /azure-data/redis/ping); the ARM control plane is in azure_services.
+try:
+    from providers import azure_redis_routes as _azure_redis_routes
+    _azure_redis_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-redis] routes skipped: {_e}")
+
 # Azure DNS resolution (/azure-data/dns/query); the ARM control plane (dnsZones) is in azure_services.
 try:
     from providers import azure_dns_routes as _azure_dns_routes

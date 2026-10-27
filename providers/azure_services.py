@@ -417,6 +417,32 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
+        "key": "redis", "label": "Azure Cache for Redis", "icon": "memory",
+        "namespace": "Microsoft.Cache", "type": "Redis",
+        "api_version": "2024-03-01", "scope": "rg",
+        "banner": "Managed Redis caches (Basic, Standard, Premium). The Azure SDKs, `az redis` and these blades edit the same caches; access keys, firewall rules, patch schedules and geo-replication links behave like Azure. Offline, a shared Valkey container serves the Redis protocol (Lite tier and up); Nano runs the control plane only.",
+        "children": [{"type": "firewallRules", "label": "Firewall rules", "icon": "security"}],
+        "columns": [["name", "Name"], ["properties.provisioningState", "Status"],
+                    ["properties.sku.name", "Pricing tier"], ["properties.sku.capacity", "Cache size (capacity)"],
+                    ["properties.redisVersion", "Redis version"], ["properties.hostName", "Host name"],
+                    ["properties.sslPort", "SSL port"], ["location", "Location"]],
+        "create_fields": [
+            {"name": "name", "label": "DNS name", "default": "cloudlearn-cache"},
+            {"name": "properties.sku.name", "label": "Pricing tier", "type": "select",
+             "options": ["Basic", "Standard", "Premium"], "default": "Basic"},
+            {"name": "properties.sku.capacity", "label": "Capacity (C0-C6 / P1-P5)", "default": "0"},
+            {"name": "properties.redisVersion", "label": "Redis version", "type": "select",
+             "options": ["6", "4"], "default": "6"},
+            {"name": "properties.enableNonSslPort", "label": "Allow access only via SSL (false = also non-SSL port 6379)", "type": "select",
+             "options": ["false", "true"], "default": "false"},
+            {"name": "properties.minimumTlsVersion", "label": "Minimum TLS version", "type": "select",
+             "options": ["1.2", "1.1", "1.0"], "default": "1.2"},
+        ],
+        "defaults": {
+            "properties": {"sku": {"name": "Basic", "family": "C", "capacity": 0}, "redisVersion": "6", "minimumTlsVersion": "1.2"},
+        },
+    },
+    {
         "key": "monitor", "label": "Monitor alerts", "icon": "notifications_active",
         "namespace": "Microsoft.Insights", "type": "metricAlerts",
         "api_version": "2018-03-01", "scope": "rg",
@@ -749,6 +775,11 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         if _dns_probe.handles(chain):
             return await _handle_dns(request, method, sub, rg, chain, names, base)
 
+    if namespace.lower() == "microsoft.cache":
+        from core import azure_redis_core as _redis_probe
+        if _redis_probe.handles(chain):
+            return await _handle_redis(request, method, sub, rg, chain, names, base)
+
     if namespace.lower() == "microsoft.insights":
         from core import azure_monitor_core as _mon_probe
         if _mon_probe.handles(chain):
@@ -909,6 +940,25 @@ async def _handle_dns(request: Request, method: str, sub: str, rg: str | None, c
             resp.headers[hk] = hv
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Network/dnsZones", "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_redis(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                        names: list[str], base: str) -> JSONResponse:
+    from core import azure_redis_core as _rd
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _rd.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    api_version = request.query_params.get("api-version") or _rd.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    for hk, hv in r["headers"].items():
+        resp.headers[hk] = hv
+    if r["lro"] and r["status"] < 300:
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Cache/Redis", "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
     return resp
 
