@@ -505,5 +505,29 @@
   "gcp_findings": 43,
   "azure_checks_passed": 122,
   "azure_findings": 32
+ },
+ {
+  "at": "2026-10-27T06:28:14+00:00",
+  "commit": "c95be7fe071e",
+  "suites_green": 28,
+  "suites_total": 35,
+  "checks_passed": 638,
+  "checks_failed": 58,
+  "api_coverage_pct": 14.0,
+  "ui_findings": 93,
+  "agent": "Fixed offline GCP Secret Manager / Cloud KMS (blank Created, wrong value stored, not counted in cost savings) and two crawler false positives; added 1 test, 0 regressions.",
+  "new_features": 0,
+  "parity_gaps": 9,
+  "ops_tested_pct": 72.9,
+  "ui_clean_nano": 14,
+  "ui_total_nano": 43,
+  "ui_clean_offline": 16,
+  "ui_total_offline": 38,
+  "aws_checks_passed": 189,
+  "aws_findings": 44,
+  "gcp_checks_passed": 29,
+  "gcp_findings": 35,
+  "azure_checks_passed": 122,
+  "azure_findings": 14
  }
 ]
