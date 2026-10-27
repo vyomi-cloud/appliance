@@ -108,6 +108,31 @@ def _resource_dispatch(backends: Backends, provider: str, operation: str,
     return out
 
 
+def _ec2_launch_defaults(body: dict) -> dict:
+    """An EC2 launch comes back fully described, like RunInstances: instance id,
+    running state, addresses in the default VPC, AMI, AZ and launch time."""
+    import time as _t
+    import uuid as _u
+    h = _u.uuid4().hex
+    o = [int(h[i:i + 2], 16) for i in range(0, 8, 2)]
+    out = dict(body or {})
+    priv = f"10.0.{o[0] % 16 * 16 + o[1] % 16}.{o[2] % 250 + 4}"
+    pub = f"54.{160 + o[0] % 80}.{o[1]}.{o[3] % 250 + 2}"
+    out.setdefault("instance_id", "i-" + h[8:25])
+    out.setdefault("instance_type", "t3.micro")
+    out.setdefault("state", "running")
+    out.setdefault("status", out["state"])
+    out.setdefault("private_ip", priv)
+    out.setdefault("public_ip", pub)
+    out.setdefault("public_dns", "ec2-" + out["public_ip"].replace(".", "-") + ".compute-1.amazonaws.com")
+    out.setdefault("image_id", "ami-0" + h[25:32] + h[:9])
+    out.setdefault("availability_zone", "us-east-1a")
+    out.setdefault("vpc_id", "vpc-0" + h[:16])
+    out.setdefault("subnet_id", "subnet-0" + h[16:32])
+    out.setdefault("launch_time", _t.strftime("%Y-%m-%dT%H:%M:%S.000Z", _t.gmtime()))
+    return out
+
+
 def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
                              account: str, svc: str, name: str, body: dict) -> dict:
     # GCP: the 7 conformance-core services are served by the proven cores (the
@@ -125,6 +150,8 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
     if operation == "List":
         return {"ok": True, "items": r.list(provider, account, svc)}
     if operation == "Create":
+        if provider == "aws" and svc == "ec2":
+            body = _ec2_launch_defaults(body)
         return {"ok": True, **r.create(provider, account, svc, body)}
     if operation == "Get":
         rec = r.get(provider, account, svc, name)
