@@ -72,7 +72,14 @@ try {
   await sleep(1000);
   const name = (await page.locator("#blade input").first().inputValue()) || "";
   check(/^[a-z0-9-]{3,}$/.test(name), "create form has a realistic default alert rule name", `name="${name}"`);
-  await page.locator("#blade .blade-actions button").filter({ hasText: /^create$/i }).first().click({ timeout: 5000 });
+  // portal-style wizard: Basics -> Condition -> Tags -> Review + create
+  for (let i = 0; i < 6; i++) {
+    const fin = page.locator("#blade button").filter({ hasText: /^\s*create\s*$/i });
+    if (await fin.count()) break;
+    await page.locator("#blade button").filter({ hasText: /^\s*(next|review \+ create)\s*$/i }).last().click({ timeout: 5000 });
+    await sleep(300);
+  }
+  await page.locator("#blade button").filter({ hasText: /^\s*create\s*$/i }).first().click({ timeout: 5000 });
   for (let i = 0; i < 30 && createStatus === null; i++) await sleep(500);
   check(createStatus !== null && createStatus < 300, "create with defaults returns 2xx", `HTTP ${createStatus}`);
   const rowFor = () => page.locator("#main table tr:has(td)").filter({ hasText: name }).first();
