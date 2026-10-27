@@ -53,3 +53,4 @@
 | 2026-10-27T05:06Z | #65 | aws/sts | success | building | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40450896476) |
 | 2026-10-27T05:11Z | #64 | aws/stepfunctions | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40453591298) |
 | 2026-10-27T05:17Z | #65 | aws/sts | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40454091291) |
+| 2026-10-27T05:42Z | #66 | gcp/artifactregistry | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40454700912) |
