@@ -1164,8 +1164,19 @@ async function openDetail(svc, item){
   document.getElementById("bladeTitle").textContent=item.name;
   const body=document.getElementById("bladeBody"); body.innerHTML="";
   // refetch for freshest
-  const res=await arm("GET", resPath(svc,item.name), undefined, svc.apiVersion);
-  const full=(res.ok&&res.json)?res.json:item;
+  let full=item;
+  if(svc.dataPlane){
+    // Data-plane services (Blob containers, Cosmos DBs, KV secrets/keys) have no ARM
+    // namespace/type: the record is the list row plus the core's own item route.
+    try{
+      const r=await fetch(ORIGIN+String(svc.resource_path||(svc.collection_path+"/{name}")).replace("{name}",encodeURIComponent(item.name)));
+      const j=r.ok?await r.json():null;
+      if(j) full=Object.assign({}, j, item);
+    }catch(e){}
+  } else {
+    const res=await arm("GET", resPath(svc,item.name), undefined, svc.apiVersion);
+    if(res.ok&&res.json) full=res.json;
+  }
 
   // VM action toolbar (Phase A) — sits ABOVE the sub-nav layout so it's always
   // visible regardless of which sub-blade is open.
