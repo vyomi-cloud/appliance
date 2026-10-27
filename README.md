@@ -1,13 +1,13 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 00:19 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 36 services (AWS 12 · GCP 12 · Azure 12) of 1,068 the clouds publish
-- **Building now:** nothing
+- **Building now:** Amazon CloudWatch Logs (AWS, no manifest yet checks)
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), Elastic Load Balancing (AWS)
-- **Queued:** 72 services (P1 first, then P2)
+- **Queued:** 71 services (P1 first, then P2)
 - **Consoles really implemented:** offline 47% · Nano 41%
 - **Hourly tests:** 14 of 23 suites passing (run 23:41 UTC)
 - **Upstream watch:** 5 open changes from the real clouds to adopt
@@ -16,7 +16,7 @@ _Updated 2026-10-27 00:19 UTC · refreshes after every pipeline run_
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 12 | 0 | 9 | 24 | 36% · 46% |
+| AWS | 12 | 1 | 9 | 23 | 36% · 46% |
 | GCP | 12 | 0 | 0 | 24 | 39% · 46% |
 | Azure | 12 | 0 | 0 | 24 | 66% · 35% |
 
@@ -25,6 +25,7 @@ _Updated 2026-10-27 00:19 UTC · refreshes after every pipeline run_
 | Service | Cloud | Stage | Checks | Still missing |
 |---|---|---|---|---|
 | Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🔍 In gate ([PR #95](https://github.com/vyomi-cloud/appliance/pull/95)) | 18/18 | — |
+| Amazon CloudWatch Logs [#59](https://github.com/vyomi-cloud/appliance/issues/59) | AWS | 🛠 Building | no manifest yet | — |
 | Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🔍 In gate ([PR #96](https://github.com/vyomi-cloud/appliance/pull/96)) | 18/18 | — |
 | Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🔍 In gate ([PR #101](https://github.com/vyomi-cloud/appliance/pull/101)) | 19/19 | — |
 | Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🔍 In gate ([PR #100](https://github.com/vyomi-cloud/appliance/pull/100)) | 20/20 | — |
@@ -94,11 +95,10 @@ _Updated 2026-10-27 00:19 UTC · refreshes after every pipeline run_
 
 ## Up next
 
-<details><summary><b>AWS</b> — 24 queued</summary>
+<details><summary><b>AWS</b> — 23 queued</summary>
 
 | Service | Priority | Issue | Offline backend |
 |---|---|---|---|
-| Amazon CloudWatch Logs | P1 | [#59](https://github.com/vyomi-cloud/appliance/issues/59) | in-process |
 | Amazon Route 53 | P1 | [#60](https://github.com/vyomi-cloud/appliance/issues/60) | coredns · 15 MB · Lite |
 | Amazon Simple Email Service | P1 | [#61](https://github.com/vyomi-cloud/appliance/issues/61) | mailpit · 15 MB · Lite |
 | Amazon Simple Notification Service | P1 | [#62](https://github.com/vyomi-cloud/appliance/issues/62) | in-process |
