@@ -581,6 +581,10 @@ async function route(method, path, body, query) {
   }
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/invoke$/);
   if (m && method === "POST") return { tuple: ["aws", "apigateway", "Invoke", { id: dec(m[1]), ...(body || {}) }] };
+  m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/resources$/);
+  if (m && method === "GET") return { tuple: ["aws", "apigateway", "ListResources", { id: dec(m[1]) }] };
+  m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/stages$/);
+  if (m && method === "GET") return { tuple: ["aws", "apigateway", "ListStages", { id: dec(m[1]) }] };
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "apigateway", "GetApi", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "apigateway", "DeleteApi", { name: dec(m[1]) }] };
@@ -590,6 +594,9 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/vpc\/vpcs\/([^/]+)$/);
   if (m && method === "GET") return { tuple: ["aws", "vpc", "GetVpc", { name: dec(m[1]) }] };
   if (path === "/api/vpc/vpcs" && method === "POST") return { tuple: ["aws", "vpc", "CreateVpc", body || {}] };
+  if (path === "/api/vpc/subnets" && method === "GET") return { tuple: ["aws", "vpc", "ListSubnets", {}] };
+  if (path === "/api/vpc/route-tables" && method === "GET") return { tuple: ["aws", "vpc", "ListRouteTables", {}] };
+  if (path === "/api/vpc/internet-gateways" && method === "GET") return { tuple: ["aws", "vpc", "ListInternetGateways", {}] };
   if (path === "/api/vpc/subnets" && method === "POST") return { tuple: ["aws", "vpc", "CreateSubnet", body || {}] };
   if (path === "/api/vpc/security-groups" && method === "POST") return { tuple: ["aws", "vpc", "CreateSecurityGroup", body || {}] };
   if (path === "/api/vpc/security-groups" && method === "GET")  return { tuple: ["aws", "vpc", "ListSecurityGroups", {}] };

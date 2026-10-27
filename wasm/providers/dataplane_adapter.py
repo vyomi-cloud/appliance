@@ -125,6 +125,30 @@ def apigw_get(p):
     return {"ok": True, **_api_row(a)} if a else {"ok": False, "code": "NotFoundException"}
 
 
+def apigw_resources(p):
+    """GET /api/apigateway/apis/{id}/resources — console API detail > Resources tab."""
+    a = _api_find(str(p.get("id") or ""))
+    if not a:
+        return {"ok": False, "code": "NotFoundException"}
+    rows = [{"resource_id": r["id"], "path": r.get("path", "/"), "path_part": r.get("pathPart", ""),
+             "parent_id": r.get("parentId") or "",
+             "resource_methods": {m: {} for m in r.get("methods", {})}}
+            for r in a["resources"].values() if r.get("parentId")]
+    return {"ok": True, "api_id": a["id"], "resources": rows, "count": len(rows)}
+
+
+def apigw_stages(p):
+    """GET /api/apigateway/apis/{id}/stages — console API detail > Stages tab."""
+    a = _api_find(str(p.get("id") or ""))
+    if not a:
+        return {"ok": False, "code": "NotFoundException"}
+    rows = [{"stage_name": n, "deployment_id": d.get("deploymentId", ""), "description": "",
+             "invoke_url": f"https://{a['id']}.execute-api.us-east-1.amazonaws.com/{n}",
+             "created": a.get("created", "")}
+            for n, d in a["deployments"].items()]
+    return {"ok": True, "stages": rows, "count": len(rows)}
+
+
 def apigw_create(p):
     """Create an API and, if a lambdaTarget/mockBody is given, wire a working
     endpoint (resource + method + integration + deployment) in one console action."""
@@ -203,6 +227,37 @@ def vpc_list_sgs(p=None):
         {"id": g["id"], "name": g.get("name", ""), "description": g.get("description", ""),
          "vpc_id": g.get("vpc_id", ""), "ingress_rules": len(g.get("ingress", []))}
         for g in m.get("sgs", {}).values()]}
+
+
+def vpc_list_subnets(p=None):
+    """GET /api/vpc/subnets — console VPC > Subnets tab."""
+    m = getattr(_VPC, "_vpc_model", {"subnets": {}})
+    rows = [{"id": s["id"], "subnet_id": s["id"], "name": s.get("name") or s["id"],
+             "vpc_id": s["vpc_id"], "cidr_block": s["cidr"],
+             "availability_zone": s.get("az") or "us-east-1a", "state": "available"}
+            for s in m.get("subnets", {}).values()]
+    return {"ok": True, "subnets": rows, "count": len(rows)}
+
+
+def vpc_list_route_tables(p=None):
+    """GET /api/vpc/route-tables — console VPC > Route tables tab."""
+    m = getattr(_VPC, "_vpc_model", {"route_tables": {}})
+    rows = [{"id": r["id"], "route_table_id": r["id"], "name": r.get("name") or r["id"],
+             "vpc_id": r["vpc_id"], "is_main": bool(r.get("main")),
+             "routes": [{"destination": x.get("dest"), "target": x.get("target")} for x in r.get("routes", [])],
+             "associations": [{"subnet_id": sid} for sid in r.get("subnets", [])]}
+            for r in m.get("route_tables", {}).values()]
+    return {"ok": True, "route_tables": rows, "count": len(rows)}
+
+
+def vpc_list_igws(p=None):
+    """GET /api/vpc/internet-gateways — console VPC > Internet gateways tab."""
+    m = getattr(_VPC, "_vpc_model", {"igws": {}})
+    rows = [{"id": g["id"], "internet_gateway_id": g["id"], "name": g.get("name") or g["id"],
+             "attachments": ([{"vpc_id": g["vpc_id"], "state": "available"}] if g.get("vpc_id") else []),
+             "state": "attached" if g.get("vpc_id") else "detached"}
+            for g in m.get("igws", {}).values()]
+    return {"ok": True, "internet_gateways": rows, "count": len(rows)}
 
 
 def vpc_create(p):

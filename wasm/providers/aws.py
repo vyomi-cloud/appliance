@@ -95,6 +95,8 @@ class Aws(CloudProvider):
             ("apigateway", "CreateApi"):  lambda b, a, p: D.apigw_create(p),
             ("apigateway", "GetApi"):     lambda b, a, p: D.apigw_get(p),
             ("apigateway", "DeleteApi"):  lambda b, a, p: D.apigw_delete(p),
+            ("apigateway", "ListResources"): lambda b, a, p: D.apigw_resources(p),
+            ("apigateway", "ListStages"): lambda b, a, p: D.apigw_stages(p),
             ("apigateway", "Invoke"):     lambda b, a, p: D.apigw_invoke(p),
             # VPC — topology + reachability analyzer, via core/vpc_core.py
             ("vpc", "List"):              lambda b, a, p: D.vpc_list(p),
@@ -103,6 +105,9 @@ class Aws(CloudProvider):
             ("vpc", "CreateSubnet"):      lambda b, a, p: D.vpc_create_subnet(p),
             ("vpc", "CreateSecurityGroup"): lambda b, a, p: D.vpc_create_sg(p),
             ("vpc", "ListSecurityGroups"): lambda b, a, p: D.vpc_list_sgs(p),
+            ("vpc", "ListSubnets"):       lambda b, a, p: D.vpc_list_subnets(p),
+            ("vpc", "ListRouteTables"):   lambda b, a, p: D.vpc_list_route_tables(p),
+            ("vpc", "ListInternetGateways"): lambda b, a, p: D.vpc_list_igws(p),
             ("vpc", "Authorize"):         lambda b, a, p: D.vpc_authorize(p),
             ("vpc", "Analyze"):           lambda b, a, p: D.vpc_analyze(p),
             # Console "extras" — EC2/VPC sub-resources (volumes, snapshots, launch
