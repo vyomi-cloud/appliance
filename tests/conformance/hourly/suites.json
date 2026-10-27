@@ -28,6 +28,7 @@
     {"id": "nano-ui-aws-tabs", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-tabs.mjs", "timeout": 600},
     {"id": "nano-ui-gcp-tabs", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-functional-tabs.mjs", "timeout": 600},
     {"id": "nano-ui-gcp-activity-detail", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-activity-detail.mjs", "timeout": 600},
+    {"id": "nano-ui-gcp-grid-defaults", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-grid-defaults.mjs", "timeout": 600},
     {"id": "nano-ui-gcp-pubsub-grid", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-pubsub-grid.mjs", "timeout": 600},
     {"id": "offline-ui-gcp-pubsub-grid", "target": "offline", "cloud": "gcp", "kind": "ui", "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/gcp node wasm/ui-tests/validate-gcp-pubsub-grid.mjs", "timeout": 300},
     {"id": "offline-api-cost-savings-extras", "target": "offline", "cloud": "aws", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_cost_savings_extras_api.py", "timeout": 120},

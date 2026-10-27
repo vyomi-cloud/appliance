@@ -101,6 +101,8 @@ def _resource_dispatch(backends: Backends, provider: str, operation: str,
     name = params.get("name", "")
     body = params.get("body") or {}
     out = _resource_dispatch_inner(backends, provider, operation, account, svc, name, body)
+    if provider == "gcp":
+        out = _gcp_fill_out(svc, operation, out)
     # cloudsim event: record mutating ops (best-effort). For a sub-resource op the
     # "resource" is the CHILD's name (body.name) when present, else the parent name.
     if operation in _MUTATING_OPS:
@@ -135,6 +137,57 @@ def _ec2_launch_defaults(body: dict) -> dict:
     return out
 
 
+def _gcp_fill(svc: str, rec):
+    """A GCP resource comes back described the way the real API describes it: the
+    fields every grid column reads (state, location, created/updated time, …) are
+    filled with provider-shaped defaults when the create form left them out."""
+    if not isinstance(rec, dict) or not rec.get("name"):
+        return rec
+    import time as _t
+    now = _t.strftime("%Y-%m-%dT%H:%M:%S.000000Z", _t.gmtime())
+    name = str(rec["name"]).rsplit("/", 1)[-1]
+    d = {
+        "firestore": {"type": "FIRESTORE_NATIVE", "locationId": "us-central1", "state": "READY"},
+        "functions": {"state": "ACTIVE", "runtime": "python312", "entryPoint": "handler",
+                      "createTime": now, "updateTime": now},
+        "apigateway": {"displayName": name, "state": "ACTIVE", "createTime": now},
+        "vpc": {"autoCreateSubnetworks": True, "routingConfig": {"routingMode": "REGIONAL"},
+                "creationTimestamp": now},
+        "eventarc": {"event_provider": "google.cloud.pubsub.topic.v1.messagePublished",
+                     "destination": "cloud-run", "region": "us-central1", "state": "ACTIVE"},
+        "secretmanager": {"created": rec.get("createTime") or now, "latest_version": "1",
+                          "replication": "automatic"},
+        "kms": {"keyring": "demo", "algorithm": "GOOGLE_SYMMETRIC_ENCRYPTION",
+                "protection": "SOFTWARE", "state": "ENABLED"},
+        "compute": {"zone": "us-central1-a", "machineType": "e2-medium"},
+    }.get(svc)
+    if not d:
+        return rec
+    out = dict(rec)
+    if svc == "kms":
+        prim = out.get("primary") if isinstance(out.get("primary"), dict) else {}
+        d = {**d, "algorithm": prim.get("algorithm") or d["algorithm"],
+             "protection": prim.get("protectionLevel") or d["protection"],
+             "state": prim.get("state") or d["state"]}
+    if svc == "secretmanager" and isinstance(out.get("replication"), dict):
+        d = {k: v for k, v in d.items() if k != "replication"}
+        out["replication"] = "automatic" if "automatic" in out["replication"] else "user-managed"
+    for k, v in d.items():
+        if out.get(k) in (None, "", [], {}):
+            out[k] = v
+    return out
+
+
+def _gcp_fill_out(svc: str, operation: str, out):
+    if not isinstance(out, dict) or not out.get("ok", True):
+        return out
+    if operation == "List" and isinstance(out.get("items"), list):
+        return {**out, "items": [_gcp_fill(svc, r) for r in out["items"]]}
+    if operation in ("Create", "Get", "Update"):
+        return _gcp_fill(svc, out)
+    return out
+
+
 def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
                              account: str, svc: str, name: str, body: dict) -> dict:
     # GCP: the 7 conformance-core services are served by the proven cores (the
@@ -154,6 +207,8 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
     if operation == "Create":
         if provider == "aws" and svc == "ec2":
             body = _ec2_launch_defaults(body)
+        if provider == "gcp":   # stored described, so created/updated times stay fixed
+            body = _gcp_fill(svc, body)
         return {"ok": True, **r.create(provider, account, svc, body)}
     if operation == "Get":
         rec = r.get(provider, account, svc, name)
