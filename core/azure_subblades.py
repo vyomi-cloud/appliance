@@ -287,6 +287,23 @@ _APP_SUB = [
     ]},
 ]
 
+_APPLICATIONINSIGHTS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Investigate", "items": [
+        {"key": "connection",  "label": "Connection and keys", "icon": "vpn_key",   "type": "aiConnection"},
+        {"key": "apikeys",     "label": "API Access",        "icon": "key",         "type": "aiApiKeys"},
+        {"key": "availability","label": "Availability",      "icon": "monitor_heart","type": "aiAvailability"},
+    ]},
+    {"group": "Configure", "items": [
+        {"key": "usage",       "label": "Usage and estimated costs", "icon": "payments", "type": "aiUsage"},
+        {"key": "network",     "label": "Network Isolation", "icon": "lan",         "type": "aiNetwork"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",     "label": "Metrics",           "icon": "show_chart",  "type": "metrics"},
+    ]},
+]
+
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
@@ -307,5 +324,6 @@ SUB_BLADES: dict[str, list] = {
     "keyvault":    _KEYVAULT_SUB,
     "eventgrid":   _EVENTGRID_SUB,
     "app":         _APP_SUB,
+    "applicationinsights": _APPLICATIONINSIGHTS_SUB,
     "rbac":        _RBAC_SUB,
 }

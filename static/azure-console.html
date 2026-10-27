@@ -1978,6 +1978,52 @@ SUB_RENDERERS.appsecrets = function(svc, full, host){
     "No secrets defined.");
 };
 
+// ---- Application Insights (Microsoft.Insights/components) renderers ---------------
+SUB_RENDERERS.aiconnection = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Use the connection string (preferred) or the instrumentation key to configure the Application Insights SDK or agent."));
+  const p = full.properties || {};
+  appKv(host, [["Application ID", p.AppId], ["Instrumentation key", p.InstrumentationKey],
+               ["Connection string", p.ConnectionString], ["Application type", full.kind || p.Application_Type],
+               ["Created", p.CreationDate]]);
+};
+SUB_RENDERERS.aiapikeys = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"API keys let external applications read telemetry or write annotations. The key value is shown only when it is created."));
+  fetch(ORIGIN + full.id + "/ApiKeys?api-version=" + svc.apiVersion).then(r=>r.json()).then(j=>{
+    appTable(host, ["Description","Created","Read access","Write access"],
+      (j.value||[]).map(k=>[k.name, k.createdDate, (k.linkedReadProperties||[]).map(x=>x.split("/").pop()).join(", ") || "-",
+                            (k.linkedWriteProperties||[]).map(x=>x.split("/").pop()).join(", ") || "-"]),
+      "No API keys.");
+  }).catch(()=>host.append(emptyState("No API keys.")));
+};
+SUB_RENDERERS.aiavailability = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Availability tests probe your endpoint from test locations on a schedule."));
+  const m = String(full.id).match(/^(\/subscriptions\/[^/]+\/resourceGroups\/[^/]+)\//i);
+  if (!m) { host.append(emptyState("No availability tests.")); return; }
+  fetch(ORIGIN + m[1] + "/providers/Microsoft.Insights/webtests?api-version=2022-06-15").then(r=>r.json()).then(j=>{
+    const mine = (j.value||[]).filter(w=>Object.keys(w.tags||{}).some(t=>t.toLowerCase().indexOf(String(full.id).toLowerCase())>=0));
+    appTable(host, ["Name","Test type","Frequency (s)","Timeout (s)","Enabled"],
+      mine.map(w=>[w.name, w.properties.Kind, w.properties.Frequency, w.properties.Timeout, w.properties.Enabled ? "Yes" : "No"]),
+      "No availability tests.");
+  }).catch(()=>host.append(emptyState("No availability tests.")));
+};
+SUB_RENDERERS.aiusage = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Data retention, sampling and the daily volume cap for this component."));
+  const p = full.properties || {};
+  fetch(ORIGIN + full.id + "/currentbillingfeatures?api-version=" + svc.apiVersion).then(r=>r.json()).then(f=>{
+    const cap = f.DataVolumeCap || {};
+    appKv(host, [["Pricing plan", (f.CurrentBillingFeatures||[]).join(", ")], ["Daily cap (GB)", cap.Cap],
+                 ["Warning threshold (%)", cap.WarningThreshold], ["Retention (days)", p.RetentionInDays],
+                 ["Ingestion mode", p.IngestionMode], ["Sampling (%)", p.SamplingPercentage == null ? "100 (default)" : p.SamplingPercentage]]);
+  }).catch(()=>host.append(emptyState("Usage details unavailable.")));
+};
+SUB_RENDERERS.ainetwork = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Controls which networks can send telemetry to and query this component."));
+  const p = full.properties || {};
+  appKv(host, [["Accept data ingestion from public networks", p.publicNetworkAccessForIngestion],
+               ["Accept queries from public networks", p.publicNetworkAccessForQuery],
+               ["Local authentication", p.DisableLocalAuth ? "Disabled" : "Enabled"]]);
+};
+
 SUB_RENDERERS.databases = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Databases under this SQL server."));
   listChildResources(svc, full, host, "databases",

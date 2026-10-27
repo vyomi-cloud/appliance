@@ -35,6 +35,11 @@ try:                                              # Container Apps engine (Micro
 except ImportError:
     import azure_app_core as app_engine            # type: ignore
 
+try:                                              # Application Insights engine (Microsoft.Insights)
+    from core import azure_applicationinsights_core as ai_engine
+except ImportError:
+    import azure_applicationinsights_core as ai_engine   # type: ignore
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -238,6 +243,8 @@ class AzureArm:
         # class's flat store is its resource map (so it persists with the rest of ARM).
         if namespace.lower() == "microsoft.app":
             return self._app(method, sub, rg, chain, payload, query)
+        if namespace.lower() == "microsoft.insights":
+            return self._insights(method, sub, rg, chain, payload, query)
 
         # POST action verbs (listKeys / start / powerOff / …)
         if method == "POST" and is_collection and len(type_chain) >= 3 and names:
@@ -285,6 +292,10 @@ class AzureArm:
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or app.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
+
+    def _insights(self, method, sub, rg, chain, payload, query):
+        r = ai_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        return {"status": r["status"], "headers": {}, "body": r["body"]}
 
     # ── CRUD primitives ───────────────────────────────────────────────────
     def _list(self, sub, rg, full_type):

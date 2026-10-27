@@ -360,6 +360,13 @@
    "upstream": "app",
    "status": "released",
    "released_in": "3.0.18"
+  },
+  {
+   "cloud": "azure",
+   "key": "applicationinsights",
+   "name": "Application Insights",
+   "upstream": "applicationinsights",
+   "status": "pending-release"
   }
  ]
 }

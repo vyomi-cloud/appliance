@@ -376,6 +376,36 @@ RESOURCE_CATALOG: list[dict] = [
         "defaults": {"properties": {"provisioningState": "Succeeded"}},
     },
     {
+        "key": "applicationinsights", "label": "Application Insights", "icon": "insights",
+        "namespace": "Microsoft.Insights", "type": "components",
+        "api_version": "2020-02-02", "scope": "rg",
+        "banner": "Control plane for Application Insights (components, API keys, billing features, availability web tests). Telemetry ingestion and log queries are not simulated; the connection string and instrumentation key are issued so SDKs can be configured.",
+        "columns": [["name", "Name"], ["location", "Location"], ["kind", "Application type"],
+                    ["properties.RetentionInDays", "Retention (days)"],
+                    ["properties.InstrumentationKey", "Instrumentation key"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [
+            {"name": "name", "label": "Name", "default": "appi-cloudlearn"},
+            {"name": "kind", "label": "Application type", "type": "select", "options": ["web", "other"], "default": "web"},
+            {"name": "properties.Application_Type", "label": "Application_Type", "type": "select",
+             "options": ["web", "other"], "default": "web"},
+            {"name": "properties.RetentionInDays", "label": "Retention (days)", "type": "select",
+             "options": ["30", "60", "90", "120", "180", "270", "365", "550", "730"], "default": "90"},
+            {"name": "properties.IngestionMode", "label": "Ingestion mode", "type": "select",
+             "options": ["ApplicationInsights", "LogAnalytics"], "default": "ApplicationInsights"},
+        ],
+        "defaults": {"kind": "web", "properties": {"Application_Type": "web", "provisioningState": "Succeeded"}},
+    },
+    {
+        "key": "aiwebtest", "label": "Application Insights Availability Tests", "icon": "monitor_heart", "hidden": True,
+        "namespace": "Microsoft.Insights", "type": "webtests",
+        "api_version": "2022-06-15", "scope": "rg",
+        "columns": [["name", "Name"], ["location", "Location"], ["properties.Kind", "Test type"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [{"name": "name", "label": "Test name", "default": "webtest-cloudlearn"}],
+        "defaults": {"properties": {"provisioningState": "Succeeded"}},
+    },
+    {
         "key": "role_definition",
         "label": "Role Definition",
         "icon": "admin_panel_settings",
@@ -654,6 +684,10 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if namespace.lower() == "microsoft.app":
         return await _handle_app(request, method, sub, rg, chain, names, base)
 
+    # Microsoft.Insights (Application Insights components / web tests): core/azure_applicationinsights_core.py.
+    if namespace.lower() == "microsoft.insights":
+        return await _handle_insights(request, method, sub, rg, chain, names)
+
     # POST action verbs (listKeys, regenerateKey, listConnectionStrings, …):
     # the trailing type segment is the action, names[-1] the target resource.
     if method == "POST" and is_collection and len(type_chain) >= 3 and names:
@@ -779,6 +813,19 @@ async def _handle_app(request: Request, method: str, sub: str, rg: str | None, c
             resp.headers[hk] = hv
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete", "start", "stop") and r["rid"]:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.App/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_insights(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                           names: list[str]) -> JSONResponse:
+    from core import azure_applicationinsights_core as _ai
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _ai.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params))
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"]:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Insights/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
     return resp
 
