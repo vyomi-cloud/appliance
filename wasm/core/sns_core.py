@@ -21,7 +21,6 @@ Also here: `console_dispatch` — the flat-JSON REST the web console uses
 """
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import re
@@ -678,7 +677,7 @@ def _passes_body_policy(policy: dict, body) -> bool:
 
 
 # ── publish ─────────────────────────────────────────────────────────────────
-def _check_message(msg: dict, fifo: bool) -> None:
+def _check_message(msg: dict, fifo: bool, require_default: bool = True) -> None:
     message = msg["Message"]
     if message is None or message == "":
         raise _invalid("Invalid parameter: Empty message")
@@ -695,7 +694,7 @@ def _check_message(msg: dict, fifo: bool) -> None:
             raise _invalid("Invalid parameter: Subject Reason: Subject must be ASCII text that begins with a letter, number, or punctuation mark")
     if msg.get("MessageStructure") == "json":
         doc = _json_attr("Message", message)
-        if not isinstance(doc, dict) or "default" not in doc:
+        if not isinstance(doc, dict) or (require_default and "default" not in doc) or not doc:
             raise _invalid("Invalid parameter: Message Structure - No default entry in JSON message body")
     elif msg.get("MessageStructure"):
         raise _invalid("Invalid parameter: MessageStructure")
@@ -705,9 +704,13 @@ def _check_message(msg: dict, fifo: bool) -> None:
         raise _invalid("Invalid parameter: MessageGroupId and MessageDeduplicationId are only valid for FIFO topics")
 
 
-def _message_for_protocol(msg: dict, protocol: str) -> str:
+def _message_for_protocol(msg: dict, protocol: str, platform: str = "") -> str:
     if msg.get("MessageStructure") == "json":
         doc = json.loads(msg["Message"])
+        if platform and platform in doc:
+            return str(doc[platform])
+        if "default" not in doc:
+            raise _invalid("Invalid parameter: Message Structure - No default entry in JSON message body")
         key = {"sqs": "sqs", "lambda": "lambda", "http": "http", "https": "https", "email": "email",
                "email-json": "email-json", "sms": "sms", "application": "default",
                "firehose": "firehose"}.get(protocol, "default")
@@ -798,13 +801,13 @@ def _publish_to_endpoint(store, endpoint_arn: str, msg: dict) -> str:
     ep = _state(store)["endpoints"].get(endpoint_arn)
     if ep is None:
         raise SnsError("NotFound", "Endpoint does not exist", 404)
-    _check_message(msg, False)
+    _check_message(msg, False, require_default=False)
     if str(ep["attributes"].get("Enabled", "true")).lower() != "true":
         raise SnsError("EndpointDisabled", "Endpoint is disabled", 400)
     message_id = str(uuid.uuid4())
     _log_delivery(store, kind="Notification", topic_arn="", protocol="application", endpoint=endpoint_arn,
                   subscription_arn="", subject=msg.get("Subject") or "",
-                  message=_message_for_protocol(msg, "application"), message_id=message_id)
+                  message=_message_for_protocol(msg, "application", ep["endpoint_platform"]), message_id=message_id)
     return message_id
 
 
@@ -967,7 +970,7 @@ def _create_platform_endpoint(store, params):
                 raise _invalid(f"Invalid parameter: Token Reason: Endpoint {ep['arn']} already exists with the same Token, but different attributes.")
             return _envelope("CreatePlatformEndpoint", _el("EndpointArn", ep["arn"]))
     arn = f"arn:aws:sns:{REGION}:{store.account_id}:endpoint/{app['platform']}/{app['name']}/{uuid.uuid4()}"
-    s["endpoints"][arn] = {"arn": arn, "application_arn": app["arn"], "attributes": attrs,
+    s["endpoints"][arn] = {"arn": arn, "application_arn": app["arn"], "endpoint_platform": app["platform"], "attributes": attrs,
                            "created": _now_iso()}
     store.persist()
     return _envelope("CreatePlatformEndpoint", _el("EndpointArn", arn))
