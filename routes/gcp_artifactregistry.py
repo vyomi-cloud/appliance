@@ -25,8 +25,11 @@ def _slot() -> dict | None:
     if not active_id:
         return None
     space = spaces_state.setdefault("spaces", {}).setdefault(active_id, {})
-    return space.setdefault("service_states", {}).setdefault(
-        "gcp_artifactregistry", {"repositories": {}, "operations": {}, "iam": {}})
+    # The cost/inventory census may have created an empty slot first: fill in our keys.
+    slot = space.setdefault("service_states", {}).setdefault("gcp_artifactregistry", {})
+    for k in ("repositories", "operations", "iam"):
+        slot.setdefault(k, {})
+    return slot
 
 
 class SpaceArStore(ar.ArtifactRegistryStore):
@@ -70,11 +73,21 @@ def _project() -> str:
     return str(space.get("active_account") or "cloudlearn")
 
 
+def _usage(op: str, name: str) -> None:
+    """Mutations feed the space's activity log and cost-savings metrics (core/cost_model)."""
+    try:
+        ctx.record_usage(f"gcp.artifactregistry.{op}", {"resource": name})
+    except Exception:
+        pass
+
+
 def register(app: FastAPI) -> None:
     async def _wire(request: Request):
         body = await request.body()
         r = ar.dispatch(_STORE, request.method, request.url.path, dict(request.query_params),
                         dict(request.headers), body)
+        if request.method != "GET" and r.status < 300:
+            _usage("wire", request.url.path)
         return Response(content=r.body, status_code=r.status, media_type=r.media_type)
 
     methods = ["GET", "POST", "PATCH", "DELETE"]
@@ -96,6 +109,8 @@ def register(app: FastAPI) -> None:
     @app.post("/api/gcp/artifactregistry/repositories")
     async def api_ar_create(request: Request):
         out = ar.console_create(_STORE, _project(), await _json(request))
+        if out.get("ok"):
+            _usage("create_repository", out.get("name", ""))
         return JSONResponse(out, status_code=200 if out.get("ok") else (409 if out.get("code") == "AlreadyExists" else 400))
 
     @app.get("/api/gcp/artifactregistry/repositories/{name}")
@@ -119,6 +134,8 @@ def register(app: FastAPI) -> None:
     @app.delete("/api/gcp/artifactregistry/repositories/{name}")
     def api_ar_delete(name: str):
         out = ar.console_delete(_STORE, name)
+        if out.get("ok"):
+            _usage("delete_repository", name)
         return JSONResponse(out, status_code=200 if out.get("ok") else 404)
 
     @app.get("/api/gcp/sub/artifactregistry/{op}/{name}")
