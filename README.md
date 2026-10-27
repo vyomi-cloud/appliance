@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 18:37 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 18:46 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -48,7 +48,7 @@ _Updated 2026-10-27 18:37 UTC · refreshes after every pipeline run_
 | containerregistry [#82](https://github.com/vyomi-cloud/appliance/issues/82) | Azure | 🔍 In gate ([PR #131](https://github.com/vyomi-cloud/appliance/pull/131)) | 20/20 | — |
 | containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🔍 In gate ([PR #132](https://github.com/vyomi-cloud/appliance/pull/132)) | 17/17 | — |
 | eventhub [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🔍 In gate ([PR #134](https://github.com/vyomi-cloud/appliance/pull/134)) | 17/17 | — |
-| monitor [#86](https://github.com/vyomi-cloud/appliance/issues/86) | Azure | 🔍 In gate ([PR #135](https://github.com/vyomi-cloud/appliance/pull/135)) | 17/17 | — |
+| monitor [#86](https://github.com/vyomi-cloud/appliance/issues/86) | Azure | 🚀 Releasing | 17/17 | — |
 | msi [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🔍 In gate ([PR #136](https://github.com/vyomi-cloud/appliance/pull/136)) | 17/17 | — |
 
 ## Released services
