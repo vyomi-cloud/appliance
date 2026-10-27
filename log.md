@@ -33,3 +33,4 @@
 | 2026-10-26T22:53Z | #58 | aws/kinesis | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40415415086) |
 | 2026-10-26T23:11Z | #57 | aws/elbv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40416107846) |
 | 2026-10-27T00:18Z | #57 | aws/elbv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40425108232) |
+| 2026-10-27T00:47Z | #59 | aws/logs | success | building | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40425802567) |
