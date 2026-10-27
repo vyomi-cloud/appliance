@@ -1,5 +1,5 @@
 {
- "at": "2026-10-27T16:50:02+00:00",
+ "at": "2026-10-27T17:50:09+00:00",
  "baseline": false,
  "changes": [
   {
@@ -9,6 +9,26 @@
    "key": "azure:network:5b3ac33ab5",
    "title": "Azure network: [Network] Update TypeSpec configuration for .NET SDK compatibility (#47643)",
    "link": "https://github.com/Azure/azure-rest-api-specs/commit/5b3ac33ab54d588beaca346f351b95f5765e2457",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure DNS",
+   "kind": "announcement",
+   "key": "feed:azure:1ec64717934c",
+   "title": "[Launched] Generally Available: Azure DNS enables DNS-based load balancing through Traffic Manager linked records",
+   "link": "https://azure.microsoft.com/updates?id=573917",
+   "detail": "Azure DNS now provides DNS based load balancing by seamless integration with Azure Traffic Manager. Customers can directly associate an Azure DNS record set with a Traffic Manager profile, eliminating the need to create a CNAME record pointing to the traf",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure DNS",
+   "kind": "announcement",
+   "key": "feed:azure:deee8ff3a24a",
+   "title": "[In preview] Public Preview: Azure DNS enables DNS-based load balancing through Traffic Manager integration",
+   "link": "https://azure.microsoft.com/updates?id=565214",
+   "detail": "Azure DNS now offers a seamless way to integrate with Azure Traffic Manager for DNS-based traffic routing. Customers can now directly associate Azure DNS record set with Traffic Manager profiles without creating CNAME record for trafficmanager.net domain.",
    "actionable": false
   }
  ],
