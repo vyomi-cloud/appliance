@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 19:23 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), applicationinsights (Azure), containerregistry (Azure), containerservice (Azure), eventhub (Azure), msi (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 52% · Nano 71%
-- **Hourly tests:** 76 of 79 suites passing (run 18:08 UTC)
+- **Hourly tests:** 78 of 81 suites passing (run 19:14 UTC)
 - **Upstream watch:** 7 open changes from the real clouds to adopt
 
 ## By cloud
@@ -18,7 +18,7 @@ _Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | 48% · 76% |
 | GCP | 16 | 0 | 8 | 12 | 42% · 66% |
-| Azure | 18 | 1 | 5 | 12 | 68% · 71% |
+| Azure | 18 | 1 | 5 | 12 | 68% · 72% |
 
 ## In progress
 
@@ -60,7 +60,7 @@ _Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| EC2 | 🧩 6/13 · 🧩 6/13 | 2 · 2 | ✅ watched | before gate |
+| EC2 | 🧩 6/13 · 🧩 6/13 | 0 · 0 | ✅ watched | before gate |
 | S3 | 🧩 6/13 · 🧩 11/13 | 0 · 0 | ✅ watched | before gate |
 | IAM | 🧩 8/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
 | RDS | 🧩 8/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
@@ -103,15 +103,15 @@ _Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
 | Virtual Machines | 🧩 10/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
-| Storage accounts | 🧩 9/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
-| SQL servers | 🧩 8/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
+| Storage accounts | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
+| SQL servers | 🧩 8/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
 | Service Bus | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| Cosmos DB | 🧩 8/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
+| Cosmos DB | 🧩 8/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
 | Function apps | 🧩 7/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
 | API Management | 🧩 10/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | Virtual networks | 🧩 8/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
 | Network Security Group | ✅ 3/3 · ✅ 3/3 | 0 · 0 | ✅ watched | before gate |
-| Event Grid topics | 🧩 8/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
+| Event Grid topics | 🧩 8/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
 | Key vaults | 🧩 9/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
 | Entra ID / RBAC | 🧩 5/6 · 🧩 5/6 | 0 · 0 | ✅ watched | before gate |
 | Container Apps | — | – · – | ✅ watched | [v3.0.18](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.18) |
@@ -1004,11 +1004,11 @@ _Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
 | Pub/Sub | offline | tab: Messages | static |
 | Pub/Sub | offline | tab: Encryption | static |
 | Pub/Sub | offline | tab: Metrics | static |
+| API Gateway | offline | tab: Activity | static |
 | API Gateway | offline | tab: Permissions | static |
 | API Gateway | offline | tab: Labels | static |
 | API Gateway | offline | tab: Configs | static |
 | API Gateway | offline | tab: Routes | static |
-| API Gateway | offline | tab: Metrics | static |
 | API Gateway | offline | tab: Logs | static |
 | Eventarc | offline | tab: Activity | static |
 | Eventarc | offline | tab: Permissions | static |
@@ -1090,7 +1090,7 @@ _Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary>Console parts not live yet — Azure (91)</summary>
+<details><summary>Console parts not live yet — Azure (89)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -1103,7 +1103,7 @@ _Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
 | Storage accounts | offline | tab: Networking | static |
 | SQL servers | offline | tab: Tags | static |
 | SQL servers | offline | tab: Diagnose and solve problems | static |
-| SQL servers | offline | tab: Deleted databases | static |
+| SQL servers | offline | tab: Pricing tier | static |
 | SQL servers | offline | tab: Failover groups | static |
 | SQL servers | offline | tab: Backups | static |
 | Service Bus | offline | tab: Tags | static |
@@ -1144,12 +1144,10 @@ _Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
 | Virtual Machines | nano | tab: Connect | static |
 | Storage accounts | nano | tab: Tags | static |
 | Storage accounts | nano | tab: Diagnose and solve problems | static |
-| Storage accounts | nano | tab: File shares | static |
 | Storage accounts | nano | tab: Tables | static |
 | Storage accounts | nano | tab: Networking | static |
 | SQL servers | nano | tab: Tags | static |
 | SQL servers | nano | tab: Diagnose and solve problems | static |
-| SQL servers | nano | tab: Pricing tier | static |
 | SQL servers | nano | tab: Deleted databases | static |
 | SQL servers | nano | tab: Failover groups | static |
 | SQL servers | nano | tab: Backups | static |
@@ -1159,7 +1157,6 @@ _Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
 | Service Bus | nano | tab: Networking | static |
 | Cosmos DB | nano | tab: Tags | static |
 | Cosmos DB | nano | tab: Diagnose and solve problems | static |
-| Cosmos DB | nano | tab: Throughput (RU/s) | static |
 | Cosmos DB | nano | tab: Replicate data globally | static |
 | Cosmos DB | nano | tab: Backup & Restore | static |
 | Function apps | nano | tab: Tags | static |
@@ -1174,9 +1171,10 @@ _Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
 | Virtual networks | nano | tab: Tags | static |
 | Virtual networks | nano | tab: Diagnose and solve problems | static |
 | Virtual networks | nano | tab: Address space | static |
-| Virtual networks | nano | tab: Subnets | static |
+| Virtual networks | nano | tab: Connected devices | static |
 | Event Grid topics | nano | tab: Tags | static |
 | Event Grid topics | nano | tab: Diagnose and solve problems | static |
+| Event Grid topics | nano | tab: Topic types | static |
 | Event Grid topics | nano | tab: Networking | static |
 | Event Grid topics | nano | tab: Identity | static |
 | Key vaults | nano | tab: Tags | static |
@@ -1192,7 +1190,7 @@ _Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
 
 | Suite | Result | Checks |
 |---|---|---|
-| offline-ui-crawl | ❌ | 35/38 |
+| offline-ui-crawl | ❌ | 36/38 |
 | offline-console-actions | ✅ | 246/246 |
 | offline-api-ec2-instance-detail | ✅ | 3/3 |
 | offline-api-s3-bucket-creation-date | ✅ | 3/3 |
@@ -1217,7 +1215,7 @@ _Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
 | offline-cli-gcp | ✅ | 6/6 |
 | offline-cli-azure | ✅ | 6/6 |
 | offline-ui-core | ✅ | 9/9 |
-| nano-ui-crawl | ❌ | 40/43 |
+| nano-ui-crawl | ❌ | 41/43 |
 | nano-cores | ✅ | 48/48 |
 | nano-aws-iam-detail | ✅ | 8/8 |
 | nano-aws-ec2-launch | ✅ | 13/13 |
@@ -1254,9 +1252,11 @@ _Updated 2026-10-27 19:22 UTC · refreshes after every pipeline run_
 | offline-api-gcp-apigateway-savings | ✅ | 5/5 |
 | offline-api-gcp-console-next | ✅ | 28/28 |
 | offline-api-gcp-grid-columns | ✅ | 19/19 |
+| offline-api-azure-console-lens | ✅ | 33/33 |
 | offline-api-gcp-console-vault-lens | ✅ | 15/15 |
 | offline-api-gcp-vault-console-secrets | ✅ | 9/9 |
 | offline-api-aws-console-savings | ✅ | 12/12 |
+| offline-api-aws-sdk-info-extras-config | ✅ | 11/11 |
 | offline-api-aws-eventbridge-rule-defaults | ✅ | 14/14 |
 | nano-ui-azure-tabs | ✅ | 71/71 |
 | nano-ui-azure-dp | ✅ | 5/5 |
