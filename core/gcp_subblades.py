@@ -310,6 +310,38 @@ _CLOUDSCHEDULER_SUB = [
 ]
 
 
+# ============================================================================
+# Kubernetes Engine — cluster detail (reuses the generic `schedkv` key/value renderer:
+# `fields` is [[field, label], …] read off the cluster's console view, every value filled)
+# ============================================================================
+_CONTAINER_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Cluster", "items": [
+        {"key": "details", "label": "Details", "icon": "info", "type": "schedkv",
+         "fields": [["status", "Status"], ["mode", "Mode"], ["version", "Control plane version"],
+                    ["channel", "Release channel"], ["endpoint", "Endpoint"], ["created", "Created"],
+                    ["description_text", "Description"], ["data_plane", "Kubernetes API"]]},
+        {"key": "nodes",   "label": "Nodes", "icon": "dns", "type": "schedkv",
+         "fields": [["pool_summary", "Node pools"], ["nodes", "Number of nodes"], ["vcpus", "Total vCPUs"],
+                    ["memory", "Total memory"], ["machine_types", "Machine types"], ["image_type", "Image type"],
+                    ["disk", "Boot disk"], ["autoscaling", "Autoscaling"], ["auto_upgrade", "Auto-upgrade"]]},
+        {"key": "networking", "label": "Networking", "icon": "lan", "type": "schedkv",
+         "fields": [["network", "Network"], ["subnetwork", "Subnet"], ["clusterIpv4Cidr", "Pod address range"],
+                    ["servicesIpv4Cidr", "Service address range"]]},
+        {"key": "observability", "label": "Observability", "icon": "monitoring", "type": "schedkv",
+         "fields": [["loggingService", "Logging"], ["monitoringService", "Monitoring"],
+                    ["notifications", "Upgrade notifications"], ["labels_text", "Labels"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -325,4 +357,5 @@ SUB_BLADES: dict[str, list] = {
     "secretmanager": _SECRETMANAGER_SUB,
     "kms":           _KMS_SUB,
     "cloudscheduler": _CLOUDSCHEDULER_SUB,
+    "container":     _CONTAINER_SUB,
 }

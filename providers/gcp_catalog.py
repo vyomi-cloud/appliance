@@ -395,6 +395,46 @@ RESOURCE_CATALOG_GCP = [
             {"name": "message",     "label": "Message body (Pub/Sub target)", "default": "scheduled"},
         ],
     },
+    # ========================================================================
+    # Kubernetes Engine (GKE) — clusters + node pools (core/gcp_container_core.py).
+    # Console REST at /api/gcp/container/*; the native /v1/projects/*/locations/*/clusters
+    # wire serves the SDKs / gcloud. Control plane only (no Kubernetes API behind it).
+    # ========================================================================
+    {
+        "key": "container", "label": "Kubernetes Engine", "icon": "hub",
+        "namespace": "GCP/Container", "service": "container",
+        "collection_path": "/api/gcp/container/clusters",
+        "resource_path":   "/api/gcp/container/clusters/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "clusters": {"method": "GET",    "path": "/api/gcp/container/clusters"},
+            "resize":   {"method": "POST",   "path": "/api/gcp/sub/container/resize/{name}"},
+            "delete":   {"method": "DELETE", "path": "/api/gcp/container/clusters/{name}"},
+        },
+        "columns": [
+            ["id",        "Name"],
+            ["region",    "Location"],
+            ["status",    "Status"],
+            ["mode",      "Mode"],
+            ["nodes",     "Number of nodes"],
+            ["vcpus",     "Total vCPUs"],
+            ["memory",    "Total memory"],
+            ["version",   "Version"],
+            ["channel",   "Release channel"],
+            ["endpoint",  "Endpoint"],
+        ],
+        "createFields": [
+            {"name": "name",        "label": "Name",                       "default": "my-cluster"},
+            {"name": "region",      "label": "Location (region or zone)",  "default": "us-central1"},
+            {"name": "mode",        "label": "Mode (Standard or Autopilot)", "default": "Standard"},
+            {"name": "nodeCount",   "label": "Nodes per pool (Standard)",  "default": "3"},
+            {"name": "machineType", "label": "Machine type (Standard)",    "default": "e2-medium"},
+            {"name": "releaseChannel", "label": "Release channel",         "default": "REGULAR"},
+            {"name": "network",     "label": "Network",                    "default": "default"},
+            {"name": "description", "label": "Description",                "default": "Demo GKE cluster"},
+        ],
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_GCP}

@@ -634,7 +634,7 @@ function renderRail(){
   const rail = document.getElementById("rail"); rail.innerHTML = "";
   rail.append(el("div",{class:"rail-h"}, "All products"));
   const groups = [
-    ["COMPUTE",       ["compute", "functions"]],
+    ["COMPUTE",       ["compute", "functions", "container"]],
     ["STORAGE",       ["storage"]],
     ["DATABASES",     ["cloudsql", "firestore"]],
     ["NETWORKING",    ["vpc"]],
@@ -743,6 +743,7 @@ async function renderList(main){
                      : svc.key === "vpc" ? "Create VPC network"
                      : svc.key === "iam" ? "Create service account"
                      : svc.key === "cloudscheduler" ? "Create job"
+                     : svc.key === "container" ? "Create cluster"
                      : "Create";
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
     icon("add"), primaryLabel));
@@ -916,6 +917,13 @@ async function renderDetail(main){
         else toast(act+" failed ("+r.status+")", "err");
       }}, icon(act === "pause" ? "pause" : act === "resume" ? "play_arrow" : "bolt"),
          act === "pause" ? "Pause" : act === "resume" ? "Resume" : "Force run")) : []),
+      ...(svc.key === "container" ? [el("button",{class:"btn",onclick:async()=>{
+        const n = prompt("Number of nodes for the first node pool", String(STATE.item.nodes || 3));
+        if (n === null) return;
+        const r = await api("POST", fillCommon((svc.api_paths||{}).resize.path, {name}), {nodeCount: parseInt(n, 10)});
+        if (r.ok) { toast("Cluster "+name+": resized to "+n+" nodes"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
+        else toast("resize failed ("+r.status+")", "err");
+      }}, icon("open_in_full"), "Resize")] : []),
       el("button",{class:"btn danger",onclick:async()=>{
         if (!confirm("Delete "+name+"?")) return;
         const dp = (svc.api_paths||{}).delete;

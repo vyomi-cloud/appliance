@@ -606,6 +606,35 @@ _CLOUDSCHEDULER_WIZARD = _basic_wizard(
 _CLOUDSCHEDULER_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
 
 
+# ============================================================================
+# Kubernetes Engine — Create cluster (core/gcp_container_core.job_from_form)
+# ============================================================================
+_CONTAINER_WIZARD = _basic_wizard(
+    name_field=_name("Name", "my-cluster", r"^[a-z]([-a-z0-9]{0,38}[a-z0-9])?$",
+                     "Up to 40 chars: lowercase letters, digits, hyphens; start with a letter"),
+    name_default="my-cluster", region_or_zone="region",
+    extra_basic_fields=[
+        {"name": "description", "label": "Description", "default": "Demo GKE cluster"},
+        {"name": "mode", "label": "Cluster mode", "type": "radio", "default": "Standard", "options": [
+            {"value": "Standard",  "label": "Standard (you manage node pools)"},
+            {"value": "Autopilot", "label": "Autopilot (Google manages nodes)"},
+        ]},
+        {"name": "releaseChannel", "label": "Release channel", "type": "select", "default": "REGULAR", "options": [
+            {"value": c, "label": c.title()} for c in ("RAPID", "REGULAR", "STABLE", "EXTENDED")]},
+        {"name": "network", "label": "Network", "default": "default"},
+    ],
+    sections=[
+        {"label": "Default node pool", "fields": [
+            {"name": "nodeCount", "label": "Number of nodes", "type": "number", "default": 3,
+             "ifEquals": {"mode": "Standard"}},
+            {"name": "machineType", "label": "Machine type", "type": "vmSize", "default": "e2-medium",
+             "ifEquals": {"mode": "Standard"}},
+        ]},
+    ],
+)
+_CONTAINER_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
+
+
 WIZARDS: dict[str, dict] = {
     "compute":       _COMPUTE_WIZARD,
     "storage":       _STORAGE_WIZARD,
@@ -620,4 +649,5 @@ WIZARDS: dict[str, dict] = {
     "secretmanager": _SECRETMANAGER_WIZARD,
     "kms":           _KMS_WIZARD,
     "cloudscheduler": _CLOUDSCHEDULER_WIZARD,
+    "container":     _CONTAINER_WIZARD,
 }
