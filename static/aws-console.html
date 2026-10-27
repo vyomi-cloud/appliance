@@ -709,7 +709,7 @@ function renderRail(){
       ["Compute", ["ec2", "lambda"]],
       ["Storage", ["s3"]],
       ["Databases", ["rds", "dynamodb"]],
-      ["Application Integration", ["sqs", "apigateway", "eventbridge"]],
+      ["Application Integration", ["sqs", "apigateway", "eventbridge", "stepfunctions"]],
       ["Networking & Content Delivery", ["vpc", "elbv2"]],
       ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
       ["Management & Governance", ["logs", "ssm"]],
@@ -971,6 +971,7 @@ async function renderList(main){
                      : (svc.key === "rds") ? "Create database"
                      : (svc.key === "lambda") ? "Create function"
                      : (svc.key === "apigateway") ? "Create API"
+                     : (svc.key === "stepfunctions") ? "Create state machine"
                      : (svc.key === "vpc") ? "Create VPC"
                      : "Create";
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
@@ -3247,6 +3248,33 @@ SUB_RENDERERS.apiresources = function(svc, full, host){
     host.append(tbl);
   });
 };
+// Step Functions — generic list tab. `tab.list_key` selects svc.api_paths[list_key];
+// `tab.cols` is [[field,label],…]. Rows come back as {items:[…]} with every cell filled.
+SUB_RENDERERS.sfnlist = function(svc, full, host, tab){
+  const ap = (svc.api_paths || {})[tab.list_key];
+  fetch(ORIGIN + fillPath(ap.path, {name: full.name || full.id})).then(r=>r.json()).then(j=>{
+    const items = j.items || [];
+    if (!items.length) { host.append(el("div",{class:"empty"}, "No " + tab.label.toLowerCase() + " for this state machine yet.")); return; }
+    const cols = tab.cols || [];
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, ...cols.map(c => el("th",{}, c[1]))));
+    items.forEach(it => tbl.append(el("tr",{}, ...cols.map(c => {
+      const v = it[c[0]];
+      return el("td",{class:/arn|id/i.test(c[0]) ? "mono small" : ""}, (v === undefined || v === null || v === "") ? "none" : String(v));
+    }))));
+    host.append(tbl);
+  }).catch(e => host.append(el("div",{class:"alert err"}, "Failed to load: " + e.message)));
+};
+// Step Functions — the Amazon States Language definition, pretty-printed.
+SUB_RENDERERS.sfndefinition = function(svc, full, host){
+  let txt = full.definition || "";
+  try { txt = JSON.stringify(JSON.parse(txt), null, 2); } catch (_) {}
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Amazon States Language definition"));
+  card.append(el("pre",{class:"mono small", style:"white-space:pre-wrap;margin:0"}, txt || "none"));
+  host.append(card);
+};
+
 SUB_RENDERERS.apistages = function(svc, full, host){
   fetch(ORIGIN+fillPath(svc.api_paths.stages.path, {name: full.rest_api_id || full.id || full.name})).then(r=>r.json()).then(j=>{
     const items = j.stages || j.value || j.items || [];

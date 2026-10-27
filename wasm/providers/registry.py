@@ -255,6 +255,11 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 aws_counts["ssm"] = len(nano_registry.get()["ssm"].parameters)
             except Exception:
                 pass
+            try:   # Step Functions lives in the shared registry store (console + relay wire)
+                from core import nano_registry
+                aws_counts["stepfunctions"] = len(nano_registry.get()["sfn"].machines)
+            except Exception:
+                pass
             for svc, n in aws_counts.items():
                 if n:
                     by_service[svc] = by_service.get(svc, 0) + n
