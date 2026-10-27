@@ -376,6 +376,13 @@
    "upstream": "cognitiveservices",
    "status": "released",
    "released_in": "3.0.20"
+  },
+  {
+   "cloud": "azure",
+   "key": "containerservice",
+   "name": "Azure Kubernetes Service",
+   "upstream": "containerservice",
+   "status": "pending-release"
   }
  ]
 }

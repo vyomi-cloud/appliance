@@ -47,6 +47,11 @@ try:                                              # Cognitive Services engine (M
 except ImportError:
     import azure_cognitiveservices_core as cogs_engine   # type: ignore
 
+try:                                              # AKS engine (Microsoft.ContainerService)
+    from core import azure_containerservice_core as aks_engine
+except ImportError:
+    import azure_containerservice_core as aks_engine   # type: ignore
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -248,6 +253,9 @@ class AzureArm:
         if namespace.lower() == "microsoft.cognitiveservices":
             return self._cogs(method, sub, rg, chain, payload, query)
 
+        if namespace.lower() == "microsoft.containerservice":
+            return self._aks(method, sub, rg, chain, payload, query)
+
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
             supported = ", ".join(sorted(c["namespace"] + "/" + c["type"] for c in CATALOG))
@@ -302,6 +310,17 @@ class AzureArm:
             resp["status"] = 200 if r["status"] == 201 else r["status"]
             op_id = self._make_operation(r["rid"], method)
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or cs.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
+    def _aks(self, method, sub, rg, chain, payload, query):
+        ak = aks_engine
+        r = ak.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or ak.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
 

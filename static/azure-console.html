@@ -2139,6 +2139,98 @@ SUB_RENDERERS.cogsquotas = function(svc, full, host){
   }).catch(()=>host.append(emptyState("Could not load quotas.")));
 };
 
+// ---- Azure Kubernetes Service (Microsoft.ContainerService) renderers --------------
+SUB_RENDERERS.aksnodepools = function(svc, full, host){
+  const base = ORIGIN + full.id + "/agentPools";
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"},"Node pools are groups of nodes with the same configuration. System pools host critical system pods; user pools run your workloads."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"});
+    bar.append(el("button",{class:"btn",onclick:add}, icon("add"), "Add node pool"), el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base + q).then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      if (!items.length){ listHost.append(emptyState("No node pools.")); return; }
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Name","Mode","OS","Node size","Nodes","Kubernetes version","State",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      items.forEach(d=>{
+        const p = d.properties || {};
+        t.append(el("tr",{}, el("td",{}, d.name), el("td",{}, p.mode||"—"), el("td",{}, p.osType||"—"), el("td",{}, p.vmSize||"—"),
+          el("td",{}, String(p.count)), el("td",{}, p.orchestratorVersion||"—"), el("td",{}, p.provisioningState||"Succeeded"),
+          el("td",{style:"text-align:right"},
+            el("button",{class:"btn sec",onclick:()=>{
+              const n = parseInt(prompt("Node count:", String(p.count))||"", 10); if (isNaN(n)) return;
+              fetch(base + "/" + encodeURIComponent(d.name) + q, {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({properties:{count:n}})})
+                .then(r=>r.json()).then(x=>{ toast(x.error ? x.error.message : "Scaled"); render(); });
+            }}, "Scale"), " ",
+            el("button",{class:"btn sec",onclick:()=>{
+              fetch(base + "/" + encodeURIComponent(d.name) + q, {method:"DELETE"}).then(r=>r.status===200||r.status===204?null:r.json()).then(x=>{ toast(x && x.error ? x.error.message : "Node pool deleted"); render(); });
+            }}, "Delete"))));
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load node pools.")));
+  }
+  function add(){
+    const name = (prompt("Node pool name (lowercase letters and digits):", "userpool1")||"").trim(); if(!name) return;
+    const size = (prompt("Node size:", "Standard_DS2_v2")||"").trim();
+    const n = parseInt(prompt("Node count:", "1")||"1", 10);
+    fetch(base + "/" + encodeURIComponent(name) + q, {method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({properties:{count:n, vmSize:size, mode:"User", osType:"Linux"}})})
+      .then(r=>r.json()).then(j=>{ if (j.error) toast(j.error.message); else toast("Node pool added"); render(); });
+  }
+  render();
+};
+SUB_RENDERERS.aksupgrades = function(svc, full, host){
+  const base = ORIGIN + full.id;
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"},"Kubernetes version, upgrade channel and power state of this cluster."));
+    wrap.append(el("div",{class:"kv prop-kv"},
+      el("div",{class:"k"},"Kubernetes version"), el("div",{class:"v"}, getPath(full,"properties.kubernetesVersion")||"—"),
+      el("div",{class:"k"},"Power state"), el("div",{class:"v"}, getPath(full,"properties.powerState.code")||"—"),
+      el("div",{class:"k"},"Upgrade channel"), el("div",{class:"v"}, getPath(full,"properties.autoUpgradeProfile.upgradeChannel")||"none"),
+      el("div",{class:"k"},"Node resource group"), el("div",{class:"v"}, getPath(full,"properties.nodeResourceGroup")||"—"),
+      el("div",{class:"k"},"Pricing tier"), el("div",{class:"v"}, getPath(full,"sku.tier")||"—")));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"});
+    const act = (label, path, msg)=>el("button",{class:"btn sec",onclick:()=>{ fetch(base + "/" + path + q, {method:"POST"}).then(()=>{ toast(msg); }); }}, label);
+    bar.append(act("Stop cluster","stop","Stopping cluster"), act("Start cluster","start","Starting cluster"), act("Rotate certificates","rotateClusterCertificates","Rotating certificates"));
+    wrap.append(bar);
+    const t = el("table",{class:"sub-table"});
+    const hdr = el("tr",{}); ["Available upgrade","Preview"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+    wrap.append(t);
+    fetch(base + "/upgradeProfiles/default" + q).then(r=>r.json()).then(j=>{
+      const ups = getPath(j,"properties.controlPlaneProfile.upgrades")||[];
+      if (!ups.length){ wrap.append(emptyState("The cluster is on the latest supported version.")); return; }
+      ups.forEach(u=>t.append(el("tr",{}, el("td",{}, u.kubernetesVersion), el("td",{}, u.isPreview ? "Yes" : "No"))));
+    }).catch(()=>wrap.append(emptyState("Could not load upgrade versions.")));
+  }
+  render();
+};
+SUB_RENDERERS.aksconnect = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Connect to the cluster with kubectl. This simulator runs the control plane only — the API server address does not serve Kubernetes requests."));
+  const base = ORIGIN + full.id;
+  const q = "?api-version=" + svc.apiVersion;
+  const rg = full.id.split("/")[4] || "";
+  host.append(el("div",{class:"kv prop-kv"},
+    el("div",{class:"k"},"API server address"), el("div",{class:"v"}, getPath(full,"properties.fqdn")||"—"),
+    el("div",{class:"k"},"Azure CLI"), el("div",{class:"v"}, "az aks get-credentials --resource-group " + rg + " --name " + full.name),
+    el("div",{class:"k"},"Location"), el("div",{class:"v"}, full.location||"—")));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Credential","Kubeconfig (decoded)"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  host.append(t);
+  fetch(base + "/listClusterUserCredential" + q, {method:"POST"}).then(r=>r.json()).then(j=>{
+    (j.kubeconfigs||[]).forEach(k=>{
+      let txt = ""; try { txt = atob(k.value); } catch(e){ txt = k.value; }
+      t.append(el("tr",{}, el("td",{}, k.name), el("td",{}, el("pre",{style:"margin:0;white-space:pre-wrap;max-width:640px"}, txt))));
+    });
+  }).catch(()=>host.append(emptyState("Could not load credentials.")));
+};
+
 SUB_RENDERERS.databases = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Databases under this SQL server."));
   listChildResources(svc, full, host, "databases",

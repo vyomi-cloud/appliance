@@ -421,6 +421,39 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
+        "key": "containerservice", "label": "Kubernetes services", "icon": "hub",
+        "namespace": "Microsoft.ContainerService", "type": "managedClusters",
+        "api_version": "2024-09-01", "scope": "rg",
+        "banner": "Azure Kubernetes Service (AKS) managed clusters. Control plane only: clusters, node pools, upgrades, credentials and maintenance windows behave like Azure; no Kubernetes API server runs behind the cluster FQDN.",
+        "children": [{"type": "agentPools", "label": "Node pools", "icon": "dns"}],
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["properties.kubernetesVersion", "Kubernetes version"],
+                    ["properties.powerState.code", "Power state"],
+                    ["sku.tier", "Pricing tier"],
+                    ["properties.fqdn", "API server address"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [
+            {"name": "name", "label": "Cluster name", "default": "aks-cloudlearn"},
+            {"name": "properties.dnsPrefix", "label": "DNS prefix", "default": "aks-cloudlearn-dns"},
+            {"name": "properties.kubernetesVersion", "label": "Kubernetes version", "type": "select",
+             "options": ["1.31.1", "1.30.5", "1.29.9", "1.28.14"], "default": "1.30.5"},
+            {"name": "sku.tier", "label": "Pricing tier", "type": "select",
+             "options": ["Free", "Standard", "Premium"], "default": "Free"},
+            {"name": "properties.agentPoolProfiles.0.name", "label": "Primary node pool name", "default": "nodepool1"},
+            {"name": "properties.agentPoolProfiles.0.count", "label": "Node count", "default": "3"},
+        ],
+        "defaults": {
+            "sku": {"name": "Base", "tier": "Free"},
+            "identity": {"type": "SystemAssigned"},
+            "properties": {
+                "provisioningState": "Succeeded", "kubernetesVersion": "1.30.5", "dnsPrefix": "aks-cloudlearn-dns",
+                "agentPoolProfiles": [{"name": "nodepool1", "count": 3, "vmSize": "Standard_DS2_v2", "mode": "System",
+                                       "osType": "Linux"}],
+                "networkProfile": {"networkPlugin": "kubenet"},
+            },
+        },
+    },
+    {
         "key": "role_definition",
         "label": "Role Definition",
         "icon": "admin_panel_settings",
@@ -696,6 +729,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if namespace.lower() == "microsoft.cognitiveservices":
         return await _handle_cognitiveservices(request, method, sub, rg, chain, names, base)
 
+    if namespace.lower() == "microsoft.containerservice":
+        return await _handle_containerservice(request, method, sub, rg, chain, names, base)
+
     top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
     if top is None:
         return _error(404, "ResourceTypeNotSupported",
@@ -849,6 +885,25 @@ async def _handle_cognitiveservices(request: Request, method: str, sub: str, rg:
             resp.headers[hk] = hv
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.CognitiveServices/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_containerservice(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                                   names: list[str], base: str) -> JSONResponse:
+    from core import azure_containerservice_core as _cs
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _cs.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    api_version = request.query_params.get("api-version") or _cs.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["lro"] and r["status"] < 300:
+        resp.status_code = 200 if r["status"] == 201 else r["status"]
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2 \
+            and chain[0].lower() == "managedclusters":
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.ContainerService/managedClusters", "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
     return resp
 
