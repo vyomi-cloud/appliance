@@ -1,7 +1,16 @@
 {
- "at": "2026-10-27T20:50:11+00:00",
+ "at": "2026-10-27T21:50:13+00:00",
  "baseline": false,
  "changes": [
+  {
+   "cloud": "azure",
+   "service": "storage",
+   "kind": "spec-commit",
+   "key": "azure:storage:548d44095b",
+   "title": "Azure storage: Update types and auth naming for .NET (#47667)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/548d44095be067632e36c74969cce42472ed1431",
+   "actionable": false
+  },
   {
    "cloud": "azure",
    "service": "network",
@@ -9,6 +18,16 @@
    "key": "azure:network:5b3ac33ab5",
    "title": "Azure network: [Network] Update TypeSpec configuration for .NET SDK compatibility (#47643)",
    "link": "https://github.com/Azure/azure-rest-api-specs/commit/5b3ac33ab54d588beaca346f351b95f5765e2457",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Aurora",
+   "kind": "announcement",
+   "key": "feed:aws:0d4f70e67c2d",
+   "title": "Amazon Aurora serverless now supports up to 384 ACUs",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/aurora-serverless-supports-384-acu/",
+   "detail": "Amazon Aurora serverless now supports database capacity of up to 384 Aurora Capacity Units (ACUs) for Aurora PostgreSQL-Compatible Edition, a 50% increase from the previous maximum of 256 ACUs. Each ACU provides approximately 2 gibibytes (GiB) of memory with corresponding CPU and networking, so a single Aurora serverless database can now scale up to 768 GiB of memory. When the workload completes, Aurora serverless automatically scales down to zero. This makes Aurora serverless especially well-suited for agentic AI applications, which typically have bursts of activity, long idle windows, and un",
    "actionable": false
   }
  ],
