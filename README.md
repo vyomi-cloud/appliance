@@ -10,7 +10,7 @@ _Updated 2026-10-27 19:51 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 52% · Nano 71%
 - **Hourly tests:** 78 of 81 suites passing (run 19:14 UTC)
-- **Upstream watch:** 7 open changes from the real clouds to adopt
+- **Upstream watch:** 12 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -60,7 +60,7 @@ _Updated 2026-10-27 19:51 UTC · refreshes after every pipeline run_
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| EC2 | 🧩 6/13 · 🧩 6/13 | 0 · 0 | ✅ watched | before gate |
+| EC2 | 🧩 6/13 · 🧩 6/13 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | S3 | 🧩 6/13 · 🧩 11/13 | 0 · 0 | ✅ watched | before gate |
 | IAM | 🧩 8/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
 | RDS | 🧩 8/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
@@ -68,7 +68,7 @@ _Updated 2026-10-27 19:51 UTC · refreshes after every pipeline run_
 | SQS | 🧩 5/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
 | Lambda | 🧩 6/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | API Gateway | 🧩 8/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
-| VPC | 🧩 8/13 · 🧩 12/13 | 0 · 0 | ✅ watched | before gate |
+| VPC | 🧩 8/13 · 🧩 12/13 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | EventBridge | 🧩 6/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | Secrets Manager | 🧩 4/13 · 🧩 9/13 | 2 · 2 | ✅ watched | before gate |
 | KMS | 🧩 5/13 · 🧩 11/13 | 0 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
