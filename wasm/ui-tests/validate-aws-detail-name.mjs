@@ -26,6 +26,9 @@ try {
     bad.length = 0;
     await page.evaluate(([sel, src]) => [...document.querySelectorAll(sel)].find((e) => new RegExp(src, "i").test(e.innerText.trim()))?.click(), [RAIL_SEL, rx.source]);
     await sleep(2000);
+    // The grid pages at 10 rows; filter so this run's resource is on page 1.
+    await page.locator("#main input[type=search], #main input[type=text], #main input:not([type])").first().fill(name).catch(() => {});
+    await sleep(500);
     await page.locator("#main a.id, #main td a", { hasText: name }).first().click();
     await sleep(2000);
     const head = await page.evaluate(() => document.querySelector("#main h1")?.innerText || "");

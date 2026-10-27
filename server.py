@@ -2609,6 +2609,25 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(policy, dict):
             add("gcp", "iam", "policy", policy_id, policy)
 
+    # Rail extras (generic create backend): billable AWS/GCP resources that live
+    # under service_states["aws_extras"|"gcp_extras"][<svc>/<kind>]["items"].
+    # (service, kind) pairs priced in core/cost_model.SERVICE_MONTHLY.
+    for provider, extras_key, scan in (
+        ("aws", "aws_extras", (("secretsmanager", "secrets"), ("kms", "keys"),
+                               ("eventbridge", "rules"), ("eventbridge", "event-buses"))),
+        ("gcp", "gcp_extras", (("secretmanager", "secrets"), ("kms", "keys"),
+                               ("eventarc", "triggers"))),
+    ):
+        extras = service_states.get(extras_key, {})
+        if not isinstance(extras, dict):
+            continue
+        for svc, kind in scan:
+            slot = extras.get(f"{svc}/{kind}", {})
+            items = slot.get("items", {}) if isinstance(slot, dict) else {}
+            for item_id, item in (items.items() if isinstance(items, dict) else []):
+                if isinstance(item, dict):
+                    add(provider, svc, kind.rstrip("s"), str(item_id), item)
+
     # Azure ARM resources (space-scoped under service_states["azure_arm"]["resources"]).
     # Same DB-derived path as AWS/GCP: service + kind are mapped from the stored
     # ARM type via the catalog (nested children fold to their parent service).

@@ -79,6 +79,9 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.dynamodb": 1.25,     # on-demand, light usage
     "aws.apigateway": 3.50,   # ~1M calls
     "aws.vpc": 0.00,          # free (NAT GW extra)
+    "aws.secretsmanager": 0.40,  # $0.40 per secret per month
+    "aws.kms": 1.00,             # $1.00 per customer-managed key per month
+    "aws.eventbridge": 0.00,     # rules / custom buses are free; events billed per use
     # GCP
     "gcp.sql": 25.00,         # db-f1-micro 730h
     "gcp.functions": 0.20,    # minimal invocations
@@ -88,6 +91,9 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.apigateway": 3.00,   # ~1M calls
     "gcp.vpc": 0.00,
     "gcp.iam": 0.00,
+    "gcp.secretmanager": 0.06,  # $0.06 per active secret version per month
+    "gcp.kms": 0.06,            # $0.06 per software key version per month
+    "gcp.eventarc": 0.00,       # triggers are free; events billed per use
     # Azure
     "azure.vm": 0.00,         # priced via VM hourly
     "azure.sql": 4.99,        # Basic DTU
