@@ -188,6 +188,8 @@ def _create_repo(store, project, loc, query, body) -> GcpResponse:
         return _err(400, "Invalid repository format: a valid format is required "
                          f"({', '.join(FORMATS)}).")
     mode = body.get("mode") or "STANDARD_REPOSITORY"
+    if mode == "MODE_UNSPECIFIED":
+        mode = "STANDARD_REPOSITORY"
     if mode not in MODES:
         return _err(400, f"Invalid repository mode \"{mode}\".")
     name = _repo_name(project, loc, rid)
