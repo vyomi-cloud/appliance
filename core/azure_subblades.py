@@ -336,6 +336,22 @@ _DNS_SUB = [
     ]},
 ]
 
+_MONITOR_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Alerting", "items": [
+        {"key": "condition",     "label": "Condition",           "icon": "rule",          "type": "monitorCondition"},
+        {"key": "actionGroups",  "label": "Action groups",       "icon": "campaign",      "type": "monitorActionGroups"},
+        {"key": "activityAlerts", "label": "Activity log alerts", "icon": "history",      "type": "monitorActivityAlerts"},
+        {"key": "autoscale",     "label": "Autoscale settings",  "icon": "unfold_more",   "type": "monitorAutoscale"},
+    ]},
+    {"group": "Settings", "items": [
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",       "label": "Metrics",             "icon": "show_chart",    "type": "metrics"},
+    ]},
+]
+
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
@@ -359,5 +375,6 @@ SUB_BLADES: dict[str, list] = {
     "appconfiguration": _APPCONFIG_SUB,
     "cognitiveservices": _COGS_SUB,
     "dns":         _DNS_SUB,
+    "monitor":     _MONITOR_SUB,
     "rbac":        _RBAC_SUB,
 }

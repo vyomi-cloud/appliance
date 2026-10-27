@@ -417,6 +417,37 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
+        "key": "monitor", "label": "Monitor alerts", "icon": "notifications_active",
+        "namespace": "Microsoft.Insights", "type": "metricAlerts",
+        "api_version": "2018-03-01", "scope": "rg",
+        "banner": "Azure Monitor metric alert rules. Action groups, activity log alerts and autoscale settings (Microsoft.Insights) are managed in the detail tabs; the Azure Monitor SDKs, `az monitor` and these blades edit the same data.",
+        "children": [{"type": "actionGroups", "label": "Action groups", "icon": "campaign"}],
+        "columns": [["name", "Name"], ["properties.severity", "Severity"],
+                    ["properties.enabled", "Enabled"],
+                    ["properties.evaluationFrequency", "Evaluation frequency"],
+                    ["properties.windowSize", "Window size"],
+                    ["properties.scopes", "Scopes"],
+                    ["location", "Location"]],
+        "create_fields": [
+            {"name": "name", "label": "Alert rule name", "default": "cloudlearn-cpu-high"},
+            {"name": "properties.scopes.0", "label": "Scope (resource id)",
+             "default": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/cloudlearn-vm"},
+            {"name": "properties.criteria.allOf.0.name", "label": "Condition name", "default": "HighCpu"},
+            {"name": "properties.criteria.allOf.0.metricName", "label": "Metric", "default": "Percentage CPU"},
+            {"name": "properties.criteria.allOf.0.operator", "label": "Operator", "default": "GreaterThan"},
+            {"name": "properties.criteria.allOf.0.timeAggregation", "label": "Aggregation", "default": "Average"},
+            {"name": "properties.criteria.allOf.0.threshold", "label": "Threshold", "default": "80"},
+            {"name": "properties.severity", "label": "Severity (0-4)", "default": "3"},
+            {"name": "properties.evaluationFrequency", "label": "Evaluate every", "default": "PT1M"},
+            {"name": "properties.windowSize", "label": "Window size", "default": "PT5M"},
+            {"name": "properties.enabled", "label": "Enabled", "default": "true"},
+        ],
+        "defaults": {
+            "location": "global",
+            "properties": {"severity": 3, "enabled": True, "evaluationFrequency": "PT1M", "windowSize": "PT5M"},
+        },
+    },
+    {
         "key": "cognitiveservices", "label": "Azure AI services", "icon": "psychology",
         "namespace": "Microsoft.CognitiveServices", "type": "accounts",
         "api_version": "2024-10-01", "scope": "rg",
@@ -718,6 +749,11 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         if _dns_probe.handles(chain):
             return await _handle_dns(request, method, sub, rg, chain, names, base)
 
+    if namespace.lower() == "microsoft.insights":
+        from core import azure_monitor_core as _mon_probe
+        if _mon_probe.handles(chain):
+            return await _handle_monitor(request, method, sub, rg, chain, names, base)
+
     if namespace.lower() == "microsoft.cognitiveservices":
         return await _handle_cognitiveservices(request, method, sub, rg, chain, names, base)
 
@@ -873,6 +909,21 @@ async def _handle_dns(request: Request, method: str, sub: str, rg: str | None, c
             resp.headers[hk] = hv
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Network/dnsZones", "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_monitor(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                          names: list[str], base: str) -> JSONResponse:
+    from core import azure_monitor_core as _mo
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _mo.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    for hk, hv in r["headers"].items():
+        resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Insights/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
     return resp
 

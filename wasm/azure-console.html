@@ -2600,6 +2600,97 @@ SUB_RENDERERS.dnsquery = function(svc, full, host){
   run();
 };
 
+// ---- Azure Monitor (Microsoft.Insights) renderers ------------------------------
+SUB_RENDERERS.monitorcondition = function(svc, full, host){
+  const p = full.properties || {}, cr = p.criteria || {};
+  host.append(el("div",{class:"sub-info"},"Condition evaluated every ", el("strong",{}, p.evaluationFrequency||"—"),
+    " over a ", el("strong",{}, p.windowSize||"—"), " window · severity ", el("strong",{}, String(p.severity))));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Name","Metric","Aggregation","Operator","Threshold"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  (cr.allOf||[]).forEach(c=>t.append(el("tr",{}, el("td",{}, c.name), el("td",{}, c.metricName), el("td",{}, c.timeAggregation),
+    el("td",{}, c.operator), el("td",{}, c.threshold==null ? (c.alertSensitivity||"—") : String(c.threshold)))));
+  if (!(cr.allOf||[]).length) t.append(el("tr",{}, el("td",{colspan:5}, "Availability test criteria: " + JSON.stringify(cr))));
+  host.append(t);
+  const acts = p.actions || [];
+  host.append(el("div",{class:"sub-info",style:"margin-top:14px"}, "Action groups notified when the alert fires: ",
+    acts.length ? acts.map(a=>a.actionGroupId.split("/").pop()).join(", ") : "none"));
+};
+function monitorCollection(svc, full, host, type, apiVersion, cols, label, makeBody){
+  const rg = full.id.split("/")[4];
+  const base = ORIGIN + "/subscriptions/" + full.id.split("/")[2] + "/resourceGroups/" + rg + "/providers/Microsoft.Insights/" + type;
+  const q = "?api-version=" + apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center"});
+    bar.append(el("button",{class:"btn",onclick:add}, icon("add"), "Add " + label),
+               el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base + q).then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      if (!items.length) { listHost.append(emptyState("No " + label + "s in resource group " + rg + ".")); return; }
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); cols.forEach(c=>hdr.append(el("th",{},c[1]))); hdr.append(el("th",{},"")); t.append(hdr);
+      items.forEach(it=>{
+        const tr = el("tr",{});
+        cols.forEach(c=>{ const v = getPath(it,c[0]); tr.append(el("td",{}, v==null ? "—" : (typeof v==="object" ? JSON.stringify(v) : String(v)))); });
+        tr.append(el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>{
+          fetch(base + "/" + encodeURIComponent(it.name) + q, {method:"DELETE"}).then(()=>{ toast(label + " deleted"); render(); });
+        }}, "Delete")));
+        t.append(tr);
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load " + label + "s.")));
+  }
+  function add(){
+    const body = makeBody(); if(!body) return;
+    fetch(base + "/" + encodeURIComponent(body.name) + q, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body.body)})
+      .then(r=>r.json().then(j=>({ok:r.ok, j}))).then(({ok,j})=>{
+        if(ok) toast(label + " saved"); else toast((j.error&&j.error.message)||"Could not save","err");
+        render(); });
+  }
+  render();
+}
+SUB_RENDERERS.monitoractiongroups = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Action groups in this resource group: who is notified (email, SMS, webhook…) when an alert fires."));
+  monitorCollection(svc, full, host, "actionGroups", "2023-01-01",
+    [["name","Name"],["properties.groupShortName","Short name"],["properties.enabled","Enabled"],["properties.emailReceivers","Email receivers"],["location","Location"]],
+    "action group", ()=>{
+      const name = (prompt("Action group name:", "ops-team")||"").trim(); if(!name) return null;
+      const short = (prompt("Short name (max 12 characters):", "ops")||"").trim(); if(!short) return null;
+      const email = (prompt("Email address to notify:", "oncall@example.com")||"").trim();
+      return {name, body:{location:"Global", properties:{groupShortName:short, enabled:true,
+        emailReceivers: email ? [{name:"oncall", emailAddress:email, useCommonAlertSchema:true}] : []}}};
+    });
+};
+SUB_RENDERERS.monitoractivityalerts = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Activity log alert rules in this resource group (fire on control-plane events such as a failed deployment)."));
+  const sub = full.id.split("/")[2];
+  monitorCollection(svc, full, host, "activityLogAlerts", "2020-10-01",
+    [["name","Name"],["properties.enabled","Enabled"],["properties.condition.allOf","Condition"],["properties.scopes","Scopes"],["location","Location"]],
+    "activity log alert", ()=>{
+      const name = (prompt("Alert rule name:", "deploy-failed")||"").trim(); if(!name) return null;
+      const cat = (prompt("Category (Administrative, ServiceHealth, ResourceHealth, Alert, Autoscale, Recommendation, Security, Policy):", "Administrative")||"").trim(); if(!cat) return null;
+      return {name, body:{location:"Global", properties:{enabled:true, scopes:["/subscriptions/"+sub],
+        condition:{allOf:[{field:"category", equals:cat}]}, actions:{actionGroups:[]}}}};
+    });
+};
+SUB_RENDERERS.monitorautoscale = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Autoscale settings in this resource group: scale a resource between a minimum and maximum instance count."));
+  const sub = full.id.split("/")[2], rg = full.id.split("/")[4];
+  monitorCollection(svc, full, host, "autoscaleSettings", "2022-10-01",
+    [["name","Name"],["properties.enabled","Enabled"],["properties.profiles.0.capacity","Capacity"],["properties.targetResourceUri","Target"],["location","Location"]],
+    "autoscale setting", ()=>{
+      const name = (prompt("Autoscale setting name:", "web-autoscale")||"").trim(); if(!name) return null;
+      const target = "/subscriptions/"+sub+"/resourceGroups/"+rg+"/providers/Microsoft.Web/serverfarms/cloudlearn-plan";
+      return {name, body:{location:LOCATION, properties:{enabled:true, targetResourceUri:target,
+        profiles:[{name:"default", capacity:{minimum:"1", maximum:"5", default:"1"}, rules:[{
+          metricTrigger:{metricName:"CpuPercentage", metricResourceUri:target, timeGrain:"PT1M", statistic:"Average", timeWindow:"PT10M", timeAggregation:"Average", operator:"GreaterThan", threshold:70},
+          scaleAction:{direction:"Increase", type:"ChangeCount", value:"1", cooldown:"PT5M"}}]}]}}};
+    });
+};
+
 SUB_RENDERERS.databases = function(svc, full, host){
   subResourceCrud(svc, full, host, {
     service: "sql", child: "Database",

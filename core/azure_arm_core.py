@@ -50,6 +50,11 @@ try:                                              # Azure DNS engine (Microsoft.
 except ImportError:
     import azure_dns_core as dns_engine            # type: ignore
 
+try:                                              # Azure Monitor engine (Microsoft.Insights)
+    from core import azure_monitor_core as monitor_engine
+except ImportError:
+    import azure_monitor_core as monitor_engine    # type: ignore
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -252,6 +257,10 @@ class AzureArm:
         if namespace.lower() == "microsoft.network" and dns_engine.handles(chain):
             return self._dns(method, sub, rg, chain, payload, query)
 
+        # Microsoft.Insights (action groups, metric / activity log alerts, autoscale): the Azure Monitor engine.
+        if namespace.lower() == "microsoft.insights" and monitor_engine.handles(chain):
+            return self._monitor(method, sub, rg, chain, payload, query)
+
         if namespace.lower() == "microsoft.cognitiveservices":
             return self._cogs(method, sub, rg, chain, payload, query)
 
@@ -310,6 +319,10 @@ class AzureArm:
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or dn.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
+
+    def _monitor(self, method, sub, rg, chain, payload, query):
+        r = monitor_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
 
     def _cogs(self, method, sub, rg, chain, payload, query):
         cs = cogs_engine
