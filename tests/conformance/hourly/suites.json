@@ -51,6 +51,11 @@
     {"id": "offline-sdk-go-aws-ssm", "target": "offline", "cloud": "aws", "kind": "sdk-go", "cwd": "tests/conformance/aws-sdk-go-ssm", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-aws-ssm", "target": "offline", "cloud": "aws", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-ssm-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-aws-ssm", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-ssm.mjs", "timeout": 600},
-    {"id": "nano-ui-aws-ssm", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-ssm.mjs", "timeout": 600}
+    {"id": "nano-ui-aws-ssm", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-ssm.mjs", "timeout": 600},
+    {"id": "offline-sdk-java-gcp-bigquery", "target": "offline", "cloud": "gcp", "kind": "sdk-java", "cwd": "tests/conformance/gcp-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=GcpBigQueryConformance", "timeout": 900},
+    {"id": "offline-sdk-go-gcp-bigquery", "target": "offline", "cloud": "gcp", "kind": "sdk-go", "cwd": "tests/conformance/gcp-sdk-go-bigquery", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-gcp-bigquery", "target": "offline", "cloud": "gcp", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-bigquery-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-gcp-bigquery", "target": "offline", "cloud": "gcp", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-bigquery.mjs", "timeout": 600},
+    {"id": "nano-ui-gcp-bigquery", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-bigquery.mjs", "timeout": 600}
   ]
 }

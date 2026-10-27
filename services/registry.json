@@ -312,6 +312,13 @@
    "upstream": "ssm",
    "status": "released",
    "released_in": "3.0.12"
+  },
+  {
+   "cloud": "gcp",
+   "key": "bigquery",
+   "name": "BigQuery",
+   "upstream": "bigquery/v2",
+   "status": "pending-release"
   }
  ]
 }
