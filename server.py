@@ -2536,6 +2536,11 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(queue, dict):
             add("aws", "sqs", "queue", queue_name, queue)
 
+    aws_sts = _cloudsim_service_state(space, "sts")
+    for akid, sess in aws_sts.get("sessions", {}).items():
+        if isinstance(sess, dict) and sess.get("origin") == "console":
+            add("aws", "sts", "session", akid, sess)
+
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():
         if isinstance(table, dict):

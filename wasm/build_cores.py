@@ -65,6 +65,10 @@ HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT ED
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
 
 
+# Cores vendored VERBATIM (no GENERATED header): the expansion service gate requires
+# wasm/core/<core>.py to be byte-identical to core/<core>.py. Add new-service cores here.
+BYTE_IDENTICAL = {"sts_core.py"}
+
 # Relay loaders whose CORES list is fetched into the Pyodide FS. Every top-level
 # `from core.X import` in a listed module MUST also be listed, or the browser boot
 # raises ImportError (this guard exists because relay-shared-worker.js once lagged
@@ -129,7 +133,7 @@ def main():
         with open(os.path.join(SRC, name)) as f:
             src = f.read()
         with open(os.path.join(OUT, name), "w") as f:
-            f.write(HEADER + src)
+            f.write(src if name in BYTE_IDENTICAL else HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
     check_relay_cores()   # fail loudly if a relay loader lags the cores
 

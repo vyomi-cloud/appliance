@@ -209,6 +209,13 @@ def sts_create(p):
     return sts_core.console_create(_sts_store(), p)
 
 
+def sts_get(p):
+    s = _sts_store().sessions.get(str(p.get("name") or ""))
+    if not s:
+        return {"ok": False, "code": "NotFound", "name": p.get("name")}
+    return {"ok": True, **sts_core.session_row(s)}
+
+
 def sts_delete(p):
     return sts_core.console_delete(_sts_store(), str(p.get("name") or ""))
 

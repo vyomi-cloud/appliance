@@ -1,0 +1,14 @@
+{
+  "cloud": "aws",
+  "key": "sts",
+  "name": "STS",
+  "upstream": "sts",
+  "issue": 65,
+  "core": "core/sts_core.py",
+  "operations": ["AssumeRole", "AssumeRoleWithWebIdentity", "AssumeRoleWithSAML", "GetCallerIdentity",
+                 "GetSessionToken", "GetFederationToken", "GetAccessKeyInfo", "DecodeAuthorizationMessage"],
+  "backend": {"kind": "in-process"},
+  "suites": ["offline-sdk-java-aws-sts", "offline-sdk-go-aws-sts", "offline-cli-aws-sts",
+             "offline-ui-aws-sts", "nano-ui-aws-sts"],
+  "status": "building"
+}

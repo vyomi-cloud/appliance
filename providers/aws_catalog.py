@@ -627,8 +627,8 @@ RESOURCE_CATALOG_AWS = [
             ["status",        "Status"],
         ],
         "createFields": [
+            {"name": "name",             "label": "Session name",     "default": "console-session"},
             {"name": "role_name",        "label": "Role name",        "default": "my-role"},
-            {"name": "session_name",     "label": "Session name",     "default": "console-session"},
             {"name": "duration_seconds", "label": "Duration (seconds)", "default": "3600"},
         ],
         "endpoints": {},

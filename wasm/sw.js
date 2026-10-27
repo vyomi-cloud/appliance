@@ -570,6 +570,7 @@ async function route(method, path, body, query) {
     if (method === "POST") return { tuple: ["aws", "sts", "CreateSession", body || {}] };
   }
   m = path.match(/^\/api\/sts\/sessions\/([^/]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "sts", "GetSession", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "sts", "DeleteSession", { name: dec(m[1]) }] };
 
   // 3. generic catalog-driven CRUD, from the route table

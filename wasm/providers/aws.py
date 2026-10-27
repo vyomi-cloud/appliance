@@ -115,6 +115,7 @@ class Aws(CloudProvider):
             # STS — sessions (temporary credentials), via core/sts_core.py
             ("sts", "ListSessions"):  lambda b, a, p: D.sts_list(p),
             ("sts", "CreateSession"): lambda b, a, p: D.sts_create(p),
+            ("sts", "GetSession"):    lambda b, a, p: D.sts_get(p),
             ("sts", "DeleteSession"): lambda b, a, p: D.sts_delete(p),
         }
 

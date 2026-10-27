@@ -43,5 +43,5 @@ echo "$OUT" | grep -q allowed; chk $? "aws sts decode-authorization-message" "$O
 OUT=$(sts assume-role --role-arn "$ROLE" --role-session-name "bad name!")
 echo "$OUT" | grep -q "ValidationError"; chk $? "assume-role rejects an invalid session name with ValidationError" "$OUT"
 
-echo "== $fails failed =="
+echo "== done, failures: $fails =="
 [ "$fails" = "0" ]

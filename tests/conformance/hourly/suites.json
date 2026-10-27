@@ -14,6 +14,10 @@
     {"id": "offline-cli-aws", "target": "offline", "cloud": "aws", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-cli-smoke.sh", "timeout": 300},
     {"id": "offline-cli-gcp", "target": "offline", "cloud": "gcp", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-cli-smoke.sh", "timeout": 300},
     {"id": "offline-cli-azure", "target": "offline", "cloud": "azure", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-sdk-java-aws-sts", "target": "offline", "cloud": "aws", "kind": "sdk-java", "cwd": "tests/conformance/aws-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=AwsStsConformance", "timeout": 900},
+    {"id": "offline-sdk-go-aws-sts", "target": "offline", "cloud": "aws", "kind": "sdk-go", "cwd": "tests/conformance/aws-sdk-go-sts", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-aws-sts", "target": "offline", "cloud": "aws", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-sts-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-aws-sts", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-sts.mjs", "timeout": 600},
     {"id": "offline-ui-core", "target": "offline", "cloud": "all", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/offline-console-core.mjs", "timeout": 600},
 
     {"id": "nano-ui-crawl", "target": "nano", "cloud": "all", "kind": "ui", "cmd": "TARGET=nano NANO_DIR=wasm OUT=tests/conformance/hourly/out/ui-nano.json node tests/conformance/hourly/ui_crawler.mjs", "timeout": 1800},
@@ -23,6 +27,7 @@
     {"id": "nano-ui-gcp-tabs", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-functional-tabs.mjs", "timeout": 600},
     {"id": "nano-ui-azure-tabs", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-tabs.mjs", "timeout": 600},
     {"id": "nano-ui-azure-dp", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-dp.mjs", "timeout": 600},
+    {"id": "nano-ui-aws-sts", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-sts.mjs", "timeout": 600},
     {"id": "nano-ui-azure-home", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-home.mjs", "timeout": 600}
   ]
 }

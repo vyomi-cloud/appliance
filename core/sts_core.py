@@ -405,8 +405,13 @@ def session_row(sess: dict) -> dict:
     }
 
 
-def list_sessions(store: StsStore) -> list[dict]:
-    return [session_row(s) for s in sorted(store.sessions.values(), key=lambda s: s["issued_at"], reverse=True)]
+def list_sessions(store: StsStore, origin: str | None = "console") -> list[dict]:
+    """Console grid rows, newest first. By default only sessions issued from the
+    console ("Assume role"); credentials minted by SDK/CLI calls are not listed (they
+    would bury the grid) but stay resolvable by GetCallerIdentity / GetAccessKeyInfo
+    and addressable by id. Pass origin=None for everything."""
+    rows = [s for s in store.sessions.values() if origin is None or s.get("origin", "api") == origin]
+    return [session_row(s) for s in sorted(rows, key=lambda s: s["issued_at"], reverse=True)]
 
 
 def console_create(store: StsStore, body: dict) -> dict:
@@ -414,10 +419,10 @@ def console_create(store: StsStore, body: dict) -> dict:
     (the secret + token are shown once in the response, like the real API)."""
     body = body or {}
     acct = store.account_id
-    role_name = str(body.get("role_name") or body.get("name") or "my-role")
+    role_name = str(body.get("role_name") or "my-role")
     role_arn = str(body.get("role_arn") or f"arn:aws:iam::{acct}:role/{role_name}")
     params = {"Action": "AssumeRole", "RoleArn": role_arn,
-              "RoleSessionName": str(body.get("session_name") or "console-session"),
+              "RoleSessionName": str(body.get("session_name") or body.get("name") or "console-session"),
               "DurationSeconds": str(body.get("duration_seconds") or DEFAULT_DURATION)}
     if body.get("external_id"):
         params["ExternalId"] = str(body["external_id"])
@@ -427,6 +432,8 @@ def console_create(store: StsStore, body: dict) -> dict:
         c = re.search(r"<Code>(.*?)</Code>", r.body, re.S)
         return {"ok": False, "code": c.group(1) if c else "Error", "error": m.group(1) if m else "failed"}
     akid = re.search(r"<AccessKeyId>(.*?)</AccessKeyId>", r.body).group(1)
+    store.sessions[akid]["origin"] = "console"
+    store.persist()
     return {"ok": True, **session_row(store.sessions[akid])}
 
 

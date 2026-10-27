@@ -711,7 +711,7 @@ function renderRail(){
       ["Databases", ["rds", "dynamodb"]],
       ["Application Integration", ["sqs", "apigateway", "eventbridge"]],
       ["Networking & Content Delivery", ["vpc"]],
-      ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
+      ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms", "sts"]],
     ];
     groups.forEach(([label, keys]) => {
       rail.append(el("div",{class:"group"}, label));
