@@ -1,13 +1,13 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 09:57 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 10:02 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 41 services (AWS 16 · GCP 13 · Azure 12) of 1,068 the clouds publish
-- **Building now:** nothing
+- **Building now:** Cloud DNS API (GCP, no manifest yet checks)
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud Tasks API (GCP), Kubernetes Engine API (GCP)
-- **Queued:** 60 services (P1 first, then P2)
+- **Queued:** 59 services (P1 first, then P2)
 - **Consoles really implemented:** offline 50% · Nano 55%
 - **Hourly tests:** 40 of 45 suites passing (run 09:18 UTC)
 - **Upstream watch:** 5 open changes from the real clouds to adopt
@@ -17,7 +17,7 @@ _Updated 2026-10-27 09:57 UTC · refreshes after every pipeline run_
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | 40% · 49% |
-| GCP | 13 | 0 | 4 | 19 | 42% · 44% |
+| GCP | 13 | 1 | 4 | 18 | 42% · 44% |
 | Azure | 12 | 0 | 0 | 24 | 68% · 69% |
 
 ## In progress
@@ -38,8 +38,9 @@ _Updated 2026-10-27 09:57 UTC · refreshes after every pipeline run_
 | AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #112](https://github.com/vyomi-cloud/appliance/pull/112)) | 18/18 | — |
 | Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🔍 In gate ([PR #114](https://github.com/vyomi-cloud/appliance/pull/114)) | 18/18 | — |
 | BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🔍 In gate ([PR #115](https://github.com/vyomi-cloud/appliance/pull/115)) | 18/18 | — |
+| Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🛠 Building | no manifest yet | — |
 | Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | — |
-| Kubernetes Engine API [#70](https://github.com/vyomi-cloud/appliance/issues/70) | GCP | 🔍 In gate ([PR #119](https://github.com/vyomi-cloud/appliance/pull/119)) | 18/18 | — |
+| Kubernetes Engine API [#70](https://github.com/vyomi-cloud/appliance/issues/70) | GCP | 🚀 Releasing | 18/18 | — |
 
 ## Released services
 
@@ -132,11 +133,10 @@ _Updated 2026-10-27 09:57 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary><b>GCP</b> — 19 queued</summary>
+<details><summary><b>GCP</b> — 18 queued</summary>
 
 | Service | Priority | Issue | Offline backend |
 |---|---|---|---|
-| Cloud DNS API | P1 | [#71](https://github.com/vyomi-cloud/appliance/issues/71) | coredns · 15 MB · Lite |
 | Cloud Logging API | P1 | [#73](https://github.com/vyomi-cloud/appliance/issues/73) | in-process |
 | Cloud Monitoring API | P1 | [#74](https://github.com/vyomi-cloud/appliance/issues/74) | in-process |
 | Cloud Run Admin API | P1 | [#76](https://github.com/vyomi-cloud/appliance/issues/76) | docker · Pro |
