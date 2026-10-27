@@ -135,6 +135,8 @@ async function bootBackend() {
   banner("Nano: booting Pyodide (in-browser cloud backend)…");
   const { loadPyodide } = await import("https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs");
   const py = await loadPyodide();
+  // BigQuery's SQL engine (core/gcp_bigquery_core.py) runs on sqlite3, a loadable Pyodide package.
+  try { await py.loadPackage("sqlite3"); } catch (e) { console.warn("sqlite3 load skipped", e); }
   py.FS.mkdir("/wasm"); py.FS.mkdir("/wasm/backends"); py.FS.mkdir("/wasm/providers");
   py.FS.writeFile("/wasm/__init__.py", "");
   py.FS.writeFile("/wasm/backends/__init__.py", "");

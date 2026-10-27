@@ -30,7 +30,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import sqlite3
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -630,12 +629,18 @@ def _split_statements(sql: str) -> list:
     return [_unmask(s, lits).strip() for s in masked.split(";") if s.strip()]
 
 
+def _sqlite3():
+    """sqlite3 is stdlib on the host but a loadable package under Pyodide: import on first query."""
+    import sqlite3
+    return sqlite3
+
+
 class _Ctx:
     """One statement's execution context: an in-memory SQLite DB loaded with the tables it touches."""
 
     def __init__(self, store, project, default_ds):
         self.store, self.project, self.default_ds = store, project, default_ds
-        self.db = sqlite3.connect(":memory:")
+        self.db = _sqlite3().connect(":memory:")
         self.db.create_function("SAFE_DIVIDE", 2, lambda a, b: None if not b or a is None else a / b)
         self.db.create_function("CONCAT", -1, lambda *a: None if any(x is None for x in a) else "".join(str(x) for x in a))
         self.db.create_function("STARTS_WITH", 2, lambda a, b: None if a is None or b is None else int(str(a).startswith(str(b))))
@@ -952,7 +957,7 @@ def _run_statement(store, project, default_ds, stmt: str, params: list | None, m
         cur = ctx.db.execute(sql, bind)
         rows = cur.fetchall() if kw in ("SELECT", "WITH") else []
         names = [d[0] for d in (cur.description or [])]
-    except sqlite3.Error as e:
+    except _sqlite3().Error as e:
         raise BqError(400, f"Syntax error: {e}", "invalidQuery")
     res["bytes"] = ctx.bytes
     res["touched"] = sorted(ctx.touched)

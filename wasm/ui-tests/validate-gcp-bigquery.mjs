@@ -26,7 +26,9 @@ await ctx.addInitScript(() => { try { localStorage.setItem("nano_tunnel_on", "1"
 const page = await ctx.newPage();
 const bad = [];
 let createStatus = null, newId = "";
+const posts = [];
 page.on("response", async (r) => {
+  if (r.request().method() !== "GET" && r.url().includes("/api/")) posts.push(`${r.request().method()} ${r.status()} ${r.url().replace(base, "")}`);
   if (r.request().method() === "POST" && r.url().endsWith(API)) {
     createStatus = r.status();
     try { newId = (await r.json()).name || ""; } catch (_) {}
@@ -44,7 +46,15 @@ const savings = () => page.evaluate(async () => {
 
 try {
   await bootConsole(page, base, "/gcp-console.html");
-  await sleep(2500);
+  // The service worker holds /api/* until Pyodide has loaded the cores: wait for the first real answer.
+  const ready = await page.evaluate(async (a) => {
+    for (let i = 0; i < 120; i++) {
+      try { const r = await fetch(a, { cache: "no-store" }); const j = await r.json(); if (j && j.ok) return true; } catch (_) {}
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    return false;
+  }, API);
+  check(ready, "Nano backend answers the BigQuery console API");
   bad.length = 0;   // boot-time requests that raced the service worker aren't part of the flow under test
   await page.evaluate((p) => fetch(p, { method: "DELETE" }).catch(() => {}), `${API}/${DEFAULT_NAME}`);
   bad.length = 0;
@@ -59,8 +69,8 @@ try {
   const name = (await page.locator("#main input").first().inputValue()) || "";
   check(name === DEFAULT_NAME, "create form has a realistic default dataset ID", `name="${name}"`);
   await page.locator("#main button").filter({ hasText: /create/i }).filter({ hasNotText: /cancel/i }).last().click({ timeout: 5000 });
-  for (let i = 0; i < 30 && createStatus === null; i++) await sleep(500);
-  check(createStatus !== null && createStatus < 300, "create with defaults returns 2xx", `HTTP ${createStatus}`);
+  for (let i = 0; i < 60 && createStatus === null; i++) await sleep(500);
+  check(createStatus !== null && createStatus < 300, "create with defaults returns 2xx", `HTTP ${createStatus} · ${posts.join("; ")} · ${(await page.locator("#main").innerText()).replace(/\n/g, " | ").slice(0, 200)}`);
   await sleep(1500);
   const rowLoc = () => page.locator("#main table tr:has(td)").filter({ hasText: newId || DEFAULT_NAME });
   for (let i = 0; i < 10 && !(await rowLoc().count()); i++) await sleep(800);
