@@ -342,6 +342,33 @@ _CONTAINER_SUB = [
 ]
 
 
+# ============================================================================
+# IAM Service Account Credentials — issued-credential detail (generic `schedkv`
+# renderer: `fields` is [[field, label], …] read off the credential's console view)
+# ============================================================================
+_IAMCREDENTIALS_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Credential", "items": [
+        {"key": "credential", "label": "Credential", "icon": "key", "type": "schedkv",
+         "fields": [["type", "Type"], ["service_account", "Service account"], ["scope_or_audience", "Scopes / audience"],
+                    ["state", "Status"]]},
+        {"key": "lifetime",   "label": "Lifetime",   "icon": "timer", "type": "schedkv",
+         "fields": [["issued", "Issued"], ["expires", "Expires"], ["lifetime", "Lifetime"]]},
+        {"key": "delegation", "label": "Delegation", "icon": "account_tree", "type": "schedkv",
+         "fields": [["delegation", "Delegation chain"], ["delegate_count", "Delegates"]]},
+        {"key": "signing",    "label": "Signing",    "icon": "draw", "type": "schedkv",
+         "fields": [["signing_algorithm", "Algorithm"], ["key_id", "Key ID"], ["api_method", "API method"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -357,5 +384,6 @@ SUB_BLADES: dict[str, list] = {
     "secretmanager": _SECRETMANAGER_SUB,
     "kms":           _KMS_SUB,
     "cloudscheduler": _CLOUDSCHEDULER_SUB,
+    "iamcredentials": _IAMCREDENTIALS_SUB,
     "container":     _CONTAINER_SUB,
 }

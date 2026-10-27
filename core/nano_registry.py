@@ -32,6 +32,7 @@ from core.elbv2_core import Elbv2Store
 from core.ssm_core import SsmStore
 from core.stepfunctions_core import StepFunctionsStore
 from core.gcp_cloudscheduler_core import CloudSchedulerStore
+from core.gcp_iamcredentials_core import IamCredentialsStore
 from core.gcp_container_core import ContainerStore
 
 _REG: dict | None = None
@@ -62,6 +63,7 @@ def get() -> dict:
             "gcp_kms": InMemoryKeyStore(),
             "gcp_sec": InMemoryKvStore(),
             "gcp_gke": ContainerStore(),   # Kubernetes Engine clusters
+            "gcp_iamc": IamCredentialsStore(),   # IAM Credentials issue log
             "gcp_sched": CloudSchedulerStore(),   # Cloud Scheduler jobs
             "gcp_msg": InMemoryMessagingStore(),
             "gcp_iam": InMemoryIamStore(),

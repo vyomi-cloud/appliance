@@ -30,6 +30,7 @@ from core.iam_store import InMemoryIamStore
 from core import gcp_cloudsql_core as _sql
 from core import gcp_cloudscheduler_core as _sched
 from core import gcp_container_core as _gke
+from core import gcp_iamcredentials_core as _iamc
 from core.sql_store import InMemorySqlStore
 
 PROJ = "demo"          # the console's default project
@@ -52,11 +53,12 @@ _STORES = {
     "cloudsql":      _R["gcp_sql"],
     "cloudscheduler": _R["gcp_sched"],
     "container":     _R["gcp_gke"],
+    "iamcredentials": _R["gcp_iamc"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc,
 }
 
 
@@ -277,6 +279,39 @@ def _gke_op(operation, name, body):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "container"}
 
 
+def _iamc_resolve(ident):
+    """IAM Credentials: service-account email / uniqueId -> email (IAM core store) or None."""
+    for email, sa in (getattr(_STORES["iam"], "gcp_service_accounts", None) or {}).items():
+        if ident in (email, sa.get("uniqueId")):
+            return email
+    return None
+
+
+def _iamc_op(operation, name, body):
+    """IAM Credentials console grid (the issued-credentials log) over core/gcp_iamcredentials_core."""
+    store = _STORES["iamcredentials"]
+    if operation == "List":
+        return {"ok": True, "items": _iamc.list_all(store)}
+    if operation == "Create":
+        sa = str(body.get("serviceAccount") or "").rsplit("/", 1)[-1]
+        if "@" in sa and not _iamc_resolve(sa):   # the console issues for the account, creating it if absent
+            acct, _, rest = sa.partition("@")
+            _call("iam", "POST", "/v1/projects/%s/serviceAccounts" % rest.split(".")[0], {}, {"accountId": acct})
+        try:
+            return {"ok": True, **_iamc.issue_from_form(store, body, _iamc_resolve)}
+        except _iamc._E as e:
+            return {"ok": False, "code": e.gcp_status, "message": e.message, "name": body.get("serviceAccount")}
+    rec = store.issued.get(name)
+    if rec is None:
+        return {"ok": False, "code": "NotFound", "name": name}
+    if operation == "Get":
+        return {"ok": True, **_iamc.console_view(rec)}
+    if operation == "Delete":
+        del store.issued[name]
+        return {"ok": True, "code": None, "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "iamcredentials"}
+
+
 def resource_op(service, operation, name="", body=None):
     """Console CRUD → GCP core. Returns the registry _resource_dispatch envelope."""
     body = body or {}
@@ -285,6 +320,8 @@ def resource_op(service, operation, name="", body=None):
         return _sched_op(operation, name, body)
     if svc == "container":
         return _gke_op(operation, name, body)
+    if svc == "iamcredentials":
+        return _iamc_op(operation, name, body)
     rid = str(body.get("name") or body.get("accountId") or body.get("secretId")
               or body.get("topicId") or name or "").strip()
 

@@ -435,6 +435,42 @@ RESOURCE_CATALOG_GCP = [
             {"name": "description", "label": "Description",                "default": "Demo GKE cluster"},
         ],
     },
+    # ========================================================================
+    # IAM Service Account Credentials — short-lived tokens, ID tokens, signed blobs/JWTs
+    # for a service account (core/gcp_iamcredentials_core.py). The grid is the log of
+    # credentials issued (never the secrets). Console REST at
+    # /api/gcp/iamcredentials/*; the native /v1/projects/-/serviceAccounts/{sa}:verb wire
+    # serves the SDKs / gcloud --impersonate-service-account.
+    # ========================================================================
+    {
+        "key": "iamcredentials", "label": "IAM Service Account Credentials", "icon": "key",
+        "namespace": "GCP/IAMCredentials", "service": "iamcredentials",
+        "collection_path": "/api/gcp/iamcredentials/credentials",
+        "resource_path":   "/api/gcp/iamcredentials/credentials/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "credentials": {"method": "GET",    "path": "/api/gcp/iamcredentials/credentials"},
+            "delete":      {"method": "DELETE", "path": "/api/gcp/iamcredentials/credentials/{name}"},
+        },
+        "columns": [
+            ["id",                "Credential ID"],
+            ["type",              "Type"],
+            ["service_account",   "Service account"],
+            ["scope_or_audience", "Scopes / audience"],
+            ["delegation",        "Delegation chain"],
+            ["issued",            "Issued"],
+            ["expires",           "Expires"],
+            ["state",             "Status"],
+        ],
+        "createFields": [
+            {"name": "serviceAccount", "label": "Service account",             "default": "vyomi-sa@demo.iam.gserviceaccount.com"},
+            {"name": "credentialType", "label": "Credential type (Access token, ID token, Signed blob or Signed JWT)", "default": "Access token"},
+            {"name": "detail",         "label": "Scopes / audience / data",    "default": "https://www.googleapis.com/auth/cloud-platform"},
+            {"name": "lifetime",       "label": "Lifetime (access tokens)",    "default": "3600s"},
+            {"name": "delegates",      "label": "Delegates (comma-separated service account emails)", "default": ""},
+        ],
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_GCP}
