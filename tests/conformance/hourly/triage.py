@@ -109,7 +109,9 @@ def main() -> int:
     for i in _load("upstream_issues.json", []) or []:
         labels = " ".join(l.get("name", "") for l in i.get("labels", []))
         c = _cloud_of(f"{i.get('title', '')} {labels}") or "aws"
-        slices[c]["upstream_issues"].append({k: i.get(k) for k in ("number", "title", "createdAt")})
+        item = {k: i.get(k) for k in ("number", "title", "createdAt")}
+        item["body"] = (i.get("body") or "")[:4000]   # the spec / acceptance criteria
+        slices[c]["upstream_issues"].append(item)
 
     # Cross-cloud work to the lightest slice, one item at a time.
     def load(c):
