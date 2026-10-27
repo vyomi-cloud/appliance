@@ -202,6 +202,7 @@ async function createWithDefaults(page, drain, cloud, backToList) {
   if (!(await btn.count())) return f;
   const rowsBefore = await rowCount(page);
   const savBefore = await savingsSnapshot(page);
+  const listText = await page.locator("#main").innerText().catch(() => "");
   try {
     await btn.click({ timeout: 3000 });
     await sleep(1200);
@@ -224,6 +225,13 @@ async function createWithDefaults(page, drain, cloud, backToList) {
     // Fields the real cloud also leaves empty and requires (a database admin
     // password, a required name with no default) cannot be "accepted as default":
     // fill them as a user would so the crawl can reach the created resource.
+    // A default name that already exists (an earlier crawl created it) would be
+    // rejected or overwritten by the real cloud; give it a fresh suffix so the
+    // create adds a row.
+    for (const inp of await scope.locator("input[type=text]").all()) {
+      const v = await inp.inputValue().catch(() => "");
+      if (v && /^[a-z0-9][a-z0-9._-]*$/i.test(v) && listText.includes(v)) await inp.fill(`${v}-${Date.now().toString(36).slice(-4)}`).catch(() => {});
+    }
     for (const inp of await scope.locator("input[type=password]").all()) {
       if (!(await inp.inputValue().catch(() => "x"))) await inp.fill("Vyomi-Crawl-1a!").catch(() => {});
     }

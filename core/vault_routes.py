@@ -32,6 +32,7 @@ from __future__ import annotations
 import base64
 import json
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
@@ -252,15 +253,39 @@ def _gcp_idx_get(space: str, kind: str) -> list:
         return []
 
 
+def _gcp_idx_created(space: str, kind: str) -> dict:
+    """name -> RFC3339 creation time, kept beside the name index."""
+    got = vc.kv_get("gcp", space, f"__idx__{kind}_created")
+    try:
+        raw = (got.get("data") or {}).get("value", "{}") if got else "{}"
+        d = json.loads(raw) if isinstance(raw, str) else dict(raw)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
 def _gcp_idx_add(space: str, kind: str, entry: str) -> None:
     items = _gcp_idx_get(space, kind)
     if entry not in items:
         vc.kv_put("gcp", space, f"__idx__{kind}", json.dumps(sorted(items + [entry])))
+        created = _gcp_idx_created(space, kind)
+        created.setdefault(entry, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
+        vc.kv_put("gcp", space, f"__idx__{kind}_created", json.dumps(created))
 
 
 def _gcp_idx_remove(space: str, kind: str, entry: str) -> None:
     items = [x for x in _gcp_idx_get(space, kind) if x != entry]
     vc.kv_put("gcp", space, f"__idx__{kind}", json.dumps(items))
+    created = _gcp_idx_created(space, kind)
+    if created.pop(entry, None) is not None:
+        vc.kv_put("gcp", space, f"__idx__{kind}_created", json.dumps(created))
+
+
+def gcp_vault_index(space: str, kind: str) -> dict:
+    """Vault-backed GCP secrets / KMS keys of a space as {name: created}; used
+    by the cost-savings collector so console/SDK-created resources are billed."""
+    created = _gcp_idx_created(space, kind)
+    return {n: created.get(n, "") for n in _gcp_idx_get(space, kind)}
 
 
 def _register_gcp(app: FastAPI) -> None:
@@ -409,8 +434,20 @@ def _register_gcp(app: FastAPI) -> None:
     @app.get("/api/gcp/secrets")
     async def gcp_console_secrets_list(request: Request):
         space = _active_space_id(request)
-        return {"items": [{"name": n, "replication": "automatic", "latest_version": "1"}
-                          for n in _gcp_idx_get(space, "secrets")]}
+        created = _gcp_idx_created(space, "secrets")
+        names = _gcp_idx_get(space, "secrets")
+        if any(n not in created for n in names):   # secrets indexed before creation times were recorded
+            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            for n in names:
+                created.setdefault(n, stamp)
+            vc.kv_put("gcp", space, "__idx__secrets_created", json.dumps(created))
+        items = []
+        for n in names:
+            got = vc.kv_get("gcp", space, n)
+            version = str(((got or {}).get("metadata") or {}).get("version") or 1)
+            items.append({"name": n, "replication": "automatic", "created": created.get(n, ""),
+                          "latest_version": version})
+        return {"items": items}
 
     @app.post("/api/gcp/secrets")
     async def gcp_console_secret_create(request: Request):
@@ -422,7 +459,7 @@ def _register_gcp(app: FastAPI) -> None:
         name = (body.get("name") or body.get("secretId") or body.get("secret_id") or "").strip()
         if not name:
             return JSONResponse(status_code=400, content={"ok": False, "error": "missing 'name'"})
-        if vc.kv_put("gcp", space, name, body.get("value", "changeme")) is None:
+        if vc.kv_put("gcp", space, name, body.get("value") or body.get("secret_value") or "changeme") is None:
             return _vault_unavailable_response("gcp.secrets")
         _gcp_idx_add(space, "secrets", name)
         return {"ok": True, "name": name}

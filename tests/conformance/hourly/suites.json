@@ -30,6 +30,7 @@
     {"id": "offline-api-cost-savings-extras", "target": "offline", "cloud": "aws", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_cost_savings_extras_api.py", "timeout": 120},
     {"id": "offline-ui-aws-detail-name", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/aws node wasm/ui-tests/validate-aws-detail-name.mjs", "timeout": 300},
     {"id": "offline-ui-aws-apigw-tabs", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/aws node wasm/ui-tests/validate-aws-apigw-tabs.mjs", "timeout": 300},
+    {"id": "offline-api-gcp-vault-console-secrets", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_vault_console_secrets_api.py", "timeout": 120},
     {"id": "offline-api-aws-eventbridge-rule-defaults", "target": "offline", "cloud": "aws", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_eventbridge_rule_defaults_api.py", "timeout": 120},
     {"id": "nano-ui-azure-tabs", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-tabs.mjs", "timeout": 600},
     {"id": "nano-ui-azure-dp", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-dp.mjs", "timeout": 600},

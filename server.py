@@ -2631,6 +2631,19 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
                 if isinstance(item, dict):
                     add(provider, svc, kind.rstrip("s"), str(item_id), item)
 
+    # Vault-backed GCP Secret Manager secrets / Cloud KMS keys (console + SDK
+    # create them in Vault with a name index, not in service_states).
+    try:
+        from core import vault_routes as _vr
+        _sid = next((k for k, v in _spaces_state().get("spaces", {}).items() if v is space), "")
+        if _sid:
+            for _svc, _kind, _vkind in (("secretmanager", "secret", "secrets"), ("kms", "key", "kms")):
+                for _entry, _created in _vr.gcp_vault_index(_sid, _vkind).items():
+                    _name = _entry.partition("/")[2] or _entry
+                    add("gcp", _svc, _kind, f"vault:{_vkind}:{_entry}", {"name": _name, "created": _created})
+    except Exception:
+        pass
+
     # Azure ARM resources (space-scoped under service_states["azure_arm"]["resources"]).
     # Same DB-derived path as AWS/GCP: service + kind are mapped from the stored
     # ARM type via the catalog (nested children fold to their parent service).
