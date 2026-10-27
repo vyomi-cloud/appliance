@@ -92,6 +92,14 @@ class Aws(CloudProvider):
             ("apigateway", "CreateApi"):  lambda b, a, p: D.apigw_create(p),
             ("apigateway", "DeleteApi"):  lambda b, a, p: D.apigw_delete(p),
             ("apigateway", "Invoke"):     lambda b, a, p: D.apigw_invoke(p),
+            # Systems Manager Parameter Store, via core/ssm_core.py (shared registry store)
+            ("ssm", "ListParameters"):    lambda b, a, p: D.ssm_list(p),
+            ("ssm", "PutParameter"):      lambda b, a, p: D.ssm_put(p, False),
+            ("ssm", "GetParameter"):      lambda b, a, p: D.ssm_get(p),
+            ("ssm", "UpdateParameter"):   lambda b, a, p: D.ssm_put(p, True),
+            ("ssm", "TagParameter"):      lambda b, a, p: D.ssm_tag(p),
+            ("ssm", "DeleteParameter"):   lambda b, a, p: D.ssm_delete(p),
+            ("ssm", "ParameterHistory"):  lambda b, a, p: D.ssm_history(p),
             # VPC — topology + reachability analyzer, via core/vpc_core.py
             ("vpc", "List"):              lambda b, a, p: D.vpc_list(p),
             ("vpc", "CreateVpc"):         lambda b, a, p: D.vpc_create(p),

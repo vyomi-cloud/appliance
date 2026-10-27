@@ -394,6 +394,42 @@ RESOURCE_CATALOG_AWS = [
         "endpoints": {},
     },
     {
+        # Systems Manager — Parameter Store in the console (core/ssm_core.py also serves
+        # documents, Run Command, associations, maintenance windows and patch baselines on
+        # the native AmazonSSM wire). Console REST at /api/ssm/*, same store as the SDK/CLI.
+        "key": "ssm", "label": "Systems Manager", "icon": "settings_suggest",
+        "namespace": "AWS/SSM", "service": "ssm",
+        "collection_path": "/api/ssm/parameters",
+        "resource_path":   "/api/ssm/parameters/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "rail_items": [
+            {"key": "parameters", "label": "Parameter Store", "icon": "settings_suggest", "type": "primary"},
+        ],
+        "api_paths": {
+            "history": {"method": "GET",    "path": "/api/ssm/parameters/{name}/history"},
+            "delete":  {"method": "DELETE", "path": "/api/ssm/parameters/{name}"},
+        },
+        "children": [],
+        "columns": [
+            ["name",          "Name"],
+            ["type",          "Type"],
+            ["tier",          "Tier"],
+            ["version",       "Version"],
+            ["data_type",     "Data type"],
+            ["last_modified", "Last modified"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Name", "default": "/vyomi/app/config"},
+            {"name": "type", "label": "Type (String, StringList or SecureString)", "default": "String"},
+            {"name": "tier", "label": "Tier (Standard or Advanced)", "default": "Standard"},
+            {"name": "value", "label": "Value", "default": "hello-from-vyomi"},
+            {"name": "description", "label": "Description", "default": "Created from the console"},
+        ],
+        "editable": True,   # per-row Edit -> PUT resource_path {value} (new parameter version)
+        "endpoints": {},
+    },
+    {
         "key": "vpc", "label": "VPC", "icon": "lan",
         "namespace": "AWS/EC2", "service": "vpc",
         "collection_path": "/api/vpc/vpcs",

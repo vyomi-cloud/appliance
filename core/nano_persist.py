@@ -32,6 +32,7 @@ STORE_ATTRS = [
     "s3", "ddb", "kms", "sec", "rds", "iam", "msg", "logs", "elbv2",
     "gcs", "gcp_fs", "gcp_kms", "gcp_sec", "gcp_msg", "gcp_iam", "gcp_sql",
     "az_blob", "az_cosmos", "az_kvsec", "az_kvkeys", "az_queue", "az_sb",
+    "ssm",      # Systems Manager (core/ssm_core.SsmStore)
     "events",   # per-resource cloudsim event/activity log (core/nano_events.EventStore)
 ]
 

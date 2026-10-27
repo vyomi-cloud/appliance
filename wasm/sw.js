@@ -208,7 +208,7 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,"microsoft.compute/virtualmachines":30.37,"microsoft.sql/servers":4.99,"microsoft.storage/storageaccounts":0.50,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.servicebus/namespaces":9.81,"microsoft.keyvault/vaults":0.03};
+const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,"microsoft.compute/virtualmachines":30.37,"microsoft.sql/servers":4.99,"microsoft.storage/storageaccounts":0.50,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.servicebus/namespaces":9.81,"microsoft.keyvault/vaults":0.03};
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
@@ -579,6 +579,18 @@ async function route(method, path, body, query) {
   if (m && method === "POST") return { tuple: ["aws", "apigateway", "Invoke", { id: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)$/);
   if (m && method === "DELETE") return { tuple: ["aws", "apigateway", "DeleteApi", { name: dec(m[1]) }] };
+  // Systems Manager Parameter Store (core/ssm_core.py) — names carry slashes, so match greedily
+  if (path === "/api/ssm/parameters") {
+    if (method === "GET")  return { tuple: ["aws", "ssm", "ListParameters", {}] };
+    if (method === "POST") return { tuple: ["aws", "ssm", "PutParameter", body || {}] };
+  }
+  m = path.match(/^\/api\/ssm\/parameters\/(.+)\/history$/);
+  if (m && method === "GET") return { tuple: ["aws", "ssm", "ParameterHistory", { name: dec(m[1]) }] };
+  m = path.match(/^\/api\/ssm\/parameters\/(.+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "ssm", "GetParameter", { name: dec(m[1]) }] };
+  if (m && method === "PUT")    return { tuple: ["aws", "ssm", "UpdateParameter", { ...(body || {}), name: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "ssm", "TagParameter", { ...(body || {}), name: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "ssm", "DeleteParameter", { name: dec(m[1]) }] };
   // VPC (core/vpc_core.py) — topology + reachability analyzer
   if (path === "/api/vpc" && method === "GET") return { tuple: ["aws", "vpc", "List", {}] };
   if (path === "/api/vpc/vpcs" && method === "POST") return { tuple: ["aws", "vpc", "CreateVpc", body || {}] };

@@ -2531,6 +2531,13 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(api, dict):
             add("aws", "apigateway", "api", api_id, api)
 
+    try:   # Systems Manager parameters — the shared wire/console store
+        from core.ssm_core import shared_store as _ssm_store
+        for _n in _ssm_store().parameters:
+            add("aws", "ssm", "parameter", _n, {"name": _n})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -21188,6 +21195,9 @@ def _aws_query_target_service(request: Request) -> str:
     # EventBridge uses AWSEvents.* targets.
     if target.startswith("AWSEvents."):
         return "events"
+    # Systems Manager uses AmazonSSM.* targets.
+    if target.startswith("AmazonSSM."):
+        return "ssm"
     return ""
 
 
@@ -21356,6 +21366,24 @@ _EC2_VPC_ACTIONS = {
 }
 
 
+def _ssm_usage(target: str, payload: dict, resp) -> None:
+    """Mirror SDK/CLI Parameter Store writes into the CloudSim resource table + usage
+    meter, exactly as console-created parameters are (so counts/cost-savings agree)."""
+    try:
+        op = target.rsplit(".", 1)[-1]
+        if resp.status >= 300:
+            return
+        if op == "PutParameter":
+            _cloudsim_sync_service_resource("aws", "ssm", "parameter", payload["Name"], {"name": payload["Name"]}, None)
+            _record_usage("ssm.put_parameter", {"name": payload["Name"]})
+        elif op in ("DeleteParameter", "DeleteParameters"):
+            for n in ([payload.get("Name")] if op == "DeleteParameter" else payload.get("Names") or []):
+                _cloudsim_sync_service_resource("aws", "ssm", "parameter", n, {}, None, action="delete")
+                _record_usage("ssm.delete_parameter", {"name": n})
+    except Exception:
+        pass
+
+
 async def aws_query_root(request: Request) -> Response:
     """Root dispatch for real AWS SDK/CLI query + JSON protocol requests."""
     service = _aws_query_target_service(request)
@@ -21376,6 +21404,17 @@ async def aws_query_root(request: Request) -> Response:
         return await api_iam_query(request)
     if service == "sts":
         return await api_sts_query(request)
+    if service == "ssm":
+        # Systems Manager: in-process engine (core/ssm_core.py) shared with the console REST.
+        from core import ssm_core as _ssm_core
+        try:
+            _payload = json.loads(await request.body() or b"{}")
+        except Exception:
+            _payload = {}
+        _r = _ssm_core.dispatch(_ssm_core.shared_store(), request.headers.get("x-amz-target", ""), _payload)
+        _ssm_usage(request.headers.get("x-amz-target", ""), _payload, _r)
+        return Response(content=json.dumps(_r.body), status_code=_r.status,
+                        media_type="application/x-amz-json-1.1", headers=dict(_r.headers or {}))
     if service in ("kms", "secretsmanager", "events"):
         # Backend-backed services. The X-Amz-Target prefix maps to one of the
         # dispatchers registered in _aws_xamz_dispatchers by vault_routes /
@@ -23033,6 +23072,21 @@ _UNIFIED_INGRESS = os.environ.get("VYOMI_UNIFIED_INGRESS", "").strip().lower() i
 # we registered the @app.post("/{bucket}/{key:path}") catch-all up
 # top (as the file originally did), it swallowed POST /api/auth/...
 # with bucket=api, key=auth/... and returned a NoSuchBucket XML.
+# Systems Manager console REST (/api/ssm/*) — shares its store with the native AmazonSSM wire.
+try:
+    from providers import aws_ssm_console as _ssm_console
+
+    def _ssm_changed(action, name):
+        if action == "delete":
+            _cloudsim_sync_service_resource("aws", "ssm", "parameter", name, {}, None, action="delete")
+            _record_usage("ssm.delete_parameter", {"name": name})
+        else:
+            _cloudsim_sync_service_resource("aws", "ssm", "parameter", name, {"name": name}, None)
+            _record_usage("ssm.put_parameter", {"name": name})
+    _ssm_console.register(app, _ssm_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[ssm] console routes skipped: {_e}")
+
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)
     # on the DEFAULT path — targeted, additive routes for path prefixes that have no

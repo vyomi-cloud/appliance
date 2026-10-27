@@ -97,6 +97,7 @@ from core import eventbridge_core as events
 from core import logs_core as logs
 from core import lambda_core as lam
 from core import apigateway_core as apigw
+from core import ssm_core as ssm
 from core import vpc_core as vpc
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
@@ -150,6 +151,7 @@ _SIGNING = {
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
     "events": "events", "lambda": "lambda", "ec2": "vpc", "logs": "logs",
     "elasticloadbalancing": "elbv2",
+    "ssm": "ssm",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
@@ -157,6 +159,7 @@ _TARGET_PREFIX = {
     "DynamoDB_": "dynamodb", "TrentService": "kms",
     "secretsmanager": "secretsmanager", "AmazonSQS": "sqs", "AWSEvents": "events",
     "Logs_20140328": "logs",
+    "AmazonSSM": "ssm",
 }
 
 # Native JSON content-types the real SDK expects back per service.
@@ -164,6 +167,7 @@ _JSON_CT = {
     "dynamodb": "application/x-amz-json-1.0", "kms": "application/x-amz-json-1.1",
     "secretsmanager": "application/x-amz-json-1.1", "sqs": "application/x-amz-json-1.0",
     "events": "application/x-amz-json-1.1", "logs": "application/x-amz-json-1.1",
+    "ssm": "application/x-amz-json-1.1",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -240,6 +244,7 @@ class AwsWireRouter:
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
         # its own lightweight function registry (a namespace the core attaches to).
         self.events = s.get("events") or self.msg
+        self.ssm = s.get("ssm") or ssm.SsmStore()   # Systems Manager (Parameter Store, documents, Run Command, …)
         self.lam = s.get("lam") or _types.SimpleNamespace()
         # API Gateway shares the Lambda store so an AWS_PROXY integration can reach
         # the registered functions (the API-GW → Lambda synergy).
@@ -443,6 +448,8 @@ class AwsWireRouter:
                 r = events.dispatch(self.events, target, payload)
             elif svc == "logs":
                 r = logs.dispatch(self.logs, target, payload)
+            elif svc == "ssm":
+                r = ssm.dispatch(self.ssm, target, payload)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload)
             hdrs = dict(r.headers or {})

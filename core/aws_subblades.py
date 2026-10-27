@@ -252,6 +252,24 @@ _APIGW_SUB = [
 
 
 # ===========================================================================
+# Systems Manager — Parameter Store parameter detail (`ssmvalue` shows/edits the value,
+# generic `ssmlist` renders the version history from `api_paths.history`)
+# ===========================================================================
+_SSM_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Parameter", "items": [
+        {"key": "value",   "label": "Value",   "icon": "key",     "type": "ssmvalue"},
+        {"key": "history", "label": "History", "icon": "history", "type": "ssmlist", "list_key": "history", "result_key": "history",
+         "cols": [["version", "Version"], ["last_modified", "Last modified"], ["value", "Value"], ["labels", "Labels"], ["description", "Description"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "monitoring", "label": "Monitoring", "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
+# ===========================================================================
 # VPC — composite (VPCs / Subnets / SGs / Route tables / IGWs)
 # ===========================================================================
 _VPC_SUB = [
@@ -392,6 +410,7 @@ SUB_BLADES: dict[str, list] = {
     "sqs":            _SQS_SUB,
     "lambda":         _LAMBDA_SUB,
     "apigateway":     _APIGW_SUB,
+    "ssm":            _SSM_SUB,
     "vpc":            _VPC_SUB,
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,

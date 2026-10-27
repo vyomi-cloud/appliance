@@ -19,6 +19,7 @@ import types
 
 from core import lambda_core, apigateway_core, vpc_core, eventbridge_core
 from core import elbv2_core
+from core import ssm_core
 from core import azure_servicebus_core, azure_sql_core, azure_iam_core
 from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
 
@@ -450,3 +451,70 @@ def elb_child_create(p):
 
 def elb_child_delete(p):
     return _elb_call(elbv2_core.console_child_delete, str(p.get("kind") or ""), str(p.get("name") or ""))
+# ── Systems Manager Parameter Store — core/ssm_core.py ─────────────────────
+# Store = the shared registry's `ssm`, the SAME one the native AmazonSSM relay wire
+# reads/writes, so console-created parameters are visible to the CLI/SDK and vice-versa.
+def _ssm():
+    from core import nano_registry
+    return nano_registry.get()["ssm"]
+
+
+def _ssm_call(op, body):
+    r = ssm_core.dispatch(_ssm(), "AmazonSSM." + op, body)
+    return r.status, r.body
+
+
+def ssm_list(p=None):
+    items = [ssm_core.console_view(n, r) for n, r in sorted(_ssm().parameters.items())]
+    return {"ok": True, "items": items, "parameters": items, "count": len(items)}
+
+
+def ssm_put(p, overwrite):
+    name = str(p.get("name") or "").strip()
+    cur = _ssm().parameters.get(name)
+    if overwrite and cur:
+        v = ssm_core.console_view(name, cur)
+        p = {"name": name, "value": p.get("value", v["value"]), "type": v["type"],
+             "description": p.get("description", v["description"]), "tier": v["tier"]}
+    body = {"Name": name, "Value": str(p.get("value") if p.get("value") is not None else ""),
+            "Type": p.get("type") or "String", "Overwrite": bool(overwrite)}
+    if p.get("description"):
+        body["Description"] = p["description"]
+    if p.get("tier"):
+        body["Tier"] = p["tier"]
+    st, out = _ssm_call("PutParameter", body)
+    if st >= 300:
+        return {"ok": False, "code": out.get("__type", "ValidationException"), "message": out.get("message", "")}
+    return {"ok": True, **ssm_core.console_view(name, _ssm().parameters[name])}
+
+
+def ssm_get(p):
+    name = str(p.get("name") or p.get("id") or "")
+    rec = _ssm().parameters.get(name)
+    if not rec:
+        return {"ok": False, "code": "ParameterNotFound", "message": f"Parameter {name} not found."}
+    return {"ok": True, **ssm_core.console_view(name, rec)}
+
+
+def ssm_tag(p):
+    name = str(p.get("name") or p.get("id") or "")
+    rec = _ssm().parameters.get(name)
+    if not rec:
+        return {"ok": False, "code": "ParameterNotFound"}
+    if isinstance(p.get("tags"), dict):
+        rec["tags"] = {str(k): str(v) for k, v in p["tags"].items()}
+    return {"ok": True, **ssm_core.console_view(name, rec)}
+
+
+def ssm_delete(p):
+    name = str(p.get("name") or p.get("id") or "")
+    st, out = _ssm_call("DeleteParameter", {"Name": name})
+    return {"ok": st < 300, "message": out.get("message", "")}
+
+
+def ssm_history(p):
+    name = str(p.get("name") or p.get("id") or "")
+    rec = _ssm().parameters.get(name)
+    if not rec:
+        return {"ok": False, "code": "ParameterNotFound"}
+    return {"ok": True, "history": ssm_core.console_history(name, rec)}

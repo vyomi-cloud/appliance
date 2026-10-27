@@ -46,6 +46,11 @@
     {"id": "offline-sdk-go-aws-logs", "target": "offline", "cloud": "aws", "kind": "sdk-go", "cwd": "tests/conformance/aws-sdk-go-logs", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-aws-logs", "target": "offline", "cloud": "aws", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-logs-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-aws-logs", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-logs.mjs", "timeout": 600},
-    {"id": "nano-ui-aws-logs", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-logs.mjs", "timeout": 600}
+    {"id": "nano-ui-aws-logs", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-logs.mjs", "timeout": 600},
+    {"id": "offline-sdk-java-aws-ssm", "target": "offline", "cloud": "aws", "kind": "sdk-java", "cwd": "tests/conformance/aws-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=SsmConformance", "timeout": 900},
+    {"id": "offline-sdk-go-aws-ssm", "target": "offline", "cloud": "aws", "kind": "sdk-go", "cwd": "tests/conformance/aws-sdk-go-ssm", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-aws-ssm", "target": "offline", "cloud": "aws", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-ssm-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-aws-ssm", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-ssm.mjs", "timeout": 600},
+    {"id": "nano-ui-aws-ssm", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-ssm.mjs", "timeout": 600}
   ]
 }

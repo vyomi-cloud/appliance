@@ -712,7 +712,7 @@ function renderRail(){
       ["Application Integration", ["sqs", "apigateway", "eventbridge"]],
       ["Networking & Content Delivery", ["vpc", "elbv2"]],
       ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
-      ["Management & Governance", ["logs"]],
+      ["Management & Governance", ["logs", "ssm"]],
     ];
     groups.forEach(([label, keys]) => {
       rail.append(el("div",{class:"group"}, label));
@@ -3259,6 +3259,49 @@ SUB_RENDERERS.apistages = function(svc, full, host){
       el("td",{class:"small mono"}, s.invoke_url||"—"))));
     host.append(tbl);
   });
+};
+
+// Systems Manager — parameter value (SecureString decrypted via GET), editable → PUT = new version.
+SUB_RENDERERS.ssmvalue = function(svc, full, host){
+  const name = itemKey(svc, full);
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  let value = full.value != null ? String(full.value) : "", editing = false;
+  function render(){
+    panel.innerHTML = "";
+    panel.append(el("div",{class:"panel-h"}, icon("key"), "Parameter value"));
+    const body = el("div",{style:"padding:14px"}); panel.append(body);
+    if (!editing){
+      body.append(el("pre",{class:"json", id:"ssm-value"}, value));
+      body.append(el("button",{class:"btn",onclick:()=>{ editing = true; render(); }}, icon("edit"), "Edit value"));
+    } else {
+      const ta = el("textarea",{style:"width:100%;min-height:90px;font-family:Consolas,Menlo,monospace"}); ta.value = value;
+      body.append(ta);
+      body.append(el("div",{style:"display:flex;gap:8px;margin-top:12px"},
+        el("button",{class:"btn primary",onclick:async ()=>{
+          const r = await api("PUT", fillPath(svc.resource_path,{name}), {value: ta.value});
+          if (r.ok){ value = ta.value; editing = false; toast("New parameter version saved"); render(); } else toast("Save failed","err");
+        }}, icon("save"), "Save new version"),
+        el("button",{class:"btn",onclick:()=>{ editing = false; render(); }}, "Cancel")));
+    }
+  }
+  render();
+};
+
+// Systems Manager — generic list tab. `tab.list_key` selects svc.api_paths[list_key]; the response
+// array is `tab.result_key`; `tab.cols` is [[field,label],…].
+SUB_RENDERERS.ssmlist = function(svc, full, host, tab){
+  const ap = (svc.api_paths || {})[tab.list_key];
+  fetch(ORIGIN + fillPath(ap.path, {name: itemKey(svc, full)})).then(r=>r.json()).then(j=>{
+    const items = j[tab.result_key] || [];
+    if (!items.length) { host.append(el("div",{class:"empty"}, "No " + tab.label.toLowerCase() + " for this parameter yet.")); return; }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, ...tab.cols.map(c => el("th",{}, c[1]))));
+    items.forEach(it => tbl.append(el("tr",{}, ...tab.cols.map(c => {
+      const v = it[c[0]];
+      return el("td",{class:/value|user/i.test(c[0]) ? "mono small" : ""}, (v === undefined || v === null || v === "") ? "none" : String(v));
+    }))));
+    host.append(tbl);
+  }).catch(e => host.append(el("div",{class:"alert err"}, "Failed to load: " + e.message)));
 };
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──
