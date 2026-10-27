@@ -320,6 +320,13 @@
    "upstream": "stepfunctions",
    "status": "released",
    "released_in": "3.0.13"
+  },
+  {
+   "cloud": "gcp",
+   "key": "cloudtasks",
+   "name": "Cloud Tasks",
+   "upstream": "cloudtasks/v2",
+   "status": "pending-release"
   }
  ]
 }

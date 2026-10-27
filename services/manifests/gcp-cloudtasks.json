@@ -1,0 +1,39 @@
+{
+  "cloud": "gcp",
+  "key": "cloudtasks",
+  "name": "Cloud Tasks",
+  "upstream": "cloudtasks/v2",
+  "issue": 69,
+  "core": "core/gcp_cloudtasks_core.py",
+  "operations": [
+    "cloudtasks.projects.locations.get",
+    "cloudtasks.projects.locations.list",
+    "cloudtasks.projects.locations.queues.create",
+    "cloudtasks.projects.locations.queues.delete",
+    "cloudtasks.projects.locations.queues.get",
+    "cloudtasks.projects.locations.queues.getIamPolicy",
+    "cloudtasks.projects.locations.queues.list",
+    "cloudtasks.projects.locations.queues.patch",
+    "cloudtasks.projects.locations.queues.pause",
+    "cloudtasks.projects.locations.queues.purge",
+    "cloudtasks.projects.locations.queues.resume",
+    "cloudtasks.projects.locations.queues.setIamPolicy",
+    "cloudtasks.projects.locations.queues.testIamPermissions",
+    "cloudtasks.projects.locations.queues.tasks.create",
+    "cloudtasks.projects.locations.queues.tasks.delete",
+    "cloudtasks.projects.locations.queues.tasks.get",
+    "cloudtasks.projects.locations.queues.tasks.list",
+    "cloudtasks.projects.locations.queues.tasks.run"
+  ],
+  "suites": [
+    "offline-sdk-java-gcp-cloudtasks",
+    "offline-sdk-go-gcp-cloudtasks",
+    "offline-cli-gcp-cloudtasks",
+    "offline-ui-gcp-cloudtasks",
+    "nano-ui-gcp-cloudtasks"
+  ],
+  "status": "ready",
+  "backend": {
+    "kind": "in-process"
+  }
+}

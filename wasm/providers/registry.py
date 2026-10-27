@@ -301,7 +301,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                     by_service[svc] = by_service.get(svc, 0) + n
         if provider == "gcp":
             from . import gcp_core_adapter as GC
-            for svc in ("storage", "firestore", "kms", "secretmanager", "pubsub", "iam", "cloudsql"):
+            for svc in ("storage", "firestore", "kms", "secretmanager", "pubsub", "iam", "cloudsql", "cloudtasks"):
                 n = len(GC.resource_op(svc, "List").get("items", []))
                 if n:
                     by_service[svc] = by_service.get(svc, 0) + n

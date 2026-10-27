@@ -97,3 +97,29 @@ def test_update_creates_missing_and_console_view():
     assert st == 200 and q["rateLimits"]["maxConcurrentDispatches"] == 5
     v = ct.console_list(s)[0]
     assert all(x not in ("", None) for x in v.values())
+
+
+def test_method_override_header_patches():
+    s = ct.CloudTasksStore()
+    mkq(s)
+    r = ct.dispatch(s, "POST", f"{P}/queues/q1", {"updateMask": "rateLimits.maxBurstSize"},
+                    {"X-HTTP-Method-Override": "PATCH"}, json.dumps({"rateLimits": {"maxBurstSize": 7}}).encode())
+    assert r.status == 200 and json.loads(r.body)["rateLimits"]["maxBurstSize"] == 7
+
+
+def test_enum_numbers_from_generated_rest_clients():
+    s = ct.CloudTasksStore()
+    mkq(s)
+    st, t = call(s, "POST", f"{P}/queues/q1/tasks", {"task": {"httpRequest": {"url": "http://x.io", "httpMethod": 4}}, "responseView": 1})
+    assert st == 200 and t["httpRequest"]["httpMethod"] == "PUT"
+    assert call(s, "GET", t["name"].replace("projects", "/v2/projects", 1), query={"responseView": "2"})[0] == 200
+
+
+def test_wire_router_routes_v2_paths():
+    import asyncio
+    from core.aws_wire_router import AwsWireRouter
+    r = AwsWireRouter()
+    out = asyncio.run(r.ahandle("POST", f"{P}/queues", {}, {}, json.dumps({"name": "projects/p1/locations/us-central1/queues/rq"}).encode()))
+    assert out["status"] == 200 and b"/queues/rq" in out["body"]
+    out = asyncio.run(r.ahandle("GET", "/v2/projects/p1/locations", {}, {}, b""))
+    assert out["status"] == 200 and b"locations" in out["body"]
