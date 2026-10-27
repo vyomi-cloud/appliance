@@ -275,6 +275,10 @@ def vpc_create(p):
         rec = _VPC._vpc_model["vpcs"][vid.group(1)]
         rec["name"] = str(p.get("name") or "")
         rec["created"] = _now()
+        # Every real VPC is created with a default security group.
+        sg = re.search(r"<groupId>(.*?)</groupId>", _vpc_q("CreateSecurityGroup", {"VpcId": vid.group(1)}).body)
+        if sg:
+            _VPC._vpc_model["sgs"][sg.group(1)].update(name="default", description="default VPC security group")
     return {"ok": bool(vid), "id": vid.group(1) if vid else None, "cidr": cidr}
 
 
@@ -289,6 +293,9 @@ def vpc_create_sg(p):
     import re
     body = _vpc_q("CreateSecurityGroup", {"VpcId": str(p.get("vpcId") or "")}).body
     gid = re.search(r"<groupId>(.*?)</groupId>", body)
+    if gid:
+        _VPC._vpc_model["sgs"][gid.group(1)].update(
+            name=str(p.get("name") or p.get("groupName") or gid.group(1)), description=str(p.get("description") or ""))
     return {"ok": bool(gid), "id": gid.group(1) if gid else None}
 
 

@@ -2998,8 +2998,8 @@ SUB_RENDERERS.sgrules = function(svc, full, host){
     tbl.append(el("tr",{}, el("th",{}, "Security group ID"), el("th",{}, "Name"),
       el("th",{}, "Description"), el("th",{}, "Inbound rules")));
     sgs.forEach(sg => tbl.append(el("tr",{},
-      el("td",{}, el("a",{class:"id"}, sg.id||sg.group_id||"—")),
-      el("td",{}, sg.name||"—"),
+      el("td",{}, el("a",{class:"id"}, sg.security_group_id||sg.id||sg.group_id||"—")),
+      el("td",{}, sg.group_name||sg.name||"—"),
       el("td",{}, sg.description||"—"),
       el("td",{}, String((sg.ingress||sg.ip_permissions||[]).length)))));
     host.append(tbl);
