@@ -40,3 +40,4 @@
 | 2026-10-27T02:08Z | #60 | aws/route53 | success | static-gate-failed | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40436440962) |
 | 2026-10-27T02:22Z | #60 | aws/route53 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40436937075) |
 | 2026-10-27T02:42Z | #61 | aws/sesv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40438240954) |
+| 2026-10-27T02:47Z | #60 | aws/route53 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40440191986) |
