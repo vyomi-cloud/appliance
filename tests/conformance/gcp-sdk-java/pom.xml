@@ -39,6 +39,13 @@
       <groupId>com.google.cloud</groupId>
       <artifactId>google-cloud-container</artifactId>
     </dependency>
+    <!-- Cloud Logging's Java GAPIC client is gRPC-only; the official google-api-services-logging
+         (Google API Client Library, REST/JSON) is the SDK that speaks the v2 REST wire. -->
+    <dependency>
+      <groupId>com.google.apis</groupId>
+      <artifactId>google-api-services-logging</artifactId>
+      <version>v2-rev20240913-2.0.0</version>
+    </dependency>
   </dependencies>
 
   <build>

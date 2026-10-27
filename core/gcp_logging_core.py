@@ -371,6 +371,8 @@ def _page(items, query, key):
         raise _E(400, "INVALID_ARGUMENT", "Page size must be non-negative.")
     size = min(size, MAX_PAGE)
     out = {key: [json.loads(json.dumps(x)) for x in items[start:start + size]]}
+    if not out[key]:
+        out = {}   # proto3 JSON omits empty repeated fields
     if start + size < len(items):
         out["nextPageToken"] = str(start + size)
     return out
