@@ -135,7 +135,10 @@ jobs:
       # Appliance and portal release together: the portal's Nano copy gets this
       # release's bundle now, not at some later nightly slot (which silently
       # drifted for weeks). The sync records the released sha in the portal.
+      # GITHUB_TOKEN (actions: write above): the bot PAT can push and tag but
+      # not dispatch workflows (403), which silently skipped v3.0.10–v3.0.23.
       - name: Sync this release's Nano to the portal
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
         run: |
           gh workflow run portal-nano-sync.yml -R "${{ github.repository }}" --ref main -f force=true
           echo "Portal Nano sync dispatched for v${{ steps.v.outputs.new }}."
