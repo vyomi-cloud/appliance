@@ -1679,6 +1679,9 @@ async function renderDetail(main){
   const path = fillPath(svc.resource_path, {name});
   const r = await api("GET", path);
   const full = (r.ok && r.json) ? r.json : itemStub;
+  // Sub-renderers address the resource as full.name; engines whose payload
+  // keys it differently (table_name, queue_name) still get a usable name.
+  if (full && typeof full === "object" && !full.name && name) full.name = name;
 
   // Top: ID line + actions
   const top = el("div",{class:"detail-top"});
