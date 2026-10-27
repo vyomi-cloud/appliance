@@ -1,7 +1,63 @@
 {
- "at": "2026-10-27T21:50:13+00:00",
+ "at": "2026-10-27T22:50:16+00:00",
  "baseline": false,
  "changes": [
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-changed",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:fd389969f2ca",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
+   "detail": {
+    "request": {
+     "was": "SqlWorkloadCapturesStartRequest",
+     "now": "WorkloadCapturesStartRequest"
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-changed",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:f421c3d61dc0",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
+   "detail": {
+    "request": {
+     "was": "SqlWorkloadCapturesStartReplayRequest",
+     "now": "WorkloadCapturesStartReplayRequest"
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-changed",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:c8c00d855f73",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
+   "detail": {
+    "request": {
+     "was": "SqlWorkloadCapturesStopRequest",
+     "now": "WorkloadCapturesStopRequest"
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-changed",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:acd5b7e919b1",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
+   "detail": {
+    "request": {
+     "was": "SqlWorkloadCapturesStopReplayRequest",
+     "now": "WorkloadCapturesStopReplayRequest"
+    }
+   },
+   "actionable": true
+  },
   {
    "cloud": "azure",
    "service": "storage",
@@ -21,13 +77,13 @@
    "actionable": false
   },
   {
-   "cloud": "aws",
-   "service": "Aurora",
+   "cloud": "azure",
+   "service": "Blob Storage, Azure Storage",
    "kind": "announcement",
-   "key": "feed:aws:0d4f70e67c2d",
-   "title": "Amazon Aurora serverless now supports up to 384 ACUs",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/aurora-serverless-supports-384-acu/",
-   "detail": "Amazon Aurora serverless now supports database capacity of up to 384 Aurora Capacity Units (ACUs) for Aurora PostgreSQL-Compatible Edition, a 50% increase from the previous maximum of 256 ACUs. Each ACU provides approximately 2 gibibytes (GiB) of memory with corresponding CPU and networking, so a single Aurora serverless database can now scale up to 768 GiB of memory. When the workload completes, Aurora serverless automatically scales down to zero. This makes Aurora serverless especially well-suited for agentic AI applications, which typically have bursts of activity, long idle windows, and un",
+   "key": "feed:azure:4dd8ea3819c5",
+   "title": "[Launched] Generally Available: Higher limit of Azure Blob Storage accounts per region per subscription",
+   "link": "https://azure.microsoft.com/updates?id=578358",
+   "detail": "Higher Azure Storage account resource quotas are now generally available, supporting up to 1,000 storage accounts with standard endpoints per region, per subscription, up from the default of 250. Manage more accounts in a single subscription, reducing the",
    "actionable": false
   }
  ],
