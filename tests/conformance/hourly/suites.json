@@ -39,6 +39,7 @@
     {"id": "offline-api-cost-savings-extras", "target": "offline", "cloud": "aws", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_cost_savings_extras_api.py", "timeout": 120},
     {"id": "nano-ui-aws-vpc-apigw-lists", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-aws-vpc-apigw-lists.mjs", "timeout": 600},
     {"id": "nano-ui-aws-compute-reload", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-aws-compute-reload.mjs", "timeout": 600},
+    {"id": "nano-ui-azure-savings", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-azure-savings.mjs", "timeout": 600},
     {"id": "nano-ui-aws-compute-savings", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-aws-compute-savings.mjs", "timeout": 600},
     {"id": "nano-ui-aws-ec2-detail-tabs", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-ec2-detail-tabs.mjs", "timeout": 600},
     {"id": "offline-ui-aws-ec2-detail-tabs", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/aws node wasm/ui-tests/validate-aws-ec2-detail-tabs.mjs", "timeout": 300},
