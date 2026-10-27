@@ -29,6 +29,7 @@ All endpoints fall back to a metadata-only response when Vault is unreachable
 """
 from __future__ import annotations
 
+import os
 import base64
 import json
 import time
@@ -115,6 +116,36 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
             ct = ct_in
         pt = vc.transit_decrypt("aws", space, key_name, ct) or ""
         return {"KeyId": key, "Plaintext": pt}
+    if op in ("Encapsulate", "Decapsulate"):
+        # ML-KEM, simulated: the shared secret is random and the ciphertext is that
+        # secret sealed with the key's transit key, so Decapsulate recovers it.
+        if body.get("EncapsulationAlgorithm") != "ML_KEM":
+            return {"__type": "ValidationException", "message": "EncapsulationAlgorithm must be ML_KEM."}
+        stored = _kms_keys.get(key_name)
+        if not stored:
+            return {"__type": "NotFoundException", "message": f"Key '{key}' does not exist."}
+        if stored.get("KeyState") != "Enabled":
+            return {"__type": "DisabledException" if stored.get("KeyState") == "Disabled" else "KMSInvalidStateException",
+                    "message": f"{stored['Arn']} is {stored.get('KeyState')}."}
+        if stored.get("KeyUsage") != "ENCAPSULATE_DECAPSULATE":
+            return {"__type": "InvalidKeyUsageException",
+                    "message": f"{stored['Arn']} key usage is not ENCAPSULATE_DECAPSULATE."}
+        if op == "Encapsulate":
+            secret_b64 = base64.b64encode(os.urandom(32)).decode()
+            ct = vc.transit_encrypt("aws", space, key_name, secret_b64) or ""
+            return {"KeyId": stored["Arn"], "SharedSecret": secret_b64,
+                    "SharedSecretCiphertextBlob": base64.b64encode(ct.encode()).decode(),
+                    "EncapsulationAlgorithm": "ML_KEM"}
+        blob_in = body.get("SharedSecretCiphertextBlob", "")
+        try:
+            ct = base64.b64decode(blob_in).decode()
+        except Exception:
+            ct = ""
+        pt = vc.transit_decrypt("aws", space, key_name, ct) if ct.startswith("vault:") else None
+        if pt is None:
+            return {"__type": "IncorrectKeyException",
+                    "message": "The key supplied does not match the ciphertext's key."}
+        return {"KeyId": stored["Arn"], "SharedSecret": pt, "EncapsulationAlgorithm": "ML_KEM"}
     if op == "GenerateDataKey":
         spec = body.get("KeySpec", "AES_256")
         vc.transit_create_key("aws", space, key_name)
@@ -137,6 +168,8 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
             "Origin": "AWS_KMS",
             "CreationDate": time.time(),
         }
+        if metadata["KeyUsage"] == "ENCAPSULATE_DECAPSULATE":
+            metadata["EncapsulationAlgorithms"] = ["ML_KEM"]
         _kms_keys[key_id] = metadata
         return {"KeyMetadata": metadata}
     if op == "DescribeKey":

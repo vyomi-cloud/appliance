@@ -140,6 +140,18 @@ def run() -> int:
     noact = kms.dispatch(st, "", {})
     _check("missing target MissingAction", noact.body["__type"] == "MissingAction")
 
+    # 14. ML-KEM Encapsulate/Decapsulate (upstream-drift #97/#98/#99)
+    kem = kms.dispatch(st, T + "CreateKey", {"KeySpec": "ML_KEM_768", "KeyUsage": "ENCAPSULATE_DECAPSULATE"}).body["KeyMetadata"]
+    _check("KEM key lists EncapsulationAlgorithms", kem["EncapsulationAlgorithms"] == ["ML_KEM"] and "EncryptionAlgorithms" not in kem)
+    en = kms.dispatch(st, T + "Encapsulate", {"KeyId": kem["KeyId"], "EncapsulationAlgorithm": "ML_KEM"})
+    _check("encapsulate 200 with secret + blob", en.status == 200 and len(_b64(en.body["SharedSecret"])) == 32 and en.body["SharedSecretCiphertextBlob"])
+    de = kms.dispatch(st, T + "Decapsulate", {"KeyId": kem["KeyId"], "EncapsulationAlgorithm": "ML_KEM",
+                                              "SharedSecretCiphertextBlob": en.body["SharedSecretCiphertextBlob"]})
+    _check("decapsulate recovers the secret", de.body["SharedSecret"] == en.body["SharedSecret"])
+    symk = kms.dispatch(st, T + "CreateKey", {}).body["KeyMetadata"]["KeyId"]
+    bad = kms.dispatch(st, T + "Encapsulate", {"KeyId": symk, "EncapsulationAlgorithm": "ML_KEM"})
+    _check("encapsulate on symmetric key InvalidKeyUsageException", bad.body["__type"] == "InvalidKeyUsageException")
+
     print("\nRESULT: PASS — KMS core conforms (native wire semantics, real crypto) on this substrate.")
     return 0
 

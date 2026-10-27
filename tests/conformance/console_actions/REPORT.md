@@ -38,9 +38,9 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `ec2` | `delete` | `DELETE` | `/api/ec2/instances/{name}` | `200` | ✓ 200 |
 | `ec2` | `get` | `GET` | `/api/ec2/instances/{name}` | `200` | ✓ 200 |
 | `ec2` | `list` | `GET` | `/api/ec2/instances` | `200` | ✓ 200 |
-| `ec2` | `reboot` | `POST` | `/api/ec2/instances/{name}/reboot` | `200` | ✓ 200 |
+| `ec2` | `reboot` | `POST` | `/api/ec2/instances/{name}/reboot` | `503` | ✓ 503 — environmental: 503 |
 | `ec2` | `start` | `POST` | `/api/ec2/instances/{name}/start` | `200` | ✓ 200 |
-| `ec2` | `stop` | `POST` | `/api/ec2/instances/{name}/stop` | `200` | ✓ 200 |
+| `ec2` | `stop` | `POST` | `/api/ec2/instances/{name}/stop` | `503` | ✓ 503 — environmental: 503 |
 | `ec2` | `terminate` | `POST` | `/api/ec2/instances/{name}/terminate` | `200` | ✓ 200 |
 | `eventbridge` | `api-destinations` | `GET` | `/api/aws/extras/eventbridge/api-destinations` | `200` | ✓ 200 |
 | `eventbridge` | `archives` | `GET` | `/api/aws/extras/eventbridge/archives` | `200` | ✓ 200 |
@@ -214,10 +214,10 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `compute` | `images` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/images` | `200` | ✓ 200 |
 | `compute` | `instanceGroups` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instanceGroups` | `200` | ✓ 200 |
 | `compute` | `list` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances` | `200` | ✓ 200 |
-| `compute` | `reset` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/reset` | `200` | ✓ 200 |
+| `compute` | `reset` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/reset` | `503` | ✓ 503 — environmental: 503 |
 | `compute` | `snapshots` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/snapshots` | `200` | ✓ 200 |
 | `compute` | `start` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/start` | `200` | ✓ 200 |
-| `compute` | `stop` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/stop` | `200` | ✓ 200 |
+| `compute` | `stop` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/stop` | `503` | ✓ 503 — environmental: 503 |
 | `eventarc` | `channels` | `GET` | `/api/gcp/extras/eventarc/channels` | `200` | ✓ 200 |
 | `eventarc` | `create` | `POST` | `/api/gcp/extras/eventarc/triggers` | `200` | ✓ 200 |
 | `eventarc` | `delete` | `DELETE` | `/api/gcp/extras/eventarc/triggers/{name}` | `200` | ✓ 200 |

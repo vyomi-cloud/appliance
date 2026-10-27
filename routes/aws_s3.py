@@ -1132,7 +1132,8 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
                     content=json.dumps({"__type": "InternalFailure", "message": f"{service}/{target} unhandled or backend unavailable"}),
                     status_code=500, media_type="application/x-amz-json-1.1",
                 )
-            return Response(content=json.dumps(resp), media_type="application/x-amz-json-1.1")
+            return Response(content=json.dumps(resp), media_type="application/x-amz-json-1.1",
+                            status_code=400 if isinstance(resp, dict) and "__type" in resp else 200)
         params = await _srv()._ec2_query_params(request)
         action = str(params.get("Action", "")).strip()
         return _error_xml("InvalidAction", f"Root dispatch could not route service={service or 'unknown'!r} action={action or 'unknown'!r}.", "/", 400)
