@@ -51,3 +51,4 @@
 | 2026-10-27T04:12Z | #63 | aws/ssm | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40448163606) |
 | 2026-10-27T04:36Z | #64 | aws/stepfunctions | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40448667579) |
 | 2026-10-27T05:06Z | #65 | aws/sts | success | building | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40450896476) |
+| 2026-10-27T05:11Z | #64 | aws/stepfunctions | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40453591298) |
