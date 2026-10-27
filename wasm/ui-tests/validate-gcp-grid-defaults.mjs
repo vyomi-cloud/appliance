@@ -46,7 +46,6 @@ try {
   for (const [k, cols] of Object.entries(res)) {
     check(`${k}: created resource listed`, !!cols);
     for (const [label, v] of cols || []) {
-      if (k === "vpc" && label === "IPv4 range") continue; // legacy-mode only: the real API returns none for subnet-mode networks
       const bad = v === undefined || v === null || v === "" || (typeof v === "object") || /^[-—]$|undefined|null|\[object/i.test(String(v));
       check(`${k}: column '${label}' filled`, !bad, JSON.stringify(v));
     }

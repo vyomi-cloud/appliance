@@ -151,7 +151,7 @@ def _gcp_fill(svc: str, rec):
         "functions": {"state": "ACTIVE", "runtime": "python312", "entryPoint": "handler",
                       "createTime": now, "updateTime": now},
         "apigateway": {"displayName": name, "state": "ACTIVE", "createTime": now},
-        "vpc": {"autoCreateSubnetworks": True, "routingConfig": {"routingMode": "REGIONAL"},
+        "vpc": {"autoCreateSubnetworks": True, "mtu": 1460, "routingConfig": {"routingMode": "REGIONAL"},
                 "creationTimestamp": now},
         "eventarc": {"event_provider": "google.cloud.pubsub.topic.v1.messagePublished",
                      "destination": "cloud-run", "region": "us-central1", "state": "ACTIVE"},
