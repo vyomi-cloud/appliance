@@ -75,16 +75,16 @@ def register(app, on_change=None):
             except Exception:
                 pass
 
-    async def call(method, path, query=None, body=b""):
+    async def call(method, path, query=None, body=b"", headers=None):
         pending: list = []
-        r = core.dispatch(store(), method, path, query or {}, {}, body, invoker=_queue_invoker(pending))
+        r = core.dispatch(store(), method, path, query or {}, headers or {}, body, invoker=_queue_invoker(pending))
         await _drain(pending, store())
         return r
 
     # ── native wire ───────────────────────────────────────────────────────
     async def native(request: Request):
         body = await request.body()
-        r = await call(request.method, request.url.path, dict(request.query_params), body)
+        r = await call(request.method, request.url.path, dict(request.query_params), body, dict(request.headers))
         if request.method == "POST" and request.url.path.endswith("/jobs") and r.status == 200:
             changed("create", core.console_view(store().jobs[json.loads(r.body)["name"]]))
         elif request.method == "DELETE" and r.status == 200:
@@ -96,6 +96,8 @@ def register(app, on_change=None):
         app.add_api_route(pat, native, methods=["GET", "POST", "PATCH", "DELETE"], include_in_schema=False)
 
     # ── console REST ──────────────────────────────────────────────────────
+    # The provider-alias middleware rewrites /api/gcp/<x> → /api/<x>, so the console's
+    # /api/gcp/cloudscheduler/jobs (and /api/gcp/sub/cloudscheduler/…) land on these.
     def find(name):
         for n, j in store().jobs.items():
             if n.rsplit("/", 1)[-1] == name or n == name:
@@ -106,12 +108,12 @@ def register(app, on_change=None):
         p = find(name)["name"].split("/")
         return p[1], p[3], p[5]
 
-    @app.get("/api/gcp/cloudscheduler/jobs")
+    @app.get("/api/cloudscheduler/jobs")
     async def list_jobs():
         items = core.list_all(store())
         return {"items": items, "count": len(items)}
 
-    @app.post("/api/gcp/cloudscheduler/jobs")
+    @app.post("/api/cloudscheduler/jobs")
     async def create_job(request: Request):
         b = await request.json()
         job = build_job(b)
@@ -123,13 +125,13 @@ def register(app, on_change=None):
         changed("create", v)
         return v
 
-    @app.get("/api/gcp/cloudscheduler/jobs/{name}")
+    @app.get("/api/cloudscheduler/jobs/{name}")
     async def get_job(name: str):
         p, l, j = parts(name)
         r = await call("GET", f"/v1/projects/{p}/locations/{l}/jobs/{j}")
         return core.console_view(store().jobs[json.loads(r.body)["name"]])
 
-    @app.patch("/api/gcp/cloudscheduler/jobs/{name}")
+    @app.patch("/api/cloudscheduler/jobs/{name}")
     async def patch_job(name: str, request: Request):
         b = await request.json()
         p, l, j = parts(name)
@@ -139,7 +141,7 @@ def register(app, on_change=None):
             raise _http_error(r)
         return core.console_view(store().jobs[json.loads(r.body)["name"]])
 
-    @app.delete("/api/gcp/cloudscheduler/jobs/{name}")
+    @app.delete("/api/cloudscheduler/jobs/{name}")
     async def delete_job(name: str):
         p, l, j = parts(name)
         r = await call("DELETE", f"/v1/projects/{p}/locations/{l}/jobs/{j}")
@@ -148,7 +150,7 @@ def register(app, on_change=None):
         changed("delete", j)
         return {"message": "Job deleted", "name": j}
 
-    @app.post("/api/gcp/sub/cloudscheduler/{action}/{name}")
+    @app.post("/api/sub/cloudscheduler/{action}/{name}")
     async def job_action(action: str, name: str):
         if action not in ("pause", "resume", "run"):
             raise HTTPException(404, detail=f"Unknown action {action}")

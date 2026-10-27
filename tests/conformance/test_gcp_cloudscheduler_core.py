@@ -83,6 +83,11 @@ def main():
     check("locations.list", s == 200 and any(l["locationId"] == "us-central1" for l in b["locations"]), b)
     s, b = call(st, "POST", "/v1/projects/p1/locations/mars-1/jobs", job("x"))
     check("invalid location → 404", s == 404, b)
+    # wire encodings used by the Java/.NET REST clients
+    s, b = call(st, "POST", P, {**job("e1"), "httpTarget": {"uri": "https://example.com/", "httpMethod": 6}}, query={"$alt": "json;enum-encoding=int"})
+    check("integer enums accepted in and returned (enum-encoding=int)", s == 200 and b["state"] == 1 and b["httpTarget"]["httpMethod"] == 6, b)
+    r = cs.dispatch(st, "POST", P + "/e1", {}, {"X-HTTP-Method-Override": "PATCH"}, json.dumps({"description": "via override"}).encode())
+    check("POST + X-HTTP-Method-Override: PATCH", r.status == 200 and json.loads(r.body)["description"] == "via override", r.body)
     # cron semantics
     t0 = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
     check("cron */15", cs.next_run("*/15 * * * *", "UTC", t0).minute == 15)
