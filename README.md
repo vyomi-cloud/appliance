@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 10:41 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 10:56 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 42 services (AWS 16 · GCP 14 · Azure 12) of 1,068 the clouds publish
-- **Building now:** Cloud Logging API (GCP, no manifest yet checks)
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Tasks API (GCP), IAM Service Account Credentials API (GCP)
+- **Building now:** nothing
+- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Tasks API (GCP), IAM Service Account Credentials API (GCP)
 - **Queued:** 57 services (P1 first, then P2)
 - **Consoles really implemented:** offline 50% · Nano 55%
 - **Hourly tests:** 40 of 45 suites passing (run 09:18 UTC)
@@ -17,7 +17,7 @@ _Updated 2026-10-27 10:41 UTC · refreshes after every pipeline run_
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | 40% · 49% |
-| GCP | 14 | 1 | 5 | 16 | 42% · 44% |
+| GCP | 14 | 0 | 6 | 16 | 42% · 44% |
 | Azure | 12 | 0 | 0 | 24 | 68% · 69% |
 
 ## In progress
@@ -39,7 +39,7 @@ _Updated 2026-10-27 10:41 UTC · refreshes after every pipeline run_
 | Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🔍 In gate ([PR #114](https://github.com/vyomi-cloud/appliance/pull/114)) | 18/18 | — |
 | BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🔍 In gate ([PR #115](https://github.com/vyomi-cloud/appliance/pull/115)) | 18/18 | — |
 | Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🔍 In gate ([PR #120](https://github.com/vyomi-cloud/appliance/pull/120)) | 18/18 | — |
-| Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🛠 Building | no manifest yet | — |
+| Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🔍 In gate ([PR #122](https://github.com/vyomi-cloud/appliance/pull/122)) | 18/18 | — |
 | Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | — |
 | IAM Service Account Credentials API [#72](https://github.com/vyomi-cloud/appliance/issues/72) | GCP | 🔍 In gate ([PR #121](https://github.com/vyomi-cloud/appliance/pull/121)) | 18/18 | — |
 
@@ -572,6 +572,31 @@ _Updated 2026-10-27 10:41 UTC · refreshes after every pipeline run_
 | ✅ | upstream id tracked by the hourly upstream watcher | dns/v1 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process', 'reason': 'Zones, record sets and changes are control-plane state held by the engine (identical offline and i |
 | ✅ | backend is the recommended one, or the manifest says why not | recommended: coredns; chose in-process |
+| ✅ | claimed operations exist in the real API | not upstream: [] |
+
+</details>
+
+<details><summary>Gate checks — Cloud Logging API (GCP)</summary>
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
+| ✅ | manifest status is ready | status=ready |
+| ✅ | engine exists in core/ | core/gcp_logging_core.py |
+| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/gcp_logging_core.py |
+| ✅ | engine listed in wasm/build_cores.py |  |
+| ✅ | service in the Nano console catalog (wasm/fixtures) | gcp-catalog.json |
+| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
+| ✅ | registry entry (pending-release or released) |  |
+| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
+| ✅ | has a offline sdk-java test bed |  |
+| ✅ | has a offline sdk-go test bed |  |
+| ✅ | has a offline cli test bed |  |
+| ✅ | has a offline ui test bed |  |
+| ✅ | has a nano ui test bed |  |
+| ✅ | upstream id tracked by the hourly upstream watcher | logging/v2 |
+| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
+| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
