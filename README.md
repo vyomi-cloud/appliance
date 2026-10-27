@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 05:41 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 05:42 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 36 services (AWS 12 · GCP 12 · Azure 12) of 1,068 the clouds publish
-- **Building now:** Artifact Registry API (GCP, 18/18 checks)
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon CloudWatch Logs (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), Amazon Simple Systems Manager (SSM) (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), AWS Step Functions (AWS), Elastic Load Balancing (AWS)
+- **Building now:** nothing
+- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon CloudWatch Logs (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), Amazon Simple Systems Manager (SSM) (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), AWS Step Functions (AWS), Elastic Load Balancing (AWS), Artifact Registry API (GCP)
 - **Queued:** 64 services (P1 first, then P2)
 - **Consoles really implemented:** offline 49% · Nano 52%
 - **Hourly tests:** 24 of 33 suites passing (run 05:34 UTC)
@@ -17,7 +17,7 @@ _Updated 2026-10-27 05:41 UTC · refreshes after every pipeline run_
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
 | AWS | 12 | 0 | 16 | 17 | 38% · 46% |
-| GCP | 12 | 1 | 0 | 23 | 42% · 46% |
+| GCP | 12 | 0 | 1 | 23 | 42% · 46% |
 | Azure | 12 | 0 | 0 | 24 | 66% · 61% |
 
 ## In progress
@@ -40,7 +40,7 @@ _Updated 2026-10-27 05:41 UTC · refreshes after every pipeline run_
 | AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #112](https://github.com/vyomi-cloud/appliance/pull/112)) | 18/18 | — |
 | AWS Step Functions [#64](https://github.com/vyomi-cloud/appliance/issues/64) | AWS | 🔍 In gate ([PR #110](https://github.com/vyomi-cloud/appliance/pull/110)) | 18/18 | — |
 | Elastic Load Balancing [#57](https://github.com/vyomi-cloud/appliance/issues/57) | AWS | 🔍 In gate ([PR #103](https://github.com/vyomi-cloud/appliance/pull/103)) | 18/18 | — |
-| Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🛠 Building | 18/18 | — |
+| Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🔍 In gate ([PR #114](https://github.com/vyomi-cloud/appliance/pull/114)) | 18/18 | — |
 
 ## Released services
 
