@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 17:21 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -8,8 +8,8 @@ _Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
 - **Building now:** eventhub (Azure, no manifest yet checks)
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), applicationinsights (Azure), containerregistry (Azure), containerservice (Azure)
 - **Queued:** 45 services (P1 first, then P2)
-- **Consoles really implemented:** offline 52% · Nano 70%
-- **Hourly tests:** 73 of 76 suites passing (run 16:09 UTC)
+- **Consoles really implemented:** offline 52% · Nano 71%
+- **Hourly tests:** 74 of 77 suites passing (run 17:09 UTC)
 - **Upstream watch:** 5 open changes from the real clouds to adopt
 
 ## By cloud
@@ -17,8 +17,8 @@ _Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | 48% · 76% |
-| GCP | 16 | 0 | 8 | 12 | 41% · 65% |
-| Azure | 16 | 1 | 3 | 16 | 68% · 70% |
+| GCP | 16 | 0 | 8 | 12 | 42% · 65% |
+| Azure | 16 | 1 | 3 | 16 | 68% · 71% |
 
 ## In progress
 
@@ -58,7 +58,7 @@ _Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| EC2 | 🧩 6/13 · 🧩 6/13 | 2 · 2 | ✅ watched | before gate |
+| EC2 | 🧩 6/13 · 🧩 6/13 | 0 · 0 | ✅ watched | before gate |
 | S3 | 🧩 6/13 · 🧩 11/13 | 0 · 0 | ✅ watched | before gate |
 | IAM | 🧩 8/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
 | RDS | 🧩 8/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
@@ -81,7 +81,7 @@ _Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|
 | Compute Engine | 🧩 5/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
 | Cloud Storage | 🧩 7/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| Cloud SQL | 🧩 4/13 · 🧩 10/13 | 0 · 0 | ⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
+| Cloud SQL | 🧩 5/13 · 🧩 10/13 | 0 · 0 | ⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
 | Pub/Sub | 🧩 5/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
 | Firestore | 🧩 5/13 · 🧩 6/13 | 0 · 0 | ✅ watched | before gate |
 | Cloud Functions | 🧩 5/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
@@ -100,7 +100,7 @@ _Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| Virtual Machines | 🧩 10/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
+| Virtual Machines | 🧩 10/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | Storage accounts | 🧩 9/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
 | SQL servers | 🧩 8/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
 | Service Bus | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
@@ -898,7 +898,7 @@ _Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary>Console parts not live yet — GCP (140)</summary>
+<details><summary>Console parts not live yet — GCP (139)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -932,7 +932,6 @@ _Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
 | Cloud SQL | offline | tab: Backups | static |
 | Cloud SQL | offline | tab: Replicas | static |
 | Cloud SQL | offline | tab: Connectivity | static |
-| Cloud SQL | offline | tab: Flags | static |
 | Firestore | offline | tab: Activity | static |
 | Firestore | offline | tab: Permissions | static |
 | Firestore | offline | tab: Labels | static |
@@ -993,7 +992,7 @@ _Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
 | Compute Engine | nano | tab: Permissions | static |
 | Compute Engine | nano | tab: Labels | static |
 | Compute Engine | nano | tab: Networking | static |
-| Compute Engine | nano | tab: Startup script | static |
+| Compute Engine | nano | tab: Metadata | static |
 | Cloud Functions | nano | tab: Permissions | static |
 | Cloud Functions | nano | tab: Labels | static |
 | Cloud Functions | nano | tab: Source | static |
@@ -1045,7 +1044,7 @@ _Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary>Console parts not live yet — Azure (92)</summary>
+<details><summary>Console parts not live yet — Azure (91)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -1095,7 +1094,6 @@ _Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
 | Key vaults | offline | tab: Access configuration | static |
 | Entra ID / RBAC | offline | tab: Conditions | static |
 | Virtual Machines | nano | page: Virtual Machines | static |
-| Virtual Machines | nano | tab: Tags | static |
 | Virtual Machines | nano | tab: Diagnose and solve problems | static |
 | Virtual Machines | nano | tab: Connect | static |
 | Storage accounts | nano | tab: Tags | static |
@@ -1120,7 +1118,7 @@ _Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
 | Cosmos DB | nano | tab: Backup & Restore | static |
 | Function apps | nano | tab: Tags | static |
 | Function apps | nano | tab: Diagnose and solve problems | static |
-| Function apps | nano | tab: App keys | static |
+| Function apps | nano | tab: Functions | static |
 | Function apps | nano | tab: Environment variables | static |
 | Function apps | nano | tab: Authentication | static |
 | Function apps | nano | tab: Identity | static |
@@ -1148,10 +1146,11 @@ _Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
 
 | Suite | Result | Checks |
 |---|---|---|
-| offline-ui-crawl | ❌ | 35/38 |
+| offline-ui-crawl | ❌ | 36/38 |
 | offline-console-actions | ✅ | 246/246 |
 | offline-api-ec2-instance-detail | ✅ | 3/3 |
 | offline-api-s3-bucket-creation-date | ✅ | 3/3 |
+| offline-sdk-python-azure-ops | ✅ | 8/8 |
 | offline-api-azure-console-data-planes | ✅ | 36/36 |
 | offline-api-aws-provider-connect | ✅ | 11/11 |
 | offline-api-gcp-eventarc-trigger-defaults | ✅ | 6/6 |
@@ -1171,7 +1170,7 @@ _Updated 2026-10-27 17:19 UTC · refreshes after every pipeline run_
 | offline-cli-gcp | ✅ | 6/6 |
 | offline-cli-azure | ✅ | 6/6 |
 | offline-ui-core | ✅ | 9/9 |
-| nano-ui-crawl | ❌ | 39/43 |
+| nano-ui-crawl | ❌ | 40/43 |
 | nano-cores | ✅ | 37/37 |
 | nano-aws-iam-detail | ✅ | 8/8 |
 | nano-aws-ec2-launch | ✅ | 13/13 |
