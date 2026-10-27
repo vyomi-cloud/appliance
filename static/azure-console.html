@@ -2053,6 +2053,63 @@ SUB_RENDERERS.appconfigreplicas = function(svc, full, host){
   }).catch(()=>{});
 };
 
+// ---- Container Registry (Microsoft.ContainerRegistry) renderers ------------------
+SUB_RENDERERS.acrrepositories = function(svc, full, host){
+  const login = getPath(full,"properties.loginServer") || (full.name + ".azurecr.io");
+  host.append(el("div",{class:"sub-info"},"Repositories in ", el("strong",{}, login),
+    ". Push with `docker tag IMAGE " + login + "/IMAGE:TAG && docker push " + login + "/IMAGE:TAG` (map " + login + " to this appliance's address first)."));
+  const listHost = el("div",{}); host.append(listHost);
+  const none = "No repositories yet — push an image to " + login + ". (The image data plane runs on the offline appliance; Nano keeps the registry control plane only.)";
+  fetch(ORIGIN + "/azure-data/acr/" + encodeURIComponent(full.name) + "/v2/_catalog").then(r=>r.ok ? r.json() : {repositories:[]}).then(j=>{
+    const repos = j.repositories || [];
+    if (!repos.length){ listHost.append(emptyState(none)); return; }
+    const t = el("table",{class:"sub-table"});
+    const hdr = el("tr",{}); ["Repository","Tags"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+    repos.forEach(rp=>{
+      const tags = el("td",{}, "…");
+      t.append(el("tr",{}, el("td",{}, rp), tags));
+      fetch(ORIGIN + "/azure-data/acr/" + encodeURIComponent(full.name) + "/v2/" + rp + "/tags/list").then(r=>r.json())
+        .then(x=>{ tags.textContent = (x.tags||[]).join(", ") || "—"; }).catch(()=>{ tags.textContent = "—"; });
+    });
+    listHost.append(t);
+  }).catch(()=>listHost.append(emptyState(none)));
+};
+SUB_RENDERERS.acrwebhooks = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Webhooks notify a service URI when images are pushed to or deleted from this registry."));
+  listChildResources(svc, full, host, "webhooks",
+    [["name","Name"],["properties.serviceUri","Service URI"],["properties.status","Status"],["properties.scope","Scope"]],
+    "No webhooks defined.");
+};
+SUB_RENDERERS.acrreplications = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Geo-replication (Premium) serves the registry from additional regions."));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Name","Location","Status"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  t.append(el("tr",{}, el("td",{}, full.location||"—"), el("td",{}, (full.location||"—") + " (home region)"),
+                       el("td",{}, getPath(full,"properties.provisioningState")||"Succeeded")));
+  host.append(t);
+  fetch(ORIGIN + full.id + "/replications?api-version=" + svc.apiVersion).then(r=>r.json()).then(j=>{
+    (j.value||[]).forEach(r=>t.append(el("tr",{}, el("td",{}, r.name), el("td",{}, r.location||"—"),
+      el("td",{}, getPath(r,"properties.provisioningState")||"Succeeded"))));
+  }).catch(()=>{});
+};
+SUB_RENDERERS.acraccess = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"The admin account authenticates docker login and the registry's tokens."));
+  const kv = el("div",{class:"kv prop-kv"});
+  [["Registry name", full.name], ["Login server", getPath(full,"properties.loginServer")||"—"],
+   ["Admin user", getPath(full,"properties.adminUserEnabled") === true ? "Enabled" : "Disabled"]].forEach(([k,v])=>kv.append(el("div",{class:"k"},k), el("div",{class:"v"}, String(v))));
+  host.append(kv);
+  if (getPath(full,"properties.adminUserEnabled") !== true){
+    host.append(emptyState("Admin user is disabled. Enable it (az acr update --admin-enabled true) to see its username and passwords."));
+    return;
+  }
+  fetch(ORIGIN + full.id + "/listCredentials?api-version=" + svc.apiVersion, {method:"POST"}).then(r=>r.json()).then(j=>{
+    const t = el("table",{class:"sub-table"});
+    const hdr = el("tr",{}); ["Username","Name","Password"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+    (j.passwords||[]).forEach(p=>t.append(el("tr",{}, el("td",{}, j.username), el("td",{}, p.name), el("td",{}, p.value))));
+    host.append(t);
+  }).catch(()=>host.append(emptyState("Could not load credentials.")));
+};
+
 SUB_RENDERERS.databases = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Databases under this SQL server."));
   listChildResources(svc, full, host, "databases",

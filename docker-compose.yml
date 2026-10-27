@@ -97,6 +97,21 @@ services:
       retries: 5
     restart: unless-stopped
 
+  vyomi-registry:
+    profiles: ["full"]
+    # Shared OCI image registry (CNCF Distribution, Apache-2.0) behind Azure Container Registry's
+    # docker push/pull data plane (and, later, ECR / Artifact Registry). One namespace per registry.
+    image: registry:2.8.3
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:5000/v2/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   vyomi-minio:
     profiles: ["full"]
     # MinIO removed its public Docker Hub image (docker.io/minio/minio → 404);

@@ -40,6 +40,11 @@ try:                                              # App Configuration engine (Mi
 except ImportError:
     import azure_appconfiguration_core as appconfig_engine   # type: ignore
 
+try:                                              # Container Registry engine (Microsoft.ContainerRegistry)
+    from core import azure_containerregistry_core as acr_engine
+except ImportError:
+    import azure_containerregistry_core as acr_engine   # type: ignore
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -237,6 +242,8 @@ class AzureArm:
         # this class's flat store is its resource map (so it persists with the rest of ARM).
         if namespace.lower() == "microsoft.appconfiguration":
             return self._appconfig(method, sub, rg, chain, payload, query)
+        if namespace.lower() == "microsoft.containerregistry":
+            return self._acr(method, sub, rg, chain, payload, query)
 
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
@@ -292,6 +299,16 @@ class AzureArm:
             resp["status"] = 200 if r["status"] == 201 else r["status"]
             op_id = self._make_operation(r["rid"], method)
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or ac.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
+    def _acr(self, method, sub, rg, chain, payload, query):
+        r = acr_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or acr_engine.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
 

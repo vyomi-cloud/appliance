@@ -23189,6 +23189,13 @@ try:
 except Exception as _e:   # never let this break appliance boot
     print(f"[azure-appconfig] routes skipped: {_e}")
 
+# Azure Container Registry image data plane (/azure-data/acr/{registry}/v2 …) → the shared Distribution registry container.
+try:
+    from providers import azure_containerregistry_routes as _azure_acr_routes
+    _azure_acr_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-acr] routes skipped: {_e}")
+
 # Memorystore for Redis: native /v1/projects/*/locations/*/instances wire + console REST (/api/gcp/redis/*).
 try:
     from providers import gcp_redis_console as _redis_console

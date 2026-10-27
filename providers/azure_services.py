@@ -397,6 +397,27 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
+        "key": "containerregistry", "label": "Container Registry", "icon": "inventory_2",
+        "namespace": "Microsoft.ContainerRegistry", "type": "registries",
+        "api_version": "2023-07-01", "scope": "rg",
+        "banner": "Private Docker/OCI registry. Offline, `docker push` / `docker pull` work against this registry's login server (see Access keys); the SDKs and `az acr` manage the registry resource.",
+        "children": [{"type": "webhooks", "label": "Webhooks", "icon": "webhook"}],
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["sku.name", "Pricing plan"],
+                    ["properties.loginServer", "Login server"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [
+            {"name": "name", "label": "Registry name (alphanumeric)", "default": "acrcloudlearn"},
+            {"name": "sku.name", "label": "Pricing plan (Basic, Standard, Premium)", "default": "Basic"},
+            {"name": "properties.adminUserEnabled", "label": "Admin user (true/false)", "default": "false"},
+            {"name": "properties.publicNetworkAccess", "label": "Public network access (Enabled/Disabled)", "default": "Enabled"},
+        ],
+        "defaults": {
+            "sku": {"name": "Basic"},
+            "properties": {"provisioningState": "Succeeded", "adminUserEnabled": False, "publicNetworkAccess": "Enabled"},
+        },
+    },
+    {
         "key": "role_definition",
         "label": "Role Definition",
         "icon": "admin_panel_settings",
@@ -668,6 +689,8 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     # store / key-value / replica semantics; the ARM store below is its resource map.
     if namespace.lower() == "microsoft.appconfiguration":
         return await _handle_appconfiguration(request, method, sub, rg, chain, names, base)
+    if namespace.lower() == "microsoft.containerregistry":
+        return await _handle_containerregistry(request, method, sub, rg, chain, names, base)
 
     top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
     if top is None:
@@ -804,6 +827,24 @@ async def _handle_appconfiguration(request: Request, method: str, sub: str, rg: 
             resp.headers[hk] = hv
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.AppConfiguration/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_containerregistry(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                                    names: list[str], base: str) -> JSONResponse:
+    from core import azure_containerregistry_core as _cr
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _cr.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    api_version = request.query_params.get("api-version") or _cr.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["lro"] and r["status"] < 300:
+        resp.status_code = 200 if r["status"] == 201 else r["status"]
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.ContainerRegistry/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
     return resp
 
