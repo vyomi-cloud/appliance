@@ -310,7 +310,8 @@
    "key": "ssm",
    "name": "Systems Manager",
    "upstream": "ssm",
-   "status": "pending-release"
+   "status": "released",
+   "released_in": "3.0.12"
   }
  ]
 }

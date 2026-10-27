@@ -4,6 +4,17 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.12] — 2026-10-27
+
+New service release.
+
+- New service: AWS Systems Manager
+- expansion(aws/ssm): SSM engine, native wire, console + Nano, CLI/UI t…
+- expansion(aws/ssm): Java + Go test beds, hourly suites, upstream trac…
+- expansion(aws/ssm): Nano activity events carry a detail; declare Hist…
+- expansion(aws/ssm): keep other services' Nano files exactly as on mai…
+- expansion(aws/ssm): add only SSM to main's Nano registry/persist (don…
+
 ## [3.0.11] — 2026-10-27
 
 New service release.
