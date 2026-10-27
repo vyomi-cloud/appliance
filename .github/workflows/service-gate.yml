@@ -72,7 +72,7 @@ jobs:
 
       - name: Install test tooling
         run: |
-          pip install --quiet requests pytest boto3 azure-storage-blob
+          pip install --quiet requests pytest boto3 azure-storage-blob pyyaml
           mkdir -p .ci-node && cd .ci-node
           echo '{"name":"vyomi-ci-node","private":true}' > package.json
           npm install --silent playwright@1.47.2 ws@8.18.0
@@ -146,7 +146,14 @@ jobs:
           BASE=$(python3 -c "import json;print(json.load(open('/tmp/portal/app/nano/APPLIANCE_SYNC.json'))['sha'])" 2>/dev/null || echo 38bfb70)
           mk "$BASE" origin/main /tmp/pending.patch
           cd /tmp/portal
-          [ ! -s /tmp/pending.patch ] || git apply /tmp/pending.patch
+          # Drift between main and the portal is the release sync's job, not this
+          # service's: apply what applies, warn about the rest, and judge only
+          # the service's own patch below.
+          if [ -s /tmp/pending.patch ] && ! git apply /tmp/pending.patch 2>/dev/null; then
+            git apply --reject /tmp/pending.patch 2>&1 | tail -5 || true
+            find . -name '*.rej' -delete
+            echo "::warning::main's pending Nano changes don't fully apply to the portal; the next release sync must reconcile them."
+          fi
           if ! git apply --check /tmp/service.patch 2>/tmp/apply.err; then
             cat /tmp/apply.err
             { echo "### Service gate — ❌ Nano changes don't apply to the portal's copy (portal/app/nano)"; echo; echo '```'; cat /tmp/apply.err; echo '```'; } > /tmp/conflict.md

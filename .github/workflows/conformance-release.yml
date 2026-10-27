@@ -9,7 +9,9 @@ name: Release on daily PR merge
 #      reads for its service list and counts
 #   2. create release/vX.Y.Z and tag vX.Y.Z — pushed with CONFORMANCE_BOT_TOKEN,
 #      so the tag triggers release.yml + docker-publish.yml like a manual release
-#   3. merge the linked portal PR (deploys the portal), if there is one
+#   3. sync this release's Nano bundle to the portal (portal-nano-sync.yml,
+#      forced): appliance and portal always release together — one portal
+#      PR + one paid deploy per release
 #
 # Merge (not approve) is the trigger: the bot token acts as the repo owner, who
 # can't approve a PR they authored.
@@ -130,14 +132,13 @@ jobs:
           git push -q origin "HEAD:refs/heads/release/v$NEW"
           echo "Released v$NEW at $SHA"
 
-      - name: Merge the linked portal PR
-        env:
-          BODY: ${{ github.event.pull_request.body }}
+      # Appliance and portal release together: the portal's Nano copy gets this
+      # release's bundle now, not at some later nightly slot (which silently
+      # drifted for weeks). The sync records the released sha in the portal.
+      - name: Sync this release's Nano to the portal
         run: |
-          URL=$(printf '%s' "$BODY" | sed -n 's/.*<!-- portal-pr: \(https[^ ]*\) -->.*/\1/p' | head -1)
-          if [ -z "$URL" ]; then echo "No linked portal PR."; exit 0; fi
-          gh pr merge "$URL" --squash
-          echo "Merged $URL (portal deploys from main)."
+          gh workflow run portal-nano-sync.yml -R "${{ github.repository }}" --ref main -f force=true
+          echo "Portal Nano sync dispatched for v${{ steps.v.outputs.new }}."
 
       - name: Comment on the PR
         if: always()
