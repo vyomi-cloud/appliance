@@ -545,7 +545,7 @@ def _sfn_err(body):
 def sfn_list(p=None):
     ms = sorted((stepfunctions_core.machine_view(m, _sfn()) for m in _sfn().machines.values()),
                 key=lambda m: (m["created"], m["name"]))
-    return {"ok": True, "machines": ms, "count": len(ms)}
+    return {"ok": True, "items": ms, "count": len(ms)}
 
 
 def sfn_create(p):

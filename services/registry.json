@@ -312,6 +312,13 @@
    "upstream": "ssm",
    "status": "released",
    "released_in": "3.0.12"
+  },
+  {
+   "cloud": "aws",
+   "key": "stepfunctions",
+   "name": "Step Functions",
+   "upstream": "stepfunctions",
+   "status": "pending-release"
   }
  ]
 }

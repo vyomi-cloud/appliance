@@ -37,7 +37,7 @@ def register(app, on_change=None):
     @app.get("/api/stepfunctions/machines")
     def list_machines():
         ms = sorted((view(m) for m in core.shared_store().machines.values()), key=lambda m: (m["created"], m["name"]))
-        return {"machines": ms, "count": len(ms)}
+        return {"items": ms, "count": len(ms)}
 
     @app.post("/api/stepfunctions/machines")
     async def create_machine(request: Request):
