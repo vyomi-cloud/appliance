@@ -35,6 +35,7 @@ STORE_ATTRS = [
     "ssm",      # Systems Manager (core/ssm_core.SsmStore)
     "gcp_gke",    # Kubernetes Engine (core/gcp_container_core.ContainerStore)
     "gcp_redis",  # Memorystore for Redis (core/gcp_redis_core.RedisStore)
+    "gcp_wf",     # Workflows (core/gcp_workflows_core.WorkflowsStore)
     "gcp_iamc",   # IAM Credentials issue log (core/gcp_iamcredentials_core.IamCredentialsStore)
     "gcp_sched",  # Cloud Scheduler (core/gcp_cloudscheduler_core.CloudSchedulerStore)
     "sfn",      # Step Functions (core/stepfunctions_core.StepFunctionsStore)

@@ -686,6 +686,32 @@ _REDIS_WIZARD = _basic_wizard(
 _REDIS_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
 
 
+# ============================================================================
+# Workflows — Create workflow (core/gcp_workflows_core.workflow_from_form)
+# ============================================================================
+_WORKFLOWS_WIZARD = _basic_wizard(
+    name_field=_name("Workflow name", "my-workflow", r"^[a-zA-Z]([-_a-zA-Z0-9]{0,61}[a-zA-Z0-9])?$",
+                     "Start with a letter; letters, digits, hyphens and underscores; up to 64 chars"),
+    name_default="my-workflow", region_or_zone="region",
+    extra_basic_fields=[
+        {"name": "description", "label": "Description", "default": "Demo workflow"},
+        {"name": "serviceAccount", "label": "Service account", "default": "demo-compute@developer.gserviceaccount.com"},
+        {"name": "callLogLevel", "label": "Call log level", "type": "select", "default": "CALL_LOG_LEVEL_UNSPECIFIED", "options": [
+            {"value": "CALL_LOG_LEVEL_UNSPECIFIED", "label": "Not specified"},
+            {"value": "LOG_ALL_CALLS", "label": "All calls"},
+            {"value": "LOG_ERRORS_ONLY", "label": "Errors only"},
+            {"value": "LOG_NONE", "label": "No logging"}]},
+    ],
+    sections=[
+        {"label": "Define workflow", "fields": [
+            {"name": "source", "label": "Workflow definition (JSON or YAML)", "required": True,
+             "default": '{"main":{"steps":[{"init":{"assign":[{"greeting":"Hello from Vyomi"}]}},{"done":{"return":"${greeting}"}}]}}'},
+        ]},
+    ],
+)
+_WORKFLOWS_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
+
+
 WIZARDS: dict[str, dict] = {
     "compute":       _COMPUTE_WIZARD,
     "storage":       _STORAGE_WIZARD,
@@ -703,4 +729,5 @@ WIZARDS: dict[str, dict] = {
     "iamcredentials": _IAMCREDENTIALS_WIZARD,
     "container":     _CONTAINER_WIZARD,
     "redis":         _REDIS_WIZARD,
+    "workflows":     _WORKFLOWS_WIZARD,
 }

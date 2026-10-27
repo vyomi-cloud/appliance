@@ -29,7 +29,7 @@ const CORES = [
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py",
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_queue_core.py", "azure_servicebus_core.py",
-  "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "vpc_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py",
+  "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "vpc_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_workflows_core.py", "gcp_iamcredentials_core.py",
   "azure_sql_core.py", "azure_iam_core.py",
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it
   "aws_wire_router.py",

@@ -24,7 +24,7 @@ def call(st, method, path, body=None, query=None):
 
 
 st = wc.WorkflowsStore()
-s, op = call(st, "POST", L + "/workflows", {"sourceContents": wc.DEFAULT_SOURCE, "description": "d"}, {"workflowId": "w1"})
+s, op = call(st, "POST", L + "/workflows", {"sourceContents": wc.DEFAULT_YAML_SOURCE, "description": "d"}, {"workflowId": "w1"})
 check("create returns a done LRO with the Workflow", s == 200 and op["done"] and op["response"]["name"].endswith("/workflows/w1")
       and op["metadata"]["verb"] == "create" and op["response"]["state"] == "ACTIVE", op)
 s, w = call(st, "GET", L + "/workflows/w1")
@@ -58,7 +58,9 @@ check("list page 2", len(page2["workflows"]) == 2 and "nextPageToken" not in pag
 s, ex = call(st, "POST", L + "/workflows/w1/executions", {"argument": "{\"a\":1}"})
 check("execution runs to SUCCEEDED with literal result", s == 200 and ex["state"] == "SUCCEEDED" and ex["result"] == '"v2"' and ex["workflowRevisionId"].startswith("000002-"), ex)
 s, ex0 = call(st, "POST", L + "/workflows/pg0/executions", {})
-check("execution resolves ${var} of an assign", ex0["result"] == '"Hello from Vyomi"', ex0)
+check("execution resolves ${var} of an assign (JSON definition)", ex0["result"] == '"Hello from Vyomi"', ex0)
+exy = call(st, "POST", L + "/workflows", {"sourceContents": wc.DEFAULT_YAML_SOURCE}, {"workflowId": "yml"})
+check("execution resolves ${var} of an assign (YAML definition)", call(st, "POST", L + "/workflows/yml/executions", {})[1]["result"] == '"Hello from Vyomi"')
 eid = ex["name"].rsplit("/", 1)[1]
 check("get execution", call(st, "GET", L + "/workflows/w1/executions/" + eid)[1]["name"] == ex["name"])
 check("list executions", len(call(st, "GET", L + "/workflows/w1/executions")[1]["executions"]) == 1)

@@ -2553,6 +2553,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # Workflows — the shared wire/console store (console + SDK/CLI created workflows)
+        from core.gcp_workflows_core import shared_store as _wf_store
+        for _wn, _wf in _wf_store().workflows.items():
+            add("gcp", "workflows", "workflow", _wn.rsplit("/", 1)[-1],
+                {"name": _wn.rsplit("/", 1)[-1], "created": _wf.get("createTime", "")})
+    except Exception:
+        pass
+
     try:   # Memorystore for Redis — the shared wire/console store (console + SDK/CLI created instances)
         from core.gcp_redis_core import shared_store as _redis_store
         for _rn, _ri in _redis_store().instances.items():
@@ -23174,6 +23182,23 @@ try:
     _gke_console.register(app, _gke_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[container] routes skipped: {_e}")
+
+# Workflows: native /v1/projects/*/locations/*/workflows wire + console REST (/api/gcp/workflows/*).
+try:
+    from providers import gcp_workflows_console as _wf_console
+
+    def _wf_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "workflows", "workflow", payload, {}, None, action="delete")
+            _record_usage("gcp.workflows.delete_workflow", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "workflows", "workflow", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("state", "ACTIVE")}, None,
+                                            region=payload.get("region", "us-central1"))
+            _record_usage("gcp.workflows.create_workflow", {"name": payload["id"]})
+    _wf_console.register(app, _wf_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[workflows] routes skipped: {_e}")
 
 # Memorystore for Redis: native /v1/projects/*/locations/*/instances wire + console REST (/api/gcp/redis/*).
 try:

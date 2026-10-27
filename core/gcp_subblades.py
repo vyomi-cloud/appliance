@@ -401,6 +401,36 @@ _REDIS_SUB = [
 ]
 
 
+# ============================================================================
+# Workflows — workflow detail (generic `schedkv` renderer: `fields` is [[field, label], …]
+# read off the workflow's console view, every value filled)
+# ============================================================================
+_WORKFLOWS_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Workflow", "items": [
+        {"key": "details", "label": "Details", "icon": "info", "type": "schedkv",
+         "fields": [["state", "State"], ["revision", "Revision"], ["revision_count", "Revisions"],
+                    ["description_text", "Description"], ["created", "Created"], ["updated", "Last updated"]]},
+        {"key": "source",  "label": "Source", "icon": "code", "type": "schedkv",
+         "fields": [["source_language", "Language"], ["source_lines", "Lines of source"],
+                    ["revision_created", "Revision created"], ["sourceContents", "Definition"]]},
+        {"key": "executions", "label": "Executions", "icon": "play_circle", "type": "schedkv",
+         "fields": [["execution_count", "Executions"], ["last_execution", "Last execution"],
+                    ["call_log_level", "Call logging"], ["history_level", "Execution history"]]},
+        {"key": "security", "label": "Security", "icon": "lock", "type": "schedkv",
+         "fields": [["service_account", "Service account"], ["encryption", "Encryption"],
+                    ["env_text", "Environment variables"], ["labels_text", "Labels"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -419,4 +449,5 @@ SUB_BLADES: dict[str, list] = {
     "iamcredentials": _IAMCREDENTIALS_SUB,
     "container":     _CONTAINER_SUB,
     "redis":         _REDIS_SUB,
+    "workflows":     _WORKFLOWS_SUB,
 }

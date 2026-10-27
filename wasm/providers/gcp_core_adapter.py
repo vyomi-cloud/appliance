@@ -32,6 +32,7 @@ from core import gcp_cloudscheduler_core as _sched
 from core import gcp_container_core as _gke
 from core import gcp_iamcredentials_core as _iamc
 from core import gcp_redis_core as _redis
+from core import gcp_workflows_core as _wf
 from core.sql_store import InMemorySqlStore
 
 PROJ = "demo"          # the console's default project
@@ -56,11 +57,12 @@ _STORES = {
     "container":     _R["gcp_gke"],
     "iamcredentials": _R["gcp_iamc"],
     "redis":         _R["gcp_redis"],
+    "workflows":     _R["gcp_wf"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis, "workflows": _wf,
 }
 
 
@@ -365,6 +367,48 @@ def _redis_op(operation, name, body):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "redis"}
 
 
+def _wf_op(operation, name, body):
+    """Workflows console CRUD (+ execute) over core/gcp_workflows_core."""
+    store = _STORES["workflows"]
+
+    def find(nm):
+        for full in store.workflows:
+            if full.rsplit("/", 1)[-1] == nm or full == nm:
+                return full
+        return None
+
+    def run(method, path, query=None, payload=None):
+        r = _wf.dispatch(store, method, "/v1/" + path, query or {}, {}, json.dumps(payload).encode() if payload is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    if operation == "List":
+        return {"ok": True, "items": _wf.list_all(store)}
+    if operation == "Create":
+        req = _wf.workflow_from_form(body, PROJ)
+        st, p = run("POST", req["parent"] + "/workflows", {"workflowId": req["workflowId"]}, req["workflow"])
+        if st < 300:
+            return {"ok": True, **_wf.view_by_name(store, _wf.workflow_name(PROJ, req["location"], req["workflowId"]))}
+        return {"ok": False, "code": p.get("error", {}).get("status", "CreateFailed"),
+                "message": p.get("error", {}).get("message", ""), "name": body.get("name")}
+    full = find(name)
+    if not full:
+        return {"ok": False, "code": "NotFound", "name": name}
+    if operation == "Get":
+        return {"ok": True, **_wf.view_by_name(store, full)}
+    if operation == "Delete":
+        st, _ = run("DELETE", full)
+        return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+    if operation == "Execute":
+        arg = body.get("argument")
+        st, p = run("POST", full + "/executions", payload={"argument": arg} if arg else {})
+        return {"ok": True, **_wf.view_by_name(store, full)} if st < 300 else \
+            {"ok": False, "code": p.get("error", {}).get("status", "ActionFailed"), "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "workflows"}
+
+
 def resource_op(service, operation, name="", body=None):
     """Console CRUD → GCP core. Returns the registry _resource_dispatch envelope."""
     body = body or {}
@@ -377,6 +421,8 @@ def resource_op(service, operation, name="", body=None):
         return _iamc_op(operation, name, body)
     if svc == "redis":
         return _redis_op(operation, name, body)
+    if svc == "workflows":
+        return _wf_op(operation, name, body)
     rid = str(body.get("name") or body.get("accountId") or body.get("secretId")
               or body.get("topicId") or name or "").strip()
 

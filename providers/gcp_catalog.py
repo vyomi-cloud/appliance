@@ -472,6 +472,44 @@ RESOURCE_CATALOG_GCP = [
         ],
     },
     # ========================================================================
+    # Workflows — serverless orchestration (core/gcp_workflows_core.py). Console REST at
+    # /api/gcp/workflows/*; the native /v1/projects/*/locations/*/workflows wire (+ executions)
+    # serves the SDKs / gcloud.
+    # ========================================================================
+    {
+        "key": "workflows", "label": "Workflows", "icon": "account_tree",
+        "namespace": "GCP/Workflows", "service": "workflows",
+        "collection_path": "/api/gcp/workflows/workflows",
+        "resource_path":   "/api/gcp/workflows/workflows/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "workflows": {"method": "GET",    "path": "/api/gcp/workflows/workflows"},
+            "execute":   {"method": "POST",   "path": "/api/gcp/sub/workflows/execute/{name}"},
+            "delete":    {"method": "DELETE", "path": "/api/gcp/workflows/workflows/{name}"},
+        },
+        "columns": [
+            ["id",              "Name"],
+            ["region",          "Region"],
+            ["state",           "State"],
+            ["revision",        "Revision"],
+            ["service_account", "Service account"],
+            ["call_log_level",  "Call log level"],
+            ["execution_count", "Executions"],
+            ["last_execution",  "Last execution"],
+            ["updated",         "Last updated"],
+        ],
+        "createFields": [
+            {"name": "name",           "label": "Workflow name",         "default": "my-workflow"},
+            {"name": "region",         "label": "Region",                "default": "us-central1"},
+            {"name": "description",    "label": "Description",           "default": "Demo workflow"},
+            {"name": "serviceAccount", "label": "Service account",       "default": "demo-compute@developer.gserviceaccount.com"},
+            {"name": "callLogLevel",   "label": "Call log level",        "default": "CALL_LOG_LEVEL_UNSPECIFIED"},
+            {"name": "source",         "label": "Workflow definition (JSON or YAML)",
+             "default": '{"main":{"steps":[{"init":{"assign":[{"greeting":"Hello from Vyomi"}]}},{"done":{"return":"${greeting}"}}]}}'},
+        ],
+    },
+    # ========================================================================
     # Memorystore for Redis — instances (core/gcp_redis_core.py). Console REST at
     # /api/gcp/redis/*; the native /v1/projects/*/locations/*/instances wire serves the SDKs /
     # gcloud. Data plane: the shared Valkey container offline (control plane only in Nano).

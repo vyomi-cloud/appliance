@@ -37,7 +37,9 @@ CALL_LOG_LEVELS = ("CALL_LOG_LEVEL_UNSPECIFIED", "LOG_ALL_CALLS", "LOG_ERRORS_ON
 HISTORY_LEVELS = ("EXECUTION_HISTORY_LEVEL_UNSPECIFIED", "EXECUTION_HISTORY_BASIC", "EXECUTION_HISTORY_DETAILED")
 MAX_SOURCE_BYTES = 128 * 1024
 MAX_WORKFLOWS_PER_LOCATION = 1000
-DEFAULT_SOURCE = (
+# One line so it fits a plain console text field (a JSON workflow definition is valid source).
+DEFAULT_SOURCE = '{"main":{"steps":[{"init":{"assign":[{"greeting":"Hello from Vyomi"}]}},{"done":{"return":"${greeting}"}}]}}'
+DEFAULT_YAML_SOURCE = (
     "main:\n"
     "  steps:\n"
     "    - init:\n"
@@ -402,18 +404,40 @@ def evaluate(src, argument):
     """Result of running `src` with `argument` (JSON text or None): the workflow's last
     top-level `return:` — a literal, or `${var}` resolved from a literal `assign` — else the
     argument echoed back. Returns (result_json_text, error_dict_or_None)."""
+    assigns, rets, raises = {}, [], []
     if src.strip().startswith("{"):
-        return json.dumps(argument if argument is None else _try_json(argument)), None
-    assigns = {}
-    for m in re.finditer(r"^\s*-\s+([A-Za-z_]\w*)\s*:\s*(.+?)\s*$", src, re.M):
-        if m.group(1) not in ("init", "done") and not m.group(2).startswith("$"):
-            assigns[m.group(1)] = _literal(m.group(2))
-    rets = re.findall(r"^\s*return\s*:\s*(.+?)\s*$", src, re.M)
-    raises = re.findall(r"^\s*raise\s*:\s*(.+?)\s*$", src, re.M)
+        def walk(o):
+            if isinstance(o, dict):
+                for k, v in o.items():
+                    if k == "assign" and isinstance(v, list):
+                        for a in v:
+                            for ak, av in (a.items() if isinstance(a, dict) else []):
+                                if not (isinstance(av, str) and av.startswith("$")):
+                                    assigns[ak] = av
+                    elif k == "return":
+                        rets.append(json.dumps(v) if not isinstance(v, str) or v.startswith("$") else json.dumps(v))
+                    elif k == "raise":
+                        raises.append(json.dumps(v))
+                    walk(v)
+            elif isinstance(o, list):
+                for x in o:
+                    walk(x)
+        try:
+            walk(json.loads(src))
+        except Exception:
+            pass
+    else:
+        for m in re.finditer(r"^\s*-\s+([A-Za-z_]\w*)\s*:\s*(.+?)\s*$", src, re.M):
+            if m.group(1) not in ("init", "done") and not m.group(2).startswith("$"):
+                assigns[m.group(1)] = _literal(m.group(2))
+        rets = re.findall(r"^\s*return\s*:\s*(.+?)\s*$", src, re.M)
+        raises = re.findall(r"^\s*raise\s*:\s*(.+?)\s*$", src, re.M)
     if raises and not rets:
         return None, {"payload": json.dumps(_literal(raises[-1])), "context": "step raise"}
     if rets:
         r = rets[-1]
+        if src.strip().startswith("{"):
+            r = _literal(r) if isinstance(_literal(r), str) else r
         m = re.match(r"^\$\{\s*([A-Za-z_]\w*)\s*\}$", r)
         if m and m.group(1) in assigns:
             return json.dumps(assigns[m.group(1)]), None
