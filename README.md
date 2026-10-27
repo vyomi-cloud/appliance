@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 16:27 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 16:37 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 47 services (AWS 16 · GCP 16 · Azure 15) of 1,068 the clouds publish
-- **Building now:** containerservice (Azure, no manifest yet checks)
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), applicationinsights (Azure), containerregistry (Azure)
+- **Building now:** nothing
+- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), applicationinsights (Azure), containerregistry (Azure), containerservice (Azure)
 - **Queued:** 47 services (P1 first, then P2)
 - **Consoles really implemented:** offline 52% · Nano 70%
 - **Hourly tests:** 73 of 76 suites passing (run 16:09 UTC)
@@ -18,7 +18,7 @@ _Updated 2026-10-27 16:27 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | 48% · 76% |
 | GCP | 16 | 0 | 8 | 12 | 41% · 65% |
-| Azure | 15 | 1 | 2 | 18 | 68% · 70% |
+| Azure | 15 | 0 | 3 | 18 | 68% · 70% |
 
 ## In progress
 
@@ -46,7 +46,7 @@ _Updated 2026-10-27 16:27 UTC · refreshes after every pipeline run_
 | Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #126](https://github.com/vyomi-cloud/appliance/pull/126)) | 18/18 | — |
 | applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🔍 In gate ([PR #129](https://github.com/vyomi-cloud/appliance/pull/129)) | 17/17 | — |
 | containerregistry [#82](https://github.com/vyomi-cloud/appliance/issues/82) | Azure | 🔍 In gate ([PR #131](https://github.com/vyomi-cloud/appliance/pull/131)) | 20/20 | — |
-| containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🛠 Building | no manifest yet | — |
+| containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🔍 In gate ([PR #132](https://github.com/vyomi-cloud/appliance/pull/132)) | 17/17 | — |
 
 ## Released services
 
@@ -748,6 +748,30 @@ _Updated 2026-10-27 16:27 UTC · refreshes after every pipeline run_
 | ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=Apache-2.0 |
 | ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=Apache-2.0 |
 | ✅ | backend image is pinned to a version (not latest) | registry:2.8.3 |
+
+</details>
+
+<details><summary>Gate checks — containerservice (Azure)</summary>
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
+| ✅ | manifest status is ready | status=ready |
+| ✅ | engine exists in core/ | core/azure_containerservice_core.py |
+| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/azure_containerservice_core.py |
+| ✅ | engine listed in wasm/build_cores.py |  |
+| ✅ | service in the Nano console catalog (wasm/fixtures) | azure-catalog.json |
+| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
+| ✅ | registry entry (pending-release or released) |  |
+| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
+| ✅ | has a offline sdk-java test bed |  |
+| ✅ | has a offline sdk-go test bed |  |
+| ✅ | has a offline cli test bed |  |
+| ✅ | has a offline ui test bed |  |
+| ✅ | has a nano ui test bed |  |
+| ✅ | upstream id tracked by the hourly upstream watcher | containerservice |
+| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process', 'reason': 'This release is control plane only (clusters, node pools, upgrades, credentials, maintenance, snap |
+| ✅ | backend is the recommended one, or the manifest says why not | recommended: k3s; chose in-process |
 
 </details>
 
