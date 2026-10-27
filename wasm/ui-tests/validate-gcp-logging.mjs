@@ -93,7 +93,7 @@ try {
     return (await page.locator(".sub-content").innerText()) || "";
   };
   check(/Cloud Storage bucket/.test(await tabText("Destination")) && /my-log-archive/.test(await tabText("Destination")), "Destination tab shows the Cloud Storage destination");
-  check(/severity>=ERROR/.test(await tabText("Inclusion filter")), "Inclusion filter tab shows the sink filter");
+  check(/severity>=WARNING/.test(await tabText("Inclusion filter")), "Inclusion filter tab shows the sink filter");
   check(/serviceAccount:/.test(await tabText("Writer identity")), "Writer identity tab shows the service account");
 
   // disable / enable from the detail header

@@ -464,10 +464,10 @@ RESOURCE_CATALOG_GCP = [
         ],
         "createFields": [
             {"name": "name",            "label": "Sink name",                 "default": "my-sink"},
-            {"name": "description",     "label": "Sink description",          "default": "Routes errors to Cloud Storage"},
+            {"name": "description",     "label": "Sink description",          "default": "Routes warnings to Cloud Storage"},
             {"name": "destinationType", "label": "Sink service (Cloud Storage bucket, BigQuery dataset, Pub/Sub topic or Cloud Logging bucket)", "default": "Cloud Storage bucket"},
             {"name": "destination",     "label": "Destination",               "default": "my-log-archive"},
-            {"name": "filter",          "label": "Inclusion filter",          "default": "severity>=ERROR"},
+            {"name": "filter",          "label": "Inclusion filter",          "default": "severity>=WARNING"},
         ],
     },
 ]
