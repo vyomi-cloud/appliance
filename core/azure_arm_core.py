@@ -166,6 +166,7 @@ class AzureArm:
             base = {"status": "Succeeded", "properties": {"provisioningState": "Succeeded"}}
             if op:
                 base.update({"id": op["id"], "name": op["name"], "startTime": op["startTime"], "endTime": op["endTime"]})
+                base.update(op.get("result") or {})
             return _ok(base)
         i = path.find("/subscriptions/")
         if i == -1:
@@ -279,7 +280,8 @@ class AzureArm:
         resp = {"status": r["status"], "headers": {}, "body": r["body"]}
         if r["lro"] and r["status"] < 300:
             resp["status"] = 200 if r["status"] == 201 else r["status"]
-            op_id = self._make_operation(r["rid"], method)
+            result = r["body"] if r["verb"] == "start" and chain[0].lower() == "jobs" else None
+            op_id = self._make_operation(r["rid"], method, result)
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or app.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
@@ -387,10 +389,12 @@ class AzureArm:
             return _ok(None, status=200)
         return _ok(body, status=200 if method in ("PUT", "PATCH", "GET") else 405)
 
-    def _make_operation(self, resource_id, method):
+    def _make_operation(self, resource_id, method, result=None):
         op_id = uuid.uuid4().hex
         now = _now()
         self._operations[op_id] = {"id": op_id, "name": op_id, "status": "Succeeded",
                                    "startTime": now, "endTime": now,
                                    "resourceId": resource_id, "method": method}
+        if result:
+            self._operations[op_id]["result"] = result
         return op_id

@@ -622,9 +622,9 @@ def _job_ops(state, rec, rest, method, payload):
         if tmpl is not None and not tmpl.get("containers"):
             tmpl = None
         ex = _execution(rec, tmpl)
-        return _ok({"name": ex["name"], "id": ex["id"]}, 202, lro=False, rid=rec["id"], verb="start")
+        return _ok({"name": ex["name"], "id": ex["id"]}, 202, lro=True, rid=rec["id"], verb="start")
     if a == "stop" and method == "POST":
-        return _ok(None, 202, verb="stop", rid=rec["id"])
+        return _ok(None, 202, lro=True, verb="stop", rid=rec["id"])
     if a == "listsecrets" and method == "POST":
         return _ok({"value": [{"name": k, "value": v} for k, v in rec["_secrets"].items()]})
     if a == "executions":
@@ -682,7 +682,7 @@ def _child_ops(rec, ctype, rest, method, payload, rid_prefix):
             pr = _merge(cur["properties"], pr)
         store[name] = {"id": cid, "name": name, "type": f"{NAMESPACE}/{rec['type'].split('/', 1)[1]}/{ctype}",
                        "properties": pr, "systemData": _sysdata()}
-        return _ok(store[name], 200 if cur else 201)
+        return _ok(store[name], 200)
     if method == "DELETE":
         had = store.pop(name, None)
         return _ok(None, 200 if had else 204)

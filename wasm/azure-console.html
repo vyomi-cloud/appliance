@@ -1090,6 +1090,7 @@ function renderGrid(svc, items){
   const stats = el("span",{class:"stats"});
   bar.append(fi, stats);
   wrap.append(bar);
+  if (svc.banner) wrap.append(el("div",{class:"sub-info",style:"margin:8px 0"}, svc.banner));
 
   const tbl = el("table"); wrap.append(tbl);
 

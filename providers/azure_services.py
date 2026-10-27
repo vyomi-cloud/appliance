@@ -336,7 +336,7 @@ RESOURCE_CATALOG: list[dict] = [
         "key": "app", "label": "Container Apps", "icon": "deployed_code",
         "namespace": "Microsoft.App", "type": "containerApps",
         "api_version": "2024-03-01", "scope": "rg",
-        "notes": "Control plane for Azure Container Apps (managed environments, apps, revisions, jobs). On the Pro/Max Docker backend each active revision runs its image as a real container; below Pro the service is control-plane only.",
+        "banner": "Control plane for Azure Container Apps (managed environments, apps, revisions, jobs). On the Pro/Max Docker backend each active revision runs its image as a real container; below Pro the service is control-plane only.",
         "children": [{"type": "revisions", "label": "Revisions", "icon": "history"}],
         "columns": [["name", "Name"], ["location", "Location"],
                     ["properties.latestRevisionName", "Latest revision"],
@@ -558,12 +558,14 @@ def _record_usage(event: str, detail: dict | None = None) -> None:
         pass
 
 
-def _make_operation(resource_id: str, method: str) -> str:
+def _make_operation(resource_id: str, method: str, result: dict | None = None) -> str:
     op_id = uuid.uuid4().hex
     now = _now()
     _operations[op_id] = {"id": op_id, "name": op_id, "status": "Succeeded",
                           "startTime": now, "endTime": now,
                           "resourceId": resource_id, "method": method}
+    if result:       # POST actions whose final (Location) response carries a body, e.g. Container Apps job start
+        _operations[op_id]["result"] = result
     return op_id
 
 
@@ -772,7 +774,8 @@ async def _handle_app(request: Request, method: str, sub: str, rg: str | None, c
         else Response(status_code=r["status"])
     if r["lro"] and r["status"] < 300:
         resp.status_code = 200 if r["status"] == 201 else r["status"]   # armappcontainers accepts 200/202 on create
-        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+        result = r["body"] if r["verb"] == "start" and chain[0].lower() == "jobs" else None
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method, result), api_version).items():
             resp.headers[hk] = hv
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete", "start", "stop") and r["rid"]:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.App/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
@@ -1013,6 +1016,8 @@ def catalog_for_console() -> list[dict]:
             "columns": c["columns"], "createFields": c["create_fields"],
             "children": c.get("children", []),
         }
+        if c.get("banner"):
+            entry["banner"] = c["banner"]
         if c["key"] in WIZARDS:
             entry["wizard"] = WIZARDS[c["key"]]
         if c["key"] in SUB_BLADES:
@@ -1185,9 +1190,10 @@ def register(app, _h=None) -> None:
         if not op:
             # Unknown ops are treated as already-completed (idempotent poll).
             return {"status": "Succeeded"}
-        return {"id": op["id"], "name": op["name"], "status": op["status"],
-                "startTime": op["startTime"], "endTime": op["endTime"],
-                "properties": {"provisioningState": op["status"]}}
+        doc = {"id": op["id"], "name": op["name"], "status": op["status"],
+               "startTime": op["startTime"], "endTime": op["endTime"],
+               "properties": {"provisioningState": op["status"]}}
+        return {**doc, **op["result"]} if op.get("result") else doc
 
     # v2.4.0: when the unified wire ingress is on, RETIRE the bespoke Azure native
     # wire — the data plane (azure_dataplane: Blob/Queue/Cosmos) AND the ARM control
