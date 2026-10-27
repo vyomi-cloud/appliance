@@ -1073,7 +1073,7 @@ async function renderList(main){
         return av.localeCompare(bv) * state.sortDir;
       });
     }
-    document.getElementById("countChip").textContent = `(${filtered.length})`;
+    const _cc = document.getElementById("countChip"); if (_cc) _cc.textContent = `(${filtered.length})`;
     statsSpan.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;
@@ -1371,7 +1371,7 @@ async function renderChildList(main){
     if (q) filtered = filtered.filter(it => spec.columns.some(c => {
       const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
     }));
-    document.getElementById("childCountChip").textContent = `(${filtered.length})`;
+    { const _c = document.getElementById("childCountChip"); if (_c) _c.textContent = `(${filtered.length})`; }
     statsSpan.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;
@@ -1470,7 +1470,7 @@ async function renderCrudStub(main, svc, fullKey, schema){
     if (q) f = f.filter(it => schema.columns.some(c => {
       const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
     }));
-    document.getElementById("stubCountChip").textContent = `(${f.length})`;
+    { const _c = document.getElementById("stubCountChip"); if (_c) _c.textContent = `(${f.length})`; }
     statsSpan.textContent = f.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${f.length} of ${items.length} match`;
