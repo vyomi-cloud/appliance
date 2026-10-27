@@ -744,7 +744,7 @@ async function renderList(main){
                      : svc.key === "iam" ? "Create service account"
                      : svc.key === "cloudscheduler" ? "Create job"
                      : svc.key === "container" ? "Create cluster"
-                     : svc.key === "iamcredentials" ? "Issue credential"
+                     : svc.key === "iamcredentials" ? "Create credential"
                      : "Create";
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
     icon("add"), primaryLabel));

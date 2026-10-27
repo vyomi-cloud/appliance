@@ -298,7 +298,14 @@ def _iamc_op(operation, name, body):
             acct, _, rest = sa.partition("@")
             _call("iam", "POST", "/v1/projects/%s/serviceAccounts" % rest.split(".")[0], {}, {"accountId": acct})
         try:
-            return {"ok": True, **_iamc.issue_from_form(store, body, _iamc_resolve)}
+            out = {"ok": True, **_iamc.issue_from_form(store, body, _iamc_resolve)}
+            try:   # the Metrics tab reads events by credential id (the dispatcher logs under the account)
+                from core import nano_events
+                nano_events.record(provider="gcp", service="iamcredentials", resource=str(out.get("id") or ""),
+                                   action="Create", status="ok", detail="gcp/iamcredentials: Create %s" % out.get("id"))
+            except Exception:
+                pass
+            return out
         except _iamc._E as e:
             return {"ok": False, "code": e.gcp_status, "message": e.message, "name": body.get("serviceAccount")}
     rec = store.issued.get(name)
