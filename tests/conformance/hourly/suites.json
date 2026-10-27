@@ -76,6 +76,11 @@
     {"id": "offline-sdk-go-gcp-redis", "target": "offline", "cloud": "gcp", "kind": "sdk-go", "cwd": "tests/conformance/gcp-sdk-go-redis", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-gcp-redis", "target": "offline", "cloud": "gcp", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-redis-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-gcp-redis", "target": "offline", "cloud": "gcp", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-redis.mjs", "timeout": 600},
-    {"id": "nano-ui-gcp-redis", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-redis.mjs", "timeout": 600}
+    {"id": "nano-ui-gcp-redis", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-redis.mjs", "timeout": 600},
+    {"id": "offline-sdk-java-azure-app", "target": "offline", "cloud": "azure", "kind": "sdk-java", "cwd": "tests/conformance/azure-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=cloudlearn.ContainerAppsConformance", "timeout": 900},
+    {"id": "offline-sdk-go-azure-app", "target": "offline", "cloud": "azure", "kind": "sdk-go", "cwd": "tests/conformance/azure-sdk-go-app", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-azure-app", "target": "offline", "cloud": "azure", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-app-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-azure-app", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-app.mjs", "timeout": 600},
+    {"id": "nano-ui-azure-app", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-app.mjs", "timeout": 600}
   ]
 }

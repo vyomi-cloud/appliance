@@ -333,6 +333,49 @@ RESOURCE_CATALOG: list[dict] = [
         "endpoints": {"properties.vaultUri": "/azure-data/keyvault/__NAME__/"},
     },
     {
+        "key": "app", "label": "Container Apps", "icon": "deployed_code",
+        "namespace": "Microsoft.App", "type": "containerApps",
+        "api_version": "2024-03-01", "scope": "rg",
+        "banner": "Control plane for Azure Container Apps (managed environments, apps, revisions, jobs). On the Pro/Max Docker backend each active revision runs its image as a real container; below Pro the service is control-plane only.",
+        "children": [{"type": "revisions", "label": "Revisions", "icon": "history"}],
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["properties.latestRevisionName", "Latest revision"],
+                    ["properties.latestRevisionFqdn", "Application URL"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [
+            {"name": "name", "label": "Container app name", "default": "ca-cloudlearn"},
+            {"name": "properties.template.containers.0.image", "label": "Container image",
+             "default": "mcr.microsoft.com/k8se/quickstart:latest"},
+            {"name": "properties.configuration.ingress.targetPort", "label": "Ingress target port", "type": "number", "default": 80},
+            {"name": "properties.configuration.ingress.external", "label": "Ingress traffic",
+             "type": "select", "options": ["true", "false"], "default": "true"},
+            {"name": "properties.template.scale.minReplicas", "label": "Min replicas", "type": "number", "default": 1},
+            {"name": "properties.template.scale.maxReplicas", "label": "Max replicas", "type": "number", "default": 10},
+        ],
+        "defaults": {
+            "kind": "containerapps",
+            "properties": {"provisioningState": "Succeeded", "runningStatus": "Running"},
+        },
+    },
+    {
+        "key": "appenv", "label": "Container Apps Environments", "icon": "cloud_circle", "hidden": True,
+        "namespace": "Microsoft.App", "type": "managedEnvironments",
+        "api_version": "2024-03-01", "scope": "rg",
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["properties.defaultDomain", "Default domain"], ["properties.provisioningState", "Status"]],
+        "create_fields": [{"name": "name", "label": "Environment name", "default": "cae-cloudlearn"}],
+        "defaults": {"kind": "Managed", "properties": {"provisioningState": "Succeeded"}},
+    },
+    {
+        "key": "appjob", "label": "Container Apps Jobs", "icon": "work", "hidden": True,
+        "namespace": "Microsoft.App", "type": "jobs",
+        "api_version": "2024-03-01", "scope": "rg",
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["properties.configuration.triggerType", "Trigger type"], ["properties.provisioningState", "Status"]],
+        "create_fields": [{"name": "name", "label": "Job name", "default": "job-cloudlearn"}],
+        "defaults": {"properties": {"provisioningState": "Succeeded"}},
+    },
+    {
         "key": "role_definition",
         "label": "Role Definition",
         "icon": "admin_panel_settings",
@@ -515,12 +558,14 @@ def _record_usage(event: str, detail: dict | None = None) -> None:
         pass
 
 
-def _make_operation(resource_id: str, method: str) -> str:
+def _make_operation(resource_id: str, method: str, result: dict | None = None) -> str:
     op_id = uuid.uuid4().hex
     now = _now()
     _operations[op_id] = {"id": op_id, "name": op_id, "status": "Succeeded",
                           "startTime": now, "endTime": now,
                           "resourceId": resource_id, "method": method}
+    if result:       # POST actions whose final (Location) response carries a body, e.g. Container Apps job start
+        _operations[op_id]["result"] = result
     return op_id
 
 
@@ -603,6 +648,11 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         return _error(404, "ResourceTypeNotSupported",
                       f"Type '{namespace}/{type_chain[1]}' is not simulated. "
                       f"Supported: {', '.join(sorted(c['namespace']+'/'+c['type'] for c in RESOURCE_CATALOG))}.")
+
+    # Microsoft.App (Container Apps): a dedicated engine (core/azure_app_core.py) owns the
+    # environment/app/revision/job semantics; the ARM store below is its resource map.
+    if namespace.lower() == "microsoft.app":
+        return await _handle_app(request, method, sub, rg, chain, names, base)
 
     # POST action verbs (listKeys, regenerateKey, listConnectionStrings, …):
     # the trailing type segment is the action, names[-1] the target resource.
@@ -712,6 +762,25 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         # exercises real LRO polling.
         return Response(status_code=200 if rec is not None else 204)
     return _error(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+async def _handle_app(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                      names: list[str], base: str) -> JSONResponse:
+    from core import azure_app_core as _app
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _app.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params))
+    api_version = request.query_params.get("api-version") or _app.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["lro"] and r["status"] < 300:
+        resp.status_code = 200 if r["status"] == 201 else r["status"]   # armappcontainers accepts 200/202 on create
+        result = r["body"] if r["verb"] == "start" and chain[0].lower() == "jobs" else None
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method, result), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete", "start", "stop") and r["rid"]:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.App/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
 
 
 def _provider_info(namespace: str) -> dict:
@@ -938,6 +1007,8 @@ def catalog_for_console() -> list[dict]:
     from core.azure_subblades import SUB_BLADES
     out = []
     for c in RESOURCE_CATALOG:
+        if c.get("hidden"):          # ARM-addressable helper types (e.g. Container Apps environments)
+            continue
         entry = {
             "key": c["key"], "label": c["label"], "icon": c["icon"],
             "namespace": c["namespace"], "type": c["type"],
@@ -945,6 +1016,8 @@ def catalog_for_console() -> list[dict]:
             "columns": c["columns"], "createFields": c["create_fields"],
             "children": c.get("children", []),
         }
+        if c.get("banner"):
+            entry["banner"] = c["banner"]
         if c["key"] in WIZARDS:
             entry["wizard"] = WIZARDS[c["key"]]
         if c["key"] in SUB_BLADES:
@@ -1117,9 +1190,10 @@ def register(app, _h=None) -> None:
         if not op:
             # Unknown ops are treated as already-completed (idempotent poll).
             return {"status": "Succeeded"}
-        return {"id": op["id"], "name": op["name"], "status": op["status"],
-                "startTime": op["startTime"], "endTime": op["endTime"],
-                "properties": {"provisioningState": op["status"]}}
+        doc = {"id": op["id"], "name": op["name"], "status": op["status"],
+               "startTime": op["startTime"], "endTime": op["endTime"],
+               "properties": {"provisioningState": op["status"]}}
+        return {**doc, **op["result"]} if op.get("result") else doc
 
     # v2.4.0: when the unified wire ingress is on, RETIRE the bespoke Azure native
     # wire — the data plane (azure_dataplane: Blob/Queue/Cosmos) AND the ARM control

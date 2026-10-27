@@ -23175,6 +23175,13 @@ try:
 except Exception as _e:   # never let this break appliance boot
     print(f"[container] routes skipped: {_e}")
 
+# Azure Container Apps: run each active revision on the Docker compute backend (Pro/Max); control plane only below.
+try:
+    from providers import azure_app_runtime as _azure_app_runtime
+    _azure_app_runtime.attach()
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-app] runtime skipped: {_e}")
+
 # Memorystore for Redis: native /v1/projects/*/locations/*/instances wire + console REST (/api/gcp/redis/*).
 try:
     from providers import gcp_redis_console as _redis_console
