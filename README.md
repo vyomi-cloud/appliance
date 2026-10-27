@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 14:31 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 14:36 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -44,7 +44,7 @@ _Updated 2026-10-27 14:31 UTC · refreshes after every pipeline run_
 | Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🔍 In gate ([PR #125](https://github.com/vyomi-cloud/appliance/pull/125)) | 19/19 | — |
 | Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | — |
 | Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #126](https://github.com/vyomi-cloud/appliance/pull/126)) | 18/18 | — |
-| app [#78](https://github.com/vyomi-cloud/appliance/issues/78) | Azure | 🔍 In gate ([PR #127](https://github.com/vyomi-cloud/appliance/pull/127)) | 18/18 | — |
+| app [#78](https://github.com/vyomi-cloud/appliance/issues/78) | Azure | 🚀 Releasing | 18/18 | — |
 
 ## Released services
 
