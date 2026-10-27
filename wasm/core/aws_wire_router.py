@@ -50,6 +50,7 @@ from core import iam_core as iam
 from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
 from core import sns_core as sns
+from core import sesv2_core as sesv2
 from core import rds_data_core as rds_data
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
 from core import gcp_firestore_core as gcp_fs
@@ -147,6 +148,7 @@ _CRED_RE = re.compile(r"Credential=[^/]+/[^/]+/[^/]+/([^/,]+)/aws4_request")
 _SIGNING = {
     "dynamodb": "dynamodb", "kms": "kms", "secretsmanager": "secretsmanager",
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
+    "ses": "sesv2",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
     "events": "events", "lambda": "lambda", "ec2": "vpc",
 }
@@ -235,6 +237,7 @@ class AwsWireRouter:
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
+        self.sesv2 = s.get("sesv2") or sesv2.SesV2Store()
 
     def _servicebus_service(self, method, path, lheaders):
         """Azure Service Bus (topics) — the pub/sub-fan-out peer of SNS/Pub-Sub.
@@ -269,6 +272,8 @@ class AwsWireRouter:
             return az
         if self._servicebus_service(method, path, lheaders):
             return "az-servicebus"
+        if sesv2.is_sesv2_path(path):         # SES v2 REST-JSON (/v2/email/…)
+            return "sesv2"
         if "/2015-03-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
             return "lambda"
         if "/restapis" in path:               # API Gateway v1 control plane
@@ -367,6 +372,12 @@ class AwsWireRouter:
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "sesv2":   # native SES v2 REST-JSON (identities, templates, sending)
+            r = sesv2.dispatch(self.sesv2, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            hdrs.setdefault("content-type", r.media_type)
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc == "apigateway":   # native API Gateway v1 control plane (/restapis)

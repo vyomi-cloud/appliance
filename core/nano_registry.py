@@ -27,6 +27,7 @@ from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
 from core.nano_events import EventStore
+from core.sesv2_core import SesV2Store
 
 _REG: dict | None = None
 
@@ -46,6 +47,7 @@ def get() -> dict:
             "rds": InMemorySqlStore(),
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
+            "sesv2": SesV2Store(),             # SES v2 identities / templates / sent mailbox (control plane)
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),

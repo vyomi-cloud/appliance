@@ -50,6 +50,7 @@ CORES = [
     "eventbridge_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
+    "sesv2_core.py",                                # AWS: SES v2 identities / templates / sending — native REST-JSON wire + console REST
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)
     "persistent_store.py",                          # v2.4.0: file-backed (sqlite) substrate — the anti-drift gate
     "aws_wire_router.py",                            # native-wire front door (relay/bridge)
@@ -59,6 +60,9 @@ CORES = [
     "nano_registry.py",                             # shared in-context store registry (console adapter + relay router draw from ONE set)
     "nano_persist.py",                              # store serialize/restore + cross-context sync (persistence + console↔SDK parity)
 ]
+
+# Cores vendored as an exact copy (no generated-file header).
+VERBATIM = {"sesv2_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
@@ -128,7 +132,9 @@ def main():
         with open(os.path.join(SRC, name)) as f:
             src = f.read()
         with open(os.path.join(OUT, name), "w") as f:
-            f.write(HEADER + src)
+            # New services are vendored byte-identical (the service gate compares
+            # core/ and wasm/core/ verbatim); legacy cores keep the generated header.
+            f.write(src if name in VERBATIM else HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
     check_relay_cores()   # fail loudly if a relay loader lags the cores
 

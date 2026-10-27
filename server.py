@@ -180,12 +180,12 @@ register_azure_routes(app, None)
 # ── Route module registration ────────────────────────────────────────
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
-from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb
+from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_sesv2
 from routes import lazy_backends, shared, console_next
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
-            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb,
+            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_sesv2,
             lazy_backends, shared, console_next]:
     mod.register(app)
 
@@ -2535,6 +2535,12 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for queue_name, queue in aws_sqs.get("queues", {}).items():
         if isinstance(queue, dict):
             add("aws", "sqs", "queue", queue_name, queue)
+
+    aws_ses = _cloudsim_service_state(space, "sesv2")
+    for ident_name, ident in aws_ses.get("identities", {}).items():
+        if isinstance(ident, dict):
+            add("aws", "sesv2", "identity", ident_name,
+                {**ident, "name": ident_name, "state": "active", "created": ident.get("created", "")})
 
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():

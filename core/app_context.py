@@ -991,6 +991,7 @@ apigw_state = _SpaceScopedDictProxy("apigateway", lambda: {"apis": {}, "logs": [
 lambda_state = _SpaceScopedDictProxy("lambda", lambda: {"functions": {}, "events": [], "invocations": []})
 sqs_state = _SpaceScopedDictProxy("sqs", lambda: {"queues": {}, "events": []})
 ddb_state = _SpaceScopedDictProxy("dynamodb", lambda: {"tables": {}, "events": []})
+sesv2_state = _SpaceScopedDictProxy("sesv2", lambda: {"identities": {}, "config_sets": {}, "templates": {}, "contact_lists": {}, "suppression": {}, "ip_pools": {}, "tenants": {}, "tags": {}, "messages": [], "account": {}})
 
 runtime_state = STATE.setdefault(
     "runtime",
