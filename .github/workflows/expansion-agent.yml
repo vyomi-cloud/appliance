@@ -111,7 +111,7 @@ jobs:
       - name: Install test tooling
         if: steps.pick.outputs.issue
         run: |
-          pip install --quiet requests pytest boto3 azure-storage-blob
+          pip install --quiet requests pytest boto3 azure-storage-blob pyyaml
           mkdir -p .ci-node && cd .ci-node
           echo '{"name":"vyomi-ci-node","private":true}' > package.json
           npm install --silent playwright@1.47.2 ws@8.18.0
