@@ -89,3 +89,4 @@
 | 2026-10-27T16:06Z | #82 | azure/containerregistry | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40534843416) |
 | 2026-10-27T16:36Z | #83 | azure/containerservice | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40537974307) |
 | 2026-10-27T17:04Z | #84 | azure/dns | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40542877673) |
+| 2026-10-27T17:12Z | #83 | azure/containerservice | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40547419515) |
