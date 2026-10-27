@@ -1126,7 +1126,7 @@ def _rec_summary(r: dict) -> dict:
     policy = ("Weighted" if "Weight" in r else "Latency" if "Region" in r else "Failover" if "Failover" in r
               else "Geolocation" if "GeoLocation" in r else "Multivalue answer" if r.get("MultiValueAnswer") else "Simple")
     return {"name": out_name(r["Name"]), "type": r["Type"], "routing_policy": policy, "alias": alias,
-            "value": value, "ttl": ttl, "set_identifier": r.get("SetIdentifier") or "None"}
+            "value": value, "ttl": ttl, "set_identifier": r.get("SetIdentifier") or "No identifier"}
 
 
 def console_zone(store, z: dict) -> dict:
@@ -1134,7 +1134,7 @@ def console_zone(store, z: dict) -> dict:
         "zone_id": z["Id"], "name": out_name(z["Name"]), "type": "Private hosted zone" if z["PrivateZone"] else "Public hosted zone",
         "created_by": "Route 53", "record_count": len(z["records"]), "comment": z.get("Comment") or "No description",
         "name_servers": ", ".join(n.rstrip(".") for n in z["NameServers"]), "created": z["created"],
-        "vpcs": ", ".join(v["VPCId"] for v in z["VPCs"]) or "None",
+        "vpcs": ", ".join(v["VPCId"] for v in z["VPCs"]) or "No VPC association",
         "arn": f"arn:aws:route53:::hostedzone/{z['Id']}",
         "tags": dict(store.tags.get(f"hostedzone/{z['Id']}", {})),
         "records": [_rec_summary(r) for r in _sorted_records(z)],
@@ -1226,9 +1226,9 @@ def console_record_delete(store, key: str, name: str, rtype: str) -> dict:
 def _hc_summary(store, h: dict) -> dict:
     c = h["Config"]
     target = c.get("IPAddress") or c.get("FullyQualifiedDomainName") or "Calculated"
-    return {"name": h["Id"], "type": c["Type"], "target": target, "port": str(c.get("Port", "N/A")),
-            "path": c.get("ResourcePath", "N/A"), "status": "Disabled" if c.get("Disabled") else "Healthy",
-            "interval": f"{c['RequestInterval']}s" if "RequestInterval" in c else "N/A", "created": h["created"]}
+    return {"name": h["Id"], "type": c["Type"], "target": target, "port": str(c.get("Port", "Not applicable")),
+            "path": c.get("ResourcePath", "Not applicable"), "status": "Disabled" if c.get("Disabled") else "Healthy",
+            "interval": f"{c['RequestInterval']}s" if "RequestInterval" in c else "Not applicable", "created": h["created"]}
 
 
 def console_children(store, kind: str) -> dict:

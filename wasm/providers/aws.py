@@ -107,6 +107,17 @@ class Aws(CloudProvider):
             ("extras", "Delete"):    lambda b, a, p: D.extras_delete(p),
             ("extras", "ConfigGet"): lambda b, a, p: D.extras_config_get(p),
             ("extras", "ConfigPut"): lambda b, a, p: D.extras_config_put(p),
+            # Route 53 — hosted zones, records, health checks (core/route53_core.py)
+            ("route53", "ListHostedZones"):  lambda b, a, p: D.r53_list(p),
+            ("route53", "CreateHostedZone"): lambda b, a, p: D.r53_create(p),
+            ("route53", "GetHostedZone"):    lambda b, a, p: D.r53_get(p),
+            ("route53", "DeleteHostedZone"): lambda b, a, p: D.r53_delete(p),
+            ("route53", "SetTags"):          lambda b, a, p: D.r53_tags(p),
+            ("route53", "UpsertRecord"):     lambda b, a, p: D.r53_record_upsert(p),
+            ("route53", "DeleteRecord"):     lambda b, a, p: D.r53_record_delete(p),
+            ("route53", "ListChildren"):     lambda b, a, p: D.r53_children(p),
+            ("route53", "CreateChild"):      lambda b, a, p: D.r53_child_create(p),
+            ("route53", "DeleteChild"):      lambda b, a, p: D.r53_child_delete(p),
             # EventBridge — rules → SQS delivery, via core/eventbridge_core.py
             ("eventbridge", "ListRules"): lambda b, a, p: D.eb_list(p),
             ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),

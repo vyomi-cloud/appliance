@@ -598,6 +598,51 @@ RESOURCE_CATALOG_AWS = [
         ],
         "endpoints": {},
     },
+    # ========================================================================
+    # Amazon Route 53 — hosted zones + records, health checks.
+    # Engine: core/route53_core.py (native REST-XML wire + this console REST);
+    # records resolve through the shared CoreDNS container offline.
+    # ========================================================================
+    {
+        "key": "route53", "label": "Route 53", "icon": "dns",
+        "namespace": "AWS/Route53", "service": "route53",
+        "collection_path": "/api/aws/route53/hosted-zones",
+        "resource_path":   "/api/aws/route53/hosted-zones/{name}",
+        "name_field":      "zone_id",
+        "create_method":   "POST",
+        "api_paths": {
+            "hostedZones":  {"method": "GET",  "path": "/api/aws/route53/hosted-zones"},
+            "healthChecks": {"method": "GET",  "path": "/api/aws/route53/health-checks"},
+            "records":      {"method": "POST", "path": "/api/aws/route53/hosted-zones/{name}/records"},
+            "delete":       {"method": "DELETE", "path": "/api/aws/route53/hosted-zones/{name}"},
+        },
+        "rail_items": [
+            {"key": "hosted-zones", "label": "Hosted zones", "icon": "dns", "type": "primary"},
+            {"group": "Monitoring"},
+            {"key": "health-checks", "label": "Health checks", "icon": "monitor_heart",
+                "type": "child", "child_key": "health-checks"},
+            {"key": "delegation-sets", "label": "Reusable delegation sets", "icon": "lan",
+                "type": "child", "child_key": "delegation-sets"},
+        ],
+        "children": [
+            {"type": "health-checks", "label": "Health checks", "icon": "monitor_heart"},
+            {"type": "delegation-sets", "label": "Reusable delegation sets", "icon": "lan"},
+        ],
+        "columns": [
+            ["name",         "Hosted zone name"],
+            ["type",         "Type"],
+            ["created_by",   "Created by"],
+            ["record_count", "Record count"],
+            ["comment",      "Description"],
+            ["zone_id",      "Hosted zone ID"],
+        ],
+        "createFields": [
+            {"name": "name",    "label": "Domain name", "default": "demo.example.com"},
+            {"name": "comment", "label": "Description", "default": "Managed by Vyomi"},
+            {"name": "type",    "label": "Type (public, private)", "default": "public"},
+        ],
+        "endpoints": {},
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_AWS}

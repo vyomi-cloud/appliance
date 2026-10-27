@@ -180,12 +180,12 @@ register_azure_routes(app, None)
 # ── Route module registration ────────────────────────────────────────
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
-from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb
+from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_route53
 from routes import lazy_backends, shared, console_next
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
-            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb,
+            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_route53,
             lazy_backends, shared, console_next]:
     mod.register(app)
 
@@ -2535,6 +2535,15 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for queue_name, queue in aws_sqs.get("queues", {}).items():
         if isinstance(queue, dict):
             add("aws", "sqs", "queue", queue_name, queue)
+
+    aws_r53 = _cloudsim_service_state(space, "route53")
+    for zone_id, zone in aws_r53.get("hosted_zones", {}).items():
+        if isinstance(zone, dict):
+            add("aws", "route53", "hosted_zone", zone.get("Name", zone_id).rstrip("."),
+                {**zone, "name": zone.get("Name", zone_id).rstrip("."), "state": "active", "created": zone.get("created", "")})
+    for hc_id, hc in aws_r53.get("health_checks", {}).items():
+        if isinstance(hc, dict):
+            add("aws", "route53", "health_check", hc_id, {**hc, "name": hc_id, "state": "active", "created": hc.get("created", "")})
 
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():

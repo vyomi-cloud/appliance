@@ -18,6 +18,7 @@ import json
 import types
 
 from core import lambda_core, apigateway_core, vpc_core, eventbridge_core
+from core import route53_core
 from core import azure_servicebus_core, azure_sql_core, azure_iam_core
 from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
 
@@ -394,3 +395,59 @@ def extras_config_get(p):
 def extras_config_put(p):
     _EXTRAS_CFG[p.get("key", "")] = _extras_vals(p)
     return {"ok": True}
+
+
+# ── Route 53 (core/route53_core.py) — shared store with the native wire ─────
+def _r53_store():
+    from core import nano_registry
+    return nano_registry.get()["route53"]
+
+
+def _r53_call(fn, *a):
+    try:
+        out = fn(_r53_store(), *a)
+        _r53_store().persist()
+        return out
+    except route53_core.Route53Error as e:
+        return {"ok": False, "code": e.code, "message": e.message}
+
+
+def r53_list(p=None):
+    return _r53_call(route53_core.console_list)
+
+
+def r53_create(p):
+    return _r53_call(route53_core.console_create, dict(p or {}))
+
+
+def r53_get(p):
+    return _r53_call(route53_core.console_get, str(p.get("name") or ""))
+
+
+def r53_delete(p):
+    return _r53_call(route53_core.console_delete, str(p.get("name") or ""))
+
+
+def r53_tags(p):
+    return _r53_call(route53_core.console_set_tags, str(p.get("name") or ""), p.get("tags") or {})
+
+
+def r53_record_upsert(p):
+    return _r53_call(route53_core.console_record_upsert, str(p.get("name") or ""), dict(p))
+
+
+def r53_record_delete(p):
+    return _r53_call(route53_core.console_record_delete, str(p.get("name") or ""),
+                     str(p.get("record") or ""), str(p.get("rtype") or "A"))
+
+
+def r53_children(p):
+    return _r53_call(route53_core.console_children, str(p.get("kind") or ""))
+
+
+def r53_child_create(p):
+    return _r53_call(route53_core.console_child_create, str(p.get("kind") or ""), dict(p))
+
+
+def r53_child_delete(p):
+    return _r53_call(route53_core.console_child_delete, str(p.get("kind") or ""), str(p.get("name") or ""))

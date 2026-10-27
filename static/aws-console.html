@@ -710,7 +710,7 @@ function renderRail(){
       ["Storage", ["s3"]],
       ["Databases", ["rds", "dynamodb"]],
       ["Application Integration", ["sqs", "apigateway", "eventbridge"]],
-      ["Networking & Content Delivery", ["vpc"]],
+      ["Networking & Content Delivery", ["vpc", "route53"]],
       ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
     ];
     groups.forEach(([label, keys]) => {
@@ -1282,6 +1282,13 @@ function childSpec(svc, childType){
       "amis": {key:"amis", label:"AMIs", absolutePath:"/api/ec2/amis", arrayKey:"amis",
         columns: [["image_id","AMI ID"],["name","Name"],["state","State"],
                   ["architecture","Architecture"],["platform","Platform"]]},
+    },
+    route53: {
+      "health-checks": {label:"Health checks", absolutePath:"/api/aws/route53/health-checks", arrayKey:"items",
+        columns: [["name","Health check ID"],["type","Type"],["target","Monitored endpoint"],["port","Port"],
+                  ["path","Path"],["status","Status"],["interval","Request interval"],["created","Created"]]},
+      "delegation-sets": {label:"Reusable delegation sets", absolutePath:"/api/aws/route53/delegation-sets", arrayKey:"items",
+        columns: [["name","Delegation set ID"],["caller_reference","Caller reference"],["name_servers","Name servers"],["zones","Hosted zones"]]},
     },
     iam: {
       "iam-groups":    {label:"User groups",      absolutePath:"/api/iam/groups",    arrayKey:"groups",
@@ -3150,6 +3157,27 @@ SUB_RENDERERS.dynamoquery = function(svc, full, host){
 };
 
 // RDS
+SUB_RENDERERS.r53records = function(svc, full, host){
+  const recs = full.records || [];
+  const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:8px"});
+  bar.append(el("button",{class:"btn",onclick:async()=>{
+    const nm = prompt("Record name", "www." + String(full.name||"").replace(/\.$/, ""));
+    if (!nm) return;
+    const ty = prompt("Record type", "A") || "A";
+    const val = prompt("Value", "192.0.2.10");
+    if (!val) return;
+    const r = await api("POST", fillPath(svc.api_paths.records.path, {name: full.zone_id}), {name:nm, type:ty, ttl:300, values:val});
+    if (r.ok) { toast("Record saved"); renderDetail(host.parentElement); } else toast("Create record failed ("+r.status+")", "err");
+  }}, icon("add"), "Create record"));
+  host.append(bar);
+  const tbl = el("table",{class:"aws"});
+  tbl.append(el("tr",{}, el("th",{}, "Record name"), el("th",{}, "Type"), el("th",{}, "Routing policy"),
+    el("th",{}, "Alias"), el("th",{}, "Value/Route traffic to"), el("th",{}, "TTL (seconds)"), el("th",{}, "Record ID")));
+  recs.forEach(r => tbl.append(el("tr",{},
+    el("td",{}, el("a",{class:"id"}, r.name)), el("td",{}, r.type), el("td",{}, r.routing_policy),
+    el("td",{}, r.alias), el("td",{class:"mono"}, r.value), el("td",{}, r.ttl), el("td",{}, r.set_identifier))));
+  host.append(tbl);
+};
 SUB_RENDERERS.rdsendpoints = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Endpoint & port"));

@@ -738,7 +738,7 @@ function renderRail(){
       ["Storage", ["s3"]],
       ["Databases", ["rds", "dynamodb"]],
       ["Application Integration", ["sqs", "apigateway", "eventbridge"]],
-      ["Networking & Content Delivery", ["vpc"]],
+      ["Networking & Content Delivery", ["vpc", "route53"]],
       ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
     ];
     groups.forEach(([label, keys]) => {
@@ -905,7 +905,7 @@ function renderHome(main){
   //    priced with rates that mirror core/cost_model. Simulator cost = $0, so every
   //    dollar of real-AWS cost for what you've spun up is a dollar saved.
   const _NANO_RATE = {
-    s3:0.50, dynamodb:1.25, kms:1.00, secretsmanager:0.40, sqs:0.40, iam:0, rds:25.55, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0,
+    s3:0.50, dynamodb:1.25, kms:1.00, secretsmanager:0.40, sqs:0.40, iam:0, rds:25.55, route53:0.50, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0,
     compute:24.53, storage:0.50, cloudsql:25.00, pubsub:0.40, firestore:0.18, functions:0.20, secretmanager:0.18,
     'microsoft.compute/virtualmachines':30.37, 'microsoft.sql/servers':4.99, 'microsoft.storage/storageaccounts':0.50,
     'microsoft.documentdb/databaseaccounts':24.48, 'microsoft.web/sites':0.20, 'microsoft.servicebus/namespaces':9.81, 'microsoft.keyvault/vaults':0.03
@@ -915,7 +915,7 @@ function renderHome(main){
   }
   // Friendly service label for a by_service census key.
   function nanoSvcLabel(k){
-    var M={s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",
+    var M={route53:"Route 53",s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",
       compute:"Compute Engine",storage:"Cloud Storage",cloudsql:"Cloud SQL",pubsub:"Pub/Sub",firestore:"Firestore",functions:"Cloud Functions",secretmanager:"Secret Manager"};
     if (M[k]) return M[k];
     var s=String(k||""), i=s.lastIndexOf("/"); if(i>=0) s=s.slice(i+1); return s.charAt(0).toUpperCase()+s.slice(1);
@@ -1350,6 +1350,13 @@ function childSpec(svc, childType){
       "amis": {key:"amis", label:"AMIs", absolutePath:"/api/ec2/amis", arrayKey:"amis",
         columns: [["image_id","AMI ID"],["name","Name"],["state","State"],
                   ["architecture","Architecture"],["platform","Platform"]]},
+    },
+    route53: {
+      "health-checks": {label:"Health checks", absolutePath:"/api/aws/route53/health-checks", arrayKey:"items",
+        columns: [["name","Health check ID"],["type","Type"],["target","Monitored endpoint"],["port","Port"],
+                  ["path","Path"],["status","Status"],["interval","Request interval"],["created","Created"]]},
+      "delegation-sets": {label:"Reusable delegation sets", absolutePath:"/api/aws/route53/delegation-sets", arrayKey:"items",
+        columns: [["name","Delegation set ID"],["caller_reference","Caller reference"],["name_servers","Name servers"],["zones","Hosted zones"]]},
     },
     iam: {
       "iam-groups":    {label:"User groups",      absolutePath:"/api/iam/groups",    arrayKey:"groups",
@@ -3267,6 +3274,27 @@ SUB_RENDERERS.dynamoquery = function(svc, full, host){
 };
 
 // RDS
+SUB_RENDERERS.r53records = function(svc, full, host){
+  const recs = full.records || [];
+  const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:8px"});
+  bar.append(el("button",{class:"btn",onclick:async()=>{
+    const nm = prompt("Record name", "www." + String(full.name||"").replace(/\.$/, ""));
+    if (!nm) return;
+    const ty = prompt("Record type", "A") || "A";
+    const val = prompt("Value", "192.0.2.10");
+    if (!val) return;
+    const r = await api("POST", fillPath(svc.api_paths.records.path, {name: full.zone_id}), {name:nm, type:ty, ttl:300, values:val});
+    if (r.ok) { toast("Record saved"); renderDetail(host.parentElement); } else toast("Create record failed ("+r.status+")", "err");
+  }}, icon("add"), "Create record"));
+  host.append(bar);
+  const tbl = el("table",{class:"aws"});
+  tbl.append(el("tr",{}, el("th",{}, "Record name"), el("th",{}, "Type"), el("th",{}, "Routing policy"),
+    el("th",{}, "Alias"), el("th",{}, "Value/Route traffic to"), el("th",{}, "TTL (seconds)"), el("th",{}, "Record ID")));
+  recs.forEach(r => tbl.append(el("tr",{},
+    el("td",{}, el("a",{class:"id"}, r.name)), el("td",{}, r.type), el("td",{}, r.routing_policy),
+    el("td",{}, r.alias), el("td",{class:"mono"}, r.value), el("td",{}, r.ttl), el("td",{}, r.set_identifier))));
+  host.append(tbl);
+};
 SUB_RENDERERS.rdsendpoints = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Endpoint & port"));

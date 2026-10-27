@@ -30,6 +30,7 @@ from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
 from core.azure_arm_core import AzureArm
 from core.nano_events import EventStore
+from core.route53_core import Route53Store
 
 _REG: dict | None = None
 
@@ -68,6 +69,7 @@ def get() -> dict:
             "rds": InMemorySqlStore(),
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
+            "route53": Route53Store(),         # Route 53 hosted zones / records / health checks (control plane)
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),
