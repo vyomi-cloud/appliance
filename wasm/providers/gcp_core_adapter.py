@@ -29,6 +29,7 @@ from core import gcp_iam_core as _iam
 from core.iam_store import InMemoryIamStore
 from core import gcp_cloudsql_core as _sql
 from core import gcp_cloudscheduler_core as _sched
+from core import gcp_container_core as _gke
 from core.sql_store import InMemorySqlStore
 
 PROJ = "demo"          # the console's default project
@@ -50,11 +51,12 @@ _STORES = {
     "iam":           _R["gcp_iam"],
     "cloudsql":      _R["gcp_sql"],
     "cloudscheduler": _R["gcp_sched"],
+    "container":     _R["gcp_gke"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke,
 }
 
 
@@ -230,12 +232,59 @@ def _sched_op(operation, name, body):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "cloudscheduler"}
 
 
+def _gke_op(operation, name, body):
+    """Kubernetes Engine console CRUD (+ resize/upgrade) over core/gcp_container_core."""
+    store = _STORES["container"]
+
+    def find(nm):
+        for full in store.clusters:
+            if full.rsplit("/", 1)[-1] == nm or full == nm:
+                return full
+        return None
+
+    def run(method, path, query=None, payload=None):
+        r = _gke.dispatch(store, method, "/v1/" + path, query or {}, {}, json.dumps(payload).encode() if payload is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    if operation == "List":
+        return {"ok": True, "items": _gke.list_all(store)}
+    if operation == "Create":
+        req = _gke.job_from_form(body, PROJ)
+        st, p = run("POST", req["parent"] + "/clusters", payload={"cluster": req["cluster"]})
+        if st < 300:
+            return {"ok": True, **_gke.view_by_name(store, _gke.cluster_name(PROJ, req["location"], req["cluster"]["name"]))}
+        return {"ok": False, "code": p.get("error", {}).get("status", "CreateFailed"),
+                "message": p.get("error", {}).get("message", ""), "name": body.get("name")}
+    full = find(name)
+    if not full:
+        return {"ok": False, "code": "NotFound", "name": name}
+    if operation == "Get":
+        return {"ok": True, **_gke.view_by_name(store, full)}
+    if operation == "Delete":
+        st, _ = run("DELETE", full)
+        return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+    if operation in ("Resize", "Upgrade"):
+        if operation == "Resize":
+            pool = (store.clusters[full]["nodePools"] or [{"name": "default-pool"}])[0]["name"]
+            st, p = run("POST", "%s/nodePools/%s:setSize" % (full, pool), payload={"nodeCount": int(body.get("nodeCount", 3))})
+        else:
+            st, p = run("PUT", full, payload={"update": {"desiredMasterVersion": body.get("version") or "latest"}})
+        return {"ok": True, **_gke.view_by_name(store, full)} if st < 300 else \
+            {"ok": False, "code": p.get("error", {}).get("status", "ActionFailed"), "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "container"}
+
+
 def resource_op(service, operation, name="", body=None):
     """Console CRUD → GCP core. Returns the registry _resource_dispatch envelope."""
     body = body or {}
     svc = service
     if svc == "cloudscheduler":
         return _sched_op(operation, name, body)
+    if svc == "container":
+        return _gke_op(operation, name, body)
     rid = str(body.get("name") or body.get("accountId") or body.get("secretId")
               or body.get("topicId") or name or "").strip()
 

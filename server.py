@@ -2553,6 +2553,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # Kubernetes Engine — the shared wire/console store (console + SDK/CLI created clusters)
+        from core.gcp_container_core import shared_store as _gke_store
+        for _cn, _cl in _gke_store().clusters.items():
+            add("gcp", "container", "cluster", _cn.rsplit("/", 1)[-1],
+                {"name": _cn.rsplit("/", 1)[-1], "created": _cl.get("createTime", "")})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -23133,6 +23141,23 @@ try:
     _gcs_sched_console.register(app, _gcs_sched_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[cloudscheduler] routes skipped: {_e}")
+
+# Kubernetes Engine: native /v1/projects/*/locations/*/clusters wire + console REST (/api/gcp/container/*).
+try:
+    from providers import gcp_container_console as _gke_console
+
+    def _gke_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "container", "cluster", payload, {}, None, action="delete")
+            _record_usage("gcp.container.delete_cluster", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "container", "cluster", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("status", "RUNNING")}, None,
+                                            region=payload.get("region", "us-central1"))
+            _record_usage("gcp.container.create_cluster", {"name": payload["id"]})
+    _gke_console.register(app, _gke_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[container] routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)
