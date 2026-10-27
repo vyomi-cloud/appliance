@@ -526,6 +526,38 @@ _SECRETMANAGER_WIZARD = _basic_wizard(
 
 
 # ============================================================================
+# Cloud Tasks — Create queue
+# ============================================================================
+def _loc_select():
+    r = _region()
+    return {**r, "name": "location"}
+
+
+_CLOUDTASKS_WIZARD = _basic_wizard(
+    name_field=_name("Queue name", "my-queue", r"^[A-Za-z0-9-]{1,100}$",
+                     "1-100 chars; letters, digits and hyphens"),
+    name_default="my-queue", region_or_zone=None,
+    extra_basic_fields=[
+        {"name": "project", "label": "Project", "default": "my-project", "required": True,
+         "validate": {"regex": r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$", "message": "6-30 chars, lowercase, digits, hyphens"}},
+        _loc_select(),
+    ],
+    sections=[
+        {"label": "Rate limits", "fields": [
+            {"name": "max_dispatches_per_second", "label": "Max dispatches per second", "type": "number",
+             "default": 500, "validate": {"min": 0, "max": 500}},
+            {"name": "max_concurrent_dispatches", "label": "Max concurrent dispatches", "type": "number",
+             "default": 1000, "validate": {"min": 1, "max": 5000}},
+        ]},
+        {"label": "Retry parameters", "fields": [
+            {"name": "max_attempts", "label": "Max attempts", "type": "number",
+             "default": 100, "validate": {"min": -1, "max": 1000}},
+        ]},
+    ],
+)
+
+
+# ============================================================================
 # Cloud KMS — Create key
 # ============================================================================
 _KMS_WIZARD = _basic_wizard(
@@ -582,5 +614,6 @@ WIZARDS: dict[str, dict] = {
     "iam":           _IAM_WIZARD,
     "eventarc":      _EVENTARC_WIZARD,
     "secretmanager": _SECRETMANAGER_WIZARD,
+    "cloudtasks": _CLOUDTASKS_WIZARD,
     "kms":           _KMS_WIZARD,
 }
