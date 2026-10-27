@@ -990,6 +990,7 @@ rds_state = _SpaceScopedDictProxy("rds", lambda: {"db_instances": {}, "db_subnet
 apigw_state = _SpaceScopedDictProxy("apigateway", lambda: {"apis": {}, "logs": []})
 lambda_state = _SpaceScopedDictProxy("lambda", lambda: {"functions": {}, "events": [], "invocations": []})
 sqs_state = _SpaceScopedDictProxy("sqs", lambda: {"queues": {}, "events": []})
+sns_state = _SpaceScopedDictProxy("sns", lambda: {"topics": {}, "extra": {}})
 ddb_state = _SpaceScopedDictProxy("dynamodb", lambda: {"tables": {}, "events": []})
 
 runtime_state = STATE.setdefault(
