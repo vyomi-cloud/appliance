@@ -385,5 +385,29 @@
   "gcp_findings": 50,
   "azure_checks_passed": 107,
   "azure_findings": 270
+ },
+ {
+  "at": "2026-10-27T01:37:42+00:00",
+  "commit": "0dc986d9e6dc",
+  "suites_green": 17,
+  "suites_total": 26,
+  "checks_passed": 564,
+  "checks_failed": 80,
+  "api_coverage_pct": 13.1,
+  "ui_findings": 164,
+  "agent": "Fixed 1 UI finding group (GCP Pub/Sub topics grid blank Retention/Encryption/Subscriptions, Nano + offline), added 1 validator (2 suites), 0 regressions seen.",
+  "new_features": 0,
+  "parity_gaps": 9,
+  "ops_tested_pct": 72.9,
+  "ui_clean_nano": 13,
+  "ui_total_nano": 43,
+  "ui_clean_offline": 14,
+  "ui_total_offline": 38,
+  "aws_checks_passed": 148,
+  "aws_findings": 77,
+  "gcp_checks_passed": 17,
+  "gcp_findings": 56,
+  "azure_checks_passed": 122,
+  "azure_findings": 31
  }
 ]
