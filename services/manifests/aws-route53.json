@@ -1,7 +1,7 @@
 {
  "cloud": "aws",
  "key": "route53",
- "name": "Amazon Route 53",
+ "name": "Route 53",
  "upstream": "route53",
  "issue": 60,
  "core": "core/route53_core.py",
