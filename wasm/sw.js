@@ -417,6 +417,11 @@ async function route(method, path, body, query) {
 
   // ── v2.9.0 Azure net-new data planes → real cores (dataplane_adapter) ──
   let am;
+  // Key Vault data plane for the console (secrets + keys CRUD). Offline serves this
+  // at /azure-data/keyvault/{vault}/…; the SW only owns /api/*, so Nano mirrors it
+  // here and runs the same native Key Vault cores the SDK wire uses.
+  am = path.match(/^\/api\/azure\/keyvault\/([^/]+)\/(secrets|keys)(\/.*)?$/);
+  if (am) return { tuple: ["azure", "_kv", method, { kind: am[2], rest: am[3] || "", body: body || null }] };
   // Storage-account console routes (/api/azure/storage/{acct}/containers|queues…)
   // → the same Azurite-equivalent blob/queue cores the native SDKs use.
   am = path.match(/^\/api\/azure\/storage\/([^/]+)\/(containers|queues)(?:\/([^/]+))?(?:\/blobs(?:\/(.+))?)?$/);

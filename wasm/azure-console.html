@@ -1961,7 +1961,7 @@ SUB_RENDERERS.storagequeues = function(svc, full, host){
 // SDK uses), so console-created secrets are SDK-readable and vice-versa.
 SUB_RENDERERS.kvsecrets = function(svc, full, host){
   const vault = full.name;
-  const base = ORIGIN + "/azure-data/keyvault/" + encodeURIComponent(vault) + "/secrets";
+  const base = ORIGIN + "/api/azure/keyvault/" + encodeURIComponent(vault) + "/secrets";
   const nameFromId = id => { const m = String(id||"").split("/secrets/")[1]; return m ? m.split("/")[0] : (id||""); };
   const wrap = el("div",{}); host.append(wrap);
   function render(){
@@ -2048,7 +2048,7 @@ SUB_RENDERERS.kvsecrets = function(svc, full, host){
 // native CryptographyClient can encrypt/decrypt against the same key.
 SUB_RENDERERS.kvkeys = function(svc, full, host){
   const vault = full.name;
-  const base = ORIGIN + "/azure-data/keyvault/" + encodeURIComponent(vault) + "/keys";
+  const base = ORIGIN + "/api/azure/keyvault/" + encodeURIComponent(vault) + "/keys";
   const nameFromKid = kid => { const m = String(kid||"").split("/keys/")[1]; return m ? m.split("/")[0] : (kid||""); };
   const wrap = el("div",{}); host.append(wrap);
   function render(){

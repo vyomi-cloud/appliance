@@ -444,6 +444,10 @@ def dispatch(backends: Backends, provider: str, service: str, operation: str,
     # Native Azure ARM control plane (real /subscriptions/* wire).
     if service == "_arm":
         return _arm_dispatch(backends, operation, params or {})
+    # Key Vault secrets/keys data plane for the Azure console (native cores).
+    if service == "_kv":
+        from . import azure_core_adapter
+        return azure_core_adapter.kv_raw(operation, params or {})
     # Live resource census for the dashboard's per-cloud footprint pies.
     if service == "_census":
         return _census_dispatch(backends, provider)
