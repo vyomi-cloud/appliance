@@ -23,8 +23,9 @@ from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
 
 # Compute/registry stores. Lambda + API Gateway share ONE namespace so an
 # AWS_PROXY integration reaches the registered functions (the API-GW→Lambda synergy).
-_COMPUTE = types.SimpleNamespace()
-_VPC = types.SimpleNamespace()
+from core import nano_registry as _R
+_COMPUTE = _R.get()["compute"]
+_VPC = _R.get()["vpc_net"]
 MSG = A.MSG      # EventBridge + Service Bus + SQS all share this
 SQLDB = A.RDB    # Azure SQL shares the SQL store (azuresql: keyspace)
 IDN = A.IAM      # Azure RBAC shares the IAM store (_azure_* attrs)
@@ -38,9 +39,21 @@ def _lam_json(resp):
 
 
 # ── Lambda ──────────────────────────────────────────────────────────────────
+def _now():
+    import datetime
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
 def _fn_row(fn):
+    # Legacy keys (name/codeSize) stay for existing callers; the AWS-shaped keys are
+    # what the console grid columns read (function_name, memory_size, timeout…).
     return {"name": fn["name"], "runtime": fn.get("runtime", "python3.12"),
-            "handler": fn.get("handler", "index.handler"), "codeSize": len(fn.get("source", ""))}
+            "handler": fn.get("handler", "index.handler"), "codeSize": len(fn.get("source", "")),
+            "function_name": fn["name"], "function_arn": fn.get("arn", ""),
+            "memory_size": fn.get("memory_size", 128), "timeout": fn.get("timeout", 3),
+            "state": "Active", "package_type": "Zip",
+            "created": fn.get("created") or fn.get("last_modified") or "",
+            "last_modified": fn.get("last_modified") or fn.get("created") or ""}
 
 
 def lambda_list(p=None):
@@ -55,7 +68,11 @@ def lambda_create(p):
     r = lambda_core.dispatch(_COMPUTE, "POST", "/2015-03-31/functions", {}, {}, json.dumps(body).encode())
     if r.status >= 400:
         return {"ok": False, "code": "CreateFailed", **_lam_json(r)}
-    return {"ok": True, **_fn_row(_COMPUTE._lambda_functions[name])}
+    fn = _COMPUTE._lambda_functions[name]
+    fn["memory_size"] = int(p.get("memory_size") or p.get("memory") or 128)
+    fn["timeout"] = int(p.get("timeout") or 3)
+    fn["created"] = fn["last_modified"] = _now()
+    return {"ok": True, **_fn_row(fn)}
 
 
 def lambda_get(p):
@@ -88,9 +105,24 @@ def lambda_invoke(p):
 # ── API Gateway ─────────────────────────────────────────────────────────────
 def apigw_list(p=None):
     apis = getattr(_COMPUTE, "_apigateway_apis", {})
-    return {"ok": True, "apis": [{"id": a["id"], "name": a["name"],
-                                  "routes": len(a["resources"]) - 1,
-                                  "stages": list(a["deployments"].keys())} for a in apis.values()]}
+    return {"ok": True, "apis": [_api_row(a) for a in apis.values()]}
+
+
+def _api_row(a):
+    return {"id": a["id"], "name": a["name"], "routes": len(a["resources"]) - 1,
+            "stages": list(a["deployments"].keys()),
+            "rest_api_id": a["id"], "description": a.get("description", ""),
+            "endpoint_type": "REGIONAL", "created": a.get("created", ""), "status": "available"}
+
+
+def _api_find(key):
+    apis = getattr(_COMPUTE, "_apigateway_apis", {})
+    return apis.get(key) or next((a for a in apis.values() if a["name"] == key), None)
+
+
+def apigw_get(p):
+    a = _api_find(str(p.get("name") or p.get("id") or ""))
+    return {"ok": True, **_api_row(a)} if a else {"ok": False, "code": "NotFoundException"}
 
 
 def apigw_create(p):
@@ -99,6 +131,8 @@ def apigw_create(p):
     name = str(p.get("name") or "").strip()
     api = _lam_json(apigateway_core.dispatch(_COMPUTE, "POST", "/restapis", {}, {}, json.dumps({"name": name}).encode()))
     api_id, root = api["id"], api["rootResourceId"]
+    _COMPUTE._apigateway_apis[api_id]["created"] = _now()
+    _COMPUTE._apigateway_apis[api_id]["description"] = str(p.get("description") or "")
     path_part = str(p.get("path") or "hello").strip("/")
     method = str(p.get("method") or "GET").upper()
     res = _lam_json(apigateway_core.dispatch(_COMPUTE, "POST", f"/restapis/{api_id}/resources/{root}",
@@ -118,7 +152,9 @@ def apigw_create(p):
 
 
 def apigw_delete(p):
-    getattr(_COMPUTE, "_apigateway_apis", {}).pop(str(p.get("name") or p.get("id") or ""), None)
+    a = _api_find(str(p.get("name") or p.get("id") or ""))
+    if a:
+        getattr(_COMPUTE, "_apigateway_apis", {}).pop(a["id"], None)
     return {"ok": True}
 
 
@@ -139,10 +175,24 @@ def _vpc_q(action, params):
 def vpc_list(p=None):
     m = getattr(_VPC, "_vpc_model", {"vpcs": {}, "subnets": {}, "sgs": {}})
     return {"ok": True,
-            "vpcs": [{"id": v["id"], "cidr": v["cidr"]} for v in m.get("vpcs", {}).values()],
+            "vpcs": [_vpc_row(v, m) for v in m.get("vpcs", {}).values()],
             "subnets": [{"id": s["id"], "vpcId": s["vpc_id"], "cidr": s["cidr"]} for s in m.get("subnets", {}).values()],
             "securityGroups": [{"id": g["id"], "vpcId": g["vpc_id"],
                                 "ingressRules": len(g["ingress"])} for g in m.get("sgs", {}).values()]}
+
+
+def _vpc_row(v, m):
+    return {"id": v["id"], "cidr": v["cidr"],
+            "vpc_id": v["id"], "name": v.get("name") or v["id"], "cidr_block": v["cidr"],
+            "state": "available", "tenancy": "default", "created": v.get("created", ""),
+            "subnet_count": sum(1 for s in m.get("subnets", {}).values() if s.get("vpc_id") == v["id"])}
+
+
+def vpc_get(p):
+    m = getattr(_VPC, "_vpc_model", {"vpcs": {}, "subnets": {}})
+    key = str(p.get("name") or p.get("id") or "")
+    v = m.get("vpcs", {}).get(key) or next((x for x in m.get("vpcs", {}).values() if x.get("name") == key), None)
+    return {"ok": True, **_vpc_row(v, m)} if v else {"ok": False, "code": "InvalidVpcID.NotFound"}
 
 
 def vpc_list_sgs(p=None):
@@ -157,9 +207,14 @@ def vpc_list_sgs(p=None):
 
 def vpc_create(p):
     import re
-    body = _vpc_q("CreateVpc", {"CidrBlock": str(p.get("cidr") or "10.0.0.0/16")}).body
+    cidr = str(p.get("cidr_block") or p.get("cidr") or "10.0.0.0/16")
+    body = _vpc_q("CreateVpc", {"CidrBlock": cidr}).body
     vid = re.search(r"<vpcId>(.*?)</vpcId>", body)
-    return {"ok": bool(vid), "id": vid.group(1) if vid else None, "cidr": p.get("cidr")}
+    if vid:
+        rec = _VPC._vpc_model["vpcs"][vid.group(1)]
+        rec["name"] = str(p.get("name") or "")
+        rec["created"] = _now()
+    return {"ok": bool(vid), "id": vid.group(1) if vid else None, "cidr": cidr}
 
 
 def vpc_create_subnet(p):

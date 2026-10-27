@@ -93,10 +93,12 @@ class Aws(CloudProvider):
             # API Gateway — APIs + MOCK/Lambda-proxy + invoke, via core/apigateway_core.py
             ("apigateway", "ListApis"):   lambda b, a, p: D.apigw_list(p),
             ("apigateway", "CreateApi"):  lambda b, a, p: D.apigw_create(p),
+            ("apigateway", "GetApi"):     lambda b, a, p: D.apigw_get(p),
             ("apigateway", "DeleteApi"):  lambda b, a, p: D.apigw_delete(p),
             ("apigateway", "Invoke"):     lambda b, a, p: D.apigw_invoke(p),
             # VPC — topology + reachability analyzer, via core/vpc_core.py
             ("vpc", "List"):              lambda b, a, p: D.vpc_list(p),
+            ("vpc", "GetVpc"):            lambda b, a, p: D.vpc_get(p),
             ("vpc", "CreateVpc"):         lambda b, a, p: D.vpc_create(p),
             ("vpc", "CreateSubnet"):      lambda b, a, p: D.vpc_create_subnet(p),
             ("vpc", "CreateSecurityGroup"): lambda b, a, p: D.vpc_create_sg(p),

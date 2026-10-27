@@ -31,6 +31,8 @@ from core.azure_queue_core import AzureQueueStore
 from core.azure_arm_core import AzureArm
 from core.nano_events import EventStore
 
+import types
+
 _REG: dict | None = None
 
 
@@ -68,6 +70,11 @@ def get() -> dict:
             "rds": InMemorySqlStore(),
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
+            # Console compute/network models: Lambda + API Gateway share ONE namespace
+            # (AWS_PROXY reaches the registered functions); VPC has its own. They
+            # live here (not as module singletons) so nano_persist snapshots them.
+            "compute": types.SimpleNamespace(),
+            "vpc_net": types.SimpleNamespace(),
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),
