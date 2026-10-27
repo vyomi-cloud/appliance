@@ -58,7 +58,8 @@ def _emit_event(provider: str, service: str, resource: str, action: str,
             ok = False
         status = "ok" if ok else (str(result.get("code")) if isinstance(result, dict) and result.get("code") else "error")
         nano_events.record(provider=provider, service=service, resource=resource or "",
-                           action=action, status=status)
+                           action=action, status=status,
+                           detail=f"{provider}/{service}: {action} {resource or ''}".rstrip() + ("" if ok else f" failed ({status})"))
     except Exception:
         pass
 
@@ -207,6 +208,11 @@ def _weigh(resources: int, vms: int) -> dict:
     }
 
 
+def _elb_census():
+    from core import nano_registry
+    return nano_registry.get()["elbv2"].load_balancers
+
+
 def _census_dispatch(backends: Backends, provider: str) -> dict:
     """Count the LIVE in-memory resources this page's backend holds for `provider`,
     across every core store, and weight them the same way the appliance does. The
@@ -232,6 +238,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                         len(A.iam_list_policies().get("policies", [])) +
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
+                "elbv2":          len(_elb_census()),
             }
             for svc, n in aws_counts.items():
                 if n:

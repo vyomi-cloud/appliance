@@ -48,6 +48,7 @@ from core import iam_core as iam
 from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
 from core import sns_core as sns
+from core import elbv2_core as elbv2
 from core import rds_data_core as rds_data
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
 from core import gcp_firestore_core as gcp_fs
@@ -147,6 +148,7 @@ _SIGNING = {
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
     "events": "events", "lambda": "lambda", "ec2": "vpc",
+    "elasticloadbalancing": "elbv2",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
@@ -187,6 +189,14 @@ _QUERY_ACTION = {
     "DescribeVpcs": "vpc", "CreateNetworkAcl": "vpc", "CreateNetworkAclEntry": "vpc",
     "AssociateNetworkAcl": "vpc", "AnalyzeReachability": "vpc",
 }
+
+
+# ELBv2 (Query protocol; signs as `elasticloadbalancing`). Tag / limit verbs are
+# shared with other services, so unsigned requests only route here for the rest.
+_AMBIGUOUS_ELB = {"AddTags", "RemoveTags", "DescribeTags", "DescribeAccountLimits"}
+for _a in elbv2.OPERATIONS:
+    if _a not in _AMBIGUOUS_ELB:
+        _QUERY_ACTION.setdefault(_a, "elbv2")
 
 
 def _lower_headers(headers):
@@ -233,6 +243,7 @@ class AwsWireRouter:
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
+        self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
 
     def _servicebus_service(self, method, path, lheaders):
         """Azure Service Bus (topics) — the pub/sub-fan-out peer of SNS/Pub-Sub.
@@ -442,6 +453,8 @@ class AwsWireRouter:
             r = rds.dispatch(self.rds, params)
         elif svc == "vpc":
             r = vpc.dispatch(self.vpc, params)
+        elif svc == "elbv2":
+            r = elbv2.dispatch(self.elbv2, params)
         else:  # sns
             r = sns.dispatch(self.msg, params)
         hdrs = dict(r.headers or {})
