@@ -231,7 +231,10 @@ def _operation(store, project, location, verb, target, response=None, response_t
                        "cancelRequested": False, "apiVersion": "v1"},
           "done": True}
     resp = {"@type": "type.googleapis.com/" + response_type}
-    resp.update(response if response is not None else {})
+    if response_type == "google.protobuf.Empty":
+        resp["value"] = {}   # Empty has a special JSON form inside Any: the payload sits under "value"
+    else:
+        resp.update(response if response is not None else {})
     op["response"] = resp
     store.operations[name] = op
     return _copy(op)

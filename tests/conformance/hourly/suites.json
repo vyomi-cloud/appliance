@@ -71,6 +71,11 @@
     {"id": "offline-sdk-go-gcp-iamcredentials", "target": "offline", "cloud": "gcp", "kind": "sdk-go", "cwd": "tests/conformance/gcp-sdk-go-iamcredentials", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-gcp-iamcredentials", "target": "offline", "cloud": "gcp", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-iamcredentials-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-gcp-iamcredentials", "target": "offline", "cloud": "gcp", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-iamcredentials.mjs", "timeout": 600},
-    {"id": "nano-ui-gcp-iamcredentials", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-iamcredentials.mjs", "timeout": 600}
+    {"id": "nano-ui-gcp-iamcredentials", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-iamcredentials.mjs", "timeout": 600},
+    {"id": "offline-sdk-java-gcp-redis", "target": "offline", "cloud": "gcp", "kind": "sdk-java", "cwd": "tests/conformance/gcp-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=RedisConformance", "timeout": 900},
+    {"id": "offline-sdk-go-gcp-redis", "target": "offline", "cloud": "gcp", "kind": "sdk-go", "cwd": "tests/conformance/gcp-sdk-go-redis", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-gcp-redis", "target": "offline", "cloud": "gcp", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-redis-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-gcp-redis", "target": "offline", "cloud": "gcp", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-redis.mjs", "timeout": 600},
+    {"id": "nano-ui-gcp-redis", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-redis.mjs", "timeout": 600}
   ]
 }

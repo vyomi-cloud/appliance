@@ -344,6 +344,13 @@
    "upstream": "iamcredentials/v1",
    "status": "released",
    "released_in": "3.0.16"
+  },
+  {
+   "cloud": "gcp",
+   "key": "redis",
+   "name": "Memorystore for Redis",
+   "upstream": "redis/v1",
+   "status": "pending-release"
   }
  ]
 }
