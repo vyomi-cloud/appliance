@@ -355,7 +355,7 @@ def console_view(job):
     status = job.get("status") or {}
     ran = bool(job.get("lastAttemptTime"))
     v.update({
-        "id": parts[-1], "job_name": parts[-1], "full_name": name, "project": parts[1], "region": parts[3],
+        "name": parts[-1], "id": parts[-1], "resourceName": name, "project": parts[1], "region": parts[3],
         "location": parts[3],
         "frequency": job.get("schedule", ""),
         "target": _target_text(job), "target_type": _target_kind(job),
