@@ -344,6 +344,13 @@
    "upstream": "iamcredentials/v1",
    "status": "released",
    "released_in": "3.0.16"
+  },
+  {
+   "cloud": "gcp",
+   "key": "monitoring",
+   "name": "Cloud Monitoring",
+   "upstream": "monitoring/v3",
+   "status": "pending-release"
   }
  ]
 }

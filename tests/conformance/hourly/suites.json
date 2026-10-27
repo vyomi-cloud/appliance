@@ -71,6 +71,11 @@
     {"id": "offline-sdk-go-gcp-iamcredentials", "target": "offline", "cloud": "gcp", "kind": "sdk-go", "cwd": "tests/conformance/gcp-sdk-go-iamcredentials", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-gcp-iamcredentials", "target": "offline", "cloud": "gcp", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-iamcredentials-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-gcp-iamcredentials", "target": "offline", "cloud": "gcp", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-iamcredentials.mjs", "timeout": 600},
-    {"id": "nano-ui-gcp-iamcredentials", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-iamcredentials.mjs", "timeout": 600}
+    {"id": "nano-ui-gcp-iamcredentials", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-iamcredentials.mjs", "timeout": 600},
+    {"id": "offline-sdk-java-gcp-monitoring", "target": "offline", "cloud": "gcp", "kind": "sdk-java", "cwd": "tests/conformance/gcp-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=MonitoringConformance", "timeout": 900},
+    {"id": "offline-sdk-go-gcp-monitoring", "target": "offline", "cloud": "gcp", "kind": "sdk-go", "cwd": "tests/conformance/gcp-sdk-go-monitoring", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-gcp-monitoring", "target": "offline", "cloud": "gcp", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-monitoring-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-gcp-monitoring", "target": "offline", "cloud": "gcp", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-monitoring.mjs", "timeout": 600},
+    {"id": "nano-ui-gcp-monitoring", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-monitoring.mjs", "timeout": 600}
   ]
 }
