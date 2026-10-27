@@ -351,6 +351,50 @@ RESOURCE_CATALOG_GCP = [
             {"name": "keyring", "label": "Key ring",  "default": "my-keyring"},
         ],
     },
+    # ========================================================================
+    # Cloud Scheduler — cron jobs that call HTTP endpoints / publish to Pub/Sub
+    # (core/gcp_cloudscheduler_core.py). Console REST at /api/gcp/cloudscheduler/*;
+    # the native /v1/projects/*/locations/*/jobs wire serves the SDKs / gcloud.
+    # ========================================================================
+    {
+        "key": "cloudscheduler", "label": "Cloud Scheduler", "icon": "schedule",
+        "namespace": "GCP/CloudScheduler", "service": "cloudscheduler",
+        "collection_path": "/api/gcp/cloudscheduler/jobs",
+        "resource_path":   "/api/gcp/cloudscheduler/jobs/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "jobs":   {"method": "GET",    "path": "/api/gcp/cloudscheduler/jobs"},
+            "pause":  {"method": "POST",   "path": "/api/gcp/sub/cloudscheduler/pause/{name}"},
+            "resume": {"method": "POST",   "path": "/api/gcp/sub/cloudscheduler/resume/{name}"},
+            "run":    {"method": "POST",   "path": "/api/gcp/sub/cloudscheduler/run/{name}"},
+            "delete": {"method": "DELETE", "path": "/api/gcp/cloudscheduler/jobs/{name}"},
+        },
+        "columns": [
+            ["id",          "Name"],
+            ["region",      "Region"],
+            ["state",       "State"],
+            ["last_status", "Status of last execution"],
+            ["frequency",   "Frequency"],
+            ["timezone",    "Time zone"],
+            ["target_type", "Target type"],
+            ["target",      "Target"],
+            ["last_run",    "Last run"],
+            ["next_run",    "Next run"],
+        ],
+        "createFields": [
+            {"name": "name",        "label": "Name",                         "default": "my-job"},
+            {"name": "region",      "label": "Region",                       "default": "us-central1"},
+            {"name": "description", "label": "Description",                  "default": "Runs every five minutes"},
+            {"name": "schedule",    "label": "Frequency (unix-cron)",        "default": "*/5 * * * *"},
+            {"name": "timeZone",    "label": "Time zone",                    "default": "Etc/UTC"},
+            {"name": "targetType",  "label": "Target type (HTTP or Pub/Sub)", "default": "HTTP"},
+            {"name": "url",         "label": "URL (HTTP target)",            "default": "https://example.com/hook"},
+            {"name": "httpMethod",  "label": "HTTP method",                  "default": "POST"},
+            {"name": "topic",       "label": "Topic (Pub/Sub target)",       "default": "projects/demo/topics/my-topic"},
+            {"name": "message",     "label": "Message body (Pub/Sub target)", "default": "scheduled"},
+        ],
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_GCP}

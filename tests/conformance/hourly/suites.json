@@ -56,6 +56,11 @@
     {"id": "offline-sdk-go-aws-stepfunctions", "target": "offline", "cloud": "aws", "kind": "sdk-go", "cwd": "tests/conformance/aws-sdk-go-stepfunctions", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-aws-stepfunctions", "target": "offline", "cloud": "aws", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-stepfunctions-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-aws-stepfunctions", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-stepfunctions.mjs", "timeout": 600},
-    {"id": "nano-ui-aws-stepfunctions", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-stepfunctions.mjs", "timeout": 600}
+    {"id": "nano-ui-aws-stepfunctions", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-stepfunctions.mjs", "timeout": 600},
+    {"id": "offline-sdk-java-gcp-cloudscheduler", "target": "offline", "cloud": "gcp", "kind": "sdk-java", "cwd": "tests/conformance/gcp-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=CloudSchedulerConformance", "timeout": 900},
+    {"id": "offline-sdk-go-gcp-cloudscheduler", "target": "offline", "cloud": "gcp", "kind": "sdk-go", "cwd": "tests/conformance/gcp-sdk-go-cloudscheduler", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-gcp-cloudscheduler", "target": "offline", "cloud": "gcp", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-cloudscheduler-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-gcp-cloudscheduler", "target": "offline", "cloud": "gcp", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-cloudscheduler.mjs", "timeout": 600},
+    {"id": "nano-ui-gcp-cloudscheduler", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-cloudscheduler.mjs", "timeout": 600}
   ]
 }

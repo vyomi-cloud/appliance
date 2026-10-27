@@ -1,0 +1,31 @@
+{
+  "cloud": "gcp",
+  "key": "cloudscheduler",
+  "name": "Cloud Scheduler",
+  "upstream": "cloudscheduler/v1",
+  "issue": 68,
+  "core": "core/gcp_cloudscheduler_core.py",
+  "operations": [
+    "cloudscheduler.projects.locations.get",
+    "cloudscheduler.projects.locations.list",
+    "cloudscheduler.projects.locations.jobs.create",
+    "cloudscheduler.projects.locations.jobs.get",
+    "cloudscheduler.projects.locations.jobs.list",
+    "cloudscheduler.projects.locations.jobs.patch",
+    "cloudscheduler.projects.locations.jobs.delete",
+    "cloudscheduler.projects.locations.jobs.pause",
+    "cloudscheduler.projects.locations.jobs.resume",
+    "cloudscheduler.projects.locations.jobs.run"
+  ],
+  "backend": {
+    "kind": "in-process"
+  },
+  "suites": [
+    "offline-sdk-java-gcp-cloudscheduler",
+    "offline-sdk-go-gcp-cloudscheduler",
+    "offline-cli-gcp-cloudscheduler",
+    "offline-ui-gcp-cloudscheduler",
+    "nano-ui-gcp-cloudscheduler"
+  ],
+  "status": "ready"
+}
