@@ -30,6 +30,7 @@ from core.iam_store import InMemoryIamStore
 from core import gcp_cloudsql_core as _sql
 from core import gcp_cloudscheduler_core as _sched
 from core import gcp_container_core as _gke
+from core import gcp_logging_core as _log
 from core.sql_store import InMemorySqlStore
 
 PROJ = "demo"          # the console's default project
@@ -52,11 +53,12 @@ _STORES = {
     "cloudsql":      _R["gcp_sql"],
     "cloudscheduler": _R["gcp_sched"],
     "container":     _R["gcp_gke"],
+    "logging":       _R["gcp_logging"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "logging": _log,
 }
 
 
@@ -277,6 +279,48 @@ def _gke_op(operation, name, body):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "container"}
 
 
+def _logging_op(operation, name, body):
+    """Cloud Logging console CRUD (log sinks, + enable/disable) over core/gcp_logging_core."""
+    store = _STORES["logging"]
+
+    def find(nm):
+        for full in store.sinks:
+            if full.rsplit("/", 1)[-1] == nm:
+                return full.split("/")[1], nm
+        return None
+
+    def run(method, path, query=None, payload=None):
+        r = _log.dispatch(store, method, path, query or {}, {}, json.dumps(payload).encode() if payload is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    if operation == "List":
+        return {"ok": True, "items": _log.list_all(store)}
+    if operation == "Create":
+        sink = _log.sink_from_form(dict(body, project=PROJ))
+        st, p = run("POST", "/v2/projects/%s/sinks" % PROJ, {"uniqueWriterIdentity": "true"}, sink)
+        if st < 300:
+            return {"ok": True, **_log.sink_console_view(PROJ, store.sinks["projects/%s/sinks/%s" % (PROJ, sink["name"])])}
+        return {"ok": False, "code": p.get("error", {}).get("status", "CreateFailed"),
+                "message": p.get("error", {}).get("message", ""), "name": body.get("name")}
+    hit = find(name)
+    if not hit:
+        return {"ok": False, "code": "NotFound", "name": name}
+    proj, sid = hit
+    if operation == "Get":
+        return {"ok": True, **_log.sink_console_view(proj, store.sinks["projects/%s/sinks/%s" % (proj, sid)])}
+    if operation == "Delete":
+        st, _ = run("DELETE", "/v2/projects/%s/sinks/%s" % (proj, sid))
+        return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+    if operation in ("Enable", "Disable"):
+        st, p = run("PATCH", "/v2/projects/%s/sinks/%s" % (proj, sid), {"updateMask": "disabled"}, {"disabled": operation == "Disable"})
+        return {"ok": True, **_log.sink_console_view(proj, store.sinks["projects/%s/sinks/%s" % (proj, sid)])} if st < 300 else \
+            {"ok": False, "code": p.get("error", {}).get("status", "ActionFailed"), "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "logging"}
+
+
 def resource_op(service, operation, name="", body=None):
     """Console CRUD → GCP core. Returns the registry _resource_dispatch envelope."""
     body = body or {}
@@ -285,6 +329,8 @@ def resource_op(service, operation, name="", body=None):
         return _sched_op(operation, name, body)
     if svc == "container":
         return _gke_op(operation, name, body)
+    if svc == "logging":
+        return _logging_op(operation, name, body)
     rid = str(body.get("name") or body.get("accountId") or body.get("secretId")
               or body.get("topicId") or name or "").strip()
 

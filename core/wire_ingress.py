@@ -89,6 +89,8 @@ def build_backed_router() -> AwsWireRouter:
     stores["gcp_sched"] = _gcp_sched_store()   # shared with the console REST (/api/gcp/cloudscheduler)
     from core.gcp_container_core import shared_store as _gcp_gke_store
     stores["gcp_gke"] = _gcp_gke_store()   # shared with the console REST (/api/gcp/container)
+    from core.gcp_logging_core import shared_store as _gcp_logging_store
+    stores["gcp_logging"] = _gcp_logging_store()   # shared with the console REST (/api/gcp/logging)
     return AwsWireRouter(stores=stores)
 
 
@@ -136,7 +138,9 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     from core.stepfunctions_core import shared_store as _sfn_store, set_lambda_store as _sfn_lambda
     from core.gcp_cloudscheduler_core import shared_store as _gcp_sched_store
     from core.gcp_container_core import shared_store as _gcp_gke_store
-    r = router or AwsWireRouter(stores={"sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store()})
+    from core.gcp_logging_core import shared_store as _gcp_logging_store
+    r = router or AwsWireRouter(stores={"sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(),
+                                        "gcp_logging": _gcp_logging_store()})
     _sfn_lambda(r.lam)   # Step Functions Task states invoke the Lambdas this router serves
 
     async def _proxy(request: Request):

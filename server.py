@@ -2561,6 +2561,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # Cloud Logging — the shared wire/console store (console + SDK/CLI created sinks)
+        from core.gcp_logging_core import shared_store as _gcp_logging_store
+        for _sn, _sk in _gcp_logging_store().sinks.items():
+            add("gcp", "logging", "sink", _sn.rsplit("/", 1)[-1],
+                {"name": _sn.rsplit("/", 1)[-1], "created": _sk.get("createTime", "")})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -23158,6 +23166,24 @@ try:
     _gke_console.register(app, _gke_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[container] routes skipped: {_e}")
+
+# Cloud Logging: native /v2/entries + /v2/projects/*/{logs,sinks,metrics,exclusions,locations/*/buckets} wire
+# + console REST (/api/gcp/logging/*).
+try:
+    from providers import gcp_logging_console as _gcp_logging_console
+
+    def _gcp_logging_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "logging", "sink", payload, {}, None, action="delete")
+            _record_usage("gcp.logging.delete_sink", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "logging", "sink", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("state", "Enabled")}, None,
+                                            region="global")
+            _record_usage("gcp.logging.create_sink", {"name": payload["id"]})
+    _gcp_logging_console.register(app, _gcp_logging_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[logging] routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)

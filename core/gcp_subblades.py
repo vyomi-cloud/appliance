@@ -342,6 +342,33 @@ _CONTAINER_SUB = [
 ]
 
 
+# ============================================================================
+# Cloud Logging — log sink detail (generic `schedkv` renderer: `fields` is
+# [[field, label], …] read off the sink's console view, every value filled)
+# ============================================================================
+_LOGGING_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Sink", "items": [
+        {"key": "destination", "label": "Destination", "icon": "output", "type": "schedkv",
+         "fields": [["destination_type", "Destination type"], ["destination_name", "Destination"],
+                    ["destination", "Full destination URI"]]},
+        {"key": "inclusion",   "label": "Inclusion filter", "icon": "filter_alt", "type": "schedkv",
+         "fields": [["filter_text", "Filter"], ["include_children", "Include child resources"]]},
+        {"key": "exclusions",  "label": "Exclusions", "icon": "block", "type": "schedkv",
+         "fields": [["exclusion_count", "Exclusion filters"], ["state", "State"]]},
+        {"key": "identity",    "label": "Writer identity", "icon": "badge", "type": "schedkv",
+         "fields": [["writer", "Writer identity"], ["outputVersionFormat", "Output format"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -357,5 +384,6 @@ SUB_BLADES: dict[str, list] = {
     "secretmanager": _SECRETMANAGER_SUB,
     "kms":           _KMS_SUB,
     "cloudscheduler": _CLOUDSCHEDULER_SUB,
+    "logging":       _LOGGING_SUB,
     "container":     _CONTAINER_SUB,
 }

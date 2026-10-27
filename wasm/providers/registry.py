@@ -43,7 +43,7 @@ _REGISTRY: dict[str, CloudProvider] = {}
 _MUTATING_OPS = {
     "Create", "Update", "Delete", "Terminate", "Start", "Stop", "Reboot", "Modify",
     # native sub-resource ops seen on the _resource path (GCP cores)
-    "CreateSubscription", "CreateDatabase", "DeleteObject", "PutObject", "Pause", "Resume", "Run", "Resize", "Upgrade",
+    "CreateSubscription", "CreateDatabase", "DeleteObject", "PutObject", "Pause", "Resume", "Run", "Resize", "Upgrade", "Enable", "Disable",
 }
 
 
@@ -301,7 +301,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                     by_service[svc] = by_service.get(svc, 0) + n
         if provider == "gcp":
             from . import gcp_core_adapter as GC
-            for svc in ("storage", "firestore", "kms", "secretmanager", "pubsub", "iam", "cloudsql", "cloudscheduler", "container"):
+            for svc in ("storage", "firestore", "kms", "secretmanager", "pubsub", "iam", "cloudsql", "cloudscheduler", "container", "logging"):
                 n = len(GC.resource_op(svc, "List").get("items", []))
                 if n:
                     by_service[svc] = by_service.get(svc, 0) + n

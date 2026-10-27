@@ -62,6 +62,7 @@ from core import gcp_iam_core as gcp_iam
 from core import gcp_cloudsql_core as gcp_sql
 from core import gcp_cloudscheduler_core as gcp_sched
 from core import gcp_container_core as gcp_gke
+from core import gcp_logging_core as gcp_logging
 
 
 def _gcp_service(path):
@@ -71,6 +72,12 @@ def _gcp_service(path):
         return "gcp-gcs"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
         return "gcp-cloudsql"
+    # Cloud Logging v2: /v2/entries:write|list, /v2/projects/{p}/logs|sinks|metrics|exclusions|buckets
+    if re.search(r"^/v2(beta1)?/(entries:(write|list)|monitoredResourceDescriptors"
+                 r"|projects/[^/]+/(logs|sinks|metrics|exclusions)([/:]|$)"
+                 r"|projects/[^/]+/locations/?$"
+                 r"|projects/[^/]+/locations/[^/]+/buckets([/:]|$))", path):
+        return "gcp-logging"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if "/projects/" in path:
@@ -247,6 +254,7 @@ class AwsWireRouter:
         self.gcp_sql = s.get("gcp_sql") or InMemorySqlStore()
         self.gcp_sched = s.get("gcp_sched") or gcp_sched.CloudSchedulerStore()   # Cloud Scheduler jobs
         self.gcp_gke = s.get("gcp_gke") or gcp_gke.ContainerStore()   # Kubernetes Engine clusters
+        self.gcp_logging = s.get("gcp_logging") or gcp_logging.LoggingStore()   # Cloud Logging (entries, sinks, metrics, buckets)
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -438,7 +446,7 @@ class AwsWireRouter:
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
-                "gcp-container": (gcp_gke, self.gcp_gke),
+                "gcp-container": (gcp_gke, self.gcp_gke), "gcp-logging": (gcp_logging, self.gcp_logging),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-cloudscheduler":   # a pubsub target publishes into the Pub/Sub core

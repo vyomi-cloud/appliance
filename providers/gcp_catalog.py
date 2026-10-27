@@ -435,6 +435,41 @@ RESOURCE_CATALOG_GCP = [
             {"name": "description", "label": "Description",                "default": "Demo GKE cluster"},
         ],
     },
+    # ========================================================================
+    # Cloud Logging — log sinks (routing rules); entries / metrics / exclusions / buckets
+    # ride the native wire (core/gcp_logging_core.py). Console REST at /api/gcp/logging/*.
+    # ========================================================================
+    {
+        "key": "logging", "label": "Cloud Logging", "icon": "receipt_long",
+        "namespace": "GCP/Logging", "service": "logging",
+        "collection_path": "/api/gcp/logging/sinks",
+        "resource_path":   "/api/gcp/logging/sinks/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "sinks":   {"method": "GET",    "path": "/api/gcp/logging/sinks"},
+            "enable":  {"method": "POST",   "path": "/api/gcp/sub/logging/enable/{name}"},
+            "disable": {"method": "POST",   "path": "/api/gcp/sub/logging/disable/{name}"},
+            "delete":  {"method": "DELETE", "path": "/api/gcp/logging/sinks/{name}"},
+        },
+        "columns": [
+            ["id",               "Name"],
+            ["destination_type", "Destination type"],
+            ["destination_name", "Destination"],
+            ["filter_text",      "Inclusion filter"],
+            ["state",            "State"],
+            ["writer",           "Writer identity"],
+            ["description_text", "Description"],
+            ["created",          "Created"],
+        ],
+        "createFields": [
+            {"name": "name",            "label": "Sink name",                 "default": "my-sink"},
+            {"name": "description",     "label": "Sink description",          "default": "Routes errors to Cloud Storage"},
+            {"name": "destinationType", "label": "Sink service (Cloud Storage bucket, BigQuery dataset, Pub/Sub topic or Cloud Logging bucket)", "default": "Cloud Storage bucket"},
+            {"name": "destination",     "label": "Destination",               "default": "my-log-archive"},
+            {"name": "filter",          "label": "Inclusion filter",          "default": "severity>=ERROR"},
+        ],
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_GCP}

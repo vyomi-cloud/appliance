@@ -667,6 +667,7 @@ function renderRail(){
     ["DATABASES",     ["cloudsql", "firestore"]],
     ["NETWORKING",    ["vpc"]],
     ["INTEGRATION",   ["pubsub", "apigateway", "eventarc", "cloudscheduler"]],
+    ["OPERATIONS",    ["logging"]],
     ["SECURITY",      ["secretmanager", "kms"]],
     ["IAM & ADMIN",   ["iam"]],
   ];
@@ -820,6 +821,7 @@ async function renderList(main){
                      : svc.key === "iam" ? "Create service account"
                      : svc.key === "cloudscheduler" ? "Create job"
                      : svc.key === "container" ? "Create cluster"
+                     : svc.key === "logging" ? "Create sink"
                      : "Create";
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
     icon("add"), primaryLabel));
@@ -993,6 +995,12 @@ async function renderDetail(main){
         else toast(act+" failed ("+r.status+")", "err");
       }}, icon(act === "pause" ? "pause" : act === "resume" ? "play_arrow" : "bolt"),
          act === "pause" ? "Pause" : act === "resume" ? "Resume" : "Force run")) : []),
+      ...(svc.key === "logging" ? ["enable","disable"].map(act => el("button",{class:"btn",onclick:async()=>{
+        const ap = (svc.api_paths||{})[act];
+        const r = await api(ap.method, fillCommon(ap.path, {name}));
+        if (r.ok) { toast("Sink "+name+": "+act+"d"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
+        else toast(act+" failed ("+r.status+")", "err");
+      }}, icon(act === "enable" ? "play_arrow" : "pause"), act === "enable" ? "Enable" : "Disable")) : []),
       ...(svc.key === "container" ? [el("button",{class:"btn",onclick:async()=>{
         const n = prompt("Number of nodes for the first node pool", String(STATE.item.nodes || 3));
         if (n === null) return;
