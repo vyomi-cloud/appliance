@@ -96,6 +96,11 @@
     {"id": "offline-sdk-go-azure-dns", "target": "offline", "cloud": "azure", "kind": "sdk-go", "cwd": "tests/conformance/azure-sdk-go-dns", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-azure-dns", "target": "offline", "cloud": "azure", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-dns-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-azure-dns", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-dns.mjs", "timeout": 600},
-    {"id": "nano-ui-azure-dns", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-dns.mjs", "timeout": 600}
+    {"id": "nano-ui-azure-dns", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-dns.mjs", "timeout": 600},
+    {"id": "offline-sdk-java-azure-msi", "target": "offline", "cloud": "azure", "kind": "sdk-java", "cwd": "tests/conformance/azure-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=cloudlearn.MsiConformance", "timeout": 900},
+    {"id": "offline-sdk-go-azure-msi", "target": "offline", "cloud": "azure", "kind": "sdk-go", "cwd": "tests/conformance/azure-sdk-go-msi", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-azure-msi", "target": "offline", "cloud": "azure", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-msi-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-azure-msi", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-msi.mjs", "timeout": 600},
+    {"id": "nano-ui-azure-msi", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-msi.mjs", "timeout": 600}
   ]
 }

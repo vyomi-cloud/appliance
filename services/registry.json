@@ -384,6 +384,13 @@
    "upstream": "dns",
    "status": "released",
    "released_in": "3.0.21"
+  },
+  {
+   "cloud": "azure",
+   "key": "msi",
+   "name": "Managed Identities",
+   "upstream": "msi",
+   "status": "pending-release"
   }
  ]
 }

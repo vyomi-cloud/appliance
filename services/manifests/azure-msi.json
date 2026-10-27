@@ -1,0 +1,32 @@
+{
+  "cloud": "azure",
+  "key": "msi",
+  "name": "Managed Identities",
+  "upstream": "msi",
+  "issue": 87,
+  "core": "core/azure_msi_core.py",
+  "operations": [
+    "UserAssignedIdentities_CreateOrUpdate",
+    "UserAssignedIdentities_Update",
+    "UserAssignedIdentities_Delete",
+    "UserAssignedIdentities_Get",
+    "UserAssignedIdentities_ListByResourceGroup",
+    "UserAssignedIdentities_ListBySubscription",
+    "UserAssignedIdentities_ListAssociatedResources",
+    "FederatedIdentityCredentials_CreateOrUpdate",
+    "FederatedIdentityCredentials_Delete",
+    "FederatedIdentityCredentials_Get",
+    "FederatedIdentityCredentials_List"
+  ],
+  "backend": {
+    "kind": "in-process"
+  },
+  "suites": [
+    "offline-sdk-java-azure-msi",
+    "offline-sdk-go-azure-msi",
+    "offline-cli-azure-msi",
+    "offline-ui-azure-msi",
+    "nano-ui-azure-msi"
+  ],
+  "status": "ready"
+}
