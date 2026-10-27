@@ -232,6 +232,9 @@ public class AwsSdkConformance {
             chk("sqs ListQueues", false, e.getMessage());
         }
 
+        // --- CloudWatch Logs (own class; prints [PASS]/[FAIL] per check) ---
+        fail += AwsLogsConformance.run(endpoint);
+
         System.out.println("RESULT pass=" + pass + " fail=" + fail);
         System.exit(fail > 0 ? 1 : 0);
     }

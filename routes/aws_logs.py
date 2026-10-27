@@ -40,6 +40,17 @@ class SpaceLogsStore(logs_core.LogsStore):
 
 STORE = SpaceLogsStore()
 
+_READ_ONLY = ("Describe", "Get", "List", "Filter", "Test")
+
+
+def _record(op: str, payload: dict) -> None:
+    """Mutations feed the cloudsim inventory so the space's resource count and
+    cost-savings metrics follow log groups as they are created / used / deleted."""
+    if op.startswith(_READ_ONLY):
+        return
+    ctx.record_usage("logs." + op, {"name": payload.get("logGroupName") or "",
+                                    "resource_id": payload.get("logGroupName") or ""})
+
 
 async def wire(request: Request) -> Response:
     """Native CloudWatch Logs JSON protocol (X-Amz-Target: Logs_20140328.<Op>)."""
@@ -50,6 +61,8 @@ async def wire(request: Request) -> Response:
     except Exception:
         payload = {}
     r = logs_core.dispatch(STORE, target, payload)
+    if r.status == 200:
+        _record(target.rsplit(".", 1)[-1], payload)
     headers = dict(r.headers or {})
     if r.status != 200 and isinstance(r.body, dict) and "__type" in r.body:
         headers["x-amzn-errortype"] = r.body["__type"]
@@ -66,4 +79,6 @@ def register(app: FastAPI) -> None:
             body = {}
         status, payload = logs_core.console_dispatch(
             STORE, request.method, rest, dict(request.query_params), body)
+        if request.method != "GET" and status < 400:
+            _record(request.method, {"logGroupName": rest.replace("log-groups/", "").split("/")[0]})
         return Response(content=json.dumps(payload), status_code=status, media_type="application/json")
