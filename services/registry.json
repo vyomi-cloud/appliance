@@ -384,6 +384,13 @@
    "upstream": "dns",
    "status": "released",
    "released_in": "3.0.21"
+  },
+  {
+   "cloud": "azure",
+   "key": "monitor",
+   "name": "Monitor alerts",
+   "upstream": "monitor",
+   "status": "pending-release"
   }
  ]
 }

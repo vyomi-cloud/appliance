@@ -562,7 +562,8 @@ def _dispatch(state, method, sub, rg, chain, payload, query, base=""):
         return _ok(_view(rec))
     if method in ("PUT", "PATCH"):
         rec, created = _put(state, sub, rg, low, name, payload, method)
-        return _ok(_view(rec), 201 if created else 200, rid=rid, verb=method.lower())
+        # metricAlerts.CreateOrUpdate documents only 200 (the SDKs reject a 201); the other types return 201 on create
+        return _ok(_view(rec), 201 if created and low != "metricalerts" else 200, rid=rid, verb=method.lower())
     if method == "DELETE":
         if rec is None:
             return _ok(None, 204)

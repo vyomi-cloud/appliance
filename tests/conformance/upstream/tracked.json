@@ -9,8 +9,8 @@
     "products": ["Cloud Storage", "Pub/Sub", "Compute Engine", "Cloud SQL", "Firestore", "Cloud Functions", "Cloud Run functions", "Secret Manager", "Cloud Key Management Service", "Identity and Access Management", "API Gateway", "Eventarc", "Virtual Private Cloud", "Cloud Scheduler", "Google Kubernetes Engine", "IAM Service Account Credentials API", "Memorystore for Redis"]
   },
   "azure": {
-    "specs": ["storage", "compute", "sql", "web", "apimanagement", "keyvault", "eventgrid", "servicebus", "cosmos-db", "network", "authorization", "resources", "app", "appconfiguration", "cognitiveservices", "dns"],
-    "keywords": ["Blob Storage", "Azure Storage", "Virtual Machines", "Azure SQL", "Azure Functions", "API Management", "Key Vault", "Event Grid", "Service Bus", "Cosmos DB", "Virtual Network", "Azure RBAC", "Role-based access", "Resource Manager", "App Configuration", "Azure AI services", "Azure OpenAI", "Cognitive Services", "Azure DNS"]
+    "specs": ["storage", "compute", "sql", "web", "apimanagement", "keyvault", "eventgrid", "servicebus", "cosmos-db", "network", "authorization", "resources", "app", "appconfiguration", "cognitiveservices", "dns", "monitor"],
+    "keywords": ["Blob Storage", "Azure Storage", "Virtual Machines", "Azure SQL", "Azure Functions", "API Management", "Key Vault", "Event Grid", "Service Bus", "Cosmos DB", "Virtual Network", "Azure RBAC", "Role-based access", "Resource Manager", "App Configuration", "Azure AI services", "Azure OpenAI", "Cognitive Services", "Azure DNS", "Azure Monitor"]
   },
   "sdks": {
     "pypi": ["boto3", "botocore", "awscli", "google-cloud-storage", "google-cloud-pubsub", "google-cloud-firestore", "google-cloud-secret-manager", "google-cloud-kms", "azure-storage-blob", "azure-cosmos", "azure-keyvault-secrets", "azure-keyvault-keys", "azure-servicebus", "azure-storage-queue", "azure-mgmt-resource", "azure-identity", "azure-mgmt-appcontainers", "azure-mgmt-appconfiguration", "azure-appconfiguration", "azure-mgmt-cognitiveservices", "azure-mgmt-dns"],
