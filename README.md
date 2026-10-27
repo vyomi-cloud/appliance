@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 00:51 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -8,8 +8,8 @@ _Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
 - **Building now:** Amazon CloudWatch Logs (AWS, no manifest yet checks)
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), Elastic Load Balancing (AWS)
 - **Queued:** 71 services (P1 first, then P2)
-- **Consoles really implemented:** offline 47% · Nano 41%
-- **Hourly tests:** 14 of 23 suites passing (run 23:41 UTC)
+- **Consoles really implemented:** offline 47% · Nano 47%
+- **Hourly tests:** 15 of 24 suites passing (run 00:45 UTC)
 - **Upstream watch:** 5 open changes from the real clouds to adopt
 
 ## By cloud
@@ -17,8 +17,8 @@ _Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
 | AWS | 12 | 1 | 9 | 23 | 36% · 46% |
-| GCP | 12 | 0 | 0 | 24 | 39% · 46% |
-| Azure | 12 | 0 | 0 | 24 | 66% · 35% |
+| GCP | 12 | 0 | 0 | 24 | 39% · 45% |
+| Azure | 12 | 0 | 0 | 24 | 66% · 49% |
 
 ## In progress
 
@@ -44,52 +44,52 @@ _Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| EC2 | 🧩 4/13 · 🧩 3/13 | 9 · 15 | ✅ watched | before gate |
-| S3 | 🧩 5/13 · 🧩 8/13 | 1 · 1 | ✅ watched | before gate |
+| EC2 | 🧩 4/13 · 🧩 3/13 | 1 · 4 | ✅ watched | before gate |
+| S3 | 🧩 5/13 · 🧩 8/13 | 1 · 0 | ✅ watched | before gate |
 | IAM | 🧩 7/11 · 🧩 2/11 | 2 · 2 | ✅ watched | before gate |
-| RDS | 🧩 8/13 · 🧩 8/13 | 0 · 1 | ✅ watched | before gate |
-| DynamoDB | 🧩 1/13 · 🧩 5/13 | 2 · 2 | ✅ watched | before gate |
-| SQS | 🧩 2/13 · 🧩 5/13 | 1 · 1 | ✅ watched | before gate |
+| RDS | 🧩 8/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
+| DynamoDB | 🧩 1/13 · 🧩 5/13 | 13 · 6 | ✅ watched | before gate |
+| SQS | 🧩 2/13 · 🧩 5/13 | 12 · 4 | ✅ watched | before gate |
 | Lambda | 🧩 6/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
 | API Gateway | 🧩 6/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
 | VPC | 🧩 7/13 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
 | EventBridge | 🧩 1/13 · 🧩 1/2 | 6 · 1 | ✅ watched | before gate |
-| Secrets Manager | 🧩 4/13 · 🧩 6/13 | 5 · 3 | ✅ watched | before gate |
+| Secrets Manager | 🧩 4/13 · 🧩 6/13 | 5 · 5 | ✅ watched | before gate |
 | KMS | 🧩 5/13 · 🧩 10/13 | 2 · 1 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
 
 ### GCP
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| Compute Engine | 🧩 5/13 · 🧩 6/13 | 0 · 2 | ✅ watched | before gate |
-| Cloud Storage | 🧩 7/13 · 🧩 7/13 | 2 · 2 | ✅ watched | before gate |
+| Compute Engine | 🧩 5/13 · 🧩 6/13 | 0 · 1 | ✅ watched | before gate |
+| Cloud Storage | 🧩 7/13 · 🧩 7/13 | 2 · 0 | ✅ watched | before gate |
 | Cloud SQL | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
-| Pub/Sub | 🧩 4/13 · 🧩 6/13 | 5 · 4 | ✅ watched | before gate |
-| Firestore | 🧩 5/13 · 🧩 2/13 | 3 · 4 | ✅ watched | before gate |
-| Cloud Functions | 🧩 4/13 · 🧩 5/13 | 3 · 4 | ✅ watched | before gate |
+| Pub/Sub | 🧩 4/13 · 🧩 6/13 | 5 · 3 | ✅ watched | before gate |
+| Firestore | 🧩 5/13 · 🧩 2/13 | 3 · 3 | ✅ watched | before gate |
+| Cloud Functions | 🧩 4/13 · 🧩 5/13 | 3 · 2 | ✅ watched | before gate |
 | API Gateway | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
-| VPC Network | 🧩 3/13 · 🧩 4/13 | 3 · 8 | ✅ watched | before gate |
-| IAM & Admin | 🧩 5/9 · ✅ 9/9 | 2 · 1 | ✅ watched | before gate |
-| Eventarc | 🧩 5/12 · 🧩 6/12 | 4 · 3 | ✅ watched | before gate |
+| VPC Network | 🧩 3/13 · 🧩 4/13 | 3 · 4 | ✅ watched | before gate |
+| IAM & Admin | 🧩 5/9 · 🧩 8/9 | 2 · 1 | ✅ watched | before gate |
+| Eventarc | 🧩 5/12 · 🧩 6/12 | 4 · 2 | ✅ watched | before gate |
 | Secret Manager | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
-| Cloud KMS | 🧩 6/13 · 🧩 7/13 | 2 · 6 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
+| Cloud KMS | 🧩 6/13 · 🧩 7/13 | 2 · 4 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
 
 ### Azure
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| Virtual Machines | 🧩 10/13 · 🧩 8/12 | 0 · 1 | ✅ watched | before gate |
-| Storage accounts | 🧩 9/13 · 🧩 4/13 | 0 · 3 | ✅ watched | before gate |
-| SQL servers | 🧩 8/13 · 🧩 4/13 | 0 · 4 | ✅ watched | before gate |
-| Service Bus | 🧩 9/13 · 🧩 5/13 | 0 · 21 | ✅ watched | before gate |
-| Cosmos DB | 🧩 8/13 · 🧩 5/13 | 0 · 22 | ✅ watched | before gate |
-| Function apps | 🧩 7/13 · 🧩 4/13 | 0 · 22 | ✅ watched | before gate |
-| API Management | 🧩 9/13 · 🧩 5/13 | 1 · 41 | ✅ watched | before gate |
-| Virtual networks | 🧩 8/13 · 🧩 5/13 | 1 · 3 | ✅ watched | before gate |
-| Network Security Group | 🧩 1/2 · 🧩 0/2 | 1 · 20 | ✅ watched | before gate |
-| Event Grid topics | 🧩 9/13 · 🧩 4/13 | 0 · 21 | ✅ watched | before gate |
-| Key vaults | 🧩 9/13 · 🧩 3/13 | 0 · 4 | ✅ watched | before gate |
-| Entra ID / RBAC | 🧩 5/6 · 🧩 3/6 | 1 · 3 | ✅ watched | before gate |
+| Virtual Machines | 🧩 10/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
+| Storage accounts | 🧩 9/13 · 🧩 6/13 | 0 · 20 | ✅ watched | before gate |
+| SQL servers | 🧩 8/13 · 🧩 7/13 | 0 · 18 | ✅ watched | before gate |
+| Service Bus | 🧩 9/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
+| Cosmos DB | 🧩 8/13 · 🧩 6/13 | 0 · 36 | ✅ watched | before gate |
+| Function apps | 🧩 7/13 · 🧩 6/13 | 0 · 0 | ✅ watched | before gate |
+| API Management | 🧩 9/13 · 🧩 6/13 | 0 · 18 | ✅ watched | before gate |
+| Virtual networks | 🧩 8/13 · 🧩 7/13 | 1 · 37 | ✅ watched | before gate |
+| Network Security Group | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
+| Event Grid topics | 🧩 9/13 · 🧩 7/13 | 0 · 19 | ✅ watched | before gate |
+| Key vaults | 🧩 9/13 · 🧩 5/13 | 0 · 20 | ✅ watched | before gate |
+| Entra ID / RBAC | 🧩 5/6 · 🧩 3/6 | 1 · 18 | ✅ watched | before gate |
 
 - **Nano ↔ offline gaps:** Blob containers (Nano-only), Cosmos databases (Nano-only), Key Vault keys (Nano-only), Key Vault secrets (Nano-only), Storage queues (Nano-only), azure_subresource_core (Nano-only)
 
@@ -586,7 +586,7 @@ _Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary>Console parts not live yet — GCP (134)</summary>
+<details><summary>Console parts not live yet — GCP (135)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -724,10 +724,11 @@ _Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
 | Cloud KMS | nano | tab: Labels | static |
 | Cloud KMS | nano | tab: Key policy | static |
 | Cloud KMS | nano | tab: Import jobs | static |
+| IAM & Admin | nano | tab: Permissions | static |
 
 </details>
 
-<details><summary>Console parts not live yet — Azure (146)</summary>
+<details><summary>Console parts not live yet — Azure (125)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -779,30 +780,23 @@ _Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
 | Role Definition | offline | create: create with defaults | unimplemented |
 | Entra ID / RBAC | offline | tab: Conditions | static |
 | Resource groups | nano | page: Resource groups | unimplemented |
-| Virtual Machines | nano | page: Virtual Machines | unimplemented |
+| Virtual Machines | nano | page: Virtual Machines | static |
 | Virtual Machines | nano | tab: Tags | static |
 | Virtual Machines | nano | tab: Diagnose and solve problems | unimplemented |
 | Virtual Machines | nano | tab: Connect | static |
-| Storage accounts | nano | create: create with defaults | unimplemented |
 | Storage accounts | nano | tab: Overview | unimplemented |
 | Storage accounts | nano | tab: Tags | static |
 | Storage accounts | nano | tab: Diagnose and solve problems | static |
 | Storage accounts | nano | tab: Containers | unimplemented |
-| Storage accounts | nano | tab: File shares | unimplemented |
 | Storage accounts | nano | tab: Queues | unimplemented |
 | Storage accounts | nano | tab: Tables | static |
 | Storage accounts | nano | tab: Networking | static |
-| SQL servers | nano | page: SQL servers | unimplemented |
-| SQL servers | nano | create: create with defaults | unimplemented |
-| SQL servers | nano | tab: Activity log | unimplemented |
+| SQL servers | nano | tab: Overview | unimplemented |
 | SQL servers | nano | tab: Tags | static |
 | SQL servers | nano | tab: Diagnose and solve problems | static |
-| SQL servers | nano | tab: Pricing tier | unimplemented |
 | SQL servers | nano | tab: Deleted databases | static |
 | SQL servers | nano | tab: Failover groups | static |
 | SQL servers | nano | tab: Backups | static |
-| Service Bus | nano | page: Service Bus | unimplemented |
-| Service Bus | nano | create: create with defaults | unimplemented |
 | Service Bus | nano | tab: Activity log | unimplemented |
 | Service Bus | nano | tab: Tags | static |
 | Service Bus | nano | tab: Diagnose and solve problems | static |
@@ -810,15 +804,12 @@ _Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
 | Service Bus | nano | tab: Geo-recovery | static |
 | Service Bus | nano | tab: Networking | static |
 | Cosmos DB | nano | page: Cosmos DB | unimplemented |
-| Cosmos DB | nano | create: create with defaults | unimplemented |
 | Cosmos DB | nano | tab: Overview | unimplemented |
 | Cosmos DB | nano | tab: Tags | static |
 | Cosmos DB | nano | tab: Diagnose and solve problems | static |
-| Cosmos DB | nano | tab: Throughput (RU/s) | unimplemented |
+| Cosmos DB | nano | tab: Throughput (RU/s) | static |
 | Cosmos DB | nano | tab: Replicate data globally | static |
 | Cosmos DB | nano | tab: Backup & Restore | static |
-| Function apps | nano | page: Function apps | unimplemented |
-| Function apps | nano | create: create with defaults | unimplemented |
 | Function apps | nano | tab: Overview | unimplemented |
 | Function apps | nano | tab: Tags | static |
 | Function apps | nano | tab: Diagnose and solve problems | static |
@@ -827,7 +818,6 @@ _Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
 | Function apps | nano | tab: Authentication | static |
 | Function apps | nano | tab: Identity | static |
 | API Management | nano | page: API Management | unimplemented |
-| API Management | nano | create: create with defaults | unimplemented |
 | API Management | nano | tab: Activity log | unimplemented |
 | API Management | nano | tab: Tags | static |
 | API Management | nano | tab: Diagnose and solve problems | static |
@@ -835,40 +825,30 @@ _Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
 | API Management | nano | tab: Policies | unimplemented |
 | API Management | nano | tab: Named values | static |
 | Virtual networks | nano | page: Virtual networks | unimplemented |
-| Virtual networks | nano | create: create with defaults | unimplemented |
 | Virtual networks | nano | tab: Activity log | unimplemented |
-| Virtual networks | nano | tab: Tags | static |
+| Virtual networks | nano | tab: Tags | unimplemented |
 | Virtual networks | nano | tab: Diagnose and solve problems | static |
 | Virtual networks | nano | tab: Address space | static |
-| Virtual networks | nano | tab: Subnets | unimplemented |
-| Virtual networks | nano | tab: Connected devices | static |
-| Network Security Group | nano | page: Network Security Group | unimplemented |
+| Virtual networks | nano | tab: Subnets | static |
 | Network Security Group | nano | create: create with defaults | unimplemented |
-| Event Grid topics | nano | create: create with defaults | unimplemented |
-| Event Grid topics | nano | detail: resource detail | unimplemented |
 | Event Grid topics | nano | tab: Overview | unimplemented |
+| Event Grid topics | nano | tab: Access control (IAM) | unimplemented |
 | Event Grid topics | nano | tab: Tags | static |
 | Event Grid topics | nano | tab: Diagnose and solve problems | static |
-| Event Grid topics | nano | tab: Event subscriptions | unimplemented |
-| Event Grid topics | nano | tab: Topic types | static |
 | Event Grid topics | nano | tab: Networking | static |
 | Event Grid topics | nano | tab: Identity | static |
-| Key vaults | nano | page: Key vaults | unimplemented |
-| Key vaults | nano | create: create with defaults | unimplemented |
-| Key vaults | nano | tab: Activity log | unimplemented |
+| Key vaults | nano | tab: Overview | unimplemented |
 | Key vaults | nano | tab: Tags | static |
 | Key vaults | nano | tab: Diagnose and solve problems | static |
 | Key vaults | nano | tab: Secrets | unimplemented |
 | Key vaults | nano | tab: Keys | unimplemented |
-| Key vaults | nano | tab: Certificates | unimplemented |
+| Key vaults | nano | tab: Certificates | static |
 | Key vaults | nano | tab: Access policies | static |
 | Key vaults | nano | tab: Access configuration | static |
-| Role Definition | nano | page: Role Definition | unimplemented |
 | Role Definition | nano | create: create with defaults | unimplemented |
-| Entra ID / RBAC | nano | create: create with defaults | unimplemented |
+| Entra ID / RBAC | nano | detail: resource detail | unimplemented |
 | Entra ID / RBAC | nano | tab: Overview | unimplemented |
 | Entra ID / RBAC | nano | tab: Conditions | static |
-| Blob containers | nano | page: Blob containers | unimplemented |
 | Blob containers | nano | detail: resource detail | unimplemented |
 | Cosmos databases | nano | page: Cosmos databases | unimplemented |
 | Cosmos databases | nano | detail: resource detail | unimplemented |
@@ -884,7 +864,7 @@ _Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
 
 | Suite | Result | Checks |
 |---|---|---|
-| offline-ui-crawl | ❌ | 13/38 |
+| offline-ui-crawl | ❌ | 14/38 |
 | offline-console-actions | ❌ | 232/246 |
 | offline-api-ec2-instance-detail | ✅ | 3/3 |
 | offline-sdk-python-aws | ❌ | 87/88 |
@@ -899,7 +879,7 @@ _Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
 | offline-cli-gcp | ✅ | 6/6 |
 | offline-cli-azure | ❌ | 5/6 |
 | offline-ui-core | ✅ | 9/9 |
-| nano-ui-crawl | ❌ | 0/43 |
+| nano-ui-crawl | ❌ | 6/43 |
 | nano-cores | ❌ | 0/1 |
 | nano-ui-aws-api | ❌ | 5/6 |
 | nano-ui-aws-tabs | ✅ | 11/11 |
@@ -907,6 +887,7 @@ _Updated 2026-10-27 00:48 UTC · refreshes after every pipeline run_
 | nano-ui-azure-tabs | ✅ | 71/71 |
 | nano-ui-azure-dp | ✅ | 5/5 |
 | nano-ui-azure-home | ✅ | 7/7 |
+| nano-ui-budget-savings | ✅ | 5/5 |
 
 </details>
 
