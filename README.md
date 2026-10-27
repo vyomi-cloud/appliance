@@ -1,13 +1,13 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 05:18 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 05:23 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 36 services (AWS 12 · GCP 12 · Azure 12) of 1,068 the clouds publish
-- **Building now:** nothing
+- **Building now:** Artifact Registry API (GCP, no manifest yet checks)
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon CloudWatch Logs (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), Amazon Simple Systems Manager (SSM) (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), AWS Step Functions (AWS), Elastic Load Balancing (AWS)
-- **Queued:** 65 services (P1 first, then P2)
+- **Queued:** 64 services (P1 first, then P2)
 - **Consoles really implemented:** offline 49% · Nano 53%
 - **Hourly tests:** 22 of 31 suites passing (run 04:36 UTC)
 - **Upstream watch:** 5 open changes from the real clouds to adopt
@@ -17,7 +17,7 @@ _Updated 2026-10-27 05:18 UTC · refreshes after every pipeline run_
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
 | AWS | 12 | 0 | 16 | 17 | 37% · 46% |
-| GCP | 12 | 0 | 0 | 24 | 42% · 47% |
+| GCP | 12 | 1 | 0 | 23 | 42% · 47% |
 | Azure | 12 | 0 | 0 | 24 | 66% · 63% |
 
 ## In progress
@@ -40,6 +40,7 @@ _Updated 2026-10-27 05:18 UTC · refreshes after every pipeline run_
 | AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #112](https://github.com/vyomi-cloud/appliance/pull/112)) | 18/18 | — |
 | AWS Step Functions [#64](https://github.com/vyomi-cloud/appliance/issues/64) | AWS | 🔍 In gate ([PR #110](https://github.com/vyomi-cloud/appliance/pull/110)) | 18/18 | — |
 | Elastic Load Balancing [#57](https://github.com/vyomi-cloud/appliance/issues/57) | AWS | 🔍 In gate ([PR #103](https://github.com/vyomi-cloud/appliance/pull/103)) | 18/18 | — |
+| Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🛠 Building | no manifest yet | — |
 
 ## Released services
 
@@ -125,11 +126,10 @@ _Updated 2026-10-27 05:18 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary><b>GCP</b> — 24 queued</summary>
+<details><summary><b>GCP</b> — 23 queued</summary>
 
 | Service | Priority | Issue | Offline backend |
 |---|---|---|---|
-| Artifact Registry API | P1 | [#66](https://github.com/vyomi-cloud/appliance/issues/66) | registry · 10 MB · Lite |
 | BigQuery API | P1 | [#67](https://github.com/vyomi-cloud/appliance/issues/67) | duckdb |
 | Cloud DNS API | P1 | [#71](https://github.com/vyomi-cloud/appliance/issues/71) | coredns · 15 MB · Lite |
 | Cloud Logging API | P1 | [#73](https://github.com/vyomi-cloud/appliance/issues/73) | in-process |
