@@ -1,13 +1,13 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-27 19:16 UTC · refreshes after every pipeline run_
+_Updated 2026-10-27 19:21 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 49 services (AWS 16 · GCP 16 · Azure 17) of 1,068 the clouds publish
-- **Building now:** nothing
+- **Building now:** redis (Azure, no manifest yet checks)
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), applicationinsights (Azure), containerregistry (Azure), containerservice (Azure), eventhub (Azure), msi (Azure), operationalinsights (Azure)
-- **Queued:** 42 services (P1 first, then P2)
+- **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 52% · Nano 71%
 - **Hourly tests:** 76 of 79 suites passing (run 18:08 UTC)
 - **Upstream watch:** 7 open changes from the real clouds to adopt
@@ -18,7 +18,7 @@ _Updated 2026-10-27 19:16 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | 48% · 76% |
 | GCP | 16 | 0 | 8 | 12 | 42% · 66% |
-| Azure | 17 | 0 | 6 | 13 | 68% · 71% |
+| Azure | 17 | 1 | 6 | 12 | 68% · 71% |
 
 ## In progress
 
@@ -49,7 +49,8 @@ _Updated 2026-10-27 19:16 UTC · refreshes after every pipeline run_
 | containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🔍 In gate ([PR #132](https://github.com/vyomi-cloud/appliance/pull/132)) | 17/17 | — |
 | eventhub [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🔍 In gate ([PR #134](https://github.com/vyomi-cloud/appliance/pull/134)) | 17/17 | — |
 | msi [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🔍 In gate ([PR #136](https://github.com/vyomi-cloud/appliance/pull/136)) | 17/17 | — |
-| operationalinsights [#88](https://github.com/vyomi-cloud/appliance/issues/88) | Azure | 🔍 In gate ([PR #140](https://github.com/vyomi-cloud/appliance/pull/140)) | 17/17 | — |
+| operationalinsights [#88](https://github.com/vyomi-cloud/appliance/issues/88) | Azure | 🚀 Releasing | 17/17 | — |
+| redis [#89](https://github.com/vyomi-cloud/appliance/issues/89) | Azure | 🛠 Building | no manifest yet | — |
 
 ## Released services
 
@@ -167,11 +168,10 @@ _Updated 2026-10-27 19:16 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary><b>Azure</b> — 13 queued</summary>
+<details><summary><b>Azure</b> — 12 queued</summary>
 
 | Service | Priority | Issue | Offline backend |
 |---|---|---|---|
-| redis | P1 | [#89](https://github.com/vyomi-cloud/appliance/issues/89) | valkey · 8 MB · Lite |
 | batch | P2 | not filed | docker · Pro |
 | cdn | P2 | not filed | caddy · 15 MB · Lite |
 | datafactory | P2 | not filed | in-process |
