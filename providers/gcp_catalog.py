@@ -321,6 +321,44 @@ RESOURCE_CATALOG_GCP = [
         ],
     },
     # ========================================================================
+    # Cloud Tasks — queues + tasks (core/gcp_cloudtasks_core.py). Console REST at
+    # /api/gcp/cloudtasks/*; the native /v2 wire serves SDKs/CLI off the same store.
+    # ========================================================================
+    {
+        "key": "cloudtasks", "label": "Cloud Tasks", "icon": "checklist",
+        "namespace": "GCP/CloudTasks", "service": "cloudtasks",
+        "collection_path": "/api/gcp/cloudtasks/queues",
+        "resource_path":   "/api/gcp/cloudtasks/queues/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "tasks":    {"method": "GET",    "path": "/api/gcp/cloudtasks/queues/{name}/tasks"},
+            "activity": {"method": "GET",    "path": "/api/gcp/cloudtasks/queues/{name}/activity"},
+            "pause":    {"method": "POST",   "path": "/api/gcp/cloudtasks/queues/{name}/pause"},
+            "resume":   {"method": "POST",   "path": "/api/gcp/cloudtasks/queues/{name}/resume"},
+            "purge":    {"method": "POST",   "path": "/api/gcp/cloudtasks/queues/{name}/purge"},
+            "delete":   {"method": "DELETE", "path": "/api/gcp/cloudtasks/queues/{name}"},
+        },
+        "columns": [
+            ["name",                      "Name"],
+            ["location",                  "Region"],
+            ["state",                     "State"],
+            ["tasks_in_queue",            "Tasks in queue"],
+            ["max_dispatches_per_second", "Max dispatches/sec"],
+            ["max_concurrent_dispatches", "Max concurrent"],
+            ["max_attempts",              "Max attempts"],
+            ["created",                   "Created"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Queue name", "default": "my-queue"},
+            {"name": "project", "label": "Project", "default": "my-project"},
+            {"name": "location", "label": "Region", "default": "us-central1"},
+            {"name": "max_dispatches_per_second", "label": "Max dispatches per second", "default": "500"},
+            {"name": "max_concurrent_dispatches", "label": "Max concurrent dispatches", "default": "1000"},
+            {"name": "max_attempts", "label": "Max attempts", "default": "100"},
+        ],
+    },
+    # ========================================================================
     # Cloud KMS — keys + key rings + versions + EKM
     # ========================================================================
     {

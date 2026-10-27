@@ -35,6 +35,7 @@ CORES = [
     "gcp_storage_core.py",                          # GCP: GCS JSON API (native google-cloud-storage wire)
     "gcp_firestore_core.py",                        # GCP: Firestore REST (native google-cloud-firestore)
     "gcp_kms_core.py",                              # GCP: Cloud KMS REST (native google-cloud-kms)
+    "gcp_cloudtasks_core.py",                      # GCP: Cloud Tasks v2 (queues, tasks) — vendored VERBATIM
     "gcp_secretmanager_core.py",                    # GCP: Secret Manager REST (native google-cloud-secret-manager)
     "gcp_pubsub_core.py",                           # GCP: Pub/Sub REST (native google-cloud-pubsub)
     "gcp_iam_core.py",                              # GCP: Cloud IAM REST (SA + policy eval)
@@ -66,7 +67,7 @@ CORES = [
 
 # Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
 # Nano copy of a new service's engine to be identical to core/.
-VERBATIM = {"logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py"}
+VERBATIM = {"logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudtasks_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")

@@ -208,7 +208,7 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,"microsoft.compute/virtualmachines":30.37,"microsoft.sql/servers":4.99,"microsoft.storage/storageaccounts":0.50,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.servicebus/namespaces":9.81,"microsoft.keyvault/vaults":0.03};
+const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,cloudtasks:0.40,"microsoft.compute/virtualmachines":30.37,"microsoft.sql/servers":4.99,"microsoft.storage/storageaccounts":0.50,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.servicebus/namespaces":9.81,"microsoft.keyvault/vaults":0.03};
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
@@ -693,6 +693,11 @@ async function route(method, path, body, query) {
   // GCP-only sub-resource routes (additive; AWS/Azure untouched). These serve the
   // detail-view sub-resource tabs (Pub/Sub subscriptions, Cloud SQL databases,
   // Secret Manager / KMS versions) off the proven GCP cores via the shared dispatch.
+  // Cloud Tasks (core/gcp_cloudtasks_core.py) — queue detail tabs + actions
+  let ct = path.match(/^\/api\/gcp\/cloudtasks\/queues\/([^/]+)\/(tasks|activity)$/);
+  if (ct && method === "GET") return { tuple: ["gcp", "_resource", "ListChildren", { service: "cloudtasks", name: dec(ct[1]), body: { kind: ct[2] } }] };
+  ct = path.match(/^\/api\/gcp\/cloudtasks\/queues\/([^/]+)\/(pause|resume|purge|tasks)$/);
+  if (ct && method === "POST") return { tuple: ["gcp", "_resource", "QueueAction", { service: "cloudtasks", name: dec(ct[1]), body: { ...(body || {}), action: ct[2] } }] };
   let gs = path.match(/^\/api\/gcp\/subresource\/pubsub\/([^/]+)\/subscriptions\/?$/);
   if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListSubscriptions", { service: "pubsub", name: dec(gs[1]) }] };
   if (gs && method === "POST") return { tuple: ["gcp", "_resource", "CreateSubscription", { service: "pubsub", name: dec(gs[1]), body: body || {} }] };

@@ -58,6 +58,7 @@ from core import gcp_secretmanager_core as gcp_sec
 from core import gcp_pubsub_core as gcp_ps
 from core import gcp_iam_core as gcp_iam
 from core import gcp_cloudsql_core as gcp_sql
+from core import gcp_cloudtasks_core as gcp_ct
 
 
 def _gcp_service(path):
@@ -69,6 +70,9 @@ def _gcp_service(path):
         return "gcp-cloudsql"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
+    if path.startswith("/v2/projects/") and (
+            "/queues" in path or path.rstrip("/").endswith("/locations") or path.count("/") == 5):
+        return "gcp-cloudtasks"   # Cloud Tasks v2 (Cloud Run's /v2 paths are .../services)
     if "/projects/" in path:
         if "/databases/" in path and "/documents" in path:
             return "gcp-firestore"
@@ -237,6 +241,7 @@ class AwsWireRouter:
         self.gcp_msg = s.get("gcp_msg") or InMemoryMessagingStore()
         self.gcp_iam = s.get("gcp_iam") or InMemoryIamStore()
         self.gcp_sql = s.get("gcp_sql") or InMemorySqlStore()
+        self.gcp_ct = s.get("gcp_ct") or gcp_ct.CloudTasksStore()   # Cloud Tasks (queues + tasks)
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -417,7 +422,7 @@ class AwsWireRouter:
                 "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs),
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
-                "gcp-cloudsql": (gcp_sql, self.gcp_sql),
+                "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudtasks": (gcp_ct, self.gcp_ct),
             }[svc]
             mod, store = _gcp_core
             r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))

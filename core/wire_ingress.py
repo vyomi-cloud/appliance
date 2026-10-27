@@ -85,6 +85,8 @@ def build_backed_router() -> AwsWireRouter:
     }
     from core.stepfunctions_core import shared_store as _sfn_store
     stores["sfn"] = _sfn_store()   # shared with the console REST (/api/stepfunctions)
+    from core.gcp_cloudtasks_core import shared_store as _ct_store
+    stores["gcp_ct"] = _ct_store()   # Cloud Tasks: shared with the console REST (/api/gcp/cloudtasks)
     return AwsWireRouter(stores=stores)
 
 
@@ -130,7 +132,8 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     from fastapi import Request, Response
 
     from core.stepfunctions_core import shared_store as _sfn_store, set_lambda_store as _sfn_lambda
-    r = router or AwsWireRouter(stores={"sfn": _sfn_store()})
+    from core.gcp_cloudtasks_core import shared_store as _ct_store
+    r = router or AwsWireRouter(stores={"sfn": _sfn_store(), "gcp_ct": _ct_store()})
     _sfn_lambda(r.lam)   # Step Functions Task states invoke the Lambdas this router serves
 
     async def _proxy(request: Request):

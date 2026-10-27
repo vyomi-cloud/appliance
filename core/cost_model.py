@@ -100,6 +100,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.iam": 0.00,
     "gcp.secretmanager": 0.06,  # $0.06 per active secret version per month
     "gcp.kms": 0.06,            # $0.06 per software key version per month
+    "gcp.cloudtasks": 0.40,     # $0.40 per million operations (~1M/month per queue)
     "gcp.eventarc": 0.00,       # triggers are free; events billed per use
     # Azure
     "azure.vm": 0.00,         # priced via VM hourly

@@ -33,6 +33,7 @@ from core.logs_core import LogsStore
 from core.elbv2_core import Elbv2Store
 from core.ssm_core import SsmStore
 from core.stepfunctions_core import StepFunctionsStore
+from core.gcp_cloudtasks_core import CloudTasksStore
 
 _REG: dict | None = None
 
@@ -64,6 +65,7 @@ def get() -> dict:
             "gcp_msg": InMemoryMessagingStore(),
             "gcp_iam": InMemoryIamStore(),
             "gcp_sql": InMemorySqlStore(),
+            "gcp_ct":  CloudTasksStore(),   # Cloud Tasks (queues + tasks)
             # ── Azure ── (blob/cosmos/keyvault secrets+keys/queue/servicebus)
             "az_blob":   AzureBlobStore(),
             "az_cosmos": CosmosStore(),

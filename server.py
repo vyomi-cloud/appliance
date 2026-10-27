@@ -2545,6 +2545,13 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # Cloud Tasks — the shared wire/console store (queues created by console + SDK/CLI)
+        from core.gcp_cloudtasks_core import shared_store as _ct_store
+        for q_name, q in _ct_store().queues.items():
+            add("gcp", "cloudtasks", "queue", q_name.rsplit("/", 1)[-1], {"name": q_name, "created": q["createTime"]})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -23108,6 +23115,22 @@ try:
     _sfn_console.register(app, _sfn_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[stepfunctions] console routes skipped: {_e}")
+
+# Cloud Tasks: native /v2 wire + console REST (/api/gcp/cloudtasks/*) on one shared store.
+try:
+    from providers import gcp_cloudtasks_console as _ct_console
+
+    def _ct_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "cloudtasks", "queue", payload, {}, None, action="delete")
+            _record_usage("cloudtasks.delete_queue", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "cloudtasks", "queue", payload["name"],
+                                            {"name": payload["name"], "created": payload["created"]}, None)
+            _record_usage("cloudtasks.create_queue", {"name": payload["name"]})
+    _ct_console.register(app, _ct_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[cloudtasks] routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)

@@ -29,6 +29,7 @@ from core import gcp_iam_core as _iam
 from core.iam_store import InMemoryIamStore
 from core import gcp_cloudsql_core as _sql
 from core.sql_store import InMemorySqlStore
+from core import gcp_cloudtasks_core as _ct
 
 PROJ = "demo"          # the console's default project
 LOC = "global"         # default KMS location
@@ -48,11 +49,12 @@ _STORES = {
     "pubsub":        _R["gcp_msg"],
     "iam":           _R["gcp_iam"],
     "cloudsql":      _R["gcp_sql"],
+    "cloudtasks":    _R["gcp_ct"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudtasks": _ct,
 }
 
 
@@ -169,12 +171,85 @@ def _sub_delete(service, parent, child_type, child):
     return {"ok": existed, "code": None if existed else "NotFound", "name": child}
 
 
+def _cloudtasks_op(operation, name, body, rid):
+    """Console CRUD for Cloud Tasks queues — same engine + store the native /v2 wire uses."""
+    st_ = _STORES["cloudtasks"]
+
+    def find(short):
+        for q in st_.queues.values():
+            if q["name"].rsplit("/", 1)[-1] == short:
+                return q
+        return None
+
+    def err(code, nm):
+        return {"ok": False, "code": code, "name": nm}
+
+    if operation == "List":
+        return {"ok": True, "items": _ct.console_list(st_)}
+    if operation == "Create":
+        project = str(body.get("project") or _ct.DEFAULT_PROJECT).strip()
+        loc = str(body.get("location") or "us-central1").strip()
+        rl, rc = {}, {}
+        if body.get("max_dispatches_per_second") not in (None, ""):
+            rl["maxDispatchesPerSecond"] = float(body["max_dispatches_per_second"])
+        if body.get("max_concurrent_dispatches") not in (None, ""):
+            rl["maxConcurrentDispatches"] = int(body["max_concurrent_dispatches"])
+        if body.get("max_attempts") not in (None, ""):
+            rc["maxAttempts"] = int(body["max_attempts"])
+        try:
+            _ct.create_queue(st_, f"projects/{project}/locations/{loc}",
+                             {"name": f"projects/{project}/locations/{loc}/queues/{rid}",
+                              "rateLimits": rl, "retryConfig": rc})
+        except _ct._E as e:
+            return err("AlreadyExists" if e.status == 409 else "InvalidArgument", rid)
+        return {"ok": True, **_ct.queue_console_view(st_, find(rid))}
+    q = find(name)
+    if q is None:
+        return err("NotFound", name)
+    if operation == "Get":
+        return {"ok": True, **_ct.queue_console_view(st_, q)}
+    if operation == "Delete":
+        _ct.delete_queue(st_, q["name"])
+        return {"ok": True, "code": None, "name": name}
+    if operation == "Update":
+        upd = {}
+        if body.get("max_dispatches_per_second") not in (None, ""):
+            upd.setdefault("rateLimits", {})["maxDispatchesPerSecond"] = float(body["max_dispatches_per_second"])
+        if body.get("max_concurrent_dispatches") not in (None, ""):
+            upd.setdefault("rateLimits", {})["maxConcurrentDispatches"] = int(body["max_concurrent_dispatches"])
+        if body.get("max_attempts") not in (None, ""):
+            upd.setdefault("retryConfig", {})["maxAttempts"] = int(body["max_attempts"])
+        if upd:
+            _ct.patch_queue(st_, q["name"], upd)
+        return {"ok": True, **_ct.queue_console_view(st_, q)}
+    if operation == "ListChildren":
+        return {"ok": True, **_ct.children(st_, q, body.get("kind"))}
+    if operation == "QueueAction":
+        act = body.get("action")
+        if act == "pause":
+            _ct.set_state(st_, q["name"], "PAUSED")
+        elif act == "resume":
+            _ct.set_state(st_, q["name"], "RUNNING")
+        elif act == "purge":
+            _ct.purge_queue(st_, q["name"])
+        elif act == "tasks":
+            t = _ct.create_task(st_, q["name"], {"task": {"httpRequest": {
+                "url": body.get("url") or "https://example.com/handler", "httpMethod": body.get("method") or "POST"}}})
+            return {"ok": True, **_ct.task_console_view(st_.tasks[t["name"]])}
+        return {"ok": True, **_ct.queue_console_view(st_, q)}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "cloudtasks"}
+
+
 def resource_op(service, operation, name="", body=None):
     """Console CRUD → GCP core. Returns the registry _resource_dispatch envelope."""
     body = body or {}
     svc = service
     rid = str(body.get("name") or body.get("accountId") or body.get("secretId")
               or body.get("topicId") or name or "").strip()
+
+    # ---------------- CLOUD TASKS (queues + tasks) ----------------
+    if svc == "cloudtasks":
+        return _cloudtasks_op(operation, name, body, rid)
 
     # ---------------- STORAGE (GCS buckets) ----------------
     if svc == "storage":
