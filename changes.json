@@ -1,6 +1,27 @@
 {
- "at": "2026-10-27T05:55:04+00:00",
+ "at": "2026-10-27T06:55:05+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "aws",
+   "service": "Elastic Load Balancing",
+   "kind": "announcement",
+   "key": "feed:aws:a8d80ed8fdaa",
+   "title": "Announcing Amazon ECS Gateway, a managed ingress solution for your ECS services",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/announcing-amazon-ecs-gateway/",
+   "detail": "AWS announces Amazon Elastic Container Service (Amazon ECS) Gateway, a new resource that simplifies ingress networking for containerized applications by dynamically provisioning and managing Application Load Balancers (ALBs) and their supporting resources directly in your account. With ECS Gateway, platform teams define organizational networking standards once on a gateway and associate it with one or more clusters, giving organizations a centralized way to govern how traffic reaches their ECS services. Application teams simply opt in to inherit those standards without requiring networking exp",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "CloudWatch Logs",
+   "kind": "announcement",
+   "key": "feed:aws:2d06f8c6de2b",
+   "title": "Amazon CloudWatch log centralization now available in AWS GovCloud and additional commercial Regions",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-cloudwatch-centralization-region-expansion",
+   "detail": "Amazon CloudWatch log centralization is now available in AWS GovCloud (US) and 13 additional commercial Regions. CloudWatch log centralization copies log data from multiple AWS accounts and Regions into a single destination account, integrating with AWS Organizations for efficient aggregation without the need for custom solutions. With this launch, organizations in the AWS GovCloud (US) partition and commercial partition can each centralize logs across their accounts and Regions for centralized monitoring. You can scope centralization rules to your entire organization, specific organizational ",
+   "actionable": false
+  }
+ ],
  "errors": []
 }
