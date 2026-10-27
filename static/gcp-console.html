@@ -807,6 +807,7 @@ async function renderList(main){
               || data.functions || data.apis || data.networks || data.accounts
               || data.serviceAccounts || data.value || data.results
               || (Array.isArray(data) ? data : []);
+  if (svc.key === "pubsub") await decoratePubsubTopics(items, fullPath);
 
   const state = {filter:"", sortBy:null, sortDir:1};
   function paint(){
@@ -867,6 +868,22 @@ async function renderList(main){
   }
   fi.addEventListener("input", e => { state.filter = e.target.value; paint(); });
   paint();
+}
+// Pub/Sub topic resources don't carry the console's derived columns: the real
+// console computes them (subscription count from the subscriptions list, key
+// type from kmsKeyName, retention only when message retention is enabled).
+async function decoratePubsubTopics(items, topicsPath){
+  let subs = [];
+  const sr = await api("GET", topicsPath.replace(/\/topics\/?$/, "/subscriptions"));
+  if (sr.ok && sr.json) subs = sr.json.subscriptions || [];
+  items.forEach(it => {
+    const full = String(it.name || "");
+    const id = full.split("/").pop();
+    if (it.subscriptionCount == null)
+      it.subscriptionCount = subs.filter(x => String(x.topic || "").split("/").pop() === id).length;
+    if (!it.kmsKeyName) it.kmsKeyName = "Google-managed key";
+    if (!it.messageRetentionDuration) it.messageRetentionDuration = "Not enabled";
+  });
 }
 function stateBadge(v){
   if (v == null || v === "") return document.createTextNode("—");
