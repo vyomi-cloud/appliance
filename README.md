@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-28 19:51 UTC · refreshes after every pipeline run_
+_Updated 2026-10-28 19:53 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-10-28 19:51 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 57% · Nano 63%
 - **Hourly tests:** 0 of 0 suites passing
-- **Upstream watch:** 26 open changes from the real clouds to adopt
+- **Upstream watch:** 28 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -60,7 +60,7 @@ _Updated 2026-10-28 19:51 UTC · refreshes after every pipeline run_
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| EC2 | 🧩 5/13 · 🧩 1/2 | 0 · 1 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
+| EC2 | 🧩 5/13 · 🧩 1/2 | 0 · 1 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | S3 | 🧩 6/13 · 🧩 9/13 | 0 · 2 | ✅ watched | before gate |
 | IAM | 🧩 7/11 · 🧩 2/11 | 2 · 12 | ✅ watched | before gate |
 | RDS | 🧩 8/13 · 🧩 9/13 | 0 · 7 | ✅ watched | before gate |
@@ -68,7 +68,7 @@ _Updated 2026-10-28 19:51 UTC · refreshes after every pipeline run_
 | SQS | 🧩 5/13 · 🧩 6/13 | 1 · 0 | ✅ watched | before gate |
 | Lambda | 🧩 6/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
 | API Gateway | 🧩 8/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
-| VPC | 🧩 7/13 · 🧩 1/2 | 1 · 1 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
+| VPC | 🧩 7/13 · 🧩 1/2 | 1 · 1 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | EventBridge | 🧩 6/13 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
 | Secrets Manager | 🧩 4/13 · 🧩 7/13 | 5 · 2 | ✅ watched | before gate |
 | KMS | 🧩 5/13 · 🧩 10/13 | 2 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
