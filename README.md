@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-28 23:41 UTC · refreshes after every pipeline run_
+_Updated 2026-10-28 23:46 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -24,7 +24,7 @@ _Updated 2026-10-28 23:41 UTC · refreshes after every pipeline run_
 
 | Service | Cloud | Stage | Checks | Real backend | Built with | Still missing |
 |---|---|---|---|---|---|---|
-| Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🔍 In gate ([PR #95](https://github.com/vyomi-cloud/appliance/pull/95)) | 18/18 | in-process | in-process | — |
+| Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🔍 In gate ([PR #95](https://github.com/vyomi-cloud/appliance/pull/95)) | 17/18 | victoriametrics · Lite · + vmalert agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🔍 In gate ([PR #96](https://github.com/vyomi-cloud/appliance/pull/96)) | 18/18 | in-process | in-process | — |
 | Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🔍 In gate ([PR #101](https://github.com/vyomi-cloud/appliance/pull/101)) | 19/19 | docker · Pro | docker · Pro | — |
 | Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🔍 In gate ([PR #100](https://github.com/vyomi-cloud/appliance/pull/100)) | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
@@ -40,7 +40,7 @@ _Updated 2026-10-28 23:41 UTC · refreshes after every pipeline run_
 | BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🔍 In gate ([PR #115](https://github.com/vyomi-cloud/appliance/pull/115)) | 17/18 | duckdb · in-process | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🔍 In gate ([PR #120](https://github.com/vyomi-cloud/appliance/pull/120)) | 17/18 | coredns · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🔍 In gate ([PR #122](https://github.com/vyomi-cloud/appliance/pull/122)) | 17/18 | logstore · in-process · + fluent-bit agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Cloud Monitoring API [#74](https://github.com/vyomi-cloud/appliance/issues/74) | GCP | 🔍 In gate ([PR #123](https://github.com/vyomi-cloud/appliance/pull/123)) | 18/18 | in-process | in-process | — |
+| Cloud Monitoring API [#74](https://github.com/vyomi-cloud/appliance/issues/74) | GCP | 🔍 In gate ([PR #123](https://github.com/vyomi-cloud/appliance/pull/123)) | 17/18 | victoriametrics · Lite · + vmalert agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🔍 In gate ([PR #125](https://github.com/vyomi-cloud/appliance/pull/125)) | 19/19 | docker · Pro | docker · Pro | — |
 | Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #126](https://github.com/vyomi-cloud/appliance/pull/126)) | 18/18 | in-process | in-process | — |
@@ -119,7 +119,7 @@ _Updated 2026-10-28 23:41 UTC · refreshes after every pipeline run_
 | App Configuration | in-process | ✅ real key-value data plane | 🧩 10/13 · 🧩 9/13 | 0 · 0 | ✅ watched | [v3.0.19](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.19) |
 | Azure AI services | ollama · Max | ⚪ no model inference (Ollama not wired) | 🧩 10/13 · 🧩 9/13 | 0 · 0 | ✅ watched | [v3.0.20](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.20) |
 | DNS zones | coredns · Lite | ⚪ no DNS server answers (CoreDNS not wired) | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | [v3.0.21](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.21) |
-| Monitor alerts | in-process | ⚪ alert rules stored, never evaluated or fired | 🧩 11/13 · 🧩 11/13 | 0 · 0 | ✅ watched | [v3.0.22](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.22) |
+| Monitor alerts | victoriametrics · Lite · + vmalert agent | ⚪ alert rules stored, never evaluated or fired (vmalert not wired) | 🧩 11/13 · 🧩 11/13 | 0 · 0 | ✅ watched | [v3.0.22](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.22) |
 | Log Analytics | logstore · in-process · + fluent-bit agent | ⚪ workspaces only; no ingestion or KQL queries | 🧩 11/13 · 🧩 11/13 | 0 · 0 | ✅ watched | [v3.0.23](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.23) |
 
 - **Nano ↔ offline gaps:** azure_subresource_core (Nano-only)
@@ -210,7 +210,7 @@ _Updated 2026-10-28 23:41 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | cloudwatch |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: victoriametrics; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -620,7 +620,7 @@ _Updated 2026-10-28 23:41 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | monitoring/v3 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: victoriametrics; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
