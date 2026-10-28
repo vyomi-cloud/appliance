@@ -1,5 +1,5 @@
 {
- "at": "2026-10-28T17:50:49+00:00",
+ "at": "2026-10-28T18:50:50+00:00",
  "baseline": false,
  "changes": [
   {
@@ -19,7 +19,27 @@
    "title": "Azure network: Consolidate Network C# resource helpers and client names (#47689)",
    "link": "https://github.com/Azure/azure-rest-api-specs/commit/280ac250381ac5489d68612b067b29f48fc5e03c",
    "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "cli:aws",
+   "kind": "release",
+   "key": "ver:cli:aws:2.39.1",
+   "title": "cli:aws: 2.39.0 \u2192 2.39.1",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Log Analytics, Azure Monitor",
+   "kind": "announcement",
+   "key": "feed:azure:a9cc43a230c0",
+   "title": "Announcing: Migrate Azure Container Apps logging destination from Log Analytics to Azure Monitor",
+   "link": "https://azure.microsoft.com/updates?id=577689",
+   "detail": "The Log Analytics logging destination for Azure Container Apps is now a legacy logging option. Existing environments configured with the Log Analytics logging destination will continue to function normally. However, we recommend planning a migration to th",
+   "actionable": false
   }
  ],
- "errors": []
+ "errors": [
+  "maven/com.azure:azure-cosmos: The read operation timed out"
+ ]
 }
