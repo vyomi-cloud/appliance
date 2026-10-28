@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
+_Updated 2026-10-28 23:06 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 57% · Nano 62%
 - **Hourly tests:** 0 of 0 suites passing
-- **Upstream watch:** 36 open changes from the real clouds to adopt
+- **Upstream watch:** 37 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -29,25 +29,25 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🔍 In gate ([PR #101](https://github.com/vyomi-cloud/appliance/pull/101)) | 19/19 | docker · Pro | docker · Pro | — |
 | Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🔍 In gate ([PR #100](https://github.com/vyomi-cloud/appliance/pull/100)) | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
 | Amazon ElastiCache [#56](https://github.com/vyomi-cloud/appliance/issues/56) | AWS | 🔍 In gate ([PR #102](https://github.com/vyomi-cloud/appliance/pull/102)) | 20/20 | valkey · Lite | valkey · 8 MB · Lite | — |
-| Amazon Kinesis [#58](https://github.com/vyomi-cloud/appliance/issues/58) | AWS | 🔍 In gate ([PR #104](https://github.com/vyomi-cloud/appliance/pull/104)) | 18/18 | nats · Lite | in-process | — |
+| Amazon Kinesis [#58](https://github.com/vyomi-cloud/appliance/issues/58) | AWS | 🔍 In gate ([PR #104](https://github.com/vyomi-cloud/appliance/pull/104)) | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Amazon Route 53 [#60](https://github.com/vyomi-cloud/appliance/issues/60) | AWS | 🔍 In gate ([PR #106](https://github.com/vyomi-cloud/appliance/pull/106)) | 20/20 | coredns · Lite | coredns · 15 MB · Lite | — |
-| Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🔍 In gate ([PR #107](https://github.com/vyomi-cloud/appliance/pull/107)) | 18/18 | mailpit · Lite | in-process | — |
-| Amazon Simple Notification Service [#62](https://github.com/vyomi-cloud/appliance/issues/62) | AWS | 🔍 In gate ([PR #108](https://github.com/vyomi-cloud/appliance/pull/108)) | 18/18 | in-process | in-process | — |
+| Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🔍 In gate ([PR #107](https://github.com/vyomi-cloud/appliance/pull/107)) | 17/18 | mailpit · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Amazon Simple Notification Service [#62](https://github.com/vyomi-cloud/appliance/issues/62) | AWS | 🔍 In gate ([PR #108](https://github.com/vyomi-cloud/appliance/pull/108)) | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | in-process | in-process | — |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | in-process | in-process | — |
 | AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #112](https://github.com/vyomi-cloud/appliance/pull/112)) | 18/18 | in-process | in-process | — |
-| Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🔍 In gate ([PR #114](https://github.com/vyomi-cloud/appliance/pull/114)) | 18/18 | registry · Lite | in-process | — |
-| BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🔍 In gate ([PR #115](https://github.com/vyomi-cloud/appliance/pull/115)) | 18/18 | duckdb | in-process | — |
-| Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🔍 In gate ([PR #120](https://github.com/vyomi-cloud/appliance/pull/120)) | 18/18 | coredns · Lite | in-process | — |
+| Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🔍 In gate ([PR #114](https://github.com/vyomi-cloud/appliance/pull/114)) | 17/18 | registry · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🔍 In gate ([PR #115](https://github.com/vyomi-cloud/appliance/pull/115)) | 17/18 | duckdb | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🔍 In gate ([PR #120](https://github.com/vyomi-cloud/appliance/pull/120)) | 17/18 | coredns · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🔍 In gate ([PR #122](https://github.com/vyomi-cloud/appliance/pull/122)) | 18/18 | in-process | in-process | — |
 | Cloud Monitoring API [#74](https://github.com/vyomi-cloud/appliance/issues/74) | GCP | 🔍 In gate ([PR #123](https://github.com/vyomi-cloud/appliance/pull/123)) | 18/18 | in-process | in-process | — |
 | Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🔍 In gate ([PR #125](https://github.com/vyomi-cloud/appliance/pull/125)) | 19/19 | docker · Pro | docker · Pro | — |
-| Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | in-process | in-process | — |
+| Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #126](https://github.com/vyomi-cloud/appliance/pull/126)) | 18/18 | in-process | in-process | — |
 | applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🔍 In gate ([PR #129](https://github.com/vyomi-cloud/appliance/pull/129)) | 17/17 | in-process | in-process | — |
 | containerregistry [#82](https://github.com/vyomi-cloud/appliance/issues/82) | Azure | 🔍 In gate ([PR #131](https://github.com/vyomi-cloud/appliance/pull/131)) | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
-| containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🔍 In gate ([PR #132](https://github.com/vyomi-cloud/appliance/pull/132)) | 17/17 | k3s · Max | in-process | — |
-| eventhub [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🔍 In gate ([PR #134](https://github.com/vyomi-cloud/appliance/pull/134)) | 17/17 | nats · Lite | in-process | — |
+| containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🔍 In gate ([PR #132](https://github.com/vyomi-cloud/appliance/pull/132)) | 16/17 | k3s · Max | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| eventhub [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🔍 In gate ([PR #134](https://github.com/vyomi-cloud/appliance/pull/134)) | 16/17 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | msi [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🔍 In gate ([PR #136](https://github.com/vyomi-cloud/appliance/pull/136)) | 17/17 | in-process | in-process | — |
 | redis [#89](https://github.com/vyomi-cloud/appliance/issues/89) | Azure | 🔍 In gate ([PR #141](https://github.com/vyomi-cloud/appliance/pull/141)) | 20/20 | valkey · Lite | valkey · 8 MB · Lite | — |
 
@@ -70,7 +70,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | Lambda | — | not audited | 🧩 6/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
 | API Gateway | — | not audited | 🧩 8/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
 | VPC | — | not audited | 🧩 7/13 · 🧩 1/2 | 1 · 1 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
-| EventBridge | — | not audited | 🧩 6/13 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
+| EventBridge | nats · Lite | 🟡 rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered | 🧩 6/13 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
 | Secrets Manager | — | not audited | 🧩 4/13 · 🧩 7/13 | 5 · 2 | ✅ watched | before gate |
 | KMS | — | not audited | 🧩 5/13 · 🧩 10/13 | 2 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
 | CloudWatch Logs | in-process | ✅ in-process engine, SQLite store; filter + Insights queries | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | [v3.0.11](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.11) |
@@ -210,7 +210,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | cloudwatch |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -235,7 +235,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | cognito-idp |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -260,7 +260,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | ecs |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'substrate', 'name': 'docker', 'tier': 'pro'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: docker; chose docker |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: docker; chose docker |
 | ✅ | substrate backends are Pro or Max only | tier=pro |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
@@ -286,7 +286,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | ecr |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'container', 'name': 'registry', 'image': 'registry:2.8.3', 'license': 'Apache-2.0', 'tier': 'lite', 'compose_service': 'vy |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: registry; chose registry |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: registry; chose registry |
 | ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=Apache-2.0 |
 | ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=Apache-2.0 |
 | ✅ | backend image is pinned to a version (not latest) | registry:2.8.3 |
@@ -313,7 +313,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | elasticache |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'container', 'name': 'valkey', 'image': 'valkey/valkey:8.0.1-alpine', 'license': 'BSD-3-Clause', 'tier': 'lite', 'compose_s |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: valkey; chose valkey |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: valkey; chose valkey |
 | ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=BSD-3-Clause |
 | ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=BSD-3-Clause |
 | ✅ | backend image is pinned to a version (not latest) | valkey/valkey:8.0.1-alpine |
@@ -340,7 +340,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | kinesis |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process', 'reason': 'Kinesis semantics (shards, hash-key routing, sequence numbers, iterators, resharding lineage) live |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: nats; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: nats; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -365,7 +365,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | route53 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'container', 'name': 'coredns', 'image': 'coredns/coredns:1.11.3', 'license': 'Apache-2.0', 'tier': 'lite', 'compose_servic |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: coredns; chose coredns |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: coredns; chose coredns |
 | ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=Apache-2.0 |
 | ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=Apache-2.0 |
 | ✅ | backend image is pinned to a version (not latest) | coredns/coredns:1.11.3 |
@@ -392,7 +392,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | sesv2 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process', 'reason': "SES v2 has no SMTP data plane in its API: SendEmail is validated and recorded by the engine and sh |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: mailpit; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: mailpit; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -417,7 +417,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | sns |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: nats; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -442,7 +442,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | apigatewayv2 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 | ✅ | blank like the real console: Routes / Authorization | AWS shows - in the Authorization column for routes with no authorizer attached (authorizationType NONE) |
 
@@ -468,7 +468,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | cloudformation |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 | ✅ | blank like the real console: Events / Status reason | AWS console shows - for the Status reason of successful stack events |
 | ✅ | blank like the real console: Outputs / Export name | AWS console shows - for an output that declares no Export |
@@ -495,7 +495,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | sts |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -520,7 +520,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | artifactregistry/v1 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process', 'reason': "Control plane first: repositories, packages, versions, tags, files and docker images live in the e |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: registry; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: registry; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -545,7 +545,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | bigquery/v2 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process', 'name': 'sqlite', 'reason': 'SQL runs on the stdlib sqlite3 engine inside the core (a GoogleSQL-to-SQLite tra |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: duckdb; chose sqlite |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: duckdb; chose sqlite |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -570,7 +570,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | dns/v1 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process', 'reason': 'Zones, record sets and changes are control-plane state held by the engine (identical offline and i |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: coredns; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: coredns; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -595,7 +595,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | logging/v2 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -620,7 +620,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | monitoring/v3 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -645,7 +645,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | run/v2 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'substrate', 'name': 'docker', 'tier': 'pro'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: docker; chose docker |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: docker; chose docker |
 | ✅ | substrate backends are Pro or Max only | tier=pro |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
@@ -671,7 +671,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | cloudtasks/v2 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: nats; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -696,7 +696,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | workflows/v1 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -721,7 +721,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | applicationinsights |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
 
 </details>
 
@@ -745,7 +745,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | containerregistry |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'container', 'name': 'registry', 'image': 'registry:2.8.3', 'license': 'Apache-2.0', 'tier': 'lite', 'compose_service': 'vy |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: registry; chose registry |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: registry; chose registry |
 | ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=Apache-2.0 |
 | ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=Apache-2.0 |
 | ✅ | backend image is pinned to a version (not latest) | registry:2.8.3 |
@@ -772,7 +772,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | containerservice |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process', 'reason': 'This release is control plane only (clusters, node pools, upgrades, credentials, maintenance, snap |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: k3s; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: k3s; chose in-process |
 
 </details>
 
@@ -796,7 +796,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | eventhub |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process', 'reason': "Event Hubs' native wire is AMQP 1.0 / Kafka, which no Vyomi tier exposes; the engine keeps the par |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: nats; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: nats; chose in-process |
 
 </details>
 
@@ -820,7 +820,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | msi |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: in-process; chose in-process |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
 
 </details>
 
@@ -844,7 +844,7 @@ _Updated 2026-10-28 22:54 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | redis |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'container', 'name': 'valkey', 'image': 'valkey/valkey:8.0.1-alpine', 'license': 'BSD-3-Clause', 'tier': 'lite', 'compose_s |
-| ✅ | backend is the recommended one, or the manifest says why not | recommended: valkey; chose valkey |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: valkey; chose valkey |
 | ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=BSD-3-Clause |
 | ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=BSD-3-Clause |
 | ✅ | backend image is pinned to a version (not latest) | valkey/valkey:8.0.1-alpine |
