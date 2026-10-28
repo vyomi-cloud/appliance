@@ -285,6 +285,33 @@
     "azure:applicationinsights"
    ],
    "why": "Optional heavy log store for large local volumes (Max): single Go binary; each cloud's query language translated to LogsQL, so edge cases can differ from the in-process store. Loki is not an option (AGPL, denied)."
+  },
+  "victoriametrics": {
+   "image": "victoriametrics/victoria-metrics:v1.104.0",
+   "license": "Apache-2.0",
+   "idle_mb": 40,
+   "tier": "lite",
+   "for": [
+    "aws:cloudwatch",
+    "aws:amp",
+    "gcp:monitoring/v3",
+    "azure:monitor"
+   ],
+   "why": "One metrics store for all three clouds: CloudWatch PutMetricData/GetMetricData/Metric Math, Cloud Monitoring timeSeries (aligners, reducers, PromQL) and Azure Monitor metrics map to labels + step + MetricsQL aggregations. Also the real Prometheus backend (remote write, /metrics scraping) for Amazon/GCP/Azure managed Prometheus, Grafana-compatible. Every Vyomi service pushes its built-in metrics (Docker stats for VMs, Lambda invocations/duration/errors, bucket size, queue depth) and logstore metric filters write here. Roll-ups (CloudWatch 1-min → 5-min → 1-h) are applied at query time (downsampling is Enterprise-only). Nano keeps a small in-process store with the same API."
+  },
+  "vmalert": {
+   "image": "victoriametrics/vmalert:v1.104.0",
+   "license": "Apache-2.0",
+   "idle_mb": 10,
+   "tier": "lite",
+   "role": "agent",
+   "agent_for": [
+    "aws:cloudwatch",
+    "aws:amp",
+    "gcp:monitoring/v3",
+    "azure:monitor"
+   ],
+   "why": "The shared alert evaluator: CloudWatch alarms (actions to SNS, Lambda, Auto Scaling), Cloud Monitoring alerting policies (notification channels) and Azure Monitor metric alerts (action groups: webhooks, email via Mailpit) are compiled to vmalert rules over VictoriaMetrics, so alarms really change state and really fire."
   }
  },
  "in_process": {
@@ -292,7 +319,6 @@
   "aws": [
    "sts",
    "ssm",
-   "cloudwatch",
    "cloudformation",
    "stepfunctions",
    "cognito-idp",
@@ -306,7 +332,6 @@
    "xray"
   ],
   "gcp": [
-   "monitoring/v3",
    "cloudscheduler/v1",
    "workflows/v1",
    "iamcredentials/v1",
@@ -321,7 +346,6 @@
    "bigtableadmin/v2"
   ],
   "azure": [
-   "monitor",
    "appconfiguration",
    "msi",
    "signalr",
@@ -418,7 +442,7 @@
   },
   "azure:monitor": {
    "state": "api",
-   "today": "alert rules stored, never evaluated or fired"
+   "today": "alert rules stored, never evaluated or fired (vmalert not wired)"
   },
   "azure:operationalinsights": {
    "state": "api",
