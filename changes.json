@@ -1,5 +1,5 @@
 {
- "at": "2026-10-28T16:50:50+00:00",
+ "at": "2026-10-28T17:50:49+00:00",
  "baseline": false,
  "changes": [
   {
@@ -21,8 +21,5 @@
    "actionable": false
   }
  ],
- "errors": [
-  "maven/com.azure:azure-data-appconfiguration: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
- ]
+ "errors": []
 }
