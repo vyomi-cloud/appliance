@@ -133,7 +133,14 @@
     "azure:frontdoor",
     "azure:cdn"
    ],
-   "why": "One shared gateway for every gateway-type service: real HTTP traffic on each invoke URL / listener, routes changed live through Caddy's admin API (no reload) as users create them, TLS, CORS, rate limits, JWT checks. AWS-specific parts (Lambda proxy integration, VTL mapping templates, Lambda authorizers, usage plans/API keys, APIM policies) are a Vyomi handler Caddy forwards to. Already in the stack."
+   "why": "One shared gateway for every gateway-type service: real HTTP traffic on each invoke URL / listener, routes changed live through Caddy's admin API (no reload) as users create them, TLS, CORS, rate limits, JWT checks. AWS-specific parts (Lambda proxy integration, VTL mapping templates, Lambda authorizers, usage plans/API keys, APIM policies) are a Vyomi handler Caddy forwards to. Already in the stack.",
+   "agent_for": [
+    "aws:apprunner",
+    "aws:ecs",
+    "azure:app",
+    "gcp:run/v2"
+   ],
+   "role": "gateway"
   },
   "logstore": {
    "kind": "in-process",
@@ -170,9 +177,10 @@
     "gcp:cloudbuild/v1",
     "gcp:batch/v1",
     "azure:app",
-    "azure:batch"
+    "azure:batch",
+    "aws:apprunner"
    ],
-   "why": "existing Pro Docker compute backend runs the real containers; Free/Lite get the control plane only"
+   "why": "Existing Pro Docker compute backend runs the real containers (Free/Lite get the control plane only). For serverless containers (Cloud Run, Container Apps, App Runner, ECS services): each revision is a real container with $PORT, the shared Caddy gateway gives the service URL and the weighted traffic split across revisions (admin API, live), and a Vyomi scaler adds/removes containers by concurrency with min/max instances and scale to zero (Caddy holds the first request through the cold start). Cloud Run Jobs / Container Apps jobs / ECS tasks run to completion with retries."
   },
   "k3s": {
    "image": "rancher/k3s:v1.30.5-k3s1",
@@ -312,6 +320,18 @@
     "azure:monitor"
    ],
    "why": "The shared alert evaluator: CloudWatch alarms (actions to SNS, Lambda, Auto Scaling), Cloud Monitoring alerting policies (notification channels) and Azure Monitor metric alerts (action groups: webhooks, email via Mailpit) are compiled to vmalert rules over VictoriaMetrics, so alarms really change state and really fire."
+  },
+  "knative": {
+   "image": "Knative Serving + Kourier on the shared k3s (pin a release when adopted)",
+   "license": "Apache-2.0",
+   "idle_mb": 400,
+   "tier": "max",
+   "role": "optional",
+   "optional_for": [
+    "gcp:run/v2",
+    "azure:app"
+   ],
+   "why": "Optional most-faithful backend on Max: Cloud Run's v1 API is the Knative Serving API, so revisions, traffic splits, concurrency autoscaling and scale to zero come natively. Needs the shared k3s (~500 MB) plus ~300-500 MB. Not Coolify (a second PaaS control plane, ~500 MB+, no revisions/traffic split/scale to zero) and not Fission (Kubernetes FaaS, function-first rather than any-container)."
   }
  },
  "in_process": {
