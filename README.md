@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-28 23:12 UTC · refreshes after every pipeline run_
+_Updated 2026-10-28 23:41 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -37,14 +37,14 @@ _Updated 2026-10-28 23:12 UTC · refreshes after every pipeline run_
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | in-process | in-process | — |
 | AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #112](https://github.com/vyomi-cloud/appliance/pull/112)) | 18/18 | in-process | in-process | — |
 | Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🔍 In gate ([PR #114](https://github.com/vyomi-cloud/appliance/pull/114)) | 17/18 | registry · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🔍 In gate ([PR #115](https://github.com/vyomi-cloud/appliance/pull/115)) | 17/18 | duckdb | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🔍 In gate ([PR #115](https://github.com/vyomi-cloud/appliance/pull/115)) | 17/18 | duckdb · in-process | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🔍 In gate ([PR #120](https://github.com/vyomi-cloud/appliance/pull/120)) | 17/18 | coredns · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🔍 In gate ([PR #122](https://github.com/vyomi-cloud/appliance/pull/122)) | 18/18 | in-process | in-process | — |
+| Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🔍 In gate ([PR #122](https://github.com/vyomi-cloud/appliance/pull/122)) | 17/18 | logstore · in-process · + fluent-bit agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Cloud Monitoring API [#74](https://github.com/vyomi-cloud/appliance/issues/74) | GCP | 🔍 In gate ([PR #123](https://github.com/vyomi-cloud/appliance/pull/123)) | 18/18 | in-process | in-process | — |
 | Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🔍 In gate ([PR #125](https://github.com/vyomi-cloud/appliance/pull/125)) | 19/19 | docker · Pro | docker · Pro | — |
 | Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #126](https://github.com/vyomi-cloud/appliance/pull/126)) | 18/18 | in-process | in-process | — |
-| applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🔍 In gate ([PR #129](https://github.com/vyomi-cloud/appliance/pull/129)) | 17/17 | in-process | in-process | — |
+| applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🔍 In gate ([PR #129](https://github.com/vyomi-cloud/appliance/pull/129)) | 16/17 | logstore · in-process · + fluent-bit agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | containerregistry [#82](https://github.com/vyomi-cloud/appliance/issues/82) | Azure | 🔍 In gate ([PR #131](https://github.com/vyomi-cloud/appliance/pull/131)) | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
 | containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🔍 In gate ([PR #132](https://github.com/vyomi-cloud/appliance/pull/132)) | 16/17 | k3s · Max | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | eventhub [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🔍 In gate ([PR #134](https://github.com/vyomi-cloud/appliance/pull/134)) | 16/17 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
@@ -73,7 +73,7 @@ _Updated 2026-10-28 23:12 UTC · refreshes after every pipeline run_
 | EventBridge | nats · Lite | 🟡 rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered | 🧩 6/13 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
 | Secrets Manager | — | not audited | 🧩 4/13 · 🧩 7/13 | 5 · 2 | ✅ watched | before gate |
 | KMS | — | not audited | 🧩 5/13 · 🧩 10/13 | 2 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
-| CloudWatch Logs | in-process | ✅ in-process engine, SQLite store; filter + Insights queries | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | [v3.0.11](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.11) |
+| CloudWatch Logs | logstore · in-process · + fluent-bit agent | ✅ in-process engine, SQLite store; filter + Insights queries | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | [v3.0.11](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.11) |
 | Elastic Load Balancing | caddy · Lite | ⚪ no traffic forwarded (Caddy not wired) | 🧩 7/8 · 🧩 7/8 | 0 · 0 | ✅ watched | [v3.0.10](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.10) |
 | Systems Manager | in-process | 🟡 Parameter Store real; Run Command reports Success without running | 🧩 5/10 · 🧩 5/10 | 1 · 0 | ✅ watched | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
 | Step Functions | in-process | ✅ ASL interpreter runs executions and calls Lambda; Wait doesn't sleep | 🧩 8/12 · 🧩 8/12 | 0 · 0 | ✅ watched | [v3.0.13](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.13) |
@@ -120,7 +120,7 @@ _Updated 2026-10-28 23:12 UTC · refreshes after every pipeline run_
 | Azure AI services | ollama · Max | ⚪ no model inference (Ollama not wired) | 🧩 10/13 · 🧩 9/13 | 0 · 0 | ✅ watched | [v3.0.20](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.20) |
 | DNS zones | coredns · Lite | ⚪ no DNS server answers (CoreDNS not wired) | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | [v3.0.21](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.21) |
 | Monitor alerts | in-process | ⚪ alert rules stored, never evaluated or fired | 🧩 11/13 · 🧩 11/13 | 0 · 0 | ✅ watched | [v3.0.22](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.22) |
-| Log Analytics | duckdb | ⚪ workspaces only; no ingestion or KQL queries | 🧩 11/13 · 🧩 11/13 | 0 · 0 | ✅ watched | [v3.0.23](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.23) |
+| Log Analytics | logstore · in-process · + fluent-bit agent | ⚪ workspaces only; no ingestion or KQL queries | 🧩 11/13 · 🧩 11/13 | 0 · 0 | ✅ watched | [v3.0.23](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.23) |
 
 - **Nano ↔ offline gaps:** azure_subresource_core (Nano-only)
 
@@ -130,7 +130,7 @@ _Updated 2026-10-28 23:12 UTC · refreshes after every pipeline run_
 
 | Service | Priority | Issue | Real backend |
 |---|---|---|---|
-| Amazon Athena | P2 | not filed | duckdb |
+| Amazon Athena | P2 | not filed | duckdb · in-process |
 | Amazon Bedrock Runtime | P2 | not filed | ollama · Max |
 | Amazon DynamoDB Streams | P2 | not filed | in-process |
 | Amazon Elastic File System | P2 | not filed | in-process |
@@ -144,7 +144,7 @@ _Updated 2026-10-28 23:12 UTC · refreshes after every pipeline run_
 | AWS Batch | P2 | not filed | docker · Pro |
 | AWS Certificate Manager | P2 | not filed | in-process |
 | AWS CodeBuild | P2 | not filed | docker · Pro |
-| AWS Glue | P2 | not filed | duckdb |
+| AWS Glue | P2 | not filed | duckdb · in-process |
 | AWS X-Ray | P2 | not filed | in-process |
 | Managed Streaming for Kafka | P2 | not filed | kafka · Max |
 
@@ -184,7 +184,7 @@ _Updated 2026-10-28 23:12 UTC · refreshes after every pipeline run_
 | search | P2 | not filed | in-process |
 | servicefabric | P2 | not filed | in-process |
 | signalr | P2 | not filed | in-process |
-| synapse | P2 | not filed | duckdb |
+| synapse | P2 | not filed | duckdb · in-process |
 
 </details>
 
@@ -595,7 +595,7 @@ _Updated 2026-10-28 23:12 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | logging/v2 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: logstore; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 
 </details>
@@ -721,7 +721,7 @@ _Updated 2026-10-28 23:12 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | applicationinsights |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: logstore; chose in-process |
 
 </details>
 
