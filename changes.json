@@ -1,7 +1,75 @@
 {
- "at": "2026-10-28T18:50:50+00:00",
+ "at": "2026-10-28T19:50:50+00:00",
  "baseline": false,
  "changes": [
+  {
+   "cloud": "aws",
+   "service": "ec2",
+   "kind": "operation-added",
+   "key": "aws:ec2:GetCapacityManagerSupportabilityScores:added",
+   "title": "AWS ec2: new operation GetCapacityManagerSupportabilityScores",
+   "detail": {
+    "in": [
+     "CapacityAmount",
+     "CapacityAvailabilityZoneIds",
+     "CapacityUnit",
+     "DryRun",
+     "InstanceRequirementsWithMetadata",
+     "InstanceTypes",
+     "MarketType"
+    ],
+    "required": [
+     "CapacityAmount",
+     "CapacityAvailabilityZoneIds",
+     "CapacityUnit",
+     "MarketType"
+    ],
+    "out": [
+     "AggregateScore",
+     "CapacityManagerSupportabilityScores"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "ec2",
+   "kind": "operation-changed",
+   "key": "aws:ec2:CreateCapacityReservationFleet:7562f26d1609",
+   "title": "AWS ec2: operation CreateCapacityReservationFleet changed",
+   "detail": {
+    "in": {
+     "was": [
+      "AllocationStrategy",
+      "ClientToken",
+      "DryRun",
+      "EndDate",
+      "InstanceMatchCriteria",
+      "InstanceTypeSpecifications",
+      "TagSpecifications",
+      "Tenancy",
+      "TotalTargetCapacity"
+     ],
+     "now": [
+      "AllocationStrategy",
+      "AvailabilityZone",
+      "AvailabilityZoneId",
+      "ClientToken",
+      "DryRun",
+      "EndDate",
+      "InstanceMatchCriteria",
+      "InstanceRequirements",
+      "InstanceTypeSpecifications",
+      "TagSpecifications",
+      "Tenancy",
+      "TotalTargetCapacity"
+     ]
+    }
+   },
+   "actionable": true
+  },
   {
    "cloud": "azure",
    "service": "servicebus",
@@ -22,24 +90,20 @@
   },
   {
    "cloud": "sdk",
-   "service": "cli:aws",
+   "service": "pypi:boto3",
    "kind": "release",
-   "key": "ver:cli:aws:2.39.1",
-   "title": "cli:aws: 2.39.0 \u2192 2.39.1",
+   "key": "ver:pypi:boto3:1.43.121",
+   "title": "pypi:boto3: 1.43.120 \u2192 1.43.121",
    "actionable": false
   },
   {
-   "cloud": "azure",
-   "service": "Log Analytics, Azure Monitor",
-   "kind": "announcement",
-   "key": "feed:azure:a9cc43a230c0",
-   "title": "Announcing: Migrate Azure Container Apps logging destination from Log Analytics to Azure Monitor",
-   "link": "https://azure.microsoft.com/updates?id=577689",
-   "detail": "The Log Analytics logging destination for Azure Container Apps is now a legacy logging option. Existing environments configured with the Log Analytics logging destination will continue to function normally. However, we recommend planning a migration to th",
+   "cloud": "sdk",
+   "service": "pypi:botocore",
+   "kind": "release",
+   "key": "ver:pypi:botocore:1.43.121",
+   "title": "pypi:botocore: 1.43.120 \u2192 1.43.121",
    "actionable": false
   }
  ],
- "errors": [
-  "maven/com.azure:azure-cosmos: The read operation timed out"
- ]
+ "errors": []
 }
