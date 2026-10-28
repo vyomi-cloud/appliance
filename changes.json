@@ -1,17 +1,17 @@
 {
- "at": "2026-10-28T21:50:53+00:00",
+ "at": "2026-10-28T22:50:53+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:fd389969f2ca",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStartRequest",
-     "now": "WorkloadCapturesStartRequest"
+     "was": "WorkloadCapturesStartRequest",
+     "now": "SqlWorkloadCapturesStartRequest"
     }
    },
    "actionable": true
@@ -20,12 +20,12 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:f421c3d61dc0",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStartReplayRequest",
-     "now": "WorkloadCapturesStartReplayRequest"
+     "was": "WorkloadCapturesStartReplayRequest",
+     "now": "SqlWorkloadCapturesStartReplayRequest"
     }
    },
    "actionable": true
@@ -34,12 +34,12 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:c8c00d855f73",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStopRequest",
-     "now": "WorkloadCapturesStopRequest"
+     "was": "WorkloadCapturesStopRequest",
+     "now": "SqlWorkloadCapturesStopRequest"
     }
    },
    "actionable": true
@@ -48,12 +48,12 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:acd5b7e919b1",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStopReplayRequest",
-     "now": "WorkloadCapturesStopReplayRequest"
+     "was": "WorkloadCapturesStopReplayRequest",
+     "now": "SqlWorkloadCapturesStopReplayRequest"
     }
    },
    "actionable": true
@@ -78,36 +78,16 @@
   },
   {
    "cloud": "aws",
-   "service": "Amazon S3, DynamoDB, Aurora, AWS Lambda, CloudWatch Logs",
+   "service": "Amazon RDS",
    "kind": "announcement",
-   "key": "feed:aws:f1d3512b137e",
-   "title": "AWS Lambda durable functions now exports live telemetry for execution insights ",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/lambda-durable-telemetry/",
-   "detail": "AWS Lambda announces the Durable Execution Telemetry Exporter plugin for Lambda durable functions. This new observability plugin captures the step-by-step history of your durable executions and sends them to one or more destinations of your choice. You can use the exported data to gather operational and business insights and keep history beyond the standard retention period. We are also releasing a companion Model Context Protocol (MCP) server that lets AI agents such as Kiro query your exported telemetry data using natural language. Lambda durable functions helps you build resilient multi-ste",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:f81aa06e3c47",
-   "title": "Amazon ECS Managed Instances adds cross-instance and Spot consolidation",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/ecs-managed-instances-consolidation/",
-   "detail": "Today, Amazon Elastic Container Service (Amazon ECS) Managed Instances introduces two infrastructure optimization updates: cross-instance and Spot consolidation. Cross-instance consolidation evaluates tasks running across multiple underutilized instances together, packing them onto fewer instances to raise utilization and lower costs. Spot consolidation extends this capability to Spot capacity, consolidating underutilized Spot Instances after first verifying replacement capacity is available. Amazon ECS Managed Instances provisions, configures, and operates right-sized Amazon EC2 instances for",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "AWS IAM, AWS Lambda, EventBridge",
-   "kind": "announcement",
-   "key": "feed:aws:9b034e54ce0e",
-   "title": "AWS IAM Identity Center's Identity Store now supports change notifications through Amazon EventBridge",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/aws-identity-store-change-notifications/",
-   "detail": "AWS IAM Identity Center's Identity Store now delivers real-time events to Amazon EventBridge when users, groups, or group memberships or the identity store itself is created, updated, or deleted. AWS IAM Identity Center Identity Store is a central repository that allows you to manage identities and access across AWS accounts and applications, serving as the identity source for AWS IAM Identity Center. This new capability helps you automatically respond to identity lifecycle events and support your security and compliance processes by detecting changes as they happen. With Identity Store change",
+   "key": "feed:aws:afd65d0c395f",
+   "title": "Amazon RDS for Oracle now supports September 2026 Monthly Recommended Patch",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-rds-oracle-september-mrp",
+   "detail": "Amazon Relational Database Service (Amazon RDS) for Oracle now supports the September 2026 Monthly Recommended Patch (MRP) for Oracle Database version 19c and 26ai. An MRP is a minor engine version that builds on a quarterly Release Update (RU), bundling Oracle's Critical Security Patch Update (CSPU) with additional Oracle-recommended fixes. The September 2026 MRP is applied on top of the July 2026 RU and includes the Oracle September CSPU . We recommend upgrading to the September 2026 MRP as it includes the latest security updates for Oracle Database. This release also includes the updated Or",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/software.amazon.awssdk:sqs: The read operation timed out"
+  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out"
  ]
 }
