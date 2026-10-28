@@ -1,5 +1,5 @@
 {
- "_comment": "Offline data-plane backends for new services. The engine in core/ is always the API surface (and is what Nano runs in the browser); a backend is the real, cheap, permissively licensed software behind it offline, used only where the service's behaviour needs a real data plane (a registry you can docker push to, DNS that resolves, a cache you can redis-cli). The gate enforces `policy` on every manifest's `backend`. `recommended` is the default pick per upstream id; the agent may choose differently only with `backend.reason` in the manifest. EXPANSION.md explains the rules.",
+ "_comment": "Offline data-plane backends for new services. The engine in core/ is always the API surface (and is what Nano runs in the browser); a backend is the real, cheap, permissively licensed software behind it offline, used only where the service's behaviour needs a real data plane (a registry you can docker push to, DNS that resolves, a cache you can redis-cli). The gate enforces `policy` on every manifest's `backend`. `recommended` is the default pick per upstream id; the agent may choose a different real backend only with `backend.reason` in the manifest, and may never replace a recommended backend with in-process (the gate refuses it). EXPANSION.md explains the rules.",
  "policy": {
   "license_allow": [
    "Apache-2.0",
@@ -97,9 +97,10 @@
    "idle_mb": 15,
    "tier": "lite",
    "for": [
-    "aws:sesv2"
+    "aws:sesv2",
+    "aws:ses"
    ],
-   "why": "captures sent mail, inspectable in a UI"
+   "why": "real SMTP: SES SendEmail and the SES SMTP interface deliver into a local inbox (UI :8025). Optional per-space outbound relay to the user's own SMTP server and optional inbound (local SMTP port or IMAP poll of the user's mailbox) feeding SES receipt rules. See issue #61."
   },
   "nats": {
    "image": "nats:2.10-alpine",

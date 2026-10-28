@@ -63,8 +63,11 @@ the upstream id and the checklist.
    2 GB Max); and listed in `tests/conformance/hourly/ci-services.txt`. The gate
    checks all of it and measures idle memory. Heavy backends (k3s, Kafka,
    OpenSearch) are Max-only: below Max the service runs control-plane only and
-   says so in the console. Deviating from the default pick needs
-   `backend.reason` in the manifest.
+   says so in the console. Picking a different real backend needs
+   `backend.reason` in the manifest; replacing a recommended backend with
+   in-process is refused, whatever the reason. The resource must really work:
+   traffic flows through a load balancer, `kubectl` reaches a cluster, `dig`
+   answers, sent mail arrives.
 6. **Conformance test beds**, using the **official SDKs/CLIs** with only the
    endpoint changed, each printing one `[PASS]`/`[FAIL]` line per check and
    exiting non-zero on failure:
