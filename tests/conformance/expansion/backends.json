@@ -124,10 +124,16 @@
    "tier": "lite",
    "for": [
     "aws:elbv2",
+    "aws:apigateway",
+    "aws:apigatewayv2",
+    "aws:apigatewaymanagementapi",
+    "gcp:apigateway/v1",
+    "azure:apimanagement",
+    "azure:Microsoft.ApiManagement",
     "azure:frontdoor",
     "azure:cdn"
    ],
-   "why": "real L7 load balancing via the admin API; already in the stack"
+   "why": "One shared gateway for every gateway-type service: real HTTP traffic on each invoke URL / listener, routes changed live through Caddy's admin API (no reload) as users create them, TLS, CORS, rate limits, JWT checks. AWS-specific parts (Lambda proxy integration, VTL mapping templates, Lambda authorizers, usage plans/API keys, APIM policies) are a Vyomi handler Caddy forwards to. Already in the stack."
   },
   "duckdb": {
    "kind": "in-process",
@@ -251,7 +257,6 @@
    "cloudformation",
    "stepfunctions",
    "cognito-idp",
-   "apigatewayv2",
    "dynamodbstreams",
    "efs",
    "appsync",
