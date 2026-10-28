@@ -1,48 +1,384 @@
 {
  "_comment": "Offline data-plane backends for new services. The engine in core/ is always the API surface (and is what Nano runs in the browser); a backend is the real, cheap, permissively licensed software behind it offline, used only where the service's behaviour needs a real data plane (a registry you can docker push to, DNS that resolves, a cache you can redis-cli). The gate enforces `policy` on every manifest's `backend`. `recommended` is the default pick per upstream id; the agent may choose differently only with `backend.reason` in the manifest. EXPANSION.md explains the rules.",
  "policy": {
-  "license_allow": ["Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "MPL-2.0", "PostgreSQL", "Zlib", "Unlicense"],
-  "license_allow_separate_process": ["GPL-2.0", "GPL-3.0", "LGPL-2.1", "LGPL-3.0"],
-  "license_deny": ["SSPL-1.0", "BUSL-1.1", "BSL-1.1", "RSALv2", "Elastic-2.0", "AGPL-3.0", "Commons-Clause", "proprietary"],
-  "arch_required": ["amd64", "arm64"],
+  "license_allow": [
+   "Apache-2.0",
+   "MIT",
+   "BSD-2-Clause",
+   "BSD-3-Clause",
+   "ISC",
+   "MPL-2.0",
+   "PostgreSQL",
+   "Zlib",
+   "Unlicense"
+  ],
+  "license_allow_separate_process": [
+   "GPL-2.0",
+   "GPL-3.0",
+   "LGPL-2.1",
+   "LGPL-3.0"
+  ],
+  "license_deny": [
+   "SSPL-1.0",
+   "BUSL-1.1",
+   "BSL-1.1",
+   "RSALv2",
+   "Elastic-2.0",
+   "AGPL-3.0",
+   "Commons-Clause",
+   "proprietary"
+  ],
+  "arch_required": [
+   "amd64",
+   "arm64"
+  ],
   "image_tag": "pinned version, never latest; prefer a vyomi/<name>:<version> multi-arch mirror (as with vyomi/minio) so an upstream image disappearing can't break installs",
-  "budget_idle_mb": {"free": 64, "lite": 128, "pro": 512, "max": 2048},
-  "budget_image_mb": {"free": 100, "lite": 200, "pro": 600, "max": 2000},
-  "prefer": ["in-process (pure Python in core/, zero extra containers)", "one shared backend for the same capability across clouds", "small single-binary servers (Go/Rust/C)", "JVM or multi-process servers only for Max"],
+  "budget_idle_mb": {
+   "free": 64,
+   "lite": 128,
+   "pro": 512,
+   "max": 2048
+  },
+  "budget_image_mb": {
+   "free": 100,
+   "lite": 200,
+   "pro": 600,
+   "max": 2000
+  },
+  "prefer": [
+   "in-process (pure Python in core/, zero extra containers)",
+   "one shared backend for the same capability across clouds",
+   "small single-binary servers (Go/Rust/C)",
+   "JVM or multi-process servers only for Max"
+  ],
   "compose": "container backends go in docker-compose.yml AND docker-compose.cloudlite.yml under profile `full`, with a mem limit at the tier budget and a healthcheck, and are listed in tests/conformance/hourly/ci-services.txt so CI, the gate and the hourly run start them"
  },
  "shared": {
-  "valkey":    {"image": "valkey/valkey:8.0.1-alpine", "license": "BSD-3-Clause", "idle_mb": 8, "tier": "lite", "for": ["aws:elasticache", "gcp:redis/v1", "azure:redis"], "why": "Redis-protocol compatible; Redis 7.4+ is RSALv2/SSPL"},
-  "registry":  {"image": "registry:2.8.3", "license": "Apache-2.0", "idle_mb": 10, "tier": "lite", "for": ["aws:ecr", "gcp:artifactregistry/v1", "azure:containerregistry"], "why": "CNCF Distribution: real docker push/pull"},
-  "coredns":   {"image": "coredns/coredns:1.11.3", "license": "Apache-2.0", "idle_mb": 15, "tier": "lite", "for": ["aws:route53", "gcp:dns/v1", "azure:dns", "azure:privatedns"], "why": "records resolve with dig/nslookup; zones written by the engine"},
-  "mailpit":   {"image": "axllent/mailpit:v1.20", "license": "MIT", "idle_mb": 15, "tier": "lite", "for": ["aws:sesv2"], "why": "captures sent mail, inspectable in a UI"},
-  "nats":      {"image": "nats:2.10-alpine", "license": "Apache-2.0", "idle_mb": 10, "tier": "lite", "for": ["aws:kinesis", "aws:firehose", "azure:eventhub"], "why": "JetStream streams/shards/consumer offsets; already in the stack"},
-  "caddy":     {"image": "caddy:2.8-alpine", "license": "Apache-2.0", "idle_mb": 15, "tier": "lite", "for": ["aws:elbv2", "azure:frontdoor", "azure:cdn"], "why": "real L7 load balancing via the admin API; already in the stack"},
-  "duckdb":    {"kind": "in-process", "license": "MIT", "for": ["gcp:bigquery/v2", "aws:athena", "aws:glue", "azure:synapse", "azure:operationalinsights"], "why": "embedded analytical SQL over local/MinIO files, zero containers"},
-  "docker":    {"kind": "substrate", "tier": "pro", "for": ["aws:ecs", "aws:batch", "aws:codebuild", "gcp:run/v2", "gcp:cloudbuild/v1", "gcp:batch/v1", "azure:app", "azure:batch"], "why": "existing Pro Docker compute backend runs the real containers; Free/Lite get the control plane only"},
-  "k3s":       {"image": "rancher/k3s:v1.30.5-k3s1", "license": "Apache-2.0", "idle_mb": 500, "tier": "max", "for": ["aws:eks", "gcp:container/v1", "azure:containerservice"], "why": "real Kubernetes API for kubectl; Max only, control plane below"},
-  "postgres":  {"image": "postgres:16.4-alpine", "license": "PostgreSQL", "idle_mb": 40, "tier": "lite", "for": ["azure:postgresql"], "why": "already in the stack"},
-  "mariadb":   {"image": "mariadb:11.4", "license": "GPL-2.0", "idle_mb": 90, "tier": "pro", "for": ["azure:mysql"], "why": "MySQL wire compatible, unmodified separate container"},
-  "kafka":     {"image": "apache/kafka:3.8.0", "license": "Apache-2.0", "idle_mb": 400, "tier": "max", "for": ["aws:kafka"], "why": "Apache Kafka KRaft single node (not Redpanda: BSL)"},
-  "opensearch":{"image": "opensearchproject/opensearch:2.17.1", "license": "Apache-2.0", "idle_mb": 700, "tier": "max", "for": ["aws:opensearch"], "why": "not Elasticsearch: Elastic License/SSPL"},
-  "rabbitmq":  {"image": "rabbitmq:3.13-alpine", "license": "MPL-2.0", "idle_mb": 100, "tier": "pro", "for": ["aws:mq"], "why": "Amazon MQ for RabbitMQ engine"},
-  "spanner-emulator": {"image": "gcr.io/cloud-spanner-emulator/emulator:1.5.25", "license": "Apache-2.0", "idle_mb": 150, "tier": "pro", "for": ["gcp:spanner/v1"], "why": "Google's open-source emulator; verify arm64 before use, else mirror-build"},
-  "ollama":    {"image": "ollama/ollama:0.3.14", "license": "MIT", "idle_mb": 50, "tier": "max", "for": ["aws:bedrock-runtime", "gcp:aiplatform/v1", "azure:cognitiveservices"], "why": "optional real inference with small local models; without it the engine returns deterministic canned responses"}
+  "valkey": {
+   "image": "valkey/valkey:8.0.1-alpine",
+   "license": "BSD-3-Clause",
+   "idle_mb": 8,
+   "tier": "lite",
+   "for": [
+    "aws:elasticache",
+    "gcp:redis/v1",
+    "azure:redis"
+   ],
+   "why": "Redis-protocol compatible; Redis 7.4+ is RSALv2/SSPL"
+  },
+  "registry": {
+   "image": "registry:2.8.3",
+   "license": "Apache-2.0",
+   "idle_mb": 10,
+   "tier": "lite",
+   "for": [
+    "aws:ecr",
+    "gcp:artifactregistry/v1",
+    "azure:containerregistry"
+   ],
+   "why": "CNCF Distribution: real docker push/pull"
+  },
+  "coredns": {
+   "image": "coredns/coredns:1.11.3",
+   "license": "Apache-2.0",
+   "idle_mb": 15,
+   "tier": "lite",
+   "for": [
+    "aws:route53",
+    "gcp:dns/v1",
+    "azure:dns",
+    "azure:privatedns"
+   ],
+   "why": "records resolve with dig/nslookup; zones written by the engine"
+  },
+  "mailpit": {
+   "image": "axllent/mailpit:v1.20",
+   "license": "MIT",
+   "idle_mb": 15,
+   "tier": "lite",
+   "for": [
+    "aws:sesv2"
+   ],
+   "why": "captures sent mail, inspectable in a UI"
+  },
+  "nats": {
+   "image": "nats:2.10-alpine",
+   "license": "Apache-2.0",
+   "idle_mb": 10,
+   "tier": "lite",
+   "for": [
+    "aws:kinesis",
+    "aws:firehose",
+    "azure:eventhub"
+   ],
+   "why": "JetStream streams/shards/consumer offsets; already in the stack"
+  },
+  "caddy": {
+   "image": "caddy:2.8-alpine",
+   "license": "Apache-2.0",
+   "idle_mb": 15,
+   "tier": "lite",
+   "for": [
+    "aws:elbv2",
+    "azure:frontdoor",
+    "azure:cdn"
+   ],
+   "why": "real L7 load balancing via the admin API; already in the stack"
+  },
+  "duckdb": {
+   "kind": "in-process",
+   "license": "MIT",
+   "for": [
+    "gcp:bigquery/v2",
+    "aws:athena",
+    "aws:glue",
+    "azure:synapse",
+    "azure:operationalinsights"
+   ],
+   "why": "embedded analytical SQL over local/MinIO files, zero containers"
+  },
+  "docker": {
+   "kind": "substrate",
+   "tier": "pro",
+   "for": [
+    "aws:ecs",
+    "aws:batch",
+    "aws:codebuild",
+    "gcp:run/v2",
+    "gcp:cloudbuild/v1",
+    "gcp:batch/v1",
+    "azure:app",
+    "azure:batch"
+   ],
+   "why": "existing Pro Docker compute backend runs the real containers; Free/Lite get the control plane only"
+  },
+  "k3s": {
+   "image": "rancher/k3s:v1.30.5-k3s1",
+   "license": "Apache-2.0",
+   "idle_mb": 500,
+   "tier": "max",
+   "for": [
+    "aws:eks",
+    "gcp:container/v1",
+    "azure:containerservice"
+   ],
+   "why": "real Kubernetes API for kubectl; Max only, control plane below"
+  },
+  "postgres": {
+   "image": "postgres:16.4-alpine",
+   "license": "PostgreSQL",
+   "idle_mb": 40,
+   "tier": "lite",
+   "for": [
+    "azure:postgresql"
+   ],
+   "why": "already in the stack"
+  },
+  "mariadb": {
+   "image": "mariadb:11.4",
+   "license": "GPL-2.0",
+   "idle_mb": 90,
+   "tier": "pro",
+   "for": [
+    "azure:mysql"
+   ],
+   "why": "MySQL wire compatible, unmodified separate container"
+  },
+  "kafka": {
+   "image": "apache/kafka:3.8.0",
+   "license": "Apache-2.0",
+   "idle_mb": 400,
+   "tier": "max",
+   "for": [
+    "aws:kafka"
+   ],
+   "why": "Apache Kafka KRaft single node (not Redpanda: BSL)"
+  },
+  "opensearch": {
+   "image": "opensearchproject/opensearch:2.17.1",
+   "license": "Apache-2.0",
+   "idle_mb": 700,
+   "tier": "max",
+   "for": [
+    "aws:opensearch"
+   ],
+   "why": "not Elasticsearch: Elastic License/SSPL"
+  },
+  "rabbitmq": {
+   "image": "rabbitmq:3.13-alpine",
+   "license": "MPL-2.0",
+   "idle_mb": 100,
+   "tier": "pro",
+   "for": [
+    "aws:mq"
+   ],
+   "why": "Amazon MQ for RabbitMQ engine"
+  },
+  "spanner-emulator": {
+   "image": "gcr.io/cloud-spanner-emulator/emulator:1.5.25",
+   "license": "Apache-2.0",
+   "idle_mb": 150,
+   "tier": "pro",
+   "for": [
+    "gcp:spanner/v1"
+   ],
+   "why": "Google's open-source emulator; verify arm64 before use, else mirror-build"
+  },
+  "ollama": {
+   "image": "ollama/ollama:0.3.14",
+   "license": "MIT",
+   "idle_mb": 50,
+   "tier": "max",
+   "for": [
+    "aws:bedrock-runtime",
+    "gcp:aiplatform/v1",
+    "azure:cognitiveservices"
+   ],
+   "why": "optional real inference with small local models; without it the engine returns deterministic canned responses"
+  }
  },
  "in_process": {
   "_comment": "No container: the core/ engine holds the state (SQLite-backed where it must survive restarts). Same code as Nano.",
-  "aws": ["sts", "ssm", "logs", "cloudwatch", "cloudformation", "stepfunctions", "cognito-idp", "apigatewayv2", "sns", "dynamodbstreams", "efs", "appsync", "acm", "autoscaling", "scheduler", "backup", "xray"],
-  "gcp": ["logging/v2", "monitoring/v3", "cloudtasks/v2", "cloudscheduler/v1", "workflows/v1", "iamcredentials/v1", "file/v1", "datastore/v1", "dataflow/v1b3", "dataproc/v1", "composer/v1", "translate/v3", "cloudtrace/v2", "certificatemanager/v1", "bigtableadmin/v2"],
-  "azure": ["applicationinsights", "monitor", "appconfiguration", "msi", "signalr", "notificationhubs", "search", "datafactory", "servicefabric"]
+  "aws": [
+   "sts",
+   "ssm",
+   "logs",
+   "cloudwatch",
+   "cloudformation",
+   "stepfunctions",
+   "cognito-idp",
+   "apigatewayv2",
+   "sns",
+   "dynamodbstreams",
+   "efs",
+   "appsync",
+   "acm",
+   "autoscaling",
+   "scheduler",
+   "backup",
+   "xray"
+  ],
+  "gcp": [
+   "logging/v2",
+   "monitoring/v3",
+   "cloudtasks/v2",
+   "cloudscheduler/v1",
+   "workflows/v1",
+   "iamcredentials/v1",
+   "file/v1",
+   "datastore/v1",
+   "dataflow/v1b3",
+   "dataproc/v1",
+   "composer/v1",
+   "translate/v3",
+   "cloudtrace/v2",
+   "certificatemanager/v1",
+   "bigtableadmin/v2"
+  ],
+  "azure": [
+   "applicationinsights",
+   "monitor",
+   "appconfiguration",
+   "msi",
+   "signalr",
+   "notificationhubs",
+   "search",
+   "datafactory",
+   "servicefabric"
+  ]
  },
  "current_stack_audit": {
   "_comment": "Existing offline backends checked against the same policy (2026-10-26). Not changed automatically; each is a product decision.",
   "issues": [
-   {"service": "vyomi-vault", "image": "hashicorp/vault:1.15", "problem": "Vault 1.15+ is BUSL-1.1 (denied)", "option": "OpenBao (MPL-2.0 fork, same API) or in-process for Secrets Manager/Key Vault"},
-   {"service": "vyomi-dynamodb", "image": "amazon/dynamodb-local:latest", "problem": "DynamoDB Local license agreement (not OSI); unpinned", "option": "in-process DynamoDB core (already what Nano runs)"},
-   {"service": "vyomi-pubsub / vyomi-firestore", "image": "gcr.io/google.com/cloudsdktool/google-cloud-cli", "problem": "~1 GB image each, JVM emulators (~300 MB RAM)", "option": "a slim emulator-only image, or in-process Pub/Sub + Firestore cores (Nano already has them)"},
-   {"service": "vyomi-gcs, vyomi-dynamodb, vyomi-elasticmq, vyomi-azurite, vyomi-minio", "image": ":latest", "problem": "unpinned tags", "option": "pin versions (release.yml already pins the appliance's own images)"},
-   {"service": "vyomi-nats, vyomi-postgres, caddy", "image": "nats:2-alpine, postgres:16-alpine, caddy:2-alpine", "problem": "major-only tags", "option": "pin full versions"}
+   {
+    "service": "vyomi-vault",
+    "image": "hashicorp/vault:1.15",
+    "problem": "Vault 1.15+ is BUSL-1.1 (denied)",
+    "option": "OpenBao (MPL-2.0 fork, same API) or in-process for Secrets Manager/Key Vault"
+   },
+   {
+    "service": "vyomi-dynamodb",
+    "image": "amazon/dynamodb-local:latest",
+    "problem": "DynamoDB Local license agreement (not OSI); unpinned",
+    "option": "in-process DynamoDB core (already what Nano runs)"
+   },
+   {
+    "service": "vyomi-pubsub / vyomi-firestore",
+    "image": "gcr.io/google.com/cloudsdktool/google-cloud-cli",
+    "problem": "~1 GB image each, JVM emulators (~300 MB RAM)",
+    "option": "a slim emulator-only image, or in-process Pub/Sub + Firestore cores (Nano already has them)"
+   },
+   {
+    "service": "vyomi-gcs, vyomi-dynamodb, vyomi-elasticmq, vyomi-azurite, vyomi-minio",
+    "image": ":latest",
+    "problem": "unpinned tags",
+    "option": "pin versions (release.yml already pins the appliance's own images)"
+   },
+   {
+    "service": "vyomi-nats, vyomi-postgres, caddy",
+    "image": "nats:2-alpine, postgres:16-alpine, caddy:2-alpine",
+    "problem": "major-only tags",
+    "option": "pin full versions"
+   }
   ]
+ },
+ "live": {
+  "_comment": "What is actually behind each released service today (audited 2026-10-28), shown as 'Wired today' on the pipeline page. state: real = the resource really works; partial = some of it does; api = management API only, nothing behind it. Update when a backend is wired.",
+  "aws:logs": {
+   "state": "real",
+   "today": "in-process engine, SQLite store; filter + Insights queries"
+  },
+  "aws:elbv2": {
+   "state": "api",
+   "today": "no traffic forwarded (Caddy not wired)"
+  },
+  "aws:ssm": {
+   "state": "partial",
+   "today": "Parameter Store real; Run Command reports Success without running"
+  },
+  "aws:stepfunctions": {
+   "state": "real",
+   "today": "ASL interpreter runs executions and calls Lambda; Wait doesn't sleep"
+  },
+  "gcp:cloudscheduler/v1": {
+   "state": "partial",
+   "today": "cron fires only on reads; HTTP targets not sent (#147-#149)"
+  },
+  "gcp:container/v1": {
+   "state": "api",
+   "today": "no Kubernetes API; kubectl can't connect (k3s not wired)"
+  },
+  "gcp:iamcredentials/v1": {
+   "state": "real",
+   "today": "real RS256-signed tokens, JWTs and blobs"
+  },
+  "gcp:redis/v1": {
+   "state": "partial",
+   "today": "one shared 64 MB Valkey; port not published, no per-instance AUTH"
+  },
+  "azure:app": {
+   "state": "partial",
+   "today": "real containers on Pro/Max only; no ingress URL"
+  },
+  "azure:appconfiguration": {
+   "state": "real",
+   "today": "real key-value data plane"
+  },
+  "azure:cognitiveservices": {
+   "state": "api",
+   "today": "no model inference (Ollama not wired)"
+  },
+  "azure:dns": {
+   "state": "api",
+   "today": "no DNS server answers (CoreDNS not wired)"
+  },
+  "azure:monitor": {
+   "state": "api",
+   "today": "alert rules stored, never evaluated or fired"
+  },
+  "azure:operationalinsights": {
+   "state": "api",
+   "today": "workspaces only; no ingestion or KQL queries"
+  }
  }
 }
