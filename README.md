@@ -2,12 +2,12 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-10-28T00:50:16+00:00
+### Upstream watch — 2026-10-28T01:50:20+00:00
 
 Tracking 3923 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
 **2 change(s), 0 actionable.**
-- · `spec-commit` Azure network: [Network] Update TypeSpec configuration for .NET SDK compatibility (#47643) ([link](https://github.com/Azure/azure-rest-api-specs/commit/5b3ac33ab54d588beaca346f351b95f5765e2457))
-- · `spec-commit` Azure storage: Update types and auth naming for .NET (#47667) ([link](https://github.com/Azure/azure-rest-api-specs/commit/548d44095be067632e36c74969cce42472ed1431))
+- · `announcement` Amazon ECS now supports GPU sharing with NVIDIA Multi-Process Service (MPS) ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-ecs-gpu-sharing-nvidia-mps/))
+- · `release` pypi:azure-keyvault-secrets: 4.11.3 → 4.12.0
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.

@@ -1,23 +1,23 @@
 {
- "at": "2026-10-28T00:50:16+00:00",
+ "at": "2026-10-28T01:50:20+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "azure",
-   "service": "storage",
-   "kind": "spec-commit",
-   "key": "azure:storage:548d44095b",
-   "title": "Azure storage: Update types and auth naming for .NET (#47667)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/548d44095be067632e36c74969cce42472ed1431",
+   "cloud": "sdk",
+   "service": "pypi:azure-keyvault-secrets",
+   "kind": "release",
+   "key": "ver:pypi:azure-keyvault-secrets:4.12.0",
+   "title": "pypi:azure-keyvault-secrets: 4.11.3 \u2192 4.12.0",
    "actionable": false
   },
   {
-   "cloud": "azure",
-   "service": "network",
-   "kind": "spec-commit",
-   "key": "azure:network:5b3ac33ab5",
-   "title": "Azure network: [Network] Update TypeSpec configuration for .NET SDK compatibility (#47643)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/5b3ac33ab54d588beaca346f351b95f5765e2457",
+   "cloud": "aws",
+   "service": "Amazon EC2",
+   "kind": "announcement",
+   "key": "feed:aws:82f723a13fa3",
+   "title": "Amazon ECS now supports GPU sharing with NVIDIA Multi-Process Service (MPS)",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-ecs-gpu-sharing-nvidia-mps/",
+   "detail": "Amazon Elastic Container Service (Amazon ECS) now supports GPU sharing with NVIDIA Multi-Process Service (MPS), enabling you to run multiple Amazon ECS tasks concurrently on a single NVIDIA GPU. GPU sharing helps you increase GPU utilization and reduce infrastructure costs for workloads that use only part of a GPU's capacity, such as small-model inference, AV/ADAS simulations, embedding generation, and multi-model serving. With GPU sharing, you can pack more workloads onto each GPU instance without changing your application code. You define the GPU memory each container needs and can optionall",
    "actionable": false
   }
  ],
