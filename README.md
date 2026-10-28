@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
+_Updated 2026-10-28 22:50 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -8,7 +8,7 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 - **Building now:** nothing
 - **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), applicationinsights (Azure), containerregistry (Azure), containerservice (Azure), eventhub (Azure), msi (Azure), redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
-- **Consoles really implemented:** offline 57% · Nano 63%
+- **Consoles really implemented:** offline 57% · Nano 62%
 - **Hourly tests:** 0 of 0 suites passing
 - **Upstream watch:** 32 open changes from the real clouds to adopt
 
@@ -17,109 +17,110 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | 51% · 60% |
-| GCP | 16 | 0 | 8 | 12 | 48% · 61% |
-| Azure | 18 | 0 | 6 | 12 | 70% · 67% |
+| GCP | 16 | 0 | 8 | 12 | 48% · 60% |
+| Azure | 18 | 0 | 6 | 12 | 70% · 64% |
 
 ## In progress
 
-| Service | Cloud | Stage | Checks | Still missing |
-|---|---|---|---|---|
-| Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🔍 In gate ([PR #95](https://github.com/vyomi-cloud/appliance/pull/95)) | 18/18 | — |
-| Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🔍 In gate ([PR #96](https://github.com/vyomi-cloud/appliance/pull/96)) | 18/18 | — |
-| Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🔍 In gate ([PR #101](https://github.com/vyomi-cloud/appliance/pull/101)) | 19/19 | — |
-| Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🔍 In gate ([PR #100](https://github.com/vyomi-cloud/appliance/pull/100)) | 20/20 | — |
-| Amazon ElastiCache [#56](https://github.com/vyomi-cloud/appliance/issues/56) | AWS | 🔍 In gate ([PR #102](https://github.com/vyomi-cloud/appliance/pull/102)) | 20/20 | — |
-| Amazon Kinesis [#58](https://github.com/vyomi-cloud/appliance/issues/58) | AWS | 🔍 In gate ([PR #104](https://github.com/vyomi-cloud/appliance/pull/104)) | 18/18 | — |
-| Amazon Route 53 [#60](https://github.com/vyomi-cloud/appliance/issues/60) | AWS | 🔍 In gate ([PR #106](https://github.com/vyomi-cloud/appliance/pull/106)) | 20/20 | — |
-| Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🔍 In gate ([PR #107](https://github.com/vyomi-cloud/appliance/pull/107)) | 18/18 | — |
-| Amazon Simple Notification Service [#62](https://github.com/vyomi-cloud/appliance/issues/62) | AWS | 🔍 In gate ([PR #108](https://github.com/vyomi-cloud/appliance/pull/108)) | 18/18 | — |
-| AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | — |
-| AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | — |
-| AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #112](https://github.com/vyomi-cloud/appliance/pull/112)) | 18/18 | — |
-| Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🔍 In gate ([PR #114](https://github.com/vyomi-cloud/appliance/pull/114)) | 18/18 | — |
-| BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🔍 In gate ([PR #115](https://github.com/vyomi-cloud/appliance/pull/115)) | 18/18 | — |
-| Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🔍 In gate ([PR #120](https://github.com/vyomi-cloud/appliance/pull/120)) | 18/18 | — |
-| Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🔍 In gate ([PR #122](https://github.com/vyomi-cloud/appliance/pull/122)) | 18/18 | — |
-| Cloud Monitoring API [#74](https://github.com/vyomi-cloud/appliance/issues/74) | GCP | 🔍 In gate ([PR #123](https://github.com/vyomi-cloud/appliance/pull/123)) | 18/18 | — |
-| Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🔍 In gate ([PR #125](https://github.com/vyomi-cloud/appliance/pull/125)) | 19/19 | — |
-| Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | — |
-| Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #126](https://github.com/vyomi-cloud/appliance/pull/126)) | 18/18 | — |
-| applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🔍 In gate ([PR #129](https://github.com/vyomi-cloud/appliance/pull/129)) | 17/17 | — |
-| containerregistry [#82](https://github.com/vyomi-cloud/appliance/issues/82) | Azure | 🔍 In gate ([PR #131](https://github.com/vyomi-cloud/appliance/pull/131)) | 20/20 | — |
-| containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🔍 In gate ([PR #132](https://github.com/vyomi-cloud/appliance/pull/132)) | 17/17 | — |
-| eventhub [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🔍 In gate ([PR #134](https://github.com/vyomi-cloud/appliance/pull/134)) | 17/17 | — |
-| msi [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🔍 In gate ([PR #136](https://github.com/vyomi-cloud/appliance/pull/136)) | 17/17 | — |
-| redis [#89](https://github.com/vyomi-cloud/appliance/issues/89) | Azure | 🔍 In gate ([PR #141](https://github.com/vyomi-cloud/appliance/pull/141)) | 20/20 | — |
+| Service | Cloud | Stage | Checks | Real backend | Built with | Still missing |
+|---|---|---|---|---|---|---|
+| Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🔍 In gate ([PR #95](https://github.com/vyomi-cloud/appliance/pull/95)) | 18/18 | in-process | in-process | — |
+| Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🔍 In gate ([PR #96](https://github.com/vyomi-cloud/appliance/pull/96)) | 18/18 | in-process | in-process | — |
+| Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🔍 In gate ([PR #101](https://github.com/vyomi-cloud/appliance/pull/101)) | 19/19 | docker · Pro | docker · Pro | — |
+| Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🔍 In gate ([PR #100](https://github.com/vyomi-cloud/appliance/pull/100)) | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
+| Amazon ElastiCache [#56](https://github.com/vyomi-cloud/appliance/issues/56) | AWS | 🔍 In gate ([PR #102](https://github.com/vyomi-cloud/appliance/pull/102)) | 20/20 | valkey · Lite | valkey · 8 MB · Lite | — |
+| Amazon Kinesis [#58](https://github.com/vyomi-cloud/appliance/issues/58) | AWS | 🔍 In gate ([PR #104](https://github.com/vyomi-cloud/appliance/pull/104)) | 18/18 | nats · Lite | in-process | — |
+| Amazon Route 53 [#60](https://github.com/vyomi-cloud/appliance/issues/60) | AWS | 🔍 In gate ([PR #106](https://github.com/vyomi-cloud/appliance/pull/106)) | 20/20 | coredns · Lite | coredns · 15 MB · Lite | — |
+| Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🔍 In gate ([PR #107](https://github.com/vyomi-cloud/appliance/pull/107)) | 18/18 | mailpit · Lite | in-process | — |
+| Amazon Simple Notification Service [#62](https://github.com/vyomi-cloud/appliance/issues/62) | AWS | 🔍 In gate ([PR #108](https://github.com/vyomi-cloud/appliance/pull/108)) | 18/18 | in-process | in-process | — |
+| AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | in-process | in-process | — |
+| AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | in-process | in-process | — |
+| AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #112](https://github.com/vyomi-cloud/appliance/pull/112)) | 18/18 | in-process | in-process | — |
+| Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🔍 In gate ([PR #114](https://github.com/vyomi-cloud/appliance/pull/114)) | 18/18 | registry · Lite | in-process | — |
+| BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🔍 In gate ([PR #115](https://github.com/vyomi-cloud/appliance/pull/115)) | 18/18 | duckdb | in-process | — |
+| Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🔍 In gate ([PR #120](https://github.com/vyomi-cloud/appliance/pull/120)) | 18/18 | coredns · Lite | in-process | — |
+| Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🔍 In gate ([PR #122](https://github.com/vyomi-cloud/appliance/pull/122)) | 18/18 | in-process | in-process | — |
+| Cloud Monitoring API [#74](https://github.com/vyomi-cloud/appliance/issues/74) | GCP | 🔍 In gate ([PR #123](https://github.com/vyomi-cloud/appliance/pull/123)) | 18/18 | in-process | in-process | — |
+| Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🔍 In gate ([PR #125](https://github.com/vyomi-cloud/appliance/pull/125)) | 19/19 | docker · Pro | docker · Pro | — |
+| Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 18/18 | in-process | in-process | — |
+| Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #126](https://github.com/vyomi-cloud/appliance/pull/126)) | 18/18 | in-process | in-process | — |
+| applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🔍 In gate ([PR #129](https://github.com/vyomi-cloud/appliance/pull/129)) | 17/17 | in-process | in-process | — |
+| containerregistry [#82](https://github.com/vyomi-cloud/appliance/issues/82) | Azure | 🔍 In gate ([PR #131](https://github.com/vyomi-cloud/appliance/pull/131)) | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
+| containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🔍 In gate ([PR #132](https://github.com/vyomi-cloud/appliance/pull/132)) | 17/17 | k3s · Max | in-process | — |
+| eventhub [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🔍 In gate ([PR #134](https://github.com/vyomi-cloud/appliance/pull/134)) | 17/17 | nats · Lite | in-process | — |
+| msi [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🔍 In gate ([PR #136](https://github.com/vyomi-cloud/appliance/pull/136)) | 17/17 | in-process | in-process | — |
+| redis [#89](https://github.com/vyomi-cloud/appliance/issues/89) | Azure | 🔍 In gate ([PR #141](https://github.com/vyomi-cloud/appliance/pull/141)) | 20/20 | valkey · Lite | valkey · 8 MB · Lite | — |
 
 ## Released services
 
 - **Console live:** parts of the console that are really implemented, offline · Nano
 - **UI issues:** problems the latest hourly crawl found, offline · Nano
+- **Real backend:** what the service should run on ([backends.json](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/expansion/backends.json)) · **Wired today:** ✅ real · 🟡 partial · ⚪ management API only
 
 ### AWS
 
-| Service | Console live | UI issues | Upstream | Release |
-|---|---|---|---|---|
-| EC2 | 🧩 5/13 · 🧩 1/2 | 0 · 1 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
-| S3 | 🧩 6/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| IAM | 🧩 7/11 · 🧩 2/11 | 3 · 2 | ✅ watched | before gate |
-| RDS | 🧩 8/13 · 🧩 9/13 | 6 · 0 | ✅ watched | before gate |
-| DynamoDB | 🧩 4/13 · 🧩 6/13 | 1 · 1 | ✅ watched | before gate |
-| SQS | 🧩 5/13 · 🧩 6/13 | 0 · 0 | ✅ watched | before gate |
-| Lambda | 🧩 6/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
-| API Gateway | 🧩 8/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
-| VPC | 🧩 7/13 · 🧩 1/2 | 4 · 1 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
-| EventBridge | 🧩 6/13 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
-| Secrets Manager | 🧩 4/13 · 🧩 7/13 | 5 · 2 | ✅ watched | before gate |
-| KMS | 🧩 5/13 · 🧩 10/13 | 2 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
-| CloudWatch Logs | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | [v3.0.11](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.11) |
-| Elastic Load Balancing | 🧩 7/8 · 🧩 7/8 | 0 · 0 | ✅ watched | [v3.0.10](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.10) |
-| Systems Manager | 🧩 5/10 · 🧩 5/10 | 0 · 0 | ✅ watched | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
-| Step Functions | 🧩 8/12 · 🧩 8/12 | 0 · 0 | ✅ watched | [v3.0.13](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.13) |
+| Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
+|---|---|---|---|---|---|---|
+| EC2 | — | not audited | 🧩 5/13 · 🧩 1/2 | 6 · 1 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
+| S3 | — | not audited | 🧩 6/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
+| IAM | — | not audited | 🧩 7/11 · 🧩 2/11 | 2 · 2 | ✅ watched | before gate |
+| RDS | — | not audited | 🧩 8/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
+| DynamoDB | — | not audited | 🧩 4/13 · 🧩 6/13 | 1 · 5 | ✅ watched | before gate |
+| SQS | — | not audited | 🧩 5/13 · 🧩 6/13 | 0 · 3 | ✅ watched | before gate |
+| Lambda | — | not audited | 🧩 6/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
+| API Gateway | — | not audited | 🧩 8/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
+| VPC | — | not audited | 🧩 7/13 · 🧩 1/2 | 1 · 1 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
+| EventBridge | — | not audited | 🧩 6/13 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
+| Secrets Manager | — | not audited | 🧩 4/13 · 🧩 7/13 | 5 · 4 | ✅ watched | before gate |
+| KMS | — | not audited | 🧩 5/13 · 🧩 10/13 | 2 · 1 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
+| CloudWatch Logs | in-process | ✅ in-process engine, SQLite store; filter + Insights queries | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | [v3.0.11](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.11) |
+| Elastic Load Balancing | caddy · Lite | ⚪ no traffic forwarded (Caddy not wired) | 🧩 7/8 · 🧩 7/8 | 0 · 0 | ✅ watched | [v3.0.10](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.10) |
+| Systems Manager | in-process | 🟡 Parameter Store real; Run Command reports Success without running | 🧩 5/10 · 🧩 5/10 | 0 · 1 | ✅ watched | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
+| Step Functions | in-process | ✅ ASL interpreter runs executions and calls Lambda; Wait doesn't sleep | 🧩 8/12 · 🧩 8/12 | 0 · 0 | ✅ watched | [v3.0.13](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.13) |
 
 ### GCP
 
-| Service | Console live | UI issues | Upstream | Release |
-|---|---|---|---|---|
-| Compute Engine | 🧩 5/13 · 🧩 7/13 | 0 · 2 | ✅ watched | before gate |
-| Cloud Storage | 🧩 7/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| Cloud SQL | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ⚠️ 14 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
-| Pub/Sub | 🧩 5/13 · 🧩 7/13 | 2 · 2 | ✅ watched | before gate |
-| Firestore | 🧩 4/13 · 🧩 3/13 | 1 · 3 | ✅ watched | before gate |
-| Cloud Functions | 🧩 4/13 · 🧩 6/13 | 1 · 2 | ✅ watched | before gate |
-| API Gateway | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
-| VPC Network | 🧩 3/13 · 🧩 5/13 | 2 · 7 | ✅ watched | before gate |
-| IAM & Admin | 🧩 5/9 · ✅ 9/9 | 1 · 1 | ✅ watched | before gate |
-| Eventarc | 🧩 5/12 · 🧩 7/12 | 1 · 2 | ✅ watched | before gate |
-| Secret Manager | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
-| Cloud KMS | 🧩 6/13 · 🧩 8/13 | 2 · 4 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
-| Cloud Scheduler | 🧩 8/11 · 🧩 9/11 | 0 · 0 | ✅ watched | [v3.0.14](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.14) |
-| Kubernetes Engine | 🧩 7/11 · 🧩 8/11 | 0 · 0 | ✅ watched | [v3.0.15](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.15) |
-| IAM Service Account Credentials | 🧩 7/11 · 🧩 9/11 | 0 · 0 | ✅ watched | [v3.0.16](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.16) |
-| Memorystore for Redis | 🧩 9/11 · 🧩 9/11 | 0 · 0 | ✅ watched | [v3.0.17](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.17) |
+| Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
+|---|---|---|---|---|---|---|
+| Compute Engine | — | not audited | 🧩 5/13 · 🧩 7/13 | 0 · 1 | ✅ watched | before gate |
+| Cloud Storage | — | not audited | 🧩 7/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
+| Cloud SQL | — | not audited | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ⚠️ 14 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
+| Pub/Sub | — | not audited | 🧩 5/13 · 🧩 7/13 | 2 · 2 | ✅ watched | before gate |
+| Firestore | — | not audited | 🧩 4/13 · 🧩 3/13 | 1 · 3 | ✅ watched | before gate |
+| Cloud Functions | — | not audited | 🧩 4/13 · 🧩 6/13 | 1 · 2 | ✅ watched | before gate |
+| API Gateway | — | not audited | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
+| VPC Network | — | not audited | 🧩 3/13 · 🧩 5/13 | 2 · 4 | ✅ watched | before gate |
+| IAM & Admin | — | not audited | 🧩 5/9 · 🧩 8/9 | 1 · 1 | ✅ watched | before gate |
+| Eventarc | — | not audited | 🧩 5/12 · 🧩 7/12 | 1 · 2 | ✅ watched | before gate |
+| Secret Manager | — | not audited | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
+| Cloud KMS | — | not audited | 🧩 6/13 · 🧩 8/13 | 2 · 4 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
+| Cloud Scheduler | in-process | 🟡 cron fires only on reads; HTTP targets not sent (#147-#149) | 🧩 8/11 · 🧩 9/11 | 0 · 0 | ✅ watched | [v3.0.14](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.14) |
+| Kubernetes Engine | k3s · Max | ⚪ no Kubernetes API; kubectl can't connect (k3s not wired) | 🧩 7/11 · 🧩 8/11 | 0 · 0 | ✅ watched | [v3.0.15](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.15) |
+| IAM Service Account Credentials | in-process | ✅ real RS256-signed tokens, JWTs and blobs | 🧩 7/11 · 🧩 9/11 | 0 · 0 | ✅ watched | [v3.0.16](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.16) |
+| Memorystore for Redis | valkey · Lite | 🟡 one shared 64 MB Valkey; port not published, no per-instance AUTH | 🧩 9/11 · 🧩 9/11 | 0 · 0 | ✅ watched | [v3.0.17](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.17) |
 
 ### Azure
 
-| Service | Console live | UI issues | Upstream | Release |
-|---|---|---|---|---|
-| Virtual Machines | 🧩 10/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
-| Storage accounts | 🧩 9/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
-| SQL servers | 🧩 8/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
-| Service Bus | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| Cosmos DB | 🧩 8/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| Function apps | 🧩 7/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
-| API Management | 🧩 9/13 · 🧩 9/13 | 0 · 1 | ✅ watched | before gate |
-| Virtual networks | 🧩 8/13 · 🧩 10/13 | 1 · 0 | ✅ watched | before gate |
-| Network Security Group | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
-| Event Grid topics | 🧩 9/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
-| Key vaults | 🧩 9/13 · 🧩 6/13 | 0 · 0 | ✅ watched | before gate |
-| Entra ID / RBAC | 🧩 5/6 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
-| Container Apps | 🧩 8/13 · 🧩 8/13 | 0 · 0 | ✅ watched | [v3.0.18](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.18) |
-| App Configuration | 🧩 10/13 · 🧩 10/13 | 0 · 0 | ✅ watched | [v3.0.19](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.19) |
-| Azure AI services | 🧩 10/13 · 🧩 10/13 | 0 · 0 | ✅ watched | [v3.0.20](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.20) |
-| DNS zones | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | [v3.0.21](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.21) |
-| Monitor alerts | 🧩 11/13 · 🧩 11/13 | 0 · 0 | ✅ watched | [v3.0.22](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.22) |
-| Log Analytics | 🧩 11/13 · 🧩 11/13 | 0 · 0 | ✅ watched | [v3.0.23](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.23) |
+| Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
+|---|---|---|---|---|---|---|
+| Virtual Machines | — | not audited | 🧩 10/13 · 🧩 9/12 | 0 · 1 | ✅ watched | before gate |
+| Storage accounts | — | not audited | 🧩 9/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
+| SQL servers | — | not audited | 🧩 8/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
+| Service Bus | — | not audited | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
+| Cosmos DB | — | not audited | 🧩 8/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
+| Function apps | — | not audited | 🧩 7/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
+| API Management | — | not audited | 🧩 9/13 · 🧩 9/13 | 1 · 0 | ✅ watched | before gate |
+| Virtual networks | — | not audited | 🧩 8/13 · 🧩 9/13 | 1 · 0 | ✅ watched | before gate |
+| Network Security Group | — | not audited | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
+| Event Grid topics | — | not audited | 🧩 9/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
+| Key vaults | — | not audited | 🧩 9/13 · 🧩 6/13 | 0 · 2 | ✅ watched | before gate |
+| Entra ID / RBAC | — | not audited | 🧩 5/6 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
+| Container Apps | docker · Pro | 🟡 real containers on Pro/Max only; no ingress URL | 🧩 8/13 · 🧩 8/13 | 0 · 0 | ✅ watched | [v3.0.18](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.18) |
+| App Configuration | in-process | ✅ real key-value data plane | 🧩 10/13 · 🧩 9/13 | 0 · 0 | ✅ watched | [v3.0.19](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.19) |
+| Azure AI services | ollama · Max | ⚪ no model inference (Ollama not wired) | 🧩 10/13 · 🧩 9/13 | 0 · 0 | ✅ watched | [v3.0.20](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.20) |
+| DNS zones | coredns · Lite | ⚪ no DNS server answers (CoreDNS not wired) | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | [v3.0.21](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.21) |
+| Monitor alerts | in-process | ⚪ alert rules stored, never evaluated or fired | 🧩 11/13 · 🧩 11/13 | 0 · 0 | ✅ watched | [v3.0.22](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.22) |
+| Log Analytics | duckdb | ⚪ workspaces only; no ingestion or KQL queries | 🧩 11/13 · 🧩 11/13 | 0 · 0 | ✅ watched | [v3.0.23](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.23) |
 
 - **Nano ↔ offline gaps:** azure_subresource_core (Nano-only)
 
@@ -127,16 +128,16 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 
 <details><summary><b>AWS</b> — 17 queued</summary>
 
-| Service | Priority | Issue | Offline backend |
+| Service | Priority | Issue | Real backend |
 |---|---|---|---|
 | Amazon Athena | P2 | not filed | duckdb |
-| Amazon Bedrock Runtime | P2 | not filed | ollama · 50 MB · Max |
+| Amazon Bedrock Runtime | P2 | not filed | ollama · Max |
 | Amazon DynamoDB Streams | P2 | not filed | in-process |
 | Amazon Elastic File System | P2 | not filed | in-process |
 | Amazon EventBridge Scheduler | P2 | not filed | in-process |
-| Amazon Kinesis Firehose | P2 | not filed | nats · 10 MB · Lite |
-| Amazon OpenSearch Service | P2 | not filed | opensearch · 700 MB · Max |
-| AmazonMQ | P2 | not filed | rabbitmq · 100 MB · Pro |
+| Amazon Kinesis Firehose | P2 | not filed | nats · Lite |
+| Amazon OpenSearch Service | P2 | not filed | opensearch · Max |
+| AmazonMQ | P2 | not filed | rabbitmq · Pro |
 | Auto Scaling | P2 | not filed | in-process |
 | AWS AppSync | P2 | not filed | in-process |
 | AWS Backup | P2 | not filed | in-process |
@@ -145,15 +146,15 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 | AWS CodeBuild | P2 | not filed | docker · Pro |
 | AWS Glue | P2 | not filed | duckdb |
 | AWS X-Ray | P2 | not filed | in-process |
-| Managed Streaming for Kafka | P2 | not filed | kafka · 400 MB · Max |
+| Managed Streaming for Kafka | P2 | not filed | kafka · Max |
 
 </details>
 
 <details><summary><b>GCP</b> — 12 queued</summary>
 
-| Service | Priority | Issue | Offline backend |
+| Service | Priority | Issue | Real backend |
 |---|---|---|---|
-| Agent Platform API | P2 | not filed | ollama · 50 MB · Max |
+| Agent Platform API | P2 | not filed | ollama · Max |
 | Batch API | P2 | not filed | docker · Pro |
 | Certificate Manager API | P2 | not filed | in-process |
 | Cloud Bigtable Admin API | P2 | not filed | in-process |
@@ -161,7 +162,7 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 | Cloud Dataproc API | P2 | not filed | in-process |
 | Cloud Datastore API | P2 | not filed | in-process |
 | Cloud Filestore API | P2 | not filed | in-process |
-| Cloud Spanner API | P2 | not filed | spanner-emulator · 150 MB · Pro |
+| Cloud Spanner API | P2 | not filed | spanner-emulator · Pro |
 | Cloud Trace API | P2 | not filed | in-process |
 | Cloud Translation API | P2 | not filed | in-process |
 | Dataflow API | P2 | not filed | in-process |
@@ -170,16 +171,16 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 
 <details><summary><b>Azure</b> — 12 queued</summary>
 
-| Service | Priority | Issue | Offline backend |
+| Service | Priority | Issue | Real backend |
 |---|---|---|---|
 | batch | P2 | not filed | docker · Pro |
-| cdn | P2 | not filed | caddy · 15 MB · Lite |
+| cdn | P2 | not filed | caddy · Lite |
 | datafactory | P2 | not filed | in-process |
-| frontdoor | P2 | not filed | caddy · 15 MB · Lite |
-| mysql | P2 | not filed | mariadb · 90 MB · Pro |
+| frontdoor | P2 | not filed | caddy · Lite |
+| mysql | P2 | not filed | mariadb · Pro |
 | notificationhubs | P2 | not filed | in-process |
-| postgresql | P2 | not filed | postgres · 40 MB · Lite |
-| privatedns | P2 | not filed | coredns · 15 MB · Lite |
+| postgresql | P2 | not filed | postgres · Lite |
+| privatedns | P2 | not filed | coredns · Lite |
 | search | P2 | not filed | in-process |
 | servicefabric | P2 | not filed | in-process |
 | signalr | P2 | not filed | in-process |
@@ -1007,7 +1008,7 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 
 </details>
 
-<details><summary>Console parts not live yet — GCP (147)</summary>
+<details><summary>Console parts not live yet — GCP (148)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -1095,7 +1096,7 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 | IAM Service Account Credentials | offline | tab: Delegation | static |
 | IAM Service Account Credentials | offline | tab: Signing | static |
 | IAM Service Account Credentials | offline | tab: Metrics | static |
-| Compute Engine | nano | create: create with defaults | unimplemented |
+| Compute Engine | nano | create: create with defaults | partial |
 | Compute Engine | nano | tab: Permissions | static |
 | Compute Engine | nano | tab: Labels | static |
 | Compute Engine | nano | tab: Networking | static |
@@ -1156,12 +1157,13 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 | Cloud KMS | nano | tab: Labels | static |
 | Cloud KMS | nano | tab: Key policy | static |
 | Cloud KMS | nano | tab: Import jobs | static |
+| IAM & Admin | nano | tab: Permissions | static |
 | IAM Service Account Credentials | nano | tab: Credential | static |
 | IAM Service Account Credentials | nano | tab: Signing | static |
 
 </details>
 
-<details><summary>Console parts not live yet — Azure (135)</summary>
+<details><summary>Console parts not live yet — Azure (141)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -1231,9 +1233,11 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 | Azure AI services | offline | tab: Networking | static |
 | Role Definition | offline | create: create with defaults | unimplemented |
 | Entra ID / RBAC | offline | tab: Conditions | static |
-| Virtual Machines | nano | page: Virtual Machines | static |
+| Resource groups | nano | page: Resource groups | partial |
+| Virtual Machines | nano | page: Virtual Machines | unimplemented |
 | Virtual Machines | nano | tab: Diagnose and solve problems | static |
 | Virtual Machines | nano | tab: Connect | static |
+| Storage accounts | nano | page: Storage accounts | static |
 | Storage accounts | nano | tab: Tags | static |
 | Storage accounts | nano | tab: Diagnose and solve problems | static |
 | Storage accounts | nano | tab: File shares | static |
@@ -1241,6 +1245,7 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 | Storage accounts | nano | tab: Networking | static |
 | SQL servers | nano | tab: Tags | static |
 | SQL servers | nano | tab: Diagnose and solve problems | static |
+| SQL servers | nano | tab: Pricing tier | static |
 | SQL servers | nano | tab: Deleted databases | static |
 | SQL servers | nano | tab: Failover groups | static |
 | SQL servers | nano | tab: Backups | static |
@@ -1250,6 +1255,7 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 | Service Bus | nano | tab: Networking | static |
 | Cosmos DB | nano | tab: Tags | static |
 | Cosmos DB | nano | tab: Diagnose and solve problems | static |
+| Cosmos DB | nano | tab: Throughput (RU/s) | static |
 | Cosmos DB | nano | tab: Replicate data globally | static |
 | Cosmos DB | nano | tab: Backup & Restore | static |
 | Function apps | nano | tab: Tags | static |
@@ -1264,11 +1270,11 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 | API Management | nano | tab: Named values | static |
 | Virtual networks | nano | tab: Tags | static |
 | Virtual networks | nano | tab: Diagnose and solve problems | static |
-| Virtual networks | nano | tab: Address space | static |
+| Virtual networks | nano | tab: Subnets | static |
+| Virtual networks | nano | tab: Connected devices | static |
 | Network Security Group | nano | create: create with defaults | unimplemented |
 | Event Grid topics | nano | page: Event Grid topics | static |
 | Event Grid topics | nano | tab: Tags | static |
-| Event Grid topics | nano | tab: Diagnose and solve problems | static |
 | Event Grid topics | nano | tab: Topic types | static |
 | Event Grid topics | nano | tab: Networking | static |
 | Event Grid topics | nano | tab: Identity | static |
@@ -1286,6 +1292,7 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 | Container Apps | nano | tab: Secrets | static |
 | App Configuration | nano | tab: Tags | static |
 | App Configuration | nano | tab: Diagnose and solve problems | static |
+| App Configuration | nano | tab: Identity | static |
 | App Configuration | nano | tab: Networking | static |
 | DNS zones | nano | tab: Tags | static |
 | DNS zones | nano | tab: Diagnose and solve problems | static |
@@ -1297,6 +1304,7 @@ _Updated 2026-10-28 21:54 UTC · refreshes after every pipeline run_
 | Log Analytics | nano | tab: Diagnose and solve problems | static |
 | Azure AI services | nano | tab: Tags | static |
 | Azure AI services | nano | tab: Diagnose and solve problems | static |
+| Azure AI services | nano | tab: Identity | static |
 | Azure AI services | nano | tab: Networking | static |
 | Role Definition | nano | create: create with defaults | unimplemented |
 | Entra ID / RBAC | nano | page: Entra ID / RBAC (crawl error) | unimplemented |
