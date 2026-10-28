@@ -110,9 +110,12 @@
    "for": [
     "aws:kinesis",
     "aws:firehose",
-    "azure:eventhub"
+    "azure:eventhub",
+    "aws:sns",
+    "aws:events",
+    "gcp:cloudtasks/v2"
    ],
-   "why": "JetStream streams/shards/consumer offsets; already in the stack"
+   "why": "JetStream streams/shards/consumer offsets; already in the stack. Also the durable delivery path for push services (SNS, EventBridge, Cloud Tasks): a stream per topic/bus/queue, a durable consumer per subscription/target, delivery workers that really call HTTP endpoints, Lambda, SQS and email (Mailpit), with retry/backoff, dead-letter queues and FIFO dedup. The in-process engine keeps the API and serves Nano."
   },
   "caddy": {
    "image": "caddy:2.8-alpine",
@@ -249,7 +252,6 @@
    "stepfunctions",
    "cognito-idp",
    "apigatewayv2",
-   "sns",
    "dynamodbstreams",
    "efs",
    "appsync",
@@ -262,7 +264,6 @@
   "gcp": [
    "logging/v2",
    "monitoring/v3",
-   "cloudtasks/v2",
    "cloudscheduler/v1",
    "workflows/v1",
    "iamcredentials/v1",
@@ -380,6 +381,10 @@
   "azure:operationalinsights": {
    "state": "api",
    "today": "workspaces only; no ingestion or KQL queries"
+  },
+  "aws:events": {
+   "state": "partial",
+   "today": "rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered"
   }
  }
 }
