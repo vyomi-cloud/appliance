@@ -1,63 +1,7 @@
 {
- "at": "2026-10-28T22:50:53+00:00",
+ "at": "2026-10-28T23:50:54+00:00",
  "baseline": false,
  "changes": [
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStartRequest",
-     "now": "SqlWorkloadCapturesStartRequest"
-    }
-   },
-   "actionable": true
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStartReplayRequest",
-     "now": "SqlWorkloadCapturesStartReplayRequest"
-    }
-   },
-   "actionable": true
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStopRequest",
-     "now": "SqlWorkloadCapturesStopRequest"
-    }
-   },
-   "actionable": true
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStopReplayRequest",
-     "now": "SqlWorkloadCapturesStopReplayRequest"
-    }
-   },
-   "actionable": true
-  },
   {
    "cloud": "azure",
    "service": "servicebus",
@@ -75,19 +19,7 @@
    "title": "Azure network: Consolidate Network C# resource helpers and client names (#47689)",
    "link": "https://github.com/Azure/azure-rest-api-specs/commit/280ac250381ac5489d68612b067b29f48fc5e03c",
    "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon RDS",
-   "kind": "announcement",
-   "key": "feed:aws:afd65d0c395f",
-   "title": "Amazon RDS for Oracle now supports September 2026 Monthly Recommended Patch",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-rds-oracle-september-mrp",
-   "detail": "Amazon Relational Database Service (Amazon RDS) for Oracle now supports the September 2026 Monthly Recommended Patch (MRP) for Oracle Database version 19c and 26ai. An MRP is a minor engine version that builds on a quarterly Release Update (RU), bundling Oracle's Critical Security Patch Update (CSPU) with additional Oracle-recommended fixes. The September 2026 MRP is applied on top of the July 2026 RU and includes the Oracle September CSPU . We recommend upgrading to the September 2026 MRP as it includes the latest security updates for Oracle Database. This release also includes the updated Or",
-   "actionable": false
   }
  ],
- "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out"
- ]
+ "errors": []
 }
