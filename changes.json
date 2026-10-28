@@ -1,5 +1,5 @@
 {
- "at": "2026-10-28T15:50:44+00:00",
+ "at": "2026-10-28T16:50:50+00:00",
  "baseline": false,
  "changes": [
   {
@@ -22,7 +22,7 @@
   }
  ],
  "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out"
+  "maven/com.azure:azure-data-appconfiguration: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
  ]
 }
