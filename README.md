@@ -2,16 +2,15 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-10-28T19:50:50+00:00
+### Upstream watch — 2026-10-28T20:50:55+00:00
 
 Tracking 3924 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**6 change(s), 2 actionable.**
-- 🔧 `operation-added` AWS ec2: new operation GetCapacityManagerSupportabilityScores
-- 🔧 `operation-changed` AWS ec2: operation CreateCapacityReservationFleet changed
+**3 change(s), 0 actionable.**
+- · `announcement` AWS Lambda supports Seekable OCI (SOCI) lazy loading for Lambda Managed Instances  ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/aws-lambda-seekable-oci-soci/))
 - · `spec-commit` Azure network: Consolidate Network C# resource helpers and client names (#47689) ([link](https://github.com/Azure/azure-rest-api-specs/commit/280ac250381ac5489d68612b067b29f48fc5e03c))
 - · `spec-commit` Azure servicebus: fix: improve Service Bus administration Swagger interoperability (#47269) ([link](https://github.com/Azure/azure-rest-api-specs/commit/1758295d22b6a143bb74383febd0c3f6bccfeda5))
-- · `release` pypi:boto3: 1.43.120 → 1.43.121
-- · `release` pypi:botocore: 1.43.120 → 1.43.121
 
-Filed 2 backlog issue(s) labelled `upstream-drift`; 0 pending.
+Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.

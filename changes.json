@@ -1,75 +1,7 @@
 {
- "at": "2026-10-28T19:50:50+00:00",
+ "at": "2026-10-28T20:50:55+00:00",
  "baseline": false,
  "changes": [
-  {
-   "cloud": "aws",
-   "service": "ec2",
-   "kind": "operation-added",
-   "key": "aws:ec2:GetCapacityManagerSupportabilityScores:added",
-   "title": "AWS ec2: new operation GetCapacityManagerSupportabilityScores",
-   "detail": {
-    "in": [
-     "CapacityAmount",
-     "CapacityAvailabilityZoneIds",
-     "CapacityUnit",
-     "DryRun",
-     "InstanceRequirementsWithMetadata",
-     "InstanceTypes",
-     "MarketType"
-    ],
-    "required": [
-     "CapacityAmount",
-     "CapacityAvailabilityZoneIds",
-     "CapacityUnit",
-     "MarketType"
-    ],
-    "out": [
-     "AggregateScore",
-     "CapacityManagerSupportabilityScores"
-    ],
-    "http": "POST",
-    "deprecated": false
-   },
-   "actionable": true
-  },
-  {
-   "cloud": "aws",
-   "service": "ec2",
-   "kind": "operation-changed",
-   "key": "aws:ec2:CreateCapacityReservationFleet:7562f26d1609",
-   "title": "AWS ec2: operation CreateCapacityReservationFleet changed",
-   "detail": {
-    "in": {
-     "was": [
-      "AllocationStrategy",
-      "ClientToken",
-      "DryRun",
-      "EndDate",
-      "InstanceMatchCriteria",
-      "InstanceTypeSpecifications",
-      "TagSpecifications",
-      "Tenancy",
-      "TotalTargetCapacity"
-     ],
-     "now": [
-      "AllocationStrategy",
-      "AvailabilityZone",
-      "AvailabilityZoneId",
-      "ClientToken",
-      "DryRun",
-      "EndDate",
-      "InstanceMatchCriteria",
-      "InstanceRequirements",
-      "InstanceTypeSpecifications",
-      "TagSpecifications",
-      "Tenancy",
-      "TotalTargetCapacity"
-     ]
-    }
-   },
-   "actionable": true
-  },
   {
    "cloud": "azure",
    "service": "servicebus",
@@ -89,21 +21,17 @@
    "actionable": false
   },
   {
-   "cloud": "sdk",
-   "service": "pypi:boto3",
-   "kind": "release",
-   "key": "ver:pypi:boto3:1.43.121",
-   "title": "pypi:boto3: 1.43.120 \u2192 1.43.121",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:botocore",
-   "kind": "release",
-   "key": "ver:pypi:botocore:1.43.121",
-   "title": "pypi:botocore: 1.43.120 \u2192 1.43.121",
+   "cloud": "aws",
+   "service": "AWS Lambda",
+   "kind": "announcement",
+   "key": "feed:aws:c784a22984a7",
+   "title": "AWS Lambda supports Seekable OCI (SOCI) lazy loading for Lambda Managed Instances ",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/aws-lambda-seekable-oci-soci/",
+   "detail": "AWS Lambda now supports Seekable OCI (SOCI) for lazy loading Event Functions packaged as Open Container Initiative (OCI) images running on Lambda Managed Instances . With SOCI support, Lambda fetches only the files needed at each stage of the execution environment startup rather than downloading the entire image upfront, reducing container startup times by up to 70%. Customers building compute-intensive applications such as data processing pipelines, high-throughput API backends, and batch computation workloads require substantial memory and CPU resources to process large datasets, serve low-l",
    "actionable": false
   }
  ],
- "errors": []
+ "errors": [
+  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
+ ]
 }
