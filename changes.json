@@ -1,5 +1,5 @@
 {
- "at": "2026-10-28T12:50:36+00:00",
+ "at": "2026-10-28T13:50:42+00:00",
  "baseline": false,
  "changes": [
   {
@@ -9,6 +9,126 @@
    "key": "azure:network:280ac25038",
    "title": "Azure network: Consolidate Network C# resource helpers and client names (#47689)",
    "link": "https://github.com/Azure/azure-rest-api-specs/commit/280ac250381ac5489d68612b067b29f48fc5e03c",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:ff6cfb743b2c",
+   "title": "Google Kubernetes Engine: Change (October 27, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_27_2026",
+   "detail": "(2026-R46) Version updates GKE cluster versions have been updated. New versions available for upgrades and new clusters. The following versions are now available for new GKE clusters, and for manual control plane upgrades and node upgrades for existing clusters. For more information about versioning and upgrades, see GKE versioning and support and About GKE cluster upgrades .",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:a2a9d9063ff2",
+   "title": "Google Kubernetes Engine: Rapid channel (October 27, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_27_2026",
+   "detail": "Note : Your clusters might not have these versions available. Rollouts are already in progress when we publish the release notes, and can take multiple days to complete across all Google Cloud zones. The following versions are now available in the Rapid channel: 1.34.12-gke.1539000 1.35.9-gke.1505000 1.36.5-gke.1982000 1.37.1-gke.3020000 Alpha version 1.38.0-gke.4162000+preview is now available for GKE alpha clusters in the Rapid channel. Alpha version 1.38.0-gke.2743000+preview is no longer available in the Rapid channel.",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "lifecycle",
+   "key": "feed:gcp:2f24098f74bc",
+   "title": "Google Kubernetes Engine: Regular channel (October 27, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_27_2026",
+   "detail": "Note : Your clusters might not have these versions available. Rollouts are already in progress when we publish the release notes, and can take multiple days to complete across all Google Cloud zones. The following versions are now available in the Regular channel: 1.34.12-gke.1209000 1.35.8-gke.1975000 1.36.4-gke.2377000 Version 1.35.8-gke.1919000 is deprecated in the Regular channel. This version will be removed in 90 days, or at the end of support, if sooner.",
+   "actionable": true
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:66e0b0ace6e6",
+   "title": "Google Kubernetes Engine: Stable channel (October 27, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_27_2026",
+   "detail": "Note : Your clusters might not have these versions available. Rollouts are already in progress when we publish the release notes, and can take multiple days to complete across all Google Cloud zones. The following versions are now available in the Stable channel: 1.34.12-gke.1011000 1.35.8-gke.1796000 1.36.4-gke.1391002 1.36.4-gke.1495002 1.36.4-gke.1495003 1.36.4-gke.2046002 1.36.4-gke.2046003 Clusters in this channel running the listed minor version have new general auto-upgrade targets. GKE can upgrade control planes and nodes to the following new versions with this release: GKE upgrades cl",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:0d770908770d",
+   "title": "Google Kubernetes Engine: Extended channel (October 27, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_27_2026",
+   "detail": "Note : Your clusters might not have these versions available. Rollouts are already in progress when we publish the release notes, and can take multiple days to complete across all Google Cloud zones. The following versions are now available in the Extended channel: 1.32.13-gke.2662000 1.32.13-gke.2701000 1.32.13-gke.2906000 1.33.13-gke.1915000 1.33.13-gke.1952000 1.33.13-gke.2207000 1.34.12-gke.1209000 1.35.8-gke.1975000 1.36.4-gke.2377000 The following versions are no longer available in the Extended channel: 1.31.14-gke.2759000 1.31.14-gke.2825000 1.31.14-gke.3042000 1.32.13-gke.2504000 is d",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "lifecycle",
+   "key": "feed:gcp:66254ec9717d",
+   "title": "Google Kubernetes Engine: No channel (deprecated) (October 27, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_27_2026",
+   "detail": "Note : Your clusters might not have these versions available. Rollouts are already in progress when we publish the release notes, and can take multiple days to complete across all Google Cloud zones. The following versions are now available: 1.34.12-gke.1539000 1.35.9-gke.1505000 1.36.4-gke.1391002 1.36.4-gke.1495003 1.36.4-gke.2046002 1.36.5-gke.1982000 1.37.1-gke.3020000 The following node versions are now available: 1.32.13-gke.2906000 1.33.13-gke.2207000 1.34.12-gke.1539000 1.35.9-gke.1505000 1.36.5-gke.1982000 1.37.1-gke.3020000 Version 1.35.8-gke.1919000 is deprecated . This version will",
+   "actionable": true
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:a410f3d4918b",
+   "title": "Google Kubernetes Engine: Security (October 27, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_27_2026",
+   "detail": "(2026-R46) Security updates This release includes new GKE versions that use updated Container-Optimized OS images. These updated images are cumulative, incorporating security fixes from all Container-Optimized OS versions released since the previous GKE release. To identify the specific vulnerabilities that were resolved in each updated Container-Optimized OS image, see the Security release notes for that image. The following table includes links to the release notes for each updated Container-Optimized OS image: GKE version Container-Optimized OS version Details 1.32.13-gke.2906000 cos-121-18",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:4f8ff49d3776",
+   "title": "Google Kubernetes Engine: Change (October 27, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_27_2026",
+   "detail": "(2026-R46) Version updates Note : Your clusters might not have these versions available. Rollouts are already in progress when we publish the release notes, and can take multiple days to complete across all Google Cloud zones. The following versions are now available in the Stable channel: 1.34.12-gke.1011000 1.35.8-gke.1796000 1.36.4-gke.1391002 1.36.4-gke.1495002 1.36.4-gke.1495003 1.36.4-gke.2046002 1.36.4-gke.2046003 Clusters in this channel running the listed minor version have new general auto-upgrade targets. GKE can upgrade control planes and nodes to the following new versions with th",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "lifecycle",
+   "key": "feed:gcp:86f96f9c08c6",
+   "title": "Google Kubernetes Engine: Change (October 27, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_27_2026",
+   "detail": "(2026-R46) Version updates Note : Your clusters might not have these versions available. Rollouts are already in progress when we publish the release notes, and can take multiple days to complete across all Google Cloud zones. The following versions are now available in the Regular channel: 1.34.12-gke.1209000 1.35.8-gke.1975000 1.36.4-gke.2377000 Version 1.35.8-gke.1919000 is deprecated in the Regular channel. This version will be removed in 90 days, or at the end of support, if sooner.",
+   "actionable": true
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:25a5d3e4e576",
+   "title": "Google Kubernetes Engine: Change (October 27, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_27_2026",
+   "detail": "(2026-R46) Version updates Note : Your clusters might not have these versions available. Rollouts are already in progress when we publish the release notes, and can take multiple days to complete across all Google Cloud zones. The following versions are now available in the Rapid channel: 1.34.12-gke.1539000 1.35.9-gke.1505000 1.36.5-gke.1982000 1.37.1-gke.3020000 Alpha version 1.38.0-gke.4162000+preview is now available for GKE alpha clusters in the Rapid channel. Alpha version 1.38.0-gke.2743000+preview is no longer available in the Rapid channel.",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:cbfac0da44be",
+   "title": "Google Kubernetes Engine: Change (October 27, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_27_2026",
+   "detail": "(2026-R46) Version updates Note : Your clusters might not have these versions available. Rollouts are already in progress when we publish the release notes, and can take multiple days to complete across all Google Cloud zones. The following versions are now available: 1.34.12-gke.1539000 1.35.9-gke.1505000 1.36.4-gke.1391002 1.36.4-gke.1495003 1.36.4-gke.2046002 1.36.5-gke.1982000 1.37.1-gke.3020000 The following node versions are now available: 1.32.13-gke.2906000 1.33.13-gke.2207000 1.34.12-gke.1539000 1.35.9-gke.1505000 1.36.5-gke.1982000 1.37.1-gke.3020000 Version 1.35.8-gke.1919000 is dep",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:4ac10ea118dd",
+   "title": "Google Kubernetes Engine: Change (October 27, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_27_2026",
+   "detail": "(2026-R46) Version updates Note : Your clusters might not have these versions available. Rollouts are already in progress when we publish the release notes, and can take multiple days to complete across all Google Cloud zones. The following versions are now available in the Extended channel: 1.32.13-gke.2662000 1.32.13-gke.2701000 1.32.13-gke.2906000 1.33.13-gke.1915000 1.33.13-gke.1952000 1.33.13-gke.2207000 1.34.12-gke.1209000 1.35.8-gke.1975000 1.36.4-gke.2377000 The following versions are no longer available in the Extended channel: 1.31.14-gke.2759000 1.31.14-gke.2825000 1.31.14-gke.30420",
    "actionable": false
   }
  ],
