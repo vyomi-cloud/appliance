@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-28 03:51 UTC · refreshes after every pipeline run_
+_Updated 2026-10-28 04:35 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -18,7 +18,7 @@ _Updated 2026-10-28 03:51 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|
 | AWS | 16 | 0 | 12 | 17 | 51% · 60% |
 | GCP | 16 | 0 | 8 | 12 | 48% · 60% |
-| Azure | 18 | 0 | 6 | 12 | 69% · 66% |
+| Azure | 18 | 0 | 6 | 12 | 70% · 66% |
 
 ## In progress
 
@@ -60,28 +60,28 @@ _Updated 2026-10-28 03:51 UTC · refreshes after every pipeline run_
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| EC2 | 🧩 5/13 · 🧩 1/2 | 6 · 1 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
-| S3 | 🧩 6/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| IAM | 🧩 7/11 · 🧩 2/11 | 2 · 2 | ✅ watched | before gate |
-| RDS | 🧩 8/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
-| DynamoDB | 🧩 4/13 · 🧩 6/13 | 1 · 5 | ✅ watched | before gate |
-| SQS | 🧩 5/13 · 🧩 6/13 | 0 · 3 | ✅ watched | before gate |
+| EC2 | 🧩 5/13 · 🧩 1/2 | 0 · 1 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
+| S3 | 🧩 6/13 · 🧩 9/13 | 0 · 2 | ✅ watched | before gate |
+| IAM | 🧩 7/11 · 🧩 2/11 | 2 · 12 | ✅ watched | before gate |
+| RDS | 🧩 8/13 · 🧩 9/13 | 0 · 7 | ✅ watched | before gate |
+| DynamoDB | 🧩 4/13 · 🧩 6/13 | 1 · 1 | ✅ watched | before gate |
+| SQS | 🧩 5/13 · 🧩 6/13 | 1 · 0 | ✅ watched | before gate |
 | Lambda | 🧩 6/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
 | API Gateway | 🧩 8/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
 | VPC | 🧩 7/13 · 🧩 1/2 | 1 · 1 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | EventBridge | 🧩 6/13 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
-| Secrets Manager | 🧩 4/13 · 🧩 7/13 | 5 · 4 | ✅ watched | before gate |
-| KMS | 🧩 5/13 · 🧩 10/13 | 2 · 1 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
+| Secrets Manager | 🧩 4/13 · 🧩 7/13 | 5 · 2 | ✅ watched | before gate |
+| KMS | 🧩 5/13 · 🧩 10/13 | 2 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
 | CloudWatch Logs | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | [v3.0.11](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.11) |
 | Elastic Load Balancing | 🧩 7/8 · 🧩 7/8 | 0 · 0 | ✅ watched | [v3.0.10](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.10) |
-| Systems Manager | 🧩 5/10 · 🧩 5/10 | 0 · 1 | ✅ watched | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
+| Systems Manager | 🧩 5/10 · 🧩 5/10 | 1 · 0 | ✅ watched | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
 | Step Functions | 🧩 8/12 · 🧩 8/12 | 0 · 0 | ✅ watched | [v3.0.13](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.13) |
 
 ### GCP
 
 | Service | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|
-| Compute Engine | 🧩 5/13 · 🧩 7/13 | 0 · 1 | ✅ watched | before gate |
+| Compute Engine | 🧩 5/13 · 🧩 7/13 | 0 · 2 | ✅ watched | before gate |
 | Cloud Storage | 🧩 7/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
 | Cloud SQL | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ⚠️ 10 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
 | Pub/Sub | 🧩 5/13 · 🧩 7/13 | 2 · 2 | ✅ watched | before gate |
@@ -90,7 +90,7 @@ _Updated 2026-10-28 03:51 UTC · refreshes after every pipeline run_
 | API Gateway | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
 | VPC Network | 🧩 3/13 · 🧩 5/13 | 2 · 4 | ✅ watched | before gate |
 | IAM & Admin | 🧩 5/9 · 🧩 8/9 | 1 · 1 | ✅ watched | before gate |
-| Eventarc | 🧩 5/12 · 🧩 8/12 | 1 · 2 | ✅ watched | before gate |
+| Eventarc | 🧩 5/12 · 🧩 8/12 | 1 · 3 | ✅ watched | before gate |
 | Secret Manager | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
 | Cloud KMS | 🧩 6/13 · 🧩 8/13 | 2 · 4 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
 | Cloud Scheduler | 🧩 8/11 · 🧩 9/11 | 0 · 0 | ✅ watched | [v3.0.14](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.14) |
@@ -108,16 +108,16 @@ _Updated 2026-10-28 03:51 UTC · refreshes after every pipeline run_
 | Service Bus | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
 | Cosmos DB | 🧩 8/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
 | Function apps | 🧩 7/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
-| API Management | 🧩 9/13 · 🧩 9/13 | 1 · 0 | ✅ watched | before gate |
+| API Management | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
 | Virtual networks | 🧩 8/13 · 🧩 9/13 | 1 · 0 | ✅ watched | before gate |
 | Network Security Group | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
-| Event Grid topics | 🧩 8/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
-| Key vaults | 🧩 9/13 · 🧩 6/13 | 0 · 2 | ✅ watched | before gate |
+| Event Grid topics | 🧩 9/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
+| Key vaults | 🧩 9/13 · 🧩 6/13 | 0 · 0 | ✅ watched | before gate |
 | Entra ID / RBAC | 🧩 5/6 · 🧩 0/1 | 1 · 1 | ✅ watched | before gate |
 | Container Apps | 🧩 8/13 · 🧩 9/13 | 0 · 0 | ✅ watched | [v3.0.18](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.18) |
 | App Configuration | 🧩 10/13 · 🧩 9/13 | 0 · 0 | ✅ watched | [v3.0.19](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.19) |
 | Azure AI services | 🧩 10/13 · 🧩 9/13 | 0 · 0 | ✅ watched | [v3.0.20](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.20) |
-| DNS zones | 🧩 9/13 · 🧩 10/13 | 0 · 0 | ✅ watched | [v3.0.21](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.21) |
+| DNS zones | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | [v3.0.21](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.21) |
 | Monitor alerts | 🧩 11/13 · 🧩 11/13 | 0 · 0 | ✅ watched | [v3.0.22](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.22) |
 | Log Analytics | 🧩 11/13 · 🧩 11/13 | 0 · 0 | ✅ watched | [v3.0.23](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.23) |
 
@@ -1095,7 +1095,7 @@ _Updated 2026-10-28 03:51 UTC · refreshes after every pipeline run_
 | IAM Service Account Credentials | offline | tab: Delegation | static |
 | IAM Service Account Credentials | offline | tab: Signing | static |
 | IAM Service Account Credentials | offline | tab: Metrics | static |
-| Compute Engine | nano | create: create with defaults | partial |
+| Compute Engine | nano | create: create with defaults | unimplemented |
 | Compute Engine | nano | tab: Permissions | static |
 | Compute Engine | nano | tab: Labels | static |
 | Compute Engine | nano | tab: Networking | static |
@@ -1119,7 +1119,7 @@ _Updated 2026-10-28 03:51 UTC · refreshes after every pipeline run_
 | Firestore | nano | create: create with defaults | partial |
 | Firestore | nano | detail: resource detail | static |
 | Firestore | nano | tab: Overview | static |
-| Firestore | nano | tab: Permissions | static |
+| Firestore | nano | tab: Labels | static |
 | Firestore | nano | tab: Data | static |
 | Firestore | nano | tab: Query builder | static |
 | Firestore | nano | tab: Indexes | static |
@@ -1205,7 +1205,6 @@ _Updated 2026-10-28 03:51 UTC · refreshes after every pipeline run_
 | Network Security Group | offline | create: create with defaults | unimplemented |
 | Event Grid topics | offline | tab: Tags | static |
 | Event Grid topics | offline | tab: Diagnose and solve problems | static |
-| Event Grid topics | offline | tab: Topic types | static |
 | Event Grid topics | offline | tab: Networking | static |
 | Event Grid topics | offline | tab: Identity | static |
 | Key vaults | offline | tab: Tags | static |
@@ -1286,7 +1285,7 @@ _Updated 2026-10-28 03:51 UTC · refreshes after every pipeline run_
 | Key vaults | nano | tab: Access configuration | static |
 | Container Apps | nano | tab: Tags | static |
 | Container Apps | nano | tab: Diagnose and solve problems | static |
-| Container Apps | nano | tab: Scale | static |
+| Container Apps | nano | tab: Containers | static |
 | Container Apps | nano | tab: Secrets | static |
 | App Configuration | nano | tab: Tags | static |
 | App Configuration | nano | tab: Diagnose and solve problems | static |
@@ -1294,6 +1293,7 @@ _Updated 2026-10-28 03:51 UTC · refreshes after every pipeline run_
 | App Configuration | nano | tab: Networking | static |
 | DNS zones | nano | tab: Tags | static |
 | DNS zones | nano | tab: Diagnose and solve problems | static |
+| DNS zones | nano | tab: Name servers | static |
 | DNS zones | nano | tab: Locks | static |
 | Monitor alerts | nano | tab: Tags | static |
 | Monitor alerts | nano | tab: Diagnose and solve problems | static |
