@@ -117,7 +117,9 @@ def main() -> int:
         if not name:
             return "in-process" if upstream in bk["in_process"].get(cloud, []) else "—"
         x = bk["shared"][name]
-        return " · ".join([name] + ([x["tier"].capitalize()] if x.get("tier") else []))
+        extra = ["in-process"] if x.get("kind") == "in-process" else ([x["tier"].capitalize()] if x.get("tier") else [])
+        agent = next((n for n, y in bk["shared"].items() if f"{cloud}:{upstream}" in y.get("agent_for", [])), None)
+        return " · ".join([name] + extra + ([f"+ {agent} agent"] if agent else []))
 
     LIVE_ICON = {"real": "✅", "partial": "🟡", "api": "⚪"}
 

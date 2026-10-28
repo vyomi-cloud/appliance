@@ -67,7 +67,9 @@ the upstream id and the checklist.
    `backend.reason` in the manifest; replacing a recommended backend with
    in-process is refused, whatever the reason. The resource must really work:
    traffic flows through a load balancer, `kubectl` reaches a cluster, `dig`
-   answers, sent mail arrives.
+   answers, sent mail arrives. Shared in-process backends (the `logstore`
+   for CloudWatch Logs, Cloud Logging, Log Analytics and App Insights) are
+   declared by name: `{"kind": "in-process", "name": "logstore"}`.
 6. **Conformance test beds**, using the **official SDKs/CLIs** with only the
    endpoint changed, each printing one `[PASS]`/`[FAIL]` line per check and
    exiting non-zero on failure:

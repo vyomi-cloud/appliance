@@ -135,6 +135,19 @@
    ],
    "why": "One shared gateway for every gateway-type service: real HTTP traffic on each invoke URL / listener, routes changed live through Caddy's admin API (no reload) as users create them, TLS, CORS, rate limits, JWT checks. AWS-specific parts (Lambda proxy integration, VTL mapping templates, Lambda authorizers, usage plans/API keys, APIM policies) are a Vyomi handler Caddy forwards to. Already in the stack."
   },
+  "logstore": {
+   "kind": "in-process",
+   "engine": "duckdb",
+   "license": "MIT",
+   "idle_mb": 0,
+   "for": [
+    "aws:logs",
+    "gcp:logging/v2",
+    "azure:operationalinsights",
+    "azure:applicationinsights"
+   ],
+   "why": "One log store for all three clouds, in-process on DuckDB (same code as Nano): entries, retention, sinks/exports, subscription filters and log-based metrics, with each cloud's own query language on top (CloudWatch Logs Insights, the Cloud Logging filter, a KQL subset). Logs are data, so in-process is the real backend. Fluent Bit (below) is the agent that ships workload logs in; VictoriaLogs is the optional heavy store."
+  },
   "duckdb": {
    "kind": "in-process",
    "license": "MIT",
@@ -142,8 +155,7 @@
     "gcp:bigquery/v2",
     "aws:athena",
     "aws:glue",
-    "azure:synapse",
-    "azure:operationalinsights"
+    "azure:synapse"
    ],
    "why": "embedded analytical SQL over local/MinIO files, zero containers"
   },
@@ -245,6 +257,34 @@
     "azure:cognitiveservices"
    ],
    "why": "optional real inference with small local models; without it the engine returns deterministic canned responses"
+  },
+  "fluent-bit": {
+   "image": "fluent/fluent-bit:3.1.9",
+   "license": "Apache-2.0",
+   "idle_mb": 5,
+   "tier": "lite",
+   "role": "agent",
+   "agent_for": [
+    "aws:logs",
+    "gcp:logging/v2",
+    "azure:operationalinsights",
+    "azure:applicationinsights"
+   ],
+   "why": "Not a store: the real log agent, started on demand. Collects logs from Vyomi compute (EC2/GCE/VM on Docker, Lambda/Functions runs, ECS/Cloud Run/Container Apps containers, k3s pods) and any user container, and ships them through its NATIVE outputs (cloudwatch_logs, stackdriver, azure_logs_ingestion) into the logstore, so the real ingestion path is tested end to end."
+  },
+  "victorialogs": {
+   "image": "victoriametrics/victoria-logs (pin a release when adopted)",
+   "license": "Apache-2.0",
+   "idle_mb": 30,
+   "tier": "max",
+   "role": "optional",
+   "optional_for": [
+    "aws:logs",
+    "gcp:logging/v2",
+    "azure:operationalinsights",
+    "azure:applicationinsights"
+   ],
+   "why": "Optional heavy log store for large local volumes (Max): single Go binary; each cloud's query language translated to LogsQL, so edge cases can differ from the in-process store. Loki is not an option (AGPL, denied)."
   }
  },
  "in_process": {
@@ -252,7 +292,6 @@
   "aws": [
    "sts",
    "ssm",
-   "logs",
    "cloudwatch",
    "cloudformation",
    "stepfunctions",
@@ -267,7 +306,6 @@
    "xray"
   ],
   "gcp": [
-   "logging/v2",
    "monitoring/v3",
    "cloudscheduler/v1",
    "workflows/v1",
@@ -283,7 +321,6 @@
    "bigtableadmin/v2"
   ],
   "azure": [
-   "applicationinsights",
    "monitor",
    "appconfiguration",
    "msi",
