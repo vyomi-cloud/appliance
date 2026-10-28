@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-28 23:06 UTC · refreshes after every pipeline run_
+_Updated 2026-10-28 23:12 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -33,7 +33,7 @@ _Updated 2026-10-28 23:06 UTC · refreshes after every pipeline run_
 | Amazon Route 53 [#60](https://github.com/vyomi-cloud/appliance/issues/60) | AWS | 🔍 In gate ([PR #106](https://github.com/vyomi-cloud/appliance/pull/106)) | 20/20 | coredns · Lite | coredns · 15 MB · Lite | — |
 | Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🔍 In gate ([PR #107](https://github.com/vyomi-cloud/appliance/pull/107)) | 17/18 | mailpit · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Amazon Simple Notification Service [#62](https://github.com/vyomi-cloud/appliance/issues/62) | AWS | 🔍 In gate ([PR #108](https://github.com/vyomi-cloud/appliance/pull/108)) | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 19/19 | in-process | in-process | — |
+| AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 18/19 | caddy · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | in-process | in-process | — |
 | AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #112](https://github.com/vyomi-cloud/appliance/pull/112)) | 18/18 | in-process | in-process | — |
 | Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🔍 In gate ([PR #114](https://github.com/vyomi-cloud/appliance/pull/114)) | 17/18 | registry · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
@@ -68,7 +68,7 @@ _Updated 2026-10-28 23:06 UTC · refreshes after every pipeline run_
 | DynamoDB | — | not audited | 🧩 4/13 · 🧩 6/13 | 1 · 1 | ✅ watched | before gate |
 | SQS | — | not audited | 🧩 5/13 · 🧩 6/13 | 1 · 0 | ✅ watched | before gate |
 | Lambda | — | not audited | 🧩 6/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
-| API Gateway | — | not audited | 🧩 8/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
+| API Gateway | caddy · Lite | not audited | 🧩 8/13 · 🧩 1/2 | 0 · 1 | ✅ watched | before gate |
 | VPC | — | not audited | 🧩 7/13 · 🧩 1/2 | 1 · 1 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | EventBridge | nats · Lite | 🟡 rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered | 🧩 6/13 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
 | Secrets Manager | — | not audited | 🧩 4/13 · 🧩 7/13 | 5 · 2 | ✅ watched | before gate |
@@ -88,7 +88,7 @@ _Updated 2026-10-28 23:06 UTC · refreshes after every pipeline run_
 | Pub/Sub | — | not audited | 🧩 5/13 · 🧩 7/13 | 2 · 2 | ✅ watched | before gate |
 | Firestore | — | not audited | 🧩 4/13 · 🧩 3/13 | 1 · 3 | ✅ watched | before gate |
 | Cloud Functions | — | not audited | 🧩 4/13 · 🧩 6/13 | 1 · 2 | ✅ watched | before gate |
-| API Gateway | — | not audited | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
+| API Gateway | caddy · Lite | not audited | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
 | VPC Network | — | not audited | 🧩 3/13 · 🧩 5/13 | 2 · 4 | ✅ watched | before gate |
 | IAM & Admin | — | not audited | 🧩 5/9 · 🧩 8/9 | 1 · 1 | ✅ watched | before gate |
 | Eventarc | — | not audited | 🧩 5/12 · 🧩 8/12 | 1 · 3 | ✅ watched | before gate |
@@ -109,7 +109,7 @@ _Updated 2026-10-28 23:06 UTC · refreshes after every pipeline run_
 | Service Bus | — | not audited | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
 | Cosmos DB | — | not audited | 🧩 8/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
 | Function apps | — | not audited | 🧩 7/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
-| API Management | — | not audited | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
+| API Management | caddy · Lite | not audited | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
 | Virtual networks | — | not audited | 🧩 8/13 · 🧩 9/13 | 1 · 0 | ✅ watched | before gate |
 | Network Security Group | — | not audited | 🧩 1/2 · 🧩 1/2 | 1 · 1 | ✅ watched | before gate |
 | Event Grid topics | — | not audited | 🧩 9/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
@@ -442,7 +442,7 @@ _Updated 2026-10-28 23:06 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | apigatewayv2 |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: caddy; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 | ✅ | blank like the real console: Routes / Authorization | AWS shows - in the Authorization column for routes with no authorizer attached (authorizationType NONE) |
 
