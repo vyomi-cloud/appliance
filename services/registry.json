@@ -414,7 +414,8 @@
    "key": "cloudwatch",
    "name": "Amazon CloudWatch",
    "upstream": "cloudwatch",
-   "status": "pending-release"
+   "status": "released",
+   "released_in": "3.0.26"
   }
  ]
 }

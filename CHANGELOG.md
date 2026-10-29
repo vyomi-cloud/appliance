@@ -4,6 +4,39 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.26] — 2026-10-29
+
+New service release. **4 product fixes** (AWS 4); 4 reach Nano and 4 reach the offline appliance; 1 test and harness improvements.
+
+### Highlights
+
+- **Metrics get a shared VictoriaMetrics backend.** Metrics from the simulator are now stored in VictoriaMetrics, in both Nano and the offline appliance.
+- **CBOR encoding fixed.** Responses for services that use the CBOR wire format are now encoded correctly, in both Nano and offline.
+- **Nano cost savings and activity detail improved.** The cost savings and activity detail views in Nano were updated in this release.
+- **Wider wire-format and SDK coverage.** The engine handles CBOR, JSON and Query protocols, and the Java and Go SDKs are now exercised against the simulator, along with the CLI and the console, in both Nano and offline.
+
+### New services
+
+- **AWS Amazon CloudWatch**
+
+### Fixes — AWS
+
+- **[Nano + offline]** VictoriaMetrics shared backend (compose, ci-services, metric sink), manifest backend
+- **[Nano + offline]** Fix CBOR encoder, Nano cost savings + activity detail, core unit tests
+- **[Nano + offline]** Java + Go SDK test beds, CLI smoke, console tests, suites/tracked/registry/manifest
+- **[Nano + offline]** Engine (CBOR/JSON/Query wire), offline routes, console catalog, Nano vendoring
+
+<details><summary>Test and harness improvements (1)</summary>
+
+- Fix UI tests' rail selector (matched CloudWatch Logs first)
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.26`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.25] — 2026-10-29
 
 New service release. **14 product fixes** (AWS 11, all clouds 3); 10 reach Nano and 10 reach the offline appliance; 1 test and harness improvements.
