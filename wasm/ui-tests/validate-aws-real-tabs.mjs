@@ -313,6 +313,23 @@ const SECTIONS = {
     const rep = await tab("Replication");
     check("secretsmanager Replication: replica added in the tab persists", /us-east-2/.test(rep) && /InSync/.test(rep), rep);
   },
+  async kms() {
+    const alias = "rt-key-" + Date.now().toString(36);
+    const c = await call("POST", "/api/aws/kms/keys", { name: alias, alias: "alias/" + alias, description: "rt" });
+    const kid = c.json.key_id || c.json.KeyId;
+    await openService("^kms$");
+    await openRow(kid);
+    const g = await tab("General configuration");
+    check("kms General configuration: this key's ID and alias", g.includes(kid) && g.includes("alias/" + alias), g);
+    await tab("Key rotation");
+    await page.locator("#main [data-testid=kms-rot-on]").check();
+    await page.locator("#main [data-testid=kms-rot-save]").click();
+    await sleep(1500);
+    await tab("Aliases");
+    const rot = await tab("Key rotation");
+    check("kms Key rotation: enabled in the tab, persists after reopening", /Automatic key rotation\s*\nEnabled/i.test(rot), rot);
+    check("kms Key rotation: backend agrees", (await call("GET", `/api/aws/kms/keys/${kid}/detail/rotation`)).json.key_rotation_enabled === true);
+  },
 };
 
 let server;

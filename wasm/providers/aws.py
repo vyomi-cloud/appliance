@@ -179,6 +179,8 @@ class Aws(CloudProvider):
             ("ec2", "GetSerialConsoleAccess"):  lambda b, a, p: A.ec2_serial_access(p),
             ("ec2", "ModifySerialConsoleAccess"): lambda b, a, p: A.ec2_serial_access(p),
             ("iam", "ResourceAccess"):          lambda b, a, p: A.resource_access(p),
+            ("kms", "GetKeySection"):          lambda b, a, p: A.kms_section(p),
+            ("kms", "UpdateKeySection"):       lambda b, a, p: A.kms_section(p),
             ("secrets", "GetSecretSection"):   lambda b, a, p: A.secret_section(p),
             ("secrets", "UpdateSecretSection"): lambda b, a, p: A.secret_section(p),
             ("sqs", "GetQueueSection"):        lambda b, a, p: A.sqs_section(p),

@@ -2526,37 +2526,6 @@ const SUB_RENDERERS = {};
 // "Edit" makes it editable (add/remove rows) and "Save" PUTs (= PutSecretValue).
 // KMS "General configuration" — mirrors the real console: key facts + editable
 // Description (Save) + Enable/Disable key (= UpdateKeyDescription/Enable/DisableKey).
-SUB_RENDERERS.kmsconfig = function(svc, full, host){
-  const id = String(full.key_id || full.KeyId || getPath(full, svc.name_field) || "");
-  const panel = el("div",{class:"panel"}); host.append(panel);
-  function render(){
-    panel.innerHTML = "";
-    panel.append(el("div",{class:"panel-h"}, icon("info"), "General configuration"));
-    const body = el("div",{style:"padding:14px"}); panel.append(body);
-    const enabled = (full.state ? full.state === "Enabled" : !!full.enabled);
-    const facts = [["Key ID", full.key_id||id], ["ARN", full.arn], ["Status", enabled?"Enabled":(full.state||"Disabled")],
-                   ["Key spec", full.key_spec], ["Key usage", full.key_usage], ["Alias", full.alias||"—"]];
-    const grid = el("div",{style:"display:grid;grid-template-columns:150px 1fr;gap:7px 14px;margin-bottom:18px;font-size:13px"});
-    facts.forEach(f=>{ grid.append(el("div",{style:"color:#5f6b7a"}, f[0]), el("div",{class:"mono small"}, String(f[1]??"—"))); });
-    body.append(grid);
-    body.append(el("div",{style:"font-weight:600;margin-bottom:6px"}, "Description"));
-    const desc = el("input",{value: full.description||"", style:"width:100%;max-width:560px;box-sizing:border-box;border:1px solid #aab7b8;border-radius:4px;padding:7px"});
-    body.append(desc);
-    const bar = el("div",{style:"display:flex;gap:8px;margin-top:16px"});
-    bar.append(el("button",{class:"btn primary",onclick:async()=>{
-      const r = await api("PUT", fillPath(svc.resource_path,{name:id}), {description: desc.value});
-      if (r.ok){ full.description = desc.value; toast("Description saved"); } else toast("Save failed","err");
-    }}, icon("save"), "Save description"));
-    bar.append(el("button",{class:"btn"+(enabled?" del":""),onclick:async()=>{
-      const r = await api("PUT", fillPath(svc.resource_path,{name:id}), {enabled: !enabled});
-      if (r.ok){ full.enabled = !enabled; full.state = !enabled?"Enabled":"Disabled"; toast((!enabled?"Enabled":"Disabled")+" key"); render(); }
-      else toast("Failed","err");
-    }}, icon("power_settings_new"), enabled?"Disable key":"Enable key"));
-    body.append(bar);
-  }
-  render();
-};
-
 SUB_RENDERERS.overview = function(svc, full, host, tab){
   if (svc.key === "vpc" && tab && tab.key === "details"){
     // VPC console "Details" card: the VPC's own attributes (not the generic summary)
@@ -2710,6 +2679,8 @@ SUB_RENDERERS.listtable = function(svc, full, host, tab){
 SUB_RENDERERS.properties = async function(svc, full, host){
   // EC2: every property DescribeInstances returns for the instance, not just the grid row.
   if (svc.key === "ec2") { const r = await api("GET", _ec2p(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
+  // KMS: DescribeKey.
+  if (svc.key === "kms") { const r = await api("GET", _kmsp(full, "general")); if (r.ok && r.json) full = {...full, ...r.json}; }
   // Secrets Manager: DescribeSecret.
   if (svc.key === "secretsmanager") { const r = await api("GET", _secp(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
   // DynamoDB: the table's DescribeTable summary.
@@ -3334,23 +3305,6 @@ async function subApi(method, ns, op, name, body){
 //   kind:"settings" — fields (each {k,label,type?:text|number|toggle|select,
 //                     options?,ph?,default?})
 const SUBRES_CATALOG = {
-  // ── KMS ──
-  "kms:aliases": {kind:"list", title:"Aliases", singular:"alias",
-    fields:[{k:"name",label:"Alias name",ph:"alias/my-key"}],
-    columns:[["name","Alias"],["status","Status"]]},
-  "kms:rotation": {kind:"settings", title:"Key rotation",
-    fields:[{k:"rotation_enabled",label:"Automatic key rotation",type:"toggle",default:false},
-            {k:"rotation_days",label:"Rotation period (days)",type:"number",default:365}]},
-  "kms:keyUsers": {kind:"list", title:"Key users", singular:"key user",
-    fields:[{k:"name",label:"IAM principal",ph:"arn:aws:iam::…:user/dev"}],
-    columns:[["name","Principal"],["status","Status"]]},
-  "kms:keyAdmins": {kind:"list", title:"Key administrators", singular:"administrator",
-    fields:[{k:"name",label:"IAM principal",ph:"arn:aws:iam::…:role/admin"}],
-    columns:[["name","Principal"],["status","Status"]]},
-  "kms:grants": {kind:"list", title:"Grants", singular:"grant",
-    fields:[{k:"name",label:"Grantee principal",ph:"arn:aws:iam::…:role/app"},
-            {k:"operations",label:"Operations",ph:"Encrypt,Decrypt"}],
-    columns:[["name","Grantee"],["operations","Operations"],["status","Status"]]},
   // ── API Gateway sub-resources ──
   "apigateway:authorizers": {kind:"list", title:"Authorizers", singular:"authorizer",
     fields:[{k:"name",label:"Name",ph:"jwt-auth"},{k:"type",label:"Type",ph:"JWT"}],
@@ -4803,6 +4757,79 @@ SUB_RENDERERS.secpolicy = async function(svc, full, host){
     el("button",{class:"btn primary",onclick:()=>_secput(full, "policy", {policy:ta.value}, "Resource policy saved")}, icon("save"), "Save"),
     j.policy ? el("button",{class:"btn",onclick:()=>_secput(full, "policy", {policy:""}, "Resource policy deleted")}, "Delete") : null));
   host.append(card);
+};
+
+// ── KMS key tabs (GET/PUT /api/aws/kms/keys/{id}/detail/{section}). ──
+function _kmsp(full, section){ return "/api/aws/kms/keys/" + encodeURIComponent(full.key_id || full.KeyId || full.name || "") + "/detail/" + section; }
+async function _kmsput(full, section, body, okMsg){
+  const r = await api("PUT", _kmsp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Failed: " + _derr(r), "err"); return false;
+}
+SUB_RENDERERS.kmsconfig = async function(svc, full, host){
+  const g = await _dget(host, _kmsp(full, "general")); if (!g) return;
+  host.append(_dkv("General configuration", [["Alias", g.alias], ["Status", g.status], ["Creation date", g.creation_date], ["ARN", g.arn, 1],
+    ["Description", g.description], ["Key ID", g.key_id, 1], ["Key spec", g.key_spec], ["Key usage", g.key_usage], ["Origin", g.origin],
+    ["Regionality", g.multi_region ? "Multi-Region" : "Single-Region"]]));
+  const desc = el("input",{value:g.description || "","data-testid":"kms-desc"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit"), _field("Description", desc),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary","data-testid":"kms-desc-save",onclick:()=>_kmsput(full, "general", {description: desc.value}, "Description saved")}, icon("save"), "Save description"),
+      g.status !== "PendingDeletion" ? el("button",{class:"btn",onclick:()=>_kmsput(full, "general", {enabled: g.status !== "Enabled"}, g.status === "Enabled" ? "Key disabled" : "Key enabled")},
+        icon("power_settings_new"), g.status === "Enabled" ? "Disable key" : "Enable key") : null)));
+};
+SUB_RENDERERS.kmspolicy = async function(svc, full, host){
+  const j = await _dget(host, _kmsp(full, "policy")); if (!j) return;
+  const ta = el("textarea",{"data-testid":"kms-policy",style:"width:100%;min-height:220px;font-family:Consolas,Menlo,monospace"});
+  ta.value = JSON.stringify(j.policy, null, 2);
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Key policy" + (j.is_default ? " (default)" : "")), ta,
+    el("button",{class:"btn primary",style:"margin-top:10px",onclick:()=>_kmsput(full, "policy", {policy: ta.value}, "Key policy saved")}, icon("save"), "Save changes")));
+};
+SUB_RENDERERS.kmsaliases = async function(svc, full, host){
+  const j = await _dget(host, _kmsp(full, "aliases")); if (!j) return;
+  const n = el("input",{placeholder:"alias/my-app-key","data-testid":"kms-alias"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Aliases (" + j.aliases.length + ")"),
+    _dtbl([["alias_name","Alias name"],["alias_arn","Alias ARN",1],[r => el("button",{class:"btn",onclick:()=>_kmsput(full, "aliases", {action:"delete", alias_name:r.alias_name}, "Alias deleted")}, "Delete"),"Actions"]],
+      j.aliases, "No aliases point to this key."),
+    _field("New alias", n), el("button",{class:"btn primary","data-testid":"kms-alias-add",onclick:()=>_kmsput(full, "aliases", {alias_name:n.value}, "Alias created")}, icon("add"), "Create alias")));
+};
+SUB_RENDERERS.kmsrotation = async function(svc, full, host){
+  const j = await _dget(host, _kmsp(full, "rotation")); if (!j) return;
+  if (!j.rotation_supported) { host.append(el("div",{class:"empty"}, "Automatic rotation is only available for symmetric encryption keys with key material from AWS KMS.")); return; }
+  host.append(_dkv("Key rotation", [["Automatic key rotation", j.key_rotation_enabled ? "Enabled" : "Disabled"],
+    ...(j.key_rotation_enabled ? [["Rotation period", j.rotation_period_in_days + " days"], ["Next rotation date", j.next_rotation_date]] : [])]));
+  const on = el("input",{type:"checkbox","data-testid":"kms-rot-on"}); if (j.key_rotation_enabled) on.checked = true;
+  const per = el("input",{type:"number",min:"90",max:"2560",value:j.rotation_period_in_days});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit"), el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, on, el("span",{}, "Automatically rotate this KMS key")),
+    _field("Rotation period (90-2560 days)", per),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary","data-testid":"kms-rot-save",onclick:()=>_kmsput(full, "rotation", {enabled:on.checked, rotation_period_in_days:per.value}, "Rotation saved")}, icon("save"), "Save"),
+      el("button",{class:"btn",onclick:()=>_kmsput(full, "rotation", {enabled:j.key_rotation_enabled, rotation_period_in_days:j.rotation_period_in_days, rotate_now:true}, "Key rotated")}, icon("autorenew"), "Rotate now"))));
+  if (j.rotations.length) host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Rotations (" + j.rotations.length + ")"),
+    _dtbl([["rotation_date","Date"],["rotation_type","Type"]], j.rotations, "")));
+};
+function _kmsPrincipals(kind){
+  return async function(svc, full, host){
+    const j = await _dget(host, _kmsp(full, kind)); if (!j) return;
+    const list = kind === "users" ? j.key_users : j.key_administrators;
+    const p = el("input",{placeholder:"arn:aws:iam::" + ACCOUNT + ":role/app","data-testid":"kms-" + kind + "-arn"});
+    host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, (kind === "users" ? "Key users" : "Key administrators") + " (" + list.length + ")"),
+      _dtbl([[r => r,"Principal",1],[r => el("button",{class:"btn",onclick:()=>_kmsput(full, kind, {action:"remove", principal:r}, "Removed")}, "Remove"),"Actions"]],
+        list, kind === "users" ? "No key users: only principals granted by IAM policies (via the root statement) can use this key." : "No key administrators besides the account root."),
+      _field("IAM user or role ARN", p), el("button",{class:"btn primary","data-testid":"kms-" + kind + "-add",onclick:()=>_kmsput(full, kind, {principal:p.value}, "Added to the key policy")}, icon("add"), "Add")));
+  };
+}
+SUB_RENDERERS.kmsusers = _kmsPrincipals("users");
+SUB_RENDERERS.kmsadmins = _kmsPrincipals("admins");
+SUB_RENDERERS.kmsgrants = async function(svc, full, host){
+  const j = await _dget(host, _kmsp(full, "grants")); if (!j) return;
+  const g = el("input",{placeholder:"arn:aws:iam::" + ACCOUNT + ":role/worker","data-testid":"kms-grantee"}), ops = el("input",{value:"Encrypt,Decrypt"}), nm = el("input",{});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Grants (" + j.grants.length + ")"),
+    _dtbl([["grant_id","Grant ID",1],["name","Name"],["grantee_principal","Grantee principal",1],[r => r.operations.join(", "),"Operations"],["creation_date","Creation date"],
+      [r => el("button",{class:"btn",onclick:()=>_kmsput(full, "grants", {action:"revoke", grant_id:r.grant_id}, "Grant revoked")}, "Revoke"),"Actions"]],
+      j.grants, "No grants on this key."),
+    _field("Grantee principal", g), _field("Operations (comma-separated)", ops), _field("Grant name", nm),
+    el("button",{class:"btn primary","data-testid":"kms-grant-add",onclick:()=>_kmsput(full, "grants", {grantee_principal:g.value, operations:_csv(ops.value), name:nm.value}, "Grant created")}, icon("add"), "Create grant")));
 };
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──

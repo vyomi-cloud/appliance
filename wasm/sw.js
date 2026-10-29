@@ -613,6 +613,10 @@ async function route(method, path, body, query) {
     if (method === "POST") return { tuple: ["aws", "kms", "CreateKey", body || {}] };
   }
   if (path === "/api/aws/extras/kms/aliases" && method === "GET") return { tuple: ["aws", "kms", "ListAliases", {}] };
+  // Key detail tabs (core/aws_console_detail.py): configuration, policy, aliases, rotation, users, admins, grants.
+  m = path.match(/^\/api\/aws\/kms\/keys\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "kms", "GetKeySection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "kms", "UpdateKeySection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/aws\/kms\/keys\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "kms", "GetKey", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "kms", "DeleteKey", { name: dec(m[1]) }] };

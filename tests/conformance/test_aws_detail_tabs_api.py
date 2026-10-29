@@ -483,7 +483,45 @@ def secrets():
     requests.delete(f"{BASE}/api/aws/secrets/{name}", timeout=30)
     requests.delete(f"{BASE}/api/lambda/functions/{fn}", timeout=30)
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets}
+
+
+def kms():
+    print("── KMS key")
+    sfx = str(int(time.time()) % 100000)
+    kid = requests.post(f"{BASE}/api/aws/kms/keys", json={"name": f"tabs-key-{sfx}", "description": "tabs"}, timeout=30).json()["key_id"]
+    p = f"/api/aws/kms/keys/{kid}/detail/"
+    sec = lambda s: get(p + s).json()
+    put = lambda s, b: requests.put(BASE + p + s, json=b, timeout=30)
+    g = sec("general")
+    check("General configuration: this key's ID, alias, spec", g["key_id"] == kid and g["alias"] == f"alias/tabs-key-{sfx}" and g["key_spec"] == "SYMMETRIC_DEFAULT", g)
+    check("Key policy: the default policy gives the account root kms:*", sec("policy")["policy"]["Statement"][0]["Action"] == "kms:*")
+    check("Key policy: a policy that locks out management is refused",
+          put("policy", {"policy": {"Statement": [{"Effect": "Allow", "Principal": "*", "Action": "kms:Decrypt", "Resource": "*"}]}}).status_code == 400)
+    r = put("aliases", {"alias_name": f"tabs-second-{sfx}"})
+    check("Aliases: second alias", r.status_code == 200 and len(sec("aliases")["aliases"]) == 2, r.text)
+    check("Aliases: alias/aws/ reserved", put("aliases", {"alias_name": "alias/aws/mine"}).status_code == 400)
+    r = put("rotation", {"enabled": True, "rotation_period_in_days": 180})
+    rot = sec("rotation")
+    check("Key rotation: enabled every 180 days with a next date", r.status_code == 200 and rot["key_rotation_enabled"] and rot["rotation_period_in_days"] == 180 and rot["next_rotation_date"], rot)
+    check("Key rotation: period below 90 rejected", put("rotation", {"enabled": True, "rotation_period_in_days": 30}).status_code == 400)
+    role = f"tabs-kms-role-{sfx}"
+    requests.post(f"{BASE}/api/iam/roles", json={"role_name": role}, timeout=30)
+    arn = f"arn:aws:iam::123456789012:role/{role}"
+    r = put("users", {"principal": arn})
+    check("Key users: role added to the key policy", r.status_code == 200 and arn in sec("users")["key_users"]
+          and any(s.get("Sid") == "Allow use of the key" for s in sec("policy")["policy"]["Statement"]), r.text)
+    check("Key users: unknown principal rejected", put("users", {"principal": "arn:aws:iam::123456789012:role/ghost-x"}).status_code == 400)
+    check("Key administrators: added", put("admins", {"principal": arn}).status_code == 200 and sec("admins")["key_administrators"] == [arn])
+    r = put("grants", {"grantee_principal": arn, "operations": ["Encrypt", "Decrypt"]})
+    gr = sec("grants")["grants"]
+    check("Grants: grant created", r.status_code == 200 and gr[0]["operations"] == ["Encrypt", "Decrypt"], gr)
+    check("Grants: invalid operation rejected", put("grants", {"grantee_principal": arn, "operations": ["Fly"]}).status_code == 400)
+    put("grants", {"action": "revoke", "grant_id": gr[0]["grant_id"]})
+    check("Grants: revoked", sec("grants")["grants"] == [])
+    put("general", {"enabled": False})
+    check("General: disabling shows Disabled", sec("general")["status"] == "Disabled")
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets, "kms": kms}
 
 if __name__ == "__main__":
     only = sys.argv[1:] or list(SECTIONS)

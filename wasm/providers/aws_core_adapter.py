@@ -1141,3 +1141,29 @@ def secret_section(p):
     except DET.DetailError as e:
         return _det_err(e)
     return {"ok": True, "section": section, **view}
+
+
+# ── KMS key tabs (core/aws_console_detail.py over kms_core's key metadata) ──
+def _nano_principal_exists(arn):
+    name = arn.rsplit("/", 1)[-1]
+    return name in (IAM.users if ":user/" in arn else IAM.roles)
+
+
+def kms_section(p):
+    kid = str(p.get("name") or "")
+    meta = KMS.keys.get(kid)
+    if meta is None:
+        return {"ok": False, "code": "NotFoundException",
+                "__http": {"status": 404, "body": {"detail": {"code": "NotFoundException", "message": f"Key '{kid}' does not exist."}}}}
+    section = str(p.get("section") or "")
+    try:
+        if p.get("method") == "PUT":
+            out = DET.kms_update(meta, kid, KMS.aliases, section, p.get("body") or {}, KMS.account_id, _nano_principal_exists)
+            KMS.persist()
+        else:
+            out = DET.kms_section(meta, kid, KMS.aliases, section, KMS.account_id)
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (TypeError, ValueError) as e:
+        return _det_err(DET.DetailError("ValidationException", str(e)))
+    return {"ok": True, "section": section, **out}

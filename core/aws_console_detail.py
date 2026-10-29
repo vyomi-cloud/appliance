@@ -2185,3 +2185,173 @@ def secret_mark_rotated(meta: dict) -> None:
     rot["last_rotated"] = _now()
     if rot.get("days"):
         rot["next_rotation"] = _days(rot["days"])
+
+
+# ── KMS key detail (General configuration, Key policy, Aliases, Key rotation,
+#    Key users, Key administrators, Grants) over the key's metadata dict ────────
+_KMS_ADMIN_ACTIONS = ["kms:Create*", "kms:Describe*", "kms:Enable*", "kms:List*", "kms:Put*", "kms:Update*", "kms:Revoke*",
+                      "kms:Disable*", "kms:Get*", "kms:Delete*", "kms:TagResource", "kms:UntagResource",
+                      "kms:ScheduleKeyDeletion", "kms:CancelKeyDeletion"]
+_KMS_USER_ACTIONS = ["kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:DescribeKey"]
+_KMS_GRANT_OPS = {"Encrypt", "Decrypt", "ReEncryptFrom", "ReEncryptTo", "GenerateDataKey", "GenerateDataKeyWithoutPlaintext",
+                  "DescribeKey", "CreateGrant", "RetireGrant", "Sign", "Verify", "GenerateDataKeyPair", "GenerateMac", "VerifyMac"}
+
+
+def _kms_default_policy(account: str) -> dict:
+    return {"Version": "2012-10-17", "Id": "key-default-1", "Statement": [
+        {"Sid": "Enable IAM User Permissions", "Effect": "Allow", "Principal": {"AWS": f"arn:aws:iam::{account}:root"},
+         "Action": "kms:*", "Resource": "*"}]}
+
+
+def _kms_policy(meta: dict, account: str) -> dict:
+    import json
+    p = meta.get("Policy")
+    if isinstance(p, str) and p:
+        try:
+            return json.loads(p)
+        except ValueError:
+            pass
+    return p if isinstance(p, dict) else _kms_default_policy(account)
+
+
+def _kms_sid_principals(doc: dict, sid: str) -> list:
+    st = next((s for s in _as_list(doc.get("Statement")) if isinstance(s, dict) and s.get("Sid") == sid), None)
+    return [str(x) for x in _as_list(((st or {}).get("Principal") or {}).get("AWS"))] if st else []
+
+
+def _kms_set_sid(doc: dict, sid: str, principals: list, actions: list) -> None:
+    sts = [s for s in _as_list(doc.get("Statement")) if not (isinstance(s, dict) and s.get("Sid") == sid)]
+    if principals:
+        sts.append({"Sid": sid, "Effect": "Allow", "Principal": {"AWS": principals if len(principals) > 1 else principals[0]},
+                    "Action": actions, "Resource": "*"})
+    doc["Statement"] = sts
+
+
+def kms_section(meta: dict, key_id: str, aliases: dict, section: str, account: str) -> dict:
+    arn = meta.get("Arn") or f"arn:aws:kms:{REGION}:{account}:key/{key_id}"
+    doc = _kms_policy(meta, account)
+    if section == "general":
+        cd = meta.get("CreationDate")
+        return {"key_id": key_id, "arn": arn, "alias": next((a for a, k in aliases.items() if k == key_id), ""),
+                "status": meta.get("KeyState", "Enabled"), "description": meta.get("Description", ""),
+                "creation_date": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(float(cd))) if isinstance(cd, (int, float)) else (cd or ""),
+                "key_spec": meta.get("KeySpec", "SYMMETRIC_DEFAULT"), "key_usage": meta.get("KeyUsage", "ENCRYPT_DECRYPT"),
+                "origin": meta.get("Origin", "AWS_KMS"), "key_manager": "CUSTOMER", "multi_region": bool(meta.get("MultiRegion")),
+                "deletion_date": meta.get("DeletionDate", "")}
+    if section == "policy":
+        return {"policy": doc, "is_default": meta.get("Policy") in (None, "")}
+    if section == "aliases":
+        return {"aliases": [{"alias_name": a, "alias_arn": f"arn:aws:kms:{REGION}:{account}:{a}"} for a, k in sorted(aliases.items()) if k == key_id]}
+    if section == "rotation":
+        on = bool(meta.get("KeyRotationEnabled"))
+        period = int(meta.get("RotationPeriodInDays") or 365)
+        return {"rotation_supported": meta.get("KeySpec", "SYMMETRIC_DEFAULT") == "SYMMETRIC_DEFAULT" and meta.get("Origin", "AWS_KMS") == "AWS_KMS",
+                "key_rotation_enabled": on, "rotation_period_in_days": period,
+                "next_rotation_date": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(float(meta.get("RotationEnabledAt") or time.time()) + period * 86400)) if on else "",
+                "rotations": list(meta.get("Rotations") or [])}
+    if section == "users":
+        return {"key_users": _kms_sid_principals(doc, "Allow use of the key")}
+    if section == "admins":
+        return {"key_administrators": _kms_sid_principals(doc, "Allow access for Key Administrators")}
+    if section == "grants":
+        return {"grants": list(meta.get("Grants") or [])}
+    raise DetailError("ValidationException", f"Unknown key section '{section}'.")
+
+
+def kms_update(meta: dict, key_id: str, aliases: dict, section: str, body: dict, account: str, principal_exists=None) -> dict:
+    import json
+    import re
+    b = dict(body or {})
+    act = b.get("action") or "create"
+    if meta.get("KeyState") == "PendingDeletion" and section != "general":
+        raise DetailError("KMSInvalidStateException", f"{meta.get('Arn', key_id)} is pending deletion.")
+    if section == "general":
+        if "description" in b:
+            meta["Description"] = str(b["description"])[:8192]
+        if "enabled" in b:
+            on = b["enabled"] in _TRUE
+            meta["KeyState"] = "Enabled" if on else "Disabled"
+            meta["Enabled"] = on
+    elif section == "aliases":
+        if act == "delete":
+            name = str(b.get("alias_name") or "")
+            if aliases.get(name) != key_id:
+                raise DetailError("NotFoundException", f"Alias {name} is not found.")
+            aliases.pop(name)
+        else:
+            name = str(b.get("alias_name") or "").strip()
+            if not name.startswith("alias/"):
+                name = "alias/" + name
+            if name.startswith("alias/aws/"):
+                raise DetailError("NotAuthorizedException", "Aliases that begin with alias/aws/ are reserved for AWS managed keys.")
+            if not re.fullmatch(r"alias/[a-zA-Z0-9/_-]{1,250}", name):
+                raise DetailError("ValidationException", "Alias names may contain letters, numbers, '/', '_' and '-'.")
+            if name in aliases:
+                raise DetailError("AlreadyExistsException", f"An alias with the name {name} already exists")
+            aliases[name] = key_id
+    elif section == "rotation":
+        if meta.get("KeySpec", "SYMMETRIC_DEFAULT") != "SYMMETRIC_DEFAULT":
+            raise DetailError("UnsupportedOperationException", "Automatic key rotation is only supported for symmetric encryption KMS keys.")
+        on = b.get("enabled") in _TRUE
+        if on:
+            period = int(b.get("rotation_period_in_days") or meta.get("RotationPeriodInDays") or 365)
+            if not 90 <= period <= 2560:
+                raise DetailError("ValidationException", "RotationPeriodInDays must be between 90 and 2560.")
+            meta["RotationPeriodInDays"] = period
+            if not meta.get("KeyRotationEnabled"):
+                meta["RotationEnabledAt"] = time.time()
+        meta["KeyRotationEnabled"] = on
+        if b.get("rotate_now") in _TRUE:
+            meta.setdefault("Rotations", []).insert(0, {"rotation_date": _now(), "rotation_type": "ON_DEMAND"})
+    elif section in ("users", "admins"):
+        sid = "Allow use of the key" if section == "users" else "Allow access for Key Administrators"
+        doc = _kms_policy(meta, account)
+        cur = _kms_sid_principals(doc, sid)
+        p = str(b.get("principal") or "").strip()
+        if act == "remove":
+            cur = [x for x in cur if x != p]
+        else:
+            if not re.fullmatch(r"arn:aws:iam::\d{12}:(user|role)/[\w+=,.@/-]+", p):
+                raise DetailError("MalformedPolicyDocumentException", "Policy contains a statement with one or more invalid principals.")
+            if principal_exists and not principal_exists(p):
+                raise DetailError("MalformedPolicyDocumentException", f"Policy contains a statement with one or more invalid principals: {p}")
+            if p not in cur:
+                cur.append(p)
+        _kms_set_sid(doc, sid, cur, _KMS_USER_ACTIONS if section == "users" else _KMS_ADMIN_ACTIONS)
+        meta["Policy"] = json.dumps(doc)
+    elif section == "policy":
+        raw = b.get("policy")
+        try:
+            doc = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
+        except (TypeError, ValueError):
+            raise DetailError("MalformedPolicyDocumentException", "The key policy must be valid JSON.")
+        sts = [s for s in _as_list(doc.get("Statement")) if isinstance(s, dict)]
+        if not sts:
+            raise DetailError("MalformedPolicyDocumentException", "The key policy needs at least one statement.")
+        can_manage = any(s.get("Effect") == "Allow" and any(a in ("kms:*", "kms:PutKeyPolicy", "*") for a in map(str, _as_list(s.get("Action"))))
+                         for s in sts)
+        if not can_manage and not b.get("bypass_lockout_check") in _TRUE:
+            raise DetailError("MalformedPolicyDocumentException", "The new key policy will not allow you to update the key policy in the future.")
+        meta["Policy"] = json.dumps(doc)
+    elif section == "grants":
+        grants = meta.setdefault("Grants", [])
+        if act == "revoke":
+            gid = str(b.get("grant_id") or "")
+            if not any(g["grant_id"] == gid for g in grants):
+                raise DetailError("NotFoundException", f"Grant {gid} not found.")
+            meta["Grants"] = [g for g in grants if g["grant_id"] != gid]
+        else:
+            grantee = str(b.get("grantee_principal") or "").strip()
+            ops = [o.strip() for o in (b.get("operations") or []) if o.strip()]
+            if not grantee.startswith("arn:aws:"):
+                raise DetailError("ValidationException", "GranteePrincipal must be an ARN.")
+            bad = [o for o in ops if o not in _KMS_GRANT_OPS]
+            if not ops or bad:
+                raise DetailError("ValidationException", f"Invalid grant operations: {', '.join(bad) or '(none)'}")
+            import hashlib
+            gid = hashlib.sha256(f"{key_id}{grantee}{time.time()}".encode()).hexdigest()
+            grants.append({"grant_id": gid, "name": str(b.get("name") or ""), "grantee_principal": grantee, "operations": ops,
+                           "issuing_account": f"arn:aws:iam::{account}:root", "creation_date": _now()})
+    else:
+        raise DetailError("ValidationException", f"Unknown key section '{section}'.")
+    return kms_section(meta, key_id, aliases, section, account)

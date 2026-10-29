@@ -274,7 +274,28 @@ def secrets():
     check("Encryption key: an existing KMS key is accepted", put("encryption", {"kms_key_id": kid}).get("kms_key_id") == kid, keys)
     check("Encryption key: unknown key rejected", put("encryption", {"kms_key_id": "nope"}).get("code") == "ResourceNotFoundException")
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets}
+
+
+def kms():
+    print("── KMS key")
+    from wasm.providers import aws_core_adapter as A
+    from core import kms_core
+    k = d("kms", "CreateKey", {"alias": "alias/tabs-k"})
+    kid = k.get("key_id") or k.get("KeyId") or list(A.KMS.keys)[-1]
+    sec = lambda s: d("kms", "GetKeySection", {"name": kid, "section": s})
+    put = lambda s, b: d("kms", "UpdateKeySection", {"name": kid, "section": s, "method": "PUT", "body": b})
+    check("General configuration: key ID + spec", sec("general")["key_id"] == kid and sec("general")["key_spec"] == "SYMMETRIC_DEFAULT")
+    put("rotation", {"enabled": True, "rotation_period_in_days": 365})
+    r = kms_core.dispatch(A.KMS, "TrentService.GetKeyRotationStatus", {"KeyId": kid})
+    body = r.body if isinstance(r.body, dict) else {}
+    check("Key rotation: console setting is what native GetKeyRotationStatus reports", body.get("KeyRotationEnabled") is True, body)
+    check("Aliases: create", len(put("aliases", {"alias_name": "tabs-k2"})["aliases"]) >= 1)
+    check("Grants: create", put("grants", {"grantee_principal": "arn:aws:iam::123456789012:role/x", "operations": ["Decrypt"]})["grants"][0]["operations"] == ["Decrypt"])
+    put("general", {"description": "billing data key"})
+    r = kms_core.dispatch(A.KMS, "TrentService.DescribeKey", {"KeyId": kid})
+    check("General: description visible to native DescribeKey", (r.body or {}).get("KeyMetadata", {}).get("Description") == "billing data key", r.body)
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets, "kms": kms}
 
 if __name__ == "__main__":
     for k in sys.argv[1:] or list(SECTIONS):

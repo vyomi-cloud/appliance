@@ -629,6 +629,41 @@ def register(app: FastAPI) -> None:
         V2, vc2, space2, meta2, vers2 = _secret_ctx(name, request)
         return {"section": section, **D.secret_section(meta2, section, vers2, name, meta2["arn"])}
 
+    # ── KMS key tabs (the key metadata the native TrentService wire also reads) ──
+    def _principal_exists(arn: str) -> bool:
+        name = arn.rsplit("/", 1)[-1]
+        st = ctx.iam_state
+        if ":user/" in arn:
+            return any(u.get("user_name") == name for u in st.get("users", {}).values())
+        return any(r.get("role_name") == name for r in st.get("roles", {}).values())
+
+    def _kms(key_id: str):
+        from core import vault_routes as V
+        meta = V._kms_keys.get(key_id)
+        if meta is None:
+            raise HTTPException(404, detail={"code": "NotFoundException", "message": f"Key '{key_id}' does not exist."})
+        return V, meta
+
+    @app.get("/api/aws/kms/keys/{key_id}/detail/{section}")
+    def kms_section(key_id: str, section: str):
+        V, meta = _kms(key_id)
+        try:
+            return {"section": section, **D.kms_section(meta, key_id, V._kms_aliases, section, ctx.AWS_ACCOUNT_ID)}
+        except D.DetailError as e:
+            _fail(e)
+
+    @app.put("/api/aws/kms/keys/{key_id}/detail/{section}")
+    async def kms_update(key_id: str, section: str, request: Request):
+        V, meta = _kms(key_id)
+        try:
+            out = D.kms_update(meta, key_id, V._kms_aliases, section, await _body(request), ctx.AWS_ACCOUNT_ID, _principal_exists)
+        except D.DetailError as e:
+            _fail(e)
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, detail={"code": "ValidationException", "message": str(e)})
+        ctx.record_usage(f"kms.update_{section}", {"key_id": key_id, "resource_id": key_id})
+        return {"section": section, **out}
+
     # ── Permissions tab (every service): identity policies covering a resource ──
     @app.get("/api/aws/resource-access")
     def resource_access(arn: str, service: str):
