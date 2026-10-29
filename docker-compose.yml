@@ -119,6 +119,22 @@ services:
       retries: 5
     restart: unless-stopped
 
+  vyomi-registry:
+    profiles: ["full"]
+    # Shared OCI registry data plane for Artifact Registry (and, later, ECR / ACR): a real
+    # `docker push` target. CNCF Distribution (Apache-2.0). Images are namespaced
+    # {project}/{repo}/{image}; the engine ingests them from /v2/_catalog.
+    image: registry:2.8.3
+    ports:
+      - "5000:5000"
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5000/v2/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   vyomi-gateway:
     profiles: ["full"]
     # Shared L7 gateway (Caddy, Apache-2.0) for API Gateway V2 invoke URLs
@@ -289,6 +305,7 @@ services:
       CLOUDLEARN_VAULT_TOKEN: vyomi-dev-token
       CLOUDLEARN_NATS_URL: nats://vyomi-nats:4222
       CLOUDLEARN_VALKEY_HOST: vyomi-valkey
+      CLOUDLEARN_REGISTRY_HOST: vyomi-registry
       CLOUDLEARN_VICTORIAMETRICS_URL: http://vyomi-victoriametrics:8428
       CLOUDLEARN_VALKEY_PORT: "6379"
       CLOUDLEARN_MINIO_URL: http://vyomi-minio:9000

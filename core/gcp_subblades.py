@@ -285,10 +285,6 @@ _KMS_SUB = [
 # ============================================================================
 # Cloud Scheduler — job detail (generic `schedkv` renderer: `fields` is
 # [[field, label], …] read off the job's console view, every value filled)
-# =====================================================================    ]},
-]
-
-
 # ============================================================================
 _CLOUDSCHEDULER_SUB = [
     {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
@@ -401,7 +397,11 @@ _REDIS_SUB = [
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
-=======
+    ]},
+]
+
+
+# ============================================================================
 # Artifact Registry — repository detail
 # ============================================================================
 _ARTIFACTREGISTRY_SUB = [

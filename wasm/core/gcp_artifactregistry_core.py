@@ -1,5 +1,3 @@
-# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
-# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
 """GCP Artifact Registry core — substrate-independent. Speaks the native
 **Artifact Registry REST API v1** (`/v1/projects/{p}/locations/{l}/repositories...`)
 so `google-cloud-artifact-registry` (Python/Java/Go) and `gcloud artifacts` work
@@ -115,6 +113,39 @@ def _with_page(key: str, items: list, query: dict) -> dict:
     if nxt:
         out["nextPageToken"] = nxt
     return out
+
+
+# Offline data plane (the shared registry container); None → control plane only (Nano).
+DATA_PLANE: dict = {"host": None, "port": 5000}
+
+
+def configure_data_plane(host, port=5000):
+    DATA_PLANE["host"], DATA_PLANE["port"] = (host or None), int(port or 5000)
+
+
+def ingest_registry_images(store: ArtifactRegistryStore, project: str, images: list) -> int:
+    """Fold what a real `docker push` left in the registry into the engine.
+    Each item: {"path": "{repo}/{image...}", "tag", "digest", "size"} (registry path minus the
+    project segment). Docker repositories only; unknown repositories and known tags are skipped.
+    Returns the number of versions/tags newly recorded."""
+    n = 0
+    for im in images:
+        repo_id, _, image = str(im.get("path", "")).partition("/")
+        if not image:
+            continue
+        full = next((k for k, r in store.repos.items()
+                     if k.startswith(f"projects/{project}/locations/") and k.rsplit("/", 1)[-1] == repo_id
+                     and r.get("format") == "DOCKER"), None)
+        if full is None:
+            continue
+        pkg = store.repos[full]["packages"].get(_pkg_key(image))
+        ver = ((pkg or {}).get("versions") or {}).get(im["digest"])
+        if ver is not None and any(t["name"].rsplit("/", 1)[-1] == im["tag"] for t in ver["_tags"]):
+            continue
+        ingest_package(store, full, image, im["digest"], int(im.get("size") or 0), [im["tag"]])
+        n += 1
+    return n
+
 
 
 # ── views ─────────────────────────────────────────────────────────────────

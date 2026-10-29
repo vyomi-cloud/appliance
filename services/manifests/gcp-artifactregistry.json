@@ -37,8 +37,12 @@
     "artifactregistry.projects.locations.repositories.files.delete"
   ],
   "backend": {
-    "kind": "in-process",
-    "reason": "Control plane first: repositories, packages, versions, tags, files and docker images live in the engine (identical in Nano). The shared registry:2 container for a real `docker push` data plane is the follow-up; pushes are recorded through the engine's ingest hook until then."
+    "kind": "container",
+    "name": "registry",
+    "image": "registry:2.8.3",
+    "license": "Apache-2.0",
+    "tier": "lite",
+    "compose_service": "vyomi-registry"
   },
   "suites": [
     "offline-sdk-java-gcp-artifactregistry",

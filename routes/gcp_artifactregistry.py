@@ -10,7 +10,13 @@ survive restarts like every other space-scoped resource. Served here:
 """
 from __future__ import annotations
 
+import json
+import os
+import time
+import urllib.request
+
 from fastapi import FastAPI, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
 from core import app_context as ctx
@@ -73,6 +79,40 @@ def _project() -> str:
     return str(space.get("active_account") or "cloudlearn")
 
 
+_SYNC = {"at": 0.0}
+
+
+def _sync_registry() -> None:
+    """Best-effort, throttled: ingest `docker push`es from the shared registry container."""
+    host = os.environ.get("CLOUDLEARN_REGISTRY_HOST", "").strip()
+    if not host or time.time() - _SYNC["at"] < 3:
+        return
+    _SYNC["at"] = time.time()
+    ar.configure_data_plane(host, int(os.environ.get("CLOUDLEARN_REGISTRY_PORT", "5000") or 5000))
+    base = f"http://{host}:{ar.DATA_PLANE['port']}/v2"
+    accept = {"Accept": "application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json"}
+
+    def get(url, headers=None):
+        with urllib.request.urlopen(urllib.request.Request(url, headers=headers or {}), timeout=2) as r:
+            return r.headers, json.loads(r.read() or b"{}")
+
+    try:
+        project = _project()
+        found = []
+        for repo in get(base + "/_catalog?n=1000")[1].get("repositories") or []:
+            proj, _, path = repo.partition("/")
+            if proj != project or "/" not in path:
+                continue
+            for tag in get(f"{base}/{repo}/tags/list")[1].get("tags") or []:
+                h, man = get(f"{base}/{repo}/manifests/{tag}", accept)
+                size = sum(int(l.get("size", 0)) for l in man.get("layers", [])) + int((man.get("config") or {}).get("size", 0))
+                found.append({"path": path, "tag": tag, "digest": h.get("Docker-Content-Digest", ""), "size": size})
+        if ar.ingest_registry_images(_STORE, project, [f for f in found if f["digest"]]):
+            _usage("registry_push", project)
+    except Exception:
+        pass            # registry down / not started: control plane keeps working
+
+
 def _usage(op: str, name: str) -> None:
     """Mutations feed the space's activity log and cost-savings metrics (core/cost_model)."""
     try:
@@ -84,6 +124,8 @@ def _usage(op: str, name: str) -> None:
 def register(app: FastAPI) -> None:
     async def _wire(request: Request):
         body = await request.body()
+        if request.method == "GET":
+            await run_in_threadpool(_sync_registry)
         r = ar.dispatch(_STORE, request.method, request.url.path, dict(request.query_params),
                         dict(request.headers), body)
         if request.method != "GET" and r.status < 300:
@@ -104,6 +146,7 @@ def register(app: FastAPI) -> None:
 
     @app.get("/api/gcp/artifactregistry/repositories")
     def api_ar_list():
+        _sync_registry()
         return {"ok": True, "items": ar.console_list(_STORE)}
 
     @app.post("/api/gcp/artifactregistry/repositories")
@@ -142,6 +185,7 @@ def register(app: FastAPI) -> None:
     @app.post("/api/gcp/sub/artifactregistry/{op}/{name}")
     async def api_ar_sub(op: str, name: str, request: Request):
         if op in ("listPackages", "listVersions", "listTags", "listImages"):
+            await run_in_threadpool(_sync_registry)
             return {"ok": True, "items": ar.console_children(_STORE, name, op[4:].lower())}
         if op == "pushSample":
             out = ar.console_push_sample(_STORE, name, await _json(request))
