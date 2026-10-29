@@ -2787,6 +2787,8 @@ SUB_RENDERERS.listtable = function(svc, full, host, tab){
 SUB_RENDERERS.properties = async function(svc, full, host){
   // EC2: every property DescribeInstances returns for the instance, not just the grid row.
   if (svc.key === "ec2") { const r = await api("GET", _ec2p(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
+  // DynamoDB: the table's DescribeTable summary.
+  if (svc.key === "dynamodb") { const r = await api("GET", _ddbp(full, "general")); if (r.ok && r.json) full = {...full, ...r.json}; }
   // RDS: every setting DescribeDBInstances returns for the instance.
   if (svc.key === "rds") { const r = await api("GET", _rdsp(full, "configuration")); if (r.ok && r.json) { const {instance_classes, log_types, ...c} = r.json; full = {...full, ...c}; } }
   // S3: the bucket overview plus its default encryption and Object Ownership.
@@ -3315,28 +3317,6 @@ SUB_RENDERERS.dynamoitems = function(svc, full, host){
     host.append(tbl);
   });
 };
-SUB_RENDERERS.dynamoquery = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("search"),
-    el("div",{}, "Run a Query or Scan operation against this table.")));
-  const ta = el("textarea",{style:"width:100%;min-height:140px"});
-  ta.value = '{\n  "expression_attribute_values": {":pk":"user123"},\n  "key_condition_expression":"pk = :pk"\n}';
-  host.append(el("div",{class:"field"}, ta));
-  const out = el("pre",{class:"json",style:"margin-top:12px"});
-  host.append(el("div",{style:"margin-top:14px;display:flex;gap:8px"},
-    el("button",{class:"btn primary",onclick:async()=>{
-      let p = {}; try { p = JSON.parse(ta.value); } catch(e) { toast("Invalid JSON","err"); return; }
-      const r = await api(svc.api_paths.query.method,
-        fillPath(svc.api_paths.query.path, {name: full.name}), p);
-      out.textContent = JSON.stringify(r.json, null, 2);
-    }}, icon("search"), "Query"),
-    el("button",{class:"btn",onclick:async()=>{
-      const r = await api(svc.api_paths.scan.method,
-        fillPath(svc.api_paths.scan.path, {name: full.name}), {});
-      out.textContent = JSON.stringify(r.json, null, 2);
-    }}, "Scan")));
-  host.append(out);
-};
-
 // RDS
 SUB_RENDERERS.rdssnapshots = function(svc, full, host){
   fetch(ORIGIN+svc.api_paths.snapshots.path).then(r=>r.json()).then(j=>{
@@ -3578,32 +3558,6 @@ const SUBRES_CATALOG = {
     fields:[{k:"name",label:"Grantee principal",ph:"arn:aws:iam::…:role/app"},
             {k:"operations",label:"Operations",ph:"Encrypt,Decrypt"}],
     columns:[["name","Grantee"],["operations","Operations"],["status","Status"]]},
-  // ── DynamoDB ──
-  "dynamodb:capacity": {kind:"settings", title:"Read/write capacity",
-    fields:[{k:"billing_mode",label:"Capacity mode",type:"select",options:["PAY_PER_REQUEST","PROVISIONED"]},
-            {k:"read_capacity",label:"Read capacity units",type:"number",default:5},
-            {k:"write_capacity",label:"Write capacity units",type:"number",default:5}]},
-  "dynamodb:encryption": {kind:"settings", title:"Encryption at rest",
-    fields:[{k:"sse_type",label:"Encryption type",type:"select",options:["AWS_OWNED","KMS"]},
-            {k:"kms_key_id",label:"KMS key ID",ph:"alias/aws/dynamodb"}]},
-  "dynamodb:ttl": {kind:"settings", title:"Time to live (TTL)",
-    fields:[{k:"ttl_enabled",label:"Enable TTL",type:"toggle",default:false},
-            {k:"ttl_attribute",label:"TTL attribute name",ph:"expiresAt"}]},
-  "dynamodb:streams": {kind:"settings", title:"DynamoDB streams",
-    fields:[{k:"stream_enabled",label:"Enable stream",type:"toggle",default:false},
-            {k:"stream_view_type",label:"View type",type:"select",
-             options:["NEW_IMAGE","OLD_IMAGE","NEW_AND_OLD_IMAGES","KEYS_ONLY"]}]},
-  "dynamodb:indexes": {kind:"list", title:"Global secondary indexes", singular:"index",
-    fields:[{k:"name",label:"Index name",ph:"gsi-email"},{k:"partition_key",label:"Partition key",ph:"email"},
-            {k:"sort_key",label:"Sort key (optional)"}],
-    columns:[["name","Index"],["partition_key","Partition key"],["sort_key","Sort key"],["status","Status"]]},
-  "dynamodb:backups": {kind:"list", title:"On-demand backups", singular:"backup",
-    fields:[{k:"name",label:"Backup name",ph:"backup-2024-01"}],
-    columns:[["name","Backup"],["status","Status"]]},
-  "dynamodb:pitr": {kind:"settings", title:"Point-in-time recovery",
-    fields:[{k:"pitr_enabled",label:"Enable PITR",type:"toggle",default:false}]},
-  "dynamodb:insights": {kind:"settings", title:"Contributor Insights",
-    fields:[{k:"insights_enabled",label:"Enable Contributor Insights",type:"toggle",default:false}]},
   // ── SQS ──
   "sqs:encryption": {kind:"settings", title:"Encryption",
     fields:[{k:"sqs_managed_sse",label:"Amazon SQS managed SSE",type:"toggle",default:true},
@@ -4431,6 +4385,154 @@ SUB_RENDERERS.rdsperformance = async function(svc, full, host){
   host.append(_rdsEditor(full, "Edit Performance Insights", c, [
     {k:"performance_insights_enabled", label:"Turn on Performance Insights", type:"bool"},
     {k:"performance_insights_retention_period", label:"Retention period (7, 731 or a multiple of 31 days)", type:"number"}]));
+};
+
+// ── Service-specific Overview cards (the universal Overview tab delegates here). ──
+const OVERVIEW_EXTRA = {};
+const _baseOverview = SUB_RENDERERS.overview;
+SUB_RENDERERS.overview = function(svc, full, host, tab){
+  const fn = OVERVIEW_EXTRA[svc.key];
+  if (fn && !(tab && tab.key === "details" && svc.key === "vpc")) return fn(svc, full, host, tab);
+  return _baseOverview(svc, full, host, tab);
+};
+
+// ── DynamoDB table tabs (GET/PUT /api/dynamodb/tables/{t}/detail/{section}). ──
+function _ddbp(full, section){ return "/api/dynamodb/tables/" + encodeURIComponent(full.name || full.table_name || "") + "/detail/" + section; }
+async function _ddbput(full, section, body, okMsg){
+  const r = await api("PUT", _ddbp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Update failed: " + _derr(r), "err"); return false;
+}
+OVERVIEW_EXTRA.dynamodb = async function(svc, full, host){
+  const g = await _dget(host, _ddbp(full, "general")); if (!g) return;
+  host.append(_dkv("General information", [["Partition key", g.partition_key, 1], ["Sort key", g.sort_key, 1],
+    ["Capacity mode", g.capacity_mode], ["Table status", g.table_status], ["Point-in-time recovery (PITR)", g.pitr === "ENABLED" ? "On" : "Off"],
+    ["Deletion protection", g.deletion_protection ? "On" : "Off"], ["Table class", g.table_class], ["Indexes", g.indexes]]));
+  host.append(_dkv("Items summary", [["Item count", g.item_count], ["Table size", g.table_size_bytes + " bytes"],
+    ["Average item size", g.average_item_size + " bytes"]]));
+  host.append(_dkv("Additional info", [["Amazon Resource Name (ARN)", g.table_arn, 1], ["Creation date", g.created]]));
+};
+SUB_RENDERERS.dynamoquery = async function(svc, full, host){
+  // Scan runs on open (as the console's "Explore items" does); Query uses the table's own key schema.
+  const g = await _dget(host, _ddbp(full, "general")); if (!g) return;
+  const pk = String(g.partition_key || "").split(" ")[0], sk = String(g.sort_key || "").split(" ")[0];
+  const out = el("div",{});
+  const show = (r, label) => { out.innerHTML = "";
+    if (!r.ok) { out.append(el("div",{class:"alert err"}, _derr(r))); return; }
+    const items = (r.json || {}).items || [];
+    const cols = Array.from(new Set(items.flatMap(i => Object.keys(i.item || i)))).slice(0, 8);
+    const card = el("div",{class:"kv-card"});
+    card.append(el("div",{class:"h"}, label + ": items returned (" + items.length + ")"),
+      _dtbl(cols.map(c => [it => { const v = (it.item || it)[c]; return v == null ? "" : (typeof v === "object" ? JSON.stringify(v) : String(v)); }, c, 1]), items,
+        "The " + label.toLowerCase() + " returned no items from " + g.table_name + "."));
+    out.append(card); };
+  const pv = el("input",{placeholder:"Enter " + pk + " value", "data-testid":"ddb-query-pk"});
+  const sv = el("input",{placeholder: sk ? "Enter " + sk + " value (optional)" : "This table has no sort key"}); if (!sk) sv.setAttribute("disabled", "");
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Scan or query items"),
+    _field(pk + " (partition key)", pv), _field((sk || "Sort key") + (sk ? " (sort key) equals" : ""), sv),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary",onclick:async()=>{
+        if (!pv.value) { toast("Enter a " + pk + " value to query", "err"); return; }
+        const body = {partition_key_value: pv.value}; if (sk && sv.value) body.sort_key_equals = sv.value;
+        show(await api(svc.api_paths.query.method, fillPath(svc.api_paths.query.path, {name: g.table_name}), body), "Query");
+      }}, icon("search"), "Run query"),
+      el("button",{class:"btn",onclick:async()=>show(await api(svc.api_paths.scan.method, fillPath(svc.api_paths.scan.path, {name: g.table_name}), {}), "Scan")}, "Run scan")));
+  host.append(card, out);
+  show(await api(svc.api_paths.scan.method, fillPath(svc.api_paths.scan.path, {name: g.table_name}), {}), "Scan");
+};
+SUB_RENDERERS.ddbindexes = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "indexes")); if (!j) return;
+  const cols = [["index_name","Name"],["status","Status"],["partition_key","Partition key"],["sort_key","Sort key"],["projection","Projected attributes"],
+    [r => r.type === "GSI" ? el("button",{class:"btn",onclick:()=>_ddbput(full, "indexes", {action:"delete", index_name:r.index_name}, "Index deleted")}, "Delete") : "", "Actions"]];
+  const g = el("div",{class:"kv-card"}); g.append(el("div",{class:"h"}, "Global secondary indexes (" + j.global_secondary_indexes.length + ")"),
+    _dtbl(cols, j.global_secondary_indexes, "No global secondary indexes on " + full.name + "."));
+  const l = el("div",{class:"kv-card"}); l.append(el("div",{class:"h"}, "Local secondary indexes (" + j.local_secondary_indexes.length + ")"),
+    _dtbl(cols.slice(0, 5), j.local_secondary_indexes, "No local secondary indexes (they can only be added when the table is created)."));
+  const f = {n:el("input",{placeholder:"email-index"}), pk:el("input",{placeholder:"email"}), pkt:el("select",{}, ...["S","N","B"].map(t => el("option",{value:t}, t))),
+    sk:el("input",{}), skt:el("select",{}, ...["S","N","B"].map(t => el("option",{value:t}, t))), pr:el("select",{}, ...["ALL","KEYS_ONLY","INCLUDE"].map(t => el("option",{value:t}, t)))};
+  const c = el("div",{class:"kv-card"}); c.append(el("div",{class:"h"}, "Create global secondary index"),
+    _field("Index name", f.n), _field("Partition key", f.pk), _field("Partition key type", f.pkt), _field("Sort key (optional)", f.sk), _field("Sort key type", f.skt),
+    _field("Attribute projections", f.pr),
+    el("button",{class:"btn primary",onclick:()=>_ddbput(full, "indexes", {index_name:f.n.value, partition_key:f.pk.value, partition_key_type:f.pkt.value,
+      sort_key:f.sk.value, sort_key_type:f.skt.value, projection:f.pr.value}, "Index created")}, icon("add"), "Create index"));
+  host.append(g, l, c);
+};
+SUB_RENDERERS.ddbstreams = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "streams")); if (!j) return;
+  const vt = el("select",{"data-testid":"ddb-stream-view"}, ...["NEW_AND_OLD_IMAGES","NEW_IMAGE","OLD_IMAGE","KEYS_ONLY"].map(t => el("option",{value:t}, t)));
+  host.append(_dkv("DynamoDB stream details", [["Stream status", j.stream_enabled ? "On" : "Off"],
+    ...(j.stream_enabled ? [["View type", j.view_type], ["Latest stream ARN", j.latest_stream_arn, 1]] : [])], j.stream_enabled
+      ? el("button",{class:"btn",style:"margin-left:auto",onclick:()=>_ddbput(full, "streams", {stream_enabled:false}, "Stream turned off")}, "Turn off")
+      : null));
+  if (!j.stream_enabled) {
+    const c = el("div",{class:"kv-card"}); c.append(el("div",{class:"h"}, "Turn on DynamoDB stream"), _field("View type", vt),
+      el("button",{class:"btn primary",onclick:()=>_ddbput(full, "streams", {stream_enabled:true, view_type:vt.value}, "Stream turned on")}, "Turn on stream"));
+    host.append(c);
+  }
+};
+SUB_RENDERERS.ddbcapacity = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "capacity")); if (!j) return;
+  host.append(_dkv("Read/write capacity", [["Capacity mode", j.billing_mode === "PAY_PER_REQUEST" ? "On-demand" : "Provisioned"],
+    ...(j.billing_mode === "PROVISIONED" ? [["Read capacity units", j.read_capacity_units], ["Write capacity units", j.write_capacity_units]] : []),
+    ["Table class", j.table_class === "STANDARD" ? "DynamoDB Standard" : "DynamoDB Standard-IA"], ["Deletion protection", j.deletion_protection ? "On" : "Off"]]));
+  const mode = el("select",{"data-testid":"ddb-billing"}, el("option",{value:"PAY_PER_REQUEST"}, "On-demand"), el("option",{value:"PROVISIONED"}, "Provisioned")); mode.value = j.billing_mode;
+  const r = el("input",{type:"number",min:"1",value:j.read_capacity_units || 5}), w = el("input",{type:"number",min:"1",value:j.write_capacity_units || 5});
+  const cls = el("select",{}, el("option",{value:"STANDARD"}, "DynamoDB Standard"), el("option",{value:"STANDARD_INFREQUENT_ACCESS"}, "DynamoDB Standard-IA")); cls.value = j.table_class;
+  const dp = el("input",{type:"checkbox"}); if (j.deletion_protection) dp.checked = true;
+  const c = el("div",{class:"kv-card"}); c.append(el("div",{class:"h"}, "Edit"), _field("Capacity mode", mode), _field("Read capacity units", r),
+    _field("Write capacity units", w), _field("Table class", cls), el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, dp, el("span",{}, "Deletion protection")),
+    el("button",{class:"btn primary",onclick:()=>_ddbput(full, "capacity", {billing_mode:mode.value, read_capacity_units:r.value, write_capacity_units:w.value,
+      table_class:cls.value, deletion_protection:dp.checked}, "Table settings saved")}, icon("save"), "Save changes"));
+  host.append(c);
+};
+SUB_RENDERERS.ddbencryption = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "encryption")); if (!j) return;
+  host.append(_dkv("Encryption at rest", [["Key type", j.description], ["Status", j.status], ...(j.kms_key_arn ? [["AWS KMS key ARN", j.kms_key_arn, 1]] : [])]));
+  const t = el("select",{}, el("option",{value:"AWS_OWNED"}, "Owned by Amazon DynamoDB"), el("option",{value:"AWS_MANAGED"}, "AWS managed key (aws/dynamodb)"),
+    el("option",{value:"CUSTOMER_MANAGED"}, "Customer managed key")); t.value = j.sse_type;
+  const k = el("input",{placeholder:"arn:aws:kms:" + REGION + ":" + ACCOUNT + ":key/…", value: j.sse_type === "CUSTOMER_MANAGED" ? j.kms_key_arn : ""});
+  const c = el("div",{class:"kv-card"}); c.append(el("div",{class:"h"}, "Manage encryption"), _field("Encryption key", t), _field("KMS key ARN (customer managed)", k),
+    el("button",{class:"btn primary",onclick:()=>_ddbput(full, "encryption", {sse_type:t.value, kms_key_arn:k.value}, "Encryption updated")}, icon("save"), "Save changes"));
+  host.append(c);
+};
+SUB_RENDERERS.ddbttl = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "ttl")); if (!j) return;
+  const on = j.time_to_live_status === "ENABLED";
+  host.append(_dkv("Time to Live (TTL)", [["TTL status", on ? "On" : "Off"], ...(on ? [["TTL attribute", j.attribute_name]] : [])],
+    on ? el("button",{class:"btn",style:"margin-left:auto",onclick:()=>_ddbput(full, "ttl", {enabled:false}, "TTL turned off")}, "Turn off") : null));
+  if (!on) {
+    const a = el("input",{placeholder:"expiresAt","data-testid":"ddb-ttl-attr"});
+    const c = el("div",{class:"kv-card"}); c.append(el("div",{class:"h"}, "Turn on Time to Live"), _field("TTL attribute name", a),
+      el("button",{class:"btn primary",onclick:()=>_ddbput(full, "ttl", {enabled:true, attribute_name:a.value}, "TTL turned on")}, "Turn on TTL"));
+    host.append(c);
+  }
+};
+SUB_RENDERERS.ddbpitr = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "pitr")); if (!j) return;
+  const on = j.point_in_time_recovery_status === "ENABLED";
+  host.append(_dkv("Point-in-time recovery (PITR)", [["Status", on ? "On" : "Off"],
+    ...(on ? [["Earliest restore date", j.earliest_restorable_date_time], ["Latest restore date", j.latest_restorable_date_time],
+              ["Backup recovery period (days)", j.recovery_period_in_days]] : [])],
+    el("button",{class:"btn",style:"margin-left:auto",onclick:()=>_ddbput(full, "pitr", {enabled:!on}, "PITR turned " + (on ? "off" : "on"))}, on ? "Turn off" : "Turn on")));
+};
+SUB_RENDERERS.ddbbackups = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "backups")); if (!j) return;
+  const c = el("div",{class:"kv-card"});
+  c.append(el("div",{class:"h"}, "Backups (" + j.backups.length + ")"),
+    _dtbl([["backup_name","Backup name"],["backup_status","Status"],["backup_type","Backup type"],["created","Creation time"],["size_bytes","Size (bytes)"],
+      ["item_count","Item count"],["backup_arn","Backup ARN",1],
+      [r => el("button",{class:"btn",onclick:()=>_ddbput(full, "backups", {action:"delete", backup_arn:r.backup_arn}, "Backup deleted")}, "Delete"),"Actions"]],
+      j.backups, "No on-demand backups of " + full.name + "."));
+  const n = el("input",{placeholder: full.name + "-backup"});
+  c.append(_field("Backup name", n), el("button",{class:"btn primary",onclick:()=>_ddbput(full, "backups", {backup_name:n.value}, "Backup created")}, icon("backup"), "Create backup"));
+  host.append(c);
+};
+SUB_RENDERERS.ddbinsights = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "insights")); if (!j) return;
+  const on = j.contributor_insights_status === "ENABLED";
+  host.append(_dkv("CloudWatch Contributor Insights", [["Status", on ? "Enabled" : "Disabled"], ...(on ? [["Rules", j.contributor_insights_rule_list.join(", ")]] : [])],
+    el("button",{class:"btn",style:"margin-left:auto",onclick:()=>_ddbput(full, "insights", {enabled:!on}, "Contributor Insights " + (on ? "disabled" : "enabled"))}, on ? "Turn off" : "Turn on")));
 };
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──

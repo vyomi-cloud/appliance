@@ -311,6 +311,73 @@ def register(app: FastAPI) -> None:
                 _fail(e)
         return R.api_rds_delete_database(db_id, skip_final_snapshot, final_snapshot_identifier)
 
+    # ── DynamoDB table tabs ─────────────────────────────────────────────────
+    def _table(name: str) -> dict:
+        from routes import aws_dynamodb as Y
+        t = Y._ddb_find_table(name)
+        if not isinstance(t, dict):
+            raise HTTPException(404, detail="TableNotFound")
+        return D.ddb_ensure(t)
+
+    def _ddb_local(action: str, payload: dict) -> None:
+        """Mirror a table-setting change into DynamoDB Local (what the native SDK wire
+        talks to offline), best-effort, the way the console's CreateTable does."""
+        try:
+            import json as _json
+            import urllib.request
+            from core import dynamodb_proxy as _ddbp
+            if not _ddbp.available():
+                return
+            req = urllib.request.Request(_ddbp._DDB_URL, data=_json.dumps(payload).encode(), method="POST", headers={
+                "X-Amz-Target": f"DynamoDB_20120810.{action}", "Content-Type": "application/x-amz-json-1.0",
+                "Authorization": "AWS4-HMAC-SHA256 Credential=test/20260531/us-east-1/dynamodb/aws4_request"})
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+    @app.get("/api/dynamodb/tables/{name}/detail/{section}")
+    def ddb_section(name: str, section: str):
+        try:
+            return {"table_name": name, "section": section, **D.ddb_section(_table(name), section)}
+        except D.DetailError as e:
+            _fail(e)
+
+    @app.put("/api/dynamodb/tables/{name}/detail/{section}")
+    async def ddb_update(name: str, section: str, request: Request):
+        t = _table(name)
+        body = await _body(request)
+        try:
+            out = D.ddb_update_section(t, section, body)
+        except D.DetailError as e:
+            _fail(e)
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, detail={"code": "ValidationException", "message": str(e)})
+        if section == "ttl":
+            _ddb_local("UpdateTimeToLive", {"TableName": name, "TimeToLiveSpecification": {
+                "Enabled": out["time_to_live_status"] == "ENABLED", "AttributeName": out["attribute_name"]}})
+        elif section == "streams":
+            _ddb_local("UpdateTable", {"TableName": name, "StreamSpecification": {"StreamEnabled": out["stream_enabled"],
+                       **({"StreamViewType": out["view_type"]} if out["stream_enabled"] else {})}})
+        elif section == "capacity" and "billing_mode" in body:
+            pt = t.get("provisioned_throughput") or {}
+            _ddb_local("UpdateTable", {"TableName": name, "BillingMode": t["billing_mode"],
+                       **({"ProvisionedThroughput": pt} if t["billing_mode"] == "PROVISIONED" else {})})
+        ctx.persist_state()
+        ctx.record_usage(f"dynamodb.update_{section}", {"table_name": name, "resource_id": name})
+        return {"table_name": name, "section": section, **out}
+
+    @app.delete("/api/dynamodb/tables/{name}")
+    def ddb_delete(name: str):
+        # DeleteTable honours deletion protection.
+        from routes import aws_dynamodb as Y
+        t = Y._ddb_find_table(name)
+        if isinstance(t, dict):
+            try:
+                D.ddb_check_delete(t)
+            except D.DetailError as e:
+                _fail(e)
+        return Y.api_dynamodb_delete_table(name)
+
     # ── Permissions tab (every service): identity policies covering a resource ──
     @app.get("/api/aws/resource-access")
     def resource_access(arn: str, service: str):

@@ -122,6 +122,32 @@ const SECTIONS = {
     check("rds Logs & events: this instance's modification event", /Finished applying modification to backup_retention_period/.test(logs), logs);
     await call("DELETE", `/api/rds/databases/${name}`);
   },
+  async dynamodb() {
+    const name = "rt-t-" + Date.now().toString(36);
+    await call("POST", "/api/dynamodb/tables", { name, table_name: name, partition_key_name: "user_id" });
+    await call("POST", `/api/dynamodb/tables/${name}/items`, { item: { user_id: "u-" + name, plan: "pro" } });
+    await openService("^dynamodb$");
+    await openRow(name);
+    const ov = await tab("Overview");
+    check("dynamodb Overview: its partition key + ARN", ov.includes("user_id (S)") && ov.includes(":table/" + name), ov);
+    const q = await tab("Query/Scan");
+    check("dynamodb Query/Scan: scan returns the table's item", q.includes("u-" + name) && /Scan: items returned \(1\)/.test(q), q);
+    await tab("Time to live");
+    await page.locator("#main [data-testid=ddb-ttl-attr]").fill("expiresAt");
+    await page.locator("#main button", { hasText: "Turn on TTL" }).click();
+    await sleep(1500);
+    await tab("Indexes");
+    const ttl = await tab("Time to live");
+    check("dynamodb TTL: turned on in the tab, persists after reopening", /TTL status\s*\nOn/i.test(ttl) && ttl.includes("expiresAt"), ttl);
+    await tab("Read/write capacity");
+    await page.locator("#main [data-testid=ddb-billing]").selectOption("PROVISIONED");
+    await page.locator("#main button", { hasText: "Save changes" }).click();
+    await sleep(1500);
+    await tab("Indexes");
+    const cap = await tab("Read/write capacity");
+    check("dynamodb Capacity: provisioned mode persists", /Capacity mode\s*\nProvisioned/i.test(cap), cap);
+    check("dynamodb Capacity: backend agrees", (await call("GET", `/api/dynamodb/tables/${name}/detail/capacity`)).json.billing_mode === "PROVISIONED");
+  },
 };
 
 let server;

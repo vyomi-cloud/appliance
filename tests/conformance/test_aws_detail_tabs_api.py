@@ -229,7 +229,55 @@ def rds():
     r = requests.delete(BASE + p, timeout=120)
     check("delete once protection is off", r.status_code < 300, r.text)
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds}
+
+
+def dynamodb():
+    print("── DynamoDB table")
+    name = f"tabs-ddb-{int(time.time()) % 100000}"
+    r = requests.post(f"{BASE}/api/dynamodb/tables", timeout=60, json={"table_name": name, "partition_key_name": "pk", "sort_key_name": "sk"})
+    check("create table", r.status_code < 300, r.text)
+    p = f"/api/dynamodb/tables/{name}/detail/"
+    sec = lambda s: get(p + s).json()
+    put = lambda s, b: requests.put(BASE + p + s, json=b, timeout=30)
+    g = sec("general")
+    check("Overview: this table's keys, capacity mode and ARN", g["partition_key"] == "pk (S)" and g["sort_key"] == "sk (S)"
+          and g["table_arn"].endswith(":table/" + name), g)
+    r = put("indexes", {"index_name": "by-email", "partition_key": "email"})
+    check("Indexes: create GSI", r.status_code == 200 and sec("indexes")["global_secondary_indexes"][0]["index_name"] == "by-email", r.text)
+    check("Indexes: duplicate index rejected", put("indexes", {"index_name": "by-email", "partition_key": "x"}).status_code == 400)
+    put("indexes", {"action": "delete", "index_name": "by-email"})
+    check("Indexes: delete GSI", sec("indexes")["global_secondary_indexes"] == [])
+    r = put("streams", {"stream_enabled": True, "view_type": "NEW_IMAGE"})
+    check("Streams: turn on with a view type", r.status_code == 200 and sec("streams")["latest_stream_arn"].startswith(g["table_arn"] + "/stream/"), r.text)
+    check("Streams: enabling twice rejected", put("streams", {"stream_enabled": True}).status_code == 400)
+    r = put("capacity", {"billing_mode": "PROVISIONED", "read_capacity_units": 7, "write_capacity_units": 3})
+    c = sec("capacity")
+    check("Capacity: provisioned 7/3 persists", r.status_code == 200 and c["read_capacity_units"] == 7 and c["write_capacity_units"] == 3, c)
+    check("Capacity: zero RCU rejected", put("capacity", {"billing_mode": "PROVISIONED", "read_capacity_units": 0, "write_capacity_units": 1}).status_code == 400)
+    check("Encryption: default AWS owned", sec("encryption")["sse_type"] == "AWS_OWNED")
+    check("Encryption: customer managed needs a key", put("encryption", {"sse_type": "CUSTOMER_MANAGED"}).status_code == 400)
+    put("encryption", {"sse_type": "AWS_MANAGED"})
+    check("Encryption: AWS managed key ARN", "alias/aws/dynamodb" in sec("encryption")["kms_key_arn"])
+    r = put("ttl", {"enabled": True, "attribute_name": "expiresAt"})
+    check("TTL: on with attribute", r.status_code == 200 and sec("ttl") == {"table_name": name, "section": "ttl",
+          "time_to_live_status": "ENABLED", "attribute_name": "expiresAt"}, r.text)
+    check("TTL: already enabled rejected", put("ttl", {"enabled": True, "attribute_name": "x"}).status_code == 400)
+    put("pitr", {"enabled": True})
+    check("PITR: on with restore window", sec("pitr")["point_in_time_recovery_status"] == "ENABLED" and sec("pitr")["recovery_period_in_days"] == 35)
+    r = put("backups", {"backup_name": "nightly"})
+    b = sec("backups")["backups"]
+    check("Backups: on-demand backup created", r.status_code == 200 and b[0]["backup_name"] == "nightly" and ":table/" + name + "/backup/" in b[0]["backup_arn"], b)
+    put("backups", {"action": "delete", "backup_arn": b[0]["backup_arn"]})
+    check("Backups: deleted", sec("backups")["backups"] == [])
+    put("insights", {"enabled": True})
+    check("Contributor Insights: enabled with rules", sec("insights")["contributor_insights_status"] == "ENABLED")
+    put("capacity", {"deletion_protection": True})
+    r = requests.delete(f"{BASE}/api/dynamodb/tables/{name}", timeout=30)
+    check("Deletion protection blocks DeleteTable", r.status_code == 400 and "protected" in r.text, r.text)
+    put("capacity", {"deletion_protection": False})
+    check("delete once unprotected", requests.delete(f"{BASE}/api/dynamodb/tables/{name}", timeout=30).status_code < 300)
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb}
 
 if __name__ == "__main__":
     only = sys.argv[1:] or list(SECTIONS)

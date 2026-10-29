@@ -1146,3 +1146,214 @@ def rds_performance_insights(db: dict) -> dict:
             "retention_period": db.get("performance_insights_retention_period", 7),
             "kms_key_id": (db.get("kms_key_id") or "alias/aws/rds") if on else "",
             "features": {"UNIFIED_SQL_ID": "ENABLED" if on else "DISABLED"}}
+
+
+# ── DynamoDB table settings (Indexes, Streams, Capacity, Encryption, TTL,
+#    Backups, PITR, Contributor Insights) ──────────────────────────────────────
+DDB_SECTIONS = ("general", "indexes", "streams", "capacity", "encryption", "ttl", "pitr", "backups", "insights")
+_DDB_VIEW_TYPES = ("KEYS_ONLY", "NEW_IMAGE", "OLD_IMAGE", "NEW_AND_OLD_IMAGES")
+_DDB_SSE = {"AWS_OWNED": "Owned by Amazon DynamoDB", "AWS_MANAGED": "AWS managed key (aws/dynamodb)",
+            "CUSTOMER_MANAGED": "Customer managed key"}
+
+
+def ddb_ensure(table: dict) -> dict:
+    table.setdefault("table_class", "STANDARD")
+    table.setdefault("deletion_protection", False)
+    table.setdefault("sse", {"type": "AWS_OWNED", "kms_key_arn": ""})
+    table.setdefault("ttl", {"status": "DISABLED", "attribute": ""})
+    table.setdefault("pitr", {"status": "DISABLED"})
+    table.setdefault("backups", [])
+    table.setdefault("contributor_insights", "DISABLED")
+    table.setdefault("local_indexes", [])
+    st = table.setdefault("streams", {})
+    if not isinstance(st, dict):
+        st = table["streams"] = {}
+    st.setdefault("enabled", False)
+    st.setdefault("view_type", "")
+    st.setdefault("latest_stream_label", "")
+    return table
+
+
+def _ddb_arn(table: dict, account: str = "123456789012") -> str:
+    return table.get("table_arn") or f"arn:aws:dynamodb:{REGION}:{account}:table/{table.get('table_name', '')}"
+
+
+def ddb_section(table: dict, section: str) -> dict:
+    """DescribeTable / DescribeTimeToLive / DescribeContinuousBackups / ListBackups /
+    DescribeContributorInsights for the table, one console section at a time."""
+    ddb_ensure(table)
+    arn = _ddb_arn(table)
+    items = len(table.get("items") or {})
+    size = int(table.get("table_size_bytes") or 0)
+    if section == "general":
+        return {"table_name": table.get("table_name"), "table_arn": arn, "table_status": table.get("table_status", "ACTIVE"),
+                "partition_key": f"{table.get('partition_key_name')} ({table.get('partition_key_type')})",
+                "sort_key": f"{table.get('sort_key_name')} ({table.get('sort_key_type')})" if table.get("sort_key_name") else "",
+                "capacity_mode": "On-demand" if table.get("billing_mode") == "PAY_PER_REQUEST" else "Provisioned",
+                "item_count": items, "table_size_bytes": size, "average_item_size": (size // items) if items else 0,
+                "pitr": table["pitr"]["status"], "deletion_protection": bool(table.get("deletion_protection")),
+                "table_class": table.get("table_class"), "created": table.get("created", ""),
+                "indexes": len(table.get("indexes") or []) + len(table.get("local_indexes") or [])}
+    if section == "indexes":
+        def ix(g, kind):
+            ks = {k.get("KeyType"): k.get("AttributeName") for k in g.get("key_schema") or []}
+            return {"index_name": g.get("name"), "type": kind, "partition_key": ks.get("HASH") or g.get("partition_key_name", ""),
+                    "sort_key": ks.get("RANGE") or g.get("sort_key_name", ""), "status": g.get("index_status", "ACTIVE"),
+                    "projection": (g.get("projection") or {}).get("ProjectionType", "ALL"), "item_count": items,
+                    "index_arn": f"{arn}/index/{g.get('name')}"}
+        return {"global_secondary_indexes": [ix(g, "GSI") for g in table.get("indexes") or []],
+                "local_secondary_indexes": [ix(g, "LSI") for g in table.get("local_indexes") or []]}
+    if section == "streams":
+        st = table["streams"]
+        return {"stream_enabled": bool(st.get("enabled")), "view_type": st.get("view_type", ""),
+                "latest_stream_label": st.get("latest_stream_label", ""),
+                "latest_stream_arn": f"{arn}/stream/{st['latest_stream_label']}" if st.get("latest_stream_label") else ""}
+    if section == "capacity":
+        pt = table.get("provisioned_throughput") or {}
+        return {"billing_mode": table.get("billing_mode", "PAY_PER_REQUEST"), "table_class": table.get("table_class"),
+                "read_capacity_units": pt.get("ReadCapacityUnits", 0), "write_capacity_units": pt.get("WriteCapacityUnits", 0),
+                "deletion_protection": bool(table.get("deletion_protection"))}
+    if section == "encryption":
+        s = table["sse"]
+        return {"sse_type": s["type"], "description": _DDB_SSE.get(s["type"], s["type"]),
+                "kms_key_arn": s.get("kms_key_arn") or ("arn:aws:kms:%s:%s:alias/aws/dynamodb" % (REGION, arn.split(":")[4]) if s["type"] == "AWS_MANAGED" else ""),
+                "status": "ENABLED"}
+    if section == "ttl":
+        return {"time_to_live_status": table["ttl"]["status"], "attribute_name": table["ttl"].get("attribute", "")}
+    if section == "pitr":
+        p = table["pitr"]
+        on = p["status"] == "ENABLED"
+        return {"point_in_time_recovery_status": p["status"], "continuous_backups_status": "ENABLED",
+                "earliest_restorable_date_time": p.get("enabled_at", "") if on else "",
+                "latest_restorable_date_time": _now() if on else "", "recovery_period_in_days": 35 if on else 0}
+    if section == "backups":
+        return {"backups": list(table["backups"])}
+    if section == "insights":
+        return {"contributor_insights_status": table["contributor_insights"],
+                "contributor_insights_rule_list": [f"DynamoDBContributorInsights-PKC-{table.get('table_name')}",
+                                                   f"DynamoDBContributorInsights-PKT-{table.get('table_name')}"]
+                if table["contributor_insights"] == "ENABLED" else []}
+    raise DetailError("ValidationException", f"Unknown table section '{section}'.")
+
+
+def _attr_def(table: dict, name: str, typ: str) -> None:
+    defs = table.setdefault("attribute_definitions", [])
+    cur = next((d for d in defs if d.get("AttributeName") == name), None)
+    if cur and cur.get("AttributeType") != typ:
+        raise DetailError("ValidationException", f"Cannot change the type of attribute {name} from {cur['AttributeType']} to {typ}.")
+    if not cur:
+        defs.append({"AttributeName": name, "AttributeType": typ})
+
+
+def ddb_update_section(table: dict, section: str, body: dict) -> dict:
+    """UpdateTable / UpdateTimeToLive / UpdateContinuousBackups / CreateBackup /
+    DeleteBackup / UpdateContributorInsights with DynamoDB's validation."""
+    ddb_ensure(table)
+    b = dict(body or {})
+    if section == "capacity":
+        if "billing_mode" in b:
+            mode = str(b["billing_mode"]).upper()
+            if mode not in ("PAY_PER_REQUEST", "PROVISIONED"):
+                raise DetailError("ValidationException", "BillingMode must be PAY_PER_REQUEST or PROVISIONED.")
+            if mode == "PROVISIONED":
+                r, w = int(b.get("read_capacity_units") or 0), int(b.get("write_capacity_units") or 0)
+                if r < 1 or w < 1:
+                    raise DetailError("ValidationException", "ProvisionedThroughput ReadCapacityUnits and WriteCapacityUnits must be at least 1.")
+                table["provisioned_throughput"] = {"ReadCapacityUnits": r, "WriteCapacityUnits": w}
+            table["billing_mode"] = mode
+        if "table_class" in b:
+            if b["table_class"] not in ("STANDARD", "STANDARD_INFREQUENT_ACCESS"):
+                raise DetailError("ValidationException", "TableClass must be STANDARD or STANDARD_INFREQUENT_ACCESS.")
+            table["table_class"] = b["table_class"]
+        if "deletion_protection" in b:
+            table["deletion_protection"] = b["deletion_protection"] in _TRUE
+    elif section == "streams":
+        st = table["streams"]
+        on = b.get("stream_enabled") in _TRUE
+        if on:
+            vt = str(b.get("view_type") or "NEW_AND_OLD_IMAGES")
+            if vt not in _DDB_VIEW_TYPES:
+                raise DetailError("ValidationException", f"StreamViewType must be one of {', '.join(_DDB_VIEW_TYPES)}.")
+            if st.get("enabled"):
+                raise DetailError("ValidationException", f"Table already has an enabled stream: {st.get('latest_stream_label')}")
+            st.update(enabled=True, view_type=vt, latest_stream_label=_now().replace("Z", "")[:23])
+        else:
+            if not st.get("enabled"):
+                raise DetailError("ValidationException", "Table does not have an enabled stream.")
+            st.update(enabled=False, view_type="")
+    elif section == "encryption":
+        typ = str(b.get("sse_type") or "AWS_OWNED")
+        if typ not in _DDB_SSE:
+            raise DetailError("ValidationException", "SSEType must be AWS_OWNED, AWS_MANAGED or CUSTOMER_MANAGED.")
+        key = str(b.get("kms_key_arn") or "")
+        if typ == "CUSTOMER_MANAGED" and not key:
+            raise DetailError("ValidationException", "A KMS key ARN is required for a customer managed key.")
+        table["sse"] = {"type": typ, "kms_key_arn": key if typ == "CUSTOMER_MANAGED" else ""}
+    elif section == "ttl":
+        on = b.get("enabled") in _TRUE
+        cur = table["ttl"]
+        if on and cur["status"] == "ENABLED":
+            raise DetailError("ValidationException", "TimeToLive is already enabled")
+        if not on and cur["status"] != "ENABLED":
+            raise DetailError("ValidationException", "TimeToLive is already disabled")
+        attr = str(b.get("attribute_name") or cur.get("attribute") or "").strip()
+        if on and not attr:
+            raise DetailError("ValidationException", "The TTL attribute name is required.")
+        table["ttl"] = {"status": "ENABLED" if on else "DISABLED", "attribute": attr}
+    elif section == "pitr":
+        on = b.get("enabled") in _TRUE
+        table["pitr"] = {"status": "ENABLED" if on else "DISABLED", "enabled_at": _now() if on else ""}
+    elif section == "insights":
+        table["contributor_insights"] = "ENABLED" if b.get("enabled") in _TRUE else "DISABLED"
+    elif section == "indexes":
+        if b.get("action") == "delete":
+            name = str(b.get("index_name") or "")
+            if not any(g.get("name") == name for g in table.get("indexes") or []):
+                raise DetailError("ResourceNotFoundException", f"Requested resource not found: Index: {name} not found.")
+            table["indexes"] = [g for g in table["indexes"] if g.get("name") != name]
+        else:
+            name = str(b.get("index_name") or "").strip()
+            pk = str(b.get("partition_key") or "").strip()
+            if not name or not pk:
+                raise DetailError("ValidationException", "IndexName and a partition key are required.")
+            if len(table.get("indexes") or []) >= 20:
+                raise DetailError("LimitExceededException", "A table can have up to 20 global secondary indexes.")
+            if any(g.get("name") == name for g in (table.get("indexes") or []) + (table.get("local_indexes") or [])):
+                raise DetailError("ValidationException", f"Attempting to create an index which already exists: {name}")
+            _attr_def(table, pk, str(b.get("partition_key_type") or "S"))
+            ks = [{"AttributeName": pk, "KeyType": "HASH"}]
+            sk = str(b.get("sort_key") or "").strip()
+            if sk:
+                _attr_def(table, sk, str(b.get("sort_key_type") or "S"))
+                ks.append({"AttributeName": sk, "KeyType": "RANGE"})
+            proj = str(b.get("projection") or "ALL")
+            if proj not in ("ALL", "KEYS_ONLY", "INCLUDE"):
+                raise DetailError("ValidationException", "ProjectionType must be ALL, KEYS_ONLY or INCLUDE.")
+            table.setdefault("indexes", []).append({"name": name, "key_schema": ks, "partition_key_name": pk, "sort_key_name": sk,
+                                                    "projection": {"ProjectionType": proj}, "index_status": "ACTIVE"})
+    elif section == "backups":
+        if b.get("action") == "delete":
+            arn = str(b.get("backup_arn") or "")
+            if not any(x["backup_arn"] == arn for x in table["backups"]):
+                raise DetailError("BackupNotFoundException", f"Backup not found: {arn}")
+            table["backups"] = [x for x in table["backups"] if x["backup_arn"] != arn]
+        else:
+            import re
+            name = str(b.get("backup_name") or "").strip()
+            if not re.fullmatch(r"[A-Za-z0-9_.-]{3,255}", name):
+                raise DetailError("ValidationException", "BackupName must be 3-255 characters: letters, numbers, '_', '-', '.'.")
+            ts = int(time.time() * 1000)
+            table["backups"].append({"backup_name": name, "backup_arn": f"{_ddb_arn(table)}/backup/{ts:013d}-{_hex(8)}",
+                                     "backup_status": "AVAILABLE", "backup_type": "USER", "created": _now(),
+                                     "size_bytes": int(table.get("table_size_bytes") or 0), "item_count": len(table.get("items") or {})})
+    else:
+        raise DetailError("ValidationException", f"Unknown table section '{section}'.")
+    table["last_modified"] = _now()
+    return ddb_section(table, section)
+
+
+def ddb_check_delete(table: dict) -> None:
+    if (table or {}).get("deletion_protection"):
+        raise DetailError("ValidationException",
+                          f"Resource cannot be deleted as it is currently protected against deletion. Disable deletion "
+                          f"protection first.")

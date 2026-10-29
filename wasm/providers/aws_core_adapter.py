@@ -214,7 +214,7 @@ def _ddb_err(r) -> dict:
 
 
 def ddb_create_table(p: dict) -> dict:
-    name = str(p.get("name") or p.get("TableName") or "").strip()
+    name = str(p.get("name") or p.get("TableName") or p.get("table_name") or "").strip()
     pk = str(p.get("partition_key") or p.get("partition_key_name") or "id").strip() or "id"
     sk = str(p.get("sort_key") or p.get("sort_key_name") or "").strip()
     billing = str(p.get("billing_mode") or "PAY_PER_REQUEST")
@@ -243,6 +243,10 @@ def ddb_get_table(p: dict) -> dict:
 
 def ddb_delete_table(p: dict) -> dict:
     name = str(p.get("table") or p.get("name") or "")
+    try:
+        DET.ddb_check_delete(ddb._find_table(DDB, name))   # deletion protection
+    except DET.DetailError as e:
+        return _det_err(e)
     r = ddb.dispatch(DDB, "DynamoDB_20120810.DeleteTable", {"TableName": name})
     if r.status != 200:
         return _ddb_err(r)
@@ -906,3 +910,25 @@ def rds_modify_configuration(p):
         return _det_err(DET.DetailError("InvalidParameterValue", str(e)))
     RDB.persist()
     return {"ok": True, **out}
+
+
+# ── DynamoDB table tabs (core/aws_console_detail.py) ────────────────────────
+def ddb_table_section(p):
+    name = str(p.get("table") or "")
+    t = ddb._find_table(DDB, name)
+    if t is None:
+        return {"ok": False, "code": "ResourceNotFoundException",
+                "__http": {"status": 404, "body": {"detail": {"code": "ResourceNotFoundException",
+                                                              "message": f"Requested resource not found: Table: {name} not found"}}}}
+    section = str(p.get("section") or "")
+    try:
+        if p.get("method") == "PUT":
+            out = DET.ddb_update_section(t, section, p.get("body") or {})
+            DDB.persist()
+        else:
+            out = DET.ddb_section(t, section)
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (TypeError, ValueError) as e:
+        return _det_err(DET.DetailError("ValidationException", str(e)))
+    return {"ok": True, "table_name": name, "section": section, **out}

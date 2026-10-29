@@ -519,6 +519,11 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "dynamodb", "ListTables", {}] };
     if (method === "POST") return { tuple: ["aws", "dynamodb", "CreateTable", body || {}] };
   }
+  // Table detail tabs (core/aws_console_detail.py): indexes, streams, capacity,
+  // encryption, TTL, PITR, backups, Contributor Insights.
+  m = path.match(/^\/api\/dynamodb\/tables\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "dynamodb", "DescribeTableSection", { table: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "dynamodb", "UpdateTableSection", { table: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/dynamodb\/tables\/([^/]+)\/items$/);
   if (m && method === "GET")  return { tuple: ["aws", "dynamodb", "ListItems", { table: dec(m[1]) }] };
   if (m && method === "POST") return { tuple: ["aws", "dynamodb", "PutItem", { table: dec(m[1]), item: (body && body.item) || body || {} }] };

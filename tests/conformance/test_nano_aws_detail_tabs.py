@@ -135,7 +135,34 @@ def rds():
     mod({"deletion_protection": True})
     check("deletion protection blocks delete", d("rds", "DeleteDatabase", {"name": "tabs-db"}).get("code") == "InvalidParameterCombination")
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds}
+
+
+def dynamodb():
+    print("── DynamoDB table")
+    import json as _json
+    from wasm.providers import aws_core_adapter as A
+    from core import dynamodb_core as ddbc
+    d("dynamodb", "CreateTable", {"table_name": "tabs-t", "partition_key_name": "id"})
+    sec = lambda s: d("dynamodb", "DescribeTableSection", {"table": "tabs-t", "section": s})
+    put = lambda s, b: d("dynamodb", "UpdateTableSection", {"table": "tabs-t", "section": s, "method": "PUT", "body": b})
+    check("Overview: partition key + on-demand", sec("general")["partition_key"] == "id (S)" and sec("general")["capacity_mode"] == "On-demand")
+    check("Indexes: GSI created", put("indexes", {"index_name": "by-city", "partition_key": "city"}).get("ok"))
+    d("dynamodb", "PutItem", {"table": "tabs-t", "item": {"id": "1", "city": "Pune"}})
+    r = ddbc.dispatch(A.DDB, "DynamoDB_20120810.Query", {"TableName": "tabs-t", "IndexName": "by-city",
+                      "KeyConditionExpression": "city = :c", "ExpressionAttributeValues": {":c": {"S": "Pune"}}})
+    check("Indexes: the console-created GSI answers a native Query(IndexName)", r.status == 200 and r.body["Count"] == 1, r.body)
+    check("TTL: on", put("ttl", {"enabled": True, "attribute_name": "exp"}).get("time_to_live_status") == "ENABLED")
+    check("Streams: on", put("streams", {"stream_enabled": True, "view_type": "KEYS_ONLY"}).get("stream_enabled") is True)
+    check("Capacity: provisioned", put("capacity", {"billing_mode": "PROVISIONED", "read_capacity_units": 2, "write_capacity_units": 2}).get("billing_mode") == "PROVISIONED")
+    check("Backups: created", put("backups", {"backup_name": "bk1"}).get("backups")[0]["backup_name"] == "bk1")
+    check("Backups: 2-character name rejected like DynamoDB", put("backups", {"backup_name": "b1"}).get("code") == "ValidationException")
+    check("PITR: on", put("pitr", {"enabled": True}).get("point_in_time_recovery_status") == "ENABLED")
+    put("capacity", {"deletion_protection": True})
+    check("deletion protection blocks DeleteTable", d("dynamodb", "DeleteTable", {"table": "tabs-t"}).get("code") == "ValidationException")
+    ev = d("_events", "List", {"resource": "tabs-t", "provider": "aws"})["events"]
+    check("Activity: table setting changes recorded", any(e["action"] == "UpdateTableSection" for e in ev), ev)
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb}
 
 if __name__ == "__main__":
     for k in sys.argv[1:] or list(SECTIONS):
