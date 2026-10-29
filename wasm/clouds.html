@@ -1044,7 +1044,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   <script src="./nano-sw.js" defer></script>
 </head>
 <body>
-  <!-- Boot screen ("nano kernel", wasm/nano-kernel.js): on EVERY launch, first thing
+  <!-- Boot screen ("nano kernel", wasm/nano-kernel.js): once per launch, first thing
        in <body>, with the dashboard's real boot steps; replaces the old one-time
        splash, which showed once ever and was then suppressed by a localStorage flag. -->
   <script src="./nano-kernel.js"></script>
