@@ -15487,6 +15487,7 @@ def api_gcp_pubsub_delete_topic(project: str, topic: str):
         if str(sub.get("project") or project) == project and str(sub.get("topic") or "") == f"projects/{project}/topics/{topic}":
             del gcp_pubsub_state["subscriptions"][sub_id]
             gcp_pubsub_state.get("messages", {}).pop(sub_id, None)
+            _cloudsim_sync_service_resource("gcp", "pubsub", "subscription", sub_id, {}, "gcp_pubsub", action="delete")
     gcp_pubsub_state.get("messages", {}).pop(topic, None)
     _cloudsim_sync_service_resource("gcp", "pubsub", "topic", topic, {}, "gcp_pubsub", action="delete")
     _record_usage("gcp.pubsub.delete_topic", {"project": project, "topic": topic})
