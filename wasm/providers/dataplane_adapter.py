@@ -510,11 +510,16 @@ def extras_create(p):
         while f"{leaf}-{n:08x}" in _EXTRAS.get(key, {}):
             n += 1
         name = f"{leaf}-{n:08x}"
-    item = {"name": name, "id": vals.get("id") or name, "state": vals.get("state", "available"), **vals}
+    default_state = "ENABLED" if key.endswith("eventbridge/rules") else "available"
+    item = {"name": name, "id": vals.get("id") or name, "state": vals.get("state") or default_state, **vals}
+    if not item.get("state"):
+        item["state"] = default_state
     item["name"] = name
     item.setdefault("created", _now())
     if key.endswith("eventbridge/rules"):
-        item.setdefault("target_count", 0)   # a new rule has no targets yet
+        # a new rule's target count is what was attached (none yet unless a target was given)
+        if item.get("target_count") in (None, "", "\u2014"):
+            item["target_count"] = 1 if item.get("target_arn") else 0
     _EXTRAS.setdefault(key, {})[name] = item
     return {"ok": True, **item}
 
