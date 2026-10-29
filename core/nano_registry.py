@@ -67,7 +67,6 @@ def get() -> dict:
             "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
             "ssm": SsmStore(),
             "sfn": StepFunctionsStore(),
-            "compute": ComputeStore(),         # Lambda + API Gateway + VPC model (dataplane_adapter)
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),

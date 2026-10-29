@@ -312,7 +312,6 @@ def _gcp_idx_created(space: str, kind: str) -> dict:
 
 def _gcp_idx_add(space: str, kind: str, entry: str) -> None:
     items = _gcp_idx_get(space, kind)
-    _GCP_IDX_CREATED.setdefault((space, entry), time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     if entry not in items:
         vc.kv_put("gcp", space, f"__idx__{kind}", json.dumps(sorted(items + [entry])))
         created = _gcp_idx_created(space, kind)

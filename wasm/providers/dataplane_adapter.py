@@ -110,16 +110,6 @@ def lambda_invoke(p):
 
 
 # ── API Gateway ─────────────────────────────────────────────────────────────
-def _api_row(a):
-    """Console row: the same snake_case fields the appliance's /api/apigateway/apis returns."""
-    stages = list(a["deployments"].keys())
-    return {"id": a["id"], "rest_api_id": a["id"], "name": a["name"], "description": a.get("description", ""),
-            "endpoint_type": "REGIONAL", "created": a.get("created", ""), "status": "available",
-            "routes": len(a["resources"]) - 1, "resource_count": len(a["resources"]),
-            "stage_count": len(stages), "stages": stages, "latest_stage": stages[-1] if stages else "",
-            "invoke_url": f"/api/apigateway/invoke/{a['id']}"}
-
-
 def apigw_list(p=None):
     apis = getattr(_COMPUTE, "_apigateway_apis", {})
     return {"ok": True, "apis": [_api_row(a) for a in apis.values()]}
@@ -190,38 +180,6 @@ def apigw_create(p):
                              {}, {}, json.dumps({"stageName": p.get("stage", "prod")}).encode())
     return {"ok": True, **_api_row(_COMPUTE._apigateway_apis[api_id]), "id": api_id, "name": name,
             "endpoint": f"/{p.get('stage','prod')}/{path_part}", "method": method}
-
-
-def _apigw_find(p):
-    apis = getattr(_COMPUTE, "_apigateway_apis", {})
-    key = str(p.get("name") or p.get("id") or "")
-    return apis.get(key) or next((x for x in apis.values() if x["name"] == key), None)
-
-
-def apigw_resources(p):
-    """GET /api/apigateway/apis/{id}/resources — the resource tree with its methods."""
-    a = _apigw_find(p)
-    if not a:
-        return {"ok": False, "code": "NotFoundException"}
-    items = [{"id": r["id"], "path": r.get("path") or "/", "path_part": r.get("pathPart", ""),
-              "parent_id": r.get("parentId", ""),
-              "resource_methods": {m: {} for m in r.get("methods", {})}}
-             for r in a["resources"].values()]
-    items.sort(key=lambda r: r["path"])
-    return {"ok": True, "resources": items, "count": len(items)}
-
-
-def apigw_stages(p):
-    """GET /api/apigateway/apis/{id}/stages — one row per deployed stage."""
-    a = _apigw_find(p)
-    if not a:
-        return {"ok": False, "code": "NotFoundException"}
-    items = [{"stage_name": st, "deployment_id": d.get("deploymentId", ""),
-              "description": d.get("description") or f"{st} stage",
-              "invoke_url": f"/api/apigateway/invoke/{a['id']}/{st}",
-              "created": a.get("created", "")}
-             for st, d in a["deployments"].items()]
-    return {"ok": True, "stages": items, "count": len(items)}
 
 
 def apigw_delete(p):

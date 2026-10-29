@@ -249,62 +249,6 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation}
 
 
-def _gcp_create_defaults(svc: str, body: dict) -> dict:
-    """What the GCP APIs return for a fresh resource, so no grid cell is left unfilled:
-    zone/region, lifecycle state and deploy/creation time."""
-    import datetime
-    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    rec = dict(body)
-    if svc == "compute":
-        rec.setdefault("zone", "us-central1-a")
-        rec.setdefault("machineType", "e2-medium")
-        rec.setdefault("creationTimestamp", now)
-    elif svc == "functions":
-        rec.setdefault("state", "ACTIVE")
-        rec["status"] = "ACTIVE" if str(rec.get("status", "")).lower() in ("", "available") else rec["status"]
-        rec.setdefault("updateTime", now)
-        rec.setdefault("createTime", now)
-        rec.setdefault("region", "us-central1")
-    elif svc == "vpc":
-        rec.setdefault("autoCreateSubnetworks", True)
-        rec.setdefault("routingConfig", {"routingMode": "REGIONAL"})
-        rec.setdefault("creationTimestamp", now)
-    elif svc == "apigateway":
-        rec.setdefault("displayName", rec.get("name") or "")
-        rec.setdefault("state", "ACTIVE")
-        rec.setdefault("createTime", now)
-    elif svc == "eventarc":
-        rec.setdefault("region", "us-central1")
-        rec.setdefault("state", "ACTIVE")
-        rec.setdefault("createTime", now)
-    return rec
-
-
-def _ec2_launch_defaults(body: dict) -> dict:
-    """What RunInstances returns for a fresh instance: id, running state, addresses,
-    placement, launch time — so the grid never shows an unfilled cell."""
-    import datetime
-    import hashlib
-    rec = dict(body)
-    seed = hashlib.sha256(repr(sorted((k, str(v)) for k, v in body.items())).encode() + str(datetime.datetime.now().timestamp()).encode()).hexdigest()
-    octet = int(seed[:4], 16)
-    rec.setdefault("instance_id", "i-" + seed[:17])
-    rec.setdefault("state", "running")
-    rec.setdefault("instance_type", "t3.micro")
-    rec.setdefault("private_ip", f"172.31.{(octet >> 8) % 250 + 1}.{octet % 250 + 4}")
-    rec.setdefault("public_ip", f"54.{(octet >> 8) % 200 + 20}.{octet % 250 + 1}.{(octet >> 4) % 250 + 2}")
-    rec.setdefault("private_dns", "ip-" + rec["private_ip"].replace(".", "-") + ".ec2.internal")
-    rec.setdefault("public_dns", "ec2-" + rec["public_ip"].replace(".", "-") + ".compute-1.amazonaws.com")
-    rec.setdefault("availability_zone", "us-east-1a")
-    rec.setdefault("vpc_id", "vpc-" + seed[17:25])
-    rec.setdefault("subnet_id", "subnet-" + seed[25:33])
-    rec.setdefault("key_name", "")
-    rec.setdefault("security_groups", ["sg-" + seed[33:41]])   # the VPC's default group, as RunInstances attaches it
-    rec.setdefault("architecture", "x86_64")
-    rec.setdefault("launch_time", datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"))
-    return rec
-
-
 def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
     """Native Azure Resource Manager control plane. Unlike the generic
     catalog CRUD (which rides /api/{cloud}/{service} paths), the Azure console
