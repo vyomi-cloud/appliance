@@ -126,6 +126,9 @@ def register(app, on_change=None):
         changed("delete", short)
         return {"message": "Alert policy deleted", "name": short}
 
+    # "/api/gcp/sub/" is exempt from the provider-alias rewrite (Artifact Registry serves it
+    # natively), so the console's enable/disable call needs the un-rewritten path as well.
+    @app.post("/api/gcp/sub/monitoring/{action}/{pid}")
     @app.post("/api/sub/monitoring/{action}/{pid}")
     async def policy_action(action: str, pid: str):
         if action not in ("enable", "disable"):
