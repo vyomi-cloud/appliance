@@ -1,11 +1,11 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-29 05:32 UTC · refreshes after every pipeline run_
+_Updated 2026-10-29 05:40 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 52 services (AWS 18 · GCP 16 · Azure 18) of 1,068 the clouds publish
-- **Building now:** Amazon Cognito Identity Provider (AWS, 18/18 checks), Amazon EC2 Container Service (AWS, 19/19 checks), Amazon Elastic Container Registry (AWS, 20/20 checks), Amazon ElastiCache (AWS, 20/20 checks), Amazon Kinesis (AWS, 17/18 checks), Amazon Route 53 (AWS, 20/20 checks), Amazon Simple Email Service (AWS, 17/18 checks), Amazon Simple Notification Service (AWS, 17/18 checks), AWS CloudFormation (AWS, 20/20 checks), AWS Security Token Service (AWS, 18/18 checks), Artifact Registry API (GCP, 17/18 checks), BigQuery API (GCP, 17/18 checks), Cloud DNS API (GCP, 17/18 checks), Cloud Logging API (GCP, 17/18 checks), Cloud Monitoring API (GCP, 17/18 checks), Cloud Run Admin API (GCP, 19/19 checks), Cloud Tasks API (GCP, 17/18 checks), Workflows API (GCP, 17/18 checks), applicationinsights (Azure, 16/17 checks), containerregistry (Azure, 20/20 checks), containerservice (Azure, 16/17 checks), eventhub (Azure, 16/17 checks), msi (Azure, 17/17 checks), redis (Azure, 20/20 checks)
+- **Building now:** Amazon Cognito Identity Provider (AWS, 18/18 checks), Amazon EC2 Container Service (AWS, 19/19 checks), Amazon Elastic Container Registry (AWS, 20/20 checks), Amazon ElastiCache (AWS, 20/20 checks), Amazon Kinesis (AWS, 20/20 checks), Amazon Route 53 (AWS, 20/20 checks), Amazon Simple Email Service (AWS, 17/18 checks), Amazon Simple Notification Service (AWS, 17/18 checks), AWS CloudFormation (AWS, 20/20 checks), AWS Security Token Service (AWS, 18/18 checks), Artifact Registry API (GCP, 17/18 checks), BigQuery API (GCP, 17/18 checks), Cloud DNS API (GCP, 17/18 checks), Cloud Logging API (GCP, 17/18 checks), Cloud Monitoring API (GCP, 17/18 checks), Cloud Run Admin API (GCP, 19/19 checks), Cloud Tasks API (GCP, 17/18 checks), Workflows API (GCP, 17/18 checks), applicationinsights (Azure, 16/17 checks), containerregistry (Azure, 20/20 checks), containerservice (Azure, 16/17 checks), eventhub (Azure, 16/17 checks), msi (Azure, 17/17 checks), redis (Azure, 20/20 checks)
 - **In the gate / releasing:** nothing
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 59% · Nano 70%
@@ -28,7 +28,7 @@ _Updated 2026-10-29 05:32 UTC · refreshes after every pipeline run_
 | Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🛠 Building | 19/19 | docker · Pro · + caddy gateway | docker · Pro | — |
 | Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🛠 Building | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
 | Amazon ElastiCache [#56](https://github.com/vyomi-cloud/appliance/issues/56) | AWS | 🛠 Building | 20/20 | valkey · Lite | valkey · 8 MB · Lite | — |
-| Amazon Kinesis [#58](https://github.com/vyomi-cloud/appliance/issues/58) | AWS | 🛠 Building | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Amazon Kinesis [#58](https://github.com/vyomi-cloud/appliance/issues/58) | AWS | 🛠 Building | 20/20 | nats · Lite | nats · 10 MB · Lite | — |
 | Amazon Route 53 [#60](https://github.com/vyomi-cloud/appliance/issues/60) | AWS | 🛠 Building | 20/20 | coredns · Lite | coredns · 15 MB · Lite | — |
 | Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🛠 Building | 17/18 | mailpit · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Amazon Simple Notification Service [#62](https://github.com/vyomi-cloud/appliance/issues/62) | AWS | 🛠 Building | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
@@ -415,9 +415,11 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | ✅ | has a offline ui test bed |  |
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | kinesis |
-| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process', 'reason': 'Kinesis semantics (shards, hash-key routing, sequence numbers, iterators, resharding lineage) live |
-| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: nats; chose in-process |
-| ✅ | claimed operations exist in the real API | not upstream: [] |
+| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'container', 'name': 'nats', 'image': 'nats:2-alpine', 'license': 'Apache-2.0', 'tier': 'lite', 'compose_service': 'vyomi-n |
+| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: nats; chose nats |
+| ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=Apache-2.0 |
+| ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=Apache-2.0 |
+| ✅ | backend image is pinned to a version (not latest) | nats:2-alpine |
 
 </details>
 
