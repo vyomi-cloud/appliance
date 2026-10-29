@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-29 09:29 UTC · refreshes after every pipeline run_
+_Updated 2026-10-29 09:30 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-10-29 09:29 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** nothing
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 61% · Nano 75%
-- **Hourly tests:** 172 of 175 suites passing (run 07:25 UTC)
+- **Hourly tests:** 174 of 176 suites passing (run 08:59 UTC)
 - **Upstream watch:** 50 open changes from the real clouds to adopt
 
 ## By cloud
@@ -18,7 +18,7 @@ _Updated 2026-10-29 09:29 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|
 | AWS | 19 | 9 | 0 | 17 | 53% · 76% |
 | GCP | 18 | 6 | 0 | 12 | 47% · 67% |
-| Azure | 18 | 6 | 0 | 12 | 78% · 79% |
+| Azure | 18 | 6 | 0 | 12 | 78% · 80% |
 
 ## In progress
 
@@ -56,14 +56,14 @@ _Updated 2026-10-29 09:29 UTC · refreshes after every pipeline run_
 
 | Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|---|---|
-| EC2 | — | not audited | 🧩 6/13 · 🧩 7/13 | 0 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
+| EC2 | — | not audited | 🧩 6/13 · 🧩 7/13 | 2 · 2 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | S3 | — | not audited | 🧩 6/13 · 🧩 11/13 | 0 · 0 | ✅ watched | before gate |
 | IAM | — | not audited | 🧩 8/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
 | RDS | — | not audited | 🧩 8/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | DynamoDB | — | not audited | 🧩 4/13 · 🧩 10/13 | 1 · 1 | ✅ watched | before gate |
 | SQS | — | not audited | 🧩 5/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
 | Lambda | — | not audited | 🧩 6/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
-| API Gateway | caddy · Lite | not audited | 🧩 8/13 · 🧩 10/13 | 0 · 1 | ✅ watched | before gate |
+| API Gateway | caddy · Lite | not audited | 🧩 8/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | VPC | — | not audited | 🧩 8/13 · 🧩 12/13 | 0 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | EventBridge | nats · Lite | 🟡 rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered | 🧩 6/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | Secrets Manager | — | not audited | 🧩 4/13 · 🧩 9/13 | 2 · 2 | ✅ watched | before gate |
@@ -111,7 +111,7 @@ _Updated 2026-10-29 09:29 UTC · refreshes after every pipeline run_
 | Function apps | — | not audited | 🧩 8/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
 | API Management | caddy · Lite | not audited | 🧩 11/13 · 🧩 11/13 | 0 · 0 | ✅ watched | before gate |
 | Virtual networks | — | not audited | 🧩 9/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
-| Network Security Group | — | not audited | 🧩 9/11 · 🧩 9/11 | 0 · 0 | ✅ watched | before gate |
+| Network Security Group | — | not audited | 🧩 9/11 · 🧩 10/11 | 0 · 0 | ✅ watched | before gate |
 | Event Grid topics | — | not audited | 🧩 9/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
 | Key vaults | — | not audited | 🧩 10/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | Entra ID / RBAC | — | not audited | 🧩 5/6 · 🧩 5/6 | 0 · 0 | ✅ watched | before gate |
@@ -1147,7 +1147,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Console parts not live yet — Azure (100)</summary>
+<details><summary>Console parts not live yet — Azure (99)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -1231,7 +1231,6 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | Virtual networks | nano | tab: Subnets | static |
 | Virtual networks | nano | tab: Connected devices | static |
 | Network Security Group | nano | tab: Diagnose and solve problems | static |
-| Network Security Group | nano | tab: Locks | static |
 | Event Grid topics | nano | tab: Diagnose and solve problems | static |
 | Event Grid topics | nano | tab: Topic types | static |
 | Event Grid topics | nano | tab: Networking | static |
@@ -1258,7 +1257,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 | Suite | Result | Checks |
 |---|---|---|
-| offline-ui-crawl | ❌ | 50/52 |
+| offline-ui-crawl | ❌ | 49/52 |
 | offline-console-actions | ✅ | 323/323 |
 | offline-api-ec2-instance-detail | ✅ | 3/3 |
 | offline-api-s3-bucket-creation-date | ✅ | 3/3 |
@@ -1311,7 +1310,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-ui-aws-vpc-details-tab | ✅ | 2/2 |
 | nano-ui-aws-vpc-sg-iam-cells | ✅ | 3/3 |
 | offline-ui-aws-vpc-sg-iam-cells | ✅ | 3/3 |
-| offline-api-gcp-pubsub-savings | ❌ | 7/8 |
+| offline-api-gcp-pubsub-savings | ✅ | 11/11 |
 | offline-api-gcp-apigateway-savings | ✅ | 5/5 |
 | offline-api-gcp-console-next | ✅ | 28/28 |
 | offline-api-gcp-grid-columns | ✅ | 19/19 |
@@ -1338,7 +1337,6 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-api-aws-eventbridge-rule-defaults | ✅ | 14/14 |
 | nano-ui-azure-tabs | ✅ | 71/71 |
 | nano-ui-azure-dp | ✅ | 5/5 |
-| nano-ui-azure-home | ✅ | 7/7 |
 | nano-ui-budget-savings | ✅ | 5/5 |
 | nano-ui-reload-backend | ✅ | 3/3 |
 | nano-ui-azure-storage-console | ✅ | 12/12 |
@@ -1421,10 +1419,12 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | nano-ui-aws-metrics | ✅ | 10/10 |
 | nano-ui-aws-settings-tabs | ✅ | 10/10 |
 | nano-ui-aws-vpc-row | ✅ | 7/7 |
+| nano-ui-azure-home | ✅ | 7/7 |
 | nano-ui-azure-nsg-roledef-create | ✅ | 7/7 |
 | nano-ui-azure-nsg-rules | ✅ | 8/8 |
 | nano-ui-azure-tags-tab | ✅ | 36/36 |
 | nano-ui-gcp-create-defaults | ✅ | 36/36 |
+| offline-api-ec2-get-image-findings | ✅ | 4/4 |
 | offline-api-gcp-console-savings | ✅ | 12/12 |
 | offline-request-metrics | ✅ | 4/4 |
 | offline-ui-aws-detail-tabs | ✅ | 6/6 |
