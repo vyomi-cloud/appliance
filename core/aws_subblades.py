@@ -324,18 +324,17 @@ _VPC_SUB = [
 _EVENTBRIDGE_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Rule", "items": [
-        {"key": "details",       "label": "Rule details",           "icon": "info",          "type": "overview"},
-        {"key": "targets",       "label": "Targets",                "icon": "send",          "type": "stub"},
-        {"key": "eventPattern",  "label": "Event pattern",          "icon": "code",          "type": "stub"},
+        {"key": "details",       "label": "Rule details",           "icon": "info",          "type": "ebDetails"},
+        {"key": "targets",       "label": "Targets",                "icon": "send",          "type": "ebTargets"},
+        {"key": "eventPattern",  "label": "Event pattern",          "icon": "code",          "type": "ebPattern"},
     ]},
     {"group": "Operations", "items": [
         {"key": "invocations",   "label": "Invocations",            "icon": "history",       "type": "activityLog"},
-        {"key": "deadletter",    "label": "Dead-letter queue",      "icon": "warning",       "type": "stub"},
+        {"key": "deadletter",    "label": "Dead-letter queue",      "icon": "warning",       "type": "ebDlq"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",       "label": "Metrics",                "icon": "show_chart",    "type": "metrics"},
-        {"key": "logs",          "label": "Trace logs",             "icon": "subject",       "type": "stub"},
     ]},
 ]
 

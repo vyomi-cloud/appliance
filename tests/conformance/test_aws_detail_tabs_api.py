@@ -521,7 +521,40 @@ def kms():
     put("general", {"enabled": False})
     check("General: disabling shows Disabled", sec("general")["status"] == "Disabled")
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets, "kms": kms}
+
+
+def eventbridge():
+    print("── EventBridge rule")
+    name = f"tabs-rule-{int(time.time()) % 100000}"
+    r = requests.post(f"{BASE}/api/aws/extras/eventbridge/rules", timeout=30, json={
+        "name": name, "rule_type": "EventPattern", "event_pattern": '{"source":["aws.s3"]}', "event_bus_name": "default"})
+    check("create rule", r.status_code < 300, r.text)
+    p = f"/api/aws/extras/eventbridge/rules/{name}/detail/"
+    sec = lambda s: get(p + s).json()
+    put = lambda s, b: requests.put(BASE + p + s, json=b, timeout=30)
+    d = sec("details")
+    check("Rule details: this rule's ARN on the default bus", d["arn"].endswith(":rule/" + name) and d["event_bus_name"] == "default", d)
+    put("details", {"state": "DISABLED"})
+    check("Rule details: disable persists", sec("details")["state"] == "DISABLED")
+    q = f"tabs-eb-q-{int(time.time()) % 100000}"
+    requests.post(f"{BASE}/api/sqs/queues", json={"queue_name": q, "name": q}, timeout=30)
+    qarn = f"arn:aws:sqs:us-east-1:123456789012:{q}"
+    r = put("targets", {"id": "to-queue", "arn": qarn})
+    check("Targets: SQS target added", r.status_code == 200 and sec("targets")["targets"][0]["arn"] == qarn, r.text)
+    check("Targets: duplicate Id rejected", put("targets", {"id": "to-queue", "arn": qarn}).status_code == 400)
+    check("Targets: list row target count", next(x for x in get("/api/aws/extras/eventbridge/rules").json()["items"] if x["name"] == name)["target_count"] == 1)
+    check("Event pattern: non-array value rejected", put("pattern", {"event_pattern": '{"source":"aws.s3"}'}).status_code == 400)
+    put("pattern", {"event_pattern": '{"source":["aws.s3"],"detail-type":["Object Created"]}'})
+    t = put("pattern", {"action": "test", "event": '{"source":"aws.s3","detail-type":"Object Created"}'}).json()
+    f = put("pattern", {"action": "test", "event": '{"source":"aws.ec2"}'}).json()
+    check("Event pattern: TestEventPattern matches / rejects sample events", t["result"] is True and f["result"] is False, (t, f))
+    check("Dead-letter queue: non-existent DLQ rejected", put("dlq", {"id": "to-queue", "dead_letter_arn": qarn + "-nope"}).status_code == 400)
+    r = put("dlq", {"id": "to-queue", "dead_letter_arn": qarn, "max_retry_attempts": 3, "max_event_age": 3600})
+    check("Dead-letter queue: retry policy + DLQ on the target", r.status_code == 200 and sec("dlq")["targets"][0]["max_retry_attempts"] == 3, r.text)
+    requests.delete(f"{BASE}/api/aws/extras/eventbridge/rules/{name}", timeout=30)
+    requests.delete(f"{BASE}/api/sqs/queues/{q}", timeout=30)
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets, "kms": kms, "eventbridge": eventbridge}
 
 if __name__ == "__main__":
     only = sys.argv[1:] or list(SECTIONS)

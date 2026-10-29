@@ -664,6 +664,35 @@ def register(app: FastAPI) -> None:
         ctx.record_usage(f"kms.update_{section}", {"key_id": key_id, "resource_id": key_id})
         return {"section": section, **out}
 
+    # ── EventBridge rule tabs (the console's rule record in the extras store) ──
+    def _rule(name: str) -> dict:
+        from routes import aws_extras as X
+        X._aws_extras_seed_if_needed("eventbridge/rules")
+        r = X._aws_extras_state("eventbridge/rules")["items"].get(name)
+        if not isinstance(r, dict):
+            raise HTTPException(404, detail={"code": "ResourceNotFoundException", "message": f"Rule {name} does not exist."})
+        return r
+
+    @app.get("/api/aws/extras/eventbridge/rules/{name}/detail/{section}")
+    def eb_section(name: str, section: str):
+        try:
+            return {"section": section, **D.eb_section(_rule(name), section, ctx.AWS_ACCOUNT_ID)}
+        except D.DetailError as e:
+            _fail(e)
+
+    @app.put("/api/aws/extras/eventbridge/rules/{name}/detail/{section}")
+    async def eb_update(name: str, section: str, request: Request):
+        from routes import aws_sqs as Q
+        try:
+            out = D.eb_update(_rule(name), section, await _body(request), ctx.AWS_ACCOUNT_ID, lambda q: bool(Q._sqs_find_queue(q)))
+        except D.DetailError as e:
+            _fail(e)
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, detail={"code": "ValidationException", "message": str(e)})
+        ctx.persist_state()
+        ctx.record_usage(f"eventbridge.update_{section}", {"name": name, "resource_id": name})
+        return {"section": section, **out}
+
     # ── Permissions tab (every service): identity policies covering a resource ──
     @app.get("/api/aws/resource-access")
     def resource_access(arn: str, service: str):

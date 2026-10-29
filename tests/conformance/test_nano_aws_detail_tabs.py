@@ -295,7 +295,23 @@ def kms():
     r = kms_core.dispatch(A.KMS, "TrentService.DescribeKey", {"KeyId": kid})
     check("General: description visible to native DescribeKey", (r.body or {}).get("KeyMetadata", {}).get("Description") == "billing data key", r.body)
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets, "kms": kms}
+
+
+def eventbridge():
+    print("── EventBridge rule")
+    d("extras", "Create", {"key": "eventbridge/rules", "name": "tabs-rule", "event_pattern": '{"source":["my.app"]}'})
+    sec = lambda s: d("eventbridge", "DescribeRuleSection", {"name": "tabs-rule", "section": s})
+    put = lambda s, b: d("eventbridge", "PutRuleSection", {"name": "tabs-rule", "section": s, "method": "PUT", "body": b})
+    check("Rule details: rule ARN", sec("details")["arn"].endswith(":rule/tabs-rule"))
+    check("Rule page GET returns the rule record", d("eventbridge", "GetConsoleRule", {"name": "tabs-rule"}).get("name") == "tabs-rule")
+    d("sqs", "CreateQueue", {"name": "eb-q"})
+    check("Targets: add", put("targets", {"id": "q", "arn": "arn:aws:sqs:us-east-1:123456789012:eb-q"})["targets"][0]["id"] == "q")
+    check("Targets: sixth target over the limit", all(put("targets", {"id": f"t{i}", "arn": "arn:aws:sqs:us-east-1:1:x"}).get("ok") for i in range(4))
+          and put("targets", {"id": "t9", "arn": "arn:aws:sqs:us-east-1:1:x"}).get("code") == "LimitExceededException")
+    check("Event pattern: test match", put("pattern", {"action": "test", "event": {"source": "my.app"}})["result"] is True)
+    check("DLQ: existing SQS DLQ accepted", put("dlq", {"id": "q", "dead_letter_arn": "arn:aws:sqs:us-east-1:123456789012:eb-q"})["targets"][0]["dead_letter_arn"].endswith(":eb-q"))
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets, "kms": kms, "eventbridge": eventbridge}
 
 if __name__ == "__main__":
     for k in sys.argv[1:] or list(SECTIONS):

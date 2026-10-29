@@ -1167,3 +1167,33 @@ def kms_section(p):
     except (TypeError, ValueError) as e:
         return _det_err(DET.DetailError("ValidationException", str(e)))
     return {"ok": True, "section": section, **out}
+
+
+# ── EventBridge rule tabs (core/aws_console_detail.py over the console's rule
+#    record in the persisted extras store) ──
+def eb_rule_section(p):
+    name = str(p.get("name") or "")
+    rule = (_EXTRAS.items.get("eventbridge/rules") or {}).get(name)
+    if not isinstance(rule, dict):
+        return {"ok": False, "code": "ResourceNotFoundException",
+                "__http": {"status": 404, "body": {"detail": {"code": "ResourceNotFoundException", "message": f"Rule {name} does not exist."}}}}
+    section = str(p.get("section") or "")
+    try:
+        if p.get("method") == "PUT":
+            out = DET.eb_update(rule, section, p.get("body") or {}, IAM.account_id, lambda q: MSG.get_queue(q) is not None)
+        else:
+            out = DET.eb_section(rule, section, IAM.account_id)
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (TypeError, ValueError) as e:
+        return _det_err(DET.DetailError("ValidationException", str(e)))
+    return {"ok": True, "section": section, **out}
+
+
+def eb_get_rule(p):
+    """GET /api/aws/extras/eventbridge/rules/{name} — the console's rule record (detail page)."""
+    name = str(p.get("name") or "")
+    rule = (_EXTRAS.items.get("eventbridge/rules") or {}).get(name)
+    if not isinstance(rule, dict):
+        return {"ok": False, "code": "ResourceNotFoundException", "name": name}
+    return {"ok": True, **DET.eb_ensure(rule)}

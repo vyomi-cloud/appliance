@@ -330,6 +330,26 @@ const SECTIONS = {
     check("kms Key rotation: enabled in the tab, persists after reopening", /Automatic key rotation\s*\nEnabled/i.test(rot), rot);
     check("kms Key rotation: backend agrees", (await call("GET", `/api/aws/kms/keys/${kid}/detail/rotation`)).json.key_rotation_enabled === true);
   },
+  async eventbridge() {
+    const name = "rt-rule-" + Date.now().toString(36);
+    await call("POST", "/api/aws/extras/eventbridge/rules", { name, rule_type: "EventPattern", event_pattern: '{"source":["rt.app"]}' });
+    await openService("^eventbridge$");
+    await openRow(name);
+    await tab("Targets");
+    await page.locator("#main [data-testid=eb-target-arn]").fill("arn:aws:sqs:us-east-1:" + "123456789012:" + name);
+    await page.locator("#main [data-testid=eb-target-add]").click();
+    await sleep(1500);
+    await tab("Event pattern");
+    const tg = await tab("Targets");
+    check("eventbridge Targets: target added in the tab persists", tg.includes(":" + name), tg);
+    await tab("Event pattern");
+    await page.locator("#main [data-testid=eb-test]").click();
+    await sleep(1200);
+    const res = await page.locator("#main [data-testid=eb-test-result]").innerText().catch(() => "");
+    check("eventbridge Event pattern: TestEventPattern result for the rule's own pattern", /matched the event pattern/.test(res), res);
+    const det = await tab("Rule details");
+    check("eventbridge Rule details: this rule's ARN", det.includes(":rule/" + name), det);
+  },
 };
 
 let server;

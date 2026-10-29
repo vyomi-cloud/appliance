@@ -1737,6 +1737,8 @@ async function renderDetail(main){
   const path = fillPath(svc.resource_path, {name});
   const r = await api("GET", path);
   const full = (r.ok && r.json) ? r.json : itemStub;
+  // Sub-renderers address the resource as full.name (as offline does).
+  if (full && typeof full === "object" && !full.name && name) full.name = name;
 
   // Top: ID line + actions
   const top = el("div",{class:"detail-top"});
@@ -2679,6 +2681,8 @@ SUB_RENDERERS.listtable = function(svc, full, host, tab){
 SUB_RENDERERS.properties = async function(svc, full, host){
   // EC2: every property DescribeInstances returns for the instance, not just the grid row.
   if (svc.key === "ec2") { const r = await api("GET", _ec2p(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
+  // EventBridge: DescribeRule.
+  if (svc.key === "eventbridge") { const r = await api("GET", _ebp(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
   // KMS: DescribeKey.
   if (svc.key === "kms") { const r = await api("GET", _kmsp(full, "general")); if (r.ok && r.json) full = {...full, ...r.json}; }
   // Secrets Manager: DescribeSecret.
@@ -3319,19 +3323,6 @@ const SUBRES_CATALOG = {
     fields:[{k:"access_logging",label:"Access logging",type:"toggle",default:false},
             {k:"xray_tracing",label:"X-Ray tracing",type:"toggle",default:false},
             {k:"log_level",label:"Log level",type:"select",options:["OFF","ERROR","INFO"]}]},
-  // ── EventBridge sub-resources ──
-  "eventbridge:targets": {kind:"list", title:"Targets", singular:"target",
-    fields:[{k:"name",label:"Target ID",ph:"target-1"},{k:"arn",label:"Target ARN",ph:"arn:aws:sqs:…"}],
-    columns:[["name","Target"],["arn","ARN"],["status","Status"]]},
-  "eventbridge:eventPattern": {kind:"settings", title:"Event pattern",
-    fields:[{k:"source",label:"Event source",ph:"aws.ec2"},
-            {k:"detail_type",label:"Detail type",ph:"EC2 Instance State-change"}]},
-  "eventbridge:deadletter": {kind:"settings", title:"Dead-letter queue",
-    fields:[{k:"dlq_enabled",label:"Enable DLQ",type:"toggle",default:false},
-            {k:"dlq_arn",label:"DLQ ARN",ph:"arn:aws:sqs:…"},
-            {k:"max_retry_attempts",label:"Max retry attempts",type:"number",default:185}]},
-  "eventbridge:logs": {kind:"settings", title:"Trace logs",
-    fields:[{k:"trace_enabled",label:"Enable trace logging",type:"toggle",default:false}]},
 };
 
 function subresCfg(svc, tab){
@@ -4830,6 +4821,74 @@ SUB_RENDERERS.kmsgrants = async function(svc, full, host){
       j.grants, "No grants on this key."),
     _field("Grantee principal", g), _field("Operations (comma-separated)", ops), _field("Grant name", nm),
     el("button",{class:"btn primary","data-testid":"kms-grant-add",onclick:()=>_kmsput(full, "grants", {grantee_principal:g.value, operations:_csv(ops.value), name:nm.value}, "Grant created")}, icon("add"), "Create grant")));
+};
+
+// ── EventBridge rule tabs (GET/PUT /api/aws/extras/eventbridge/rules/{name}/detail/{section}). ──
+function _ebp(full, section){ return "/api/aws/extras/eventbridge/rules/" + encodeURIComponent(full.name || "") + "/detail/" + section; }
+async function _ebput(full, section, body, okMsg){
+  const r = await api("PUT", _ebp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return r.json; }
+  toast("Failed: " + _derr(r), "err"); return null;
+}
+SUB_RENDERERS.ebdetails = async function(svc, full, host){
+  const d = await _dget(host, _ebp(full, "details")); if (!d) return;
+  host.append(_dkv("Rule details", [["Rule name", d.name], ["Status", d.state], ["Type", d.rule_type === "Schedule" ? "Scheduled" : "Standard rule"],
+    ["Event bus name", d.event_bus_name], ["Rule ARN", d.arn, 1], ["Description", d.description],
+    ...(d.schedule_expression ? [["Schedule", d.schedule_expression, 1]] : [["Event source", d.event_source]]), ["Targets", d.target_count], ["Created", d.created]]));
+  const desc = el("input",{value:d.description || ""});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit rule"), _field("Description", desc),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary",onclick:()=>_ebput(full, "details", {description: desc.value}, "Rule updated")}, icon("save"), "Save"),
+      el("button",{class:"btn","data-testid":"eb-toggle",onclick:()=>_ebput(full, "details", {state: d.state === "ENABLED" ? "DISABLED" : "ENABLED"}, d.state === "ENABLED" ? "Rule disabled" : "Rule enabled")},
+        d.state === "ENABLED" ? "Disable" : "Enable"))));
+};
+SUB_RENDERERS.ebtargets = async function(svc, full, host){
+  const j = await _dget(host, _ebp(full, "targets")); if (!j) return;
+  const id = el("input",{placeholder:"Target" + j.targets.length}), arn = el("input",{placeholder:"arn:aws:sqs:" + REGION + ":" + ACCOUNT + ":my-queue","data-testid":"eb-target-arn"}), inp = el("input",{placeholder:'{"constant":"input"} (optional)'});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Targets (" + j.targets.length + ")"),
+    _dtbl([["id","Target ID"],["arn","ARN",1],[t => t.input || "Matched event","Input"],[t => t.dead_letter_arn || "Not configured","Dead-letter queue",1],
+      [t => el("button",{class:"btn",onclick:()=>_ebput(full, "targets", {action:"remove", id:t.id}, "Target removed")}, "Remove"),"Actions"]],
+      j.targets, "No targets: matched events go nowhere."),
+    _field("Target ID", id), _field("Target ARN", arn), _field("Constant input (JSON)", inp),
+    el("button",{class:"btn primary","data-testid":"eb-target-add",onclick:()=>_ebput(full, "targets", {id:id.value, arn:arn.value, input:inp.value}, "Target added")}, icon("add"), "Add target")));
+};
+SUB_RENDERERS.ebpattern = async function(svc, full, host){
+  const j = await _dget(host, _ebp(full, "pattern")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  if (j.rule_type === "Schedule") {
+    const s = el("input",{value:j.schedule_expression || ""});
+    card.append(el("div",{class:"h"}, "Schedule"), el("pre",{class:"json"}, j.schedule_expression || ""), _field("Schedule expression (rate() or cron())", s),
+      el("button",{class:"btn primary",onclick:()=>_ebput(full, "pattern", {schedule_expression:s.value}, "Schedule saved")}, icon("save"), "Save"));
+    host.append(card); return;
+  }
+  const ta = el("textarea",{"data-testid":"eb-pattern",style:"width:100%;min-height:140px;font-family:Consolas,Menlo,monospace"}); ta.value = JSON.stringify(j.event_pattern || {}, null, 2);
+  const ev = el("textarea",{"data-testid":"eb-test-event",style:"width:100%;min-height:110px;font-family:Consolas,Menlo,monospace"});
+  ev.value = JSON.stringify({"version":"0","source":(j.event_pattern && (j.event_pattern.source || [])[0]) || "aws.ec2","detail-type":((j.event_pattern || {})["detail-type"] || [])[0] || "",
+    "account":ACCOUNT,"region":REGION,"detail":{}}, null, 2);
+  const res = el("div",{"data-testid":"eb-test-result"});
+  card.append(el("div",{class:"h"}, "Event pattern"), ta,
+    el("button",{class:"btn primary",style:"margin-top:8px","data-testid":"eb-pattern-save",onclick:()=>_ebput(full, "pattern", {event_pattern: ta.value}, "Event pattern saved")}, icon("save"), "Save"),
+    el("div",{class:"h",style:"margin-top:14px"}, "Test pattern (TestEventPattern)"), ev,
+    el("button",{class:"btn",style:"margin-top:8px","data-testid":"eb-test",onclick:async()=>{
+      const r = await api("PUT", _ebp(full, "pattern"), {action:"test", event: ev.value, event_pattern: ta.value});
+      res.innerHTML = ""; res.append(r.ok ? el("div",{class:"alert " + (r.json.result ? "info" : "warn")}, r.json.result ? "Sample event matched the event pattern." : "Sample event did not match the event pattern.")
+        : el("div",{class:"alert err"}, _derr(r)));
+    }}, "Test pattern"), res);
+  host.append(card);
+};
+SUB_RENDERERS.ebdlq = async function(svc, full, host){
+  const j = await _dget(host, _ebp(full, "dlq")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Retry policy and dead-letter queue per target"),
+    _dtbl([["id","Target"],["arn","ARN",1],["max_retry_attempts","Retry attempts"],["max_event_age","Maximum age of event (s)"],[t => t.dead_letter_arn || "Not configured","Dead-letter queue",1]],
+      j.targets, "Add a target to configure its retry policy and dead-letter queue."));
+  if (j.targets.length) {
+    const t = el("select",{}, ...j.targets.map(x => el("option",{value:x.id}, x.id))), q = el("input",{placeholder:"arn:aws:sqs:" + REGION + ":" + ACCOUNT + ":my-dlq","data-testid":"eb-dlq-arn"}),
+      r = el("input",{type:"number",min:"0",max:"185",value:j.targets[0].max_retry_attempts}), a = el("input",{type:"number",min:"60",max:"86400",value:j.targets[0].max_event_age});
+    card.append(_field("Target", t), _field("Dead-letter queue (SQS ARN, empty = none)", q), _field("Retry attempts (0-185)", r), _field("Maximum age of event (60-86400 s)", a),
+      el("button",{class:"btn primary","data-testid":"eb-dlq-save",onclick:()=>_ebput(full, "dlq", {id:t.value, dead_letter_arn:q.value, max_retry_attempts:r.value, max_event_age:a.value}, "Target settings saved")}, icon("save"), "Save"));
+  }
+  host.append(card);
 };
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──

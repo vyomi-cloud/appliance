@@ -2355,3 +2355,143 @@ def kms_update(meta: dict, key_id: str, aliases: dict, section: str, body: dict,
     else:
         raise DetailError("ValidationException", f"Unknown key section '{section}'.")
     return kms_section(meta, key_id, aliases, section, account)
+
+
+# ── EventBridge rule detail (Rule details, Targets, Event pattern, Dead-letter
+#    queue) over the console's rule record ─────────────────────────────────────
+def eb_ensure(rule: dict) -> dict:
+    if "targets" not in rule or not isinstance(rule.get("targets"), list):
+        rule["targets"] = [{"id": "Target0", "arn": rule["target_arn"], "input": "", "dead_letter_arn": "",
+                            "max_retry_attempts": 185, "max_event_age": 86400}] if rule.get("target_arn") else []
+    rule["target_count"] = len(rule["targets"])
+    rule.setdefault("event_bus_name", "default")
+    rule.setdefault("state", "ENABLED")
+    rule.setdefault("description", "")
+    rule.setdefault("rule_type", "Schedule" if rule.get("schedule_expression") and not rule.get("event_pattern") else "EventPattern")
+    return rule
+
+
+def _eb_pattern(rule: dict) -> dict:
+    import json
+    p = rule.get("event_pattern") or ""
+    try:
+        return json.loads(p) if isinstance(p, str) and p else (p if isinstance(p, dict) else {})
+    except ValueError:
+        return {}
+
+
+def eb_section(rule: dict, section: str, account: str) -> dict:
+    eb_ensure(rule)
+    name = rule.get("name", "")
+    bus = rule.get("event_bus_name") or "default"
+    arn = f"arn:aws:events:{REGION}:{account}:rule/{name}" if bus == "default" else f"arn:aws:events:{REGION}:{account}:rule/{bus}/{name}"
+    if section == "details":
+        return {"name": name, "arn": arn, "event_bus_name": bus, "rule_type": rule["rule_type"], "state": rule["state"],
+                "description": rule.get("description", ""), "created": rule.get("created", ""),
+                "schedule_expression": rule.get("schedule_expression", "") if rule["rule_type"] == "Schedule" else "",
+                "event_source": rule.get("event_source", ""), "target_count": rule["target_count"]}
+    if section == "targets":
+        return {"targets": rule["targets"], "rule_arn": arn}
+    if section == "pattern":
+        return {"rule_type": rule["rule_type"], "event_pattern": _eb_pattern(rule) if rule["rule_type"] == "EventPattern" else None,
+                "schedule_expression": rule.get("schedule_expression", "") if rule["rule_type"] == "Schedule" else ""}
+    if section == "dlq":
+        return {"targets": [{"id": t["id"], "arn": t["arn"], "dead_letter_arn": t.get("dead_letter_arn", ""),
+                             "max_retry_attempts": t.get("max_retry_attempts", 185), "max_event_age": t.get("max_event_age", 86400)}
+                            for t in rule["targets"]]}
+    raise DetailError("ValidationException", f"Unknown rule section '{section}'.")
+
+
+def eb_update(rule: dict, section: str, body: dict, account: str, queue_exists=None) -> dict:
+    """PutTargets / RemoveTargets / PutRule (pattern, schedule, state, description)
+    / target DeadLetterConfig + RetryPolicy / TestEventPattern."""
+    import json
+    import re
+    eb_ensure(rule)
+    b = dict(body or {})
+    act = b.get("action") or "put"
+    if section == "details":
+        if "state" in b:
+            if b["state"] not in ("ENABLED", "DISABLED"):
+                raise DetailError("ValidationException", "State must be ENABLED or DISABLED.")
+            rule["state"] = b["state"]
+        if "description" in b:
+            if len(str(b["description"])) > 512:
+                raise DetailError("ValidationException", "Description must be 512 characters or fewer.")
+            rule["description"] = str(b["description"])
+    elif section == "targets":
+        if act == "remove":
+            before = len(rule["targets"])
+            rule["targets"] = [t for t in rule["targets"] if t["id"] != b.get("id")]
+            if len(rule["targets"]) == before:
+                raise DetailError("ResourceNotFoundException", f"Target {b.get('id')} not found on rule {rule.get('name')}.")
+        else:
+            tid = str(b.get("id") or "").strip() or f"Target{len(rule['targets'])}"
+            arn = str(b.get("arn") or "").strip()
+            if not re.fullmatch(r"[\.\-_A-Za-z0-9]{1,64}", tid):
+                raise DetailError("ValidationException", "Target Id must be 1-64 letters, numbers, '.', '-' or '_'.")
+            if not arn.startswith("arn:aws:"):
+                raise DetailError("ValidationException", "Target Arn must be an ARN.")
+            if any(t["id"] == tid for t in rule["targets"]):
+                raise DetailError("ValidationException", f"A target with Id {tid} already exists on this rule.")
+            if len(rule["targets"]) >= 5:
+                raise DetailError("LimitExceededException", "The requested resource exceeds the maximum number allowed (5 targets per rule).")
+            inp = str(b.get("input") or "")
+            if inp:
+                try:
+                    json.loads(inp)
+                except ValueError:
+                    raise DetailError("ValidationException", "Target Input must be valid JSON.")
+            rule["targets"].append({"id": tid, "arn": arn, "input": inp, "dead_letter_arn": "", "max_retry_attempts": 185, "max_event_age": 86400})
+        rule["target_arn"] = rule["targets"][0]["arn"] if rule["targets"] else ""
+        rule["target_count"] = len(rule["targets"])
+    elif section == "pattern":
+        if act == "test":
+            try:
+                event = json.loads(b.get("event") or "{}") if isinstance(b.get("event"), str) else dict(b.get("event") or {})
+            except ValueError:
+                raise DetailError("InvalidEventPatternException", "The test event must be valid JSON.")
+            from core import eventbridge_core as _ebc
+            pat = b.get("event_pattern")
+            pat = json.loads(pat) if isinstance(pat, str) and pat else (pat or _eb_pattern(rule))
+            return {"result": bool(_ebc._match_pattern(pat, event)), "event_pattern": pat}
+        if rule["rule_type"] == "Schedule":
+            sched = str(b.get("schedule_expression") or "").strip()
+            if not re.fullmatch(r"rate\(\d+ (minute|minutes|hour|hours|day|days)\)|cron\(.+\)", sched):
+                raise DetailError("ValidationException", "Parameter ScheduleExpression is not valid.")
+            rule["schedule_expression"] = sched
+        else:
+            raw = b.get("event_pattern")
+            try:
+                pat = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
+            except (TypeError, ValueError):
+                raise DetailError("InvalidEventPatternException", "Event pattern is not valid. Reason: it is not valid JSON.")
+            if not pat:
+                raise DetailError("InvalidEventPatternException", "Event pattern is not valid. Reason: it is empty.")
+
+            def check(o, path):
+                for k, v in o.items():
+                    if isinstance(v, dict):
+                        check(v, path + k + ".")
+                    elif not isinstance(v, list):
+                        raise DetailError("InvalidEventPatternException", f"Event pattern is not valid. Reason: \"{path + k}\" must be an object or an array")
+            check(pat, "")
+            rule["event_pattern"] = json.dumps(pat)
+            rule["event_source"] = ",".join(map(str, pat.get("source", []))) if isinstance(pat.get("source"), list) else rule.get("event_source", "")
+    elif section == "dlq":
+        t = next((x for x in rule["targets"] if x["id"] == b.get("id")), None)
+        if not t:
+            raise DetailError("ResourceNotFoundException", f"Target {b.get('id')} not found on rule {rule.get('name')}.")
+        dlq = str(b.get("dead_letter_arn") or "").strip()
+        if dlq:
+            if not dlq.startswith("arn:aws:sqs:") or (queue_exists and not queue_exists(dlq.rsplit(":", 1)[-1])):
+                raise DetailError("ValidationException", "The dead-letter queue must be an existing Amazon SQS queue ARN.")
+        retries, age = int(b.get("max_retry_attempts", t["max_retry_attempts"])), int(b.get("max_event_age", t["max_event_age"]))
+        if not 0 <= retries <= 185:
+            raise DetailError("ValidationException", "MaximumRetryAttempts must be between 0 and 185.")
+        if not 60 <= age <= 86400:
+            raise DetailError("ValidationException", "MaximumEventAgeInSeconds must be between 60 and 86400.")
+        t.update(dead_letter_arn=dlq, max_retry_attempts=retries, max_event_age=age)
+    else:
+        raise DetailError("ValidationException", f"Unknown rule section '{section}'.")
+    return eb_section(rule, section, account)

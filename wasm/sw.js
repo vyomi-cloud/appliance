@@ -726,6 +726,12 @@ async function route(method, path, body, query) {
   // launch templates, spot requests, endpoint services). Specific extras + fixtures
   // (kms/aliases, secretsmanager/*) are matched earlier, so only the unrouted ones
   // fall here. fullKey = "{category}/{resource}". Was 501; now a real in-memory CRUD.
+  // EventBridge rule detail tabs (core/aws_console_detail.py): details, targets, pattern, DLQ.
+  m = path.match(/^\/api\/aws\/extras\/eventbridge\/rules\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "eventbridge", "DescribeRuleSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "eventbridge", "PutRuleSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
+  m = path.match(/^\/api\/aws\/extras\/eventbridge\/rules\/([^/]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "eventbridge", "GetConsoleRule", { name: dec(m[1]) }] };
   let _ex = path.match(/^\/api\/aws\/extras\/(.+?)\/([^/]+)\/([^/]+)$/);
   if (_ex && method === "DELETE") return { tuple: ["aws", "extras", "Delete", { key: _ex[1] + "/" + _ex[2], name: dec(_ex[3]) }] };
   _ex = path.match(/^\/api\/aws\/extras-config\/(.+)$/);
