@@ -263,6 +263,23 @@ def resource_op(service, operation, name="", body=None):
             s, _ = _call(_cosmos, st, "DELETE", f"/dbs/{name}")
             return {"ok": s < 300, "code": None if s < 300 else "NotFound", "name": name}
 
+    # ---- Key Vault data plane, native wire shape (/azure-data/keyvault/{vault}/…) ----
+    # The vault blade's Secrets / Keys tabs speak the SDK's own JSON (value[] with id/kid,
+    # {value}, attributes.enabled), so hand the core's body through untouched.
+    if operation == "KvData" and service in ("kvsecrets", "kvkeys"):
+        coll = "secrets" if service == "kvsecrets" else "keys"
+        core = _kvsec if service == "kvsecrets" else _kvkeys
+        sub = str(body.get("sub") or "").strip("/")
+        s, t = _call(core, _STORES[service], str(body.get("method") or "GET").upper(),
+                     f"/{coll}/{sub}" if sub else f"/{coll}", APIV, {}, body.get("body") or {})
+        try:
+            data = json.loads(t) if t else {}
+        except Exception:
+            data = {}
+        if not isinstance(data, dict):
+            data = {"value": data}
+        return {**data, "ok": s < 300, "status": s}
+
     # ---- Key Vault secrets (JSON) ----
     if service == "kvsecrets":
         st = _STORES[service]

@@ -433,6 +433,13 @@ async function route(method, path, body, query) {
       return { tuple: ["azure", "_resource", "Delete", { service: svc, name: item }] };
     }
   }
+  // Key Vault data plane as the vault blade (and the native SDK) address it:
+  // /azure-data/keyvault/{vault}/secrets|keys[/{name}[/create]] → the KV secrets/keys cores.
+  am = path.match(/^\/azure-data\/keyvault\/([^/]+)\/(secrets|keys)((?:\/[^/]+){0,2})$/);
+  if (am) {
+    return { tuple: ["azure", "_resource", "KvData", { service: am[2] === "keys" ? "kvkeys" : "kvsecrets",
+      body: { method, sub: am[3].replace(/^\//, "").split("/").map(decodeURIComponent).join("/"), body: body || {} } }] };
+  }
   // Service Bus (core/azure_servicebus_core.py) — topics + subscriptions + send/receive
   if (path === "/api/servicebus/topics") {
     if (method === "GET")  return { tuple: ["azure", "servicebus", "ListTopics", {}] };
@@ -766,7 +773,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   // We own /api/* (console REST) AND /subscriptions/* (native Azure ARM).
   const inApi = url.pathname.startsWith(BASE + "/api/");
-  const inArm = url.pathname.startsWith(BASE + "/subscriptions/");
+  const inArm = url.pathname.startsWith(BASE + "/subscriptions/") || url.pathname.startsWith(BASE + "/azure-data/keyvault/");
   if (url.origin !== self.location.origin || !(inApi || inArm)) return;
   // Strip the mount prefix so all routing below is written against "/api/..."
   // or "/subscriptions/...".
