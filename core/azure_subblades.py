@@ -110,15 +110,15 @@ _SQL_SUB = [
     {"group": "Data management", "items": [
         {"key": "databases",    "label": "Databases",         "icon": "database",     "type": "databases"},
         {"key": "pricingTier",  "label": "Pricing tier",      "icon": "monetization_on","type": "perfTier"},
-        {"key": "deletedDb",    "label": "Deleted databases", "icon": "delete",       "type": "stub"},
-        {"key": "failover",     "label": "Failover groups",   "icon": "swap_horiz",   "type": "stub"},
-        {"key": "backups",      "label": "Backups",           "icon": "backup",       "type": "stub"},
+        {"key": "deletedDb",    "label": "Deleted databases", "icon": "delete",       "type": "sqlDeleted"},
+        {"key": "failover",     "label": "Failover groups",   "icon": "swap_horiz",   "type": "sqlFailover"},
+        {"key": "backups",      "label": "Backups",           "icon": "backup",       "type": "sqlBackups"},
     ]},
     {"group": "Security", "items": [
         {"key": "firewalls",    "label": "Networking",        "icon": "security",     "type": "firewalls"},
-        {"key": "tde",          "label": "Transparent data encryption", "icon": "enhanced_encryption", "type": "stub"},
-        {"key": "auditing",     "label": "Auditing",          "icon": "fact_check",   "type": "stub"},
-        {"key": "defender",     "label": "Microsoft Defender for Cloud", "icon": "shield", "type": "stub"},
+        {"key": "tde",          "label": "Transparent data encryption", "icon": "enhanced_encryption", "type": "sqlTde"},
+        {"key": "auditing",     "label": "Auditing",          "icon": "fact_check",   "type": "sqlAuditing"},
+        {"key": "defender",     "label": "Microsoft Defender for Cloud", "icon": "shield", "type": "sqlDefender"},
     ]},
     {"group": "Settings", "items": [
         {"key": "connStrings",  "label": "Connection strings","icon": "vpn_key",      "type": "connStrings"},

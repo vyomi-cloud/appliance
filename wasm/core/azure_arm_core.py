@@ -371,8 +371,7 @@ class AzureArm:
             ext_engine.after_upsert(self.state, rec)
             return _ok(_view(rec))
         if method in ("PUT", "PATCH"):
-            bad = (ext_engine.validate_vm(self.state, rid, payload) if full_type.lower() == ext_engine.VM_T
-                   else ext_engine.validate_identity(payload))
+            bad = ext_engine.validate_write(self.state, rid, full_type, payload)
             if bad:
                 return {"status": bad["status"], "headers": {}, "body": bad["body"]}
             resp = self._upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
@@ -464,7 +463,7 @@ class AzureArm:
         ft = full_type.lower()
         pfx = parent.lower() + "/" if parent else None
         items = []
-        for rec in self.state.values():
+        for rec in list(self.state.values()):
             if rec.get("_type", "").lower() != ft:
                 continue
             if pfx and not str(rec.get("id", "")).lower().startswith(pfx):
@@ -473,6 +472,7 @@ class AzureArm:
                 continue
             if rg is not None and (rec.get("_rg") or "").lower() != rg.lower():
                 continue
+            ext_engine.after_upsert(self.state, rec)
             items.append(_view(rec))
         return _ok({"value": items})
 

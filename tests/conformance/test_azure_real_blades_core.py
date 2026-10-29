@@ -229,7 +229,55 @@ def test_storage_blades():
     _check("ReadOnly lock blocks listKeys (as in Azure)", s == 409)
 
 
-TESTS = [test_vm_blades, test_storage_blades]
+def test_sql_blades():
+    arm = AzureArm()
+    av = "2023-05-01-preview"
+    srv = f"{P}/Microsoft.Sql/servers/sqlb"
+    call(arm, "PUT", srv, {"location": "eastus", "properties": {"administratorLogin": "sqladmin"}}, av)
+    call(arm, "PUT", f"{P}/Microsoft.Sql/servers/sqlb2", {"location": "westus", "properties": {}}, av)
+    s, db = call(arm, "PUT", srv + "/databases/app", {"location": "eastus"}, av)
+    _check("database reports status, sku and earliest restore point",
+           db["properties"]["status"] == "Online" and db["sku"]["tier"] and db["properties"]["earliestRestoreDate"])
+    s, ep = call(arm, "GET", srv + "/encryptionProtector", av=av)
+    _check("server TDE protector is service-managed", ep["value"][0]["properties"]["serverKeyType"] == "ServiceManaged")
+    s, tde = call(arm, "GET", srv + "/databases/app/transparentDataEncryption", av=av)
+    _check("database TDE enabled by default", tde["value"][0]["properties"]["state"] == "Enabled")
+    call(arm, "PUT", srv + "/databases/app/transparentDataEncryption/current", {"properties": {"state": "Disabled"}}, av)
+    s, tde = call(arm, "GET", srv + "/databases/app/transparentDataEncryption", av=av)
+    _check("TDE state persists", tde["value"][0]["properties"]["state"] == "Disabled")
+    s, st = call(arm, "GET", srv + "/databases/app/backupShortTermRetentionPolicies", av=av)
+    _check("PITR retention defaults to 7 days", st["value"][0]["properties"]["retentionDays"] == 7)
+    s, b = call(arm, "PUT", srv + "/databases/app/backupShortTermRetentionPolicies/default", {"properties": {"retentionDays": 90}}, av)
+    _check("PITR retention outside 1-35 days rejected", s == 400)
+    s, b = call(arm, "PUT", srv + "/databases/app/backupShortTermRetentionPolicies/default", {"properties": {"retentionDays": 14, "diffBackupIntervalInHours": 24}}, av)
+    _check("PITR retention saved", b["properties"]["retentionDays"] == 14)
+    s, au = call(arm, "GET", srv + "/auditingSettings", av=av)
+    _check("auditing off by default with the default action groups",
+           au["value"][0]["properties"]["state"] == "Disabled" and "BATCH_COMPLETED_GROUP" in au["value"][0]["properties"]["auditActionsAndGroups"])
+    s, b = call(arm, "PUT", srv + "/auditingSettings/default", {"properties": {"state": "Enabled"}}, av)
+    _check("enabling auditing without a destination is rejected", s == 400)
+    s, b = call(arm, "PUT", srv + "/auditingSettings/default", {"properties": {"state": "Enabled", "isAzureMonitorTargetEnabled": True}}, av)
+    _check("auditing enabled to Azure Monitor", b["properties"]["state"] == "Enabled")
+    s, sa = call(arm, "GET", srv + "/securityAlertPolicies", av=av)
+    _check("Defender for SQL policy present (off)", sa["value"][0]["properties"]["state"] == "Disabled")
+    s, b = call(arm, "PUT", srv + "/failoverGroups/fg1", {"properties": {"partnerServers": [{"id": srv}]}}, av)
+    _check("failover group partner must be another server", s == 400)
+    s, fg = call(arm, "PUT", srv + "/failoverGroups/fg1", {"properties": {"partnerServers": [{"id": f"{P}/Microsoft.Sql/servers/sqlb2"}],
+                                                                           "databases": [db["id"]]}}, av)
+    _check("failover group: primary role, partner location filled",
+           fg["properties"]["replicationRole"] == "Primary" and fg["properties"]["partnerServers"][0]["location"] == "westus")
+    s, cap = call(arm, "GET", f"/subscriptions/{SUB}/providers/Microsoft.Sql/locations/eastus/capabilities", av=av)
+    eds = [e["name"] for e in cap["supportedServerVersions"][0]["supportedEditions"]]
+    _check("capabilities list the SQL editions", "GeneralPurpose" in eds and "Basic" in eds)
+    s, b = call(arm, "PATCH", db["id"], {"sku": {"name": "S1", "tier": "Standard", "capacity": 20}}, av)
+    _check("database tier change persists", b["sku"]["name"] == "S1")
+    call(arm, "DELETE", db["id"], av=av)
+    s, dd = call(arm, "GET", srv + "/restorableDroppedDatabases", av=av)
+    _check("deleted database listed as restorable dropped database",
+           [x["properties"]["databaseName"] for x in dd["value"]] == ["app"] and dd["value"][0]["properties"]["deletionDate"])
+
+
+TESTS = [test_vm_blades, test_storage_blades, test_sql_blades]
 
 if __name__ == "__main__":
     for t in TESTS:

@@ -5174,6 +5174,133 @@ SUB_RENDERERS.storagetables = function(svc, full, host){
     body: () => ({properties:{}}),
   });
 };
+// ---- Azure SQL server blades ----
+async function rbSqlDbs(svc, full){
+  const r = await rbGet(full.id + "/databases", svc.apiVersion);
+  return ((r.ok && r.json && r.json.value) || []).filter(d => d.name !== "master");
+}
+// Pricing tier: each database's current sku + the editions this region offers (capabilities).
+SUB_RENDERERS.perftier = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Compute + storage tier of each database on ", el("strong",{}, full.name), ". Tiers come from the region's SQL capabilities."));
+  const slot = el("div",{}); host.append(slot);
+  async function fill(){
+    slot.innerHTML = "";
+    const [cap, dbs] = await Promise.all([rbGet(`/subscriptions/${SUB}/providers/Microsoft.Sql/locations/${full.location || LOCATION}/capabilities`, svc.apiVersion), rbSqlDbs(svc, full)]);
+    const eds = (cap.ok && getPath(cap.json,"supportedServerVersions.0.supportedEditions")) || [];
+    const slos = []; eds.forEach(e => (e.supportedServiceLevelObjectives || []).forEach(o => slos.push(o)));
+    if (!dbs.length) slot.append(emptyState("No databases on " + full.name + " yet — create one under Databases."));
+    dbs.forEach(db => {
+      const sel = rbSelect(slos.map(o => [o.name, o.sku.tier + " · " + o.name + " (" + o.performanceLevel.value + " " + o.performanceLevel.unit + ", up to " + o.supportedMaxSizes[0].limit + " GB)"]), getPath(db,"sku.name"));
+      slot.append(rbKv([["Database", db.name], ["Current tier", (getPath(db,"sku.tier") || "") + " · " + (getPath(db,"sku.name") || "") + (getPath(db,"sku.capacity") ? " · capacity " + getPath(db,"sku.capacity") : "")],
+                        ["Max size", Math.round((getPath(db,"properties.maxSizeBytes") || 0) / 1073741824) + " GB"], ["Change to", sel]], db.name));
+      slot.append(el("div",{class:"blade-actions"}, rbBtn("Apply", async () => {
+        const o = slos.find(x => x.name === sel.value); if (!o) return;
+        const r = await arm("PATCH", db.id, {sku: o.sku, properties:{maxSizeBytes: o.supportedMaxSizes[0].limit * 1073741824}}, svc.apiVersion);
+        if (r.ok) { toast(db.name + " → " + o.name); recordNotif("ok","Database tier changed", db.name + " " + o.name); fill(); }
+        else toast("Update failed: " + rbErr(r), "err");
+      })));
+    });
+    if (!slos.length) slot.append(emptyState("SQL capabilities unavailable: " + rbErr(cap)));
+  }
+  await fill();
+};
+SUB_RENDERERS.sqldeleted = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Databases deleted from ", el("strong",{}, full.name), " that are still within their backup retention."));
+  const r = await rbGet(full.id + "/restorableDroppedDatabases", svc.apiVersion);
+  const items = (r.ok && r.json && r.json.value) || [];
+  if (!items.length) { host.append(emptyState("No deleted databases on " + full.name + ".")); return; }
+  host.append(rbTable(["Database","Deletion time","Creation time","Earliest restore point","Tier"], items.map(d => [
+    getPath(d,"properties.databaseName"), getPath(d,"properties.deletionDate") || "", getPath(d,"properties.creationDate") || "",
+    getPath(d,"properties.earliestRestoreDate") || "", (getPath(d,"sku.tier") || "") + " " + (getPath(d,"sku.name") || "")])));
+};
+SUB_RENDERERS.sqlfailover = async function(svc, full, host){
+  const sr = await rbGet(rbRgPath(full, "Microsoft.Sql", "servers"), svc.apiVersion);
+  const partners = ((sr.ok && sr.json && sr.json.value) || []).filter(x => x.id.toLowerCase() !== full.id.toLowerCase());
+  const dbs = await rbSqlDbs(svc, full);
+  await rbChildCrud(full, host, {
+    coll: "failoverGroups", apiv: svc.apiVersion, child: "Failover group",
+    intro: "Failover groups replicate databases on " + full.name + " to a partner server and give them a read-write listener.",
+    empty: "No failover groups on " + full.name + ".",
+    columns: [["properties.replicationRole","Role"],["properties.replicationState","Replication"],["properties.partnerServers.0.id","Partner server"],
+              ["properties.readWriteEndpoint.failoverPolicy","Failover policy"],["properties.databases","Databases"]],
+    fields: [{key:"partner", label:"Partner server", type:"select", options: partners.length ? partners.map(x => [x.id, x.name + " (" + x.location + ")"]) : [["","No other server in this resource group"]], default: partners[0] && partners[0].id},
+             {key:"dbs", label:"Databases", type:"select", options: [["","None"]].concat(dbs.map(d => [d.id, d.name])), default: dbs[0] ? dbs[0].id : ""},
+             {key:"policy", label:"Read/write failover policy", type:"select", options:["Automatic","Manual"], default:"Automatic"}],
+    body: v => ({properties:{partnerServers:[{id: v.partner}], databases: v.dbs ? [v.dbs] : [],
+                 readWriteEndpoint: Object.assign({failoverPolicy: v.policy}, v.policy === "Automatic" ? {failoverWithDataLossGracePeriodMinutes:60} : {})}}),
+  });
+};
+SUB_RENDERERS.sqlbackups = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Point-in-time restore (short-term) and long-term retention policies of the databases on ", el("strong",{}, full.name), "."));
+  const dbs = await rbSqlDbs(svc, full);
+  if (!dbs.length) { host.append(emptyState("No databases on " + full.name + " yet.")); return; }
+  for (const db of dbs) {
+    const [st, lt] = await Promise.all([rbGet(db.id + "/backupShortTermRetentionPolicies", svc.apiVersion), rbGet(db.id + "/backupLongTermRetentionPolicies", svc.apiVersion)]);
+    const s = ((st.ok && st.json.value) || [])[0] || {}, l = ((lt.ok && lt.json.value) || [])[0] || {};
+    const days = rbInput(getPath(s,"properties.retentionDays"), {type:"number", style:"min-width:100px"});
+    const diff = rbSelect([["12","12 hours"],["24","24 hours"]], String(getPath(s,"properties.diffBackupIntervalInHours") || 12));
+    host.append(rbKv([["Earliest restore point", getPath(db,"properties.earliestRestoreDate") || ""], ["PITR retention (days)", days], ["Differential backup frequency", diff],
+      ["LTR weekly / monthly / yearly", [getPath(l,"properties.weeklyRetention"), getPath(l,"properties.monthlyRetention"), getPath(l,"properties.yearlyRetention")].map(x => x === "PT0S" || !x ? "Not configured" : x).join(" / ")]], db.name));
+    host.append(el("div",{class:"blade-actions"}, rbBtn("Save retention", async () => {
+      const r = await arm("PUT", db.id + "/backupShortTermRetentionPolicies/default", {properties:{retentionDays: Number(days.value), diffBackupIntervalInHours: Number(diff.value)}}, svc.apiVersion);
+      if (r.ok) { toast("Retention saved for " + db.name); recordNotif("ok","Backup retention saved", db.name + " " + days.value + " days"); }
+      else toast("Save failed: " + rbErr(r), "err");
+    })));
+  }
+};
+SUB_RENDERERS.sqltde = async function(svc, full, host){
+  const ep = await rbGet(full.id + "/encryptionProtector", svc.apiVersion);
+  const prot = ((ep.ok && ep.json.value) || [])[0] || {};
+  host.append(rbKv([["TDE protector", getPath(prot,"properties.serverKeyType") === "AzureKeyVault" ? "Customer-managed key" : "Service-managed key"],
+                    ["Server key", getPath(prot,"properties.serverKeyName") || ""], ["Auto-rotation", getPath(prot,"properties.autoRotationEnabled") ? "On" : "Off"]], "Transparent data encryption — " + full.name));
+  const dbs = await rbSqlDbs(svc, full);
+  if (!dbs.length) { host.append(emptyState("No databases on " + full.name + " yet.")); return; }
+  const rows = [];
+  for (const db of dbs) {
+    const t = await rbGet(db.id + "/transparentDataEncryption", svc.apiVersion);
+    const st = getPath(((t.ok && t.json.value) || [])[0] || {}, "properties.state") || "";
+    rows.push([db.name, st, rbBtn(st === "Enabled" ? "Disable" : "Enable", async () => {
+      const r = await arm("PUT", db.id + "/transparentDataEncryption/current", {properties:{state: st === "Enabled" ? "Disabled" : "Enabled"}}, svc.apiVersion);
+      if (r.ok) { toast("TDE " + getPath(r.json,"properties.state") + " on " + db.name); SUB_RENDERERS.sqltde(svc, full, (host.innerHTML = "", host)); }
+      else toast("Update failed: " + rbErr(r), "err");
+    }, "sec")]);
+  }
+  host.append(rbTable(["Database","Data encryption",""], rows));
+};
+SUB_RENDERERS.sqlauditing = async function(svc, full, host){
+  const r = await rbGet(full.id + "/auditingSettings", svc.apiVersion);
+  const a = ((r.ok && r.json.value) || [])[0] || {properties:{}};
+  const p = a.properties || {};
+  const stg = await rbGet(rbRgPath(full, "Microsoft.Storage", "storageAccounts"), "2023-01-01");
+  const accts = (stg.ok && stg.json.value) || [];
+  const on = rbSelect([["Disabled","Off"],["Enabled","On"]], p.state || "Disabled");
+  const dest = rbSelect([["","(none)"]].concat(accts.map(x => [getPath(x,"properties.primaryEndpoints.blob") || ("https://" + x.name + ".blob.core.windows.net/"), x.name])), p.storageEndpoint || "");
+  const mon = rbSelect([["false","No"],["true","Yes"]], String(!!p.isAzureMonitorTargetEnabled));
+  const ret = rbInput(p.retentionDays || 0, {type:"number", style:"min-width:100px"});
+  host.append(rbKv([["Azure SQL Auditing", on], ["Storage destination", dest], ["Log Analytics / Azure Monitor", mon], ["Retention (days, 0 = unlimited)", ret],
+                    ["Audited action groups", (p.auditActionsAndGroups || []).join(", ")]], "Auditing — " + full.name));
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Save", async () => {
+    const w = await arm("PUT", full.id + "/auditingSettings/default", {properties:{state: on.value, storageEndpoint: dest.value, isAzureMonitorTargetEnabled: mon.value === "true",
+      retentionDays: Number(ret.value), auditActionsAndGroups: p.auditActionsAndGroups}}, svc.apiVersion);
+    if (w.ok) { toast("Auditing " + on.value.toLowerCase() + " on " + full.name); recordNotif("ok","Auditing saved", full.name); }
+    else toast("Save failed: " + rbErr(w), "err");
+  })));
+};
+SUB_RENDERERS.sqldefender = async function(svc, full, host){
+  const r = await rbGet(full.id + "/securityAlertPolicies", svc.apiVersion);
+  const a = ((r.ok && r.json.value) || [])[0] || {properties:{}};
+  const p = a.properties || {};
+  const on = rbSelect([["Disabled","Off"],["Enabled","On"]], p.state || "Disabled");
+  const em = rbInput((p.emailAddresses || []).filter(Boolean).join(","), {placeholder:"alerts@contoso.com"});
+  const adm = rbSelect([["false","No"],["true","Yes"]], String(!!p.emailAccountAdmins));
+  host.append(rbKv([["Microsoft Defender for SQL", on], ["Send alerts to", em], ["Also send to admins and subscription owners", adm], ["Enabled since", p.creationTime || ""]], "Microsoft Defender for Cloud — " + full.name));
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Save", async () => {
+    const w = await arm("PUT", full.id + "/securityAlertPolicies/Default", {properties:{state: on.value, emailAddresses: em.value.split(",").map(x => x.trim()).filter(Boolean),
+      emailAccountAdmins: adm.value === "true", disabledAlerts: p.disabledAlerts || [], retentionDays: p.retentionDays || 0}}, svc.apiVersion);
+    if (w.ok) { toast("Defender " + on.value.toLowerCase() + " on " + full.name); recordNotif("ok","Defender for SQL saved", full.name); }
+    else toast("Save failed: " + rbErr(w), "err");
+  })));
+};
 // ===== REAL-BLADES:END =====
 
 function emptyState(msg){

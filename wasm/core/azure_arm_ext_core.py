@@ -649,6 +649,8 @@ def on_delete(state, rec):
     low = rid.lower()
     for k in [k for k in list(state.keys()) if str(k).startswith(low + "/")]:
         state.pop(k, None)
+    if str(rec.get("_type", "")).lower() == SQL_DB_T:
+        _sql_drop(state, rec)
     if str(rec.get("_type", "")).lower() == VM_T:
         for ref in _nic_refs(rec.get("properties")):
             nic = state.get(ref["id"].lower())
@@ -987,6 +989,12 @@ def after_upsert(state, rec, payload=None) -> None:
     p = rec.setdefault("properties", {})
     if t == STORAGE_T:
         _storage_fill(rec)
+    elif t == SQL_SERVER_T:
+        _sql_server_fill(state, rec)
+    elif t == SQL_DB_T:
+        _sql_db_fill(state, rec)
+    elif t == SQL_SERVER_T + "/failovergroups":
+        _sql_failover_group_fill(state, rec)
     elif t == STORAGE_T + "/fileservices/shares":
         p.setdefault("shareQuota", 5120)
         p.setdefault("accessTier", "TransactionOptimized")
@@ -1076,6 +1084,141 @@ def _storage_action(state, rid, rec, action, payload):
     return None
 
 
+# ── Azure SQL: server/database security + backup settings, deleted DBs, capabilities ──
+SQL_SERVER_T = "microsoft.sql/servers"
+SQL_DB_T = "microsoft.sql/servers/databases"
+_AUDIT_DEFAULT_GROUPS = ["SUCCESSFUL_DATABASE_AUTHENTICATION_GROUP", "FAILED_DATABASE_AUTHENTICATION_GROUP",
+                         "BATCH_COMPLETED_GROUP"]
+# Editions / service objectives Azure SQL Database offers (Capabilities_ListByLocation).
+SQL_EDITIONS = [
+    ("Basic", [("Basic", "Basic", 5, "DTU", 2)]),
+    ("Standard", [("S0", "Standard", 10, "DTU", 250), ("S1", "Standard", 20, "DTU", 250),
+                  ("S2", "Standard", 50, "DTU", 250), ("S3", "Standard", 100, "DTU", 1024)]),
+    ("Premium", [("P1", "Premium", 125, "DTU", 1024), ("P2", "Premium", 250, "DTU", 1024)]),
+    ("GeneralPurpose", [("GP_Gen5_2", "GeneralPurpose", 2, "VCores", 1024), ("GP_Gen5_4", "GeneralPurpose", 4, "VCores", 1536),
+                        ("GP_S_Gen5_1", "GeneralPurpose", 1, "VCores", 512)]),
+    ("BusinessCritical", [("BC_Gen5_2", "BusinessCritical", 2, "VCores", 1024)]),
+    ("Hyperscale", [("HS_Gen5_2", "Hyperscale", 2, "VCores", 102400)]),
+]
+
+
+def _ensure_child(state, parent, seg, name, typ, props):
+    rid = f"{parent['id']}/{seg}/{name}"
+    if rid.lower() not in state:
+        rec = _new_rec(rid, name, typ)
+        rec["properties"] = props
+        state[rid.lower()] = rec
+    return state[rid.lower()]
+
+
+def _sql_server_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    p.setdefault("publicNetworkAccess", "Enabled")
+    p.setdefault("minimalTlsVersion", "1.2")
+    _ensure_child(state, rec, "encryptionProtector", "current", "Microsoft.Sql/servers/encryptionProtector",
+                  {"kind": "servicemanaged", "serverKeyName": "ServiceManaged", "serverKeyType": "ServiceManaged",
+                   "autoRotationEnabled": False})
+    _ensure_child(state, rec, "auditingSettings", "default", "Microsoft.Sql/servers/auditingSettings",
+                  {"state": "Disabled", "retentionDays": 0, "auditActionsAndGroups": list(_AUDIT_DEFAULT_GROUPS),
+                   "isAzureMonitorTargetEnabled": False, "isStorageSecondaryKeyInUse": False, "storageEndpoint": ""})
+    _ensure_child(state, rec, "securityAlertPolicies", "Default", "Microsoft.Sql/servers/securityAlertPolicies",
+                  {"state": "Disabled", "disabledAlerts": [], "emailAddresses": [], "emailAccountAdmins": False,
+                   "retentionDays": 0, "creationTime": rec.get("_created") or _now()})
+
+
+def _sql_db_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    p.setdefault("status", "Online")
+    p.setdefault("databaseId", str(uuid.uuid5(uuid.NAMESPACE_URL, rec["id"].lower())))
+    p.setdefault("creationDate", rec.get("_created") or _now())
+    p.setdefault("earliestRestoreDate", p["creationDate"])
+    p.setdefault("collation", "SQL_Latin1_General_CP1_CI_AS")
+    p.setdefault("maxSizeBytes", 34359738368)
+    rec.setdefault("sku", {"name": "GP_S_Gen5", "tier": "GeneralPurpose", "family": "Gen5", "capacity": 1})
+    _ensure_child(state, rec, "transparentDataEncryption", "current",
+                  "Microsoft.Sql/servers/databases/transparentDataEncryption", {"state": "Enabled"})
+    _ensure_child(state, rec, "backupShortTermRetentionPolicies", "default",
+                  "Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies",
+                  {"retentionDays": 7, "diffBackupIntervalInHours": 12})
+    _ensure_child(state, rec, "backupLongTermRetentionPolicies", "default",
+                  "Microsoft.Sql/servers/databases/backupLongTermRetentionPolicies",
+                  {"weeklyRetention": "PT0S", "monthlyRetention": "PT0S", "yearlyRetention": "PT0S", "weekOfYear": 0})
+
+
+def _sql_failover_group_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    p.setdefault("readWriteEndpoint", {"failoverPolicy": "Automatic", "failoverWithDataLossGracePeriodMinutes": 60})
+    p.setdefault("replicationRole", "Primary")
+    p.setdefault("replicationState", "CATCH_UP")
+    for ps in p.get("partnerServers") or []:
+        prt = state.get(str(ps.get("id", "")).lower())
+        if prt:
+            ps["location"] = prt.get("location")
+            ps.setdefault("replicationRole", "Secondary")
+
+
+def _sql_drop(state, rec):
+    """Deleting a database leaves a restorable dropped database on its server."""
+    server_id = rec["id"].rsplit("/databases/", 1)[0]
+    if server_id.lower() not in state:
+        return
+    now = datetime.datetime.now(datetime.timezone.utc)
+    ticks = int((now - datetime.datetime(1, 1, 1, tzinfo=datetime.timezone.utc)).total_seconds() * 10_000_000)
+    name = f"{rec['name']},{ticks}"
+    rid = f"{server_id}/restorableDroppedDatabases/{name}"
+    p = rec.get("properties") or {}
+    d = _new_rec(rid, name, "Microsoft.Sql/servers/restorableDroppedDatabases", location=rec.get("location"))
+    d["properties"] = {"databaseName": rec["name"], "creationDate": p.get("creationDate") or rec.get("_created"),
+                       "deletionDate": _now(), "earliestRestoreDate": p.get("earliestRestoreDate") or rec.get("_created"),
+                       "maxSizeBytes": p.get("maxSizeBytes"), "backupStorageRedundancy": p.get("requestedBackupStorageRedundancy", "Geo")}
+    d["sku"] = rec.get("sku") or {}
+    state[rid.lower()] = d
+
+
+def _sql_capabilities(loc):
+    eds = []
+    for ed, slos in SQL_EDITIONS:
+        eds.append({"name": ed, "status": "Available", "supportedServiceLevelObjectives": [
+            {"name": n, "status": "Available", "sku": {"name": n, "tier": tier, "capacity": cap},
+             "performanceLevel": {"value": cap, "unit": unit},
+             "supportedMaxSizes": [{"limit": mx, "unit": "Gigabytes"}]} for n, tier, cap, unit, mx in slos]})
+    return {"name": loc, "status": "Available",
+            "supportedServerVersions": [{"name": "12.0", "status": "Default", "supportedEditions": eds}]}
+
+
+def validate_write(state, rid, full_type, payload):
+    """Request validation ARM performs before a write (400 error dict or None)."""
+    t = full_type.lower()
+    pp = _payload_props(payload)
+    if t == VM_T:
+        return validate_vm(state, rid, payload)
+    bad = validate_identity(payload)
+    if bad:
+        return bad
+    if t == SQL_DB_T + "/backupshorttermretentionpolicies":
+        d = pp.get("retentionDays")
+        if d is not None and not (isinstance(d, int) and 1 <= d <= 35):
+            return _err(400, "InvalidBackupRetentionPeriod", "Point-in-time restore retention must be between 1 and 35 days.")
+        h = pp.get("diffBackupIntervalInHours")
+        if h is not None and h not in (12, 24):
+            return _err(400, "InvalidDiffBackupInterval", "Differential backup frequency must be 12 or 24 hours.")
+    if t == SQL_SERVER_T + "/auditingsettings" and pp.get("state") == "Enabled":
+        if not pp.get("storageEndpoint") and not pp.get("isAzureMonitorTargetEnabled"):
+            return _err(400, "DataSecurityInvalidUserSuppliedParameter",
+                        "Invalid parameter 'storageEndpoint': a storage endpoint or the Azure Monitor target is required when auditing is enabled.")
+    if t == SQL_SERVER_T + "/failovergroups":
+        own = rid.lower().split("/failovergroups/")[0]
+        for ps in pp.get("partnerServers") or []:
+            pid = str(ps.get("id", "")).lower()
+            if not pid or pid not in state or pid == own:
+                return _err(400, "FailoverGroupPartnerServerInvalid",
+                            f"Partner server '{ps.get('id')}' must be an existing server other than the primary.")
+        for db in pp.get("databases") or []:
+            if str(db).lower() not in state or not str(db).lower().startswith(own + "/databases/"):
+                return _err(400, "FailoverGroupDatabaseInvalid", f"Database '{db}' does not exist on the primary server.")
+    return None
+
+
 # ── entry ────────────────────────────────────────────────────────────────────
 def route(state, method, sub, rg, after, payload=None, query=None, executor=None):
     """Serve the request if it is one this module models, else None.
@@ -1114,7 +1257,8 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
         return _pip(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.devtestlab" and low[1] == "schedules" and len(after) <= 3:
         return _schedules(state, method, sub, rg, after, payload)
-    if low[0] == "microsoft.storage" and low[1] == "storageaccounts" and len(after) == 4 and method == "POST":
+    if low[0] == "microsoft.storage" and low[1] == "storageaccounts" and len(after) == 4 and method == "POST" \
+            and low[3] in ("listkeys", "regeneratekey", "listaccountsas", "failover"):
         rid = scope_id(sub, rg, after[:3])
         rec = state.get(rid.lower())
         if rec is None:
@@ -1123,6 +1267,8 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
         r = _storage_action(state, rid, rec, after[3], payload)
         if r is not None:
             return r
+    if low[0] == "microsoft.sql" and low[1] == "locations" and len(after) == 4 and low[3] == "capabilities":
+        return _ok(_sql_capabilities(after[2])) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
     if low[0] == "microsoft.compute" and low[1] == "restorepointcollections":
         return _restore_points(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.compute" and low[1] == "virtualmachines" and len(after) == 4 \

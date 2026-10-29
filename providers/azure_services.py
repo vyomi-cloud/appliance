@@ -918,8 +918,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
                 raise
             except Exception:
                 pass
-        _bad = (_ext.validate_vm(_state, rid, payload) if full_type.lower() == _ext.VM_T
-                else _ext.validate_identity(payload))
+        _bad = _ext.validate_write(_state, rid, full_type, payload)
         if _bad:
             return JSONResponse(status_code=_bad["status"], content=_bad["body"])
         resp = _upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
@@ -1180,7 +1179,7 @@ def _list(sub: str, rg: str | None, full_type: str, parent: str | None = None) -
     ft = full_type.lower()
     pfx = parent.lower() + "/" if parent else None
     items = []
-    for rec in _state.values():
+    for rec in list(_state.values()):
         if rec.get("_type", "").lower() != ft:
             continue
         if pfx and not str(rec.get("id", "")).lower().startswith(pfx):
@@ -1189,6 +1188,8 @@ def _list(sub: str, rg: str | None, full_type: str, parent: str | None = None) -
             continue
         if rg is not None and (rec.get("_rg") or "").lower() != rg.lower():
             continue
+        from core import azure_arm_ext_core as _ext
+        _ext.after_upsert(_state, rec)
         items.append(_view(rec))
     return JSONResponse({"value": items})
 
