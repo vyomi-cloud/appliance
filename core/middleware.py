@@ -425,35 +425,41 @@ def _storage_write_provider(request, path: str) -> str:
     return ""
 
 
+def _schedule_savings_refresh() -> None:
+    """Recompute the space's resource graph + cost savings ~1 s after a write (debounced)."""
+    global _METER_TIMER
+    import threading
+    if _METER_TIMER is not None and _METER_TIMER.is_alive():
+        return
+
+    def _refresh():
+        try:
+            from server import _cloudsim_refresh_bridge
+            _cloudsim_refresh_bridge("savings.refresh", {})
+        except Exception:
+            pass
+    _METER_TIMER = threading.Timer(1.0, _refresh)
+    _METER_TIMER.daemon = True
+    _METER_TIMER.start()
+
+
 def _meter_storage_write(request, response, orig_path: str) -> None:
-    """Meter bytes stored + a write request so savings include real storage billing."""
+    """Meter bytes stored + a write request so savings include real storage billing;
+    any other successful write schedules a savings refresh so new resources count."""
     try:
-        if response.status_code >= 300:
+        if response.status_code >= 300 or request.method not in ("PUT", "POST", "DELETE", "PATCH"):
             return
         provider = _storage_write_provider(request, request.scope.get("path", "") or orig_path)
-        if not provider:
-            return
-        try:
-            nbytes = int(request.headers.get("x-amz-decoded-content-length")
-                         or request.headers.get("content-length") or 0)
-        except ValueError:
-            nbytes = 0
-        from core import usage_meter
-        from core.app_context import STATE
-        space_id = (STATE.get("spaces") or {}).get("active_space_id", "")
-        usage_meter.record(space_id, provider, nbytes)
-        global _METER_TIMER
-        import threading
-        if _METER_TIMER is None or not _METER_TIMER.is_alive():
-            def _refresh():
-                try:
-                    from server import _cloudsim_refresh_bridge
-                    _cloudsim_refresh_bridge("usage.storage_write", {})
-                except Exception:
-                    pass
-            _METER_TIMER = threading.Timer(1.0, _refresh)
-            _METER_TIMER.daemon = True
-            _METER_TIMER.start()
+        if provider:
+            try:
+                nbytes = int(request.headers.get("x-amz-decoded-content-length")
+                             or request.headers.get("content-length") or 0)
+            except ValueError:
+                nbytes = 0
+            from core import usage_meter
+            space_id = (STATE.get("spaces") or {}).get("active_space_id", "")
+            usage_meter.record(space_id, provider, nbytes)
+        _schedule_savings_refresh()
     except Exception:
         pass
 

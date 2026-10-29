@@ -161,7 +161,7 @@ const savingsSnapshot = (page) => page.evaluate(async () => {
 // Services the real cloud does not bill for (Azure virtual networks, NSGs and
 // RBAC role definitions/assignments cost nothing): the resource count must still
 // move, but there are no dollars to save.
-const FREE_OF_CHARGE = { aws: /^(IAM|VPC|EventBridge)$/i, azure: /^(virtual networks?|network security group|entra id \/ rbac|role definition)$/i };
+const FREE_OF_CHARGE = { gcp: /^(VPC Network|IAM & Admin)$/i, aws: /^(IAM|VPC|EventBridge)$/i, azure: /^(virtual networks?|network security group|entra id \/ rbac|role definition)$/i };
 
 function savingsFindings(cloud, before, after, stage, service = "") {
   const f = [];

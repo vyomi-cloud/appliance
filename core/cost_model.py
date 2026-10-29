@@ -104,7 +104,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.cloudscheduler": 0.10, # $0.10 per job per month (first 3 jobs per billing account free)
     "gcp.secretmanager": 0.06,  # $0.06 per active secret version per month
     "gcp.kms": 0.06,            # $0.06 per software key version per month
-    "gcp.eventarc": 0.00,       # triggers are free; events billed per use
+    "gcp.eventarc": 0.04,       # triggers are free; events $0.40 per million delivered (modelled at ~100K events/month)
     # Azure
     "azure.vm": 0.00,         # priced via VM hourly
     "azure.sql": 4.99,        # Basic DTU

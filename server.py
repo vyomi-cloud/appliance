@@ -2655,6 +2655,32 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(fn, dict):
             add("gcp", "functions", "function", fn_name, fn, "gcp_functions")
 
+    # Pub/Sub backed by the emulator keeps topics/subscriptions only there (not in
+    # service_states), so list them per project (console project, SDK default projects).
+    try:
+        from core import gcp_pubsub_emulator as _ps_emu
+        if str(space.get("provider") or "") == "gcp" and _ps_emu.available():
+            for _pp in ("123456789012", "cloudlearn", "gcp-dev"):
+                for _t in _ps_emu.list_topics(_pp):
+                    add("gcp", "pubsub", "topic", f"{_pp}/{_t['name']}", {"name": _t["name"]})
+                for _sb in _ps_emu.list_subscriptions(_pp):
+                    add("gcp", "pubsub", "subscription", f"{_pp}/{_sb['name']}", {"name": _sb["name"]})
+    except Exception:
+        pass
+
+    # API Gateway created through the console catalog (routes/gcp_extras.py) lives under
+    # service_states["apigateway"][<project>]["apis"|"gateways"]; the SDK path under gcp_apigateway.
+    _ag_projects = service_states.get("apigateway", {}) if isinstance(service_states.get("apigateway"), dict) else {}
+    if str(space.get("provider") or "") == "gcp":
+        for _proj, _pd in _ag_projects.items():
+            if not isinstance(_pd, dict) or _proj in ("apis", "logs"):
+                continue
+            for _akind, _nkind in (("apis", "api"), ("gateways", "gateway")):
+                for _aname, _arec in (_pd.get(_akind) or {}).items():
+                    if isinstance(_arec, dict):
+                        add("gcp", "apigateway", _nkind, f"{_proj}/{_aname}",
+                            {**_arec, "name": _aname, "created": _arec.get("createTime", "")})
+
     gcp_apigw = _cloudsim_service_state(space, "gcp_apigateway")
     for api_id, api in gcp_apigw.get("apis", {}).items():
         if isinstance(api, dict):
@@ -2706,6 +2732,18 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             for item_id, item in (items.items() if isinstance(items, dict) else []):
                 if isinstance(item, dict):
                     add(provider, svc, kind.rstrip("s"), str(item_id), item)
+
+    # GCP Secret Manager secrets + Cloud KMS keys are Vault-backed (console + SDK share
+    # one name index in Vault KV), so they are not in service_states.
+    try:
+        from core import vault_routes as _vr
+        _gcp_space = str(space.get("space_id") or space.get("id") or "")
+        for _kind, _svc, _node_kind in (("secrets", "secretmanager", "secret"), ("kms", "kms", "key")):
+            for _entry in _vr._gcp_idx_get(_gcp_space or "default", _kind):
+                add("gcp", _svc, _node_kind, str(_entry), {"name": str(_entry).split("/")[-1],
+                                                           "created": _vr._gcp_idx_created(_gcp_space or "default", str(_entry))})
+    except Exception:
+        pass
 
     # Azure ARM resources (space-scoped under service_states["azure_arm"]["resources"]).
     # Same DB-derived path as AWS/GCP: service + kind are mapped from the stored

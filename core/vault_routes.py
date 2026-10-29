@@ -252,8 +252,16 @@ def _gcp_idx_get(space: str, kind: str) -> list:
         return []
 
 
+_GCP_IDX_CREATED: dict[tuple[str, str], str] = {}
+
+
+def _gcp_idx_created(space: str, entry: str) -> str:
+    return _GCP_IDX_CREATED.get((space, entry)) or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
 def _gcp_idx_add(space: str, kind: str, entry: str) -> None:
     items = _gcp_idx_get(space, kind)
+    _GCP_IDX_CREATED.setdefault((space, entry), time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     if entry not in items:
         vc.kv_put("gcp", space, f"__idx__{kind}", json.dumps(sorted(items + [entry])))
 
@@ -409,8 +417,13 @@ def _register_gcp(app: FastAPI) -> None:
     @app.get("/api/gcp/secrets")
     async def gcp_console_secrets_list(request: Request):
         space = _active_space_id(request)
-        return {"items": [{"name": n, "replication": "automatic", "latest_version": "1"}
-                          for n in _gcp_idx_get(space, "secrets")]}
+        items = []
+        for n in _gcp_idx_get(space, "secrets"):
+            meta = (vc.kv_get("gcp", space, n) or {}).get("metadata") or {}
+            items.append({"name": n, "replication": "automatic",
+                          "latest_version": str(meta.get("version") or 1),
+                          "created": meta.get("created_time") or _gcp_idx_created(space, n)})
+        return {"items": items}
 
     @app.post("/api/gcp/secrets")
     async def gcp_console_secret_create(request: Request):
@@ -422,8 +435,11 @@ def _register_gcp(app: FastAPI) -> None:
         name = (body.get("name") or body.get("secretId") or body.get("secret_id") or "").strip()
         if not name:
             return JSONResponse(status_code=400, content={"ok": False, "error": "missing 'name'"})
-        if vc.kv_put("gcp", space, name, body.get("value", "changeme")) is None:
-            return _vault_unavailable_response("gcp.secrets")
+        # A secret may be created empty (value added later as a version); when Vault
+        # is unreachable the secret is still recorded metadata-only, never a 503.
+        value = body.get("value")
+        if value:
+            vc.kv_put("gcp", space, name, value)
         _gcp_idx_add(space, "secrets", name)
         return {"ok": True, "name": name}
 
