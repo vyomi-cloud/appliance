@@ -127,18 +127,101 @@ fetch_latest_release() {
   fi
 }
 
+
+# ── Launch view: dot-matrix banner + live steps (cosmetic, honest) ─────────────
+# Only on an interactive terminal; plain lines when piped, in CI, with NO_COLOR or
+# VYOMI_NO_BANNER=1. Every step reports what actually happened and how long it took.
+VYOMI_URL="${VYOMI_URL:-http://localhost:9000}"
+_tty=0; [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${VYOMI_NO_BANNER:-}" != "1" ] && [ "${CI:-}" = "" ] && _tty=1
+case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in *UTF-8*|*utf8*|*UTF8*) _utf=1 ;; *) _utf=0 ;; esac
+if [ "$_tty" = 1 ]; then _c=$'\033[36m'; _d=$'\033[38;5;236m'; _g=$'\033[32m'; _y=$'\033[33m'; _r=$'\033[31m'; _b=$'\033[1m'; _z=$'\033[0m'
+else _c=""; _d=""; _g=""; _y=""; _r=""; _b=""; _z=""; fi
+if [ "$_utf" = 1 ]; then _on="●"; _off="·"; _ok="✓"; _bad="✗"; _run="▸"; else _on="#"; _off="."; _ok="ok"; _bad="!!"; _run=">"; fi
+
+banner() {
+  [ "$_tty" = 1 ] || return 0
+  local rows=(
+    "10001 10001 01110 10001 111"
+    "10001 10001 10001 11011 010"
+    "10001 01010 10001 10101 010"
+    "10001 00100 10001 10101 010"
+    "01010 00100 10001 10001 010"
+    "01010 00100 10001 10001 010"
+    "00100 00100 01110 10001 111"
+  )
+  echo
+  local row ch i line
+  for row in "${rows[@]}"; do
+    line="  "
+    for ((i = 0; i < ${#row}; i++)); do
+      ch="${row:i:1}"
+      case "$ch" in 1) line+="${_c}${_on}${_z} " ;; 0) line+="${_d}${_off}${_z} " ;; " ") line+="  " ;; esac
+    done
+    printf '%s\n' "$line"
+  done
+  printf '\n  %slocal AWS · GCP · Azure — no cloud bill%s   %s%s%s\n\n' "$_b" "$_z" "$_d" "${1:-}" "$_z"
+}
+
+_t0=$(date +%s)
+_since() { echo "$(( $(date +%s) - _t0 ))s"; }
+step_ok()  { printf '  %s%s%s %-10s %s %s(%s)%s\n' "$_g" "$_ok" "$_z" "$1" "$2" "$_d" "$(_since)" "$_z"; }
+step_bad() { printf '  %s%s%s %-10s %s\n' "$_r" "$_bad" "$_z" "$1" "$2" >&2; }
+step_run() { if [ "$_tty" = 1 ]; then printf '\r\033[K  %s%s%s %-10s %s' "$_y" "$_run" "$_z" "$1" "$2"; fi; }
+step_end() { if [ "$_tty" = 1 ]; then printf '\r\033[K'; fi; }
+
+# Wait for the console, then show the backends coming up (they keep starting in the
+# background after we return; the console's readiness strip shows the rest).
+wait_ready() {
+  local i body ready total pct
+  for ((i = 0; i < 120; i++)); do
+    if curl -fs --max-time 2 "$VYOMI_URL/api/runtime/readiness" >/dev/null 2>&1; then break; fi
+    step_run "console" "starting the simulator… ${i}s"; sleep 1
+  done
+  step_end
+  if ! curl -fs --max-time 2 "$VYOMI_URL/api/runtime/readiness" >/dev/null 2>&1; then
+    step_bad "console" "not answering on $VYOMI_URL yet — check \`vyomi logs simulator\`"; return 1
+  fi
+  step_ok "console" "$VYOMI_URL"
+  for ((i = 0; i < 90; i++)); do
+    body="$(curl -fs --max-time 2 "$VYOMI_URL/api/runtime/readiness" 2>/dev/null || true)"
+    ready="$(printf '%s' "$body" | sed -n 's/.*"ready_count":\([0-9]*\).*/\1/p')"
+    total="$(printf '%s' "$body" | sed -n 's/.*"total_count":\([0-9]*\).*/\1/p')"
+    pct="$(printf '%s' "$body" | sed -n 's/.*"overall_pct":\([0-9]*\).*/\1/p')"
+    [ -n "$total" ] || break
+    if [ "$ready" = "$total" ]; then step_end; step_ok "backends" "${total}/${total} ready (S3 · KMS · SQL · NoSQL · queues · Pub/Sub · Blob)"; return 0; fi
+    step_run "backends" "${ready}/${total} ready (${pct}%) — pulling and starting in the background"
+    [ "$_tty" = 1 ] || break          # non-interactive: don't hold the shell for the heavy backends
+    sleep 2
+  done
+  step_end
+  [ -n "${total:-}" ] && step_ok "backends" "${ready:-0}/${total} ready; the rest keep starting in the background"
+  return 0
+}
+
+launch() {   # $1 = label for the banner
+  banner "$1"
+  if docker info >/dev/null 2>&1; then step_ok "docker" "engine reachable ($(docker --version 2>/dev/null | sed 's/^Docker version //;s/,.*//'))"
+  else step_bad "docker" "engine not reachable — start Docker Desktop (macOS/Windows) or dockerd (Linux)"; exit 1; fi
+  step_run "images" "pulling $(pinned_ver "$COMPOSE_FILE" || true)…"
+  local log; log="$(mktemp)"
+  if ! dc up -d --quiet-pull >"$log" 2>&1 && ! dc up -d >"$log" 2>&1; then
+    step_end; step_bad "start" "docker compose up failed:"; tail -n 15 "$log" >&2; rm -f "$log"; exit 1
+  fi
+  rm -f "$log"; step_end
+  step_ok "start" "simulator $(pinned_ver "$COMPOSE_FILE") + core services"
+  wave2_full_bg
+  step_ok "downloads" "heavy backends (S3, KMS, SQL, NoSQL, queues) downloading in the background"
+  wait_ready || true
+  printf '\n  %sReady.%s Open %s%s%s   ·   SDK/CLI: point --endpoint-url at %s\n' "$_b" "$_z" "$_c" "$VYOMI_URL" "$_z" "$VYOMI_URL"
+  printf '  %sPro tier: launch an EC2 instance in the console, then ssh ubuntu@<ip>.%s\n\n' "$_d" "$_z"
+}
+
 case "${1:-up}" in
   up|start)
-    # Wave 1 — base only (simulator + required deps). Fast: the console is
-    # reachable the moment the simulator is healthy, with no wait on the
-    # heavy backends.
-    dc up -d
-    # Wave 2 — the heavy backends download + start in the background.
-    wave2_full_bg
-    echo "==> Vyomi (Docker) is starting. Open http://localhost:9000 in ~30s."
-    echo "    Backends (S3/KMS/SQL/NoSQL/queues) are downloading + starting in the"
-    echo "    background — the readiness strip turns each green as it comes up."
-    echo "    Pro tier: launch an EC2 instance in the console, then ssh ubuntu@<ip>."
+    # Wave 1 — base only (simulator + required deps): the console is reachable the
+    # moment the simulator is healthy. Wave 2 — the heavy backends download + start
+    # in the background (launch() runs both and shows each step live).
+    launch "v$(pinned_ver "$COMPOSE_FILE" || echo dev)"
     ;;
   down|stop)       dc --profile full down ;;
   restart)         dc --profile full down; dc up -d; wave2_full_bg ;;
@@ -147,7 +230,8 @@ case "${1:-up}" in
   update|upgrade)
     fetch_latest_release
     dc --profile full pull && dc up -d --remove-orphans && wave2_full_bg
-    echo "==> Vyomi $(pinned_ver "$COMPOSE_FILE") is starting. Open http://localhost:9000 in ~30s."
+    banner "updated to v$(pinned_ver "$COMPOSE_FILE")"
+    wait_ready || true
     ;;
   doctor)
     # Environment report (was falling through to `docker compose doctor`,
