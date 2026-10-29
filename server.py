@@ -13521,11 +13521,13 @@ def _gcp_compute_instance_json(instance: dict) -> dict:
         "selfLink": _gcp_compute_instance_path(project, zone, instance_name),
         "canIpForward": bool(instance.get("assign_external_ip", True)),
         "description": instance.get("description", ""),
-        "scheduling": {
+        # setScheduling (console Scheduling tab / SDK) stores the instance's own policy.
+        "scheduling": dict(instance.get("scheduling") or {
             "automaticRestart": True,
             "onHostMaintenance": "MIGRATE",
             "preemptible": False,
-        },
+            "provisioningModel": "STANDARD",
+        }),
         "serviceAccounts": [
             {
                 "email": f"{instance.get('service_account', 'default')}@{project}.iam.gserviceaccount.com",
@@ -23715,6 +23717,13 @@ try:
     _mon_console.register(app, _mon_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[monitoring] routes skipped: {_e}")
+
+# GCP console resource-detail tabs (/api/gcp/sub/{service}/{op}/{name}) over the services' own state.
+try:
+    from providers import gcp_tabs_console as _gcp_tabs_console
+    _gcp_tabs_console.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[gcp-tabs] routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)

@@ -1009,18 +1009,18 @@ async function renderDetail(main){
     if (!item) return;
     content.append(el("h2",{class:"sub-h"}, item.label));
     const t = (item.type||"").toLowerCase();
-    if (t === "overview") return renderOverviewTab(content, svc, STATE.item);
+    // Each tab renders into its own host, so a slow load from a tab the user already
+    // left never lands in the tab they switched to.
+    const host = el("div",{}); content.append(host);
+    if (GT[t]) return GT[t](host, svc, STATE.item, item);
+    if (t === "overview" || t === "properties") return freshItem(svc, STATE.item).then(it => renderOverviewTab(host, svc, it));
     if (t === "secretvalue") return renderSecretValueTab(content, svc, STATE.item);
     if (t === "sublist")  return renderSublistTab(content, svc, STATE.item, item);
   if (t === "kmsconfig") return renderKmsConfigTab(content, svc, STATE.item);
-    if (t === "schedkv")  return renderSchedKvTab(content, STATE.item, item.fields || []);
+    if (t === "schedkv")  return freshItem(svc, STATE.item).then(it => renderSchedKvTab(host, it, item.fields || []));
     if (t === "objects")  return renderObjectsTab(content, svc, STATE.item);
-    if (t === "tags")     return renderLabelsTab(content, svc, STATE.item);
     if (t === "json")     return content.append(el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto"}, JSON.stringify(STATE.item, null, 2)));
-    if (t === "properties")return renderOverviewTab(content, svc, STATE.item);
     if (t === "metrics")  return renderMetricsTab(content, svc);
-    if (t === "activitylog") return content.append(el("div",{class:"empty"}, "Activity log derived from /api/cloudsim/events — populated when actions taken on this resource."));
-    if (t === "iam")      return content.append(el("div",{class:"empty"}, "Permissions inherited from project-level IAM bindings."));
     // Stub — wired in GCP-C
     content.append(el("div",{class:"empty"},
       el("span",{class:"ic material-symbols-outlined"}, "construction"),
@@ -1314,6 +1314,429 @@ function buildSparkline(label, lo, hi, suffix){
     pts[pts.length-1].toFixed(suffix==="%"?0:0) + (suffix||" units")));
   return card;
 }
+
+// ========== DETAIL TABS — this resource's real data =========================
+// Every tab below reads THIS resource from the backend (the resource GET, a child
+// list at /api/gcp/sub/{service}/{op}/{name}, the event log, the project IAM
+// policy) and writes through the same API, so an edit survives reopening the tab.
+// Offline the appliance serves these routes; in Nano the service worker maps the
+// same URLs onto the in-browser engines (wasm/providers/gcp_core_adapter.py).
+const GT = {};
+function tabName(svc, item){ return String((item && item.name) || getPath(item, svc.name_field) || ""); }
+function lastSeg(v){ return String(v == null ? "" : v).replace(/\/+$/, "").split("/").pop(); }
+function subPath(svc, op, name){ return "/api/gcp/sub/" + svc.key + "/" + op + "/" + encodeURIComponent(name); }
+function subGet(svc, op, name){ return api("GET", subPath(svc, op, name)); }
+function subPost(svc, op, name, body){ return api("POST", subPath(svc, op, name), body || {}); }
+function errMsg(r){
+  const j = r && r.json;
+  const m = j && (j.message || (j.error && (j.error.message || j.error)) || j.detail);
+  return (typeof m === "string" && m) ? m : ("HTTP " + (r ? r.status : "?"));
+}
+// The resource as the backend returns it now (the list row can be stale or partial).
+async function freshItem(svc, item){
+  const name = tabName(svc, item);
+  try {
+    const r = await api("GET", fillCommon(svc.resource_path, {name}));
+    if (r.ok && r.json && typeof r.json === "object" && !Array.isArray(r.json)) {
+      const j = r.json.item && typeof r.json.item === "object" ? r.json.item : r.json;
+      return {...item, ...j, name: item.name};
+    }
+  } catch(_) {}
+  return item;
+}
+// One tab's slice of the resource (`get<View>` = the fields that tab shows, like a
+// Google API `fields=` partial response); falls back to the full resource GET.
+async function tabView(svc, item, view){
+  const r = await subGet(svc, "get" + view, tabName(svc, item));
+  if (r.ok && r.json && r.json.item) return {...item, ...r.json.item, name: item.name};
+  return freshItem(svc, item);
+}
+function fmtVal(v){
+  if (v == null || v === "") return "Not set";
+  if (typeof v === "boolean") return v ? "On" : "Off";
+  if (Array.isArray(v)) return v.length ? v.map(x => typeof x === "object" ? JSON.stringify(x) : String(x)).join(", ") : "None set";
+  if (typeof v === "object") { const e = Object.entries(v); return e.length ? e.map(([k, x]) => k + ": " + (typeof x === "object" ? JSON.stringify(x) : x)).join(", ") : "None set"; }
+  return String(v);
+}
+function kvCardOf(title, pairs){
+  const card = el("div",{class:"kv-card"});
+  if (title) card.append(el("div",{style:"font-weight:500;font-size:14px;margin-bottom:10px;font-family:'Google Sans',sans-serif"}, title));
+  const g = el("div",{class:"kv-grid"});
+  pairs.forEach(([k, v]) => g.append(el("div",{}, el("div",{class:"k"}, k),
+    el("div",{class:"v"}, v instanceof Node ? v : fmtVal(v)))));
+  card.append(g);
+  return card;
+}
+function tableOf(cols, rows, actions){
+  const t = el("table",{class:"gc"});
+  const hr = el("tr",{}, ...cols.map(c => el("th",{}, c[1])));
+  if (actions && actions.length) hr.append(el("th",{}, "Actions"));
+  t.append(hr);
+  rows.forEach(row => {
+    const tr = el("tr",{}, ...cols.map(c => {
+      const v = c[2] ? c[2](row) : getPath(row, c[0]);
+      return el("td",{}, v instanceof Node ? v : fmtVal(v));
+    }));
+    if (actions && actions.length) tr.append(el("td",{style:"white-space:nowrap"},
+      ...actions.filter(a => !a.when || a.when(row)).map(a =>
+        el("button",{class:"btn" + (a.danger ? " danger" : ""), style:"margin-right:6px", onclick:()=>a.run(row)},
+          icon(a.icon || "edit"), a.label))));
+    t.append(tr);
+  });
+  return t;
+}
+function emptyOf(iconName, text, hint){
+  return el("div",{class:"empty"}, el("span",{class:"ic material-symbols-outlined"}, iconName), el("div",{}, text),
+    hint ? el("div",{style:"font-size:11.5px;color:var(--hint);margin-top:6px"}, hint) : null);
+}
+// Inline form: fields [{name,label,type,options,value,placeholder}] → onSubmit(values) (return true to close).
+function inlineForm(fields, submitLabel, onSubmit, onCancel){
+  const box = el("div",{class:"kv-card", style:"display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end"});
+  const inputs = {};
+  fields.forEach(f => {
+    let inp;
+    if (f.type === "select") {
+      inp = el("select",{style:"padding:6px;border:1px solid #ccc;border-radius:4px;min-width:150px"});
+      (f.options || []).forEach(o => inp.append(el("option",{value: o.value ?? o}, o.label ?? o)));
+      if (f.value != null) inp.value = String(f.value);
+    } else if (f.type === "checkbox") {
+      inp = el("input",{type:"checkbox"}); inp.checked = !!f.value;
+    } else if (f.type === "textarea") {
+      inp = el("textarea",{rows: f.rows || 6, style:"width:100%;min-width:420px;box-sizing:border-box;font-family:monospace;font-size:12.5px;padding:8px;border:1px solid #ccc;border-radius:4px"});
+      inp.value = f.value || "";
+    } else {
+      inp = el("input",{type: f.type || "text", placeholder: f.placeholder || "", style:"padding:6px;border:1px solid #ccc;border-radius:4px;min-width:" + (f.width || 160) + "px"});
+      if (f.value != null) inp.value = String(f.value);
+    }
+    inputs[f.name] = inp;
+    box.append(el("label",{style:"display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--sub)" + (f.type === "textarea" ? ";flex:1 1 100%" : "")}, f.label, inp));
+  });
+  const bar = el("div",{style:"display:flex;gap:8px"});
+  bar.append(el("button",{class:"btn primary", onclick: async () => {
+    const vals = {};
+    Object.entries(inputs).forEach(([k, i]) => { vals[k] = i.type === "checkbox" ? i.checked : i.value; });
+    await onSubmit(vals);
+  }}, icon("check"), submitLabel));
+  if (onCancel) bar.append(el("button",{class:"btn", onclick: onCancel}, "Cancel"));
+  box.append(bar);
+  return box;
+}
+// Key/value editor (metadata, labels, env vars, flags): read view + Edit → Save.
+function kvEditor(host, opts){
+  // opts: {title, load: async()=>[[k,v]...], save: async(pairs)=>r, keyLabel, valueLabel, addLabel, emptyText, multiline}
+  let pairs = [], editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function load(){ pairs = await opts.load(); paint(); }
+  function paint(){
+    wrap.innerHTML = "";
+    const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:12px"});
+    if (!editing) bar.append(el("button",{class:"btn", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit"),
+      el("button",{class:"btn", onclick:()=>{ editing = true; pairs.push(["", ""]); paint(); }}, icon("add"), opts.addLabel || "Add item"));
+    wrap.append(bar);
+    if (!editing) {
+      if (!pairs.length) { wrap.append(emptyOf(opts.emptyIcon || "data_object", opts.emptyText || "Nothing set.")); return; }
+      wrap.append(tableOf([["k", opts.keyLabel || "Key"], ["v", opts.valueLabel || "Value"]],
+        pairs.map(([k, v]) => ({k, v: String(v)}))));
+      return;
+    }
+    const tbl = el("table",{class:"gc"});
+    tbl.append(el("tr",{}, el("th",{}, opts.keyLabel || "Key"), el("th",{}, opts.valueLabel || "Value"), el("th",{style:"width:44px"}, "")));
+    const rows = [];
+    pairs.forEach(([k, v]) => {
+      const ki = el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"}); ki.value = k;
+      const vi = opts.multiline ? el("textarea",{rows:2, style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px;font-family:monospace"})
+                                : el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+      vi.value = String(v);
+      const row = {ki, vi};
+      const tr = el("tr",{}, el("td",{}, ki), el("td",{}, vi),
+        el("td",{}, el("button",{class:"btn", title:"Remove", onclick:()=>{ rows.splice(rows.indexOf(row), 1); tr.remove(); }}, "✕")));
+      rows.push(row); tbl.append(tr);
+    });
+    wrap.append(tbl);
+    const bar2 = el("div",{style:"display:flex;gap:8px;margin-top:12px"});
+    bar2.append(el("button",{class:"btn", onclick:()=>{ pairs = rows.map(r => [r.ki.value, r.vi.value]); pairs.push(["", ""]); paint(); }}, icon("add"), opts.addLabel || "Add item"));
+    bar2.append(el("button",{class:"btn primary", onclick: async ()=>{
+      const out = rows.map(r => [r.ki.value.trim(), r.vi.value]).filter(p => p[0]);
+      const r = await opts.save(out);
+      if (r.ok) { toast("Saved"); editing = false; await load(); } else toast("Save failed: " + errMsg(r), "err");
+    }}, icon("save"), "Save"));
+    bar2.append(el("button",{class:"btn", onclick:()=>{ editing = false; load(); }}, "Cancel"));
+    wrap.append(bar2);
+  }
+  load();
+}
+// A child collection with optional create form + per-row delete/actions.
+async function childList(host, opts){
+  // opts: {load: async()=>({ok,items}|r), columns, empty, emptyIcon, create:{label, fields, run:async(vals)=>r}, rowActions:[{label,icon,danger,run:async(row)=>r, confirm}]}
+  const wrap = el("div",{}); host.append(wrap);
+  let formOpen = false;
+  async function load(){
+    const r = await opts.load();
+    const items = (r && r.json && (r.json.items || r.json.list)) || [];
+    wrap.innerHTML = "";
+    const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:12px;align-items:center"});
+    if (opts.create) bar.append(el("button",{class:"btn primary", onclick:()=>{ formOpen = !formOpen; load(); }}, icon(opts.create.icon || "add"), opts.create.label));
+    (opts.actions || []).forEach(a => bar.append(el("button",{class:"btn", onclick: async ()=>{
+      const rr = await a.run(); if (rr && !rr.ok) toast(a.label + " failed: " + errMsg(rr), "err"); else { toast(a.label + " done"); load(); }
+    }}, icon(a.icon || "bolt"), a.label)));
+    bar.append(el("span",{style:"margin-left:auto;font-size:12.5px;color:var(--sub)"}, items.length + " " + (items.length === 1 ? (opts.noun || "item") : (opts.nouns || "items"))));
+    wrap.append(bar);
+    if (r && !r.ok) wrap.append(el("div",{class:"kv-card", style:"color:var(--err)"}, errMsg(r)));
+    if (opts.create && formOpen) wrap.append(inlineForm(opts.create.fields, opts.create.submit || "Create", async vals => {
+      const rr = await opts.create.run(vals);
+      if (rr.ok) { toast((opts.create.done || "Created") + (vals.name ? " " + vals.name : "")); formOpen = false; load(); }
+      else toast("Failed: " + errMsg(rr), "err");
+    }, ()=>{ formOpen = false; load(); }));
+    if (!items.length) { wrap.append(emptyOf(opts.emptyIcon || "inbox", opts.empty || "Nothing here yet.")); return; }
+    wrap.append(tableOf(opts.columns, items, (opts.rowActions || []).map(a => ({...a, run: async row => {
+      if (a.confirm && !confirm(a.confirm(row))) return;
+      const rr = await a.run(row);
+      if (rr && !rr.ok) toast(a.label + " failed: " + errMsg(rr), "err"); else { toast(a.label + " done"); load(); }
+    }}))));
+    if (opts.after) opts.after(wrap, items);
+  }
+  await load();
+}
+
+// ---- Universal tabs ---------------------------------------------------------
+// Activity: this resource's events (offline: the space's CloudSim event log; Nano:
+// core/nano_events, filtered server-side by resource).
+async function resourceEvents(svc, item){
+  const name = tabName(svc, item);
+  const ids = new Set([name, lastSeg(name), item.id, item.instance_id, item.resourceName, item.email, item.uniqueId]
+    .filter(x => x != null && String(x).length > 1).map(String));
+  const r = await api("GET", "/api/cloudsim/events?provider=gcp&resource=" + encodeURIComponent(name) + "&limit=200");
+  const all = (r.json && (Array.isArray(r.json) ? r.json : r.json.events)) || [];
+  const inner = ev => { const d = (ev && ev.detail) || {}; return (d && typeof d.detail === "object" && d.detail) ? d.detail : d; };
+  const vals = o => Object.values(o || {}).filter(v => typeof v === "string" || typeof v === "number").map(String);
+  const isGcp = ev => ev.provider === "gcp" || /^gcp\./.test(String(ev.event || ""));
+  // A create event carries the resource's other ids (instance_id, …): learn them first.
+  all.forEach(ev => { if (!isGcp(ev)) return; const dd = inner(ev);
+    if (vals(dd).some(v => ids.has(v)) || ids.has(String(ev.resource || "")))
+      ["instance_id", "id", "gcp_resource_id", "resource_id"].forEach(k => { if (dd[k]) ids.add(String(dd[k])); }); });
+  const mine = all.filter(ev => isGcp(ev) && (ids.has(String(ev.resource || "")) || vals(inner(ev)).some(v => ids.has(v))));
+  mine.sort((a, b) => String(b.at || b.ts || "").localeCompare(String(a.at || a.ts || "")));
+  return {r, events: mine};
+}
+function eventOp(ev){
+  const e = String(ev.event || ev.action || "");
+  return ev.service && !/^gcp\./.test(e) ? ev.service + "." + e : e.replace(/^gcp\./, "");
+}
+function eventDetail(ev){
+  const dd = (ev.detail && typeof ev.detail.detail === "object" && ev.detail.detail) ? ev.detail.detail : (ev.detail || {});
+  if (typeof dd === "string") return dd;
+  return Object.entries(dd).filter(([k, v]) => v !== "" && v != null && typeof v !== "object" && !/^(event|space_id|at|real_cloud_cost_usd|savings_usd)$/.test(k))
+    .slice(0, 8).map(([k, v]) => k + "=" + v).join(", ") || "Recorded";
+}
+GT.activitylog = async function(host, svc, item){
+  const {r, events} = await resourceEvents(svc, item);
+  if (!r.ok) { host.append(emptyOf("error", "Could not load the event log: " + errMsg(r))); return; }
+  if (!events.length) { host.append(emptyOf("list_alt", "No activity recorded for " + tabName(svc, item) + " yet.",
+    "Creates, updates and deletes on this resource are logged here as they happen.")); return; }
+  host.append(tableOf([["at", "Time", e => e.at || e.ts], ["op", "Operation", eventOp],
+    ["st", "Status", e => stateBadge(/^(ok|succeeded|success)?$/i.test(String(e.status || (e.detail && e.detail.status) || "")) ? "Succeeded" : String(e.status))],
+    ["d", "Detail", eventDetail]], events.slice(0, 100)));
+};
+// Permissions: the IAM bindings that apply to this resource (the project policy it inherits).
+GT.iam = async function(host, svc, item){
+  const iam = {key: "iam"};
+  async function load(){ return subGet(iam, "getProjectPolicy", PROJECT); }
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin-bottom:10px"},
+    "Principals with access to " + tabName(svc, item) + " through project " + PROJECT + "'s IAM policy."));
+  await childList(host, {
+    load: async () => { const r = await load(); if (r.ok && r.json) r.json.items = (r.json.bindings || []).flatMap(b => (b.members || []).map(m => ({member: m, role: b.role, inherited: "Project " + PROJECT}))); return r; },
+    noun: "binding", nouns: "bindings", emptyIcon: "admin_panel_settings",
+    empty: "No IAM bindings on project " + PROJECT + ". Grant access to add one.",
+    columns: [["member", "Principal"], ["role", "Role"], ["inherited", "Inheritance"]],
+    create: {label: "Grant access", icon: "person_add", submit: "Save", done: "Access granted",
+      fields: [{name: "member", label: "New principal", placeholder: "user:dev@example.com", width: 240},
+               {name: "role", label: "Role", type: "select", value: "roles/viewer",
+                options: ["roles/viewer", "roles/editor", "roles/owner", "roles/browser", "roles/iam.serviceAccountUser",
+                          "roles/storage.objectViewer", "roles/storage.admin", "roles/compute.admin", "roles/cloudsql.client",
+                          "roles/pubsub.publisher", "roles/pubsub.subscriber", "roles/secretmanager.secretAccessor",
+                          "roles/cloudkms.cryptoKeyEncrypterDecrypter", "roles/cloudfunctions.invoker", "roles/datastore.user"]}],
+      run: v => subPost(iam, "grantAccess", PROJECT, {member: v.member.trim(), role: v.role})},
+    rowActions: [{label: "Remove", icon: "delete", danger: true, confirm: row => "Remove " + row.role + " from " + row.member + "?",
+      run: row => subPost(iam, "revokeAccess", PROJECT, {member: row.member, role: row.role})}],
+  });
+};
+// Labels: the resource's labels from the backend, editable (setLabels persists them).
+GT.tags = async function(host, svc, item){
+  kvEditor(host, {
+    load: async () => { const it = await tabView(svc, item, "Labels"); const l = (it.labels && typeof it.labels === "object") ? it.labels : {}; STATE.item = {...STATE.item, labels: l}; return Object.entries(l); },
+    save: pairs => subPost(svc, "setLabels", tabName(svc, item), {labels: Object.fromEntries(pairs)}),
+    keyLabel: "Key", valueLabel: "Value", addLabel: "Add label", emptyIcon: "sell",
+    emptyText: "No labels on " + tabName(svc, item) + ". Labels are key-value pairs that help organize and filter resources.",
+  });
+};
+// Logs: Cloud Logging's audit entries for this resource (admin activity), newest first.
+GT.logs = async function(host, svc, item){
+  const {r, events} = await resourceEvents(svc, item);
+  if (!r.ok) { host.append(emptyOf("error", "Could not load logs: " + errMsg(r))); return; }
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin-bottom:10px"},
+    "logName=\"projects/" + PROJECT + "/logs/cloudaudit.googleapis.com%2Factivity\" · resource " + tabName(svc, item)));
+  if (!events.length) { host.append(emptyOf("subject", "No log entries for " + tabName(svc, item) + " yet.")); return; }
+  host.append(tableOf([["at", "Timestamp", e => e.at || e.ts],
+    ["sev", "Severity", e => /^(ok|succeeded|success)?$/i.test(String(e.status || "")) ? "NOTICE" : "ERROR"],
+    ["m", "Method", eventOp], ["s", "Summary", eventDetail]], events.slice(0, 100)));
+};
+
+// ---- Compute Engine ---------------------------------------------------------
+function gceStatus(it){ return String(it.status || it.state || "").toUpperCase(); }
+GT.gcenetworking = async function(host, svc, item){
+  const it = await tabView(svc, item, "Networking");
+  const nics = Array.isArray(it.networkInterfaces) ? it.networkInterfaces : [];
+  if (!nics.length) { host.append(emptyOf("lan", "No network interfaces on " + tabName(svc, item) + ".")); return; }
+  host.append(tableOf([["name", "Name"], ["network", "Network", n => lastSeg(n.network)], ["subnetwork", "Subnetwork", n => lastSeg(n.subnetwork)],
+    ["networkIP", "Primary internal IP", n => n.networkIP || "Ephemeral (pending)"],
+    ["ext", "External IP", n => ((n.accessConfigs || [])[0] || {}).natIP || "None (internal only)"],
+    ["tier", "Network tier", n => ((n.accessConfigs || [])[0] || {}).networkTier || "PREMIUM"],
+    ["stackType", "Stack type", n => n.stackType || "IPV4_ONLY"]], nics));
+  const tags = (it.tags && it.tags.items) || [];
+  host.append(el("div",{style:"height:14px"}));
+  host.append(kvCardOf("Firewall & routing", [["Network tags", tags.length ? tags.join(", ") : "No network tags"],
+    ["IP forwarding", it.canIpForward ? "On" : "Off"]]));
+};
+GT.gcedisks = async function(host, svc, item){
+  const name = tabName(svc, item);
+  await childList(host, {
+    load: () => subGet(svc, "listDisks", name), noun: "disk", nouns: "disks", emptyIcon: "storage",
+    empty: "No disks attached to " + name + ".",
+    columns: [["name", "Name"], ["boot", "Type", d => d.boot ? "Boot disk" : "Additional disk"], ["sizeGb", "Size (GB)"],
+              ["type", "Disk type"], ["mode", "Mode", d => d.mode === "READ_ONLY" ? "Read only" : "Read/write"],
+              ["autoDelete", "When deleting instance", d => d.autoDelete ? "Delete disk" : "Keep disk"],
+              ["sourceImage", "Image", d => (d.sourceImage && d.sourceImage !== "None") ? lastSeg(d.sourceImage) : "Blank disk"]],
+    create: {label: "Attach new disk", submit: "Attach", done: "Attached",
+      fields: [{name: "name", label: "Name", placeholder: name + "-data"}, {name: "sizeGb", label: "Size (GB)", type: "number", value: 10, width: 90},
+               {name: "type", label: "Disk type", type: "select", value: "pd-balanced", options: ["pd-balanced", "pd-ssd", "pd-standard"]},
+               {name: "autoDelete", label: "Delete with instance", type: "checkbox"}],
+      run: v => subPost(svc, "attachDisk", name, {name: v.name.trim(), sizeGb: Number(v.sizeGb), type: v.type, autoDelete: v.autoDelete})},
+    rowActions: [{label: "Detach", icon: "link_off", danger: true, when: d => !d.boot, confirm: d => "Detach " + d.name + " from " + name + "?",
+      run: d => subPost(svc, "detachDisk", name, {name: d.name})}],
+  });
+};
+GT.gcemachine = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const it = await tabView(svc, item, "Machine");
+    const mt = lastSeg(it.machineType || it.machine_type);
+    const spec = INSTANCE_CATALOG.find(x => x.name === mt);
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("", [["Machine type", mt || "Not set"], ["vCPUs", spec ? String(spec.vcpu) : "Custom"],
+      ["Memory", spec ? (spec.ram_mb / 1024).toFixed(spec.ram_mb < 1024 ? 1 : 0) + " GB" : "Custom"],
+      ["Machine family", spec ? String(spec.family) : mt.split("-")[0]], ["CPU platform", it.cpuPlatform || "Automatic"],
+      ["Status", gceStatus(it)]]));
+    if (!editing) {
+      wrap.append(el("button",{class:"btn", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Change machine type"));
+      if (gceStatus(it) === "RUNNING") wrap.append(el("div",{style:"font-size:12px;color:var(--sub);margin-top:8px"}, "Stop the instance to change its machine type."));
+      return;
+    }
+    wrap.append(inlineForm([{name: "machineType", label: "New machine type", type: "select", value: mt,
+      options: INSTANCE_CATALOG.map(x => ({value: x.name, label: x.name + " — " + x.vcpu + " vCPU · " + (x.ram_mb / 1024).toFixed(x.ram_mb < 1024 ? 1 : 0) + " GB"}))}],
+      "Save", async v => {
+        const r = await subPost(svc, "setMachineType", name, {machineType: v.machineType});
+        if (r.ok) { toast("Machine type set to " + v.machineType); editing = false; paint(); } else toast("Change failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paint(); }));
+  }
+  await paint();
+};
+function gceMetadataItems(it){ return ((it.metadata && it.metadata.items) || []).map(x => [x.key, x.value]); }
+GT.gcemetadata = async function(host, svc, item){
+  const name = tabName(svc, item);
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin-bottom:10px"}, "Custom metadata key/value pairs on " + name + " (instances.setMetadata)."));
+  kvEditor(host, {
+    load: async () => gceMetadataItems(await tabView(svc, item, "Metadata")),
+    save: pairs => subPost(svc, "setMetadata", name, {items: pairs.map(([key, value]) => ({key, value}))}),
+    keyLabel: "Key", valueLabel: "Value", addLabel: "Add item", emptyIcon: "data_object", multiline: true,
+    emptyText: "No custom metadata on " + name + ".",
+  });
+};
+GT.gcestartup = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const items = gceMetadataItems(await tabView(svc, item, "Startup"));
+    const cur = (items.find(p => p[0] === "startup-script") || [null, ""])[1];
+    wrap.innerHTML = "";
+    wrap.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin-bottom:10px"}, "The startup-script metadata key — runs on every boot of " + name + "."));
+    if (!editing) {
+      wrap.append(cur ? el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto;white-space:pre-wrap"}, cur)
+                      : emptyOf("code", "No startup script on " + name + "."));
+      wrap.append(el("button",{class:"btn", style:"margin-top:10px", onclick:()=>{ editing = true; paint(); }}, icon("edit"), cur ? "Edit script" : "Add startup script"));
+      return;
+    }
+    wrap.append(inlineForm([{name: "script", label: "startup-script", type: "textarea", rows: 10, value: cur || "#! /bin/bash\n"}], "Save", async v => {
+      const rest = items.filter(p => p[0] !== "startup-script");
+      if (v.script.trim()) rest.push(["startup-script", v.script]);
+      const r = await subPost(svc, "setMetadata", name, {items: rest.map(([key, value]) => ({key, value}))});
+      if (r.ok) { toast("Startup script saved"); editing = false; paint(); } else toast("Save failed: " + errMsg(r), "err");
+    }, ()=>{ editing = false; paint(); }));
+  }
+  await paint();
+};
+GT.gceconnect = async function(host, svc, item){
+  const it = await tabView(svc, item, "Connect");
+  const name = tabName(svc, item);
+  const zone = lastSeg(it.zone) || ZONE;
+  const nic = (it.networkInterfaces || [])[0] || {};
+  const ext = ((nic.accessConfigs || [])[0] || {}).natIP;
+  const mono = "font-family:monospace;font-size:12.5px;word-break:break-all";
+  host.append(kvCardOf("", [["Status", gceStatus(it)], ["Zone", zone], ["Internal IP", nic.networkIP || "Pending"],
+    ["External IP", ext || "None (internal only)"]]));
+  const c = el("div",{class:"kv-card"});
+  c.append(el("div",{style:"font-weight:500;margin-bottom:10px"}, "Connect with gcloud"));
+  c.append(el("div",{class:"k", style:"font-size:11.5px;color:var(--sub)"}, "SSH"));
+  c.append(el("div",{style:mono}, "gcloud compute ssh " + name + " --zone=" + zone + " --project=" + PROJECT));
+  c.append(el("div",{class:"k", style:"font-size:11.5px;color:var(--sub);margin-top:10px"}, "Serial console"));
+  c.append(el("div",{style:mono}, "gcloud compute connect-to-serial-port " + name + " --zone=" + zone + " --project=" + PROJECT));
+  if (ext) { c.append(el("div",{class:"k", style:"font-size:11.5px;color:var(--sub);margin-top:10px"}, "Plain SSH")); c.append(el("div",{style:mono}, "ssh -i ~/.ssh/google_compute_engine $USER@" + ext)); }
+  host.append(c);
+  if (gceStatus(it) !== "RUNNING") host.append(el("div",{style:"font-size:12px;color:var(--sub)"}, "Start the instance to connect — SSH needs a RUNNING VM."));
+};
+GT.gcescheduling = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const it = await tabView(svc, item, "Scheduling");
+    const s = it.scheduling || {};
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("", [["VM provisioning model", s.provisioningModel || (s.preemptible ? "SPOT" : "STANDARD")],
+      ["On host maintenance", s.onHostMaintenance === "TERMINATE" ? "Terminate VM instance" : "Migrate VM instance (recommended)"],
+      ["Automatic restart", s.automaticRestart === false ? "Off" : "On (recommended)"], ["Preemptibility", s.preemptible ? "On" : "Off"],
+      ["On VM termination", s.instanceTerminationAction || (s.provisioningModel === "SPOT" ? "STOP" : "Not applicable")]]));
+    if (!editing) { wrap.append(el("button",{class:"btn", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit")); return; }
+    wrap.append(inlineForm([
+      {name: "provisioningModel", label: "VM provisioning model", type: "select", value: s.provisioningModel || "STANDARD", options: ["STANDARD", "SPOT"]},
+      {name: "onHostMaintenance", label: "On host maintenance", type: "select", value: s.onHostMaintenance || "MIGRATE", options: ["MIGRATE", "TERMINATE"]},
+      {name: "automaticRestart", label: "Automatic restart", type: "checkbox", value: s.automaticRestart !== false}],
+      "Save", async v => {
+        const r = await subPost(svc, "setScheduling", name, v);
+        if (r.ok) { toast("Scheduling updated"); editing = false; paint(); } else toast("Update failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paint(); }));
+  }
+  await paint();
+};
+GT.gcesnapshots = async function(host, svc, item){
+  const name = tabName(svc, item);
+  const disks = ((await subGet(svc, "listDisks", name)).json || {}).items || [];
+  await childList(host, {
+    load: () => subGet(svc, "listSnapshots", name), noun: "snapshot", nouns: "snapshots", emptyIcon: "photo_camera",
+    empty: "No snapshots of " + name + "'s disks yet.",
+    columns: [["name", "Name"], ["sourceDisk", "Source disk"], ["status", "Status", x => stateBadge(x.status)], ["sizeGb", "Disk size (GB)"],
+              ["storageLocations", "Location"], ["created", "Created"]],
+    create: {label: "Create snapshot", icon: "add_a_photo", submit: "Create", done: "Snapshot created",
+      fields: [{name: "name", label: "Name", placeholder: name + "-snap-1"},
+               {name: "sourceDisk", label: "Source disk", type: "select", options: disks.map(d => d.name), value: (disks[0] || {}).name}],
+      run: v => subPost(svc, "createSnapshot", name, {name: v.name.trim(), sourceDisk: v.sourceDisk})},
+    rowActions: [{label: "Delete", icon: "delete", danger: true, confirm: x => "Delete snapshot " + x.name + "?",
+      run: x => subPost(svc, "deleteSnapshot", name, {name: x.name})}],
+  });
+};
+// ========== END DETAIL TABS =================================================
 
 // ========== CREATE — collapsible-sections form + right summary card =========
 function renderCreate(main){

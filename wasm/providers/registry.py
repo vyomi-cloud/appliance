@@ -45,6 +45,9 @@ _MUTATING_OPS = {
     # native sub-resource ops seen on the _resource path (GCP cores)
     "CreateSubscription", "CreateDatabase", "DeleteObject", "PutObject", "Pause", "Resume", "Run", "Enable", "Disable", "Resize", "Upgrade", "Failover",
 }
+# GCP resource-detail tab writes (/api/gcp/sub/{service}/{op}/{name}) — logged on the parent.
+_GCP_TAB_WRITES = ("Set", "Attach", "Detach", "Create", "Delete", "Grant", "Revoke", "Add", "Update", "Destroy",
+                   "Restore", "Publish", "Seek", "Rotate", "Import", "Export", "Patch", "Promote", "Test")
 
 
 def _emit_event(provider: str, service: str, resource: str, action: str,
@@ -116,7 +119,7 @@ def _resource_dispatch(backends: Backends, provider: str, operation: str,
         out = _gcp_fill_out(svc, operation, out)
     # cloudsim event: record mutating ops (best-effort). For a sub-resource op the
     # "resource" is the CHILD's name (body.name) when present, else the parent name.
-    if operation in _MUTATING_OPS:
+    if operation in _MUTATING_OPS or (provider == "gcp" and operation.startswith(_GCP_TAB_WRITES)):
         res_name = str(body.get("name") or name or "") if operation in (
             "CreateSubscription", "CreateDatabase") else str(name or body.get("name") or "")
         _emit_event(provider, svc, res_name, operation, out)
@@ -209,6 +212,9 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
         from . import gcp_core_adapter as _gca
         if svc in _gca.GCP_CORE_SERVICES:
             return _gca.resource_op(svc, operation, name, body)
+        # Resource-detail tab ops on generic-store parents (compute, vpc, functions, …).
+        if _gca.is_tab_op(svc, operation):
+            return _gca.tab_dispatch(svc, operation, name, body, backends.resources, account)
     if provider == "azure":
         from . import azure_core_adapter as _aca
         if svc in _aca.AZURE_DP_SERVICES:
@@ -225,6 +231,9 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
             body = _ec2_launch_defaults(body)
         if provider == "gcp":   # stored described, so created/updated times stay fixed
             body = _gcp_fill(svc, body)
+            if svc == "compute":   # instances.get shape: NICs, boot disk, scheduling, metadata
+                from core import gcp_console_tabs as _gct
+                body = _gct.describe_instance(body, "demo", body.get("zone") or "us-central1-a")
         return {"ok": True, **r.create(provider, account, svc, body)}
     if operation == "Get":
         rec = r.get(provider, account, svc, name)
@@ -252,6 +261,8 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
             "Stop":   ("stopped", "stopped"),
             "Reboot": ("running", "available"),
         }[operation]
+        if provider == "gcp" and svc == "compute":   # GCE instance status values
+            status = "TERMINATED" if operation == "Stop" else "RUNNING"
         updated = r.update(provider, account, svc, name, {"state": st, "status": status})
         return {"ok": True, **(updated or {"name": name, "state": st, "status": status})}
     if operation == "Terminate":

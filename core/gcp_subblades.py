@@ -45,21 +45,21 @@ def _settings_props():
 _COMPUTE_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Settings", "items": [
-        {"key": "networking",  "label": "Networking",       "icon": "lan",        "type": "networking"},
-        {"key": "disks",       "label": "Disks",            "icon": "storage",    "type": "stub"},
-        {"key": "machineSize", "label": "Machine size",     "icon": "tune",       "type": "stub"},
-        {"key": "metadata",    "label": "Metadata",         "icon": "data_object","type": "stub"},
-        {"key": "startup",     "label": "Startup script",   "icon": "code",       "type": "stub"},
+        {"key": "networking",  "label": "Networking",       "icon": "lan",        "type": "gceNetworking"},
+        {"key": "disks",       "label": "Disks",            "icon": "storage",    "type": "gceDisks"},
+        {"key": "machineSize", "label": "Machine size",     "icon": "tune",       "type": "gceMachine"},
+        {"key": "metadata",    "label": "Metadata",         "icon": "data_object","type": "gceMetadata"},
+        {"key": "startup",     "label": "Startup script",   "icon": "code",       "type": "gceStartup"},
         *_settings_props(),
     ]},
     {"group": "Operations", "items": [
-        {"key": "connect",     "label": "Connect",          "icon": "terminal",   "type": "stub"},
-        {"key": "scheduling",  "label": "Scheduling",       "icon": "schedule",   "type": "stub"},
-        {"key": "snapshots",   "label": "Snapshots",        "icon": "photo_camera","type": "stub"},
+        {"key": "connect",     "label": "Connect",          "icon": "terminal",   "type": "gceConnect"},
+        {"key": "scheduling",  "label": "Scheduling",       "icon": "schedule",   "type": "gceScheduling"},
+        {"key": "snapshots",   "label": "Snapshots",        "icon": "photo_camera","type": "gceSnapshots"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",     "label": "Metrics",          "icon": "show_chart", "type": "metrics"},
-        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "stub"},
+        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "logs"},
     ]},
 ]
 

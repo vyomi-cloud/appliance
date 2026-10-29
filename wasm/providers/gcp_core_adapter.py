@@ -447,6 +447,9 @@ def _mon_op(operation, name, body):
 
 
 def resource_op(service, operation, name="", body=None):
+    tab = tab_dispatch(service, operation, name, body)
+    if tab is not None:
+        return tab
     out = _resource_op(service, operation, name, body)
     if isinstance(out, dict) and service in ("kms", "firestore", "secretmanager"):
         if isinstance(out.get("items"), list) and operation == "List":
@@ -751,3 +754,145 @@ def _resource_op(service, operation, name="", body=None):
 
 
 GCP_CORE_SERVICES = frozenset(_MOD.keys())
+
+
+# ── Resource-detail tabs (/api/gcp/sub/{service}/{op}/{name}) ─────────────
+# The same ops the offline appliance serves (providers/gcp_tabs_console.py), over the
+# Nano engines: the cores for core-backed services, the generic ResourceStore record
+# for compute / vpc / functions / apigateway / eventarc. Validation and the records
+# no engine models on its own come from core/gcp_console_tabs.py (shared with offline).
+from core import gcp_console_tabs as _T
+
+_GENERIC_TAB_SERVICES = {"compute", "functions", "apigateway", "vpc", "eventarc"}
+_CRUD = {"List", "Create", "Get", "Update", "Delete", "Start", "Stop", "Reboot", "Terminate"}
+
+
+def _tab_err(e):
+    body = {"ok": False, "code": e.code, "message": e.message}
+    return {**body, "__http": {"status": e.status, "body": body}}
+
+
+def _tab_root():
+    return _sub_root()   # the durable nano_sub dict (persisted + cross-tab synced)
+
+
+class _Generic:
+    """A generic-store (ResourceStore) record of `svc`, fetched by name."""
+
+    def __init__(self, resources, account, svc, name):
+        self.r, self.account, self.svc, self.name = resources, account, svc, name
+
+    def get(self):
+        rec = self.r.get("gcp", self.account, self.svc, self.name) if self.r is not None else None
+        if rec is None:
+            raise _T.TabError(404, "NOT_FOUND", "The resource '%s' was not found" % self.name)
+        return rec
+
+    def update(self, patch):
+        return self.r.update("gcp", self.account, self.svc, self.name, patch)
+
+
+def _compute_tab(g, op, body):
+    rec = g.get()
+    if "networkInterfaces" not in rec:   # created before instances were described: fill once
+        g.update({k: v for k, v in _T.describe_instance(rec, PROJ, "us-central1-a").items() if k not in rec})
+        rec = g.get()
+    name = str(rec.get("name") or g.name)
+    v = _T.view_op("compute", op)
+    if v:
+        return {"ok": True, "item": _T.view("compute", v, rec)}
+    if op == "SetMetadata":
+        g.update({"metadata": {"items": _T.validate_metadata(body.get("items", []))}})
+        return {"ok": True, "item": g.get()}
+    if op == "SetMachineType":
+        _T.check_stopped(rec.get("status"), "changing its machine type")
+        from core import instance_catalog as _ic
+        g.update({"machineType": _T.validate_machine_type(body.get("machineType"), list(_ic.GCP.keys()))})
+        return {"ok": True, "item": g.get()}
+    if op == "SetScheduling":
+        g.update({"scheduling": _T.validate_scheduling(body, rec.get("scheduling"))})
+        return {"ok": True, "item": g.get()}
+    if op == "SetLabels":
+        g.update({"labels": _T.validate_labels(body.get("labels", {}))})
+        return {"ok": True, "item": g.get()}
+    disks = list(rec.get("disks") or [])
+    root = _tab_root()
+    if op == "ListDisks":
+        return {"ok": True, "items": [{"name": d.get("deviceName") or d.get("source"), "boot": bool(d.get("boot")),
+                                       "sizeGb": str(d.get("diskSizeGb") or ""), "type": d.get("diskType") or "pd-balanced",
+                                       "status": "READY", "autoDelete": bool(d.get("autoDelete")),
+                                       "mode": d.get("mode") or "READ_WRITE",
+                                       "sourceImage": _T.short(d.get("sourceImage") or "") or "None",
+                                       "deviceName": d.get("deviceName")} for d in disks]}
+    if op == "AttachDisk":
+        taken = [d.get("deviceName") for d in disks] + [
+            d.get("deviceName") for x in g.r.list("gcp", g.account, "compute") for d in (x.get("disks") or [])]
+        spec = _T.disk_spec(body, name, taken)
+        disks.append({"deviceName": spec["name"], "source": spec["name"], "boot": False, "autoDelete": spec["autoDelete"],
+                      "mode": "READ_WRITE", "type": "PERSISTENT", "diskSizeGb": str(spec["sizeGb"]), "diskType": spec["type"]})
+        g.update({"disks": disks})
+        return {"ok": True, "name": spec["name"]}
+    if op == "DetachDisk":
+        dn = str(body.get("name") or "")
+        d = next((x for x in disks if x.get("deviceName") == dn), None)
+        if d is None:
+            raise _T.TabError(404, "NOT_FOUND", "Disk '%s' is not attached to this instance." % dn)
+        if d.get("boot"):
+            raise _T.TabError(400, "INVALID_ARGUMENT", "The boot disk cannot be detached from a VM instance.")
+        g.update({"disks": [x for x in disks if x is not d]})
+        return {"ok": True, "name": dn}
+    names = [d.get("deviceName") for d in disks]
+    if op == "ListSnapshots":
+        snaps = _T.list_children(root, "compute", "_project", "snapshots")
+        return {"ok": True, "items": [x for x in snaps if x.get("sourceDisk") in names]}
+    if op == "CreateSnapshot":
+        existing = [x.get("name") for x in _T.list_children(root, "compute", "_project", "snapshots")]
+        spec = _T.snapshot_spec(body, names, existing)
+        d = next(x for x in disks if x.get("deviceName") == spec["sourceDisk"])
+        _T.put_child(root, "compute", "_project", "snapshots",
+                     {**spec, "status": "READY", "sizeGb": str(d.get("diskSizeGb") or ""), "storageLocations": "us",
+                      "created": _T.now_iso()})
+        return {"ok": True, "name": spec["name"]}
+    if op == "DeleteSnapshot":
+        sn = str(body.get("name") or "")
+        x = _T.children(root, "compute", "_project", "snapshots").get(sn)
+        if not x or x.get("sourceDisk") not in names:
+            raise _T.TabError(404, "NOT_FOUND", "The resource 'snapshots/%s' was not found" % sn)
+        _T.delete_child(root, "compute", "_project", "snapshots", sn)
+        return {"ok": True, "name": sn}
+    return None
+
+
+def _project_policy(op, project, body):
+    res = "projects/%s" % (project or PROJ)
+    st, pol = _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})
+    if op == "GetProjectPolicy":
+        return {"ok": True, "project": project, "bindings": pol.get("bindings", []), "etag": pol.get("etag", "")}
+    fn = _T.policy_grant if op == "GrantAccess" else _T.policy_revoke
+    new = fn(pol, body.get("role"), body.get("member"))
+    st, out = _call("iam", "POST", "/v1/%s:setIamPolicy" % res, {}, {"policy": new})
+    return {"ok": st < 300, "project": project, "bindings": out.get("bindings", [])}
+
+
+_TAB_HANDLERS = {"compute": _compute_tab}
+
+
+def tab_dispatch(svc, operation, name, body, resources=None, account="default"):
+    """Serve one resource-detail tab op, or None when `operation` isn't a tab op."""
+    body = body or {}
+    try:
+        if svc == "iam" and operation in ("GetProjectPolicy", "GrantAccess", "RevokeAccess"):
+            return _project_policy(operation, name, body)
+        h = _TAB_HANDLERS.get(svc)
+        if h is None or operation in _CRUD:
+            return None
+        if svc in _GENERIC_TAB_SERVICES:
+            out = h(_Generic(resources, account, svc, name), operation, body)
+            return out if out is not None else {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": svc}
+        return h(name, operation, body)
+    except _T.TabError as e:
+        return _tab_err(e)
+
+
+def is_tab_op(svc, operation):
+    return svc in _GENERIC_TAB_SERVICES and operation not in _CRUD and svc in _TAB_HANDLERS
