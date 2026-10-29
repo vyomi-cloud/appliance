@@ -2161,6 +2161,107 @@ GT.psencryption = async function(host, svc, item){
   }
   await paint();
 };
+
+// ---- VPC network --------------------------------------------------------------
+const GCP_REGIONS = ["us-central1", "us-east1", "us-east4", "us-west1", "us-west2", "europe-west1", "europe-west2", "europe-west3",
+  "europe-west4", "europe-west6", "europe-north1", "asia-east1", "asia-east2", "asia-northeast1", "asia-northeast2", "asia-south1",
+  "asia-southeast1", "australia-southeast1", "southamerica-east1", "northamerica-northeast1"];
+GT.vpcsubnets = async function(host, svc, item){
+  const name = tabName(svc, item);
+  await childList(host, {
+    load: () => subGet(svc, "listSubnets", name), noun: "subnet", nouns: "subnets", emptyIcon: "view_module",
+    empty: name + " is a custom-mode network with no subnets yet — add one per region you deploy to.",
+    columns: [["name", "Name"], ["region", "Region"], ["ipCidrRange", "Internal IP ranges"], ["gatewayAddress", "Gateway"],
+              ["secondaryIpRanges", "Secondary ranges", s => (s.secondaryIpRanges || []).map(r => r.rangeName + " " + r.ipCidrRange).join(", ") || "No secondary ranges"],
+              ["privateIpGoogleAccess", "Private Google Access", s => s.privateIpGoogleAccess ? "On" : "Off"],
+              ["mode", "Created by", s => s.autoCreated ? "Auto mode" : "Custom"]],
+    create: {label: "Add subnet", submit: "Add", done: "Subnet added",
+      fields: [{name: "name", label: "Name", placeholder: name + "-subnet"}, {name: "region", label: "Region", type: "select", value: REGION, options: GCP_REGIONS},
+               {name: "ipCidrRange", label: "IPv4 range", placeholder: "10.10.0.0/24"},
+               {name: "privateIpGoogleAccess", label: "Private Google Access", type: "checkbox"}],
+      run: v => subPost(svc, "createSubnet", name, {name: v.name.trim(), region: v.region, ipCidrRange: v.ipCidrRange.trim(), privateIpGoogleAccess: v.privateIpGoogleAccess})},
+    rowActions: [{label: "Toggle Private Google Access", icon: "toggle_on", run: s => subPost(svc, "setPrivateGoogleAccess", name, {name: s.name, region: s.region, enabled: !s.privateIpGoogleAccess})},
+                 {label: "Delete", icon: "delete", danger: true, when: s => !s.autoCreated, confirm: s => "Delete subnet " + s.name + " (" + s.region + ")?",
+                  run: s => subPost(svc, "deleteSubnet", name, {name: s.name, region: s.region})}],
+  });
+};
+function fwRules(f){
+  const r = (f.allowed && f.allowed.length ? f.allowed : f.denied) || [];
+  return r.map(x => x.IPProtocol + (x.ports && x.ports.length ? ":" + x.ports.join(",") : "")).join("; ") || "all";
+}
+GT.vpcfirewalls = async function(host, svc, item){
+  const name = tabName(svc, item);
+  await childList(host, {
+    load: () => subGet(svc, "listFirewalls", name), noun: "firewall rule", nouns: "firewall rules", emptyIcon: "shield",
+    empty: "No firewall rules on " + name + " — the implied rules apply: allow all egress, deny all ingress.",
+    columns: [["name", "Name"], ["direction", "Type", f => f.direction === "EGRESS" ? "Egress" : "Ingress"],
+              ["targets", "Targets", f => (f.targetTags || []).length ? "Tags: " + f.targetTags.join(", ") : "Apply to all"],
+              ["filters", "Filters", f => "IP ranges: " + ((f.direction === "EGRESS" ? f.destinationRanges : f.sourceRanges) || []).join(", ")],
+              ["rules", "Protocols / ports", fwRules], ["action", "Action", f => (f.denied || []).length ? "Deny" : "Allow"],
+              ["priority", "Priority"], ["disabled", "Enforcement", f => f.disabled ? "Disabled" : "Enabled"]],
+    create: {label: "Create firewall rule", submit: "Create", done: "Firewall rule created",
+      fields: [{name: "name", label: "Name", placeholder: name + "-allow-http"},
+               {name: "direction", label: "Direction", type: "select", value: "INGRESS", options: ["INGRESS", "EGRESS"]},
+               {name: "action", label: "Action on match", type: "select", value: "allow", options: ["allow", "deny"]},
+               {name: "rules", label: "Protocols and ports", placeholder: "tcp:80,443;icmp", width: 200},
+               {name: "ranges", label: "Source / destination IPv4 ranges", value: "0.0.0.0/0", width: 200},
+               {name: "targetTags", label: "Target tags (optional)", placeholder: "web", width: 140},
+               {name: "priority", label: "Priority", type: "number", value: 1000, width: 90}],
+      run: v => subPost(svc, "createFirewall", name, {...v, name: v.name.trim(), priority: Number(v.priority)})},
+    rowActions: [{label: "Disable", icon: "block", when: f => !f.disabled, run: f => subPost(svc, "setFirewallDisabled", name, {name: f.name, disabled: true})},
+                 {label: "Enable", icon: "check_circle", when: f => f.disabled, run: f => subPost(svc, "setFirewallDisabled", name, {name: f.name, disabled: false})},
+                 {label: "Delete", icon: "delete", danger: true, confirm: f => "Delete firewall rule " + f.name + "?", run: f => subPost(svc, "deleteFirewall", name, {name: f.name})}],
+  });
+};
+GT.vpcroutes = async function(host, svc, item){
+  const name = tabName(svc, item);
+  await childList(host, {
+    load: () => subGet(svc, "listRoutes", name), noun: "route", nouns: "routes", emptyIcon: "route",
+    empty: "No routes on " + name + ".",
+    columns: [["name", "Name"], ["type", "Route type"], ["destRange", "Destination IP range"], ["priority", "Priority"],
+              ["nextHop", "Next hop"], ["region", "Region", r => r.region || "Global"]],
+    create: {label: "Create route", submit: "Create", done: "Route created",
+      fields: [{name: "name", label: "Name", placeholder: name + "-route"}, {name: "destRange", label: "Destination IPv4 range", placeholder: "192.0.2.0/24"},
+               {name: "nextHopType", label: "Next hop", type: "select", value: "gateway",
+                options: [{value: "gateway", label: "Default internet gateway"}, {value: "ip", label: "IP address"}, {value: "instance", label: "Instance"}]},
+               {name: "nextHop", label: "Next hop IP / instance", placeholder: "10.128.0.5", width: 140},
+               {name: "priority", label: "Priority", type: "number", value: 1000, width: 90}],
+      run: v => subPost(svc, "createRoute", name, {...v, name: v.name.trim(), priority: Number(v.priority)})},
+    rowActions: [{label: "Delete", icon: "delete", danger: true, when: r => r.type !== "Subnet route" && r.type !== "Peering subnet route",
+      confirm: r => "Delete route " + r.name + "?", run: r => subPost(svc, "deleteRoute", name, {name: r.name})}],
+  });
+};
+GT.vpcpeerings = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let nets = [];
+  try { const r = await api("GET", fillCommon(svc.collection_path)); nets = ((r.json || {}).items || []).map(n => lastSeg(n.name)).filter(n => n !== name); } catch(_) {}
+  await childList(host, {
+    load: () => subGet(svc, "listPeerings", name), noun: "peering connection", nouns: "peering connections", emptyIcon: "compare_arrows",
+    empty: name + " has no VPC network peering connections.",
+    columns: [["name", "Name"], ["network", "Peered VPC network", p => lastSeg(p.network)], ["state", "Status", p => stateBadge(p.state)],
+              ["stateDetails", "Details"], ["exchange", "Exchange custom routes", p => (p.importCustomRoutes ? "Import" : "") + (p.importCustomRoutes && p.exportCustomRoutes ? " · " : "") + (p.exportCustomRoutes ? "Export" : "") || "Subnet routes only"]],
+    create: {label: "Create peering connection", submit: "Create", done: "Peering created",
+      fields: [{name: "name", label: "Name", placeholder: name + "-peer"},
+               {name: "peerNetwork", label: "Peered VPC network", type: "select", value: nets[0], options: nets},
+               {name: "importCustomRoutes", label: "Import custom routes", type: "checkbox"}, {name: "exportCustomRoutes", label: "Export custom routes", type: "checkbox"}],
+      run: v => subPost(svc, "addPeering", name, {...v, name: v.name.trim()})},
+    rowActions: [{label: "Delete", icon: "delete", danger: true, confirm: p => "Delete peering " + p.name + "?", run: p => subPost(svc, "removePeering", name, {name: p.name})}],
+  });
+  if (!nets.length) host.append(el("div",{style:"font-size:12px;color:var(--sub);margin-top:8px"}, "Peering needs another VPC network in project " + PROJECT + "."));
+};
+GT.vpcflowlogs = async function(host, svc, item){
+  const name = tabName(svc, item);
+  await childList(host, {
+    load: () => subGet(svc, "listFlowLogs", name), noun: "subnet", nouns: "subnets", emptyIcon: "subject",
+    empty: name + " has no subnets to log flows for.",
+    columns: [["name", "Subnet"], ["region", "Region"], ["ipCidrRange", "Range"], ["enable", "Flow logs", s => s.enable ? "On" : "Off"],
+              ["aggregationInterval", "Aggregation interval", s => s.enable ? s.aggregationInterval : "Not logging"],
+              ["flowSampling", "Sample rate", s => s.enable ? Math.round(s.flowSampling * 100) + "%" : "Not logging"]],
+    rowActions: [{label: "Turn on", icon: "toggle_on", when: s => !s.enable,
+                  run: s => subPost(svc, "setFlowLogs", name, {name: s.name, region: s.region, enable: true, aggregationInterval: "INTERVAL_5_SEC", flowSampling: 0.5, metadata: "INCLUDE_ALL_METADATA"})},
+                 {label: "Turn off", icon: "toggle_off", when: s => s.enable, run: s => subPost(svc, "setFlowLogs", name, {name: s.name, region: s.region, enable: false})}],
+  });
+};
 // ========== END DETAIL TABS =================================================
 
 // ========== CREATE — collapsible-sections form + right summary card =========

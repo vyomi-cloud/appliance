@@ -469,3 +469,79 @@ def test_pubsub_encryption_and_labels(c, topic):
     st, _ = c.sub("pubsub", "setLabels", topic, {"labels": {"team": "events"}})
     st, out = c.sub("pubsub", "getLabels", topic)
     assert out["item"]["labels"] == {"team": "events"}
+
+
+# ── VPC network ───────────────────────────────────────────────────────────────
+@pytest.fixture(scope="module")
+def nets(c):
+    auto, custom = uid("tabauto"), uid("tabcust")
+    assert c.create("vpc", {"name": auto, "autoCreateSubnetworks": True})[0] == 200
+    assert c.create("vpc", {"name": custom, "autoCreateSubnetworks": False})[0] == 200
+    yield auto, custom
+    for n in (auto, custom):
+        c.delete("vpc", n)
+
+
+def test_vpc_subnets_tab(c, nets):
+    auto, custom = nets
+    st, out = c.sub("vpc", "listSubnets", auto)
+    regions = {s["region"]: s["ipCidrRange"] for s in out["items"]}
+    assert regions["us-central1"] == "10.128.0.0/20" and len(regions) >= 15      # auto mode: one /20 per region
+    st, out = c.sub("vpc", "listSubnets", custom)
+    assert out["items"] == []
+    st, _ = c.sub("vpc", "createSubnet", custom, {"name": "app", "region": "us-east1", "ipCidrRange": "10.20.0.0/24"})
+    assert st == 200
+    st, bad = c.sub("vpc", "createSubnet", custom, {"name": "app2", "region": "us-east1", "ipCidrRange": "10.20.0.128/25"})
+    assert st == 400 and "conflicts" in bad["message"]
+    st, out = c.sub("vpc", "listSubnets", custom)
+    s = out["items"][0]
+    assert (s["name"], s["region"], s["ipCidrRange"], s["gatewayAddress"]) == ("app", "us-east1", "10.20.0.0/24", "10.20.0.1")
+    st, _ = c.sub("vpc", "setPrivateGoogleAccess", custom, {"name": "app", "region": "us-east1", "enabled": True})
+    st, out = c.sub("vpc", "listSubnets", custom)
+    assert out["items"][0]["privateIpGoogleAccess"] is True
+    st, bad = c.sub("vpc", "deleteSubnet", auto, {"name": auto, "region": "us-central1"})
+    assert st == 400                                                               # auto-created subnets stay
+
+
+def test_vpc_firewalls_routes_flowlogs(c, nets):
+    auto, custom = nets
+    st, _ = c.sub("vpc", "createFirewall", custom, {"name": "allow-web", "direction": "INGRESS", "action": "allow",
+                                                    "rules": "tcp:80,443", "ranges": "0.0.0.0/0", "targetTags": "web", "priority": 900})
+    assert st == 200
+    st, bad = c.sub("vpc", "createFirewall", custom, {"name": "bad", "rules": "icmp:22"})
+    assert st == 400
+    st, out = c.sub("vpc", "listFirewalls", custom)
+    fw = next(f for f in out["items"] if f["name"] == "allow-web")
+    assert fw["allowed"] == [{"IPProtocol": "tcp", "ports": ["80", "443"]}] and fw["targetTags"] == ["web"] and fw["priority"] == 900
+    st, _ = c.sub("vpc", "setFirewallDisabled", custom, {"name": "allow-web", "disabled": True})
+    st, out = c.sub("vpc", "listFirewalls", custom)
+    assert next(f for f in out["items"] if f["name"] == "allow-web")["disabled"] is True
+    st, _ = c.sub("vpc", "deleteFirewall", custom, {"name": "allow-web"})
+    st, out = c.sub("vpc", "createRoute", custom, {"name": "to-vpn", "destRange": "192.0.2.0/24", "nextHopType": "ip", "nextHop": "10.20.0.5"})
+    assert st == 200
+    st, out = c.sub("vpc", "listRoutes", custom)
+    types = {r["name"]: r["type"] for r in out["items"]}
+    assert types["to-vpn"] == "Static route" and "Subnet route" in types.values() and "Default route" in types.values()
+    st, bad = c.sub("vpc", "deleteRoute", custom, {"name": next(n for n, t in types.items() if t == "Subnet route")})
+    assert st == 400
+    st, _ = c.sub("vpc", "setFlowLogs", custom, {"name": "app", "region": "us-east1", "enable": True, "aggregationInterval": "INTERVAL_30_SEC", "flowSampling": 0.25})
+    assert st == 200
+    st, out = c.sub("vpc", "listFlowLogs", custom)
+    fl = out["items"][0]
+    assert fl["enable"] and fl["aggregationInterval"] == "INTERVAL_30_SEC" and fl["flowSampling"] == 0.25
+
+
+def test_vpc_peering_goes_active_when_both_sides_connect(c, nets):
+    auto, custom = nets
+    st, bad = c.sub("vpc", "addPeering", auto, {"name": "self", "peerNetwork": auto})
+    assert st == 400
+    st, out = c.sub("vpc", "addPeering", custom, {"name": "to-auto", "peerNetwork": auto})
+    assert st == 200 and out["state"] == "INACTIVE"
+    st, out = c.sub("vpc", "addPeering", auto, {"name": "to-custom", "peerNetwork": custom})
+    assert st == 200 and out["state"] == "ACTIVE"
+    st, out = c.sub("vpc", "listPeerings", custom)
+    assert out["items"][0]["state"] == "ACTIVE"
+    st, _ = c.sub("vpc", "removePeering", auto, {"name": "to-custom"})
+    st, out = c.sub("vpc", "listPeerings", custom)
+    assert out["items"][0]["state"] == "INACTIVE"
+    c.sub("vpc", "removePeering", custom, {"name": "to-auto"})

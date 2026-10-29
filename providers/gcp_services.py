@@ -1701,8 +1701,18 @@ async def api_gcp_vpc_create_network(project: str, request: Request):
     name = str(payload.get("name") or payload.get("network") or "").strip()
     if not name:
         raise HTTPException(400, detail="Network name is required")
-    rec = {"id": s._gcp_compute_numeric_id(f"{project}:{name}"), "name": name, "project": project, "description": str(payload.get("description") or ""), "IPv4Range": str(payload.get("IPv4Range") or ""), "gatewayIPv4": str(payload.get("gatewayIPv4") or ""), "mtu": int(payload.get("mtu") or 1460), "autoCreateSubnetworks": bool(payload.get("autoCreateSubnetworks", True)), "routingMode": str(payload.get("routingMode") or "REGIONAL"), "subnetworks": payload.get("subnetworks", []) if isinstance(payload.get("subnetworks"), list) else [], "peerings": payload.get("peerings", []) if isinstance(payload.get("peerings"), list) else [], "createTime": _now()}
+    routing = str(payload.get("routingMode") or (payload.get("routingConfig") or {}).get("routingMode") or "REGIONAL").upper()
+    rec = {"id": s._gcp_compute_numeric_id(f"{project}:{name}"), "name": name, "project": project, "description": str(payload.get("description") or ""), "IPv4Range": str(payload.get("IPv4Range") or ""), "gatewayIPv4": str(payload.get("gatewayIPv4") or ""), "mtu": int(payload.get("mtu") or 1460), "autoCreateSubnetworks": bool(payload.get("autoCreateSubnetworks", True)), "routingMode": routing, "subnetworks": payload.get("subnetworks", []) if isinstance(payload.get("subnetworks"), list) else [], "peerings": payload.get("peerings", []) if isinstance(payload.get("peerings"), list) else [], "createTime": _now()}
     gcp_vpc_state.setdefault("networks", {})[name] = rec
+    # Like networks.insert: an auto-mode network gets one subnet per region, and every
+    # network gets its default route to the internet gateway.
+    from core import gcp_console_tabs as _tabs
+    if rec["autoCreateSubnetworks"]:
+        for sn in _tabs.auto_subnets(name):
+            gcp_vpc_state.setdefault("subnetworks", {})["%s/%s" % (sn["region"], sn["name"])] = {
+                **sn, "id": s._gcp_compute_numeric_id(f"{project}:{sn['region']}:{name}"), "project": project, "createTime": _now()}
+    dr = _tabs.default_route(name)
+    gcp_vpc_state.setdefault("routes", {})[dr["name"]] = {**dr, "id": s._gcp_compute_numeric_id(f"{project}:{dr['name']}"), "project": project, "createTime": _now()}
     return {"kind": "compute#network", "id": rec["id"], "creationTimestamp": rec["createTime"], "name": name, "description": rec["description"], "IPv4Range": rec["IPv4Range"], "gatewayIPv4": rec["gatewayIPv4"], "mtu": rec["mtu"], "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{name}", "selfLinkWithId": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{name}?id={rec['id']}", "autoCreateSubnetworks": rec["autoCreateSubnetworks"], "subnetworks": rec["subnetworks"], "peerings": rec["peerings"], "routingConfig": {"routingMode": rec["routingMode"]}}
 
 
@@ -1722,6 +1732,12 @@ def api_gcp_vpc_delete_network(project: str, network: str):
     if not rec or str(rec.get("project") or project) != project:
         raise HTTPException(404, detail="Network not found")
     del gcp_vpc_state["networks"][network]
+    # the network's auto-mode subnets and its default internet route go with it
+    from core import gcp_console_tabs as _tabs
+    for k, sn in list(gcp_vpc_state.get("subnetworks", {}).items()):
+        if sn.get("network") == network and sn.get("autoCreated"):
+            gcp_vpc_state["subnetworks"].pop(k, None)
+    gcp_vpc_state.get("routes", {}).pop(_tabs.default_route(network)["name"], None)
     return {"done": True}
 
 

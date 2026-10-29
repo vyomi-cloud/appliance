@@ -192,18 +192,19 @@ _APIGW_SUB = [
 # ============================================================================
 # VPC Network — Network detail
 # ============================================================================
+# (VPC networks carry no labels in the Compute API, so there is no Labels tab.)
 _VPC_SUB = [
-    *_UNIVERSAL_TOP,
+    *[t for t in _UNIVERSAL_TOP if t["key"] != "tags"],
     {"group": "Network", "items": [
-        {"key": "subnetsList", "label": "Subnets",          "icon": "view_module","type": "stub"},
-        {"key": "firewalls",   "label": "Firewall rules",   "icon": "shield",     "type": "stub"},
-        {"key": "routes",      "label": "Routes",           "icon": "route",      "type": "stub"},
-        {"key": "peerings",    "label": "VPC peering",      "icon": "compare_arrows","type": "stub"},
+        {"key": "subnetsList", "label": "Subnets",          "icon": "view_module","type": "vpcSubnets"},
+        {"key": "firewalls",   "label": "Firewall rules",   "icon": "shield",     "type": "vpcFirewalls"},
+        {"key": "routes",      "label": "Routes",           "icon": "route",      "type": "vpcRoutes"},
+        {"key": "peerings",    "label": "VPC peering",      "icon": "compare_arrows","type": "vpcPeerings"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",     "label": "Network metrics",  "icon": "show_chart", "type": "metrics"},
-        {"key": "flowLogs",    "label": "Flow logs",        "icon": "subject",    "type": "stub"},
+        {"key": "flowLogs",    "label": "Flow logs",        "icon": "subject",    "type": "vpcFlowLogs"},
     ]},
 ]
 

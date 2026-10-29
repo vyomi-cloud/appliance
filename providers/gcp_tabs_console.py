@@ -514,6 +514,82 @@ def _pubsub(op: str, name: str, body: dict):
 
 
 # ---------------------------------------------------------------------------
+# VPC network — subnets, firewall rules, routes, peering, flow logs over gcp_vpc_state
+# (the same records /compute/v1 networks|subnetworks|firewalls|routes serve; firewall
+# rules are what core/gcp_vpc_enforce applies inside governed instances)
+# ---------------------------------------------------------------------------
+class _OfflineVpc:
+    def __init__(self):
+        self.s = _server()
+        self.st = self.s.gcp_vpc_state
+        self.project = _project()
+
+    def _id(self, seed):
+        return self.s._gcp_compute_numeric_id("%s:%s" % (self.project, seed))
+
+    def network(self, name):
+        rec = self.st.get("networks", {}).get(name)
+        return rec if isinstance(rec, dict) else None
+
+    def update_network(self, name, field, value):
+        self.st["networks"][name][field] = value
+
+    def subnets(self, network):
+        return [dict(v) for v in self.st.get("subnetworks", {}).values()
+                if isinstance(v, dict) and T.short(v.get("network") or "default") == network]
+
+    def _subnet_key(self, region, name):
+        for k, v in self.st.get("subnetworks", {}).items():
+            if isinstance(v, dict) and v.get("name") == name and v.get("region") == region:
+                return k
+        return None
+
+    def put_subnet(self, rec):
+        subs = self.st.setdefault("subnetworks", {})
+        key = self._subnet_key(rec["region"], rec["name"]) or "%s/%s" % (rec["region"], rec["name"])
+        cur = subs.get(key) or {"id": self._id("%s:%s" % (rec["region"], rec["name"])), "project": self.project, "createTime": self.s._now()}
+        subs[key] = {**cur, **rec}
+
+    def delete_subnet(self, region, name):
+        self.st.get("subnetworks", {}).pop(self._subnet_key(region, name), None)
+
+    def firewalls(self, network):
+        return [dict(f) for f in self.st.get("firewalls", {}).values() if isinstance(f, dict) and T.short(f.get("network") or "default") == network]
+
+    def firewall_names(self):
+        return list(self.st.get("firewalls", {}).keys())
+
+    def put_firewall(self, rec):
+        self.st.setdefault("firewalls", {})[rec["name"]] = {**rec, "id": self._id(rec["name"]), "project": self.project, "createTime": self.s._now()}
+
+    def update_firewall(self, name, patch):
+        self.st["firewalls"][name].update(patch)
+
+    def delete_firewall(self, name):
+        self.st.get("firewalls", {}).pop(name, None)
+
+    def routes(self, network):
+        return [dict(r) for r in self.st.get("routes", {}).values() if isinstance(r, dict) and T.short(r.get("network") or "default") == network]
+
+    def route_names(self):
+        return list(self.st.get("routes", {}).keys())
+
+    def put_route(self, rec):
+        self.st.setdefault("routes", {})[rec["name"]] = {**rec, "id": self._id(rec["name"]), "project": self.project, "createTime": self.s._now()}
+
+    def delete_route(self, name):
+        self.st.get("routes", {}).pop(name, None)
+
+
+def _vpc(op: str, name: str, body: dict):
+    be = _OfflineVpc()
+    out = T.vpc_op(be, T.short(name), op, body)
+    if out is not None and not op.startswith("list"):
+        _usage("vpc", op, T.short(name), {k: body.get(k) for k in ("name", "region", "peerNetwork") if body.get(k)})
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Project IAM policy (every resource's Permissions tab)
 # ---------------------------------------------------------------------------
 def _iam_project(op: str, project: str, body: dict):
@@ -537,6 +613,7 @@ _HANDLERS = {
     "storage": _storage,
     "cloudsql": _cloudsql,
     "pubsub": _pubsub,
+    "vpc": _vpc,
 }
 
 

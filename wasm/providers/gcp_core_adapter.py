@@ -1049,6 +1049,70 @@ def _pubsub_tab(name, op, body):
     return None
 
 
+class _NanoVpc:
+    """VPC storage for core/gcp_console_tabs.vpc_op: networks are ResourceStore records;
+    subnets / firewall rules / routes are durable child collections (nano_sub)."""
+
+    def __init__(self, g):
+        self.g, self.root = g, _tab_root()
+
+    def network(self, name):
+        rec = self.g.r.get("gcp", self.g.account, "vpc", name) if self.g.r is not None else None
+        if rec is not None and "autoCreateSubnetworks" not in rec:
+            rec["autoCreateSubnetworks"] = True
+        return rec
+
+    def update_network(self, name, field, value):
+        self.g.r.update("gcp", self.g.account, "vpc", name, {field: value})
+
+    def subnets(self, network):
+        return [dict(x) for x in _T.children(self.root, "vpc", network, "subnets").values()]
+
+    def put_subnet(self, rec):
+        coll = _T.children(self.root, "vpc", rec["network"], "subnets", create=True)
+        key = "%s/%s" % (rec["region"], rec["name"])
+        coll[key] = {**(coll.get(key) or {"creationTimestamp": _T.now_iso()}), **rec}
+
+    def delete_subnet(self, region, name):
+        for key in [k for k in self.root if k.startswith("vpc/") and k.endswith("/subnets")]:
+            self.root[key].pop("%s/%s" % (region, name), None)
+
+    def _proj(self, kind):
+        return _T.children(self.root, "vpc", "_project", kind, create=True)
+
+    def firewalls(self, network):
+        return [dict(f) for f in self._proj("firewalls").values() if f.get("network") == network]
+
+    def firewall_names(self):
+        return list(self._proj("firewalls"))
+
+    def put_firewall(self, rec):
+        self._proj("firewalls")[rec["name"]] = {**rec, "creationTimestamp": _T.now_iso()}
+
+    def update_firewall(self, name, patch):
+        self._proj("firewalls")[name].update(patch)
+
+    def delete_firewall(self, name):
+        self._proj("firewalls").pop(name, None)
+
+    def routes(self, network):
+        return [dict(r) for r in self._proj("routes").values() if r.get("network") == network]
+
+    def route_names(self):
+        return list(self._proj("routes"))
+
+    def put_route(self, rec):
+        self._proj("routes")[rec["name"]] = {**rec, "creationTimestamp": _T.now_iso()}
+
+    def delete_route(self, name):
+        self._proj("routes").pop(name, None)
+
+
+def _vpc_tab(g, op, body):
+    g.get()   # 404 when the network doesn't exist
+    return _T.vpc_op(_NanoVpc(g), g.name, op, body)
+
+
 def _project_policy(op, project, body):
     res = "projects/%s" % (project or PROJ)
     st, pol = _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})
@@ -1060,7 +1124,8 @@ def _project_policy(op, project, body):
     return {"ok": st < 300, "project": project, "bindings": out.get("bindings", [])}
 
 
-_TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _sql_tab, "pubsub": _pubsub_tab}
+_TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _sql_tab, "pubsub": _pubsub_tab,
+                 "vpc": _vpc_tab}
 
 
 def tab_dispatch(svc, operation, name, body, resources=None, account="default"):

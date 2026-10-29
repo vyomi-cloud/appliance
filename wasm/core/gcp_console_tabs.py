@@ -478,6 +478,322 @@ AUTO_SUBNETS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# VPC networks — subnets, firewall rules, routes, peering, flow logs
+# ---------------------------------------------------------------------------
+def _net(cidr: str, what: str):
+    import ipaddress
+    try:
+        return ipaddress.ip_network(str(cidr).strip(), strict=True)
+    except ValueError as e:
+        raise TabError(400, "INVALID_ARGUMENT", "Invalid value for field '%s': '%s'. %s" % (what, cidr, e))
+
+
+def auto_subnets(network: str) -> list:
+    """networks.insert(autoCreateSubnetworks=true): one /20 per region, named like the network."""
+    out = []
+    for region, cidr in AUTO_SUBNETS:
+        base = cidr.split("/")[0].rsplit(".", 1)[0]
+        out.append({"name": network, "network": network, "region": region, "ipCidrRange": cidr,
+                    "gatewayAddress": base + ".1", "privateIpGoogleAccess": False, "secondaryIpRanges": [],
+                    "stackType": "IPV4_ONLY", "purpose": "PRIVATE", "state": "READY", "autoCreated": True,
+                    "logConfig": {"enable": False}})
+    return out
+
+
+def default_route(network: str) -> dict:
+    h = hashlib.sha256(network.encode()).hexdigest()[:16]
+    return {"name": "default-route-" + h, "network": network, "destRange": "0.0.0.0/0", "priority": 1000,
+            "nextHopGateway": "default-internet-gateway", "description": "Default route to the Internet."}
+
+
+def validate_subnet(body: dict, network: str, existing: list) -> dict:
+    """subnetworks.insert: name, region and a primary range that doesn't overlap the network's other subnets."""
+    name = validate_name(body.get("name"), "resource.name")
+    region = str(body.get("region") or "").strip()
+    if region not in [r for r, _ in AUTO_SUBNETS]:
+        raise TabError(400, "INVALID_ARGUMENT", "Invalid value for field 'region': '%s'. Unknown region." % region)
+    net = _net(body.get("ipCidrRange") or "", "resource.ipCidrRange")
+    if net.version != 4 or not (8 <= net.prefixlen <= 29):
+        raise TabError(400, "INVALID_ARGUMENT", "Invalid IPCidrRange: %s. Primary ranges are IPv4 /8 to /29." % net)
+    for s in existing:
+        if s.get("region") == region and s.get("name") == name:
+            raise TabError(409, "ALREADY_EXISTS", "The resource 'projects/regions/%s/subnetworks/%s' already exists" % (region, name))
+        if net.overlaps(_net(s.get("ipCidrRange"), "ipCidrRange")):
+            raise TabError(400, "INVALID_ARGUMENT", "Invalid IPCidrRange: %s conflicts with existing subnetwork '%s' in region '%s'."
+                           % (net, s.get("name"), s.get("region")))
+    sec = []
+    for r in body.get("secondaryIpRanges") or []:
+        sn = _net(r.get("ipCidrRange"), "secondaryIpRanges.ipCidrRange")
+        if sn.overlaps(net):
+            raise TabError(400, "INVALID_ARGUMENT", "Secondary range %s overlaps the primary range %s." % (sn, net))
+        sec.append({"rangeName": validate_name(r.get("rangeName"), "secondaryIpRanges.rangeName"), "ipCidrRange": str(sn)})
+    return {"name": name, "network": network, "region": region, "ipCidrRange": str(net),
+            "gatewayAddress": str(next(net.hosts())), "privateIpGoogleAccess": bool(body.get("privateIpGoogleAccess")),
+            "secondaryIpRanges": sec, "stackType": "IPV4_ONLY", "purpose": "PRIVATE", "state": "READY",
+            "logConfig": {"enable": False}, "description": str(body.get("description") or "")}
+
+
+def validate_flow_logs(body: dict) -> dict:
+    enable = bool(body.get("enable"))
+    out = {"enable": enable}
+    if enable:
+        iv = str(body.get("aggregationInterval") or "INTERVAL_5_SEC")
+        if iv not in ("INTERVAL_5_SEC", "INTERVAL_30_SEC", "INTERVAL_1_MIN", "INTERVAL_5_MIN", "INTERVAL_10_MIN", "INTERVAL_15_MIN"):
+            raise TabError(400, "INVALID_ARGUMENT", "Invalid aggregationInterval %s." % iv)
+        try:
+            fs = float(body.get("flowSampling", 0.5))
+        except (TypeError, ValueError):
+            fs = -1
+        if not 0 <= fs <= 1:
+            raise TabError(400, "INVALID_ARGUMENT", "flowSampling must be between 0 and 1.")
+        md = str(body.get("metadata") or "INCLUDE_ALL_METADATA")
+        if md not in ("INCLUDE_ALL_METADATA", "EXCLUDE_ALL_METADATA"):
+            raise TabError(400, "INVALID_ARGUMENT", "Invalid metadata option %s." % md)
+        out.update({"aggregationInterval": iv, "flowSampling": fs, "metadata": md})
+    return out
+
+
+def _rules(spec):
+    """'tcp:22,80;udp:53;icmp' (or a list of {IPProtocol, ports}) → firewall allowed/denied entries."""
+    if isinstance(spec, list):
+        items = [(str(x.get("IPProtocol") or ""), [str(p) for p in (x.get("ports") or [])]) for x in spec if isinstance(x, dict)]
+    else:
+        items = []
+        for part in [p.strip() for p in str(spec or "").split(";") if p.strip()]:
+            proto, _, ports = part.partition(":")
+            items.append((proto.strip().lower(), [p.strip() for p in ports.split(",") if p.strip()]))
+    out = []
+    for proto, ports in items:
+        if proto not in ("tcp", "udp", "icmp", "esp", "ah", "sctp", "ipip", "all"):
+            raise TabError(400, "INVALID_ARGUMENT", "Invalid value for field 'resource.allowed[].IPProtocol': '%s'." % proto)
+        for p in ports:
+            lo, _, hi = p.partition("-")
+            if not (lo.isdigit() and (not hi or hi.isdigit()) and 0 <= int(lo) <= 65535 and int(hi or lo) <= 65535):
+                raise TabError(400, "INVALID_ARGUMENT", "Invalid value for field 'resource.allowed[].ports[]': '%s'." % p)
+            if proto not in ("tcp", "udp", "sctp"):
+                raise TabError(400, "INVALID_ARGUMENT", "Ports can only be specified for tcp, udp or sctp, not %s." % proto)
+        out.append({"IPProtocol": proto, **({"ports": ports} if ports else {})})
+    if not out:
+        raise TabError(400, "INVALID_ARGUMENT", "A firewall rule needs at least one protocol (e.g. tcp:22).")
+    return out
+
+
+def validate_firewall(body: dict, network: str, existing_names: list) -> dict:
+    name = validate_name(body.get("name"), "resource.name")
+    if name in existing_names:
+        raise TabError(409, "ALREADY_EXISTS", "The resource 'projects/global/firewalls/%s' already exists" % name)
+    direction = str(body.get("direction") or "INGRESS").upper()
+    if direction not in ("INGRESS", "EGRESS"):
+        raise TabError(400, "INVALID_ARGUMENT", "direction must be INGRESS or EGRESS.")
+    try:
+        prio = int(body.get("priority", 1000))
+    except (TypeError, ValueError):
+        prio = -1
+    if not 0 <= prio <= 65535:
+        raise TabError(400, "INVALID_ARGUMENT", "Invalid value for field 'resource.priority': must be 0-65535.")
+    action = str(body.get("action") or "allow").lower()
+    rules = _rules(body.get("rules") or body.get("allowed") or body.get("denied"))
+    ranges = body.get("ranges")
+    if isinstance(ranges, str):
+        ranges = [r.strip() for r in ranges.split(",") if r.strip()]
+    ranges = [str(_net(r, "sourceRanges" if direction == "INGRESS" else "destinationRanges")) for r in (ranges or [])] or ["0.0.0.0/0"]
+    tags = body.get("targetTags")
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(",") if t.strip()]
+    rec = {"name": name, "network": network, "direction": direction, "priority": prio,
+           "allowed": rules if action == "allow" else [], "denied": rules if action == "deny" else [],
+           "sourceRanges": ranges if direction == "INGRESS" else [], "destinationRanges": ranges if direction == "EGRESS" else [],
+           "targetTags": [validate_name(t, "targetTags[]") for t in (tags or [])], "disabled": bool(body.get("disabled")),
+           "logConfig": {"enable": bool(body.get("logging"))}, "description": str(body.get("description") or "")}
+    return rec
+
+
+def validate_route(body: dict, network: str, existing_names: list) -> dict:
+    name = validate_name(body.get("name"), "resource.name")
+    if name in existing_names:
+        raise TabError(409, "ALREADY_EXISTS", "The resource 'projects/global/routes/%s' already exists" % name)
+    dest = str(_net(body.get("destRange") or "", "resource.destRange"))
+    try:
+        prio = int(body.get("priority", 1000))
+    except (TypeError, ValueError):
+        prio = -1
+    if not 0 <= prio <= 65535:
+        raise TabError(400, "INVALID_ARGUMENT", "Invalid value for field 'resource.priority': must be 0-65535.")
+    kind = str(body.get("nextHopType") or "gateway")
+    hop = str(body.get("nextHop") or "").strip()
+    rec = {"name": name, "network": network, "destRange": dest, "priority": prio, "description": str(body.get("description") or ""),
+           "tags": [t.strip() for t in str(body.get("tags") or "").split(",") if t.strip()]}
+    if kind == "gateway":
+        rec["nextHopGateway"] = "default-internet-gateway"
+    elif kind == "ip":
+        import ipaddress
+        try:
+            rec["nextHopIp"] = str(ipaddress.ip_address(hop))
+        except ValueError:
+            raise TabError(400, "INVALID_ARGUMENT", "Invalid value for field 'resource.nextHopIp': '%s'." % hop)
+    elif kind == "instance":
+        rec["nextHopInstance"] = validate_name(hop, "resource.nextHopInstance")
+    else:
+        raise TabError(400, "INVALID_ARGUMENT", "Unknown next hop type %s." % kind)
+    return rec
+
+
+def subnet_routes(network: str, subnets: list) -> list:
+    """The system-generated subnet routes every VPC has (one per subnet range)."""
+    out = []
+    for s in subnets:
+        out.append({"name": "default-subnet-route-%s" % hashlib.sha256(("%s/%s/%s" % (network, s.get("region"), s.get("name"))).encode()).hexdigest()[:12],
+                    "network": network, "destRange": s.get("ipCidrRange"), "priority": 0, "nextHop": "Virtual network " + network,
+                    "type": "Subnet route", "region": s.get("region")})
+    return out
+
+
+def validate_peering(body: dict, network: str, peer_exists: bool, my_subnets: list, peer_subnets: list, existing: list) -> dict:
+    name = validate_name(body.get("name"), "networkPeering.name")
+    peer = short(body.get("peerNetwork"))
+    if not peer_exists:
+        raise TabError(404, "NOT_FOUND", "The resource 'projects/global/networks/%s' was not found" % peer)
+    if peer == network:
+        raise TabError(400, "INVALID_ARGUMENT", "A network cannot be peered with itself.")
+    if any(p.get("name") == name for p in existing):
+        raise TabError(409, "ALREADY_EXISTS", "A peering named %s already exists on %s." % (name, network))
+    if any(short(p.get("network")) == peer for p in existing):
+        raise TabError(400, "INVALID_ARGUMENT", "%s is already peered with %s." % (network, peer))
+    for a in my_subnets:
+        for b in peer_subnets:
+            if _net(a["ipCidrRange"], "ipCidrRange").overlaps(_net(b["ipCidrRange"], "ipCidrRange")):
+                raise TabError(400, "INVALID_ARGUMENT",
+                               "Cannot peer %s with %s: subnet %s (%s) overlaps %s (%s)."
+                               % (network, peer, a["name"], a["ipCidrRange"], b["name"], b["ipCidrRange"]))
+    return {"name": name, "network": peer, "exchangeSubnetRoutes": True,
+            "exportCustomRoutes": bool(body.get("exportCustomRoutes")), "importCustomRoutes": bool(body.get("importCustomRoutes")),
+            "stackType": "IPV4_ONLY"}
+
+
+def peering_state(network: str, peering: dict, peer_peerings: list) -> dict:
+    """ACTIVE once the peer network has the matching peering back; INACTIVE until then."""
+    back = any(short(p.get("network")) == network for p in peer_peerings or [])
+    return {**peering, "state": "ACTIVE" if back else "INACTIVE",
+            "stateDetails": "[%s]: Connected." % now_iso() if back else
+            "[%s]: Waiting for peer network to connect." % now_iso()}
+
+
+def vpc_op(be, network: str, op: str, body: dict):
+    """One VPC network's detail-tab op over a storage backend `be` (offline: server.py's
+    gcp_vpc_state; Nano: the ResourceStore record + child collections). `be` provides:
+    network(name)->dict|None, update_network(name, field, value), subnets(network), put_subnet(rec),
+    delete_subnet(region, name), firewalls(network), firewall_names(), put_firewall(rec),
+    update_firewall(name, patch), delete_firewall(name), routes(network), route_names(),
+    put_route(rec), delete_route(name)."""
+    op = op[0].lower() + op[1:]
+    net = be.network(network)
+    if net is None:
+        raise TabError(404, "NOT_FOUND", "The resource 'projects/global/networks/%s' was not found" % network)
+    if not net.get("defaultsCreated"):
+        # networks.insert side effects for a network created before they were modelled:
+        # an auto-mode network's per-region subnets and every network's default route.
+        have = be.subnets(network)
+        if net.get("autoCreateSubnetworks", True) and not any(s.get("autoCreated") for s in have):
+            for s in auto_subnets(network):
+                if not any(x.get("region") == s["region"] and x.get("name") == s["name"] for x in have):
+                    be.put_subnet(s)
+        dr = default_route(network)
+        if dr["name"] not in be.route_names():
+            be.put_route(dr)
+        be.update_network(network, "defaultsCreated", True)
+        net = be.network(network)
+    subs = be.subnets(network)
+    if op == "listSubnets":
+        return {"ok": True, "items": sorted(subs, key=lambda s: (s.get("region") or "", s.get("name") or ""))}
+    if op == "createSubnet":
+        rec = validate_subnet(body, network, subs)
+        be.put_subnet(rec)
+        return {"ok": True, "name": rec["name"], "region": rec["region"]}
+    if op in ("deleteSubnet", "setPrivateGoogleAccess", "setFlowLogs"):
+        s = next((x for x in subs if x.get("name") == body.get("name") and x.get("region") == body.get("region")), None)
+        if s is None:
+            raise TabError(404, "NOT_FOUND", "The resource 'projects/regions/%s/subnetworks/%s' was not found" % (body.get("region"), body.get("name")))
+        if op == "deleteSubnet":
+            if s.get("autoCreated") and net.get("autoCreateSubnetworks", True):
+                raise TabError(400, "INVALID_ARGUMENT", "Subnetwork %s in %s was auto-created by an auto-mode network and cannot be deleted; "
+                               "convert the network to custom mode first." % (s["name"], s["region"]))
+            be.delete_subnet(s["region"], s["name"])
+            return {"ok": True}
+        patch = {"privateIpGoogleAccess": bool(body.get("enabled"))} if op == "setPrivateGoogleAccess" else {"logConfig": validate_flow_logs(body)}
+        be.put_subnet({**s, **patch})
+        return {"ok": True}
+    if op == "listFlowLogs":
+        return {"ok": True, "items": [{"name": s["name"], "region": s["region"], "ipCidrRange": s["ipCidrRange"],
+                                       **{"enable": False, **(s.get("logConfig") or {})}} for s in subs]}
+    if op == "listFirewalls":
+        return {"ok": True, "items": sorted(be.firewalls(network), key=lambda f: (f.get("priority", 1000), f.get("name")))}
+    if op == "createFirewall":
+        rec = validate_firewall(body, network, be.firewall_names())
+        be.put_firewall(rec)
+        return {"ok": True, "name": rec["name"]}
+    if op in ("deleteFirewall", "setFirewallDisabled"):
+        name = str(body.get("name") or "")
+        if name not in [f.get("name") for f in be.firewalls(network)]:
+            raise TabError(404, "NOT_FOUND", "The resource 'projects/global/firewalls/%s' was not found" % name)
+        if op == "deleteFirewall":
+            be.delete_firewall(name)
+        else:
+            be.update_firewall(name, {"disabled": bool(body.get("disabled"))})
+        return {"ok": True, "name": name}
+    if op == "listRoutes":
+        custom = [{**r, "type": "Static route" if not str(r.get("name", "")).startswith("default-route-") else "Default route",
+                   "nextHop": r.get("nextHopGateway") or r.get("nextHopIp") or r.get("nextHopInstance") or r.get("nextHopNetwork") or "default-internet-gateway"}
+                  for r in be.routes(network)]
+        peers = [{"name": "peering-route-%s" % p.get("name"), "network": network, "destRange": s["ipCidrRange"], "priority": 0,
+                  "nextHop": "Peering " + p.get("name"), "type": "Peering subnet route"}
+                 for p in (net.get("peerings") or []) if p.get("state") == "ACTIVE"
+                 for s in be.subnets(short(p.get("network")))]
+        return {"ok": True, "items": subnet_routes(network, subs) + custom + peers}
+    if op == "createRoute":
+        rec = validate_route(body, network, be.route_names())
+        be.put_route(rec)
+        return {"ok": True, "name": rec["name"]}
+    if op == "deleteRoute":
+        name = str(body.get("name") or "")
+        if name.startswith("default-subnet-route-"):
+            raise TabError(400, "INVALID_ARGUMENT", "Subnet routes are managed by the VPC and cannot be deleted.")
+        if name not in [r.get("name") for r in be.routes(network)]:
+            raise TabError(404, "NOT_FOUND", "The resource 'projects/global/routes/%s' was not found" % name)
+        be.delete_route(name)
+        return {"ok": True, "name": name}
+    if op == "listPeerings":
+        out = []
+        for p in net.get("peerings") or []:
+            other = be.network(short(p.get("network"))) or {}
+            out.append(peering_state(network, p, other.get("peerings")))
+        be.update_network(network, "peerings", out)   # keep the stored state current (routes read it)
+        return {"ok": True, "items": out}
+    if op == "addPeering":
+        peer = short(body.get("peerNetwork"))
+        rec = validate_peering(body, network, be.network(peer) is not None, subs, be.subnets(peer) if be.network(peer) else [],
+                               net.get("peerings") or [])
+        other = be.network(peer) or {}
+        rec = peering_state(network, rec, other.get("peerings"))
+        be.update_network(network, "peerings", list(net.get("peerings") or []) + [rec])
+        if rec["state"] == "ACTIVE":   # the peer's side becomes ACTIVE too
+            be.update_network(peer, "peerings", [peering_state(peer, p, [rec]) if short(p.get("network")) == network else p
+                                   for p in other.get("peerings") or []])
+        return {"ok": True, "name": rec["name"], "state": rec["state"]}
+    if op == "removePeering":
+        name = str(body.get("name") or "")
+        p = next((x for x in net.get("peerings") or [] if x.get("name") == name), None)
+        if p is None:
+            raise TabError(404, "NOT_FOUND", "No peering named %s on %s." % (name, network))
+        be.update_network(network, "peerings", [x for x in net.get("peerings") or [] if x.get("name") != name])
+        other = be.network(short(p.get("network")))
+        if other is not None:   # the peer's side drops back to INACTIVE
+            be.update_network(short(p.get("network")), "peerings", [peering_state(short(p.get("network")), x, []) if short(x.get("network")) == network else x
+                                                       for x in other.get("peerings") or []])
+        return {"ok": True, "name": name}
+    return None
+
+
 def auto_subnet_second_octet(region: str) -> int:
     for r, cidr in AUTO_SUBNETS:
         if r == region:
