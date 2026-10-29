@@ -63,6 +63,26 @@ jobs:
       - name: Pick the next service
         id: pick
         run: |
+          # Backend upgrades first (stacks of existing PRs rebuilt onto main, e.g.
+          # Rohith's Service Bus AMQP stack): label backend-upgrade, marker
+          # <!-- upgrade: slug=<slug> prs=<n,n,...> -->. They open a PR for human
+          # review and are never auto-merged by the service gate.
+          uq() { gh issue list -R "$REPO" --state open --limit 50 --label backend-upgrade "$@" \
+                   --json number,labels -q '[.[] | select([.labels[].name] | (index("blocked") or index("in-review")) | not)] | sort_by(.number) | .[0].number // empty'; }
+          U=""; [ -z "${{ inputs.issue }}" ] && { U=$(uq --label in-progress); [ -n "$U" ] || U=$(uq); }
+          if [ -n "$U" ]; then
+            BODY=$(gh issue view "$U" -R "$REPO" --json body -q .body)
+            SLUG=$(printf '%s' "$BODY" | sed -n 's/.*<!-- upgrade: slug=\([a-z0-9-]*\) prs=\([0-9,]*\).*/\1/p' | head -1)
+            PRS=$(printf '%s' "$BODY" | sed -n 's/.*<!-- upgrade: slug=\([a-z0-9-]*\) prs=\([0-9,]*\).*/\2/p' | head -1)
+            if [ -z "$SLUG" ] || [ -z "$PRS" ]; then echo "::error::#$U has no upgrade marker"; exit 1; fi
+            gh issue edit "$U" -R "$REPO" --add-label in-progress >/dev/null
+            echo "issue=$U" >> "$GITHUB_OUTPUT"; echo "mode=upgrade" >> "$GITHUB_OUTPUT"
+            echo "slug=$SLUG" >> "$GITHUB_OUTPUT"; echo "prs=$PRS" >> "$GITHUB_OUTPUT"
+            echo "ISSUE=$U" >> "$GITHUB_ENV"; echo "BRANCH=expansion/upgrade-$SLUG" >> "$GITHUB_ENV"
+            echo "MANIFEST=tests/conformance/expansion/upgrades/$SLUG.json" >> "$GITHUB_ENV"
+            echo "Upgrade #$U ($SLUG from PRs $PRS)"; exit 0
+          fi
+          echo "mode=service" >> "$GITHUB_OUTPUT"
           if [ -n "${{ inputs.issue }}" ]; then
             N="${{ inputs.issue }}"
           else
@@ -143,17 +163,39 @@ jobs:
           github_token: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
           prompt: |
             Follow tests/conformance/expansion/EXPANSION.md exactly.
-            Service: issue #${{ env.ISSUE }} (cloud ${{ steps.pick.outputs.cloud }}, key ${{ steps.pick.outputs.key }}).
-            Branch: ${{ env.BRANCH }} (push only there). Manifest: ${{ env.MANIFEST }}.
+            ${{ steps.pick.outputs.mode == 'upgrade' && format('BACKEND UPGRADE (section "Backend upgrades"): issue #{0}, slug {1}, source PRs {2} in this order. Status file: {3}.', env.ISSUE, steps.pick.outputs.slug, steps.pick.outputs.prs, env.MANIFEST) || format('Service: issue #{0} (cloud {1}, key {2}). Manifest: {3}.', env.ISSUE, steps.pick.outputs.cloud, steps.pick.outputs.key, env.MANIFEST) }}
+            Branch: ${{ env.BRANCH }} (push only there).
             Read the issue with: gh issue view ${{ env.ISSUE }} --comments
           claude_args: >-
             --max-turns 200
             --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
 
       # Ready + static gate green → open the release PR; the full gate runs there.
+      # Upgrade ready → open (or refresh) a PR for human review: label
+      # backend-upgrade, the source PRs' author as reviewer. The service gate
+      # only merges new-service-release PRs, so this is never auto-merged.
+      - name: Upgrade → open the review PR
+        if: steps.pick.outputs.mode == 'upgrade'
+        run: |
+          git fetch -q origin "$BRANCH" && git checkout -q -B "$BRANCH" FETCH_HEAD || { echo "Branch not pushed yet."; exit 0; }
+          if [ ! -f "$MANIFEST" ] || [ "$(python3 -c "import json;print(json.load(open('$MANIFEST')).get('status'))")" != "ready" ]; then
+            echo "Upgrade not ready yet."; exit 0
+          fi
+          gh label create backend-upgrade -R "$REPO" --color 1d76db 2>/dev/null || true
+          TITLE=$(python3 -c "import json;print(json.load(open('$MANIFEST')).get('title') or 'Backend upgrade: ${{ steps.pick.outputs.slug }}')")
+          AUTHOR=$(gh pr view "$(echo "${{ steps.pick.outputs.prs }}" | cut -d, -f1)" -R "$REPO" --json author -q .author.login)
+          PR=$(GH_TOKEN=$BOT gh pr list -R "$REPO" --head "$BRANCH" --state open --json url -q '.[0].url')
+          if [ -z "$PR" ]; then
+            PR=$(GH_TOKEN=$BOT gh pr create -R "$REPO" --base main --head "$BRANCH" --label backend-upgrade --title "$TITLE" \
+              --body "$(python3 -c "import json;print(json.load(open('$MANIFEST')).get('pr_body',''))")$(printf '\n\nRefs #%s. Rebuilt by the expansion agent from PRs %s; their commits and authorship are kept. Needs human review: the service gate does not merge backend upgrades.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)' "$ISSUE" "${{ steps.pick.outputs.prs }}")")
+          fi
+          [ -n "$AUTHOR" ] && GH_TOKEN=$BOT gh pr edit "$PR" -R "$REPO" --add-reviewer "$AUTHOR" >/dev/null 2>&1 || true
+          gh issue edit "$ISSUE" -R "$REPO" --add-label in-review >/dev/null
+          echo "Review PR: $PR"
+
       - name: Static gate → open the release PR
         id: gate
-        if: steps.pick.outputs.issue
+        if: steps.pick.outputs.issue && steps.pick.outputs.mode != 'upgrade'
         run: |
           git fetch -q origin "$BRANCH" && git checkout -q -B "$BRANCH" FETCH_HEAD
           if [ ! -f "$MANIFEST" ]; then echo "state=building" >> "$GITHUB_OUTPUT"; echo "No manifest yet."; exit 0; fi
