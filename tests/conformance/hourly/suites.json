@@ -1517,6 +1517,22 @@
       "timeout": 300
     },
     {
+      "id": "offline-ui-azure-locks",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-locks.mjs",
+      "timeout": 300
+    },
+    {
+      "id": "nano-ui-azure-locks",
+      "target": "nano",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-locks.mjs",
+      "timeout": 300
+    },
+    {
       "id": "offline-sdk-java-aws-kinesis",
       "target": "offline",
       "cloud": "aws",

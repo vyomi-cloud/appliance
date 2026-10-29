@@ -47,6 +47,10 @@ try:                                              # Cognitive Services engine (M
 except ImportError:
     import azure_cognitiveservices_core as cogs_engine   # type: ignore
 
+try:                                              # Azure management locks engine (Microsoft.Authorization/locks)
+    from core import azure_locks_core as locks_engine
+except ImportError:                                # pragma: no cover
+    import azure_locks_core as locks_engine        # type: ignore
 try:                                              # Azure DNS engine (Microsoft.Network/dnsZones)
     from core import azure_dns_core as dns_engine
 except ImportError:
@@ -261,6 +265,9 @@ class AzureArm:
             return _err(400, "BadRequest", "Missing provider namespace/type.")
 
         namespace = after[0]
+        if locks_engine.handles(after):
+            r = locks_engine.dispatch(self.state, method, sub, rg, after, payload, query, base=self._base)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
         chain = after[1:]
         # ARM type path alternates type/name: providers/<ns>/<t1>/<n1>/<t2>/<n2>...
         type_chain = [namespace]

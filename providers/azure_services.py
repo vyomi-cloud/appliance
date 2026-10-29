@@ -767,6 +767,10 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if len(after) < 2:
         return _error(400, "BadRequest", "Missing provider namespace/type.")
     namespace = after[0]
+    from core import azure_locks_core as _locks
+    if _locks.handles(after):
+        r = _locks.dispatch(_state, method, sub, rg, after, await _safe_json(request) if method in ("PUT", "PATCH") else {}, dict(request.query_params))
+        return JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None else Response(status_code=r["status"])
     # after = [ns, type, name?, childType?, childName?, ...]
     chain = after[1:]
     # Split into (type_chain, names): types at even positions, names at odd.

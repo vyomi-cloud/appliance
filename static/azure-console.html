@@ -1435,8 +1435,56 @@ SUB_RENDERERS.properties = function(svc, full, host){
 
 SUB_RENDERERS.locks = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},
-    "Locks prevent accidental delete or modify. None set on simulated resources."));
-  host.append(emptyState("No locks. Click + Add to attach a CanNotDelete or ReadOnly lock (simulated)."));
+    "Locks prevent accidental deletion (Delete) or modification (Read-only) of this resource. Real ARM PUT to " + full.id + "/providers/Microsoft.Authorization/locks/{name}."));
+  const wrap = el("div",{}); host.append(wrap);
+  const base = full.id + "/providers/Microsoft.Authorization/locks";
+  const API = "2020-05-01";
+  function reload(){
+    wrap.innerHTML = "";
+    arm("GET", base, undefined, API).then(r => {
+      const locks = (r.json && r.json.value) || [];
+      if (!r.ok) { wrap.append(emptyState("Could not load locks ("+r.status+").")); return; }
+      if (!locks.length) { wrap.append(emptyState("No locks on this resource. Click + Add to attach a CanNotDelete or ReadOnly lock.")); return; }
+      const t = el("table",{class:"sub-table"});
+      t.append(el("tr",{},["Lock name","Lock type","Notes",""].map(h=>el("th",{},h))));
+      locks.forEach(l => {
+        const p = l.properties || {};
+        t.append(el("tr",{},
+          el("td",{}, l.name), el("td",{}, p.level === "ReadOnly" ? "Read-only" : "Delete"), el("td",{}, p.notes || ""),
+          el("td",{}, el("button",{class:"vm-action danger",title:"Delete lock",onclick:async()=>{
+            if (!confirm("Delete lock "+l.name+"?")) return;
+            const d = await arm("DELETE", base + "/" + encodeURIComponent(l.name), undefined, API);
+            if (d.ok || d.status===204) { toast("Lock deleted"); reload(); } else toast("Delete failed ("+d.status+")","err");
+          }}, icon("delete")))));
+      });
+      wrap.append(t);
+    });
+  }
+  reload();
+  host.append(el("div",{class:"blade-actions"},
+    el("button",{class:"btn",onclick:()=>{
+      const form = el("div",{class:"essentials",style:"margin-top:14px"});
+      form.append(el("div",{class:"h"}, "Add lock"));
+      const grid = el("div",{class:"essentials-grid"});
+      const nameInp = el("input",{class:"sub-select",style:"min-width:260px",value:"lock-" + Math.floor(Math.random()*1e4)});
+      const lvl = el("select",{class:"sub-select"});
+      [["CanNotDelete","Delete"],["ReadOnly","Read-only"]].forEach(([v,l]) => lvl.append(el("option",{value:v},l)));
+      const notes = el("input",{class:"sub-select",style:"min-width:260px",value:""});
+      grid.append(el("div",{class:"k"},"Lock name"), el("div",{class:"v"}, nameInp),
+                  el("div",{class:"k"},"Lock type"), el("div",{class:"v"}, lvl),
+                  el("div",{class:"k"},"Notes"), el("div",{class:"v"}, notes));
+      form.append(grid);
+      form.append(el("div",{class:"blade-actions"},
+        el("button",{class:"btn",onclick:async()=>{
+          const nm = nameInp.value.trim();
+          if (!nm) { toast("Name is required","err"); return; }
+          const r = await arm("PUT", base + "/" + encodeURIComponent(nm), {properties:{level: lvl.value, notes: notes.value}}, API);
+          if (r.ok) { toast("Lock created"); recordNotif("ok","Resource lock created",nm); form.remove(); reload(); }
+          else toast("Create failed ("+r.status+")","err");
+        }},"OK"),
+        el("button",{class:"btn sec",onclick:()=>form.remove()},"Cancel")));
+      host.append(form);
+    }}, icon("add"), "Add")));
 };
 
 SUB_RENDERERS.metrics = function(svc, full, host){
