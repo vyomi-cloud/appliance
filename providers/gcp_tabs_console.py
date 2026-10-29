@@ -590,6 +590,49 @@ def _vpc(op: str, name: str, body: dict):
 
 
 # ---------------------------------------------------------------------------
+# Cloud Functions — source, trigger, variables, testing (real execution), networking, logs
+# ---------------------------------------------------------------------------
+class _OfflineFunction:
+    def __init__(self, name):
+        self.s = _server()
+        fns = self.s.gcp_functions_state.setdefault("functions", {})
+        self.fn = fns.get(T.short(name))
+        if not isinstance(self.fn, dict):
+            raise T.TabError(404, "NOT_FOUND", "Function %s does not exist." % T.short(name))
+
+    def rec(self):
+        return self.fn
+
+    def update(self, patch):
+        self.fn.update(patch)
+        if "runtime" in patch:
+            self.fn.setdefault("buildConfig", {})["runtime"] = patch["runtime"]
+
+    def view(self):
+        return self.s._gcp_functions_view(str(self.fn.get("project") or "cloudlearn"), str(self.fn.get("location") or "us-central1"), self.fn)
+
+    def execute(self, code, entry, runtime, event, env, timeout):
+        from core import gcp_function_runtime
+        try:
+            return gcp_function_runtime.execute(code, entry, runtime, event, timeout=timeout, env=env)
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)[:300], "result": None, "logs": ""}
+
+    def topic_exists(self, topic):
+        from core import gcp_pubsub_emulator as emu
+        if emu.available():
+            return bool(emu.get_topic(_project(), topic))
+        return topic in self.s.gcp_pubsub_state.get("topics", {})
+
+
+def _functions(op: str, name: str, body: dict):
+    out = T.functions_op(_OfflineFunction(name), op, body)
+    if out is not None and not op.startswith(("get", "list")):
+        _usage("functions", op, T.short(name), {k: out.get(k) for k in ("status", "id", "versionId") if out.get(k)})
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Project IAM policy (every resource's Permissions tab)
 # ---------------------------------------------------------------------------
 def _iam_project(op: str, project: str, body: dict):
@@ -614,6 +657,7 @@ _HANDLERS = {
     "cloudsql": _cloudsql,
     "pubsub": _pubsub,
     "vpc": _vpc,
+    "functions": _functions,
 }
 
 

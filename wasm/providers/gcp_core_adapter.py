@@ -1113,6 +1113,42 @@ def _vpc_tab(g, op, body):
     return _T.vpc_op(_NanoVpc(g), g.name, op, body)
 
 
+class _NanoFunction:
+    """Cloud Functions storage for core/gcp_console_tabs.functions_op: the ResourceStore record,
+    described like functions.get; test runs execute in the in-browser Python sandbox."""
+
+    def __init__(self, g):
+        self.g = g
+        rec = g.get()
+        if "serviceConfig" not in rec or "code" not in rec:
+            g.update({k: v for k, v in _T.describe_function(rec, "nano-project", "us-central1").items()
+                      if k not in rec or k in ("serviceConfig", "httpsTrigger")})
+
+    def rec(self):
+        return self.g.get()
+
+    def update(self, patch):
+        self.g.update(patch)
+
+    def view(self):
+        return dict(self.g.get())
+
+    def execute(self, code, entry, runtime, event, env, timeout):
+        if not str(runtime).startswith("python"):
+            return {"status": "ERROR", "result": None, "logs": "",
+                    "error": "Runtime %s can't execute in Nano's in-browser (Pyodide) runtime; Python runtimes run here, "
+                             "every runtime runs on the offline appliance." % runtime}
+        return _T.run_python_function(code, entry, event, env)
+
+    def topic_exists(self, topic):
+        st, _ = _call("pubsub", "GET", "/v1/projects/%s/topics/%s" % (PROJ, topic))
+        return st < 300
+
+
+def _functions_tab(g, op, body):
+    return _T.functions_op(_NanoFunction(g), op, body)
+
+
 def _project_policy(op, project, body):
     res = "projects/%s" % (project or PROJ)
     st, pol = _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})
@@ -1125,7 +1161,7 @@ def _project_policy(op, project, body):
 
 
 _TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _sql_tab, "pubsub": _pubsub_tab,
-                 "vpc": _vpc_tab}
+                 "vpc": _vpc_tab, "functions": _functions_tab}
 
 
 def tab_dispatch(svc, operation, name, body, resources=None, account="default"):

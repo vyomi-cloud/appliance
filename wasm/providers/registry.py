@@ -231,9 +231,10 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
             body = _ec2_launch_defaults(body)
         if provider == "gcp":   # stored described, so created/updated times stay fixed
             body = _gcp_fill(svc, body)
-            if svc == "compute":   # instances.get shape: NICs, boot disk, scheduling, metadata
+            if svc in ("compute", "functions"):   # described like instances.get / functions.get
                 from core import gcp_console_tabs as _gct
-                body = _gct.describe_instance(body, "demo", body.get("zone") or "us-central1-a")
+                body = (_gct.describe_instance(body, "demo", body.get("zone") or "us-central1-a") if svc == "compute"
+                        else _gct.describe_function(body, "nano-project", "us-central1"))
         return {"ok": True, **r.create(provider, account, svc, body)}
     if operation == "Get":
         rec = r.get(provider, account, svc, name)

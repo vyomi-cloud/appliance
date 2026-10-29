@@ -2235,6 +2235,127 @@ GT.vpcflowlogs = async function(host, svc, item){
                  {label: "Turn off", icon: "toggle_off", when: s => s.enable, run: s => subPost(svc, "setFlowLogs", name, {name: s.name, region: s.region, enable: false})}],
   });
 };
+
+// ---- Cloud Functions ----------------------------------------------------------
+const FN_RUNTIMES = ["python313", "python312", "python311", "python310", "nodejs22", "nodejs20", "nodejs18", "go123", "java21", "ruby33", "php83", "dotnet8"];
+GT.fnsource = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const f = await tabView(svc, item, "Source");
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("", [["Runtime", f.runtime], ["Entry point", f.entryPoint], ["Revision", f.versionId || "1"], ["Last deployed", f.updateTime]]));
+    if (!editing) {
+      wrap.append(f.code ? el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto;white-space:pre-wrap"}, f.code)
+                         : emptyOf("code", "No source deployed to " + name + " — it runs the default echo handler.", "Edit the source and deploy to run your own code."));
+      wrap.append(el("button",{class:"btn", style:"margin-top:10px", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit source"));
+      return;
+    }
+    const py = String(f.runtime || "").startsWith("python");
+    const sample = py ? "def " + (f.entryPoint || "handler") + "(event):\n    print('received', event)\n    return {'hello': event.get('name', 'world')}\n"
+                      : "exports." + (f.entryPoint || "handler") + " = (event) => {\n  console.log('received', event);\n  return { hello: event.name || 'world' };\n};\n";
+    wrap.append(inlineForm([{name: "runtime", label: "Runtime", type: "select", value: f.runtime, options: FN_RUNTIMES},
+      {name: "entryPoint", label: "Entry point", value: f.entryPoint},
+      {name: "code", label: py ? "main.py" : "index.js", type: "textarea", rows: 12, value: f.code || sample}], "Save and redeploy", async v => {
+        const r = await subPost(svc, "setSource", name, v);
+        if (r.ok) { toast("Deployed revision " + r.json.versionId); editing = false; paint(); } else toast("Deploy failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paint(); }));
+  }
+  await paint();
+};
+GT.fntrigger = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const f = await tabView(svc, item, "Trigger");
+    const ev = f.eventTrigger;
+    const pub = (f.permissions || []).some(b => b.role === "roles/cloudfunctions.invoker" && (b.members || []).includes("allUsers"));
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("", ev ? [["Trigger type", ev.eventType && ev.eventType.includes("pubsub") ? "Cloud Pub/Sub" : "Cloud Storage"], ["Event type", ev.eventType],
+        ["Source", ev.pubsubTopic || ((ev.eventFilters || [])[0] || {}).value || "Not set"], ["Retry on failure", ev.retryPolicy === "RETRY_POLICY_RETRY" ? "On" : "Off"],
+        ["Trigger region", ev.triggerRegion || REGION]]
+      : [["Trigger type", "HTTPS"], ["URL", (f.httpsTrigger || {}).url || (f.serviceConfig || {}).uri], ["Ingress", (f.serviceConfig || {}).ingressSettings || "ALLOW_ALL"],
+         ["Authentication", pub ? "Allow unauthenticated invocations" : "Require authentication"]]));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0"});
+    bar.append(el("button",{class:"btn", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit trigger"));
+    if (!ev) bar.append(el("button",{class:"btn", onclick: async ()=>{ const r = await subPost(svc, "setPublicAccess", name, {public: !pub}); if (r.ok) { toast(pub ? "Authentication required" : "Unauthenticated invocations allowed"); paint(); } else toast("Failed: " + errMsg(r), "err"); }},
+      icon(pub ? "lock" : "public"), pub ? "Require authentication" : "Allow unauthenticated"));
+    wrap.append(bar);
+    if (!editing) return;
+    let topics = [];
+    try { const r = await api("GET", fillCommon(svcByKey("pubsub").collection_path)); topics = ((r.json || {}).items || (r.json || {}).topics || []).map(t => "projects/" + PROJECT + "/topics/" + lastSeg(t.name)); } catch(_) {}
+    wrap.append(inlineForm([{name: "type", label: "Trigger type", type: "select", value: ev ? (ev.pubsubTopic ? "pubsub" : "storage") : "http",
+        options: [{value: "http", label: "HTTPS"}, {value: "pubsub", label: "Cloud Pub/Sub"}, {value: "storage", label: "Cloud Storage"}]},
+      {name: "topic", label: "Pub/Sub topic", type: "select", value: (ev || {}).pubsubTopic || topics[0], options: topics},
+      {name: "bucket", label: "Bucket (Cloud Storage)", placeholder: "my-bucket"},
+      {name: "retry", label: "Retry on failure", type: "checkbox", value: ev && ev.retryPolicy === "RETRY_POLICY_RETRY"}], "Save", async v => {
+        const r = await subPost(svc, "setTrigger", name, v);
+        if (r.ok) { toast("Trigger updated"); editing = false; paint(); } else toast("Update failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paint(); }));
+  }
+  await paint();
+};
+GT.fnvariables = async function(host, svc, item){
+  const name = tabName(svc, item);
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin-bottom:10px"}, "Runtime environment variables of " + name + " (os.environ / process.env)."));
+  kvEditor(host, {
+    load: async () => Object.entries((await tabView(svc, item, "Variables")).environmentVariables || {}),
+    save: pairs => subPost(svc, "setEnvVars", name, {environmentVariables: Object.fromEntries(pairs)}),
+    keyLabel: "Name", valueLabel: "Value", addLabel: "Add variable", emptyIcon: "settings",
+    emptyText: "No runtime environment variables on " + name + ".",
+  });
+};
+GT.fntesting = async function(host, svc, item){
+  const name = tabName(svc, item);
+  const f = await tabView(svc, item, "Testing");
+  host.append(kvCardOf("", [["Runtime", f.runtime], ["Entry point", f.entryPoint], ["Timeout", ((f.serviceConfig || {}).timeoutSeconds || 60) + " s"]]));
+  const out = el("div",{});
+  host.append(inlineForm([{name: "data", label: "Triggering event (JSON)", type: "textarea", rows: 5, value: '{\n  "name": "Vyomi"\n}'}], "Test the function", async v => {
+    const r = await subPost(svc, "testFunction", name, {data: v.data});
+    out.innerHTML = "";
+    if (!r.ok) { toast("Test failed: " + errMsg(r), "err"); return; }
+    const j = r.json;
+    out.append(kvCardOf("Output", [["Execution ID", j.id], ["Status", j.status === "SUCCESS" ? "Finished with status 'ok'" : "Finished with status 'error'"],
+      ["Result", j.status === "SUCCESS" ? JSON.stringify(j.response) : (j.error || "Execution failed")]]));
+    out.append(el("div",{style:"font-weight:500;margin:6px 0"}, "Logs"));
+    out.append(el("pre",{style:"background:#202124;color:#d4d4d4;padding:12px;border-radius:6px;font-family:monospace;font-size:12px;white-space:pre-wrap"}, j.logs || "No output written by the function."));
+  }));
+  host.append(out);
+};
+GT.fnnetworking = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const f = await tabView(svc, item, "Networking");
+    const sc = f.serviceConfig || {};
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("", [["Ingress settings", {ALLOW_ALL: "Allow all traffic", ALLOW_INTERNAL_ONLY: "Allow internal traffic only", ALLOW_INTERNAL_AND_GCLB: "Allow internal traffic and traffic from Cloud Load Balancing"}[sc.ingressSettings || "ALLOW_ALL"]],
+      ["VPC connector", sc.vpcConnector || f.vpcConnector || "No connector (egress to the internet only)"],
+      ["Egress settings", sc.vpcConnectorEgressSettings === "ALL_TRAFFIC" ? "Route all traffic through the connector" : "Route only requests to private IPs through the connector"],
+      ["Minimum instances", sc.minInstanceCount ?? 0], ["Maximum instances", sc.maxInstanceCount ?? 100]]));
+    if (!editing) { wrap.append(el("button",{class:"btn", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit networking")); return; }
+    wrap.append(inlineForm([{name: "ingressSettings", label: "Ingress", type: "select", value: sc.ingressSettings || "ALLOW_ALL", options: ["ALLOW_ALL", "ALLOW_INTERNAL_ONLY", "ALLOW_INTERNAL_AND_GCLB"]},
+      {name: "vpcConnector", label: "VPC connector", value: sc.vpcConnector || "", placeholder: "projects/" + PROJECT + "/locations/" + REGION + "/connectors/conn-1", width: 300},
+      {name: "vpcConnectorEgressSettings", label: "Egress", type: "select", value: sc.vpcConnectorEgressSettings || "PRIVATE_RANGES_ONLY", options: ["PRIVATE_RANGES_ONLY", "ALL_TRAFFIC"]},
+      {name: "minInstanceCount", label: "Min instances", type: "number", value: sc.minInstanceCount ?? 0, width: 80},
+      {name: "maxInstanceCount", label: "Max instances", type: "number", value: sc.maxInstanceCount ?? 100, width: 80}], "Save", async v => {
+        const r = await subPost(svc, "setNetworking", name, v);
+        if (r.ok) { toast("Networking updated"); editing = false; paint(); } else toast("Update failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paint(); }));
+  }
+  await paint();
+};
+GT.fnlogs = async function(host, svc, item){
+  const name = tabName(svc, item);
+  await childList(host, {
+    load: () => subGet(svc, "listLogs", name), noun: "log entry", nouns: "log entries", emptyIcon: "subject",
+    empty: "No log entries yet — " + name + " writes them when it runs (try the Testing tab).",
+    columns: [["timestamp", "Timestamp"], ["severity", "Severity"], ["executionId", "Execution ID"], ["textPayload", "Message"]],
+  });
+};
 // ========== END DETAIL TABS =================================================
 
 // ========== CREATE — collapsible-sections form + right summary card =========

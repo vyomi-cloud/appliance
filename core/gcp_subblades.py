@@ -156,18 +156,18 @@ _FIRESTORE_SUB = [
 _FUNCTIONS_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Function", "items": [
-        {"key": "sourceCode",  "label": "Source",           "icon": "code",       "type": "stub"},
-        {"key": "trigger",     "label": "Trigger",          "icon": "bolt",       "type": "stub"},
-        {"key": "envVars",     "label": "Variables",        "icon": "settings",   "type": "stub"},
-        {"key": "testing",     "label": "Testing",          "icon": "play_arrow", "type": "stub"},
+        {"key": "sourceCode",  "label": "Source",           "icon": "code",       "type": "fnSource"},
+        {"key": "trigger",     "label": "Trigger",          "icon": "bolt",       "type": "fnTrigger"},
+        {"key": "envVars",     "label": "Variables",        "icon": "settings",   "type": "fnVariables"},
+        {"key": "testing",     "label": "Testing",          "icon": "play_arrow", "type": "fnTesting"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "networking",  "label": "Networking",       "icon": "lan",        "type": "stub"},
+        {"key": "networking",  "label": "Networking",       "icon": "lan",        "type": "fnNetworking"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",     "label": "Metrics",          "icon": "show_chart", "type": "metrics"},
-        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "stub"},
+        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "fnLogs"},
     ]},
 ]
 

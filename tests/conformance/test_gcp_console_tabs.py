@@ -547,3 +547,59 @@ def test_vpc_peering_goes_active_when_both_sides_connect(c, nets):
     st, out = c.sub("vpc", "listPeerings", custom)
     assert out["items"][0]["state"] == "INACTIVE"
     c.sub("vpc", "removePeering", custom, {"name": "to-auto"})
+
+
+# ── Cloud Functions ───────────────────────────────────────────────────────────
+@pytest.fixture(scope="module")
+def fn(c):
+    name = uid("tabfn")
+    st, _ = c.create("functions", {"name": name, "runtime": "python312", "entryPoint": "handler"})
+    assert st == 200
+    yield name
+    c.delete("functions", name)
+
+
+def test_functions_source_deploy_and_test_run(c, fn):
+    code = "import os\ndef handler(event):\n    print('greeting', event.get('name'))\n    return {'hi': event.get('name'), 'env': os.environ.get('STAGE')}\n"
+    st, bad = c.sub("functions", "setSource", fn, {"runtime": "python312", "entryPoint": "main", "code": code})
+    assert st == 400 and "entry point" in bad["message"]
+    st, bad = c.sub("functions", "setSource", fn, {"runtime": "python312", "entryPoint": "handler", "code": "def handler(:"})
+    assert st == 400
+    st, out = c.sub("functions", "setSource", fn, {"runtime": "python312", "entryPoint": "handler", "code": code})
+    assert st == 200
+    st, out = c.sub("functions", "getSource", fn)
+    assert out["item"]["code"] == code and out["item"]["entryPoint"] == "handler"
+    st, _ = c.sub("functions", "setEnvVars", fn, {"environmentVariables": {"STAGE": "dev"}})
+    assert st == 200
+    st, bad = c.sub("functions", "setEnvVars", fn, {"environmentVariables": {"K_SERVICE": "x"}})
+    assert st == 400
+    st, out = c.sub("functions", "testFunction", fn, {"data": json.dumps({"name": "tabs"})})
+    assert st == 200 and out["status"] == "SUCCESS", out
+    assert out["response"] == {"hi": "tabs", "env": "dev"} and "greeting tabs" in out["logs"]
+    st, out = c.sub("functions", "listLogs", fn)
+    assert any("greeting tabs" in e["textPayload"] for e in out["items"])
+
+
+def test_functions_trigger_networking_labels(c, fn):
+    st, bad = c.sub("functions", "setTrigger", fn, {"type": "pubsub", "topic": "projects/x/topics/" + uid("missing")})
+    assert st == 404
+    st, _ = c.sub("functions", "setTrigger", fn, {"type": "storage", "bucket": "uploads", "retry": True})
+    assert st == 200
+    st, out = c.sub("functions", "getTrigger", fn)
+    ev = out["item"]["eventTrigger"]
+    assert ev["eventType"] == "google.cloud.storage.object.v1.finalized" and ev["eventFilters"][0]["value"] == "uploads"
+    st, _ = c.sub("functions", "setTrigger", fn, {"type": "http"})
+    st, _ = c.sub("functions", "setPublicAccess", fn, {"public": True})
+    st, out = c.sub("functions", "getTrigger", fn)
+    assert out["item"]["eventTrigger"] is None
+    assert any("allUsers" in b["members"] for b in out["item"]["permissions"])
+    st, _ = c.sub("functions", "setNetworking", fn, {"ingressSettings": "ALLOW_INTERNAL_ONLY", "minInstanceCount": 1, "maxInstanceCount": 5})
+    assert st == 200
+    st, bad = c.sub("functions", "setNetworking", fn, {"minInstanceCount": 9, "maxInstanceCount": 5})
+    assert st == 400
+    st, out = c.sub("functions", "getNetworking", fn)
+    sc = out["item"]["serviceConfig"]
+    assert sc["ingressSettings"] == "ALLOW_INTERNAL_ONLY" and sc["minInstanceCount"] == 1 and sc["maxInstanceCount"] == 5
+    st, _ = c.sub("functions", "setLabels", fn, {"labels": {"app": "api"}})
+    st, out = c.sub("functions", "getLabels", fn)
+    assert out["item"]["labels"] == {"app": "api"}

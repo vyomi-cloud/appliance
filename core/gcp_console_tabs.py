@@ -127,6 +127,14 @@ VIEWS = {
         "insights": ["name", "databaseVersion", "settings"],
         "logging": ["name", "databaseVersion", "settings"],
     },
+    "functions": {
+        "source": ["name", "runtime", "entryPoint", "code", "buildConfig", "updateTime", "versionId"],
+        "trigger": ["name", "eventTrigger", "httpsTrigger", "serviceConfig", "permissions"],
+        "variables": ["name", "environmentVariables"],
+        "networking": ["name", "serviceConfig", "vpcConnector"],
+        "testing": ["name", "runtime", "entryPoint", "serviceConfig", "state"],
+        "labels": ["name", "labels"],
+    },
     "pubsub": {
         "encryption": ["name", "kmsKeyName"],
         "schema": ["name", "schemaSettings", "schema"],
@@ -790,6 +798,264 @@ def vpc_op(be, network: str, op: str, body: dict):
                                                        for x in other.get("peerings") or []])
         return {"ok": True, "name": name}
     return None
+
+
+# ---------------------------------------------------------------------------
+# Cloud Functions — source, trigger, variables, networking, test runs
+# ---------------------------------------------------------------------------
+FUNCTION_RUNTIMES = ("python313", "python312", "python311", "python310", "python39", "nodejs22", "nodejs20", "nodejs18",
+                     "go123", "go122", "java21", "java17", "ruby33", "php83", "dotnet8")
+_ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_RESERVED_ENV = ("X_GOOGLE_", "FIREBASE_CONFIG", "FUNCTION_TARGET", "FUNCTION_SIGNATURE_TYPE", "K_SERVICE", "K_REVISION",
+                 "K_CONFIGURATION", "PORT")
+
+
+def validate_source(runtime: str, code: str, entry: str) -> dict:
+    runtime = str(runtime or "").strip()
+    if runtime not in FUNCTION_RUNTIMES:
+        raise TabError(400, "INVALID_ARGUMENT", "Invalid runtime '%s'. Supported: %s." % (runtime, ", ".join(FUNCTION_RUNTIMES)))
+    entry = str(entry or "").strip()
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_.]*$", entry):
+        raise TabError(400, "INVALID_ARGUMENT", "Invalid entry point '%s'." % entry)
+    code = str(code or "")
+    if runtime.startswith("python") and code.strip():
+        import ast
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as e:
+            raise TabError(400, "FAILED_PRECONDITION",
+                           "Build failed: main.py line %s: %s" % (e.lineno, e.msg))
+        names = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        if entry not in names:
+            raise TabError(400, "FAILED_PRECONDITION",
+                           "Function failed on loading user code: entry point '%s' is not defined in main.py." % entry)
+    if runtime.startswith("nodejs") and code.strip() and entry not in code:
+        raise TabError(400, "FAILED_PRECONDITION",
+                       "Function failed on loading user code: entry point '%s' is not exported by index.js." % entry)
+    return {"runtime": runtime, "entryPoint": entry, "code": code}
+
+
+def validate_env(env) -> dict:
+    if not isinstance(env, dict):
+        raise TabError(400, "INVALID_ARGUMENT", "environmentVariables must be a map.")
+    out = {}
+    for k, v in env.items():
+        k = str(k)
+        if not _ENV_KEY.match(k):
+            raise TabError(400, "INVALID_ARGUMENT", "Invalid environment variable name '%s'." % k)
+        if k.startswith(_RESERVED_ENV) or k in _RESERVED_ENV:
+            raise TabError(400, "INVALID_ARGUMENT", "Environment variable '%s' is reserved by Cloud Functions." % k)
+        out[k] = str(v)
+    return out
+
+
+def validate_trigger(body: dict, topic_exists) -> dict:
+    kind = str(body.get("type") or "http")
+    if kind == "http":
+        return {"eventTrigger": None}
+    if kind == "pubsub":
+        topic = str(body.get("topic") or "")
+        if not topic_exists(short(topic)):
+            raise TabError(404, "NOT_FOUND", "Topic %s not found." % topic)
+        return {"eventTrigger": {"eventType": "google.cloud.pubsub.topic.v1.messagePublished", "pubsubTopic": topic,
+                                 "retryPolicy": "RETRY_POLICY_RETRY" if body.get("retry") else "RETRY_POLICY_DO_NOT_RETRY",
+                                 "triggerRegion": str(body.get("region") or "us-central1")}}
+    if kind == "storage":
+        bucket = str(body.get("bucket") or "").strip()
+        if not bucket:
+            raise TabError(400, "INVALID_ARGUMENT", "A Cloud Storage trigger needs a bucket.")
+        ev = str(body.get("event") or "google.cloud.storage.object.v1.finalized")
+        return {"eventTrigger": {"eventType": ev, "eventFilters": [{"attribute": "bucket", "value": bucket}],
+                                 "retryPolicy": "RETRY_POLICY_RETRY" if body.get("retry") else "RETRY_POLICY_DO_NOT_RETRY",
+                                 "triggerRegion": str(body.get("region") or "us-central1")}}
+    raise TabError(400, "INVALID_ARGUMENT", "Unknown trigger type %s." % kind)
+
+
+def validate_fn_networking(body: dict) -> dict:
+    ing = str(body.get("ingressSettings") or "ALLOW_ALL")
+    if ing not in ("ALLOW_ALL", "ALLOW_INTERNAL_ONLY", "ALLOW_INTERNAL_AND_GCLB"):
+        raise TabError(400, "INVALID_ARGUMENT", "Invalid ingressSettings %s." % ing)
+    egress = str(body.get("vpcConnectorEgressSettings") or "PRIVATE_RANGES_ONLY")
+    if egress not in ("PRIVATE_RANGES_ONLY", "ALL_TRAFFIC"):
+        raise TabError(400, "INVALID_ARGUMENT", "Invalid vpcConnectorEgressSettings %s." % egress)
+    conn = str(body.get("vpcConnector") or "").strip()
+    if conn and not re.match(r"^projects/[^/]+/locations/[^/]+/connectors/[a-z][-a-z0-9]{0,23}$", conn):
+        raise TabError(400, "INVALID_ARGUMENT", "vpcConnector must be projects/PROJECT/locations/REGION/connectors/NAME.")
+    out = {"ingressSettings": ing, "vpcConnector": conn, "vpcConnectorEgressSettings": egress}
+    for k, lo, hi in (("minInstanceCount", 0, 1000), ("maxInstanceCount", 1, 3000)):
+        if body.get(k) not in (None, ""):
+            n = int(body[k])
+            if not lo <= n <= hi:
+                raise TabError(400, "INVALID_ARGUMENT", "%s must be between %d and %d." % (k, lo, hi))
+            out[k] = n
+    if out.get("minInstanceCount", 0) > out.get("maxInstanceCount", 3000):
+        raise TabError(400, "INVALID_ARGUMENT", "minInstanceCount cannot exceed maxInstanceCount.")
+    return out
+
+
+_FN_SAFE_MODULES = {"json", "math", "datetime", "base64", "re", "random", "uuid", "hashlib", "hmac", "itertools",
+                    "functools", "collections", "string", "decimal", "statistics", "textwrap", "time"}
+
+
+def run_python_function(code: str, entry: str, event, env: dict | None = None) -> dict:
+    """Run a Python function's source in-process (Nano: Pyodide) with a restricted sandbox:
+    computational stdlib only, `os.environ` = the function's runtime variables, print → logs.
+    Same contract as core/gcp_function_runtime.execute: {status, result, logs[, error]}."""
+    import builtins as _b
+    import importlib
+    import json as _json
+    import traceback
+    logs = []
+
+    class _Os:
+        environ = dict(env or {})
+
+        @staticmethod
+        def getenv(k, d=None):
+            return _Os.environ.get(k, d)
+
+    def _imp(name, globals=None, locals=None, fromlist=(), level=0):
+        root = name.split(".")[0]
+        if root == "os":
+            return _Os
+        if root not in _FN_SAFE_MODULES:
+            raise ImportError("module '%s' is not available in the function sandbox" % name)
+        return importlib.import_module(name)
+
+    def _print(*a, **k):
+        logs.append(" ".join(str(x) for x in a))
+
+    safe = {n: getattr(_b, n) for n in ("abs", "all", "any", "bool", "dict", "enumerate", "filter", "float", "int", "len",
+                                         "list", "map", "max", "min", "range", "reversed", "round", "set", "sorted", "str",
+                                         "sum", "tuple", "zip", "isinstance", "hasattr", "getattr", "repr", "type", "chr",
+                                         "ord", "Exception", "ValueError", "KeyError", "TypeError", "IndexError",
+                                         "RuntimeError", "object", "staticmethod", "classmethod", "property", "super",
+                                         "bytes", "format", "divmod", "pow", "hash", "iter", "next", "slice", "frozenset")}
+    safe.update({"__import__": _imp, "print": _print, "__build_class__": _b.__build_class__, "__name__": "main"})
+    g = {"__builtins__": safe}
+    started = time.time()
+    try:
+        exec(compile(code, "main.py", "exec"), g)
+        fn = g.get(entry)
+        if not callable(fn):
+            raise RuntimeError("Entry point %r not found in function source" % entry)
+        result = fn(event)
+        try:
+            _json.dumps(result)
+        except TypeError:
+            result = str(result)
+        return {"status": "SUCCESS", "result": result, "logs": "\n".join(logs)[:4000],
+                "durationMs": int((time.time() - started) * 1000)}
+    except Exception as e:
+        tb = traceback.format_exception_only(type(e), e)[-1].strip()
+        return {"status": "ERROR", "result": None, "error": tb[:2000], "logs": "\n".join(logs)[:4000],
+                "durationMs": int((time.time() - started) * 1000)}
+
+
+def functions_op(be, op: str, body: dict):
+    """One function's detail-tab op over `be`: rec() (the stored function), update(patch),
+    view() (functions.get shape), execute(code, entry, runtime, event, env, timeout) and
+    topic_exists(topic_id). Offline executes in core/gcp_function_runtime's subprocess
+    sandbox; Nano in run_python_function."""
+    op = op[0].lower() + op[1:]
+    rec = be.rec()
+    v = view_op("functions", op)
+    if v:
+        return {"ok": True, "item": view("functions", v, be.view())}
+    if op == "setSource":
+        src = validate_source(body.get("runtime") or rec.get("runtime"), body.get("code", rec.get("code", "")),
+                              body.get("entryPoint") or rec.get("entryPoint"))
+        versions = [x for x in rec.get("versions") or [] if isinstance(x, dict)]
+        for x in versions:
+            x["is_latest"] = False
+        versions.append({"version": str(len(versions) + 1), "state": "ACTIVE", "created": now_iso(), "is_latest": True,
+                         "runtime": src["runtime"], "entryPoint": src["entryPoint"],
+                         "sha256": hashlib.sha256(src["code"].encode()).hexdigest()[:16]})
+        be.update({**src, "versions": versions, "versionId": str(len(versions)),
+                   "buildConfig": {**(rec.get("buildConfig") or {}), "runtime": src["runtime"], "entryPoint": src["entryPoint"]},
+                   "updateTime": now_iso()})
+        return {"ok": True, "versionId": str(len(versions))}
+    if op == "setTrigger":
+        be.update({**validate_trigger(body, be.topic_exists), "updateTime": now_iso()})
+        return {"ok": True}
+    if op == "setPublicAccess":
+        perms = [b for b in rec.get("permissions") or [] if not (b.get("role") == "roles/cloudfunctions.invoker" and "allUsers" in (b.get("members") or []))]
+        if body.get("public"):
+            perms.append({"role": "roles/cloudfunctions.invoker", "members": ["allUsers"]})
+        be.update({"permissions": perms})
+        return {"ok": True}
+    if op == "setEnvVars":
+        be.update({"environmentVariables": validate_env(body.get("environmentVariables") or {}), "updateTime": now_iso()})
+        return {"ok": True}
+    if op == "setNetworking":
+        net = validate_fn_networking(body)
+        sc = {**(rec.get("serviceConfig") or {}), **{k: net[k] for k in net if k != "vpcConnector"}}
+        if net["vpcConnector"]:
+            sc["vpcConnector"] = net["vpcConnector"]
+        else:
+            sc.pop("vpcConnector", None)
+        be.update({"serviceConfig": sc, "vpcConnector": net["vpcConnector"], "updateTime": now_iso()})
+        return {"ok": True}
+    if op == "setLabels":
+        be.update({"labels": validate_labels(body.get("labels", {}))})
+        return {"ok": True}
+    if op == "testFunction":
+        data = body.get("data")
+        if isinstance(data, str):
+            import json as _json
+            try:
+                data = _json.loads(data) if data.strip() else {}
+            except ValueError:
+                raise TabError(400, "INVALID_ARGUMENT", "The triggering event must be valid JSON.")
+        code, entry, runtime = rec.get("code") or "", rec.get("entryPoint") or "handler", rec.get("runtime") or "python312"
+        if not code.strip():   # no source deployed: the default echo handler both runtimes run
+            code = ("exports.%s = (event) => ({ message: 'default handler (no source deployed)', echo: event });\n" % entry
+                    if runtime.startswith("nodejs") else
+                    "def %s(event):\n    return {'message': 'default handler (no source deployed)', 'echo': event}\n" % entry)
+        timeout = int((rec.get("serviceConfig") or {}).get("timeoutSeconds") or 60)
+        out = be.execute(code, entry, runtime, data, rec.get("environmentVariables") or {}, min(max(timeout, 1), 120))
+        inv = {"id": "exec-" + hashlib.sha256(("%s%s" % (now_iso(), time.time())).encode()).hexdigest()[:12],
+               "timestamp": now_iso(), "request": data, "response": out.get("result"), "status": out.get("status", "SUCCESS"),
+               "error": out.get("error", ""), "logs": out.get("logs", "")}
+        be.update({"invocations": (list(rec.get("invocations") or []) + [inv])[-100:]})
+        return {"ok": True, **{k: inv[k] for k in ("id", "status", "response", "error", "logs")}}
+    if op in ("listInvocations", "listLogs"):
+        out = []
+        for inv in reversed(rec.get("invocations") or []):
+            if op == "listInvocations":
+                out.append({k: inv.get(k) for k in ("id", "timestamp", "status", "error")})
+                continue
+            base = {"timestamp": inv.get("timestamp"), "executionId": inv.get("id")}
+            for line in (inv.get("logs") or "").splitlines():
+                out.append({**base, "severity": "INFO", "textPayload": line})
+            out.append({**base, "severity": "ERROR" if inv.get("status") == "ERROR" else "DEBUG",
+                        "textPayload": ("Function execution took %s, finished with status: '%s'" % ("under a second", "error" if inv.get("status") == "ERROR" else "ok"))
+                                       + (" — " + inv["error"] if inv.get("error") else "")})
+        return {"ok": True, "items": out[:300]}
+    return None
+
+
+def describe_function(rec: dict, project: str, region: str) -> dict:
+    """Nano: a deployed function described like functions.get (v2): build/service config + URL."""
+    out = dict(rec)
+    name = short(out.get("name") or "")
+    out.setdefault("runtime", "python312")
+    out.setdefault("entryPoint", "handler")
+    out.setdefault("code", "")
+    out.setdefault("environmentVariables", {})
+    out.setdefault("eventTrigger", None)
+    out.setdefault("invocations", [])
+    sc = dict(out.get("serviceConfig") or {})
+    sc.setdefault("availableMemory", str(out.get("memory") or "256M"))
+    sc.setdefault("timeoutSeconds", int(out.get("timeoutSeconds") or 60))
+    sc.setdefault("ingressSettings", "ALLOW_ALL")
+    sc.setdefault("vpcConnectorEgressSettings", "PRIVATE_RANGES_ONLY")
+    sc.setdefault("maxInstanceCount", 100)
+    sc.setdefault("minInstanceCount", 0)
+    sc["uri"] = "https://%s-%s.cloudfunctions.net/%s" % (region, project, name)
+    out["serviceConfig"] = sc
+    out["httpsTrigger"] = {"url": sc["uri"]}
+    return out
 
 
 def auto_subnet_second_octet(region: str) -> int:
