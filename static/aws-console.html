@@ -3095,42 +3095,6 @@ SUB_RENDERERS.bucketobjects = function(svc, full, host){
   });
 };
 // Lambda specific
-SUB_RENDERERS.lambdacode = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("code"),
-    el("div",{}, "Function source code. Save to deploy a new version (PATCH /api/lambda/functions/{name}/code).")));
-  const ta = el("textarea",{style:"width:100%;min-height:340px"});
-  ta.value = full.code || "def lambda_handler(event, context):\n    return {'statusCode': 200, 'body': 'Hello!'}";
-  host.append(el("div",{class:"field"}, ta));
-  host.append(el("div",{style:"margin-top:14px"},
-    el("button",{class:"btn primary",onclick:async()=>{
-      const r = await api(svc.api_paths.updateCode.method,
-        fillPath(svc.api_paths.updateCode.path, {name: full.function_name || full.name}),
-        {code: ta.value});
-      if (r.ok) toast("Code deployed"); else toast("Deploy failed", "err");
-    }}, icon("save"), "Deploy")));
-};
-SUB_RENDERERS.lambdainvoke = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("play_arrow"),
-    el("div",{}, "Test your function with a sample event payload.")));
-  const ta = el("textarea",{style:"width:100%;min-height:160px"});
-  ta.value = '{\n  "key": "value"\n}';
-  host.append(el("div",{class:"field"}, ta));
-  const out = el("pre",{class:"json",style:"margin-top:12px"});
-  host.append(el("div",{style:"margin-top:14px"},
-    el("button",{class:"btn primary",onclick:async()=>{
-      let payload = {}; try { payload = JSON.parse(ta.value); }
-      catch(e) { toast("Invalid JSON","err"); return; }
-      const r = await api(svc.api_paths.invoke.method,
-        fillPath(svc.api_paths.invoke.path, {name: full.function_name || full.name}), payload);
-      out.textContent = JSON.stringify(r.json, null, 2);
-      if (r.ok) toast("Invocation succeeded"); else toast("Invocation failed", "err");
-    }}, icon("play_arrow"), "Test")));
-  host.append(out);
-};
-SUB_RENDERERS.lambdaperms = function(svc, full, host){
-  host.append(el("div",{class:"empty"}, "No resource-based policy statements."));
-};
-
 // SQS
 SUB_RENDERERS.sqsmessages = function(svc, full, host){
   host.append(el("div",{class:"alert info"}, icon("send"),
@@ -4033,6 +3997,135 @@ SUB_RENDERERS.ddbinsights = async function(svc, full, host){
   const on = j.contributor_insights_status === "ENABLED";
   host.append(_dkv("CloudWatch Contributor Insights", [["Status", on ? "Enabled" : "Disabled"], ...(on ? [["Rules", j.contributor_insights_rule_list.join(", ")]] : [])],
     el("button",{class:"btn",style:"margin-left:auto",onclick:()=>_ddbput(full, "insights", {enabled:!on}, "Contributor Insights " + (on ? "disabled" : "enabled"))}, on ? "Turn off" : "Turn on")));
+};
+
+// ── Lambda function tabs (GET/PUT /api/lambda/functions/{fn}/detail/{section}). ──
+function _lamp(full, section){ return "/api/lambda/functions/" + encodeURIComponent(full.function_name || full.name || "") + "/detail/" + section; }
+async function _lamput(full, section, body, okMsg){
+  const r = await api("PUT", _lamp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Update failed: " + _derr(r), "err"); return false;
+}
+SUB_RENDERERS.lambdacode = async function(svc, full, host){
+  const c = await _dget(host, _lamp(full, "code")); if (!c) return;
+  host.append(_dkv("Code properties", [["Package type", c.package_type], ["Runtime", c.runtime], ["Handler", c.handler, 1],
+    ["Code size", c.code_size + " bytes"], ["SHA256 hash", c.code_sha256, 1], ["Last modified", c.last_modified]]));
+  const ta = el("textarea",{"data-testid":"lambda-code",style:"width:100%;min-height:300px;font-family:Consolas,Menlo,monospace"});
+  ta.value = c.code;
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Code source"), ta,
+    el("div",{style:"margin-top:10px"}, el("button",{class:"btn primary",onclick:()=>_lamput(full, "code", {code: ta.value}, "Code deployed")}, icon("save"), "Deploy"))));
+};
+SUB_RENDERERS.lambdainvoke = async function(svc, full, host){
+  // Saved test events (shareable per function) + Invoke with the chosen event.
+  const j = await _dget(host, _lamp(full, "test-events")); if (!j) return;
+  const evs = j.test_events || [];
+  const sel = el("select",{"data-testid":"lambda-test-event"}, el("option",{value:""}, "New event"), ...evs.map(e => el("option",{value:e.name}, e.name)));
+  const nm = el("input",{placeholder:"MyEventName"});
+  const ta = el("textarea",{"data-testid":"lambda-test-json",style:"width:100%;min-height:150px;font-family:Consolas,Menlo,monospace"});
+  ta.value = evs.length ? JSON.stringify(evs[0].event, null, 2) : '{\n  "key1": "value1"\n}';
+  if (evs.length) { sel.value = evs[0].name; nm.value = evs[0].name; }
+  sel.addEventListener("change", () => { const e = evs.find(x => x.name === sel.value); nm.value = e ? e.name : ""; ta.value = e ? JSON.stringify(e.event, null, 2) : "{}"; });
+  const out = el("div",{});
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Test event (" + evs.length + " saved)"), _field("Saved event", sel), _field("Event name", nm), _field("Event JSON", ta),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary","data-testid":"lambda-test-run",onclick:async()=>{
+        let payload; try { payload = JSON.parse(ta.value || "{}"); } catch(e) { toast("The event is not valid JSON", "err"); return; }
+        const r = await api(svc.api_paths.invoke.method, fillPath(svc.api_paths.invoke.path, {name: full.function_name || full.name}), {payload});
+        out.innerHTML = "";
+        const res = r.json || {};
+        const failed = !r.ok || res.functionError || res.function_error || res.FunctionError;
+        out.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, failed ? "Execution result: failed" : "Execution result: succeeded"),
+          el("pre",{class:"json","data-testid":"lambda-test-result"}, JSON.stringify(res.result !== undefined ? res.result : res, null, 2))));
+      }}, icon("play_arrow"), "Test"),
+      el("button",{class:"btn","data-testid":"lambda-test-save",onclick:()=>_lamput(full, "test-events", {name: nm.value, event: ta.value}, "Test event saved")}, icon("save"), "Save"),
+      sel.value ? el("button",{class:"btn",onclick:()=>_lamput(full, "test-events", {action:"delete", name: sel.value}, "Test event deleted")}, icon("delete"), "Delete") : null));
+  host.append(card, out);
+};
+SUB_RENDERERS.lambdaenv = async function(svc, full, host){
+  const j = await _dget(host, _lamp(full, "env")); if (!j) return;
+  const vars = Object.entries(j.variables || {});
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Environment variables (" + vars.length + ")"),
+    _dtbl([["0","Key",1],["1","Value",1]], vars, "No environment variables are set on " + (full.function_name || full.name) + "."));
+  const rows = el("div",{});
+  const state = vars.length ? vars.map(([k, v]) => [k, v]) : [["", ""]];
+  const paint = () => { rows.innerHTML = ""; state.forEach((pr, i) => {
+    const k = el("input",{placeholder:"Key", value: pr[0], "data-env-key": String(i), oninput:e=>{ pr[0] = e.target.value; }});
+    const v = el("input",{placeholder:"Value", value: pr[1], "data-env-val": String(i), oninput:e=>{ pr[1] = e.target.value; }});
+    rows.append(el("div",{class:"tags-rows"}, k, v, el("button",{class:"x material-symbols-outlined",onclick:()=>{ state.splice(i, 1); paint(); }}, "close"))); }); };
+  paint();
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Edit environment variables"), rows,
+    el("button",{class:"add-row",onclick:()=>{ state.push(["", ""]); paint(); }}, "+ Add environment variable"),
+    el("div",{style:"margin-top:10px"}, el("button",{class:"btn primary",onclick:()=>_lamput(full, "env",
+      {variables: Object.fromEntries(state.filter(([k]) => k))}, "Environment variables saved")}, icon("save"), "Save")));
+  host.append(card);
+};
+SUB_RENDERERS.lambdaconfig = async function(svc, full, host){
+  const c = await _dget(host, _lamp(full, "configuration")); if (!c) return;
+  host.append(_dkv("General configuration", [["Description", c.description], ["Memory", c.memory_size + " MB"], ["Ephemeral storage", c.ephemeral_storage + " MB"],
+    ["Timeout", c.timeout + " sec"], ["Architecture", (c.architectures || []).join(", ")], ["Tracing", c.tracing_mode],
+    ["Function ARN", c.function_arn, 1], ["State", c.state], ["Last modified", c.last_modified]]));
+  const f = {description:el("input",{value:c.description || ""}), memory_size:el("input",{type:"number",min:"128",max:"10240",value:c.memory_size,"data-cfg":"memory_size"}),
+    ephemeral_storage:el("input",{type:"number",min:"512",max:"10240",value:c.ephemeral_storage}), timeout:el("input",{type:"number",min:"1",max:"900",value:c.timeout,"data-cfg":"timeout"})};
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit basic settings"), _field("Description", f.description), _field("Memory (MB)", f.memory_size),
+    _field("Ephemeral storage (MB)", f.ephemeral_storage), _field("Timeout (seconds)", f.timeout),
+    el("button",{class:"btn primary",onclick:()=>_lamput(full, "configuration", {description:f.description.value, memory_size:f.memory_size.value,
+      ephemeral_storage:f.ephemeral_storage.value, timeout:f.timeout.value}, "Configuration saved")}, icon("save"), "Save")));
+};
+SUB_RENDERERS.lambdaversions = async function(svc, full, host){
+  const j = await _dget(host, _lamp(full, "versions")); if (!j) return;
+  const d = el("input",{placeholder:"Version description"});
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Versions (" + j.versions.length + ")"),
+    _dtbl([["version","Version"],["function_arn","Version ARN",1],["description","Description"],["created","Last modified"],["code_sha256","Code SHA256",1]],
+      j.versions, "No versions."),
+    _field("Description", d), el("button",{class:"btn primary",onclick:()=>_lamput(full, "versions", {description: d.value}, "Version published")}, icon("publish"), "Publish new version"));
+  host.append(card);
+};
+SUB_RENDERERS.lambdaaliases = async function(svc, full, host){
+  const j = await _dget(host, _lamp(full, "aliases")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Aliases (" + j.aliases.length + ")"),
+    _dtbl([["name","Name"],["function_version","Version"],["alias_arn","Alias ARN",1],["description","Description"],
+      [r => el("button",{class:"btn",onclick:()=>_lamput(full, "aliases", {action:"delete", name:r.name}, "Alias deleted")}, "Delete"),"Actions"]],
+      j.aliases, "No aliases point at versions of " + (full.function_name || full.name) + "."));
+  const n = el("input",{placeholder:"prod","data-testid":"lambda-alias-name"});
+  const v = el("select",{}, ...j.versions.map(x => el("option",{value:x}, x)));
+  const desc = el("input",{});
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Create alias"), _field("Name", n), _field("Version", v), _field("Description", desc),
+    el("button",{class:"btn primary","data-testid":"lambda-alias-save",onclick:()=>_lamput(full, "aliases", {name:n.value, function_version:v.value, description:desc.value}, "Alias created")}, icon("add"), "Save"));
+  host.append(card);
+};
+SUB_RENDERERS.lambdaperms = async function(svc, full, host){
+  const j = await _dget(host, _lamp(full, "policy")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Resource-based policy statements (" + j.statements.length + ")"),
+    _dtbl([["statement_id","Statement ID"],["principal","Principal",1],["action","Action"],[r => r.source_arn || r.source_account || "None","Conditions",1],
+      [r => el("button",{class:"btn",onclick:()=>_lamput(full, "policy", {action:"remove", statement_id:r.statement_id}, "Statement removed")}, "Delete"),"Actions"]],
+      j.statements, "No resource-based policy: no other account or AWS service can invoke " + (full.function_name || full.name) + "."));
+  if (j.policy) card.append(el("pre",{class:"json"}, JSON.stringify(j.policy, null, 2)));
+  const f = {sid:el("input",{placeholder:"AllowS3Invoke"}), pr:el("input",{placeholder:"s3.amazonaws.com"}), src:el("input",{placeholder:"arn:aws:s3:::my-bucket"}),
+    acct:el("input",{placeholder:ACCOUNT}), act:el("select",{}, el("option",{value:"lambda:InvokeFunction"}, "lambda:InvokeFunction"), el("option",{value:"lambda:GetFunction"}, "lambda:GetFunction"))};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Add permissions"), _field("Statement ID", f.sid), _field("Principal", f.pr), _field("Source ARN", f.src),
+    _field("Source account", f.acct), _field("Action", f.act),
+    el("button",{class:"btn primary",onclick:()=>_lamput(full, "policy", {statement_id:f.sid.value, principal:f.pr.value, source_arn:f.src.value,
+      source_account:f.acct.value, action_name:f.act.value}, "Permission added")}, icon("add"), "Save"));
+  host.append(card);
+};
+SUB_RENDERERS.lambdarole = async function(svc, full, host){
+  const j = await _dget(host, _lamp(full, "role")); if (!j) return;
+  host.append(_dkv("Execution role", [["Role name", j.role_name], ["Role ARN", j.role_arn, 1],
+    ["Role in this account's IAM", j.role_exists ? "Yes" : "No (the default service role is not an IAM role here)"]]));
+  if (j.role_exists) {
+    const card = el("div",{class:"kv-card"});
+    card.append(el("div",{class:"h"}, "Permissions policies (" + j.attached_policies.length + ")"),
+      _dtbl([[r => r,"Policy name"]], j.attached_policies, "The role has no policies attached, so the function can call no AWS APIs."));
+    host.append(card);
+  }
+  const r = el("input",{value:j.role_arn,"data-testid":"lambda-role"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit execution role"), _field("Existing role ARN", r),
+    el("button",{class:"btn primary",onclick:()=>_lamput(full, "role", {role:r.value}, "Execution role updated")}, icon("save"), "Save")));
 };
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──

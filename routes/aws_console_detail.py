@@ -378,6 +378,48 @@ def register(app: FastAPI) -> None:
                 _fail(e)
         return Y.api_dynamodb_delete_table(name)
 
+    # ── Lambda function tabs ────────────────────────────────────────────────
+    def _fn(name: str) -> dict:
+        from routes import aws_lambda as L
+        fn = L._lambda_find_function(name)
+        if not isinstance(fn, dict):
+            raise HTTPException(404, detail="ResourceNotFoundException")
+        return D.lambda_ensure(fn)
+
+    def _role_info(name: str):
+        st = ctx.iam_state
+        r = next((x for x in st.get("roles", {}).values() if x.get("role_name") == name), None)
+        if not r:
+            return None
+        pols = st.get("policies", {})
+        return {"policies": [pols.get(p, {}).get("policy_name", p) for p in r.get("policies") or []],
+                "trust": r.get("assume_role_policy_document")}
+
+    @app.get("/api/lambda/functions/{name}/detail/{section}")
+    def lambda_section(name: str, section: str):
+        try:
+            return {"function_name": name, "section": section, **D.lambda_section(_fn(name), section, _role_info)}
+        except D.DetailError as e:
+            _fail(e)
+
+    @app.put("/api/lambda/functions/{name}/detail/{section}")
+    async def lambda_update(name: str, section: str, request: Request):
+        fn = _fn(name)
+        try:
+            out = D.lambda_update_section(fn, section, await _body(request), _role_info)
+        except D.DetailError as e:
+            _fail(e)
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, detail={"code": "InvalidParameterValueException", "message": str(e)})
+        if section in ("code", "env", "configuration", "role"):
+            try:
+                _srv()._lambda_sync_code_artifact(fn)   # the runtime invokes the synced artifact
+            except Exception:
+                pass
+        ctx.persist_state()
+        ctx.record_usage(f"lambda.update_{section.replace('-', '_')}", {"function_name": name, "resource_id": name})
+        return {"function_name": name, "section": section, **out}
+
     # ── Permissions tab (every service): identity policies covering a resource ──
     @app.get("/api/aws/resource-access")
     def resource_access(arn: str, service: str):

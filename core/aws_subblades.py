@@ -208,16 +208,16 @@ _LAMBDA_SUB = [
     {"group": "Function", "items": [
         {"key": "code",        "label": "Code",                "icon": "code",        "type": "lambdaCode"},
         {"key": "test",        "label": "Test",                "icon": "play_arrow",  "type": "lambdaInvoke"},
-        {"key": "envVars",     "label": "Environment variables","icon": "settings",   "type": "stub"},
-        {"key": "configuration","label":"Configuration",       "icon": "tune",        "type": "properties"},
+        {"key": "envVars",     "label": "Environment variables","icon": "settings",   "type": "lambdaEnv"},
+        {"key": "configuration","label":"Configuration",       "icon": "tune",        "type": "lambdaConfig"},
     ]},
     {"group": "Aliases & versions", "items": [
-        {"key": "versions",    "label": "Versions",            "icon": "history",     "type": "stub"},
-        {"key": "aliases",     "label": "Aliases",             "icon": "alternate_email","type": "stub"},
+        {"key": "versions",    "label": "Versions",            "icon": "history",     "type": "lambdaVersions"},
+        {"key": "aliases",     "label": "Aliases",             "icon": "alternate_email","type": "lambdaAliases"},
     ]},
     {"group": "Permissions", "items": [
         {"key": "perms",       "label": "Resource-based policy","icon": "policy",     "type": "lambdaPerms"},
-        {"key": "iam",         "label": "Execution role",      "icon": "badge",       "type": "iam"},
+        {"key": "role",        "label": "Execution role",      "icon": "badge",       "type": "lambdaRole"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "monitoring",  "label": "Monitor",             "icon": "show_chart",  "type": "metrics"},

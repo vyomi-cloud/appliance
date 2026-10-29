@@ -162,7 +162,33 @@ def dynamodb():
     ev = d("_events", "List", {"resource": "tabs-t", "provider": "aws"})["events"]
     check("Activity: table setting changes recorded", any(e["action"] == "UpdateTableSection" for e in ev), ev)
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb}
+
+
+def lambda_():
+    print("── Lambda function")
+    d("lambda", "CreateFunction", {"name": "tabs-fn"})
+    sec = lambda s: d("lambda", "GetFunctionSection", {"name": "tabs-fn", "section": s})
+    put = lambda s, b: d("lambda", "UpdateFunctionSection", {"name": "tabs-fn", "section": s, "method": "PUT", "body": b})
+    check("Code: the function's source", "def handler" in sec("code")["code"])
+    put("code", {"code": "def handler(event, context):\n    return {'tripled': event['n'] * 3}"})
+    check("Code: deployed code is what Invoke runs", d("lambda", "Invoke", {"name": "tabs-fn", "payload": {"n": 5}})["result"] == {"tripled": 15})
+    check("Env: saved", put("env", {"variables": {"MODE": "x"}}).get("variables") == {"MODE": "x"})
+    check("Env: invalid key rejected", put("env", {"variables": {"1BAD": "x"}}).get("code") == "InvalidParameterValueException")
+    check("Versions: publish", put("versions", {"description": "v1"}).get("versions")[-1]["version"] == "1")
+    check("Aliases: create", put("aliases", {"name": "live", "function_version": "1"}).get("aliases")[0]["alias_arn"].endswith(":tabs-fn:live"))
+    check("Aliases: duplicate conflicts", put("aliases", {"name": "live", "function_version": "1"}).get("code") == "ResourceConflictException")
+    check("Policy: AddPermission", put("policy", {"statement_id": "apigw", "principal": "apigateway.amazonaws.com"}).get("policy")["Statement"][0]["Principal"]
+          == {"Service": "apigateway.amazonaws.com"})
+    from wasm.providers import aws_core_adapter as A
+    from core import iam_core
+    iam_core.dispatch(A.IAM, {"Action": "CreateRole", "RoleName": "fn-exec", "AssumeRolePolicyDocument": "{}"})
+    check("Execution role: existing role accepted", put("role", {"role": "arn:aws:iam::123456789012:role/fn-exec"}).get("role_exists") is True)
+    check("Execution role: unknown role rejected", put("role", {"role": "arn:aws:iam::123456789012:role/ghost"}).get("code") == "InvalidParameterValueException")
+    check("Test events: saved", put("test-events", {"name": "five", "event": {"n": 5}}).get("test_events")[0]["name"] == "five")
+    ev = d("_events", "List", {"resource": "tabs-fn", "provider": "aws"})["events"]
+    check("Activity: function changes recorded", sum(1 for e in ev if e["action"] == "UpdateFunctionSection") >= 5, ev)
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_}
 
 if __name__ == "__main__":
     for k in sys.argv[1:] or list(SECTIONS):

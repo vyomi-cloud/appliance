@@ -8,6 +8,7 @@ Engine: core/aws_console_detail.py; routes: routes/aws_console_detail.py.
     VYOMI_BASE_URL=http://localhost:9000 python3 tests/conformance/test_aws_detail_tabs_api.py
 """
 import ipaddress
+import json
 import os
 import sys
 import time
@@ -277,7 +278,53 @@ def dynamodb():
     put("capacity", {"deletion_protection": False})
     check("delete once unprotected", requests.delete(f"{BASE}/api/dynamodb/tables/{name}", timeout=30).status_code < 300)
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb}
+
+
+def lambda_():
+    print("── Lambda function")
+    name = f"tabs-fn-{int(time.time()) % 100000}"
+    r = requests.post(f"{BASE}/api/lambda/functions", timeout=60, json={"function_name": name})
+    check("create function", r.status_code < 300, r.text)
+    p = f"/api/lambda/functions/{name}/detail/"
+    sec = lambda s: get(p + s).json()
+    put = lambda s, b: requests.put(BASE + p + s, json=b, timeout=60)
+    c = sec("code")
+    check("Code: the function's own source + hash", "def " in c["code"] and c["code_sha256"] and c["handler"], c)
+    new = "def lambda_handler(event, context):\n    return {'tabs': event.get('n', 0) * 2}\n"
+    r = put("code", {"code": new})
+    check("Code: deploy persists", r.status_code == 200 and sec("code")["code"].strip() == new.strip(), r.text)
+    inv = requests.post(f"{BASE}/api/lambda/functions/{name}/invoke", json={"payload": {"n": 21}}, timeout=60).json()
+    check("Test: invoking runs the deployed code", "42" in json.dumps(inv), inv)
+    r = put("env", {"variables": {"STAGE": "dev", "LOG_LEVEL": "debug"}})
+    check("Environment variables: saved", r.status_code == 200 and sec("env")["variables"] == {"STAGE": "dev", "LOG_LEVEL": "debug"}, r.text)
+    check("Environment variables: reserved key rejected", put("env", {"variables": {"AWS_REGION": "x"}}).status_code == 400)
+    check("Environment variables: also visible on the function", get(f"/api/lambda/functions/{name}").json()["environment"]["STAGE"] == "dev")
+    r = put("configuration", {"memory_size": 256, "timeout": 30, "description": "tabs"})
+    check("Configuration: memory/timeout saved", r.status_code == 200 and sec("configuration")["memory_size"] == 256, r.text)
+    check("Configuration: timeout > 900 rejected", put("configuration", {"timeout": 901}).status_code == 400)
+    put("versions", {"description": "first"})
+    v = sec("versions")["versions"]
+    check("Versions: published version 1 with its ARN", any(x["version"] == "1" and x["function_arn"].endswith(":" + name + ":1") for x in v), v)
+    r = put("aliases", {"name": "prod", "function_version": "1"})
+    check("Aliases: prod -> 1", r.status_code == 200 and sec("aliases")["aliases"][0]["function_version"] == "1", r.text)
+    check("Aliases: unknown version rejected", put("aliases", {"name": "beta", "function_version": "9"}).status_code == 404)
+    r = put("policy", {"statement_id": "s3-invoke", "principal": "s3.amazonaws.com", "source_arn": "arn:aws:s3:::tabs"})
+    pol = sec("policy")
+    check("Resource-based policy: statement added", r.status_code == 200 and pol["policy"]["Statement"][0]["Sid"] == "s3-invoke", pol)
+    check("Resource-based policy: also on GetPolicy", "s3-invoke" in get(f"/api/lambda/functions/{name}/policy").json()["Policy"])
+    check("Resource-based policy: duplicate Sid conflicts", put("policy", {"statement_id": "s3-invoke", "principal": "x"}).status_code == 409)
+    put("policy", {"action": "remove", "statement_id": "s3-invoke"})
+    check("Resource-based policy: removed", sec("policy")["statements"] == [])
+    role = f"tabs-lambda-role-{int(time.time()) % 100000}"
+    requests.post(BASE + "/api/iam/roles", json={"role_name": role}, timeout=30)
+    r = put("role", {"role": f"arn:aws:iam::123456789012:role/{role}"})
+    check("Execution role: switched to an existing role", r.status_code == 200 and sec("role")["role_exists"] is True, r.text)
+    check("Execution role: unknown role rejected", put("role", {"role": "arn:aws:iam::123456789012:role/nope-x"}).status_code == 400)
+    r = put("test-events", {"name": "double", "event": '{"n": 4}'})
+    check("Test: saved test event", r.status_code == 200 and sec("test-events")["test_events"][0]["event"] == {"n": 4}, r.text)
+    requests.delete(f"{BASE}/api/lambda/functions/{name}", timeout=30)
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_}
 
 if __name__ == "__main__":
     only = sys.argv[1:] or list(SECTIONS)

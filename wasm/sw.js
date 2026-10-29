@@ -610,6 +610,11 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "lambda", "ListFunctions", {}] };
     if (method === "POST") return { tuple: ["aws", "lambda", "CreateFunction", body || {}] };
   }
+  // Function detail tabs (core/aws_console_detail.py): code, env, configuration,
+  // versions, aliases, resource-based policy, execution role, saved test events.
+  m = path.match(/^\/api\/lambda\/functions\/([^/]+)\/detail\/([a-z-]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "lambda", "GetFunctionSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "lambda", "UpdateFunctionSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/lambda\/functions\/([^/]+)\/invoke$/);
   if (m && method === "POST") return { tuple: ["aws", "lambda", "Invoke", { name: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/lambda\/functions\/([^/]+)$/);

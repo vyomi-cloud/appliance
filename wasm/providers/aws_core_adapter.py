@@ -932,3 +932,31 @@ def ddb_table_section(p):
     except (TypeError, ValueError) as e:
         return _det_err(DET.DetailError("ValidationException", str(e)))
     return {"ok": True, "table_name": name, "section": section, **out}
+
+
+# ── Lambda function tabs (core/aws_console_detail.py) ───────────────────────
+def _nano_role_info(name):
+    r = IAM.roles.get(name)
+    if not r:
+        return None
+    return {"policies": [a.rsplit("/", 1)[-1] for a in r.get("attached_policies") or []] + list((r.get("inline_policies") or {}).keys()),
+            "trust": r.get("assume_role_policy_document")}
+
+
+def lambda_section(p):
+    name = str(p.get("name") or "")
+    fn = (getattr(_R["compute"], "_lambda_functions", None) or {}).get(name)
+    if fn is None:
+        return {"ok": False, "code": "ResourceNotFoundException",
+                "__http": {"status": 404, "body": {"detail": {"code": "ResourceNotFoundException", "message": f"Function not found: {name}"}}}}
+    section = str(p.get("section") or "")
+    try:
+        if p.get("method") == "PUT":
+            out = DET.lambda_update_section(fn, section, p.get("body") or {}, _nano_role_info)
+        else:
+            out = DET.lambda_section(fn, section, _nano_role_info)
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (TypeError, ValueError) as e:
+        return _det_err(DET.DetailError("InvalidParameterValueException", str(e)))
+    return {"ok": True, "function_name": name, "section": section, **out}

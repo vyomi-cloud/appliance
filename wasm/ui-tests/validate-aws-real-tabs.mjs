@@ -148,6 +148,38 @@ const SECTIONS = {
     check("dynamodb Capacity: provisioned mode persists", /Capacity mode\s*\nProvisioned/i.test(cap), cap);
     check("dynamodb Capacity: backend agrees", (await call("GET", `/api/dynamodb/tables/${name}/detail/capacity`)).json.billing_mode === "PROVISIONED");
   },
+  async lambda() {
+    const name = "rt-fn-" + Date.now().toString(36);
+    await call("POST", "/api/lambda/functions", { name, function_name: name });
+    await call("PUT", `/api/lambda/functions/${name}/detail/env`, { variables: { RT_KEY: "rt-" + name } });
+    await openService("^lambda$");
+    await openRow(name);
+    const env = await tab("Environment variables");
+    check("lambda Environment variables: this function's variables", env.includes("RT_KEY") && env.includes("rt-" + name), env);
+    await tab("Code");
+    const code = await page.locator("#main [data-testid=lambda-code]").inputValue();
+    check("lambda Code: the function's source", /def \w+\(event, context\)/.test(code), code);
+    await tab("Test");
+    await page.locator("#main [data-testid=lambda-test-json]").fill('{"who": "rt"}');
+    await page.locator("#main input[placeholder=MyEventName]").fill("rt-event");
+    await page.locator("#main [data-testid=lambda-test-save]").click();
+    await sleep(1500);
+    await tab("Code");
+    await tab("Test");
+    const saved = await page.locator("#main [data-testid=lambda-test-event]").inputValue();
+    check("lambda Test: saved test event persists after reopening the tab", saved === "rt-event", saved);
+    await page.locator("#main [data-testid=lambda-test-run]").click();
+    await sleep(2000);
+    const res = await page.locator("#main [data-testid=lambda-test-result]").innerText().catch(() => "");
+    check("lambda Test: the invocation result is shown", res.length > 2, res);
+    await tab("Aliases");
+    await page.locator("#main [data-testid=lambda-alias-name]").fill("live");
+    await page.locator("#main [data-testid=lambda-alias-save]").click();
+    await sleep(1500);
+    await tab("Versions");
+    const al = await tab("Aliases");
+    check("lambda Aliases: alias created in the tab is listed after reopening", al.includes(":" + name + ":live"), al);
+  },
 };
 
 let server;

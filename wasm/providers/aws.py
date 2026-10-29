@@ -179,6 +179,8 @@ class Aws(CloudProvider):
             ("ec2", "GetSerialConsoleAccess"):  lambda b, a, p: A.ec2_serial_access(p),
             ("ec2", "ModifySerialConsoleAccess"): lambda b, a, p: A.ec2_serial_access(p),
             ("iam", "ResourceAccess"):          lambda b, a, p: A.resource_access(p),
+            ("lambda", "GetFunctionSection"):    lambda b, a, p: A.lambda_section(p),
+            ("lambda", "UpdateFunctionSection"): lambda b, a, p: A.lambda_section(p),
             ("dynamodb", "DescribeTableSection"): lambda b, a, p: A.ddb_table_section(p),
             ("dynamodb", "UpdateTableSection"):   lambda b, a, p: A.ddb_table_section(p),
             ("rds", "DescribeDBInstanceDetail"): lambda b, a, p: A.rds_detail(p),

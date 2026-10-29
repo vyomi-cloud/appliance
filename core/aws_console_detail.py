@@ -1357,3 +1357,259 @@ def ddb_check_delete(table: dict) -> None:
         raise DetailError("ValidationException",
                           f"Resource cannot be deleted as it is currently protected against deletion. Disable deletion "
                           f"protection first.")
+
+
+# ── Lambda function detail (Code, Test, Environment variables, Configuration,
+#    Versions, Aliases, Resource-based policy, Execution role) ──────────────────
+# Function records come in two shapes: the offline appliance's (function_name /
+# code / environment) and lambda_core's (name / source / env); _lf maps both.
+_LAMBDA_RESERVED = {"_HANDLER", "_X_AMZN_TRACE_ID", "AWS_DEFAULT_REGION", "AWS_REGION", "AWS_EXECUTION_ENV",
+                    "AWS_LAMBDA_FUNCTION_NAME", "AWS_LAMBDA_FUNCTION_MEMORY_SIZE", "AWS_LAMBDA_FUNCTION_VERSION",
+                    "AWS_LAMBDA_INITIALIZATION_TYPE", "AWS_LAMBDA_LOG_GROUP_NAME", "AWS_LAMBDA_LOG_STREAM_NAME",
+                    "AWS_ACCESS_KEY", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+                    "AWS_LAMBDA_RUNTIME_API", "LAMBDA_TASK_ROOT", "LAMBDA_RUNTIME_DIR"}
+
+
+def _lf(fn: dict) -> dict:
+    offline = "function_name" in fn
+    return {"name": fn.get("function_name") if offline else fn.get("name"),
+            "code": "code" if offline else "source", "env": "environment" if offline else "env",
+            "arn": fn.get("function_arn") if offline else fn.get("arn")}
+
+
+def _sha(code: str) -> str:
+    import base64
+    import hashlib
+    return base64.b64encode(hashlib.sha256((code or "").encode("utf-8")).digest()).decode("ascii")
+
+
+def lambda_ensure(fn: dict) -> dict:
+    k = _lf(fn)
+    fn.setdefault(k["env"], {})
+    fn.setdefault("description", "")
+    fn.setdefault("memory_size", 128)
+    fn.setdefault("timeout", 3)
+    fn.setdefault("ephemeral_storage", 512)
+    fn.setdefault("architectures", ["x86_64"])
+    fn.setdefault("tracing_mode", "PassThrough")
+    fn.setdefault("permissions", [])
+    fn.setdefault("aliases", [])
+    fn.setdefault("test_events", {})
+    fn.setdefault("last_modified", fn.get("created") or _now())
+    if not fn.get("versions"):
+        fn["versions"] = [{"version": "$LATEST", "description": fn.get("description", ""), "created": fn["last_modified"],
+                           "code_sha256": _sha(fn.get(k["code"], "")), "runtime": fn.get("runtime", "python3.12"),
+                           "handler": fn.get("handler", ""), "state": "Active", "is_latest": True}]
+    return fn
+
+
+def lambda_policy_document(fn: dict) -> dict:
+    k = _lf(fn)
+    sts = []
+    for p in fn.get("permissions") or []:
+        st = {"Sid": p.get("statement_id"), "Effect": "Allow", "Action": p.get("action", "lambda:InvokeFunction"),
+              "Resource": k["arn"]}
+        pr = p.get("principal", "")
+        st["Principal"] = {"Service": pr} if pr.endswith(".amazonaws.com") else ({"AWS": pr} if pr != "*" else "*")
+        cond = {}
+        if p.get("source_arn"):
+            cond["ArnLike"] = {"AWS:SourceArn": p["source_arn"]}
+        if p.get("source_account"):
+            cond["StringEquals"] = {"AWS:SourceAccount": p["source_account"]}
+        if cond:
+            st["Condition"] = cond
+        sts.append(st)
+    return {"Version": "2012-10-17", "Id": "default", "Statement": sts}
+
+
+def lambda_section(fn: dict, section: str, role_lookup=None) -> dict:
+    lambda_ensure(fn)
+    k = _lf(fn)
+    if section == "code":
+        code = fn.get(k["code"], "") or ""
+        return {"function_name": k["name"], "runtime": fn.get("runtime"), "handler": fn.get("handler"), "code": code,
+                "code_sha256": _sha(code), "code_size": len(code.encode("utf-8")), "package_type": "Zip",
+                "last_modified": fn.get("last_modified", "")}
+    if section == "env":
+        return {"variables": dict(fn.get(k["env"]) or {})}
+    if section == "configuration":
+        return {"function_name": k["name"], "function_arn": k["arn"], "description": fn.get("description", ""),
+                "memory_size": fn.get("memory_size"), "timeout": fn.get("timeout"), "ephemeral_storage": fn.get("ephemeral_storage"),
+                "runtime": fn.get("runtime"), "handler": fn.get("handler"), "architectures": fn.get("architectures"),
+                "tracing_mode": fn.get("tracing_mode"), "role": fn.get("role", ""), "state": fn.get("state", "Active"),
+                "last_modified": fn.get("last_modified", "")}
+    if section == "versions":
+        return {"versions": [{**v, "function_arn": k["arn"] + ("" if v.get("version") == "$LATEST" else ":" + str(v.get("version")))}
+                             for v in fn["versions"]]}
+    if section == "aliases":
+        return {"aliases": [{**a, "alias_arn": f"{k['arn']}:{a['name']}"} for a in fn["aliases"]],
+                "versions": [v.get("version") for v in fn["versions"]]}
+    if section == "policy":
+        doc = lambda_policy_document(fn)
+        return {"statements": [{**p} for p in fn.get("permissions") or []], "policy": doc if doc["Statement"] else None}
+    if section == "role":
+        arn = fn.get("role", "")
+        name = arn.rsplit("/", 1)[-1] if arn else ""
+        role = role_lookup(name) if (role_lookup and name) else None
+        return {"role_arn": arn, "role_name": name, "role_exists": bool(role),
+                "attached_policies": (role or {}).get("policies", []), "trust_policy": (role or {}).get("trust", None)}
+    if section == "test-events":
+        return {"test_events": [{"name": n, "event": e} for n, e in sorted(fn["test_events"].items())]}
+    raise DetailError("InvalidParameterValueException", f"Unknown function section '{section}'.")
+
+
+def lambda_validate_env(variables: dict) -> dict:
+    import json as _j
+    import re
+    v = {str(a): str(b) for a, b in (variables or {}).items()}
+    bad = sorted(x for x in v if x in _LAMBDA_RESERVED)
+    if bad:
+        raise DetailError("InvalidParameterValueException", "Lambda was unable to configure your environment variables because "
+                          "the environment variables you have provided contains reserved keys that are currently not supported "
+                          f"for modification. Reserved keys used in this request: {', '.join(bad)}")
+    for name in v:
+        if not re.fullmatch(r"[a-zA-Z]([a-zA-Z0-9_])+", name):
+            raise DetailError("InvalidParameterValueException", f"Member must satisfy regular expression pattern: "
+                              f"[a-zA-Z]([a-zA-Z0-9_])+ (key '{name}')")
+    if len(_j.dumps(v).encode()) > 4096:
+        raise DetailError("InvalidParameterValueException", "Lambda was unable to configure your environment variables because "
+                          "the environment variables you have provided exceeded the 4KB limit.")
+    return v
+
+
+def lambda_validate_config(b: dict) -> dict:
+    out = {}
+    if "memory_size" in b:
+        m = int(b["memory_size"])
+        if not 128 <= m <= 10240:
+            raise DetailError("InvalidParameterValueException", "MemorySize must be between 128 MB and 10240 MB.")
+        out["memory_size"] = m
+    if "timeout" in b:
+        t = int(b["timeout"])
+        if not 1 <= t <= 900:
+            raise DetailError("InvalidParameterValueException", "Timeout must be between 1 and 900 seconds.")
+        out["timeout"] = t
+    if "ephemeral_storage" in b:
+        e = int(b["ephemeral_storage"])
+        if not 512 <= e <= 10240:
+            raise DetailError("InvalidParameterValueException", "EphemeralStorage size must be between 512 MB and 10240 MB.")
+        out["ephemeral_storage"] = e
+    if "description" in b:
+        if len(str(b["description"])) > 256:
+            raise DetailError("InvalidParameterValueException", "Description must be 256 characters or fewer.")
+        out["description"] = str(b["description"])
+    if "tracing_mode" in b:
+        if b["tracing_mode"] not in ("Active", "PassThrough"):
+            raise DetailError("InvalidParameterValueException", "TracingConfig Mode must be Active or PassThrough.")
+        out["tracing_mode"] = b["tracing_mode"]
+    if "handler" in b:
+        out["handler"] = str(b["handler"]).strip() or "lambda_function.lambda_handler"
+    return out
+
+
+def lambda_update_section(fn: dict, section: str, body: dict, role_lookup=None) -> dict:
+    """UpdateFunctionCode / UpdateFunctionConfiguration / PublishVersion /
+    CreateAlias / DeleteAlias / AddPermission / RemovePermission and saved test
+    events, with Lambda's validation."""
+    import re
+    lambda_ensure(fn)
+    k = _lf(fn)
+    b = dict(body or {})
+    if section == "code":
+        code = str(b.get("code") or "").strip()
+        if not code:
+            raise DetailError("InvalidParameterValueException", "The function code is empty.")
+        fn[k["code"]] = code + "\n"
+        _touch_latest(fn)
+    elif section == "env":
+        fn[k["env"]] = lambda_validate_env(b.get("variables") or {})
+        _touch_latest(fn)
+    elif section == "configuration":
+        fn.update(lambda_validate_config(b))
+        _touch_latest(fn)
+    elif section == "role":
+        arn = str(b.get("role") or "").strip()
+        name = arn.rsplit("/", 1)[-1]
+        if not arn.startswith("arn:aws:iam::") or (role_lookup and not role_lookup(name)):
+            raise DetailError("InvalidParameterValueException", "The role defined for the function cannot be assumed by Lambda.")
+        fn["role"] = arn
+        _touch_latest(fn)
+    elif section == "versions":
+        nums = [int(v["version"]) for v in fn["versions"] if str(v.get("version")).isdigit()]
+        latest = next(v for v in fn["versions"] if v.get("version") == "$LATEST")
+        sha = _sha(fn.get(k["code"], ""))
+        if nums and next(v for v in fn["versions"] if v.get("version") == str(max(nums))).get("code_sha256") == sha \
+                and not b.get("force"):
+            pass   # PublishVersion with unchanged code + config returns the existing latest version
+        else:
+            for v in fn["versions"]:
+                v["is_latest"] = False
+            fn["versions"].append({"version": str((max(nums) if nums else 0) + 1), "description": str(b.get("description") or ""),
+                                   "created": _now(), "code_sha256": sha, "runtime": latest.get("runtime"), "handler": latest.get("handler"),
+                                   "state": "Active", "is_latest": True})
+    elif section == "aliases":
+        if b.get("action") == "delete":
+            name = str(b.get("name") or "")
+            if not any(a["name"] == name for a in fn["aliases"]):
+                raise DetailError("ResourceNotFoundException", f"Alias not found: {k['arn']}:{name}", 404)
+            fn["aliases"] = [a for a in fn["aliases"] if a["name"] != name]
+        else:
+            name = str(b.get("name") or "").strip()
+            if not re.fullmatch(r"(?!^[0-9]+$)([a-zA-Z0-9-_]+)", name) or len(name) > 128:
+                raise DetailError("ValidationException", "Alias name must be 1-128 letters, numbers, '-' or '_' and not only digits.")
+            ver = str(b.get("function_version") or "$LATEST")
+            if ver not in [v.get("version") for v in fn["versions"]]:
+                raise DetailError("ResourceNotFoundException", f"Function not found: {k['arn']}:{ver}", 404)
+            if any(a["name"] == name for a in fn["aliases"]):
+                raise DetailError("ResourceConflictException", f"Alias already exists: {k['arn']}:{name}", 409)
+            fn["aliases"].append({"name": name, "function_version": ver, "description": str(b.get("description") or ""),
+                                  "created": _now(), "revision_id": _hex(32)})
+    elif section == "policy":
+        perms = fn.setdefault("permissions", [])
+        if b.get("action") == "remove":
+            sid = str(b.get("statement_id") or "")
+            if not any(p.get("statement_id") == sid for p in perms):
+                raise DetailError("ResourceNotFoundException", f"Statement {sid} is not found in resource policy.", 404)
+            fn["permissions"] = [p for p in perms if p.get("statement_id") != sid]
+        else:
+            sid = str(b.get("statement_id") or "").strip()
+            principal = str(b.get("principal") or "").strip()
+            if not re.fullmatch(r"[a-zA-Z0-9-_]{1,100}", sid):
+                raise DetailError("ValidationException", "Statement ID must be 1-100 letters, numbers, '-' or '_'.")
+            if not principal:
+                raise DetailError("ValidationException", "A principal is required.")
+            if any(p.get("statement_id") == sid for p in perms):
+                raise DetailError("ResourceConflictException", f"The statement id ({sid}) provided already exists. Please provide a "
+                                  "new statement id, or remove the existing statement.", 409)
+            perms.append({"statement_id": sid, "action": str(b.get("action_name") or "lambda:InvokeFunction"), "principal": principal,
+                          "source_arn": str(b.get("source_arn") or ""), "source_account": str(b.get("source_account") or ""),
+                          "created": _now()})
+    elif section == "test-events":
+        import json as _j
+        name = str(b.get("name") or "").strip()
+        if b.get("action") == "delete":
+            fn["test_events"].pop(name, None)
+        else:
+            if not re.fullmatch(r"[A-Za-z0-9_.-]{1,25}", name):
+                raise DetailError("ValidationException", "Event name must be 1-25 letters, numbers, '.', '-' or '_'.")
+            ev = b.get("event")
+            if isinstance(ev, str):
+                try:
+                    ev = _j.loads(ev or "{}")
+                except ValueError:
+                    raise DetailError("ValidationException", "The test event must be valid JSON.")
+            if len(fn["test_events"]) >= 10 and name not in fn["test_events"]:
+                raise DetailError("LimitExceededException", "A function can have up to 10 saved test events.")
+            fn["test_events"][name] = ev
+    else:
+        raise DetailError("InvalidParameterValueException", f"Unknown function section '{section}'.")
+    return lambda_section(fn, section, role_lookup)
+
+
+def _touch_latest(fn: dict) -> None:
+    k = _lf(fn)
+    fn["last_modified"] = _now()
+    for v in fn.get("versions") or []:
+        if v.get("version") == "$LATEST":
+            v.update(code_sha256=_sha(fn.get(k["code"], "")), handler=fn.get("handler"), runtime=fn.get("runtime"),
+                     description=fn.get("description", ""), created=fn["last_modified"])
