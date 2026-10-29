@@ -361,6 +361,14 @@
       "timeout": 600
     },
     {
+      "id": "nano-ui-gcp-firestore-usage",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-firestore-usage.mjs",
+      "timeout": 600
+    },
+    {
       "id": "nano-ui-gcp-metrics-counts",
       "target": "nano",
       "cloud": "gcp",
