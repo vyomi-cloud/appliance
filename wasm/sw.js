@@ -755,6 +755,9 @@ async function route(method, path, body, query) {
   if (go && method === "GET") return { tuple: ["gcp", "_resource", "ListObjects", { service: "storage", body: { bucket: dec(go[1]) } }] };
   go = path.match(/^\/api\/gcp\/storage\/v1\/b\/([^/]+)\/o\/(.+)$/);
   if (go && method === "DELETE") return { tuple: ["gcp", "_resource", "DeleteObject", { service: "storage", body: { bucket: dec(go[1]), key: dec(go[2]) } }] };
+  // Firestore database -> its documents (Usage tab document count)
+  go = path.match(/^\/api\/gcp\/firestore\/v1\/projects\/[^/]+\/databases\/[^/]+\/documents\/?$/);
+  if (go && method === "GET") return { tuple: ["gcp", "_resource", "ListDocuments", { service: "firestore" }] };
   // GCP-only sub-resource routes (additive; AWS/Azure untouched). These serve the
   // detail-view sub-resource tabs (Pub/Sub subscriptions, Cloud SQL databases,
   // Secret Manager / KMS versions) off the proven GCP cores via the shared dispatch.
