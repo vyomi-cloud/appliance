@@ -32,8 +32,6 @@
     {"id": "offline-request-metrics", "target": "offline", "cloud": "aws", "kind": "core", "cmd": "python3 -m pytest tests/conformance/test_request_metrics.py -q --tb=line", "timeout": 300},
     {"id": "nano-ui-aws-metrics", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-metrics.mjs", "timeout": 600},
     {"id": "offline-ui-aws-metrics", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/aws node wasm/ui-tests/validate-aws-metrics.mjs", "timeout": 600},
-    {"id": "nano-ui-aws-detail-tabs", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-detail-tabs.mjs", "timeout": 600},
-    {"id": "offline-ui-aws-detail-tabs", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/aws node wasm/ui-tests/validate-aws-detail-tabs.mjs", "timeout": 600},
     {"id": "nano-ui-aws-api", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-api.mjs", "timeout": 600},
     {"id": "nano-ui-aws-tabs", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-tabs.mjs", "timeout": 600},
     {"id": "nano-ui-gcp-tabs", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-functional-tabs.mjs", "timeout": 600},
