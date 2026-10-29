@@ -25,6 +25,8 @@
     {"id": "nano-ui-aws-lambda-row", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-lambda-row.mjs", "timeout": 300},
     {"id": "nano-ui-aws-ec2-row", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-ec2-row.mjs", "timeout": 300},
     {"id": "nano-ui-aws-apigw-row", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-apigw-row.mjs", "timeout": 300},
+    {"id": "nano-ui-aws-detail-tabs", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-detail-tabs.mjs", "timeout": 600},
+    {"id": "offline-ui-aws-detail-tabs", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/aws node wasm/ui-tests/validate-aws-detail-tabs.mjs", "timeout": 600},
     {"id": "nano-ui-aws-vpc-row", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-vpc-row.mjs", "timeout": 300},
     {"id": "nano-ui-aws-eventbridge-row", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-eventbridge-row.mjs", "timeout": 300},
     {"id": "nano-ui-aws-settings-tabs", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-settings-tabs.mjs", "timeout": 300},

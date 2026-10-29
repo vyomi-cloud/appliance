@@ -2595,7 +2595,21 @@ SUB_RENDERERS.kmsconfig = function(svc, full, host){
   render();
 };
 
-SUB_RENDERERS.overview = function(svc, full, host){
+SUB_RENDERERS.overview = function(svc, full, host, tab){
+  // VPC "VPC details": the VPC's network configuration (the Overview tab keeps the summary grid).
+  if (tab && tab.key === "details" && svc.key === "vpc") {
+    const card = el("div",{class:"kv-card"});
+    card.append(el("div",{class:"h"}, "VPC details"));
+    const grid = el("div",{class:"kv-grid"});
+    [["VPC ID", full.vpc_id || full.id], ["State", full.state], ["IPv4 CIDR", full.cidr_block || full.cidr],
+     ["Tenancy", full.tenancy], ["DHCP option set", full.dhcp_options_id], ["Main route table", full.main_route_table_id],
+     ["Default security group", full.default_security_group_id], ["Internet gateway", full.internet_gateway_id || "Not attached"],
+     ["Subnets", full.subnet_count], ["Created", full.created]]
+      .forEach(([k,v]) => grid.append(el("div",{}, el("div",{class:"k"}, k),
+        el("div",{class:"v"+(/ID|table|group|set|gateway/.test(k)?" mono":"")}, v == null || v === "" ? "—" : String(v)))));
+    card.append(grid); host.append(card);
+    return;
+  }
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Resource details"));
   const grid = el("div",{class:"kv-grid"});
@@ -2696,7 +2710,25 @@ SUB_RENDERERS.properties = function(svc, full, host){
   }
   walk(full, ""); card.append(grid); host.append(card);
 };
-SUB_RENDERERS.metrics = function(svc, full, host){
+SUB_RENDERERS.metrics = function(svc, full, host, tab){
+  // EC2 "Status and alarms": the resource's own check results, not a metrics graph.
+  if (tab && tab.key === "statusChecks") {
+    const st = String((full.state && full.state.Name) || full.state || "").toLowerCase();
+    const ok = st === "running";
+    const card = el("div",{class:"kv-card"});
+    card.append(el("div",{class:"h"}, "Status checks"));
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Check"), el("th",{}, "Status"), el("th",{}, "Detail")));
+    [["System reachability", "Underlying host reachable"], ["Instance reachability", "Guest network stack responding"]].forEach(([k, d]) =>
+      tbl.append(el("tr",{}, el("td",{}, k), el("td",{}, stateBadge(ok ? "passed" : "not applicable")),
+        el("td",{}, ok ? d : "Instance is " + (st || "not running") + " — checks run only while running"))));
+    card.append(tbl); host.append(card);
+    const al = el("div",{class:"kv-card"});
+    al.append(el("div",{class:"h"}, "Alarm status"));
+    al.append(el("div",{class:"v"}, "No alarms configured for " + (full.instance_id || full.name || "this instance")));
+    host.append(al);
+    return;
+  }
   host.append(el("div",{class:"alert info"}, icon("show_chart"),
     el("div",{}, "Synthesized CloudWatch metrics. Real telemetry ingestion is future work.")));
   const series = svc.key === "ec2"
