@@ -234,6 +234,20 @@ _VNET_SUB = [
     ]},
 ]
 
+_NSG_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Settings", "items": [
+        {"key": "securityRules", "label": "Security rules", "icon": "security",   "type": "nsgRules"},
+        *_settings_props_locks(),
+    ]},
+]
+
+_ROLEDEF_SUB = [
+    {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
+    {"key": "properties", "label": "Properties", "icon": "info",      "type": "properties"},
+    {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
+]
+
 _KEYVAULT_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Objects", "items": [
@@ -395,4 +409,6 @@ SUB_BLADES: dict[str, list] = {
     "operationalinsights": _OI_SUB,
     "monitor":     _MONITOR_SUB,
     "rbac":        _RBAC_SUB,
+    "nsg":         _NSG_SUB,
+    "role_definition": _ROLEDEF_SUB,
 }

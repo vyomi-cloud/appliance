@@ -25,6 +25,10 @@ const check = (ok, what, detail = "") => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const NSG = `${BASE}/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups/nsg-cloudlearn?api-version=2023-11-01`;
+const dropNsg = () => fetch(NSG, { method: "DELETE" }).catch(() => {});
+await dropNsg();   // the default name is fixed: a leftover from an earlier run would hide the new row
+
 const browser = await chromium.launch();
 const page = await (await browser.newContext()).newPage();
 const bad = [];
@@ -57,4 +61,5 @@ try {
   check(false, "console flow", String(e.message || e).split("\n")[0]);
 }
 await browser.close();
+await dropNsg();
 process.exit(fails ? 1 : 0);

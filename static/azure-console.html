@@ -2668,6 +2668,69 @@ SUB_RENDERERS.peerings = function(svc, full, host){
       host.append(form);
     }}, icon("add"), "Add peering")));
 };
+// ---------- NSG security rules (real ARM child PUT / DELETE) ----------------
+SUB_RENDERERS.nsgrules = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},
+    "Security rules allow or deny network traffic to this network security group. Rules are evaluated by priority (lowest number first). Real ARM PUT to .../securityRules/{name}."));
+  const wrap = el("div",{}); host.append(wrap);
+  const base = full.id + "/securityRules";
+  function reload(){
+    wrap.innerHTML = "";
+    fetch(ORIGIN + base + "?api-version=" + svc.apiVersion).then(r=>r.json()).then(j => {
+      const rules = (j.value || []).slice().sort((a,b)=>Number(getPath(a,"properties.priority")||0)-Number(getPath(b,"properties.priority")||0));
+      if (!rules.length) { wrap.append(emptyState("No custom security rules. Click + Add security rule below to create one.")); return; }
+      const t = el("table",{class:"sub-table"});
+      t.append(el("tr",{},["Priority","Name","Port","Protocol","Source","Destination","Action",""].map(h=>el("th",{},h))));
+      rules.forEach(r => {
+        const p = r.properties || {};
+        t.append(el("tr",{},
+          el("td",{}, String(p.priority ?? "")), el("td",{}, r.name || ""),
+          el("td",{}, String(p.destinationPortRange ?? "*")), el("td",{}, p.protocol || "*"),
+          el("td",{}, p.sourceAddressPrefix || "*"), el("td",{}, p.destinationAddressPrefix || "*"),
+          el("td",{}, (p.access || "Allow") + " (" + (p.direction || "Inbound") + ")"),
+          el("td",{}, el("button",{class:"vm-action danger",title:"Delete rule",onclick:async()=>{
+            if (!confirm("Delete security rule "+r.name+"?")) return;
+            const d = await arm("DELETE", base + "/" + encodeURIComponent(r.name), undefined, svc.apiVersion);
+            if (d.ok || d.status===204) { toast("Rule deleted"); reload(); } else toast("Delete failed ("+d.status+")","err");
+          }}, icon("delete")))));
+      });
+      wrap.append(t);
+    }).catch(()=>wrap.append(emptyState("Could not load security rules.")));
+  }
+  reload();
+  host.append(el("div",{class:"blade-actions"},
+    el("button",{class:"btn",onclick:()=>{
+      const form = el("div",{class:"essentials",style:"margin-top:14px"});
+      form.append(el("div",{class:"h"}, "Add security rule"));
+      const grid = el("div",{class:"essentials-grid"});
+      const f = {};
+      const field = (label, key, node) => { f[key] = node; grid.append(el("div",{class:"k"},label), el("div",{class:"v"}, node)); };
+      const sel = (opts, v) => { const s = el("select",{class:"sub-select"}); opts.forEach(o=>s.append(el("option",{value:o},o))); s.value = v; return s; };
+      field("Name", "name", el("input",{class:"sub-select",style:"min-width:260px",value:"Allow-HTTPS-Inbound"}));
+      field("Priority", "priority", el("input",{type:"number",class:"sub-select",value:"100"}));
+      field("Direction", "direction", sel(["Inbound","Outbound"], "Inbound"));
+      field("Action", "access", sel(["Allow","Deny"], "Allow"));
+      field("Protocol", "protocol", sel(["Tcp","Udp","Icmp","*"], "Tcp"));
+      field("Source", "src", el("input",{class:"sub-select",value:"*"}));
+      field("Destination", "dst", el("input",{class:"sub-select",value:"*"}));
+      field("Destination port ranges", "port", el("input",{class:"sub-select",value:"443"}));
+      form.append(grid);
+      form.append(el("div",{class:"blade-actions"},
+        el("button",{class:"btn",onclick:async()=>{
+          const nm = f.name.value.trim();
+          if (!nm) { toast("Name is required","err"); return; }
+          const body = {properties:{
+            priority: Number(f.priority.value), direction: f.direction.value, access: f.access.value,
+            protocol: f.protocol.value, sourceAddressPrefix: f.src.value || "*", destinationAddressPrefix: f.dst.value || "*",
+            sourcePortRange: "*", destinationPortRange: f.port.value || "*"}};
+          const r = await arm("PUT", base + "/" + encodeURIComponent(nm), body, svc.apiVersion);
+          if (r.ok) { toast("Security rule created"); recordNotif("ok","NSG security rule created",nm); form.remove(); reload(); }
+          else toast("Create failed ("+r.status+")","err");
+        }},"Add"),
+        el("button",{class:"btn sec",onclick:()=>form.remove()},"Cancel")));
+      host.append(form);
+    }}, icon("add"), "Add security rule")));
+};
 async function fetchPeerableVnets(svc, currentVnet){
   // Fetch sibling VNets in the same RG (anything but ourselves).
   const collUrl = ORIGIN + collPath(svc) + "?api-version=" + svc.apiVersion;

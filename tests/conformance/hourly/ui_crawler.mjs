@@ -422,7 +422,10 @@ async function crawlConsole(browser, base, con, needsSW) {
           // content is the whole panel.
           const prev = new Set(t === 0 ? [] : before.text.split("\n"));
           const added = after.text.split("\n").filter((l) => !prev.has(l)).join("\n");
-          surface("tab", label, tf, calls(), added, tokens);
+          // A Tags tab holding the editable tag grid renders this resource's own tags (the
+          // grid's inputs aren't part of innerText); validated by azure-tags-tab (save + reload).
+          const tagEditor = /^tags$/i.test(label) && (await page.locator(".tags-grid input").count().catch(() => 0)) >= 2 ? 1 : 0;
+          surface("tab", label, tf, calls() + tagEditor, added, tokens);
           if (process.env.DEBUG_CRAWL && row.surfaces.at(-1).state === "static") console.log(`[debug] ${svc.label}/${label} static: ${JSON.stringify(added.slice(0, 160))}`);
         }
       } catch (e) {
