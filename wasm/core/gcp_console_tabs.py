@@ -1060,6 +1060,227 @@ def describe_function(rec: dict, project: str, region: str) -> dict:
     return out
 
 
+# ---------------------------------------------------------------------------
+# Firestore — data, query builder, indexes, security rules, import/export
+# ---------------------------------------------------------------------------
+def fs_to_typed(val):
+    if val is None:
+        return {"nullValue": None}
+    if isinstance(val, bool):
+        return {"booleanValue": val}
+    if isinstance(val, int):
+        return {"integerValue": str(val)}
+    if isinstance(val, float):
+        return {"doubleValue": val}
+    if isinstance(val, list):
+        return {"arrayValue": {"values": [fs_to_typed(x) for x in val]}}
+    if isinstance(val, dict):
+        return {"mapValue": {"fields": {k: fs_to_typed(x) for k, x in val.items()}}}
+    return {"stringValue": str(val)}
+
+
+def fs_from_typed(v):
+    if not isinstance(v, dict) or not v:
+        return None
+    k, x = next(iter(v.items()))
+    if k == "integerValue":
+        try:
+            return int(x)
+        except (TypeError, ValueError):
+            return x
+    if k == "doubleValue":
+        return float(x)
+    if k == "arrayValue":
+        return [fs_from_typed(i) for i in (x or {}).get("values") or []]
+    if k == "mapValue":
+        return {a: fs_from_typed(b) for a, b in ((x or {}).get("fields") or {}).items()}
+    if k == "nullValue":
+        return None
+    return x
+
+
+def _fs_data(data) -> dict:
+    import json as _json
+    if isinstance(data, str):
+        try:
+            data = _json.loads(data) if data.strip() else {}
+        except ValueError as e:
+            raise TabError(400, "INVALID_ARGUMENT", "Document data must be a JSON object: %s" % e)
+    if not isinstance(data, dict):
+        raise TabError(400, "INVALID_ARGUMENT", "Document data must be a JSON object.")
+    return {k: fs_to_typed(v) for k, v in data.items()}
+
+
+_FS_ID = re.compile(r"^(?!__.*__$)[^/]{1,1500}$")
+_FS_OPS = {"==": "EQUAL", "!=": "NOT_EQUAL", "<": "LESS_THAN", "<=": "LESS_THAN_OR_EQUAL", ">": "GREATER_THAN",
+           ">=": "GREATER_THAN_OR_EQUAL", "array-contains": "ARRAY_CONTAINS", "in": "IN", "not-in": "NOT_IN",
+           "array-contains-any": "ARRAY_CONTAINS_ANY"}
+DEFAULT_RULES = ("rules_version = '2';\n\nservice cloud.firestore {\n  match /databases/{database}/documents {\n"
+                 "    match /{document=**} {\n      allow read, write: if false;\n    }\n  }\n}\n")
+
+
+def validate_rules(source: str) -> str:
+    src = str(source or "")
+    if "service cloud.firestore" not in src:
+        raise TabError(400, "INVALID_ARGUMENT", "Ruleset compile error: expected 'service cloud.firestore { ... }'.")
+    depth = 0
+    for i, ch in enumerate(src):
+        depth += (ch == "{") - (ch == "}")
+        if depth < 0:
+            raise TabError(400, "INVALID_ARGUMENT", "Ruleset compile error at character %d: unexpected '}'." % i)
+    if depth:
+        raise TabError(400, "INVALID_ARGUMENT", "Ruleset compile error: missing '}' (unbalanced braces).")
+    for m in re.finditer(r"allow\s+([^:;]+):", src):
+        for verb in [v.strip() for v in m.group(1).split(",")]:
+            if verb not in ("read", "write", "get", "list", "create", "update", "delete"):
+                raise TabError(400, "INVALID_ARGUMENT", "Ruleset compile error: unknown method '%s' in allow statement." % verb)
+    if "match /databases/{database}/documents" not in src:
+        raise TabError(400, "INVALID_ARGUMENT", "Ruleset compile error: rules must match /databases/{database}/documents.")
+    return src
+
+
+def firestore_op(be, project: str, db: str, op: str, body: dict):
+    """One Firestore database's detail-tab op over `be`: collections(), docs(coll) ->
+    [{id, fields(typed), createTime, updateTime}], create_doc(coll, id, typed),
+    update_doc(coll, id, typed), delete_doc(coll, id), indexes(), create_index(cg, body),
+    delete_index(name), put_object(bucket, name, text), get_object(bucket, name), root."""
+    import json as _json
+    op = op[0].lower() + op[1:]
+    if op == "listCollections":
+        return {"ok": True, "items": [{"id": c, "documents": len(be.docs(c))} for c in sorted(be.collections())]}
+    if op == "listQueryFields":   # the query builder's collection + field pickers
+        out = []
+        for c in sorted(be.collections()):
+            fields = sorted({k for d in be.docs(c) for k in (d.get("fields") or {})})
+            out.append({"collection": c, "fields": fields})
+        return {"ok": True, "items": out}
+    if op == "listDocuments":
+        coll = str(body.get("collection") or "")
+        return {"ok": True, "items": [{"id": d["id"], "path": "%s/%s" % (coll, d["id"]),
+                                       "data": _json.dumps({k: fs_from_typed(v) for k, v in (d.get("fields") or {}).items()}, default=str),
+                                       "createTime": d.get("createTime", ""), "updateTime": d.get("updateTime", "")}
+                                      for d in sorted(be.docs(coll), key=lambda d: d["id"])]}
+    if op in ("createDocument", "updateDocument", "deleteDocument"):
+        coll = str(body.get("collection") or "").strip("/")
+        if not _FS_ID.match(coll):
+            raise TabError(400, "INVALID_ARGUMENT", "Invalid collection ID '%s'." % coll)
+        did = str(body.get("id") or "").strip()
+        if op == "createDocument":
+            did = did or hashlib.sha256(("%s%s" % (time.time(), coll)).encode()).hexdigest()[:20]
+            if not _FS_ID.match(did):
+                raise TabError(400, "INVALID_ARGUMENT", "Invalid document ID '%s'." % did)
+            if any(d["id"] == did for d in be.docs(coll)):
+                raise TabError(409, "ALREADY_EXISTS", "Document already exists: projects/%s/databases/%s/documents/%s/%s" % (project, db, coll, did))
+            be.create_doc(coll, did, _fs_data(body.get("data")))
+            return {"ok": True, "id": did}
+        if not any(d["id"] == did for d in be.docs(coll)):
+            raise TabError(404, "NOT_FOUND", "No document to update: projects/%s/databases/%s/documents/%s/%s" % (project, db, coll, did))
+        if op == "updateDocument":
+            be.update_doc(coll, did, _fs_data(body.get("data")))
+        else:
+            be.delete_doc(coll, did)
+        return {"ok": True, "id": did}
+    if op == "runQuery":
+        from core.gcp_firestore_core import _eval_filter, _scalar
+        coll = str(body.get("collection") or "")
+        where = {}
+        if body.get("field"):
+            fop = _FS_OPS.get(str(body.get("op") or "=="))
+            if not fop:
+                raise TabError(400, "INVALID_ARGUMENT", "Unknown operator %s." % body.get("op"))
+            raw = body.get("value")
+            try:
+                val = _json.loads(raw) if isinstance(raw, str) else raw
+            except ValueError:
+                val = raw
+            if fop in ("IN", "NOT_IN", "ARRAY_CONTAINS_ANY") and not isinstance(val, list):
+                raise TabError(400, "INVALID_ARGUMENT", "'%s' needs a JSON array value, e.g. [\"a\", \"b\"]." % body.get("op"))
+            where = {"fieldFilter": {"field": {"fieldPath": str(body["field"])}, "op": fop, "value": fs_to_typed(val)}}
+        rows = [d for d in be.docs(coll) if _eval_filter(d.get("fields") or {}, where)]
+        if body.get("orderBy"):
+            fp = str(body["orderBy"])
+            rows.sort(key=lambda d: (_scalar((d.get("fields") or {}).get(fp, {})) is None, str(_scalar((d.get("fields") or {}).get(fp, {})))),
+                      reverse=str(body.get("direction") or "ASCENDING").upper() == "DESCENDING")
+        lim = int(body.get("limit") or 50)
+        return {"ok": True, "items": [{"id": d["id"], "path": "%s/%s" % (coll, d["id"]),
+                                       "data": _json.dumps({k: fs_from_typed(v) for k, v in (d.get("fields") or {}).items()}, default=str)}
+                                      for d in rows[:lim]]}
+    if op == "listIndexes":
+        return {"ok": True, "items": [{"name": i.get("name"), "collectionGroup": i.get("collectionGroup"),
+                                       "fields": ", ".join("%s %s" % (f["fieldPath"], f.get("order") or f.get("arrayConfig")) for f in i.get("fields") or [] if f["fieldPath"] != "__name__"),
+                                       "queryScope": i.get("queryScope"), "state": i.get("state", "READY")} for i in be.indexes()]}
+    if op == "createIndex":
+        fields = []
+        for part in [p.strip() for p in str(body.get("fields") or "").split(",") if p.strip()]:
+            fp, _, order = part.partition(":")
+            order = order.strip().upper() or "ASCENDING"
+            order = {"ASC": "ASCENDING", "DESC": "DESCENDING"}.get(order, order)
+            fields.append({"fieldPath": fp.strip(), **({"arrayConfig": "CONTAINS"} if order == "CONTAINS" else {"order": order})})
+        be.create_index(str(body.get("collection") or ""), {"fields": fields, "queryScope": body.get("queryScope") or "COLLECTION"})
+        return {"ok": True}
+    if op == "deleteIndex":
+        be.delete_index(str(body.get("name") or ""))
+        return {"ok": True}
+    rels = children(be.root, "firestore", db, "rulesets", create=True)
+    if op == "getRules":
+        cur = sorted(rels.values(), key=lambda r: r["createTime"])[-1] if rels else None
+        return {"ok": True, "item": {"source": cur["source"] if cur else DEFAULT_RULES,
+                                     "ruleset": cur["name"] if cur else "Default rules (deny all)",
+                                     "released": cur["createTime"] if cur else ""}}
+    if op == "setRules":
+        src = validate_rules(body.get("source"))
+        rid = hashlib.sha256(("%s%s" % (src, time.time())).encode()).hexdigest()[:36]
+        rels[rid] = {"name": "projects/%s/rulesets/%s" % (project, rid), "source": src, "createTime": now_iso()}
+        return {"ok": True, "ruleset": rels[rid]["name"]}
+    if op == "listRulesReleases":
+        return {"ok": True, "items": [{"ruleset": r["name"], "createTime": r["createTime"], "lines": len(r["source"].splitlines())}
+                                      for r in sorted(rels.values(), key=lambda r: r["createTime"], reverse=True)]}
+    ops = children(be.root, "firestore", db, "operations", create=True)
+    if op == "exportDocuments":
+        bucket = str(body.get("bucket") or "").strip().replace("gs://", "").strip("/")
+        if not bucket:
+            raise TabError(400, "INVALID_ARGUMENT", "An export needs a Cloud Storage bucket (gs://BUCKET).")
+        prefix = str(body.get("prefix") or "").strip("/")
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%S_00000", time.gmtime())
+        colls = [c for c in (body.get("collectionIds") or be.collections())]
+        dump = {"database": "projects/%s/databases/%s" % (project, db), "exportTime": now_iso(),
+                "collections": {c: [{"id": d["id"], "fields": d.get("fields") or {}} for d in be.docs(c)] for c in colls}}
+        obj = "/".join(x for x in (prefix, stamp, "%s.overall_export_metadata" % stamp) if x)
+        be.put_object(bucket, obj, _json.dumps(dump))
+        n = sum(len(v) for v in dump["collections"].values())
+        name = "projects/%s/databases/%s/operations/%s" % (project, db, hashlib.sha256(obj.encode()).hexdigest()[:24])
+        ops[name] = {"name": name, "operationType": "EXPORT_DOCUMENTS", "state": "SUCCESSFUL", "seq": len(ops), "startTime": now_iso(),
+                     "endTime": now_iso(), "progressDocuments": n, "uri": "gs://%s/%s" % (bucket, obj),
+                     "collectionIds": ", ".join(colls) or "All collections"}
+        return {"ok": True, "operation": name, "outputUri": "gs://%s/%s" % (bucket, obj), "documents": n}
+    if op == "importDocuments":
+        uri = str(body.get("uri") or "").strip()
+        if not uri.startswith("gs://") or "/" not in uri[5:]:
+            raise TabError(400, "INVALID_ARGUMENT", "Import needs the export's gs://BUCKET/PATH (the .overall_export_metadata object).")
+        bucket, obj = uri[5:].split("/", 1)
+        text = be.get_object(bucket, obj)
+        if text is None:
+            raise TabError(404, "NOT_FOUND", "Export not found: %s" % uri)
+        try:
+            dump = _json.loads(text)
+            colls = dump["collections"]
+        except Exception:
+            raise TabError(400, "INVALID_ARGUMENT", "%s is not a Firestore export." % uri)
+        n = 0
+        for c, docs in colls.items():
+            have = {d["id"] for d in be.docs(c)}
+            for d in docs:
+                (be.update_doc if d["id"] in have else be.create_doc)(c, d["id"], d.get("fields") or {})
+                n += 1
+        name = "projects/%s/databases/%s/operations/%s" % (project, db, hashlib.sha256(("imp" + uri + now_iso()).encode()).hexdigest()[:24])
+        ops[name] = {"name": name, "operationType": "IMPORT_DOCUMENTS", "state": "SUCCESSFUL", "seq": len(ops), "startTime": now_iso(),
+                     "endTime": now_iso(), "progressDocuments": n, "uri": uri, "collectionIds": ", ".join(colls) or "All collections"}
+        return {"ok": True, "operation": name, "documents": n}
+    if op == "listOperations":
+        return {"ok": True, "items": sorted(ops.values(), key=lambda o: (o["startTime"], o.get("seq", 0)), reverse=True)}
+    return None
+
+
 def auto_subnet_second_octet(region: str) -> int:
     for r, cidr in AUTO_SUBNETS:
         if r == region:

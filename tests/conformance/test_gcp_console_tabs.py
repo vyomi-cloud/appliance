@@ -603,3 +603,84 @@ def test_functions_trigger_networking_labels(c, fn):
     st, _ = c.sub("functions", "setLabels", fn, {"labels": {"app": "api"}})
     st, out = c.sub("functions", "getLabels", fn)
     assert out["item"]["labels"] == {"app": "api"}
+
+
+# ── Firestore ─────────────────────────────────────────────────────────────────
+@pytest.fixture(scope="module")
+def fsdb(c):
+    name = uid("tabfs")
+    st, _ = c.create("firestore", {"name": name, "type": "FIRESTORE_NATIVE"})
+    assert st == 200
+    yield name
+    for coll in (c.sub("firestore", "listCollections", name)[1].get("items") or []):
+        for d in c.sub("firestore", "listDocuments", name, {"collection": coll["id"]})[1].get("items") or []:
+            c.sub("firestore", "deleteDocument", name, {"collection": coll["id"], "id": d["id"]})
+    c.delete("firestore", name)
+
+
+def test_firestore_data_and_query_builder(c, fsdb):
+    for did, data in (("alice", {"name": "Alice", "age": 30, "city": "Pune"}), ("bob", {"name": "Bob", "age": 25, "city": "Goa"}),
+                      ("cara", {"name": "Cara", "age": 41, "city": "Pune"})):
+        st, _ = c.sub("firestore", "createDocument", fsdb, {"collection": "users", "id": did, "data": json.dumps(data)})
+        assert st == 200
+    st, dup = c.sub("firestore", "createDocument", fsdb, {"collection": "users", "id": "bob", "data": "{}"})
+    assert st == 409
+    st, bad = c.sub("firestore", "createDocument", fsdb, {"collection": "users", "id": "x", "data": "{nope"})
+    assert st == 400
+    st, out = c.sub("firestore", "listCollections", fsdb)
+    assert {"id": "users", "documents": 3} in out["items"]
+    st, out = c.sub("firestore", "listDocuments", fsdb, {"collection": "users"})
+    assert json.loads(next(d for d in out["items"] if d["id"] == "alice")["data"]) == {"name": "Alice", "age": 30, "city": "Pune"}
+    st, out = c.sub("firestore", "runQuery", fsdb, {"collection": "users", "field": "city", "op": "==", "value": '"Pune"',
+                                                    "orderBy": "age", "direction": "DESCENDING"})
+    assert [d["id"] for d in out["items"]] == ["cara", "alice"]
+    st, out = c.sub("firestore", "runQuery", fsdb, {"collection": "users", "field": "age", "op": ">", "value": "26"})
+    assert sorted(d["id"] for d in out["items"]) == ["alice", "cara"]
+    st, _ = c.sub("firestore", "updateDocument", fsdb, {"collection": "users", "id": "bob", "data": json.dumps({"age": 26})})
+    st, out = c.sub("firestore", "listDocuments", fsdb, {"collection": "users"})
+    assert json.loads(next(d for d in out["items"] if d["id"] == "bob")["data"])["age"] == 26
+    st, _ = c.sub("firestore", "deleteDocument", fsdb, {"collection": "users", "id": "bob"})
+    st, out = c.sub("firestore", "listDocuments", fsdb, {"collection": "users"})
+    assert "bob" not in [d["id"] for d in out["items"]]
+
+
+def test_firestore_indexes_and_rules(c, fsdb):
+    st, bad = c.sub("firestore", "createIndex", fsdb, {"collection": "users", "fields": "age:ASC"})
+    assert st == 400 and "single field" in bad["message"]
+    st, _ = c.sub("firestore", "createIndex", fsdb, {"collection": "users", "fields": "city:ASC,age:DESC"})
+    assert st == 200
+    st, out = c.sub("firestore", "listIndexes", fsdb)
+    idx = next(i for i in out["items"] if i["collectionGroup"] == "users")
+    assert idx["fields"] == "city ASCENDING, age DESCENDING" and idx["state"] == "READY"
+    st, _ = c.sub("firestore", "deleteIndex", fsdb, {"name": idx["name"]})
+    st, out = c.sub("firestore", "listIndexes", fsdb)
+    assert not [i for i in out["items"] if i["collectionGroup"] == "users"]
+    st, out = c.sub("firestore", "getRules", fsdb)
+    assert "allow read, write: if false" in out["item"]["source"]
+    st, bad = c.sub("firestore", "setRules", fsdb, {"source": "service cloud.firestore { match /databases/{database}/documents {"})
+    assert st == 400
+    src = "rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /users/{u} {\n      allow read: if true;\n    }\n  }\n}\n"
+    st, _ = c.sub("firestore", "setRules", fsdb, {"source": src})
+    assert st == 200
+    st, out = c.sub("firestore", "getRules", fsdb)
+    assert out["item"]["source"] == src
+    st, out = c.sub("firestore", "listRulesReleases", fsdb)
+    assert len(out["items"]) == 1
+
+
+def test_firestore_export_then_import_round_trips_through_gcs(c, fsdb):
+    bucket = uid("tabexp")
+    assert c.create("storage", {"name": bucket})[0] == 200
+    st, _ = c.sub("firestore", "createDocument", fsdb, {"collection": "orders", "id": "o1", "data": json.dumps({"total": 9.5})})
+    st, out = c.sub("firestore", "exportDocuments", fsdb, {"bucket": bucket, "prefix": "backups"})
+    assert st == 200 and out["documents"] >= 1 and out["outputUri"].startswith("gs://%s/backups/" % bucket)
+    uri = out["outputUri"]
+    st, _ = c.sub("firestore", "deleteDocument", fsdb, {"collection": "orders", "id": "o1"})
+    st, out = c.sub("firestore", "importDocuments", fsdb, {"uri": uri})
+    assert st == 200 and out["documents"] >= 1
+    st, out = c.sub("firestore", "listDocuments", fsdb, {"collection": "orders"})
+    assert json.loads(out["items"][0]["data"]) == {"total": 9.5}
+    st, out = c.sub("firestore", "listOperations", fsdb)
+    assert [o["operationType"] for o in out["items"]][:2] == ["IMPORT_DOCUMENTS", "EXPORT_DOCUMENTS"]
+    st, bad = c.sub("firestore", "importDocuments", fsdb, {"uri": "gs://%s/missing" % bucket})
+    assert st == 404

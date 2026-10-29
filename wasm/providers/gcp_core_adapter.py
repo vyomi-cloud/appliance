@@ -513,24 +513,29 @@ def _resource_op(service, operation, name="", body=None):
                           f"/storage/v1/b/{body.get('bucket','')}/o/{quote(str(body.get('key','')), safe='')}")
             return {"ok": st < 300, "key": body.get("key"), "code": None if st < 300 else "NotFound"}
 
-    # ---------------- FIRESTORE (documents in a default collection) ----------------
+    # ---------------- FIRESTORE (projects.databases — the Admin API's databases) ----------------
     if svc == "firestore":
-        base = f"{_P}/databases/(default)/documents/{COLL}"
+        base = f"{_P}/databases"
         if operation == "List":
-            return _ok_list(svc)
+            st, p = _call(svc, "GET", base)
+            return {"ok": True, "items": [_rec(x) for x in (p.get("databases") or [])]}
         if operation == "Create":
-            st, p = _call(svc, "POST", base, {"documentId": rid}, {"fields": {}})
-            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "AlreadyExists", "name": rid}
+            st, p = _call(svc, "POST", base, {"databaseId": rid},
+                          {k: body[k] for k in ("type", "concurrencyMode", "locationId", "appEngineIntegrationMode",
+                                                "pointInTimeRecoveryEnablement", "deleteProtectionState") if body.get(k)})
+            if st < 300:
+                return {"ok": True, **_rec(p.get("response") or {})}
+            err = (p or {}).get("error") or {}
+            return {"ok": False, "code": err.get("status") or "AlreadyExists", "message": err.get("message", ""), "name": rid}
         if operation == "Get":
             st, p = _call(svc, "GET", f"{base}/{name}")
             return {"ok": True, **_rec(p)} if st < 300 else {"ok": False, "code": "NotFound", "name": name}
         if operation == "Delete":
-            st, _ = _call(svc, "DELETE", f"{base}/{name}")
-            return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
-        if operation == "Update":   # Data tab edit → document PATCH (merge typed fields)
-            fields = body.get("fields", body)
-            st, p = _call(svc, "PATCH", f"{base}/{name}", {}, {"fields": fields})
-            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "UpdateFailed", "name": name}
+            st, p = _call(svc, "DELETE", f"{base}/{name}")
+            return {"ok": st < 300, "code": None if st < 300 else ((p or {}).get("error") or {}).get("status", "NotFound"), "name": name}
+        if operation == "Update":   # databases.patch (delete protection, PITR, concurrency)
+            st, p = _call(svc, "PATCH", f"{base}/{name}", {}, body)
+            return {"ok": True, **_rec(p.get("response") or {})} if st < 300 else {"ok": False, "code": "UpdateFailed", "name": name}
 
     # ---------------- KMS (cryptoKeys under a default key ring) ----------------
     if svc == "kms":
@@ -1149,6 +1154,72 @@ def _functions_tab(g, op, body):
     return _T.functions_op(_NanoFunction(g), op, body)
 
 
+class _NanoFirestore:
+    """Firestore storage for core/gcp_console_tabs.firestore_op over core/gcp_firestore_core
+    (documents per database, composite indexes) + GCS for exports."""
+
+    def __init__(self, db):
+        self.db, self.root = db, _tab_root()
+        self.base = "%s/databases/%s/documents" % (_P, db)
+        st, _ = _call("firestore", "GET", "%s/databases/%s" % (_P, db))
+        if st >= 300 and db != "(default)":
+            raise _T.TabError(404, "NOT_FOUND", "The database %s does not exist for project %s" % (db, PROJ))
+
+    def _ok(self, st, out):
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "FAILED_PRECONDITION", err.get("message") or "Request failed")
+        return out
+
+    def collections(self):
+        from core.gcp_firestore_core import _DbDocs
+        rels = _DbDocs(_STORES["firestore"], self.db).all()
+        return sorted({r.split("/")[0] for r, _ in rels if "/" in r})
+
+    def docs(self, coll):
+        if not coll:
+            return []
+        st, out = _call("firestore", "GET", "%s/%s" % (self.base, coll))
+        return [{"id": d["name"].rsplit("/", 1)[-1], "fields": d.get("fields") or {}, "createTime": d.get("createTime", ""),
+                 "updateTime": d.get("updateTime", "")} for d in (out or {}).get("documents", [])]
+
+    def create_doc(self, coll, did, typed):
+        self._ok(*_call("firestore", "POST", "%s/%s" % (self.base, coll), {"documentId": did}, {"fields": typed}))
+
+    def update_doc(self, coll, did, typed):
+        self._ok(*_call("firestore", "PATCH", "%s/%s/%s" % (self.base, coll, did), {}, {"fields": typed}))
+
+    def delete_doc(self, coll, did):
+        self._ok(*_call("firestore", "DELETE", "%s/%s/%s" % (self.base, coll, did)))
+
+    def indexes(self):
+        st, out = _call("firestore", "GET", "%s/databases/%s/collectionGroups/-/indexes" % (_P, self.db))
+        return (out or {}).get("indexes", [])
+
+    def create_index(self, cg, body):
+        self._ok(*_call("firestore", "POST", "%s/databases/%s/collectionGroups/%s/indexes" % (_P, self.db, cg), {}, body))
+
+    def delete_index(self, name):
+        self._ok(*_call("firestore", "DELETE", "/v1/" + name))
+
+    def put_object(self, bucket, name, text):
+        r = _MOD["storage"].dispatch(_STORES["storage"], "POST", "/upload/storage/v1/b/%s/o" % bucket,
+                                     {"uploadType": "media", "name": name}, {"content-type": "application/json"}, text.encode())
+        if r.status >= 300:
+            raise _T.TabError(404 if r.status == 404 else r.status, "NOT_FOUND", "Bucket gs://%s does not exist." % bucket)
+
+    def get_object(self, bucket, name):
+        from urllib.parse import quote
+        r = _MOD["storage"].dispatch(_STORES["storage"], "GET", "/storage/v1/b/%s/o/%s" % (bucket, quote(name, safe="")),
+                                     {"alt": "media"}, {}, b"")
+        return r.body.decode("utf-8") if r.status < 300 else None
+
+
+def _firestore_tab(name, op, body):
+    db = _short(name) or "(default)"
+    return _T.firestore_op(_NanoFirestore(db), "nano-project", db, op, body)
+
+
 def _project_policy(op, project, body):
     res = "projects/%s" % (project or PROJ)
     st, pol = _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})
@@ -1161,7 +1232,7 @@ def _project_policy(op, project, body):
 
 
 _TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _sql_tab, "pubsub": _pubsub_tab,
-                 "vpc": _vpc_tab, "functions": _functions_tab}
+                 "vpc": _vpc_tab, "functions": _functions_tab, "firestore": _firestore_tab}
 
 
 def tab_dispatch(svc, operation, name, body, resources=None, account="default"):

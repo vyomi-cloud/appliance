@@ -16,6 +16,7 @@ API uses.
 from __future__ import annotations
 
 import re
+import time
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -633,6 +634,112 @@ def _functions(op: str, name: str, body: dict):
 
 
 # ---------------------------------------------------------------------------
+# Firestore — documents live in the Google Firestore emulator (named databases), indexes in
+# gcp_firestore_state, security rulesets / operations in the tab state, exports in GCS
+# ---------------------------------------------------------------------------
+class _OfflineFirestore:
+    def __init__(self, db):
+        from core import gcp_firestore_emulator as emu
+        self.s, self.emu, self.db, self.project = _server(), emu, db, _project()
+        if db not in self.s.gcp_firestore_state.setdefault("databases", {}) and db != "(default)":
+            raise T.TabError(404, "NOT_FOUND", "The database %s does not exist for project %s" % (db, self.project))
+        self.root = tab_state
+        self.live = emu.available()
+        self.engine = None if self.live else self.s._gcp_firestore_engine()
+
+    def _rows(self, docs):
+        return [{"id": str(d.get("name", "")).rsplit("/", 1)[-1], "fields": d.get("fields") or {},
+                 "createTime": d.get("createTime", ""), "updateTime": d.get("updateTime", "")} for d in docs]
+
+    def collections(self):
+        docs = self.emu.list_root(self.project, self.db) if self.live else self.engine.list_root_documents(self.project, self.db)
+        return sorted({str(d.get("name", "")).split("/documents/", 1)[-1].split("/")[0] for d in docs if "/documents/" in str(d.get("name", ""))})
+
+    def docs(self, coll):
+        if not coll:
+            return []
+        return self._rows(self.emu.list_collection(self.project, self.db, coll) if self.live
+                          else self.engine.list_documents(self.project, self.db, coll))
+
+    def create_doc(self, coll, did, typed):
+        if self.live:
+            self.emu.create(self.project, self.db, coll, did, typed)
+        else:
+            self.engine.create_document(self.project, self.db, coll, self.s._gcp_firestore_normalize_fields(typed), did)
+
+    def update_doc(self, coll, did, typed):
+        if self.live:
+            self.emu.update(self.project, self.db, coll, did, typed)
+        else:
+            self.engine.update_document(self.project, self.db, coll, did, self.s._gcp_firestore_normalize_fields(typed))
+
+    def delete_doc(self, coll, did):
+        if self.live:
+            self.emu.delete(self.project, self.db, coll, did)
+        else:
+            self.engine.delete_document(self.project, self.db, coll, did)
+
+    def indexes(self):
+        out = []
+        for idx in self.s.gcp_firestore_state.get("indexes", {}).values():
+            if isinstance(idx, dict) and str(idx.get("database") or "(default)") == self.db:
+                v = self.s._gcp_firestore_index_view(idx)
+                out.append(v)
+        return out
+
+    def create_index(self, cg, body):
+        from core import gcp_firestore_core as fsc
+        try:
+            rec = fsc.validate_index(cg, body)
+        except ValueError as e:
+            raise T.TabError(400, "INVALID_ARGUMENT", str(e))
+        for idx in self.indexes():
+            if idx["collectionGroup"] == cg and idx["fields"] == rec["fields"] and idx["queryScope"] == rec["queryScope"]:
+                raise T.TabError(409, "ALREADY_EXISTS", "Index already exists")
+        rec = self.s._gcp_firestore_index_record(self.project, self.db, cg, {**rec, "name": "CICAg" + T.numeric_id(str(time.time()))[:10]})
+        self.s.gcp_firestore_state.setdefault("indexes", {})["%s:%s:%s:%s" % (self.project, self.db, cg, rec["name"])] = rec
+
+    def delete_index(self, name):
+        idx = self.s.gcp_firestore_state.get("indexes", {})
+        for k, v in list(idx.items()):
+            if isinstance(v, dict) and self.s._gcp_firestore_index_view(v)["name"] == name:
+                del idx[k]
+                return
+        raise T.TabError(404, "NOT_FOUND", "Index not found")
+
+    def put_object(self, bucket, name, text):
+        if bucket not in self.s.gcp_storage_state.get("buckets", {}):
+            raise T.TabError(404, "NOT_FOUND", "Bucket gs://%s does not exist." % bucket)
+        from core import gcp_gcs_store as gcs
+        if gcs.available():
+            gcs.put_text(self.s._tenant_scoped_bucket(bucket), name, text, "application/json")
+        rec = self.s._gcp_storage_object_record(bucket, name, {"contentType": "application/json", "size": str(len(text.encode()))})
+        rec["_export_body"] = None if gcs.available() else text   # no byte store: keep the export with its record
+        self.s.gcp_storage_state.setdefault("objects", {}).setdefault(bucket, {})[name] = rec
+
+    def get_object(self, bucket, name):
+        rec = self.s.gcp_storage_state.get("objects", {}).get(bucket, {}).get(name)
+        if rec is None:
+            return None
+        if rec.get("_export_body"):
+            return rec["_export_body"]
+        from core import gcp_gcs_store as gcs
+        try:
+            data, _ = gcs.download(self.s._tenant_scoped_bucket(bucket), name)
+            return data.decode("utf-8")
+        except Exception:
+            return None
+
+
+def _firestore(op: str, name: str, body: dict):
+    db = T.short(name) or "(default)"
+    out = T.firestore_op(_OfflineFirestore(db), _project(), db, op, body)
+    if out is not None and not op.startswith(("get", "list", "run")):
+        _usage("firestore", op, db, {k: body.get(k) for k in ("collection", "id", "bucket") if body.get(k)})
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Project IAM policy (every resource's Permissions tab)
 # ---------------------------------------------------------------------------
 def _iam_project(op: str, project: str, body: dict):
@@ -658,6 +765,7 @@ _HANDLERS = {
     "pubsub": _pubsub,
     "vpc": _vpc,
     "functions": _functions,
+    "firestore": _firestore,
 }
 
 

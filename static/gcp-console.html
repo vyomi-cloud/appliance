@@ -2356,6 +2356,134 @@ GT.fnlogs = async function(host, svc, item){
     columns: [["timestamp", "Timestamp"], ["severity", "Severity"], ["executionId", "Execution ID"], ["textPayload", "Message"]],
   });
 };
+
+// ---- Firestore ----------------------------------------------------------------
+GT.fsdata = async function(host, svc, item){
+  const db = tabName(svc, item);
+  let coll = "";
+  const top = el("div",{}); const docsHost = el("div",{});
+  host.append(top, docsHost);
+  async function paintColls(){
+    top.innerHTML = "";
+    await childList(top, {
+      load: () => subGet(svc, "listCollections", db), noun: "collection", nouns: "collections", emptyIcon: "data_object",
+      empty: "The " + db + " database has no collections yet. Start one by adding a document.",
+      columns: [["id", "Collection ID", c => el("a",{href:"#", onclick: e => { e.preventDefault(); coll = c.id; paintDocs(); }}, c.id)], ["documents", "Documents"]],
+      create: {label: "Start collection", submit: "Save", done: "Document added",
+        fields: [{name: "collection", label: "Collection ID", placeholder: "users"}, {name: "id", label: "Document ID (blank = auto-ID)", placeholder: "alice"},
+                 {name: "data", label: "Fields (JSON)", type: "textarea", rows: 4, value: '{\n  "name": "Alice",\n  "age": 30\n}'}],
+        run: async v => { const r = await subPost(svc, "createDocument", db, {collection: v.collection.trim(), id: v.id.trim(), data: v.data}); if (r.ok) { coll = v.collection.trim(); setTimeout(paintDocs, 0); } return r; }},
+    });
+  }
+  async function paintDocs(){
+    docsHost.innerHTML = "";
+    if (!coll) return;
+    docsHost.append(el("div",{style:"font-weight:500;margin:12px 0 8px"}, "Documents in " + coll));
+    await childList(docsHost, {
+      load: () => api("POST", subPath(svc, "listDocuments", db), {collection: coll}), noun: "document", nouns: "documents", emptyIcon: "description",
+      empty: "No documents in " + coll + ".",
+      columns: [["id", "Document ID"], ["data", "Fields"], ["updateTime", "Last updated"]],
+      create: {label: "Add document", submit: "Save", done: "Document added",
+        fields: [{name: "id", label: "Document ID (blank = auto-ID)"}, {name: "data", label: "Fields (JSON)", type: "textarea", rows: 4, value: "{}"}],
+        run: v => subPost(svc, "createDocument", db, {collection: coll, id: v.id.trim(), data: v.data})},
+      rowActions: [
+        {label: "Edit", icon: "edit", run: d => { const v = prompt("Fields (JSON) for " + d.path, d.data); if (v === null) return Promise.resolve({ok: true}); return subPost(svc, "updateDocument", db, {collection: coll, id: d.id, data: v}); }},
+        {label: "Delete", icon: "delete", danger: true, confirm: d => "Delete document " + d.path + "?", run: d => subPost(svc, "deleteDocument", db, {collection: coll, id: d.id})}],
+      after: () => paintColls(),
+    });
+  }
+  await paintColls();
+};
+GT.fsquery = async function(host, svc, item){
+  const db = tabName(svc, item);
+  const schema = (((await subGet(svc, "listQueryFields", db)).json || {}).items || []);
+  const colls = schema.map(c => c.collection);
+  const allFields = [...new Set(schema.flatMap(c => c.fields))];
+  if (!colls.length) { host.append(emptyOf("search", "Nothing to query — the " + db + " database has no collections yet.")); return; }
+  const out = el("div",{});
+  host.append(inlineForm([{name: "collection", label: "Collection", type: "select", value: colls[0], options: colls},
+    {name: "field", label: "Where field (optional)", placeholder: allFields.slice(0, 3).join(", ") || "field", width: 140},
+    {name: "op", label: "Operator", type: "select", value: "==", options: ["==", "!=", "<", "<=", ">", ">=", "array-contains", "in", "not-in", "array-contains-any"]},
+    {name: "value", label: "Value (JSON)", placeholder: "30", width: 120},
+    {name: "orderBy", label: "Order by (optional)", width: 120},
+    {name: "direction", label: "Direction", type: "select", value: "ASCENDING", options: ["ASCENDING", "DESCENDING"]},
+    {name: "limit", label: "Limit", type: "number", value: 50, width: 70}], "Run query", async v => {
+      const r = await subPost(svc, "runQuery", db, {...v, limit: Number(v.limit)});
+      out.innerHTML = "";
+      if (!r.ok) { toast("Query failed: " + errMsg(r), "err"); return; }
+      const items = r.json.items || [];
+      out.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin:6px 0"}, items.length + " result" + (items.length === 1 ? "" : "s")));
+      if (items.length) out.append(tableOf([["path", "Document"], ["data", "Fields"]], items));
+    }));
+  host.append(out);
+};
+GT.fsindexes = async function(host, svc, item){
+  const db = tabName(svc, item);
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin-bottom:10px"}, "Composite indexes of " + db + " (single-field indexes are automatic)."));
+  await childList(host, {
+    load: () => subGet(svc, "listIndexes", db), noun: "composite index", nouns: "composite indexes", emptyIcon: "format_indent_increase",
+    empty: "No composite indexes on " + db + ".",
+    columns: [["collectionGroup", "Collection ID"], ["fields", "Fields indexed"], ["queryScope", "Query scope"], ["state", "Status", i => stateBadge(i.state === "READY" ? "Enabled" : i.state)]],
+    create: {label: "Create index", submit: "Create", done: "Index created",
+      fields: [{name: "collection", label: "Collection ID", placeholder: "users"}, {name: "fields", label: "Fields (path:ASC|DESC|CONTAINS, …)", placeholder: "city:ASC,age:DESC", width: 240},
+               {name: "queryScope", label: "Query scope", type: "select", value: "COLLECTION", options: ["COLLECTION", "COLLECTION_GROUP"]}],
+      run: v => subPost(svc, "createIndex", db, v)},
+    rowActions: [{label: "Delete", icon: "delete", danger: true, confirm: () => "Delete this composite index?", run: i => subPost(svc, "deleteIndex", db, {name: i.name})}],
+  });
+};
+GT.fsrules = async function(host, svc, item){
+  const db = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const r = (await subGet(svc, "getRules", db)).json || {};
+    const it = r.item || {};
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("", [["Active ruleset", it.ruleset], ["Published", it.released || "Never (default rules)"]]));
+    if (!editing) {
+      wrap.append(el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto;white-space:pre-wrap"}, it.source || ""));
+      wrap.append(el("button",{class:"btn", style:"margin-top:10px", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit rules"));
+    } else {
+      wrap.append(inlineForm([{name: "source", label: "firestore.rules", type: "textarea", rows: 12, value: it.source || ""}], "Publish", async v => {
+        const rr = await subPost(svc, "setRules", db, v);
+        if (rr.ok) { toast("Rules published"); editing = false; paint(); } else toast("Publish failed: " + errMsg(rr), "err");
+      }, ()=>{ editing = false; paint(); }));
+    }
+    wrap.append(el("div",{style:"font-weight:500;margin:12px 0 8px"}, "Release history"));
+    await childList(wrap, {load: () => subGet(svc, "listRulesReleases", db), noun: "release", nouns: "releases", emptyIcon: "history",
+      empty: "No rules published for " + db + " yet — the default rules deny all reads and writes.",
+      columns: [["createTime", "Published"], ["ruleset", "Ruleset"], ["lines", "Lines"]]});
+  }
+  await paint();
+};
+GT.fsimportexport = async function(host, svc, item){
+  const db = tabName(svc, item);
+  let buckets = [];
+  try { const r = await api("GET", fillCommon(svcByKey("storage").collection_path)); buckets = ((r.json || {}).items || []).map(b => lastSeg(b.name)); } catch(_) {}
+  const bar = el("div",{});
+  host.append(el("div",{style:"font-weight:500;margin-bottom:8px"}, "Export"));
+  if (buckets.length) host.append(inlineForm([{name: "bucket", label: "Destination bucket", type: "select", value: buckets[0], options: buckets},
+    {name: "prefix", label: "Path prefix (optional)", placeholder: "exports"}], "Export", async v => {
+      const r = await subPost(svc, "exportDocuments", db, v);
+      if (r.ok) { toast("Exported " + r.json.documents + " documents to " + r.json.outputUri); paintOps(); } else toast("Export failed: " + errMsg(r), "err");
+    }));
+  else host.append(emptyOf("cloud_upload", "Exports go to a Cloud Storage bucket — create one first."));
+  host.append(el("div",{style:"font-weight:500;margin:12px 0 8px"}, "Import"));
+  host.append(inlineForm([{name: "uri", label: "Export to import (gs://…overall_export_metadata)", placeholder: "gs://bucket/exports/…", width: 380}], "Import", async v => {
+    const r = await subPost(svc, "importDocuments", db, {uri: v.uri.trim()});
+    if (r.ok) { toast("Imported " + r.json.documents + " documents"); paintOps(); } else toast("Import failed: " + errMsg(r), "err");
+  }));
+  host.append(el("div",{style:"font-weight:500;margin:12px 0 8px"}, "Recent imports and exports"), bar);
+  async function paintOps(){
+    bar.innerHTML = "";
+    await childList(bar, {load: () => subGet(svc, "listOperations", db), noun: "operation", nouns: "operations", emptyIcon: "import_export",
+      empty: "No imports or exports of " + db + " yet.",
+      columns: [["startTime", "Started"], ["operationType", "Type", o => o.operationType === "EXPORT_DOCUMENTS" ? "Export" : "Import"],
+                ["state", "Status", o => stateBadge(o.state === "SUCCESSFUL" ? "Succeeded" : o.state)], ["progressDocuments", "Documents"],
+                ["uri", "Location"], ["collectionIds", "Collections"]]});
+  }
+  await paintOps();
+};
 // ========== END DETAIL TABS =================================================
 
 // ========== CREATE — collapsible-sections form + right summary card =========

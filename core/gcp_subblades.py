@@ -132,16 +132,17 @@ _PUBSUB_SUB = [
 # ============================================================================
 # Firestore — Database detail
 # ============================================================================
+# (Firestore databases carry no labels in the Firestore Admin API, so there is no Labels tab.)
 _FIRESTORE_SUB = [
-    *_UNIVERSAL_TOP,
+    *[t for t in _UNIVERSAL_TOP if t["key"] != "tags"],
     {"group": "Data", "items": [
-        {"key": "data",        "label": "Data",             "icon": "data_object","type": "stub"},
-        {"key": "query",       "label": "Query builder",    "icon": "search",     "type": "stub"},
-        {"key": "indexes",     "label": "Indexes",          "icon": "format_indent_increase","type":"stub"},
+        {"key": "data",        "label": "Data",             "icon": "data_object","type": "fsData"},
+        {"key": "query",       "label": "Query builder",    "icon": "search",     "type": "fsQuery"},
+        {"key": "indexes",     "label": "Indexes",          "icon": "format_indent_increase","type":"fsIndexes"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "rules",       "label": "Security rules",   "icon": "policy",     "type": "stub"},
-        {"key": "imports",     "label": "Import / Export",  "icon": "import_export","type": "stub"},
+        {"key": "rules",       "label": "Security rules",   "icon": "policy",     "type": "fsRules"},
+        {"key": "imports",     "label": "Import / Export",  "icon": "import_export","type": "fsImportExport"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
