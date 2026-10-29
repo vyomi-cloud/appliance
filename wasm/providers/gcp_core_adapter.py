@@ -883,6 +883,95 @@ def _storage_tab(name, op, body):
     return {"ok": True, "item": out}
 
 
+def _sql_tab(name, op, body):
+    """Cloud SQL detail tabs over core/gcp_cloudsql_core (the Cloud SQL Admin engine)."""
+    base = "/sql/v1beta4/projects/%s/instances/%s" % (PROJ, name)
+
+    def call(method, path="", query=None, payload=None, ok=(200,)):
+        st, out = _call("cloudsql", method, base + path, query or {}, payload if payload is not None else b"")
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "FAILED_PRECONDITION", err.get("message") or "Request failed")
+        return out
+
+    full = call("GET")
+    op = op[0].lower() + op[1:]
+    v = _T.view_op("cloudsql", op)
+    if v:
+        return {"ok": True, "item": _T.view("cloudsql", v, full)}
+    patch = _T.sql_settings_patch(op, body, full.get("settings") or {})
+    if patch is not None:
+        call("PATCH", "", None, {"settings": patch})
+        return {"ok": True, "item": call("GET")}
+    if op == "listDatabases":
+        return {"ok": True, "items": [{"name": d["name"], "charset": d.get("charset"), "collation": d.get("collation")}
+                                      for d in call("GET", "/databases").get("items", [])]}
+    if op == "createDatabase":
+        call("POST", "/databases", None, {k: body[k] for k in ("name", "charset", "collation") if body.get(k)})
+        return {"ok": True, "name": body.get("name")}
+    if op == "deleteDatabase":
+        call("DELETE", "/databases/%s" % body.get("name"))
+        return {"ok": True, "name": body.get("name")}
+    if op == "listUsers":
+        return {"ok": True, "items": [{"name": u["name"], "host": u.get("host") or "", "type": u.get("type")}
+                                      for u in call("GET", "/users").get("items", [])]}
+    if op == "createUser":
+        call("POST", "/users", None, body)
+        return {"ok": True, "name": body.get("name")}
+    if op == "deleteUser":
+        call("DELETE", "/users", {"name": body.get("name", ""), "host": body.get("host", "")})
+        return {"ok": True, "name": body.get("name")}
+    if op == "setUserPassword":
+        if not str(body.get("password") or ""):
+            raise _T.TabError(400, "INVALID_ARGUMENT", "Invalid request: a password is required.")
+        call("PUT", "/users", {"name": body.get("name", ""), "host": body.get("host", "")}, {"password": body["password"]})
+        return {"ok": True, "name": body.get("name")}
+    if op == "listBackups":
+        return {"ok": True, "items": [{"id": b["id"], "type": b.get("type"), "status": b.get("status"),
+                                       "description": b.get("description") or "", "windowStartTime": b.get("windowStartTime"),
+                                       "location": b.get("location")} for b in call("GET", "/backupRuns").get("items", [])]}
+    if op == "createBackup":
+        call("POST", "/backupRuns", None, {"description": body.get("description") or ""})
+        return {"ok": True}
+    if op == "deleteBackup":
+        call("DELETE", "/backupRuns/%s" % body.get("id"))
+        return {"ok": True, "id": body.get("id")}
+    if op == "listReplicas":
+        st, lst = _call("cloudsql", "GET", "/sql/v1beta4/projects/%s/instances" % PROJ)
+        reps = [r for r in (lst or {}).get("items", []) if r.get("masterInstanceName") == name]
+        return {"ok": True, "items": [{"name": r["name"], "state": r.get("state"), "region": r.get("region"),
+                                       "databaseVersion": r.get("databaseVersion"), "tier": r["settings"].get("tier"),
+                                       "instanceType": r.get("instanceType")} for r in reps]}
+    if op == "createReplica":
+        rn = _T.validate_name(body.get("name"), "name")
+        st, out = _call("cloudsql", "POST", "/sql/v1beta4/projects/%s/instances" % PROJ, {},
+                        {"name": rn, "masterInstanceName": name, "settings": {"tier": (full.get("settings") or {}).get("tier")}})
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "FAILED_PRECONDITION", err.get("message") or "Create failed")
+        return {"ok": True, "name": rn}
+    if op in ("promoteReplica", "deleteReplica"):
+        rn = str(body.get("name") or "")
+        if rn not in (full.get("replicaNames") or []):
+            raise _T.TabError(404, "NOT_FOUND", "%s is not a read replica of %s." % (rn, name))
+        path = "/sql/v1beta4/projects/%s/instances/%s" % (PROJ, rn)
+        if op == "promoteReplica":
+            st, out = _call("cloudsql", "POST", path + "/promoteReplica")
+        else:
+            st, out = _call("cloudsql", "DELETE", path)
+        if st >= 300:
+            raise _T.TabError(st, "FAILED_PRECONDITION", ((out or {}).get("error") or {}).get("message") or "Failed")
+        return {"ok": True, "name": rn}
+    if op == "listOperations":
+        st, out = _call("cloudsql", "GET", "/sql/v1beta4/projects/%s/operations" % PROJ, {"instance": name})
+        return {"ok": True, "items": [{"operationType": o.get("operationType"), "status": o.get("status"),
+                                       "insertTime": o.get("insertTime"), "endTime": o.get("endTime"), "user": o.get("user"),
+                                       "name": o.get("name")} for o in (out or {}).get("items", [])]}
+    if op == "listQueryInsights":
+        return {"ok": True, "items": []}   # no query has run through this instance's Query Insights recorder
+    return None
+
+
 def _project_policy(op, project, body):
     res = "projects/%s" % (project or PROJ)
     st, pol = _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})
@@ -894,7 +983,7 @@ def _project_policy(op, project, body):
     return {"ok": st < 300, "project": project, "bindings": out.get("bindings", [])}
 
 
-_TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab}
+_TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _sql_tab}
 
 
 def tab_dispatch(svc, operation, name, body, resources=None, account="default"):

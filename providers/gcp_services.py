@@ -423,9 +423,14 @@ async def api_gcp_sql_patch_instance(project: str, instance: str, request: Reque
         payload = {}
     payload = payload if isinstance(payload, dict) else {}
     if isinstance(payload.get("settings"), dict):
+        # flags / ipConfiguration / backups / insights validated by the Cloud SQL engine
+        # (core/gcp_cloudsql_core) — the rules Nano's instances.patch applies.
+        from core import gcp_cloudsql_core as _sqlc
         cur = rec.get("settings") if isinstance(rec.get("settings"), dict) else {}
-        cur.update(payload["settings"])
-        rec["settings"] = cur
+        try:
+            rec["settings"] = _sqlc.patch_settings(rec.get("databaseVersion", ""), cur, payload["settings"])
+        except _sqlc.SqlSettingsError as e:
+            raise HTTPException(e.status, detail=e.message)
     for key in ("databaseVersion", "region"):
         if payload.get(key):
             rec[key] = str(payload[key])

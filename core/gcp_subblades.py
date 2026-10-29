@@ -91,20 +91,20 @@ _STORAGE_SUB = [
 _CLOUDSQL_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Data", "items": [
-        {"key": "databases",   "label": "Databases",        "icon": "database",   "type": "stub"},
-        {"key": "users",       "label": "Users",            "icon": "person",     "type": "stub"},
-        {"key": "backups",     "label": "Backups",          "icon": "backup",     "type": "stub"},
-        {"key": "replicas",    "label": "Replicas",         "icon": "content_copy","type": "stub"},
+        {"key": "databases",   "label": "Databases",        "icon": "database",   "type": "sqlDatabases"},
+        {"key": "users",       "label": "Users",            "icon": "person",     "type": "sqlUsers"},
+        {"key": "backups",     "label": "Backups",          "icon": "backup",     "type": "sqlBackups"},
+        {"key": "replicas",    "label": "Replicas",         "icon": "content_copy","type": "sqlReplicas"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "connectivity","label":"Connectivity",      "icon": "lan",        "type": "stub"},
-        {"key": "flags",       "label": "Flags",            "icon": "tune",       "type": "stub"},
-        {"key": "logging",     "label": "Logging",          "icon": "subject",    "type": "stub"},
+        {"key": "connectivity","label":"Connectivity",      "icon": "lan",        "type": "sqlConnectivity"},
+        {"key": "flags",       "label": "Flags",            "icon": "tune",       "type": "sqlFlags"},
+        {"key": "logging",     "label": "Logging",          "icon": "subject",    "type": "sqlLogging"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",     "label": "Metrics",          "icon": "show_chart", "type": "metrics"},
-        {"key": "insights",    "label": "Query Insights",   "icon": "insights",   "type": "stub"},
+        {"key": "insights",    "label": "Query Insights",   "icon": "insights",   "type": "sqlInsights"},
     ]},
 ]
 

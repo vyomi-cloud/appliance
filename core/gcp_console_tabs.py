@@ -119,6 +119,14 @@ VIEWS = {
         "scheduling": ["name", "status", "scheduling"],
         "labels": ["name", "labels", "labelFingerprint"],
     },
+    "cloudsql": {
+        "connectivity": ["name", "connectionName", "ipAddresses", "settings", "region", "gceZone", "connection",
+                         "connect_help", "databaseVersion", "state"],
+        "flags": ["name", "databaseVersion", "settings"],
+        "backupconfig": ["name", "settings"],
+        "insights": ["name", "databaseVersion", "settings"],
+        "logging": ["name", "databaseVersion", "settings"],
+    },
     "storage": {
         "configuration": ["name", "location", "locationType", "storageClass", "iamConfiguration", "versioning",
                           "timeCreated", "updated", "metageneration", "projectNumber", "labels"],
@@ -161,7 +169,38 @@ def view_op(service: str, op: str):
 
 def view(service: str, v: str, full: dict) -> dict:
     fields = VIEWS.get(service, {}).get(v) or ["name", "labels"]
-    return {k: full[k] for k in fields if k in full}
+    out = {k: full[k] for k in fields if k in full}
+    if service == "cloudsql" and v == "labels":   # Cloud SQL labels live in settings.userLabels
+        out["labels"] = dict((full.get("settings") or {}).get("userLabels") or full.get("labels") or {})
+    return out
+
+
+def sql_settings_patch(op: str, body: dict, settings: dict):
+    """Cloud SQL tab write → the instances.patch `settings` body it amounts to."""
+    op = op[0].lower() + op[1:]
+    ip = dict(settings.get("ipConfiguration") or {})
+    if op == "setFlags":
+        return {"databaseFlags": list(body.get("flags") or [])}
+    if op == "setIpConfig":
+        return {"ipConfiguration": {k: body[k] for k in ("ipv4Enabled", "sslMode", "privateNetwork") if k in body}}
+    if op == "addAuthorizedNetwork":
+        nets = list(ip.get("authorizedNetworks") or [])
+        nets.append({"name": str(body.get("name") or ""), "value": str(body.get("value") or "")})
+        return {"ipConfiguration": {"authorizedNetworks": nets}}
+    if op == "removeAuthorizedNetwork":
+        nets = [n for n in (ip.get("authorizedNetworks") or []) if n.get("value") != body.get("value")]
+        if len(nets) == len(ip.get("authorizedNetworks") or []):
+            raise TabError(404, "NOT_FOUND", "Authorized network %s is not set on this instance." % body.get("value"))
+        return {"ipConfiguration": {"authorizedNetworks": nets}}
+    if op == "setBackupConfig":
+        return {"backupConfiguration": {k: body[k] for k in ("enabled", "startTime", "pointInTimeRecoveryEnabled",
+                                                            "retainedBackups", "transactionLogRetentionDays") if k in body}}
+    if op == "setInsights":
+        return {"insightsConfig": {k: body[k] for k in ("queryInsightsEnabled", "recordApplicationTags",
+                                                        "recordClientAddress", "queryStringLength") if k in body}}
+    if op == "setLabels":
+        return {"userLabels": validate_labels(body.get("labels", {}))}
+    return None
 
 
 # ---------------------------------------------------------------------------

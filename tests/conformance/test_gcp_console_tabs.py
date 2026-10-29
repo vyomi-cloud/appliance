@@ -296,3 +296,100 @@ def test_storage_retention_blocks_object_delete_in_the_engine():
     assert call("POST", "/upload/storage/v1/b/b1/o", {"uploadType": "media", "name": "o1"}, b"again").status == 403
     assert call("PATCH", "/storage/v1/b/b1", b=json.dumps({"retentionPolicy": None}).encode()).status == 200
     assert call("DELETE", "/storage/v1/b/b1/o/o1").status == 204
+
+
+# ── Cloud SQL ─────────────────────────────────────────────────────────────────
+@pytest.fixture(scope="module")
+def sqli(c):
+    name = uid("tabsql")
+    st, _ = c.create("cloudsql", {"name": name, "databaseVersion": "POSTGRES_15", "tier": "db-f1-micro"})
+    assert st == 200
+    _wait(lambda: c.sub("cloudsql", "getFlags", name), lambda r: r[0] == 200)
+    return name
+
+
+def test_cloudsql_databases_tab(c, sqli):
+    st, _ = c.sub("cloudsql", "createDatabase", sqli, {"name": "appdb"})
+    assert st == 200
+    st, dup = c.sub("cloudsql", "createDatabase", sqli, {"name": "appdb"})
+    assert st == 409
+    st, out = c.sub("cloudsql", "listDatabases", sqli)
+    assert "appdb" in [d["name"] for d in out["items"]]
+    st, _ = c.sub("cloudsql", "deleteDatabase", sqli, {"name": "appdb"})
+    st, out = c.sub("cloudsql", "listDatabases", sqli)
+    assert "appdb" not in [d["name"] for d in out["items"]]
+
+
+def test_cloudsql_users_tab(c, sqli):
+    st, out = c.sub("cloudsql", "listUsers", sqli)
+    assert st == 200 and out["items"], "the instance's admin user is listed"
+    st, _ = c.sub("cloudsql", "createUser", sqli, {"name": "app_user", "password": "s3cret!", "type": "BUILT_IN"})
+    assert st == 200
+    st, bad = c.sub("cloudsql", "createUser", sqli, {"name": "nopass", "type": "BUILT_IN"})
+    assert st == 400
+    st, out = c.sub("cloudsql", "listUsers", sqli)
+    assert "app_user" in [u["name"] for u in out["items"]]
+    st, _ = c.sub("cloudsql", "setUserPassword", sqli, {"name": "app_user", "password": "n3w"})
+    assert st == 200
+    st, _ = c.sub("cloudsql", "deleteUser", sqli, {"name": "app_user"})
+    st, out = c.sub("cloudsql", "listUsers", sqli)
+    assert "app_user" not in [u["name"] for u in out["items"]]
+
+
+def test_cloudsql_backups_tab(c, sqli):
+    st, _ = c.sub("cloudsql", "createBackup", sqli, {"description": "before-migration"})
+    assert st == 200
+    st, out = c.sub("cloudsql", "listBackups", sqli)
+    b = next(x for x in out["items"] if x["description"] == "before-migration")
+    assert b["type"] == "ON_DEMAND" and b["status"] == "SUCCESSFUL"
+    st, _ = c.sub("cloudsql", "setBackupConfig", sqli, {"enabled": True, "startTime": "03:00", "pointInTimeRecoveryEnabled": True, "retainedBackups": 14})
+    assert st == 200
+    st, out = c.sub("cloudsql", "getBackupConfig", sqli)
+    cfg = out["item"]["settings"]["backupConfiguration"]
+    assert cfg["enabled"] and cfg["startTime"] == "03:00" and cfg["backupRetentionSettings"]["retainedBackups"] == 14
+    st, bad = c.sub("cloudsql", "setBackupConfig", sqli, {"startTime": "03:30"})
+    assert st == 400
+    st, _ = c.sub("cloudsql", "deleteBackup", sqli, {"id": b["id"]})
+    st, out = c.sub("cloudsql", "listBackups", sqli)
+    assert b["id"] not in [x["id"] for x in out["items"]]
+
+
+def test_cloudsql_replicas_tab(c, sqli):
+    rep = uid("rep")
+    st, _ = c.sub("cloudsql", "createReplica", sqli, {"name": rep})
+    assert st == 200
+    st, out = c.sub("cloudsql", "listReplicas", sqli)
+    assert [r["name"] for r in out["items"]] == [rep]
+    st, inst = c.get("cloudsql", rep)
+    assert inst.get("masterInstanceName", sqli) == sqli
+    st, _ = c.sub("cloudsql", "promoteReplica", sqli, {"name": rep})
+    assert st == 200
+    st, out = c.sub("cloudsql", "listReplicas", sqli)
+    assert out["items"] == []
+
+
+def test_cloudsql_connectivity_flags_insights(c, sqli):
+    st, _ = c.sub("cloudsql", "addAuthorizedNetwork", sqli, {"name": "office", "value": "203.0.113.0/24"})
+    assert st == 200
+    st, bad = c.sub("cloudsql", "addAuthorizedNetwork", sqli, {"name": "lan", "value": "10.0.0.0/8"})
+    assert st == 400 and "private" in bad["message"].lower()
+    st, _ = c.sub("cloudsql", "setIpConfig", sqli, {"sslMode": "ENCRYPTED_ONLY"})
+    st, out = c.sub("cloudsql", "getConnectivity", sqli)
+    ip = out["item"]["settings"]["ipConfiguration"]
+    assert ip["sslMode"] == "ENCRYPTED_ONLY" and [n["value"] for n in ip["authorizedNetworks"]] == ["203.0.113.0/24"]
+    st, _ = c.sub("cloudsql", "setFlags", sqli, {"flags": [{"name": "max_connections", "value": "200"}, {"name": "log_connections", "value": "on"}]})
+    assert st == 200
+    st, out = c.sub("cloudsql", "getFlags", sqli)
+    assert {f["name"]: f["value"] for f in out["item"]["settings"]["databaseFlags"]} == {"max_connections": "200", "log_connections": "on"}
+    st, bad = c.sub("cloudsql", "setFlags", sqli, {"flags": [{"name": "max_connections", "value": "5"}]})
+    assert st == 400
+    st, bad = c.sub("cloudsql", "setFlags", sqli, {"flags": [{"name": "innodb_lock_wait_timeout", "value": "5"}]})
+    assert st == 400   # a MySQL flag on a Postgres instance
+    st, _ = c.sub("cloudsql", "setInsights", sqli, {"queryInsightsEnabled": True, "queryStringLength": 2048})
+    st, out = c.sub("cloudsql", "getInsights", sqli)
+    assert out["item"]["settings"]["insightsConfig"] == {**out["item"]["settings"]["insightsConfig"], "queryInsightsEnabled": True, "queryStringLength": 2048}
+    st, out = c.sub("cloudsql", "listOperations", sqli)
+    assert "UPDATE" in [o["operationType"] for o in out["items"]]
+    st, _ = c.sub("cloudsql", "setLabels", sqli, {"labels": {"tier": "gold"}})
+    st, out = c.sub("cloudsql", "getLabels", sqli)
+    assert out["item"]["labels"] == {"tier": "gold"}

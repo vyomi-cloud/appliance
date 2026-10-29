@@ -1884,6 +1884,178 @@ GT.gcsretention = async function(host, svc, item){
   }
   await paint();
 };
+
+// ---- Cloud SQL ----------------------------------------------------------------
+function sqlEngine(v){ v = String(v || "").toUpperCase(); return v.startsWith("MYSQL") ? "MYSQL" : v.startsWith("SQLSERVER") ? "SQLSERVER" : "POSTGRES"; }
+GT.sqldatabases = async function(host, svc, item){
+  const name = tabName(svc, item);
+  await childList(host, {
+    load: () => subGet(svc, "listDatabases", name), noun: "database", nouns: "databases", emptyIcon: "database",
+    empty: "No databases on " + name + " yet.",
+    columns: [["name", "Name"], ["charset", "Character set"], ["collation", "Collation"]],
+    create: {label: "Create database", submit: "Create", fields: [{name: "name", label: "Database name", placeholder: "appdb"},
+      {name: "charset", label: "Character set", type: "select", value: "UTF8", options: ["UTF8", "utf8mb4", "LATIN1"]}],
+      run: v => subPost(svc, "createDatabase", name, {name: v.name.trim(), charset: v.charset})},
+    rowActions: [{label: "Delete", icon: "delete", danger: true, confirm: d => "Delete database " + d.name + "?",
+      run: d => subPost(svc, "deleteDatabase", name, {name: d.name})}],
+  });
+};
+GT.sqlusers = async function(host, svc, item){
+  const name = tabName(svc, item);
+  const mysql = sqlEngine(item.databaseVersion) === "MYSQL";
+  await childList(host, {
+    load: () => subGet(svc, "listUsers", name), noun: "user", nouns: "users", emptyIcon: "person",
+    empty: "No users on " + name + ".",
+    columns: [["name", "User name"], ...(mysql ? [["host", "Host name", u => u.host || "% (any host)"]] : []),
+              ["type", "Authentication", u => u.type === "BUILT_IN" ? "Built-in" : u.type === "CLOUD_IAM_USER" ? "Cloud IAM" : u.type]],
+    create: {label: "Add user account", icon: "person_add", submit: "Add", done: "User added",
+      fields: [{name: "name", label: "User name", placeholder: "app_user"}, {name: "password", label: "Password", type: "password"},
+               ...(mysql ? [{name: "host", label: "Host name", value: "%", width: 100}] : []),
+               {name: "type", label: "Authentication", type: "select", value: "BUILT_IN",
+                options: [{value: "BUILT_IN", label: "Built-in"}, {value: "CLOUD_IAM_USER", label: "Cloud IAM user"}]}],
+      run: v => subPost(svc, "createUser", name, {name: v.name.trim(), password: v.password, host: v.host, type: v.type})},
+    rowActions: [
+      {label: "Change password", icon: "password", run: u => { const p = prompt("New password for " + u.name); if (p === null) return Promise.resolve({ok: true}); return subPost(svc, "setUserPassword", name, {name: u.name, host: u.host, password: p}); }},
+      {label: "Delete", icon: "delete", danger: true, confirm: u => "Delete user " + u.name + "?", run: u => subPost(svc, "deleteUser", name, {name: u.name, host: u.host})}],
+  });
+};
+GT.sqlbackups = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const top = el("div",{}); host.append(top);
+  async function paintCfg(){
+    const it = await tabView(svc, item, "BackupConfig");
+    const b = (it.settings || {}).backupConfiguration || {};
+    top.innerHTML = "";
+    top.append(kvCardOf("Automated backups", [["Automated backups", b.enabled ? "Enabled" : "Disabled"],
+      ["Backup window (UTC)", b.startTime || "Not set"], ["Point-in-time recovery", b.pointInTimeRecoveryEnabled ? "Enabled" : "Disabled"],
+      ["Retained backups", (b.backupRetentionSettings || {}).retainedBackups || "Not set"],
+      ["Log retention (days)", b.transactionLogRetentionDays || "Not set"]]));
+    if (!editing) { top.append(el("button",{class:"btn", style:"margin-bottom:14px", onclick:()=>{ editing = true; paintCfg(); }}, icon("edit"), "Edit backup settings")); return; }
+    top.append(inlineForm([{name: "enabled", label: "Automate backups", type: "checkbox", value: !!b.enabled},
+      {name: "startTime", label: "Window start (UTC)", type: "select", value: b.startTime || "02:00", options: Array.from({length: 24}, (_, h) => String(h).padStart(2, "0") + ":00")},
+      {name: "pointInTimeRecoveryEnabled", label: "Point-in-time recovery", type: "checkbox", value: !!b.pointInTimeRecoveryEnabled},
+      {name: "retainedBackups", label: "Retained backups", type: "number", value: (b.backupRetentionSettings || {}).retainedBackups || 7, width: 90}],
+      "Save", async v => {
+        const r = await subPost(svc, "setBackupConfig", name, {...v, retainedBackups: Number(v.retainedBackups)});
+        if (r.ok) { toast("Backup settings saved"); editing = false; paintCfg(); } else toast("Save failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paintCfg(); }));
+  }
+  await paintCfg();
+  await childList(host, {
+    load: () => subGet(svc, "listBackups", name), noun: "backup", nouns: "backups", emptyIcon: "backup",
+    empty: "No backups of " + name + " yet.",
+    columns: [["windowStartTime", "Created"], ["type", "Type", b => b.type === "ON_DEMAND" ? "On-demand" : "Automated"],
+              ["status", "Status", b => stateBadge(b.status)], ["description", "Description", b => b.description || "No description"],
+              ["location", "Location"]],
+    create: {label: "Create backup", icon: "backup", submit: "Create", done: "Backup created",
+      fields: [{name: "description", label: "Description (optional)", placeholder: "before migration", width: 240}],
+      run: v => subPost(svc, "createBackup", name, {description: v.description})},
+    rowActions: [{label: "Delete", icon: "delete", danger: true, confirm: () => "Delete this backup?", run: b => subPost(svc, "deleteBackup", name, {id: b.id})}],
+  });
+};
+GT.sqlreplicas = async function(host, svc, item){
+  const name = tabName(svc, item);
+  await childList(host, {
+    load: () => subGet(svc, "listReplicas", name), noun: "read replica", nouns: "read replicas", emptyIcon: "content_copy",
+    empty: "No read replicas of " + name + ".",
+    columns: [["name", "Replica ID"], ["state", "Status", r => stateBadge(r.state)], ["region", "Region"], ["databaseVersion", "Version"],
+              ["tier", "Machine type", r => r.tier || "Same as primary"]],
+    create: {label: "Create read replica", submit: "Create", done: "Replica created",
+      fields: [{name: "name", label: "Instance ID", placeholder: name + "-replica"}],
+      run: v => subPost(svc, "createReplica", name, {name: v.name.trim()})},
+    rowActions: [{label: "Promote", icon: "upgrade", confirm: r => "Promote " + r.name + " to a standalone primary? Replication stops.", run: r => subPost(svc, "promoteReplica", name, {name: r.name})},
+                 {label: "Delete", icon: "delete", danger: true, confirm: r => "Delete replica " + r.name + "?", run: r => subPost(svc, "deleteReplica", name, {name: r.name})}],
+  });
+};
+GT.sqlconnectivity = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const it = await tabView(svc, item, "Connectivity");
+    const ip = (it.settings || {}).ipConfiguration || {};
+    const conn = it.connection || null;
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("", [["Connection name", it.connectionName], ["Public IP", ip.ipv4Enabled === false ? "Disabled" : "Enabled"],
+      ["IP addresses", (it.ipAddresses || []).map(a => a.type + " " + a.ipAddress).join(", ") || "None assigned"],
+      ["Private IP network", ip.privateNetwork || "Not configured"],
+      ["SSL mode", ip.sslMode || (ip.requireSsl ? "ENCRYPTED_ONLY" : "ALLOW_UNENCRYPTED_AND_ENCRYPTED")],
+      ...(conn ? [["Engine endpoint", conn.host + ":" + conn.port]] : [])]));
+    if (!editing) wrap.append(el("button",{class:"btn", style:"margin-bottom:14px", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit connections"));
+    else wrap.append(inlineForm([{name: "ipv4Enabled", label: "Public IP", type: "checkbox", value: ip.ipv4Enabled !== false},
+      {name: "privateNetwork", label: "Private IP network", value: ip.privateNetwork || "", placeholder: "projects/" + PROJECT + "/global/networks/default", width: 280},
+      {name: "sslMode", label: "SSL mode", type: "select", value: ip.sslMode || "ALLOW_UNENCRYPTED_AND_ENCRYPTED",
+       options: ["ALLOW_UNENCRYPTED_AND_ENCRYPTED", "ENCRYPTED_ONLY", "TRUSTED_CLIENT_CERTIFICATE_REQUIRED"]}], "Save", async v => {
+        const r = await subPost(svc, "setIpConfig", name, v);
+        if (r.ok) { toast("Connections updated"); editing = false; paint(); } else toast("Update failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paint(); }));
+    const nets = ip.authorizedNetworks || [];
+    const sub = el("div",{}); wrap.append(el("div",{style:"font-weight:500;margin:8px 0"}, "Authorized networks"), sub);
+    await childList(sub, {
+      load: async () => ({ok: true, json: {items: nets}}), noun: "network", nouns: "networks", emptyIcon: "lan",
+      empty: "No authorized networks — public IP connections need one (or the Cloud SQL Auth Proxy).",
+      columns: [["name", "Name", n => n.name || "Unnamed"], ["value", "Network (CIDR)"]],
+      create: {label: "Add a network", submit: "Add", done: "Network authorized",
+        fields: [{name: "name", label: "Name", placeholder: "office"}, {name: "value", label: "Network", placeholder: "203.0.113.0/24"}],
+        run: async v => { const r = await subPost(svc, "addAuthorizedNetwork", name, {name: v.name.trim(), value: v.value.trim()}); if (r.ok) setTimeout(paint, 0); return r; }},
+      rowActions: [{label: "Remove", icon: "delete", danger: true, run: async n => { const r = await subPost(svc, "removeAuthorizedNetwork", name, {value: n.value}); if (r.ok) setTimeout(paint, 0); return r; }}],
+    });
+  }
+  await paint();
+};
+GT.sqlflags = async function(host, svc, item){
+  const name = tabName(svc, item);
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin-bottom:10px"}, "Database flags set on " + name + " (settings.databaseFlags)."));
+  kvEditor(host, {
+    load: async () => (((await tabView(svc, item, "Flags")).settings || {}).databaseFlags || []).map(f => [f.name, f.value]),
+    save: pairs => subPost(svc, "setFlags", name, {flags: pairs.map(([n, v]) => ({name: n, value: v}))}),
+    keyLabel: "Flag", valueLabel: "Value", addLabel: "Add a database flag", emptyIcon: "tune",
+    emptyText: "No database flags set on " + name + " — the engine runs with its defaults.",
+  });
+};
+GT.sqllogging = async function(host, svc, item){
+  const name = tabName(svc, item);
+  const it = await tabView(svc, item, "Logging");
+  const flags = ((it.settings || {}).databaseFlags || []).filter(f => /log|audit|general_log|slow_query/.test(f.name));
+  host.append(kvCardOf("Logging flags", flags.length ? flags.map(f => [f.name, f.value]) : [["Logging flags", "Engine defaults (none set)"]]));
+  host.append(el("div",{style:"font-weight:500;margin:8px 0"}, "Operations log"));
+  await childList(host, {
+    load: () => subGet(svc, "listOperations", name), noun: "operation", nouns: "operations", emptyIcon: "subject",
+    empty: "No operations recorded on " + name + ".",
+    columns: [["insertTime", "Start time"], ["operationType", "Type"], ["status", "Status", o => stateBadge(o.status === "DONE" ? "Succeeded" : o.status)],
+              ["user", "User"]],
+  });
+};
+GT.sqlinsights = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const top = el("div",{}); host.append(top);
+  async function paint(){
+    const it = await tabView(svc, item, "Insights");
+    const q = (it.settings || {}).insightsConfig || {};
+    top.innerHTML = "";
+    top.append(kvCardOf("Query Insights", [["Query Insights", q.queryInsightsEnabled ? "Enabled" : "Disabled"],
+      ["Store client IP addresses", q.recordClientAddress ? "On" : "Off"], ["Store application tags", q.recordApplicationTags ? "On" : "Off"],
+      ["Query string length", q.queryStringLength || 1024]]));
+    if (!editing) { top.append(el("button",{class:"btn", style:"margin-bottom:14px", onclick:()=>{ editing = true; paint(); }}, icon("edit"), q.queryInsightsEnabled ? "Configure" : "Enable Query Insights")); return; }
+    top.append(inlineForm([{name: "queryInsightsEnabled", label: "Enable Query Insights", type: "checkbox", value: true},
+      {name: "recordClientAddress", label: "Store client IP addresses", type: "checkbox", value: !!q.recordClientAddress},
+      {name: "recordApplicationTags", label: "Store application tags", type: "checkbox", value: !!q.recordApplicationTags},
+      {name: "queryStringLength", label: "Query string length", type: "number", value: q.queryStringLength || 1024, width: 100}], "Save", async v => {
+        const r = await subPost(svc, "setInsights", name, {...v, queryStringLength: Number(v.queryStringLength)});
+        if (r.ok) { toast("Query Insights updated"); editing = false; paint(); } else toast("Update failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paint(); }));
+  }
+  await paint();
+  host.append(el("div",{style:"font-weight:500;margin:8px 0"}, "Top queries"));
+  await childList(host, {
+    load: () => subGet(svc, "listQueryInsights", name), noun: "query", nouns: "queries", emptyIcon: "insights",
+    empty: "No queries recorded for " + name + " yet.",
+    columns: [["query", "Normalized query", x => x.query || x.queryString || x.queryId], ["calls", "Calls", x => x.calls ?? x.executionCount],
+              ["meanLatencyMs", "Avg latency (ms)"], ["database", "Database", x => x.database || x.databaseName || "All databases"]],
+  });
+};
 // ========== END DETAIL TABS =================================================
 
 // ========== CREATE — collapsible-sections form + right summary card =========

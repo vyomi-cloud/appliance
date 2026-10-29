@@ -202,6 +202,158 @@ def _storage(op: str, name: str, body: dict):
 
 
 # ---------------------------------------------------------------------------
+# Cloud SQL — databases, users, backups, replicas, connectivity, flags, …
+# ---------------------------------------------------------------------------
+def _sql_err(e):
+    return T.TabError(e.status, e.code, e.message)
+
+
+def _cloudsql(op: str, name: str, body: dict):
+    from core import gcp_cloudsql_core as sqlc
+    s = _server()
+    insts = s.gcp_sql_state.setdefault("instances", {})
+    rec = insts.get(name)
+    if not isinstance(rec, dict):
+        raise T.TabError(404, "NOT_FOUND", "The Cloud SQL instance does not exist. Instance: %s" % name)
+    project = str(rec.get("project") or "cloudlearn")
+    version = str(rec.get("databaseVersion") or "POSTGRES_15")
+    full = lambda: s._gcp_sql_instance_view(project, rec)
+
+    def op_rec(kind, target=None):
+        s._gcp_sql_make_operation(project, target or name, kind)
+        _usage("sql", op, name, {"instance": name, "operationType": kind})
+
+    v = T.view_op("cloudsql", op)
+    if v:
+        return {"ok": True, "item": T.view("cloudsql", v, full())}
+    patch = T.sql_settings_patch(op, body, rec.get("settings") or {})
+    if patch is not None:
+        try:
+            rec["settings"] = sqlc.patch_settings(version, rec.get("settings") or {}, patch)
+        except sqlc.SqlSettingsError as e:
+            raise _sql_err(e)
+        rec["updateTime"] = s._now()
+        op_rec("UPDATE")
+        return {"ok": True, "item": full()}
+    # databases
+    dbs = rec.setdefault("databases", [])
+    if op == "listDatabases":
+        return {"ok": True, "items": [{"name": d.get("name"), "charset": d.get("charset") or "UTF8",
+                                       "collation": d.get("collation") or "en_US.UTF8"} for d in dbs]}
+    if op == "createDatabase":
+        dn = str(body.get("name") or "").strip()
+        if not dn:
+            raise T.TabError(400, "INVALID_ARGUMENT", "Database name is required.")
+        if any(d.get("name") == dn for d in dbs):
+            raise T.TabError(409, "ALREADY_EXISTS", "The database already exists. Database: %s" % dn)
+        dbs.append({"name": dn, "charset": str(body.get("charset") or "UTF8"), "collation": str(body.get("collation") or "en_US.UTF8")})
+        op_rec("CREATE_DATABASE")
+        return {"ok": True, "name": dn}
+    if op == "deleteDatabase":
+        dn = str(body.get("name") or "")
+        if not any(d.get("name") == dn for d in dbs):
+            raise T.TabError(404, "NOT_FOUND", "The database does not exist. Database: %s" % dn)
+        rec["databases"] = [d for d in dbs if d.get("name") != dn]
+        op_rec("DELETE_DATABASE")
+        return {"ok": True, "name": dn}
+    # users (the instance's master user is a real login on the backing engine)
+    users = rec.setdefault("users", [])
+    master_user = str(rec.get("masterUsername") or "")
+    if master_user and not any(u.get("name") == master_user for u in users):
+        users.insert(0, {"name": master_user, "host": "%" if sqlc.engine_of(version) == "MYSQL" else "", "type": "BUILT_IN"})
+    if op == "listUsers":
+        return {"ok": True, "items": [{"name": u.get("name"), "host": u.get("host") or "", "type": u.get("type") or "BUILT_IN"} for u in users]}
+    if op == "createUser":
+        try:
+            u = sqlc.validate_user(version, body, users)
+        except sqlc.SqlSettingsError as e:
+            raise _sql_err(e)
+        users.append({"name": u["name"], "host": u["host"], "type": u["type"]})
+        op_rec("CREATE_USER")
+        return {"ok": True, "name": u["name"]}
+    if op in ("deleteUser", "setUserPassword"):
+        un, host = str(body.get("name") or ""), str(body.get("host") or "")
+        if not any(u.get("name") == un and (u.get("host") or "") == host for u in users):
+            raise T.TabError(404, "NOT_FOUND", "The user does not exist. User: %s" % un)
+        if op == "deleteUser":
+            rec["users"] = [u for u in users if not (u.get("name") == un and (u.get("host") or "") == host)]
+            op_rec("DELETE_USER")
+        else:
+            if not str(body.get("password") or ""):
+                raise T.TabError(400, "INVALID_ARGUMENT", "Invalid request: a password is required.")
+            op_rec("UPDATE_USER")
+        return {"ok": True, "name": un}
+    # backups (backupRuns)
+    backups = s.gcp_sql_state.setdefault("backups", {})
+    if op == "listBackups":
+        mine = [b for b in backups.values() if isinstance(b, dict) and b.get("instance") == name]
+        mine.sort(key=lambda b: b.get("createTime", ""), reverse=True)
+        return {"ok": True, "items": [{"id": b.get("name"), "type": b.get("backupType") or "ON_DEMAND",
+                                       "status": b.get("status") or "SUCCESSFUL", "description": b.get("description") or "",
+                                       "windowStartTime": b.get("createTime", ""), "location": "us"} for b in mine]}
+    if op == "createBackup":
+        b = s._gcp_sql_backup_record(project, name, {"backupType": "ON_DEMAND", "description": body.get("description") or ""})
+        backups[b["name"]] = b
+        op_rec("BACKUP_VOLUME")
+        return {"ok": True, "id": b["name"]}
+    if op == "deleteBackup":
+        bid = str(body.get("id") or "")
+        b = backups.get(bid)
+        if not isinstance(b, dict) or b.get("instance") != name:
+            raise T.TabError(404, "NOT_FOUND", "The backup run does not exist. Backup run: %s" % bid)
+        del backups[bid]
+        op_rec("DELETE_BACKUP")
+        return {"ok": True, "id": bid}
+    # read replicas: instances whose masterInstanceName is this one
+    if op == "listReplicas":
+        reps = [r for r in insts.values() if isinstance(r, dict) and r.get("masterInstanceName") == name]
+        return {"ok": True, "items": [{"name": r.get("name"), "state": r.get("state") or "RUNNABLE", "region": r.get("region"),
+                                       "databaseVersion": r.get("databaseVersion"), "tier": (r.get("settings") or {}).get("tier", ""),
+                                       "instanceType": "READ_REPLICA_INSTANCE"} for r in reps]}
+    if op == "createReplica":
+        if rec.get("masterInstanceName"):
+            raise T.TabError(400, "INVALID_ARGUMENT", "Invalid request: cannot create a replica of a read replica.")
+        rn = T.validate_name(body.get("name"), "name")
+        if rn in insts:
+            raise T.TabError(409, "ALREADY_EXISTS", "The Cloud SQL instance already exists. Instance: %s" % rn)
+        rep = s._gcp_sql_instance_record(project, {"name": rn, "databaseVersion": version, "region": rec.get("region"),
+                                                   "settings": dict(rec.get("settings") or {}),
+                                                   "instanceType": "READ_REPLICA_INSTANCE"})
+        rep["masterInstanceName"] = name
+        rep["_backend"] = rec.get("_backend")          # a replica serves reads from the primary's data
+        rep["ipAddresses"] = rec.get("ipAddresses") or rep["ipAddresses"]
+        insts[rn] = rep
+        rec.setdefault("replicaNames", []).append(rn)
+        op_rec("CREATE_REPLICA", rn)
+        return {"ok": True, "name": rn}
+    if op in ("promoteReplica", "deleteReplica"):
+        rn = str(body.get("name") or "")
+        rep = insts.get(rn)
+        if not isinstance(rep, dict) or rep.get("masterInstanceName") != name:
+            raise T.TabError(404, "NOT_FOUND", "%s is not a read replica of %s." % (rn, name))
+        rec["replicaNames"] = [x for x in rec.get("replicaNames") or [] if x != rn]
+        if op == "promoteReplica":
+            rep.pop("masterInstanceName", None)
+            rep["instanceType"] = "CLOUD_SQL_INSTANCE"
+            op_rec("PROMOTE_REPLICA", rn)
+        else:
+            del insts[rn]
+            op_rec("DELETE", rn)
+        return {"ok": True, "name": rn}
+    if op == "listOperations":
+        ops = [o for o in (s.gcp_sql_state.get("operation_records") or {}).values() if o.get("targetId") == name]
+        ops.sort(key=lambda o: o.get("insertTime", ""), reverse=True)
+        return {"ok": True, "items": [{"operationType": o.get("operationType"), "status": o.get("status"),
+                                       "insertTime": o.get("insertTime"), "endTime": o.get("endTime") or "",
+                                       "user": o.get("user"), "name": o.get("name")} for o in ops[:100]]}
+    if op == "listQueryInsights":
+        out = [s._gcp_sql_query_insight_view(q) for q in (s.gcp_sql_state.get("query_insights") or {}).values()
+               if isinstance(q, dict) and q.get("instance") == name]
+        return {"ok": True, "items": out}
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Project IAM policy (every resource's Permissions tab)
 # ---------------------------------------------------------------------------
 def _iam_project(op: str, project: str, body: dict):
@@ -223,6 +375,7 @@ def _iam_project(op: str, project: str, body: dict):
 _HANDLERS = {
     "compute": _compute,
     "storage": _storage,
+    "cloudsql": _cloudsql,
 }
 
 
