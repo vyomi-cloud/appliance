@@ -374,6 +374,32 @@ def main() -> int:
         md += [f"| {r['name']} | {r['priority']} | {r['link'] or 'not filed'} | {r['real']} |" for r in d["queued"]]
         md += ["", "</details>", ""]
 
+    # Real backends and the vyomi-libs design (tests/conformance/expansion/backends.json).
+    md += ["## Real backends and vyomi-libs", "",
+           "Every service must run on a real backend, so a created resource really works. Shared engines become "
+           "`vyomi-<lib>` packages, one per capability across all three clouds.", "",
+           "| Lib | Cloud services | Real backends it drives | Nano | Phase |", "|---|---|---|---|---|"]
+    for lib, x in ((k, v) for k, v in bk.get("libs", {}).items() if not k.startswith("_")):
+        drives = ", ".join(sorted(n for n, y in bk["shared"].items() if y.get("lib") == lib)) or "in-process"
+        md.append(f"| **{lib}** | {x['serves']} | {drives} | {x.get('nano', '')} | {x.get('phase', '')} |")
+    md += ["", "<details><summary><b>Shared backends</b> — what each one is and what it serves</summary>", "",
+           "| Backend | Kind | Tier | Idle RAM | Lib | Serves |", "|---|---|---|---|---|---|"]
+    for n, y in bk["shared"].items():
+        kind = y.get("role") or y.get("kind") or "container"
+        serves = ", ".join(sorted(set(y.get("for", []) + y.get("agent_for", []) + y.get("optional_for", []))))
+        md.append(f"| {n} | {kind} | {str(y.get('tier', 'all')).capitalize()} | {y.get('idle_mb', '—')} MB | "
+                  f"{y.get('lib', '—')} | {serves or '—'} |")
+    md += ["", "</details>", ""]
+    if bk.get("messaging_layers"):
+        md += ["<details><summary><b>vyomi-messaging layers</b> — one core, a protocol adapter per wire format</summary>", "",
+               "| Layer | Serves |", "|---|---|"] + [f"| {a} | {b} |" for a, b in bk["messaging_layers"]]
+        md += ["", "AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ (ActiveMQ) speak it; "
+               "AWS SQS/SNS/Kinesis and GCP Pub/Sub SDKs use HTTP or gRPC. Amazon MQ for RabbitMQ (AMQP 0-9-1) keeps real RabbitMQ.",
+               "", "</details>", ""]
+    if bk.get("libs_design"):
+        md += ["<details><summary><b>vyomi-libs design</b> — shape, Nano wheels, contract, release, migration</summary>", ""]
+        md += [f"- {line}" for line in bk["libs_design"]] + ["", "</details>", ""]
+
     md += ["## Details", ""]
     for lbl, r in moving_all:
         if r["gate"]:
