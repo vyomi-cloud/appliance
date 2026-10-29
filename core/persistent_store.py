@@ -64,7 +64,8 @@ class SqliteStateBackend:
     def __init__(self, path: str = ":memory:"):
         self.path = path
         # A single shared connection so `:memory:` persists across save/load.
-        self._conn = sqlite3.connect(path)
+        # check_same_thread=False allows FastAPI worker threads and asyncio loop to safely share connection.
+        self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS store_state (id TEXT PRIMARY KEY, blob TEXT)")
         self._conn.commit()

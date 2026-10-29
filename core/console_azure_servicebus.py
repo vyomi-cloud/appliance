@@ -116,10 +116,57 @@ def _looks_like_fanout(body: str) -> bool:
         return False
 
 
+def _sync_with_runtime_store():
+    """Sync state from the shared PersistentMessagingStore singleton."""
+    try:
+        from core.azure_servicebus_runtime import get_store
+        store = get_store()
+    except Exception:
+        return
+
+    for t_name, t in getattr(store, "topics", {}).items():
+        if t_name not in _TOPICS:
+            _TOPICS[t_name] = {"created": t.get("created", _now_iso()), "subscriptions": set()}
+        subs = t.get("subscriptions", {})
+        for s_name, sub in subs.items():
+            _TOPICS[t_name]["subscriptions"].add(s_name)
+            q = _QUEUES.setdefault(s_name, {"topic": t_name, "created": sub.get("created", _now_iso()), "messages": []})
+            q["topic"] = t_name
+            existing_ids = {m.get("message_id") for m in q["messages"]}
+            live_ids = {sm.get("MessageId") or sm.get("_id") for sm in sub.get("messages", [])}
+            for sm in sub.get("messages", []):
+                mid = sm.get("MessageId") or sm.get("_id")
+                if mid not in existing_ids:
+                    body_val = sm.get("body", "")
+                    if isinstance(body_val, bytes):
+                        try:
+                            body_str = body_val.decode("utf-8")
+                        except Exception:
+                            body_str = str(body_val)
+                    else:
+                        body_str = str(body_val)
+                    q["messages"].append({
+                        "message_id": mid,
+                        "body": body_str,
+                        "published_at": sm.get("EnqueuedTimeUtc", _now_iso()),
+                        "visible_at": sm.get("visible_at", 0),
+                        "receive_count": sm.get("delivery_count", 0),
+                        "deleted": sm.get("deleted", False),
+                        "is_notification": _looks_like_fanout(body_str),
+                    })
+            # Messages no longer present in the live backlog have been
+            # completed, received-and-deleted, or dead-lettered — mark them
+            # deleted so approximate_messages/total_messages stop overcounting.
+            for m in q["messages"]:
+                if m.get("message_id") not in live_ids:
+                    m["deleted"] = True
+
+
 # ── queues (the widget's "queue" column) ────────────────────────────────────
 def list_queues() -> dict:
     """List queues with an approximate depth (visible message count) — the SAME JSON
     shape console_messaging.list_queues returns."""
+    _sync_with_runtime_store()
     now = _now_ts()
     out = []
     for name in sorted(_QUEUES):
@@ -243,6 +290,7 @@ def purge_queue(name: str) -> dict:
 
 # ── topics (the widget's "topic" column) ────────────────────────────────────
 def list_topics() -> dict:
+    _sync_with_runtime_store()
     out = []
     for name in sorted(_TOPICS):
         t = _TOPICS[name]

@@ -1132,7 +1132,10 @@ def api_gcp_firestore_list_root_documents(project: str, database: str):
     project = _gcp_project_name(project)
     database = str(database or "(default)")
     if _fs_emu.available():
-        return {"documents": _fs_emu.list_root(project, database), "nextPageToken": "", "kind": "firestore#documents"}
+        try:
+            return {"documents": _fs_emu.list_root(project, database), "nextPageToken": "", "kind": "firestore#documents"}
+        except Exception:
+            pass
     docs = s._gcp_firestore_engine().list_root_documents(project, database)
     return {"documents": docs, "nextPageToken": "", "kind": "firestore#documents"}
 
@@ -1142,7 +1145,10 @@ def api_gcp_firestore_list_documents(project: str, database: str, collection: st
     project = _gcp_project_name(project)
     database = str(database or "(default)")
     if _fs_emu.available():
-        return {"documents": _fs_emu.list_collection(project, database, collection), "nextPageToken": "", "kind": "firestore#documents"}
+        try:
+            return {"documents": _fs_emu.list_collection(project, database, collection), "nextPageToken": "", "kind": "firestore#documents"}
+        except Exception:
+            pass
     docs = s._gcp_firestore_engine().list_documents(project, database, collection)
     return {"documents": docs, "nextPageToken": "", "kind": "firestore#documents"}
 
