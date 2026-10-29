@@ -33,7 +33,7 @@ const api = (method, path) => page.evaluate(async ([m, p]) => {
 try {
   await bootConsole(page, base, "/aws-console.html");
   await api("DELETE", `/api/aws/cloudwatch/alarms/${STACK}`);
-  const rail = page.locator(RAIL_SEL).filter({ hasText: /CloudWatch/i }).first();
+  const rail = page.locator(RAIL_SEL).filter({ hasText: /CloudWatch\s*$/ }).first();
   check(await rail.count() > 0, "CloudWatch is on the Nano AWS console rail");
   await rail.click({ timeout: 5000 });
   await page.waitForTimeout(1500);

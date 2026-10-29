@@ -43,7 +43,7 @@ try {
   await page.goto(`${BASE}/console/aws`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction((s) => document.querySelectorAll(s).length > 0, RAIL_SEL, { timeout: 60000 });
   await page.waitForTimeout(1500);
-  const rail = page.locator(RAIL_SEL).filter({ hasText: /CloudWatch/i }).first();
+  const rail = page.locator(RAIL_SEL).filter({ hasText: /CloudWatch\s*$/ }).first();
   check(await rail.count() > 0, "CloudWatch is on the AWS console rail");
   await rail.click({ timeout: 5000 });
   await page.waitForTimeout(1500);
