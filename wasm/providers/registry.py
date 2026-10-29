@@ -424,10 +424,10 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
         # Azure resources live in the ARM core's flat state, keyed by resource id.
         if provider == "azure":
             arm = getattr(backends, "_azure_arm", None)
-            # AzureArm keeps its flat map in `_state` (lower-cased resource ids). Count
+            # AzureArm keeps its flat map in `state` (lower-cased resource ids). Count
             # top-level resources only (<ns>/<type>/<name>); children (subnets, APIs, …)
             # have longer ids and are not separately billed resources.
-            for rid in getattr(arm, "_state", {}) or {}:
+            for rid in getattr(arm, "state", {}) or {}:
                 i = rid.find("/providers/")
                 if i < 0:
                     continue  # resource groups etc. have no /providers/ segment
