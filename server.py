@@ -153,6 +153,16 @@ from core.models import *  # noqa: F401,F403  — backward compat
 # ── App creation ──────────────────────────────────────────────────────
 app = FastAPI(title="CloudLearn Cloud Simulator", version="2.0.0", docs_url=None, redoc_url=None)
 
+
+# A handler calling `await request.json()` on an empty or malformed body is a
+# client error, not a crash: an unhandled JSONDecodeError surfaced as a 500 and
+# closed the keep-alive connection, so the client's NEXT request failed with
+# "Remote end closed connection" (console-actions ssm.create -> ssm.list).
+@app.exception_handler(json.JSONDecodeError)
+async def _invalid_json_body(request: Request, exc: json.JSONDecodeError):
+    return JSONResponse({"detail": f"Request body is not valid JSON: {exc.msg}",
+                         "code": "InvalidRequestBody"}, status_code=400)
+
 # ── Backend route registration (EARLY) ───────────────────────────────
 _aws_xamz_dispatchers: dict = {}
 try:
