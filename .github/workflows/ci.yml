@@ -27,6 +27,8 @@ jobs:
         run: python wasm/build_cores.py --check
       - name: All three launchers show the same launch view
         run: python tests/launcher/test_launch_view_consistency.py
+      - name: Readiness + Nano backend lists are up to date
+        run: python tests/launcher/test_backends_up_to_date.py
 
   # ── Backend stack + conformance (the gate) ──────────────────────────────
   # ── Nano boot screen: once per launch (real browser) ────────────────────

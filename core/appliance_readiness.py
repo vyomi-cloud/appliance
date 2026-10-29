@@ -58,7 +58,18 @@ _BACKENDS: list[tuple[str, str, str, int, str, int]] = [
     ("pubsub",          "Pub/Sub emulator",    "cloudlearn-pubsub",         8085, "gcp",      750),
     ("firestore",       "Firestore emulator",  "cloudlearn-firestore",      8080, "gcp",      750),
     ("cloudsim",        "CloudSim Plus",       "cloudsim",                  9010, "core",     250),
+    # Backends added with later services. Each is tracked only when the simulator is
+    # configured for it (its _CANONICAL_ENV var is set), i.e. when this stack runs it:
+    # the Max appliance VM's compose has Azurite only.
+    ("victoriametrics", "VictoriaMetrics (CloudWatch metrics)", "vyomi-victoriametrics", 8428, "aws", 30),
+    ("gateway",         "Caddy gateway (API Gateway V2)", "vyomi-gateway",  2019, "aws",       45),
+    ("valkey",          "Valkey (Memorystore)", "vyomi-valkey",             6379, "gcp",       40),
+    ("registry",        "OCI registry (Artifact Registry)", "vyomi-registry", 5000, "gcp",     25),
+    ("azurite",         "Azurite (Blob / Queue)", "vyomi-azurite",          10000, "azure",   250),
 ]
+
+# Tracked only when their env var is set (see above).
+_OPTIONAL = {"victoriametrics", "gateway", "valkey", "registry", "azurite"}
 
 # Canonical env vars the simulator already sets for each backend (URL,
 # host:port, or bare host). The prober prefers these so it always probes
@@ -77,6 +88,11 @@ _CANONICAL_ENV: dict[str, str] = {
     "fake-gcs":  "CLOUDLEARN_GCS_URL",
     "pubsub":    "CLOUDLEARN_PUBSUB_EMULATOR_HOST",
     "firestore": "CLOUDLEARN_FIRESTORE_EMULATOR_HOST",
+    "victoriametrics": "CLOUDLEARN_VICTORIAMETRICS_URL",
+    "gateway":   "VYOMI_GATEWAY_ADMIN",
+    "valkey":    "CLOUDLEARN_VALKEY_HOST",
+    "registry":  "CLOUDLEARN_REGISTRY_HOST",
+    "azurite":   "CLOUDLEARN_AZURITE_URL",
 }
 
 
@@ -102,6 +118,13 @@ def _probe_one(host: str, port: int, timeout: float = 0.25) -> bool:
         return False
 
 
+def _configured() -> list[tuple[str, str, str, int, str, int]]:
+    """The backends this stack runs: every core entry, plus each optional one whose
+    env var the compose file sets for the simulator."""
+    return [b for b in _BACKENDS
+            if b[0] not in _OPTIONAL or os.environ.get(_CANONICAL_ENV.get(b[0], ""), "").strip()]
+
+
 def _active_backends() -> list[tuple[str, str, str, int, str, int]]:
     """Scope the tracked backends to the profile that's actually RUNNING, so the
     readiness banner reaches 100% for the profile's services (not stranded at
@@ -118,11 +141,11 @@ def _active_backends() -> list[tuple[str, str, str, int, str, int]]:
     if clouds is None:
         active = os.environ.get("COMPOSE_PROFILES", "").strip()
         if not active:
-            return _BACKENDS
+            return _configured()
         clouds = {p.strip() for p in active.split(",") if p.strip()}
     cats = set(clouds)
     cats.add("core")   # simulator / postgres / cloudsim are the always-on backbone
-    return [b for b in _BACKENDS if b[4] in cats]
+    return [b for b in _configured() if b[4] in cats]
 
 
 def probe_all() -> dict[str, Any]:

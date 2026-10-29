@@ -140,18 +140,41 @@ const STUBS = {
 // "ready" (one Pyodide runtime, nothing to boot). service-metrics maps live
 // CPU/RAM onto these `name`s from the census + WASM heap.
 const NANO_SERVICES = [
-  { name: "runtime",        label: "Pyodide runtime",     category: "core" },
-  { name: "router",         label: "Conformance router",  category: "core" },
-  { name: "s3",             label: "ObjectStore (S3)",    category: "aws" },
-  { name: "dynamodb",       label: "NoSQL (DynamoDB)",    category: "aws" },
-  { name: "kms",            label: "KMS engine",          category: "aws" },
-  { name: "secretsmanager", label: "Secrets (KV)",        category: "aws" },
-  { name: "sqs",            label: "Messaging (SQS/SNS)", category: "aws" },
-  { name: "cloudwatch",     label: "CloudWatch",          category: "aws" },
-  { name: "iam",            label: "IAM",                 category: "aws" },
-  { name: "rds",            label: "SqlStore (RDS)",      category: "aws" },
-  { name: "gcp",            label: "ResourceStore (GCP)", category: "gcp" },
-  { name: "azure",          label: "ARM (Azure)",         category: "azure" },
+  // `stores` = the core/nano_registry.py stores each engine owns; the backends
+  // check in CI (tests/launcher/test_backends_up_to_date.py) fails when a
+  // registry store isn't covered here, so this list follows every release.
+  { name: "runtime",        label: "Pyodide runtime",     category: "core", stores: [] },
+  { name: "router",         label: "Conformance router",  category: "core", stores: ["events"] },
+  { name: "s3",             label: "ObjectStore (S3)",    category: "aws", stores: ["s3"] },
+  { name: "dynamodb",       label: "NoSQL (DynamoDB)",    category: "aws", stores: ["ddb"] },
+  { name: "kms",            label: "KMS engine",          category: "aws", stores: ["kms"] },
+  { name: "secretsmanager", label: "Secrets (KV)",        category: "aws", stores: ["sec"] },
+  { name: "sqs",            label: "Messaging (SQS/SNS)", category: "aws", stores: ["msg"] },
+  { name: "cloudwatch",     label: "CloudWatch",          category: "aws", stores: ["cw", "logs"] },
+  { name: "iam",            label: "IAM",                 category: "aws", stores: ["iam"] },
+  { name: "rds",            label: "SqlStore (RDS)",      category: "aws", stores: ["rds"] },
+  { name: "lambda",         label: "Compute (Lambda / API Gateway / VPC)", category: "aws", stores: ["compute", "vpc_net", "extras"] },
+  { name: "apigatewayv2",   label: "API Gateway V2",      category: "aws", stores: ["apigwv2"] },
+  { name: "kinesis",        label: "Streams (Kinesis)",   category: "aws", stores: ["kinesis"] },
+  { name: "elbv2",          label: "Load balancing (ELBv2)", category: "aws", stores: ["elbv2"] },
+  { name: "ssm",            label: "Parameters (SSM)",    category: "aws", stores: ["ssm"] },
+  { name: "stepfunctions",  label: "Workflows (Step Functions)", category: "aws", stores: ["sfn"] },
+  { name: "gcp",            label: "ResourceStore (GCP)", category: "gcp", stores: ["gcp_iam", "gcp_iamc"] },
+  { name: "gcs",            label: "ObjectStore (Cloud Storage)", category: "gcp", stores: ["gcs"] },
+  { name: "firestore",      label: "NoSQL (Firestore)",   category: "gcp", stores: ["gcp_fs"] },
+  { name: "gcpkms",         label: "KMS / Secrets (GCP)", category: "gcp", stores: ["gcp_kms", "gcp_sec"] },
+  { name: "pubsub",         label: "Messaging (Pub/Sub)", category: "gcp", stores: ["gcp_msg"] },
+  { name: "cloudsql",       label: "SqlStore (Cloud SQL)", category: "gcp", stores: ["gcp_sql"] },
+  { name: "gke",            label: "Kubernetes Engine",   category: "gcp", stores: ["gcp_gke"] },
+  { name: "memorystore",    label: "Memorystore (Redis)", category: "gcp", stores: ["gcp_redis"] },
+  { name: "scheduler",      label: "Cloud Scheduler",     category: "gcp", stores: ["gcp_sched"] },
+  { name: "monitoring",     label: "Cloud Monitoring",    category: "gcp", stores: ["gcp_mon"] },
+  { name: "artifactregistry", label: "Artifact Registry", category: "gcp", stores: ["gcp_ar"] },
+  { name: "azure",          label: "ARM (Azure)",         category: "azure", stores: ["az_arm"] },
+  { name: "azblob",         label: "Blob / Queue (Azure Storage)", category: "azure", stores: ["az_blob", "az_queue"] },
+  { name: "cosmos",         label: "NoSQL (Cosmos DB)",   category: "azure", stores: ["az_cosmos"] },
+  { name: "keyvault",       label: "Key Vault",           category: "azure", stores: ["az_kvsec", "az_kvkeys"] },
+  { name: "servicebus",     label: "Messaging (Service Bus)", category: "azure", stores: ["az_sb"] },
 ];
 
 function json(obj, status, extraHeaders) {
@@ -1029,7 +1052,7 @@ self.addEventListener("fetch", (event) => {
       // Service status (readiness-strip.js) — the Nano cores are always ready
       // (one Pyodide runtime, nothing to boot), grouped Core/AWS/GCP/Azure.
       if (apiPath === "/api/runtime/readiness" && method === "GET") {
-        const services = NANO_SERVICES.map((s) => ({ ...s, status: "ready" }));
+        const services = NANO_SERVICES.map(({ stores, ...s }) => ({ ...s, status: "ready" }));
         const by_category = {};
         for (const s of services) {
           const c = (by_category[s.category] = by_category[s.category] || { ready: 0, total: 0, pct: 100 });

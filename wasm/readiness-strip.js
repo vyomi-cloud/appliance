@@ -91,76 +91,6 @@
       ' border-radius:50%; background:rgba(255,255,255,.28); font-size:11px; font-weight:700; line-height:1;">&#10003;</span>';
   }
 
-  // Cloud services per cloud, from /api/{cloud}/catalog (the consoles' own lists).
-  var CLOUDS = [['aws', 'AWS'], ['gcp', 'GCP'], ['azure', 'Azure']];
-  var _catalog = null;           // {aws: [labels], gcp: [...], azure: [...]}
-  function _catalogSummary() {
-    if (!_catalog) return '';
-    var n = 0, parts = [];
-    CLOUDS.forEach(function (c) { var k = (_catalog[c[0]] || []).length; n += k; parts.push(c[1] + ' ' + k); });
-    return n ? n + ' cloud services (' + parts.join(' · ') + ')' : '';
-  }
-  function subHead(icon, title, right) {
-    var h = document.createElement('div');
-    h.style.cssText = 'display:flex; align-items:center; gap:8px; margin:4px 0 12px; color:#e4e4e7; font-weight:600; font-size:14px;';
-    h.innerHTML = '<span class="material-icons" style="font-size:18px;color:#2563eb;">' + icon + '</span>';
-    h.appendChild(document.createTextNode(title));
-    var r = document.createElement('span');
-    r.style.cssText = 'margin-left:auto; font-size:12px; color:#a1a1aa; font-weight:600;';
-    r.textContent = right || '';
-    h.appendChild(r);
-    return h;
-  }
-  function buildCloudServices(up) {
-    var wrap = document.createElement('div');
-    wrap.style.cssText = 'margin-bottom:26px;';
-    var total = 0;
-    CLOUDS.forEach(function (c) { total += (_catalog[c[0]] || []).length; });
-    wrap.appendChild(subHead('cloud', 'Cloud services', total + ' in this release'));
-    var grid = document.createElement('div');
-    grid.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px;';
-    CLOUDS.forEach(function (c) {
-      var labels = _catalog[c[0]] || [];
-      var tile = document.createElement('div');
-      tile.style.cssText = 'background:linear-gradient(180deg,#14172e 0%,#0d1228 100%); border:1px solid rgba(255,255,255,0.10); border-radius:14px; padding:16px 18px;';
-      var head = document.createElement('div');
-      head.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding-bottom:9px; margin-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.12);';
-      var t = document.createElement('span');
-      t.style.cssText = 'font-weight:600; color:#e4e4e7; font-size:13.5px;';
-      t.textContent = c[1];
-      var n = document.createElement('span');
-      n.style.cssText = 'font-size:12px; font-weight:600; color:' + (up ? '#16a34a' : '#a1a1aa') + ';';
-      n.textContent = labels.length + ' services';
-      head.appendChild(t); head.appendChild(n); tile.appendChild(head);
-      var rows = document.createElement('div');
-      rows.style.cssText = 'display:flex; flex-direction:column; gap:8px; font-size:13px;';
-      labels.forEach(function (l) {
-        var row = document.createElement('div');
-        row.style.cssText = 'display:flex; align-items:center; gap:8px; color:#c7cbe0;';
-        row.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;flex:none;background:' + (up ? '#34d399' : '#d4d4d8') + ';"></span>';
-        var nm = document.createElement('span');
-        nm.style.cssText = 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
-        nm.textContent = l;
-        row.appendChild(nm); rows.appendChild(row);
-      });
-      tile.appendChild(rows); grid.appendChild(tile);
-    });
-    wrap.appendChild(grid);
-    return wrap;
-  }
-  function loadCatalogs(getJSON) {
-    return Promise.all(CLOUDS.map(function (c) { return getJSON('/api/' + c[0] + '/catalog'); })).then(function (res) {
-      var out = {}, any = false;
-      res.forEach(function (d, i) {
-        var list = d && (Array.isArray(d) ? d : d.services);
-        if (!Array.isArray(list)) return;
-        any = true;
-        out[CLOUDS[i][0]] = list.map(function (x) { return x.label || x.name || x.key; }).filter(Boolean);
-      });
-      if (any) _catalog = out;
-    });
-  }
-
   function render(j) {
     var strip = mount();
     var ready = !!j.ready;
@@ -170,14 +100,9 @@
     strip.style.background = ready ? GRAD_READY : GRAD_LOADING;
     strip.querySelector('#vyr-icon').innerHTML = ready ? checkHTML() : spinnerHTML();
     strip.querySelector('#vyr-title').textContent = ready ? 'Appliance is Ready' : 'Appliance is getting ready';
-    // Cloud services come from the live console catalogs, so the count follows
-    // every release; the readiness API counts the backend containers behind them.
-    var cs = _catalogSummary();
-    // Nano has no backend containers (its readiness is a fixture): say where it runs.
-    var nano = !!window.__NANO_BASE || /\/nano\//.test(location.pathname);
     strip.querySelector('#vyr-summary').textContent = ready
-      ? '— ' + (cs ? cs + ' · ' : '') + (nano ? 'running in your browser' : 'all ' + tc + ' backends running')
-      : '— ' + rc + '/' + tc + ' backends ready' + (cs ? ' · ' + cs : '');
+      ? '— all ' + tc + ' services running'
+      : '— ' + rc + '/' + tc + ' backends ready';
 
     // Progress bar + pct are only meaningful while loading. When ready, swap the
     // bar for a flexible spacer so the Details button stays right-aligned.
@@ -278,8 +203,6 @@
         .concat(Object.keys(groups).filter(function (c) { return CAT_ORDER.indexOf(c) < 0; }));
       bodyMount.style.cssText = '';
       bodyMount.innerHTML = '';
-      if (_catalog) bodyMount.appendChild(buildCloudServices(ready));
-      bodyMount.appendChild(subHead('dns', 'Backends', rc + '/' + tc + ' ready'));
       bodyMount.appendChild(buildMetricToggle());
       var grid = document.createElement('div');
       grid.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px;';
@@ -337,11 +260,10 @@
     // Fetch live CPU/Mem only where the body card is mounted (appliance /clouds).
     var wantMetrics = !!document.getElementById('vyomi-services-mount');
     var reqs = [getJSON('/api/runtime/readiness')];
-    if (!_catalog) reqs.push(loadCatalogs(getJSON));
     if (wantMetrics) reqs.push(getJSON('/api/runtime/service-metrics'));
     Promise.all(reqs).then(function (res) {
       var j = res[0];
-      if (wantMetrics) _metrics = (res[res.length - 1] && res[res.length - 1].services) || {};
+      if (wantMetrics) _metrics = (res[1] && res[1].services) || {};
       if (!j) { schedule(POLL_LOADING_MS); return; }
       var ready = render(j);
       schedule(ready ? POLL_READY_MS : POLL_LOADING_MS);
