@@ -16,7 +16,9 @@ Cores vendored (each green on host CPython AND Pyodide via tests/conformance/):
 Run:  python3 wasm/build_cores.py   (part of the bundle build, with build_fixtures.py)
 """
 import os
+import ast
 import re
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -87,8 +89,19 @@ HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT ED
 # raises ImportError (this guard exists because relay-shared-worker.js once lagged
 # aws_wire_router's new GCP/Azure imports and broke Start-tunnel in production).
 _RELAY_LOADERS = ["relay/relay-shared-worker.js", "relay/nano-endpoint.html"]
-_TOPLEVEL_IMPORT = re.compile(r"^from core\.(\w+) import", re.M)
-_TOPLEVEL_FROM = re.compile(r"^from core import (.+)$", re.M)
+def _load_time_imports(tree):
+    """Import statements that run when the module is imported: the module body
+    and the bodies of top-level try/except, if/else and with blocks, but not
+    function or class bodies (those load on demand)."""
+    stack = list(tree.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            yield node
+        elif isinstance(node, (ast.Try, getattr(ast, "TryStar", ast.Try))):
+            stack += node.body + node.orelse + node.finalbody + [x for h in node.handlers for x in h.body]
+        elif isinstance(node, (ast.If, ast.With)):
+            stack += node.body + getattr(node, "orelse", [])
 
 
 def _cores_in(js_text):
@@ -98,15 +111,24 @@ def _cores_in(js_text):
 
 
 def _deps_of(module_py):
-    """Top-level core deps of core/<module_py> (as X.py). Lazy/indented imports
-    are excluded — they load on demand, not at module import."""
-    src = open(os.path.join(SRC, module_py)).read()
-    deps = {f"{x}.py" for x in _TOPLEVEL_IMPORT.findall(src)}
-    for grp in _TOPLEVEL_FROM.findall(src):
-        for part in grp.split(","):
-            name = part.strip().split(" as ")[0].strip()
-            if name:
-                deps.add(f"{name}.py")
+    """Core modules core/<module_py> imports at load time (as X.py), including
+    the Pyodide fallbacks inside top-level `try: from core import x / except
+    ImportError: import x` blocks: azure_arm_core's six such imports were
+    missed by the old regex (indented = "lazy") and broke the relay in v3.0.18+."""
+    tree = ast.parse(open(os.path.join(SRC, module_py)).read())
+    deps = set()
+    for node in _load_time_imports(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module == "core":
+                deps |= {f"{a.name}.py" for a in node.names}
+            elif node.module and node.module.startswith("core."):
+                deps.add(node.module.split(".")[1] + ".py")
+            elif node.module and node.level == 0:
+                deps.add(node.module.split(".")[0] + ".py")      # flat fallback: from x import y
+        else:
+            for a in node.names:
+                name = a.name.split(".")
+                deps.add((name[1] if name[0] == "core" and len(name) > 1 else name[0]) + ".py")
     return deps
 
 
@@ -154,4 +176,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if "--check" in sys.argv:          # CI: verify the relay loaders only, write nothing
+        check_relay_cores()
+    else:
+        main()
