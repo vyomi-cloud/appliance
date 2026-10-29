@@ -46,9 +46,13 @@ const PREV = (() => {
 const shardOf = (key) => [...key].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % TAB_SHARDS;
 const OFFLINE_BASE = (process.env.VYOMI_BASE_URL || "http://localhost:9000").replace(/\/$/, "");
 
-const CONSOLES = TARGET === "nano"
+// CLOUDS=aws[,gcp,…] limits the crawl to those consoles (one detect shard per
+// cloud); unset = all three.
+const ONLY_CLOUDS = (process.env.CLOUDS || "").split(",").map((c) => c.trim()).filter(Boolean);
+const CONSOLES = (TARGET === "nano"
   ? [{ cloud: "aws", path: "/aws-console.html" }, { cloud: "gcp", path: "/gcp-console.html" }, { cloud: "azure", path: "/azure-console.html" }]
-  : [{ cloud: "aws", path: "/console/aws" }, { cloud: "gcp", path: "/console/gcp" }, { cloud: "azure", path: "/console/azure" }];
+  : [{ cloud: "aws", path: "/console/aws" }, { cloud: "gcp", path: "/console/gcp" }, { cloud: "azure", path: "/console/azure" }]
+).filter((c) => !ONLY_CLOUDS.length || ONLY_CLOUDS.includes(c.cloud));
 
 // Resource-detail tabs: AWS `.top-tabs` buttons, GCP `.sub-nav` items, Azure
 // blade `.sub-nav-item`s (as the wasm/ui-tests tab validators use), plus
