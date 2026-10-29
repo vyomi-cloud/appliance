@@ -536,6 +536,31 @@ def api_gcp_sql_delete_database(project: str, instance: str, database: str):
     return s._gcp_sql_make_operation(project, instance, "DELETE_DATABASE")
 
 
+def _pubsub_mirror(s, kind: str, project: str, rid: str, payload: dict | None = None, delete: bool = False) -> None:
+    """The Pub/Sub emulator owns topics/subscriptions, but the space's inventory
+    (resource_count, cost savings) reads gcp_pubsub_state — keep a metadata record
+    there for every emulator-backed resource so it is counted and billed."""
+    bucket = "topics" if kind == "topic" else "subscriptions"
+    try:
+        if delete:
+            gcp_pubsub_state.get(bucket, {}).pop(rid, None)
+            if kind == "topic":
+                for sid, sub in list(gcp_pubsub_state.get("subscriptions", {}).items()):
+                    if str(sub.get("topic") or "").split("/")[-1] == rid:
+                        gcp_pubsub_state["subscriptions"].pop(sid, None)
+                        s._cloudsim_sync_service_resource("gcp", "pubsub", "subscription", sid, {}, "gcp_pubsub", action="delete")
+            s._cloudsim_sync_service_resource("gcp", "pubsub", kind, rid, {}, "gcp_pubsub", action="delete")
+            return
+        if kind == "topic":
+            rec = s._gcp_pubsub_topic_record(project, rid, payload)
+        else:
+            rec = s._gcp_pubsub_subscription_record(project, rid, payload)
+        gcp_pubsub_state.setdefault(bucket, {})[rid] = rec
+        s._cloudsim_sync_service_resource("gcp", "pubsub", kind, rid, rec, "gcp_pubsub")
+    except Exception:
+        pass
+
+
 def api_gcp_pubsub_list_topics(project: str):
     s = _server()
     project = _gcp_project_name(project)
@@ -563,6 +588,7 @@ async def api_gcp_pubsub_create_topic(project: str, request: Request):
             t = await asyncio.to_thread(_ps_emu.create_topic, project, topic_id, labels)
         except _gax.AlreadyExists:
             raise HTTPException(409, detail="Topic already exists")
+        _pubsub_mirror(s, "topic", project, topic_id, payload)
         return s._gcp_pubsub_topic_view(project, t)
     topic = s._gcp_pubsub_topic_record(project, topic_id, payload)
     gcp_pubsub_state.setdefault("topics", {})[topic_id] = topic
@@ -626,6 +652,7 @@ def api_gcp_pubsub_delete_topic(project: str, topic: str):
     if _ps_emu.available():
         if not _ps_emu.delete_topic(project, topic):
             raise HTTPException(404, detail="Topic not found")
+        _pubsub_mirror(s, "topic", project, topic, delete=True)
         return {"done": True}
     rec = gcp_pubsub_state.get("topics", {}).get(topic)
     if not rec or str(rec.get("project") or project) != project:
@@ -727,6 +754,7 @@ async def api_gcp_pubsub_create_subscription(project: str, request: Request, que
             raise HTTPException(409, detail="Subscription already exists")
         except _gax.NotFound:
             raise HTTPException(404, detail="Topic not found")
+        _pubsub_mirror(s, "subscription", project, sub_id, payload)
         return s._gcp_pubsub_subscription_view(project, sub)
     sub = s._gcp_pubsub_subscription_record(project, sub_id, payload)
     if not sub.get("topic"):
@@ -821,6 +849,7 @@ def api_gcp_pubsub_delete_subscription(project: str, subscription: str):
     if _ps_emu.available():
         if not _ps_emu.delete_subscription(project, subscription):
             raise HTTPException(404, detail="Subscription not found")
+        _pubsub_mirror(s, "subscription", project, subscription, delete=True)
         return {"done": True}
     rec = gcp_pubsub_state.get("subscriptions", {}).get(subscription)
     if not rec or str(rec.get("project") or project) != project:
@@ -1616,7 +1645,7 @@ def api_gcp_vpc_list_networks(project: str):
         if str(network.get("project") or project) != project:
             continue
         network_name = str(network.get("name") or "")
-        networks.append({"kind": "compute#network", "id": str(network.get("id") or s._gcp_compute_numeric_id(f"{project}:{network_name}")), "creationTimestamp": network.get("createTime", _now()), "name": network_name, "description": network.get("description", ""), "IPv4Range": network.get("IPv4Range", ""), "gatewayIPv4": network.get("gatewayIPv4", ""), "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}", "selfLinkWithId": network.get("selfLinkWithId", f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}?id={network.get('id') or s._gcp_compute_numeric_id(f'{project}:{network_name}')}"), "autoCreateSubnetworks": bool(network.get("autoCreateSubnetworks", True)), "subnetworks": network.get("subnetworks", []), "peerings": network.get("peerings", []), "routingConfig": {"routingMode": network.get("routingMode", "REGIONAL")}})
+        networks.append({"kind": "compute#network", "id": str(network.get("id") or s._gcp_compute_numeric_id(f"{project}:{network_name}")), "creationTimestamp": network.get("createTime", _now()), "name": network_name, "description": network.get("description", ""), "IPv4Range": network.get("IPv4Range", ""), "gatewayIPv4": network.get("gatewayIPv4", ""), "mtu": int(network.get("mtu") or 1460), "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}", "selfLinkWithId": network.get("selfLinkWithId", f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}?id={network.get('id') or s._gcp_compute_numeric_id(f'{project}:{network_name}')}"), "autoCreateSubnetworks": bool(network.get("autoCreateSubnetworks", True)), "subnetworks": network.get("subnetworks", []), "peerings": network.get("peerings", []), "routingConfig": {"routingMode": network.get("routingMode", "REGIONAL")}})
     return {"kind": "compute#networkList", "items": networks}
 
 
@@ -1628,9 +1657,9 @@ async def api_gcp_vpc_create_network(project: str, request: Request):
     name = str(payload.get("name") or payload.get("network") or "").strip()
     if not name:
         raise HTTPException(400, detail="Network name is required")
-    rec = {"id": s._gcp_compute_numeric_id(f"{project}:{name}"), "name": name, "project": project, "description": str(payload.get("description") or ""), "IPv4Range": str(payload.get("IPv4Range") or ""), "gatewayIPv4": str(payload.get("gatewayIPv4") or ""), "autoCreateSubnetworks": bool(payload.get("autoCreateSubnetworks", True)), "routingMode": str(payload.get("routingMode") or "REGIONAL"), "subnetworks": payload.get("subnetworks", []) if isinstance(payload.get("subnetworks"), list) else [], "peerings": payload.get("peerings", []) if isinstance(payload.get("peerings"), list) else [], "createTime": _now()}
+    rec = {"id": s._gcp_compute_numeric_id(f"{project}:{name}"), "name": name, "project": project, "description": str(payload.get("description") or ""), "IPv4Range": str(payload.get("IPv4Range") or ""), "gatewayIPv4": str(payload.get("gatewayIPv4") or ""), "mtu": int(payload.get("mtu") or 1460), "autoCreateSubnetworks": bool(payload.get("autoCreateSubnetworks", True)), "routingMode": str(payload.get("routingMode") or "REGIONAL"), "subnetworks": payload.get("subnetworks", []) if isinstance(payload.get("subnetworks"), list) else [], "peerings": payload.get("peerings", []) if isinstance(payload.get("peerings"), list) else [], "createTime": _now()}
     gcp_vpc_state.setdefault("networks", {})[name] = rec
-    return {"kind": "compute#network", "id": rec["id"], "creationTimestamp": rec["createTime"], "name": name, "description": rec["description"], "IPv4Range": rec["IPv4Range"], "gatewayIPv4": rec["gatewayIPv4"], "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{name}", "selfLinkWithId": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{name}?id={rec['id']}", "autoCreateSubnetworks": rec["autoCreateSubnetworks"], "subnetworks": rec["subnetworks"], "peerings": rec["peerings"], "routingConfig": {"routingMode": rec["routingMode"]}}
+    return {"kind": "compute#network", "id": rec["id"], "creationTimestamp": rec["createTime"], "name": name, "description": rec["description"], "IPv4Range": rec["IPv4Range"], "gatewayIPv4": rec["gatewayIPv4"], "mtu": rec["mtu"], "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{name}", "selfLinkWithId": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{name}?id={rec['id']}", "autoCreateSubnetworks": rec["autoCreateSubnetworks"], "subnetworks": rec["subnetworks"], "peerings": rec["peerings"], "routingConfig": {"routingMode": rec["routingMode"]}}
 
 
 def api_gcp_vpc_get_network(project: str, network: str):
@@ -1639,7 +1668,7 @@ def api_gcp_vpc_get_network(project: str, network: str):
     rec = gcp_vpc_state.get("networks", {}).get(network)
     if not rec or str(rec.get("project") or project) != project:
         raise HTTPException(404, detail="Network not found")
-    return {"kind": "compute#network", "id": rec.get("id", s._gcp_compute_numeric_id(f"{project}:{network}")), "creationTimestamp": rec.get("createTime", _now()), "name": rec["name"], "description": rec.get("description", ""), "IPv4Range": rec.get("IPv4Range", ""), "gatewayIPv4": rec.get("gatewayIPv4", ""), "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network}", "selfLinkWithId": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network}?id={rec.get('id', s._gcp_compute_numeric_id(f'{project}:{network}'))}", "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks", True)), "subnetworks": rec.get("subnetworks", []), "peerings": rec.get("peerings", []), "routingConfig": {"routingMode": rec.get("routingMode", "REGIONAL")}}
+    return {"kind": "compute#network", "id": rec.get("id", s._gcp_compute_numeric_id(f"{project}:{network}")), "creationTimestamp": rec.get("createTime", _now()), "name": rec["name"], "description": rec.get("description", ""), "IPv4Range": rec.get("IPv4Range", ""), "gatewayIPv4": rec.get("gatewayIPv4", ""), "mtu": int(rec.get("mtu") or 1460), "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network}", "selfLinkWithId": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network}?id={rec.get('id', s._gcp_compute_numeric_id(f'{project}:{network}'))}", "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks", True)), "subnetworks": rec.get("subnetworks", []), "peerings": rec.get("peerings", []), "routingConfig": {"routingMode": rec.get("routingMode", "REGIONAL")}}
 
 
 def api_gcp_vpc_delete_network(project: str, network: str):

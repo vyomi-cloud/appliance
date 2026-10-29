@@ -1,0 +1,47 @@
+{
+  "cloud": "azure",
+  "key": "operationalinsights",
+  "name": "Log Analytics",
+  "upstream": "operationalinsights",
+  "issue": 88,
+  "core": "core/azure_operationalinsights_core.py",
+  "operations": [
+    "Workspaces_CreateOrUpdate",
+    "Workspaces_Update",
+    "Workspaces_Delete",
+    "Workspaces_Get",
+    "Workspaces_List",
+    "Workspaces_ListByResourceGroup",
+    "SharedKeys_GetSharedKeys",
+    "SharedKeys_Regenerate",
+    "Usages_List",
+    "IntelligencePacks_List",
+    "IntelligencePacks_Enable",
+    "IntelligencePacks_Disable",
+    "SavedSearches_CreateOrUpdate",
+    "SavedSearches_Get",
+    "SavedSearches_Delete",
+    "SavedSearches_ListByWorkspace",
+    "Tables_CreateOrUpdate",
+    "Tables_Update",
+    "Tables_Get",
+    "Tables_Delete",
+    "Tables_ListByWorkspace",
+    "DataSources_CreateOrUpdate",
+    "DataSources_Get",
+    "DataSources_Delete",
+    "DataSources_ListByWorkspace"
+  ],
+  "backend": {
+    "kind": "in-process",
+    "reason": "Workspaces, saved searches, tables and data sources are plain control-plane data the engine already holds (the same code runs in Nano); no container is added. The KQL query data plane (api.loganalytics.io), log ingestion, data export, linked services, clusters and purge are not simulated."
+  },
+  "suites": [
+    "offline-sdk-java-azure-operationalinsights",
+    "offline-sdk-go-azure-operationalinsights",
+    "offline-cli-azure-operationalinsights",
+    "offline-ui-azure-operationalinsights",
+    "nano-ui-azure-operationalinsights"
+  ],
+  "status": "ready"
+}

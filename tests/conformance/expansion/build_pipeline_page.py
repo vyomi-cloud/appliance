@@ -109,6 +109,25 @@ def main() -> int:
         tier = b.get("tier") or x.get("tier", "")
         bits = [name] + ([f"{x['idle_mb']} MB"] if x.get("idle_mb") else []) + ([tier.capitalize()] if tier else [])
         return " · ".join(bits) + ("" if b else " (default)")
+
+    def real_backend_cell(cloud: str, upstream: str) -> str:
+        """The backend the service should have: the shared default for its
+        upstream id, else in-process (the engine itself is the backend)."""
+        name = next((n for n, x in bk["shared"].items() if f"{cloud}:{upstream}" in x.get("for", [])), None)
+        if not name:
+            return "in-process" if upstream in bk["in_process"].get(cloud, []) else "—"
+        x = bk["shared"][name]
+        extra = ["in-process"] if x.get("kind") == "in-process" else ([x["tier"].capitalize()] if x.get("tier") else [])
+        comp = [f"+ {n} {y.get('role', 'agent')}" for n, y in bk["shared"].items() if f"{cloud}:{upstream}" in y.get("agent_for", [])]
+        return " · ".join([name] + extra + comp)
+
+    LIVE_ICON = {"real": "✅", "partial": "🟡", "api": "⚪"}
+
+    def wired_cell(cloud: str, upstream: str) -> str:
+        x = bk.get("live", {}).get(f"{cloud}:{upstream}")
+        if not x:
+            return "not audited"
+        return f"{LIVE_ICON.get(x['state'], '')} {x['today']}".replace("|", "/")
     # Nano ↔ offline feature parity from the hourly inventory (routes are an
     # offline-only concept, so they're left out).
     feats: dict = {}
@@ -223,6 +242,8 @@ def main() -> int:
             up = "⬜ not watched" if up.startswith("⬜") else ("⚠️ " + up.split("⚠️ ")[1] if "⚠️" in up else "✅ watched")
             ver = s.get("released_in", "")
             rel_rows.append({"name": s["name"], "console": console_cell(cloud, s["name"]).replace("off ", "").replace("Nano ", ""),
+                             "real": real_backend_cell(cloud, s.get("upstream") or s["key"]),
+                             "wired": wired_cell(cloud, s.get("upstream") or s["key"]),
                              "issues": " · ".join(issues_n), "upstream": up,
                              "release": f"[v{ver}]({GH}/releases/tag/v{ver})" if re.match(r"^\d", ver) else "before gate"})
         moving, queued = [], []
@@ -253,7 +274,8 @@ def main() -> int:
                 except ValueError:
                     mb = None
             row = {"name": name, "link": link, "priority": s["priority"], "stage": stage,
-                   "backend": backend_cell(cloud, s["id"], mb).replace(" (default)", "")}
+                   "backend": backend_cell(cloud, s["id"], mb).replace(" (default)", ""),
+                   "real": real_backend_cell(cloud, s["id"])}
             if stage.startswith(("📋", "Not")):
                 queued.append(row)
                 continue
@@ -323,19 +345,23 @@ def main() -> int:
 
     md += ["", "## In progress", ""]
     if moving_all:
-        md += ["| Service | Cloud | Stage | Checks | Still missing |", "|---|---|---|---|---|"]
+        md += ["| Service | Cloud | Stage | Checks | Real backend | Built with | Still missing |", "|---|---|---|---|---|---|---|"]
         for lbl, r in moving_all:
             miss = "; ".join(r["missing"][:3]) + (f" (+{len(r['missing']) - 3} more)" if len(r["missing"]) > 3 else "")
-            md.append(f"| {r['name']} {r['link']} | {lbl} | {r['stage']} | {r['checks']} | {miss or '—'} |")
+            md.append(f"| {r['name']} {r['link']} | {lbl} | {r['stage']} | {r['checks']} | {r['real']} | {r['backend']} | {miss or '—'} |")
     else:
         md.append("- Nothing is being built right now.")
 
     md += ["", "## Released services", "",
            "- **Console live:** parts of the console that are really implemented, offline · Nano",
-           "- **UI issues:** problems the latest hourly crawl found, offline · Nano", ""]
+           "- **UI issues:** problems the latest hourly crawl found, offline · Nano",
+           "- **Real backend:** what the service should run on ([backends.json]"
+           f"({GH}/blob/main/tests/conformance/expansion/backends.json)) · **Wired today:** ✅ real · 🟡 partial · ⚪ management API only", ""]
     for c, d in data.items():
-        md += [f"### {d['label']}", "", "| Service | Console live | UI issues | Upstream | Release |", "|---|---|---|---|---|"]
-        md += [f"| {r['name']} | {r['console']} | {r['issues']} | {r['upstream']} | {r['release']} |" for r in d["released"]]
+        md += [f"### {d['label']}", "", "| Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |",
+               "|---|---|---|---|---|---|---|"]
+        md += [f"| {r['name']} | {r['real']} | {r['wired']} | {r['console']} | {r['issues']} | {r['upstream']} | {r['release']} |"
+               for r in d["released"]]
         if d["gaps"]:
             md += ["", "- **Nano ↔ offline gaps:** " + ", ".join(
                 f"{svc} ({'offline-only' if o else 'Nano-only'})" for svc, o, n in d["gaps"])]
@@ -344,9 +370,78 @@ def main() -> int:
     md += ["## Up next", ""]
     for c, d in data.items():
         md += [f"<details><summary><b>{d['label']}</b> — {len(d['queued'])} queued</summary>", "",
-               "| Service | Priority | Issue | Offline backend |", "|---|---|---|---|"]
-        md += [f"| {r['name']} | {r['priority']} | {r['link'] or 'not filed'} | {r['backend']} |" for r in d["queued"]]
+               "| Service | Priority | Issue | Real backend |", "|---|---|---|---|"]
+        md += [f"| {r['name']} | {r['priority']} | {r['link'] or 'not filed'} | {r['real']} |" for r in d["queued"]]
         md += ["", "</details>", ""]
+
+    # Platform features: cross-cutting work, highest priority (label platform-feature).
+    feats_ = gh_json("issue", "list", "-R", REPO, "--label", "platform-feature", "--state", "all", "--limit", "50",
+                     "--json", "number,title,state,labels,body")
+    if feats_:
+        md += ["## Platform features (highest priority)", "",
+               "Built by the agent ahead of everything else, then **reviewed and merged by a person**.", "",
+               "| Feature | Stage | Review PR |", "|---|---|---|"]
+        for it in sorted(feats_, key=lambda x: x["number"]):
+            m = re.search(r"<!-- feature: slug=([a-z0-9-]+)", it.get("body") or "")
+            if not m:
+                continue
+            labels = {l["name"] for l in it.get("labels", [])}
+            pr = prs.get(f"expansion/feature-{m.group(1)}")
+            stage = ("✅ Merged" if pr and pr["state"] == "MERGED" else "👀 In review" if pr and pr["state"] == "OPEN"
+                     else "⛔ Blocked" if "blocked" in labels else "🛠 Building" if "in-progress" in labels
+                     else "✅ Done" if it["state"] == "CLOSED" else "📋 Queued")
+            review = f"[PR #{pr['number']}]({pr['url']})" if pr else "—"
+            md.append(f"| {it['title'].replace('[feature] ', '')} [#{it['number']}]({GH}/issues/{it['number']}) | {stage} | {review} |")
+        md.append("")
+
+    # Backend upgrades: stacks of existing PRs rebuilt onto main (label backend-upgrade).
+    ups = gh_json("issue", "list", "-R", REPO, "--label", "backend-upgrade", "--state", "all", "--limit", "50",
+                  "--json", "number,title,state,labels,body")
+    if ups:
+        md += ["## Backend upgrades", "",
+               "Existing work rebuilt onto main by the agent, then **reviewed and merged by a person** (never auto-merged).", "",
+               "| Upgrade | Source PRs | Stage | Review PR |", "|---|---|---|---|"]
+        for it in sorted(ups, key=lambda x: x["number"]):
+            m = re.search(r"<!-- upgrade: slug=([a-z0-9-]+) prs=([0-9,]+)", it.get("body") or "")
+            if not m:
+                continue
+            slug, nums = m.group(1), [n for n in m.group(2).split(",") if n]
+            src = " → ".join(f"[#{n}]({GH}/pull/{n})" for n in nums)
+            labels = {l["name"] for l in it.get("labels", [])}
+            pr = prs.get(f"expansion/upgrade-{slug}")
+            stage = ("✅ Merged" if pr and pr["state"] == "MERGED" else "👀 In review" if pr and pr["state"] == "OPEN"
+                     else "⛔ Blocked" if "blocked" in labels else "🛠 Rebuilding" if "in-progress" in labels
+                     else "✅ Done" if it["state"] == "CLOSED" else "📋 Queued")
+            title = it["title"].replace("[upgrade] ", "")
+            review = f"[PR #{pr['number']}]({pr['url']})" if pr else "—"
+            md.append(f"| {title} [#{it['number']}]({GH}/issues/{it['number']}) | {src} | {stage} | {review} |")
+        md.append("")
+
+    # Real backends and the vyomi-libs design (tests/conformance/expansion/backends.json).
+    md += ["## Real backends and vyomi-libs", "",
+           "Every service must run on a real backend, so a created resource really works. Shared engines become "
+           "`vyomi-<lib>` packages, one per capability across all three clouds.", "",
+           "| Lib | Cloud services | Real backends it drives | Nano | Phase |", "|---|---|---|---|---|"]
+    for lib, x in ((k, v) for k, v in bk.get("libs", {}).items() if not k.startswith("_")):
+        drives = ", ".join(sorted(n for n, y in bk["shared"].items() if y.get("lib") == lib)) or "in-process"
+        md.append(f"| **{lib}** | {x['serves']} | {drives} | {x.get('nano', '')} | {x.get('phase', '')} |")
+    md += ["", "<details><summary><b>Shared backends</b> — what each one is and what it serves</summary>", "",
+           "| Backend | Kind | Tier | Idle RAM | Lib | Serves |", "|---|---|---|---|---|---|"]
+    for n, y in bk["shared"].items():
+        kind = y.get("role") or y.get("kind") or "container"
+        serves = ", ".join(sorted(set(y.get("for", []) + y.get("agent_for", []) + y.get("optional_for", []))))
+        md.append(f"| {n} | {kind} | {str(y.get('tier', 'all')).capitalize()} | {y.get('idle_mb', '—')} MB | "
+                  f"{y.get('lib', '—')} | {serves or '—'} |")
+    md += ["", "</details>", ""]
+    if bk.get("messaging_layers"):
+        md += ["<details><summary><b>vyomi-messaging layers</b> — one core, a protocol adapter per wire format</summary>", "",
+               "| Layer | Serves |", "|---|---|"] + [f"| {a} | {b} |" for a, b in bk["messaging_layers"]]
+        md += ["", "AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ (ActiveMQ) speak it; "
+               "AWS SQS/SNS/Kinesis and GCP Pub/Sub SDKs use HTTP or gRPC. Amazon MQ for RabbitMQ (AMQP 0-9-1) keeps real RabbitMQ.",
+               "", "</details>", ""]
+    if bk.get("libs_design"):
+        md += ["<details><summary><b>vyomi-libs design</b> — shape, Nano wheels, contract, release, migration</summary>", ""]
+        md += [f"- {line}" for line in bk["libs_design"]] + ["", "</details>", ""]
 
     md += ["## Details", ""]
     for lbl, r in moving_all:

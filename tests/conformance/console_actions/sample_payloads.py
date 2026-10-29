@@ -82,6 +82,11 @@ _AWS_PAYLOADS: dict[str, dict] = {
 
 
 _GCP_PAYLOADS: dict[str, dict] = {
+    # Memorystore: the form's defaults but STANDARD_HA, so the lifecycle's
+    # failover action is valid (GCP refuses failover on BASIC instances).
+    "redis": {"name": "my-redis", "region": "us-central1", "tier": "STANDARD_HA", "memorySizeGb": "1",
+              "redisVersion": "REDIS_7_0", "network": "default", "authEnabled": "false",
+              "displayName": "Demo Redis cache"},
     "compute":     {"name": "conf-test-vm",
                     "machineType": "zones/us-central1-a/machineTypes/e2-micro",
                     "disks": [{"boot": True, "initializeParams": {"sourceImage": "sim-ubuntu-22.04"}}],
@@ -105,9 +110,9 @@ _GCP_PAYLOADS: dict[str, dict] = {
     "apigateway":  {"apiId": "vyomi-conf-api", "displayName": "Conf"},
     "eventarc":    {"name": "vyomi-conf-trigger",
                     "destination": {"cloudRun": {"service": "demo"}}},
-    "secretmanager": {"secretId": "vyomi-conf-secret",
+    "secretmanager": {"name": "vyomi-conf-secret", "secretId": "vyomi-conf-secret",
                      "secret": {"replication": {"automatic": {}}}},
-    "kms":         {"keyRingId": "vyomi-conf-ring"},
+    "kms":         {"name": "vyomi-conf-key", "keyRingId": "vyomi-conf-ring"},
 }
 
 
@@ -171,6 +176,65 @@ def _apply_run_suffix(payload: dict) -> dict:
     return out
 
 
+def _set_path(obj: dict, dotted: str, value) -> None:
+    """azure-console.html's setPath: `properties.a.0.b` writes nested dicts/lists."""
+    parts = str(dotted).split(".")
+    cur = obj
+    for i, p in enumerate(parts):
+        last, nxt = i == len(parts) - 1, (parts[i + 1] if i + 1 < len(parts) else None)
+        idx = int(p) if p.isdigit() else None
+        if last:
+            if idx is not None and isinstance(cur, list):
+                cur.extend([None] * (idx + 1 - len(cur)))
+                cur[idx] = value
+            else:
+                cur[p] = value
+            return
+        want = [] if (nxt or "").isdigit() else {}
+        if idx is not None and isinstance(cur, list):
+            cur.extend([None] * (idx + 1 - len(cur)))
+            if cur[idx] is None:
+                cur[idx] = want
+            cur = cur[idx]
+        else:
+            if not isinstance(cur.get(p), (dict, list)):
+                cur[p] = want
+            cur = cur[p]
+
+
+def form_payload(provider: str, svc: dict) -> Optional[dict]:
+    """Fallback when a service has no hand-written payload above: exactly what
+    the console's create form submits with its defaults (the catalog's
+    createFields), so every new service's create is exercised the way users
+    hit it. Values are strings, as the form inputs send them. AWS/GCP post the
+    flat field map with the name field made unique per run; Azure PUTs the ARM
+    body the console builds ({location, properties} + dotted paths) and takes
+    the name from the resource path."""
+    fields = [f for f in (svc.get("createFields") or []) if isinstance(f, dict) and "default" in f]
+    if not fields:
+        return None
+    if provider.lower() == "azure":
+        body: dict = {"location": "eastus", "properties": {}}
+        for f in fields:
+            if f["name"] != "name" and f["default"] not in ("", None):
+                v = str(f["default"])
+                # Globally unique in Azure (and reserved after soft delete):
+                # an AI account's custom subdomain must change every run.
+                if f["name"].endswith("customSubDomainName"):
+                    v = f"{v}-{_RUN_SUFFIX}"
+                _set_path(body, f["name"], v)
+        return body
+    out = {f["name"]: str(f["default"]) for f in fields if f["default"] not in ("", None)}
+    # Unique per run: the catalog's name field plus the usual name-like keys.
+    # Emails (a service account the credential is issued for) are references,
+    # not new names, so they are left untouched.
+    for k in {str(svc.get("name_field") or "")} | _NAME_KEYS:
+        v = out.get(k)
+        if isinstance(v, str) and v and "@" not in v:
+            out[k] = f"{v.rsplit('/', 1)[0]}/{v.rsplit('/', 1)[1]}-{_RUN_SUFFIX}" if "/" in v else f"{v}-{_RUN_SUFFIX}"
+    return out
+
+
 def payload_for(provider: str, service: str) -> Optional[dict]:
     table = {"aws": _AWS_PAYLOADS, "gcp": _GCP_PAYLOADS, "azure": _AZURE_PAYLOADS}.get(
         provider.lower(), {})
@@ -210,6 +274,12 @@ _SUB_ACTION_PAYLOADS: dict[tuple[str, str, str], dict] = {
         "rules": [],
     },
     ("aws", "s3", "uploadObject"): {
+        "key": "conformance/hello.txt",
+        "content": "hello from conformance",
+        "content_type": "text/plain",
+    },
+    ("gcp", "storage", "uploadObject"): {
+        "name": "conformance/hello.txt",
         "key": "conformance/hello.txt",
         "content": "hello from conformance",
         "content_type": "text/plain",

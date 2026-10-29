@@ -1,0 +1,95 @@
+name: Conformance cycle watchdog
+
+# Starts the next conformance cycle (conformance-hourly.yml) once the last one
+# has finished and the cooldown (repo variable CONFORMANCE_COOLDOWN_MIN, default
+# 60) has passed; never while a cycle is queued or running. Raises the
+# "Conformance cycle stalled" issue when a cycle runs past 4 hours or two in a
+# row end cancelled/failed. Logic: tests/conformance/hourly/watchdog.py.
+#
+# Two triggers, because GitHub's cron fires late or not at all for this repo
+# (the hourly cron fired 11 times in ~55 h):
+#   - handover: each cycle's publish job dispatches this with wait_min = the
+#     cooldown, so the next cycle starts on time without any cron;
+#   - the 15-minute cron below: a backup that also catches stalls and revives
+#     the chain if a cycle died before handing over.
+# GitHub attributes scheduled runs to whoever last changed the cron line; it
+# must be an account linked to this repo (see 52824f8), or the cron never fires.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      wait_min:
+        description: 'Minutes to wait before checking (the handover passes the cooldown)'
+        type: number
+        default: 0
+
+permissions:
+  contents: read
+
+jobs:
+  # A cycle's handover: wait out the cooldown here (a tiny job; standard runners
+  # are free on this public repo) rather than inside the cycle.
+  wait:
+    if: ${{ inputs.wait_min > 0 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - run: echo "Cooling down ${{ inputs.wait_min }} min"; sleep $(( ${{ inputs.wait_min }} * 60 ))
+
+  tick:
+    needs: wait
+    if: ${{ always() && needs.wait.result != 'failure' && needs.wait.result != 'cancelled' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # One tick decides at a time, so two ticks can never both start a cycle.
+    concurrency:
+      group: conformance-watchdog-tick
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: write      # dispatch the cycle (the bot PAT can't: HTTP 403, see 7df3a7a)
+      issues: write       # the stall alarm
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tests/conformance/hourly/watchdog.py
+      - name: Start the next cycle if due; stall alarm
+        env:
+          COOLDOWN_MIN: ${{ vars.CONFORMANCE_COOLDOWN_MIN || '60' }}
+          STALL_MIN: '240'
+        run: python3 tests/conformance/hourly/watchdog.py
+
+      # Moved from the old hourly chain step (GitHub's cron for these doesn't fire
+      # either). From 23:00 IST refresh today's daily PR, at most once per ~hour;
+      # after midnight make sure yesterday's branch got its PR.
+      - name: End-of-day daily PR
+        run: |
+          ist_hour=$(TZ=Asia/Kolkata date +%H)
+          last=$(gh run list -R "$REPO" --workflow conformance-daily-pr.yml -L 1 --json createdAt -q '.[0].createdAt // empty')
+          age=999999; [ -n "$last" ] && age=$(( $(date -u +%s) - $(date -u -d "$last" +%s) ))
+          if [ "$ist_hour" -ge 23 ] && [ "$age" -ge 3000 ]; then
+            gh workflow run conformance-daily-pr.yml -R "$REPO" --ref main && echo "Daily PR dispatched for $(TZ=Asia/Kolkata date +%F)."
+          fi
+          yday=$(TZ=Asia/Kolkata date -d yesterday +%F)
+          if git ls-remote --exit-code "https://github.com/$REPO" "refs/heads/conformance/daily-$yday" >/dev/null 2>&1 \
+             && [ -z "$(gh pr list -R "$REPO" --head "conformance/daily-$yday" --state all --json number -q '.[0].number')" ]; then
+            gh workflow run conformance-daily-pr.yml -R "$REPO" --ref main -f date="$yday" && echo "Daily PR dispatched for $yday (missed)."
+          fi
+
+      # Moved from the old hourly chain step. Only while the expansion agent is
+      # enabled (it is disabled while real backends are wired in).
+      - name: Keep the expansion agent going
+        run: |
+          state=$(gh api "repos/$REPO/actions/workflows/expansion-agent.yml" -q .state 2>/dev/null || echo missing)
+          [ "$state" = "active" ] || { echo "Expansion agent is $state; leaving it."; exit 0; }
+          live=$(gh run list -R "$REPO" --workflow expansion-agent.yml -L 20 --json status -q '[.[] | select(.status!="completed")] | length')
+          last=$(gh run list -R "$REPO" --workflow expansion-agent.yml -L 1 --json createdAt -q '.[0].createdAt // empty')
+          age=999999; [ -n "$last" ] && age=$(( $(date -u +%s) - $(date -u -d "$last" +%s) ))
+          if [ "${live:-0}" -eq 0 ] && { [ "${{ vars.EXPANSION_CADENCE || 'continuous' }}" = "continuous" ] || [ "$age" -ge 86400 ]; }; then
+            gh workflow run expansion-agent.yml -R "$REPO" --ref main && echo "Expansion agent started."
+          fi

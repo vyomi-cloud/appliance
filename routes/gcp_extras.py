@@ -64,6 +64,10 @@ def _gcp_apigateway_state(project: str, kind: str) -> dict:
     active_id = spaces_state.get("active_space_id", "")
     space = spaces_state.setdefault("spaces", {}).setdefault(active_id, {})
     svc_states = space.setdefault("service_states", {})
+    if kind in ("apis", "gateways"):
+        # The same bucket the space tick counts (resource_count + savings) and the
+        # grid reads, so an API Gateway API/gateway moves the cost-savings metrics.
+        return svc_states.setdefault("gcp_apigateway", {}).setdefault(kind, {})
     ag = svc_states.setdefault("apigateway", {})
     proj = ag.setdefault(project, {})
     return proj.setdefault(kind, {})
@@ -117,6 +121,13 @@ def register(app: FastAPI) -> None:
             name = f"{prefix}-{_sec.token_hex(4)}"
         payload["name"] = name
         payload.setdefault("created", _now())
+        # Fill what the console form didn't send the way the real API would:
+        # the form field defaults, then the resource's initial lifecycle state.
+        for f in (schema.get("create_fields") or []):
+            if f.get("default") is not None and payload.get(f["name"]) in (None, ""):
+                payload[f["name"]] = f["default"]
+        if any(c[0] == "state" for c in (schema.get("columns") or [])) and payload.get("state") in (None, ""):
+            payload["state"] = "ENABLED" if stub_path.split("/")[-1] in ("keys", "versions", "keyversions") else "ACTIVE"
         for col_path, _ in (schema.get("columns") or []):
             if "." not in col_path and col_path not in payload:
                 payload[col_path] = payload.get(col_path, "\u2014")

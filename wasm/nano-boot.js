@@ -88,7 +88,13 @@ const CORES = [
   "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
-  "messaging_store.py", "sqs_core.py", "sns_core.py",
+  "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py",
+  "azure_cognitiveservices_core.py",  // Azure AI services engine (Microsoft.CognitiveServices) — loaded before azure_arm_core which delegates to it
+  "azure_monitor_core.py",   // Azure Monitor engine (Microsoft.Insights) — loaded before azure_arm_core which delegates to it
+  "azure_dns_core.py",   // Azure DNS engine (Microsoft.Network/dnsZones) — loaded before azure_arm_core which delegates to it
+  "azure_operationalinsights_core.py",   // Azure Log Analytics engine (Microsoft.OperationalInsights) — loaded before azure_arm_core which delegates to it
+  "azure_appconfiguration_core.py",   // Azure App Configuration engine — loaded before azure_arm_core which delegates to it
+  "azure_app_core.py",   // Azure Container Apps engine (Microsoft.App) — loaded before azure_arm_core which delegates to it
   "ecs_core.py", "console_ecs.py",   // Amazon ECS (engine + console REST facade)
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
@@ -106,7 +112,7 @@ const CORES = [
   // dedicated console UI pages are a follow-up). Deps (messaging_store, sql_store,
   // iam_store, lambda_core) are already listed above.
   "azure_servicebus_core.py", "eventbridge_core.py", "lambda_core.py",
-  "apigateway_core.py", "vpc_core.py", "azure_sql_core.py", "azure_iam_core.py",
+  "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py",
   // console-next capability manifest dependency (slice 1): the pure conformance
   // signal module (only imports `os` — safe in Pyodide, no FastAPI).
   "console_conformance.py",
@@ -118,13 +124,18 @@ const CORES = [
   "nano_events.py", "nano_registry.py", "nano_persist.py",
 ];
 
+// Boot screen (wasm/nano-kernel.js): the page paints it first thing in <body>;
+// these steps report the real work + timings to it, then close it when ready.
+const K = window.__nk || (window.NanoKernel ? window.NanoKernel.start(CONSOLE_PROVIDER ? CONSOLE_PROVIDER.toUpperCase() + " console" : "console") : null)
+  || { step: () => ({ ok() {}, fail() {} }), info() {}, carry() {}, ready() {}, fail() {} };
+
 function banner(text, bad) {
   let b = document.getElementById("nano-banner");
   if (!b) {
     b = document.createElement("div");
     b.id = "nano-banner";
     b.style.cssText =
-      "position:fixed;left:0;right:0;bottom:0;z-index:99999;font:12px/1.4 ui-monospace,Menlo,monospace;" +
+      "position:fixed;left:0;right:0;bottom:0;z-index:99999;pointer-events:none;font:12px/1.4 ui-monospace,Menlo,monospace;" +
       "padding:6px 12px;text-align:center;color:#fff;background:" + (bad ? "#b91c1c" : "#065f46");
     document.body.appendChild(b);
   }
@@ -134,8 +145,12 @@ function banner(text, bad) {
 
 async function bootBackend() {
   banner("Nano: booting Pyodide (in-browser cloud backend)…");
+  let st = K.step("kernel", "loading Pyodide 0.26.2: CPython on WebAssembly");
   const { loadPyodide } = await import("https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs");
   const py = await loadPyodide();
+  let pyv = ""; try { pyv = py.runPython("import sys; sys.version.split()[0]"); } catch (_) {}
+  st.ok("Python " + (pyv || "3") + " · Pyodide " + (py.version || "0.26.2"));
+  st = K.step("fs", "mounting /wasm: " + MODULES.length + " console modules");
   py.FS.mkdir("/wasm"); py.FS.mkdir("/wasm/backends"); py.FS.mkdir("/wasm/providers");
   py.FS.writeFile("/wasm/__init__.py", "");
   py.FS.writeFile("/wasm/backends/__init__.py", "");
@@ -145,9 +160,13 @@ async function bootBackend() {
   }
   // The vendored cores live under /core (their own `core` package) so their
   // `from core.object_store import ...` imports resolve, exactly as in the repo.
+  st.ok();
+  st = K.step("fs", "mounting /core: " + CORES.length + " cloud engines (AWS · GCP · Azure)");
   py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
   for (const c of CORES)
     py.FS.writeFile("/core/" + c, await (await fetch(BASE + "/core/" + c)).text());
+  st.ok();
+  st = K.step("kernel", "importing the engines and wiring the console router");
   py.runPython(`
 import sys; sys.path.insert(0, "/")
 from wasm.backends.store import Backends
@@ -170,6 +189,7 @@ def _disp(payload_json):
                                  params=d.get("params") or {}))
 import builtins; builtins._disp = _disp
 `);
+  st.ok();
   const dispatch = (prov, svc, op, params) =>
     JSON.parse(py.runPython(
       `_disp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
@@ -236,7 +256,8 @@ import builtins; builtins._disp = _disp
   };
   // Boot: rehydrate the persisted dataset into the shared registry BEFORE releasing
   // /api/* requests, so the console opens with its previous resources intact.
-  try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {}
+  st = K.step("store", "restoring your resources from IndexedDB");
+  try { restoreStores(await nbMetaGet(STORE_KEY)); st.ok(); } catch (e) { st.ok("starting fresh"); }
 
   // Bridge: SW -> page dispatch -> SW
   navigator.serviceWorker.addEventListener("message", async (ev) => {
@@ -272,6 +293,7 @@ import builtins; builtins._disp = _disp
   // Release any held /api/* requests.
   const reg = await navigator.serviceWorker.ready;
   (reg.active || navigator.serviceWorker.controller).postMessage({ type: "pyodide-ready" });
+  K.ready((CONSOLE_PROVIDER ? CONSOLE_PROVIDER.toUpperCase() + " console" : "console") + " ready: running entirely in your browser");
   banner("Nano: in-browser backend ready — this console runs with no server.");
   setTimeout(() => { const b = document.getElementById("nano-banner"); if (b) b.style.display = "none"; }, 4000);
 
@@ -289,19 +311,22 @@ import builtins; builtins._disp = _disp
 (async () => {
   if (!("serviceWorker" in navigator)) { banner("Nano needs a service-worker-capable browser.", true); return; }
   try {
+    const sw = K.step("service", "service worker: registering " + BASE + "/sw.js");
     const reg = await navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE + "/", updateViaCache: "none" });
     try { await reg.update(); } catch (_) {}
     await navigator.serviceWorker.ready;
+    sw.ok(wasControlledAtStart ? "active, controlling this page" : "installed");
     // Arriving from the dashboard we're already CONTROLLED. If a console URL is
     // opened cold/directly, it started uncontrolled (boot()'s /api reads went to
     // the network) — reload once to a controlled load before booting Pyodide.
     if (!wasControlledAtStart) {
       const n = Number(sessionStorage.getItem("nano-boot-reload") || "0");
-      if (n < 4) { sessionStorage.setItem("nano-boot-reload", String(n + 1)); location.reload(); return; }
+      if (n < 4) { K.info("service", "reloading once under the service worker"); K.carry(); sessionStorage.setItem("nano-boot-reload", String(n + 1)); location.reload(); return; }
     }
     sessionStorage.removeItem("nano-boot-reload");
     await bootBackend();
   } catch (e) {
+    K.fail(e);
     banner("Nano boot failed: " + e, true);
   }
 })();

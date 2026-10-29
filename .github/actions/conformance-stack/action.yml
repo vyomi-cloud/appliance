@@ -1,0 +1,58 @@
+name: Conformance stack
+description: >-
+  Toolchains, test tooling, the offline appliance stack (tier limits lifted),
+  the test license and the Nano relay — what the hourly detect job and each
+  parallel fixer need before they can run or verify anything.
+inputs:
+  test-license-jwt:
+    description: VYOMI_TEST_LICENSE_JWT (optional)
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with: { python-version: '3.12' }
+    - uses: actions/setup-node@v4
+      with: { node-version: '20' }
+    - uses: actions/setup-go@v5
+      with: { go-version: '1.22', cache: false }
+    - uses: actions/setup-java@v4
+      with: { distribution: temurin, java-version: '17', cache: maven }
+
+    - name: Install test tooling
+      shell: bash
+      run: |
+        pip install --quiet requests pytest boto3 azure-storage-blob pyyaml
+        mkdir -p .ci-node && cd .ci-node
+        echo '{"name":"vyomi-ci-node","private":true}' > package.json
+        npm install --silent playwright@1.47.2 ws@8.18.0
+        npx playwright install --with-deps chromium
+
+    - name: Boot offline appliance stack
+      shell: bash
+      run: |
+        docker build -t cloudlearn/simulator:ci .
+        CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:ci \
+          docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml up -d \
+            $(grep -v '^#' tests/conformance/hourly/ci-services.txt)
+        for i in $(seq 1 90); do curl -fs "$VYOMI_BASE_URL/healthz" >/dev/null && break; sleep 2; done
+        curl -f "$VYOMI_BASE_URL/healthz"
+
+    - name: Apply test license
+      shell: bash
+      env:
+        VYOMI_TEST_LICENSE_JWT: ${{ inputs.test-license-jwt }}
+      run: |
+        if [ -n "$VYOMI_TEST_LICENSE_JWT" ]; then
+          curl -fs -X POST -H 'Content-Type: application/json' \
+            -d "{\"license_key\":\"$VYOMI_TEST_LICENSE_JWT\"}" "$VYOMI_BASE_URL/api/license/activate" >/dev/null
+        else
+          echo "No VYOMI_TEST_LICENSE_JWT secret: tier-gated services will show as locked."
+        fi
+
+    - name: Start Nano relay
+      shell: bash
+      run: |
+        nohup node wasm/relay/local-relay.mjs > relay.log 2>&1 &
+        for _ in $(seq 1 20); do curl -fs "$RELAY_HTTP/health" >/dev/null && break; sleep 1; done

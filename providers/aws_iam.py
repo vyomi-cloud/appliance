@@ -20,6 +20,9 @@ def _server():
 
 
 def api_iam_list_users():
+    s = _server()
+    for u in iam_state["users"].values():
+        u.setdefault("arn", s._iam_user_arn(u.get("user_name", "")))
     return {"users": list(iam_state["users"].values()), "count": len(iam_state["users"])}
 
 
@@ -72,7 +75,7 @@ def api_iam_create_user(req):
     if not (req.user_name or "").strip():
         raise HTTPException(400, detail="MissingParameter: user_name is required.")
     user_id = _id("user")
-    user = {"user_id": user_id, "user_name": req.user_name, "path": req.path, "created": _now(), "policies": [], "groups": []}
+    user = {"user_id": user_id, "user_name": req.user_name, "arn": _server()._iam_user_arn(req.user_name), "path": req.path, "created": _now(), "policies": [], "groups": []}
     iam_state["users"][user_id] = user
     _record_usage("iam.create_user", user)
     return user
