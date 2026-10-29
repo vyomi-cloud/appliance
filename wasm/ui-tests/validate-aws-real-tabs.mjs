@@ -265,6 +265,31 @@ const SECTIONS = {
     const cfg = await tab("Configuration");
     check("sqs Configuration: visibility timeout change persists", /75 seconds/.test(cfg), cfg);
   },
+  async sns() {
+    const name = "rt-topic-" + Date.now().toString(36), q = "rt-sub-q-" + Date.now().toString(36);
+    await call("POST", "/api/aws/sns/topics", { name });
+    await call("POST", "/api/sqs/queues", { name: q, queue_name: q });
+    const qarn = (await call("GET", `/api/sqs/queues/${q}`)).json.queue_arn;
+    await openService("^amazon sns$");
+    await openRow(name);
+    await tab("Subscriptions");
+    await page.locator("#main [data-testid=sns-endpoint]").fill(qarn);
+    await page.locator("#main [data-testid=sns-subscribe]").click();
+    await sleep(1500);
+    await tab("Publish message");
+    const subs = await tab("Subscriptions");
+    check("sns Subscriptions: SQS subscription created in the tab is listed after reopening", subs.includes(qarn), subs);
+    await tab("Publish message");
+    await page.locator("#main [data-testid=sns-message]").fill("ping " + name);
+    await page.locator("#main [data-testid=sns-publish]").click();
+    await sleep(2000);
+    await call("POST", `/api/aws/sns/topics/${name}/subscriptions`, { protocol: "email", endpoint: "ops@" + name + ".example.com" });
+    const pub = await tab("Publish message");
+    // SQS deliveries land in the queue; the log records the other protocols (here the email confirmation).
+    check("sns Publish: the message log shows this topic's email delivery", pub.includes("ops@" + name + ".example.com"), pub);
+    const qv = (await call("GET", `/api/sqs/queues/${q}/detail/configuration`)).json;
+    check("sns Publish: the subscribed queue received it", qv.messages_available >= 1, JSON.stringify(qv).slice(0, 200));
+  },
 };
 
 let server;
