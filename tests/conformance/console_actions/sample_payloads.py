@@ -108,6 +108,14 @@ _GCP_PAYLOADS: dict[str, dict] = {
     "secretmanager": {"name": "vyomi-conf-secret", "secretId": "vyomi-conf-secret",
                      "secret": {"replication": {"automatic": {}}}},
     "kms":         {"name": "vyomi-conf-key", "keyRingId": "vyomi-conf-ring"},
+    # Console create-form shapes (catalog createFields) for the services whose handlers
+    # take the form directly; an empty body is not a valid create for them.
+    "cloudscheduler": {"name": "vyomi-conf-job", "region": "us-central1", "schedule": "*/30 * * * *",
+                       "targetType": "HTTP", "url": "https://example.com/hook", "httpMethod": "POST"},
+    "container":   {"name": "vyomi-conf-gke", "region": "us-central1", "mode": "Standard", "nodeCount": 1},
+    "redis":       {"name": "vyomi-conf-redis", "region": "us-central1", "tier": "STANDARD_HA", "memorySizeGb": 1},
+    "iamcredentials": {"serviceAccount": "vyomi-conf-sa@cloudlearn.iam.gserviceaccount.com",
+                       "credentialType": "Access token"},
 }
 
 

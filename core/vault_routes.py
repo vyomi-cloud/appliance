@@ -448,6 +448,9 @@ def _register_gcp(app: FastAPI) -> None:
         space = _active_space_id(request)
         got = vc.kv_get("gcp", space, name)
         if got is None:
+            # A secret may exist with no version yet (created empty): metadata only.
+            if name in _gcp_idx_get(space, "secrets"):
+                return {"ok": True, "name": name, "value": ""}
             return JSONResponse(status_code=404,
                                 content={"ok": False, "error": "secret not found", "name": name})
         data = got.get("data", {})

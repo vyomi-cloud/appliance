@@ -17,6 +17,12 @@ const open = (name) => page.evaluate(([sel, n]) => {
 }, [RAIL_SEL, name]);
 try {
   if (offline) {
+    // Re-runs against the same stack: the form's default names ((default) database, my-topic)
+    // already exist from the previous run and the real clouds answer 409, so start clean.
+    const api = new URL(offline).origin + "/api/gcp";
+    for (const u of ["/firestore/v1/projects/123456789012/databases/(default)", "/pubsub/v1/projects/123456789012/topics/my-topic"]) {
+      await fetch(api + u, { method: "DELETE" }).catch(() => {});
+    }
     await page.goto(offline, { waitUntil: "domcontentloaded" });
     await page.waitForFunction((s) => document.querySelectorAll(s).length > 0, RAIL_SEL, { timeout: 60000 });
   } else {
@@ -24,8 +30,8 @@ try {
     await bootConsole(page, s.base, "/gcp-console.html");
   }
   for (const svc of SERVICES) {
-    const posts = [];
-    const onResp = (r) => { if (r.request().method() === "POST" && r.url().includes("/api/")) posts.push(r.status()); };
+    const posts = [], urls = [];
+    const onResp = (r) => { if (r.request().method() === "POST" && r.url().includes("/api/")) { posts.push(r.status()); urls.push(`${r.status()} ${r.url()}`); } };
     page.on("response", onResp);
     check(`${svc}: service is on the rail`, await open(svc));
     await sleep(1500);
@@ -34,7 +40,7 @@ try {
     await page.locator("button").filter({ hasText: /create|save|submit/i }).filter({ hasNotText: /cancel/i }).last().click();
     await sleep(2500);
     page.off("response", onResp);
-    check(`${svc}: create with defaults is accepted`, posts.some((c) => c < 300), JSON.stringify(posts));
+    check(`${svc}: create with defaults is accepted`, posts.some((c) => c < 300), JSON.stringify(posts) + " " + urls.filter((u) => !u.startsWith("2")).join(" "));
     await page.keyboard.press("Escape");
     await open(svc);
     await sleep(2000);

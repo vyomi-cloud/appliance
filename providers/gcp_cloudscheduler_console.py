@@ -18,6 +18,17 @@ DEFAULT_PROJECT = "demo"
 DEFAULT_REGION = "us-central1"
 
 
+async def _json_body(request):
+    """Console form body; a missing/invalid JSON body is a 400, not a 500."""
+    try:
+        b = await request.json()
+    except ValueError:
+        raise HTTPException(400, detail="Request body must be a JSON object.")
+    if not isinstance(b, dict):
+        raise HTTPException(400, detail="Request body must be a JSON object.")
+    return b
+
+
 class _Shim:
     """Minimal Request stand-in for providers.gcp_services.api_gcp_pubsub_publish."""
 
@@ -115,7 +126,7 @@ def register(app, on_change=None):
 
     @app.post("/api/cloudscheduler/jobs")
     async def create_job(request: Request):
-        b = await request.json()
+        b = await _json_body(request)
         job = build_job(b)
         loc = str(b.get("region") or DEFAULT_REGION)
         r = await call("POST", f"/v1/projects/{DEFAULT_PROJECT}/locations/{loc}/jobs", body=json.dumps(job).encode())
@@ -133,7 +144,7 @@ def register(app, on_change=None):
 
     @app.patch("/api/cloudscheduler/jobs/{name}")
     async def patch_job(name: str, request: Request):
-        b = await request.json()
+        b = await _json_body(request)
         p, l, j = parts(name)
         upd = {k: b[k] for k in ("description", "schedule", "timeZone") if b.get(k)}
         r = await call("PATCH", f"/v1/projects/{p}/locations/{l}/jobs/{j}", {"updateMask": ",".join(upd)}, json.dumps(upd).encode())
