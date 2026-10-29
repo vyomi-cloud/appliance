@@ -308,6 +308,18 @@ def _fire(job, invoker, now):
                 status = {"code": 5, "message": str(res)}   # NOT_FOUND etc. from the topic
         except Exception as e:   # noqa: BLE001
             status = {"code": 13, "message": str(e)}
+    elif job.get("httpTarget") and invoker:
+        t = job["httpTarget"]
+        try:   # the invoker (appliance only) sends the request; Nano has none -> recorded only
+            res = invoker("http", {"uri": t.get("uri", ""), "httpMethod": t.get("httpMethod") or "POST",
+                                   "headers": t.get("headers") or {}, "body": t.get("body", ""),
+                                   "oidcToken": t.get("oidcToken"), "oauthToken": t.get("oauthToken"),
+                                   "attemptDeadline": job.get("attemptDeadline"),
+                                   "retryConfig": job.get("retryConfig") or {}, "job": job["name"]})
+            if res is not True and res is not None and res != "":
+                status = {"code": 13, "message": str(res)}
+        except Exception as e:   # noqa: BLE001
+            status = {"code": 13, "message": str(e)}
     job["status"] = status
     return status
 
