@@ -157,7 +157,13 @@ builtins._capture = _capture; builtins._restore = _restore
     _announce();
     const ws = new WebSocket(RELAY);
     ws.onopen = () => { window.__nano.registered = true; log(`<span class="ok">registered</span> → ${RELAY}`); _announce(); };
-    ws.onclose = (ev) => { window.__nano.registered = false; console.log("WS_CLOSE code=" + ev.code + " reason=" + ev.reason); log(`disconnected (code ${ev.code}); retrying…`,'dim'); _announce(); setTimeout(connect, 1000); };
+    ws.onclose = (ev) => {
+      window.__nano.registered = false; console.log("WS_CLOSE code=" + ev.code + " reason=" + ev.reason);
+      // 1012 = another Nano window registered this session after us; reconnecting would
+      // make the two supersede each other forever. Stop; reload this page to take it back.
+      if (ev.code === 1012) { log('tunnel taken over by another Nano window — reload this page to take it back','dim'); _announce(); return; }
+      log(`disconnected (code ${ev.code}); retrying…`,'dim'); _announce(); setTimeout(connect, 1000);
+    };
     ws.onerror = () => log('ws error','err');
     ws.onmessage = async (ev) => {
       let req; try { req = JSON.parse(ev.data); } catch { return; }
