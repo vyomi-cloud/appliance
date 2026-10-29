@@ -1052,15 +1052,40 @@ self.addEventListener("fetch", (event) => {
       // Service status (readiness-strip.js) — the Nano cores are always ready
       // (one Pyodide runtime, nothing to boot), grouped Core/AWS/GCP/Azure.
       if (apiPath === "/api/runtime/readiness" && method === "GET") {
-        const services = NANO_SERVICES.map(({ stores, ...s }) => ({ ...s, status: "ready" }));
-        const by_category = {};
-        for (const s of services) {
-          const c = (by_category[s.category] = by_category[s.category] || { ready: 0, total: 0, pct: 100 });
-          c.ready++; c.total++;
+        // Real status: the engines run inside a Pyodide runtime (a console tab or the
+        // relay worker), which checks every registry store every 30 s (nano-boot.js /
+        // relay-shared-worker.js -> nano_persist.health_registry). A report older than
+        // 90 s means that runtime is gone. No live runtime -> the engines aren't running.
+        const now = Date.now(), FRESH_MS = 90000, ok = {}, err = {};
+        let live = 0, checked = 0;
+        for (const ctx of ["aws", "gcp", "azure", "page", "relay"]) {
+          let r = null; try { r = await metaGet("engines:" + ctx); } catch (_) {}
+          if (!r || typeof r.ts !== "number" || now - r.ts > FRESH_MS) continue;
+          live++; checked = Math.max(checked, r.ts);
+          if (r.error) { err["*"] = r.error; continue; }
+          for (const [k, v] of Object.entries(r.stores || {})) {
+            if (v && v.ok) ok[k] = true; else if (!ok[k]) err[k] = (v && v.error) || "failed";
+          }
         }
-        return json({ ready: true, status: "ready", percent: 100, overall_pct: 100,
-                      ready_count: services.length, total_count: services.length,
-                      by_category, services });
+        const services = NANO_SERVICES.map(({ stores, ...s }) => {
+          if (!live) return { ...s, status: "idle" };
+          if (err["*"]) return { ...s, status: "error", error: err["*"] };
+          const bad = stores.filter((k) => !ok[k]);
+          return bad.length ? { ...s, status: "error", error: bad.map((k) => k + ": " + (err[k] || "not reported")).join("; ") }
+                            : { ...s, status: "ready" };
+        });
+        const by_category = {};
+        let rc = 0;
+        for (const s of services) {
+          const c = (by_category[s.category] = by_category[s.category] || { ready: 0, total: 0, pct: 0 });
+          c.total++; if (s.status === "ready") { c.ready++; rc++; }
+          c.pct = Math.round(100 * c.ready / c.total);
+        }
+        const all = rc === services.length;
+        return json({ ready: all, status: live ? (all ? "ready" : "degraded") : "idle",
+                      percent: Math.round(100 * rc / services.length), overall_pct: Math.round(100 * rc / services.length),
+                      ready_count: rc, total_count: services.length, live_runtimes: live,
+                      checked_at: checked ? new Date(checked).toISOString() : null, by_category, services });
       }
       // Per-service live CPU/RAM for the Service-status tiles. Derived from the
       // live census (real resource counts per service) + the real WASM heap — so

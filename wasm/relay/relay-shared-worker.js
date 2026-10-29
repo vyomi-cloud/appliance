@@ -172,6 +172,12 @@ builtins._capture = _capture; builtins._restore = _restore
     scheduleStoresSave = () => { if (_storeTimer) return; _storeTimer = setTimeout(() => { _storeTimer = null; saveStores(true); }, 400); };
     if (_storesBC) _storesBC.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } finally { _restoring = false; } };
     try { resStores(await idbGet(_SK)); } catch (_) {}   // boot: rehydrate before serving
+    // Live engine status for Dashboard > Service status (same check as nano-boot.js).
+    const writeEngines = async () => {
+      try { await idbPut("engines:relay", { ts: Date.now(), stores: JSON.parse(py.runPython("import json\nfrom core import nano_persist as _np\njson.dumps(_np.health_registry())")) }); }
+      catch (e) { try { await idbPut("engines:relay", { ts: Date.now(), error: String(e && e.message || e).slice(0, 200) }); } catch (_) {} }
+    };
+    writeEngines(); setInterval(writeEngines, 30000);
   })();
   return booting;
 }

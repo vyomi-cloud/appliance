@@ -98,18 +98,24 @@
     var tc = (j.total_count != null) ? j.total_count : 0;
 
     strip.style.background = ready ? GRAD_READY : GRAD_LOADING;
-    strip.querySelector('#vyr-icon').innerHTML = ready ? checkHTML() : spinnerHTML();
-    strip.querySelector('#vyr-title').textContent = ready ? 'Appliance is Ready' : 'Appliance is getting ready';
+    strip.querySelector('#vyr-icon').innerHTML = ready ? checkHTML() : (j.status === 'idle' ? '' : spinnerHTML());
+    strip.querySelector('#vyr-title').textContent = ready ? 'Appliance is Ready'
+      : j.status === 'idle' ? 'Engines not running' : 'Appliance is getting ready';
+    // Nano: no runtime is running its engines (no console or relay open) — say so,
+    // rather than spinning as if something were starting.
+    var idle = j.status === 'idle';
     strip.querySelector('#vyr-summary').textContent = ready
       ? '— all ' + tc + ' services running'
+      : idle ? '— they start when you open a console (0/' + tc + ' running)'
       : '— ' + rc + '/' + tc + ' backends ready';
 
     // Progress bar + pct are only meaningful while loading. When ready, swap the
     // bar for a flexible spacer so the Details button stays right-aligned.
-    strip.querySelector('#vyr-barwrap').style.display = ready ? 'none' : 'block';
-    strip.querySelector('#vyr-spacer').style.display = ready ? 'block' : 'none';
-    strip.querySelector('#vyr-pct').style.display = ready ? 'none' : 'inline';
-    if (!ready) {
+    var noBar = ready || j.status === 'idle';
+    strip.querySelector('#vyr-barwrap').style.display = noBar ? 'none' : 'block';
+    strip.querySelector('#vyr-spacer').style.display = noBar ? 'block' : 'none';
+    strip.querySelector('#vyr-pct').style.display = noBar ? 'none' : 'inline';
+    if (!noBar) {
       strip.querySelector('#vyr-bar').style.width = (j.overall_pct || 0) + '%';
       strip.querySelector('#vyr-pct').textContent = (j.overall_pct || 0) + '%';
     }
@@ -147,7 +153,7 @@
       row.style.cssText = 'display:flex; align-items:center; gap:8px;';
       var dot = document.createElement('span');
       dot.style.cssText = 'width:8px; height:8px; border-radius:50%; flex:none; background:' +
-        (up ? '#34d399' : (onDark ? 'rgba(255,255,255,.35)' : '#d4d4d8')) + ';';
+        (up ? '#34d399' : s.status === 'error' ? '#ef4444' : (onDark ? 'rgba(255,255,255,.35)' : '#d4d4d8')) + ';';
       row.appendChild(dot);
       var name = document.createElement('span');
       name.style.cssText = 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;' +
@@ -156,9 +162,11 @@
       row.appendChild(name);
       if (!onDark) row.appendChild(metricCell(s));    // live CPU/Mem bar (body card)
       var tag = document.createElement('span');
+      var failed = s.status === 'error';
       tag.style.cssText = 'font-size:11px; text-transform:uppercase; letter-spacing:.4px;' +
-        (onDark ? ' margin-left:auto; opacity:.65;' : ' color:' + (up ? '#16a34a' : '#a1a1aa') + ';');
-      tag.textContent = up ? 'ready' : 'loading…';
+        (onDark ? ' margin-left:auto; opacity:.65;' : ' color:' + (up ? '#16a34a' : failed ? '#ef4444' : '#a1a1aa') + ';');
+      tag.textContent = up ? 'ready' : failed ? 'error' : s.status === 'idle' ? 'not running' : 'loading…';
+      if (failed && s.error) row.title = s.error;
       row.appendChild(tag);
       return row;
     }

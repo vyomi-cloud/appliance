@@ -4,7 +4,8 @@ Offline: every container a compose file runs is tracked by core/appliance_readin
 and an optional backend is tracked only by the stacks that run it (its env var is set
 for the simulator exactly when its container is defined), so no stack waits forever on
 a backend it never starts. Nano: every store in core/nano_registry.py belongs to an
-engine in wasm/sw.js NANO_SERVICES.
+engine in wasm/sw.js NANO_SERVICES, and every store passes the live check the cards use
+(nano_persist.health_registry), which must also catch a store that can't be read.
 
     python tests/launcher/test_backends_up_to_date.py
 """
@@ -62,10 +63,27 @@ def main() -> int:
     for s in sorted(stores - covered):
         bad.append(f"core/nano_registry.py store '{s}' has no engine in wasm/sw.js NANO_SERVICES")
 
+    # Nano's live check (what the Service status cards show) passes on every store of
+    # the shipped engines, and reports a store that can't be read.
+    sys.path.insert(0, str(ROOT / "wasm"))
+    for m in [m for m in sys.modules if m == "core" or m.startswith("core.")]:
+        del sys.modules[m]                     # use the vendored wasm/core, as Nano does
+    from core import nano_persist as NP, nano_registry as NR
+    health = NP.health_registry()
+    for k, v in health.items():
+        if not v["ok"]:
+            bad.append(f"Nano engine store '{k}' ({v['engine']}) fails its live check: {v.get('error')}")
+    saved = NR.get()["kms"]
+    NR.get()["kms"] = None
+    if NP.health_registry().get("kms", {}).get("ok"):
+        bad.append("nano_persist.health_registry() reported a missing store as ok")
+    NR.get()["kms"] = saved
+
     if bad:
         print("[FAIL] backend lists are behind the release:\n  " + "\n  ".join(bad))
         return 1
-    print(f"[PASS] readiness tracks all {len(tracked)} offline backends; NANO_SERVICES covers {len(stores)} registry stores")
+    print(f"[PASS] readiness tracks all {len(tracked)} offline backends; NANO_SERVICES covers {len(stores)} registry stores; "
+          f"all {len(health)} Nano engine stores pass the live check")
     return 0
 
 
