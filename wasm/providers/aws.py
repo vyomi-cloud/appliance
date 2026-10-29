@@ -67,6 +67,8 @@ class Aws(CloudProvider):
             ("iam", "ListGroups"):      lambda b, a, p: A.iam_list_groups(p),
             ("iam", "ListAttachments"): lambda b, a, p: A.iam_list_attachments(p),
             ("iam", "CreateUser"):      lambda b, a, p: A.iam_create_user(p),
+            ("iam", "GetUser"):         lambda b, a, p: A.iam_get_user(p),
+            ("iam", "GetRole"):         lambda b, a, p: A.iam_get_role(p),
             ("iam", "DeleteUser"):      lambda b, a, p: A.iam_delete_user(p),
             ("iam", "DeleteRole"):      lambda b, a, p: A.iam_delete_role(p),
             ("iam", "DeletePolicy"):    lambda b, a, p: A.iam_delete_policy(p),
