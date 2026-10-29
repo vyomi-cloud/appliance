@@ -111,3 +111,4 @@
 | 2026-10-29T05:31Z | #56 | aws/elasticache | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40823458754) |
 | 2026-10-29T05:39Z | #58 | aws/kinesis | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40824084581) |
 | 2026-10-29T05:46Z | #60 | aws/route53 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40824891329) |
+| 2026-10-29T05:53Z | #58 | aws/kinesis | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40825544041) |
