@@ -58,8 +58,10 @@ jobs:
           # Use the dev compose; mounts host paths the appliance compose
           # expects (the multipass-specific paths aren't relevant in CI).
           # VYOMI_NO_TELEMETRY: CI boots must not count as installs.
+          # The CI override lifts tier limits (incl. the Free-tier 10 rps rate
+          # limit, which 429'd most of the suite) — same as the hourly agent.
           VYOMI_NO_TELEMETRY=1 CLOUDLEARN_SIMULATOR_IMAGE=cloudlearn/simulator:ci \
-            docker compose -f docker-compose.yml up -d \
+            docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml up -d \
               simulator vyomi-pubsub vyomi-firestore \
               vyomi-sql-postgres vyomi-minio vyomi-nats \
               vyomi-dynamodb vyomi-elasticmq vyomi-vault

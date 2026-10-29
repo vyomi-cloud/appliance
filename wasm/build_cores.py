@@ -16,7 +16,9 @@ Cores vendored (each green on host CPython AND Pyodide via tests/conformance/):
 Run:  python3 wasm/build_cores.py   (part of the bundle build, with build_fixtures.py)
 """
 import os
+import ast
 import re
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -51,9 +53,26 @@ CORES = [
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
     "sesv2_core.py",                                # AWS: SES v2 identities / templates / sending — native REST-JSON wire + console REST
+    "apigatewayv2_core.py",                        # AWS: API Gateway V2 control plane
+    "apigatewayv2_gateway.py",                     # AWS: API Gateway V2 data plane (authorizers, throttling, CORS, Lambda proxy)
+    "elbv2_core.py",                                # AWS: Elastic Load Balancing v2 control plane — native Query wire + console REST
+    "ssm_core.py",                                 # AWS: Systems Manager (Parameter Store, documents, Run Command, windows, baselines)
+    "gcp_cloudscheduler_core.py",                  # expansion GCP: Cloud Scheduler (jobs, cron, pause/resume/run)
+    "gcp_iamcredentials_core.py",                  # expansion GCP: IAM Service Account Credentials (access/ID tokens, signBlob, signJwt)
+    "gcp_redis_core.py",                           # expansion GCP: Memorystore for Redis (instances, failover, upgrade, import/export, operations)
+    "gcp_container_core.py",                       # expansion GCP: Kubernetes Engine (clusters, node pools, operations)
+    "stepfunctions_core.py",                       # AWS: Step Functions (ASL interpreter, executions, activities)
+    "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)
+    "logs_core.py",                                # expansion AWS: CloudWatch Logs (log groups/streams/events/insights) — vendored VERBATIM
     "persistent_store.py",                          # v2.4.0: file-backed (sqlite) substrate — the anti-drift gate
     "aws_wire_router.py",                            # native-wire front door (relay/bridge)
+    "azure_cognitiveservices_core.py",             # expansion Azure: AI services (Microsoft.CognitiveServices accounts, deployments, keys) — vendored VERBATIM
+    "azure_monitor_core.py",                      # expansion Azure: Monitor (Microsoft.Insights action groups, alerts, autoscale) — vendored VERBATIM
+    "azure_dns_core.py",                          # expansion Azure: DNS (Microsoft.Network/dnsZones, record sets) — vendored VERBATIM
+    "azure_operationalinsights_core.py",          # expansion Azure: Log Analytics (Microsoft.OperationalInsights workspaces, saved searches, tables) — vendored VERBATIM
+    "azure_appconfiguration_core.py",             # expansion Azure: App Configuration (stores, key-values, snapshots) — vendored VERBATIM
+    "azure_app_core.py",                            # expansion Azure: Container Apps (Microsoft.App: environments, apps, revisions, jobs) — vendored VERBATIM
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
     "console_conformance.py",                       # console-next capability manifest: per-service conformance signal (pure, `os` only)
     "nano_events.py",                               # per-resource cloudsim event/activity log (recorded on every mutating dispatch; MUST precede nano_registry which imports it)
@@ -61,8 +80,9 @@ CORES = [
     "nano_persist.py",                              # store serialize/restore + cross-context sync (persistence + console↔SDK parity)
 ]
 
-# Cores vendored as an exact copy (no generated-file header).
-VERBATIM = {"sesv2_core.py"}
+# Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
+# Nano copy of a new service's engine to be identical to core/.
+VERBATIM = {"cloudwatch_core.py", "apigatewayv2_core.py", "logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "sesv2_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
@@ -73,8 +93,19 @@ HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT ED
 # raises ImportError (this guard exists because relay-shared-worker.js once lagged
 # aws_wire_router's new GCP/Azure imports and broke Start-tunnel in production).
 _RELAY_LOADERS = ["relay/relay-shared-worker.js", "relay/nano-endpoint.html"]
-_TOPLEVEL_IMPORT = re.compile(r"^from core\.(\w+) import", re.M)
-_TOPLEVEL_FROM = re.compile(r"^from core import (.+)$", re.M)
+def _load_time_imports(tree):
+    """Import statements that run when the module is imported: the module body
+    and the bodies of top-level try/except, if/else and with blocks, but not
+    function or class bodies (those load on demand)."""
+    stack = list(tree.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            yield node
+        elif isinstance(node, (ast.Try, getattr(ast, "TryStar", ast.Try))):
+            stack += node.body + node.orelse + node.finalbody + [x for h in node.handlers for x in h.body]
+        elif isinstance(node, (ast.If, ast.With)):
+            stack += node.body + getattr(node, "orelse", [])
 
 
 def _cores_in(js_text):
@@ -84,15 +115,24 @@ def _cores_in(js_text):
 
 
 def _deps_of(module_py):
-    """Top-level core deps of core/<module_py> (as X.py). Lazy/indented imports
-    are excluded — they load on demand, not at module import."""
-    src = open(os.path.join(SRC, module_py)).read()
-    deps = {f"{x}.py" for x in _TOPLEVEL_IMPORT.findall(src)}
-    for grp in _TOPLEVEL_FROM.findall(src):
-        for part in grp.split(","):
-            name = part.strip().split(" as ")[0].strip()
-            if name:
-                deps.add(f"{name}.py")
+    """Core modules core/<module_py> imports at load time (as X.py), including
+    the Pyodide fallbacks inside top-level `try: from core import x / except
+    ImportError: import x` blocks: azure_arm_core's six such imports were
+    missed by the old regex (indented = "lazy") and broke the relay in v3.0.18+."""
+    tree = ast.parse(open(os.path.join(SRC, module_py)).read())
+    deps = set()
+    for node in _load_time_imports(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module == "core":
+                deps |= {f"{a.name}.py" for a in node.names}
+            elif node.module and node.module.startswith("core."):
+                deps.add(node.module.split(".")[1] + ".py")
+            elif node.module and node.level == 0:
+                deps.add(node.module.split(".")[0] + ".py")      # flat fallback: from x import y
+        else:
+            for a in node.names:
+                name = a.name.split(".")
+                deps.add((name[1] if name[0] == "core" and len(name) > 1 else name[0]) + ".py")
     return deps
 
 
@@ -140,4 +180,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if "--check" in sys.argv:          # CI: verify the relay loaders only, write nothing
+        check_relay_cores()
+    else:
+        main()

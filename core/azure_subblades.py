@@ -269,6 +269,106 @@ _EVENTGRID_SUB = [
     ]},
 ]
 
+_APP_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Application", "items": [
+        {"key": "revisions",   "label": "Revisions and replicas", "icon": "history",   "type": "revisionsList"},
+        {"key": "containers",  "label": "Containers",        "icon": "deployed_code", "type": "appContainers"},
+        {"key": "scale",       "label": "Scale",             "icon": "trending_up",  "type": "appScale"},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "ingress",     "label": "Ingress",           "icon": "input",        "type": "appIngress"},
+        {"key": "secrets",     "label": "Secrets",           "icon": "key",          "type": "appSecrets"},
+        {"key": "identity",    "label": "Identity",          "icon": "badge",        "type": "identity"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",     "label": "Metrics",           "icon": "show_chart",   "type": "metrics"},
+    ]},
+]
+
+_APPCONFIG_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Operations", "items": [
+        {"key": "configExplorer", "label": "Configuration explorer", "icon": "list_alt",   "type": "appconfigExplorer"},
+        {"key": "replicas",       "label": "Geo-replication",        "icon": "public",     "type": "appconfigReplicas"},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "accessSettings", "label": "Access settings",        "icon": "vpn_key",    "type": "appconfigAccess"},
+        {"key": "identity",       "label": "Identity",               "icon": "badge",      "type": "identity"},
+        {"key": "networking",     "label": "Networking",             "icon": "lan",        "type": "networking"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",        "label": "Metrics",                "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+_COGS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Resource Management", "items": [
+        {"key": "keys",        "label": "Keys and Endpoint",   "icon": "vpn_key",     "type": "cogsKeys"},
+        {"key": "deployments", "label": "Model deployments",   "icon": "model_training", "type": "cogsDeployments"},
+        {"key": "quotas",      "label": "Quotas",              "icon": "speed",       "type": "cogsQuotas"},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "identity",    "label": "Identity",            "icon": "badge",       "type": "identity"},
+        {"key": "networking",  "label": "Networking",          "icon": "lan",         "type": "networking"},
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",     "label": "Metrics",             "icon": "show_chart",  "type": "metrics"},
+    ]},
+]
+
+_DNS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "DNS Management", "items": [
+        {"key": "recordsets",  "label": "Recordsets",          "icon": "list_alt",   "type": "dnsRecordsets"},
+        {"key": "nameServers", "label": "Name servers",        "icon": "dns",        "type": "dnsNameServers"},
+        {"key": "testQuery",   "label": "Test query",          "icon": "travel_explore", "type": "dnsQuery"},
+    ]},
+    {"group": "Settings", "items": [
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",     "label": "Metrics",             "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+_MONITOR_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Alerting", "items": [
+        {"key": "condition",     "label": "Condition",           "icon": "rule",          "type": "monitorCondition"},
+        {"key": "actionGroups",  "label": "Action groups",       "icon": "campaign",      "type": "monitorActionGroups"},
+        {"key": "activityAlerts", "label": "Activity log alerts", "icon": "history",      "type": "monitorActivityAlerts"},
+        {"key": "autoscale",     "label": "Autoscale settings",  "icon": "unfold_more",   "type": "monitorAutoscale"},
+    ]},
+    {"group": "Settings", "items": [
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",       "label": "Metrics",             "icon": "show_chart",    "type": "metrics"},
+    ]},
+]
+
+_OI_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Log Analytics", "items": [
+        {"key": "savedSearches", "label": "Saved searches",      "icon": "bookmark",   "type": "oiSavedSearches"},
+        {"key": "tables",        "label": "Tables",              "icon": "table_chart", "type": "oiTables"},
+        {"key": "dataSources",   "label": "Data sources",        "icon": "input",      "type": "oiDataSources"},
+        {"key": "agents",        "label": "Agents (keys)",       "icon": "vpn_key",    "type": "oiKeys"},
+        {"key": "usage",         "label": "Usage and quota",     "icon": "data_usage", "type": "oiUsage"},
+    ]},
+    {"group": "Settings", "items": [
+        *_settings_props_locks(),
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",       "label": "Metrics",             "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
@@ -288,5 +388,11 @@ SUB_BLADES: dict[str, list] = {
     "vnet":        _VNET_SUB,
     "keyvault":    _KEYVAULT_SUB,
     "eventgrid":   _EVENTGRID_SUB,
+    "app":         _APP_SUB,
+    "appconfiguration": _APPCONFIG_SUB,
+    "cognitiveservices": _COGS_SUB,
+    "dns":         _DNS_SUB,
+    "operationalinsights": _OI_SUB,
+    "monitor":     _MONITOR_SUB,
     "rbac":        _RBAC_SUB,
 }

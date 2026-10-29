@@ -1,0 +1,36 @@
+{
+  "cloud": "azure",
+  "key": "dns",
+  "name": "DNS zones",
+  "upstream": "dns",
+  "issue": 84,
+  "core": "core/azure_dns_core.py",
+  "operations": [
+    "Zones_CreateOrUpdate",
+    "Zones_Update",
+    "Zones_Delete",
+    "Zones_Get",
+    "Zones_ListByResourceGroup",
+    "Zones_List",
+    "RecordSets_CreateOrUpdate",
+    "RecordSets_Update",
+    "RecordSets_Delete",
+    "RecordSets_Get",
+    "RecordSets_ListByType",
+    "RecordSets_ListByDnsZone",
+    "RecordSets_ListAllByDnsZone",
+    "DnsResourceReference_GetByTargetResources"
+  ],
+  "backend": {
+    "kind": "in-process",
+    "reason": "Zones and record sets are plain data the engine already holds, and the same code runs in Nano. Answers are served from that state by the engine's resolver (/azure-data/dns/query, console Test query). No shared CoreDNS exists in the stack yet (Route 53 / Cloud DNS are not built), so a new container would add idle memory for no extra fidelity; a CoreDNS file plugin can be added later as the shared backend if raw UDP/53 `dig` is wanted."
+  },
+  "suites": [
+    "offline-sdk-java-azure-dns",
+    "offline-sdk-go-azure-dns",
+    "offline-cli-azure-dns",
+    "offline-ui-azure-dns",
+    "nano-ui-azure-dns"
+  ],
+  "status": "ready"
+}

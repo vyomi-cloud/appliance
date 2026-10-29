@@ -107,6 +107,28 @@ CLOUDS = {
 }
 
 
+def check_azure_vm() -> None:
+    """An Azure VM is billed per hour by size: Standard_B1s is $0.0104/h list price,
+    so one VM must add about $7.59 (730 h) to Azure savings, not $0."""
+    print("\n== azure: Virtual machine (Standard_B1s) ==")
+    try:
+        if not switch_to("azure"):
+            return
+        sub, rg, name = "sub-001", "rg-savings-check", f"vm-sav-{uuid.uuid4().hex[:8]}"
+        before = savings()
+        http("PUT", f"{BASE}/subscriptions/{sub}/resourceGroups/{rg}?api-version=2021-04-01", {"location": "eastus"})
+        http("PUT", f"{BASE}/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{name}?api-version=2023-09-01",
+             {"location": "eastus", "properties": {"hardwareProfile": {"vmSize": "Standard_B1s"}}})
+        after = wait_for(lambda b, c: c["by_provider"].get("azure", 0) > b["by_provider"].get("azure", 0) + 1, before)
+        added = round(after["by_provider"].get("azure", 0) - before["by_provider"].get("azure", 0), 2)
+        check(after["count"] > before["count"], "azure: creating a VM raises the space resource_count",
+              f"{before['count']} → {after['count']}")
+        check(abs(added - 7.59) < 0.05, "azure: a Standard_B1s VM adds its 730 h list price ($7.59) to Azure savings",
+              f"added ${added}")
+    except Exception as e:  # noqa: BLE001
+        check(False, "azure: VM savings check ran", repr(e)[:300])
+
+
 def main() -> int:
     for cloud, (label, create, mkname) in CLOUDS.items():
         print(f"\n== {cloud}: {label} ==")
@@ -130,6 +152,7 @@ def main() -> int:
                   f"${after['usd']} → ${used['usd']} (real {cloud} bills storage + requests)")
         except Exception as e:  # noqa: BLE001
             check(False, f"{cloud}: savings check ran", repr(e)[:300])
+    check_azure_vm()
     print(f"\nRESULT fail={fails}")
     return 1 if fails else 0
 

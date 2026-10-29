@@ -32,6 +32,36 @@ try:                                              # host: package import
 except ImportError:                               # Pyodide: cores are flat on sys.path
     from azure_arm_data import CATALOG, ROLES      # type: ignore
 
+try:                                              # Container Apps engine (Microsoft.App)
+    from core import azure_app_core as app_engine
+except ImportError:
+    import azure_app_core as app_engine            # type: ignore
+
+try:                                              # App Configuration engine (Microsoft.AppConfiguration)
+    from core import azure_appconfiguration_core as appconfig_engine
+except ImportError:
+    import azure_appconfiguration_core as appconfig_engine   # type: ignore
+
+try:                                              # Cognitive Services engine (Microsoft.CognitiveServices)
+    from core import azure_cognitiveservices_core as cogs_engine
+except ImportError:
+    import azure_cognitiveservices_core as cogs_engine   # type: ignore
+
+try:                                              # Azure DNS engine (Microsoft.Network/dnsZones)
+    from core import azure_dns_core as dns_engine
+except ImportError:
+    import azure_dns_core as dns_engine            # type: ignore
+
+try:                                              # Azure Monitor engine (Microsoft.Insights)
+    from core import azure_monitor_core as monitor_engine
+except ImportError:
+    import azure_monitor_core as monitor_engine    # type: ignore
+
+try:                                              # Azure Log Analytics engine (Microsoft.OperationalInsights)
+    from core import azure_operationalinsights_core as oi_engine
+except ImportError:
+    import azure_operationalinsights_core as oi_engine   # type: ignore
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -41,27 +71,6 @@ _BY_TYPE = {(c["namespace"].lower(), c["type"].lower()): c for c in CATALOG}
 
 def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-
-
-# ── cloudsim event emission (DURABLE, best-effort) ──────────────────────────
-# ARM ops are NOT auto-logged by providers/registry (the generic recorder skips
-# the `_arm` service — see the Infra contract). But the Azure console's detail
-# Activity tab reads GET /api/cloudsim/events?resource=<name>&provider=azure, so
-# EACH mutating ARM op (resource + sub-resource CRUD, VM power actions) records
-# ONE event into the SAME registry-owned, nano_persist-captured EventStore that
-# S3/DynamoDB ride. Keyed by resource NAME so the events API's name filter finds
-# it. NEVER raises — a telemetry failure must not break an ARM request.
-def _emit_event(service: str, resource: str, action: str,
-                status: str = "ok", detail: str = "") -> None:
-    try:
-        try:
-            from core import nano_events as _ev
-        except ImportError:                       # Pyodide: cores flat on sys.path
-            import nano_events as _ev              # type: ignore
-        _ev.record("azure", str(service or "").lower(), str(resource or ""),
-                   str(action or ""), str(status or "ok"), str(detail or ""))
-    except Exception:
-        pass
 
 
 # ── pure helpers (ported verbatim from azure_services) ─────────────────────
@@ -129,6 +138,23 @@ def _expand_tokens(obj, name: str, base: str):
     return obj
 
 
+_APIM_DEFAULT_POLICY = ("<policies>\r\n  <inbound />\r\n  <backend>\r\n    <forward-request />\r\n"
+                        "  </backend>\r\n  <outbound />\r\n  <on-error />\r\n</policies>")
+
+
+def _apim_default_policy(type_chain, names, state, rid=""):
+    """A new API Management service ships with the default global policy, so
+    GET .../service/{n}/policies/policy returns it instead of 404 until PUT."""
+    if (len(type_chain) == 3 and len(names) == 2 and names[1].lower() == "policy"
+            and type_chain[1].lower() == "service" and type_chain[2].lower() == "policies"
+            and type_chain[0].lower() == "microsoft.apimanagement"):
+        parent = rid.rsplit("/policies/", 1)[0].lower()
+        if parent in state:
+            return {"id": rid, "name": "policy", "type": "Microsoft.ApiManagement/service/policies",
+                    "properties": {"format": "xml", "value": _APIM_DEFAULT_POLICY}}
+    return None
+
+
 def _canonical_id(sub: str, rg, type_chain, names) -> str:
     seg = [f"/subscriptions/{sub}"]
     if rg:
@@ -169,13 +195,8 @@ class AzureArm:
     """In-memory Azure Resource Manager control plane (one per Nano instance)."""
 
     def __init__(self, base: str = ""):
-        # PUBLIC dict (no leading underscore) so nano_persist captures it →
-        # top-level ARM resources + ARM-core children (servicebus topics/subs,
-        # vnet peerings, deployment slots) survive a full page reload and
-        # cross-tab sync. Keyed by the lower-cased resource id. Registered in
-        # nano_registry under `az_arm` and listed in nano_persist.STORE_ATTRS.
         self.state: dict = {}
-        self._operations: dict = {}             # ephemeral LRO polls — NOT persisted
+        self.operations: dict = {}
         self._base = base                       # endpoint/LRO URL prefix (relative by default)
 
     # ── public entry ──────────────────────────────────────────────────────
@@ -185,10 +206,11 @@ class AzureArm:
         # LRO poll — every operation completes immediately in the sim.
         if "/api/azure/operations/" in path:
             op_id = path.split("/api/azure/operations/", 1)[1].split("?", 1)[0].strip("/")
-            op = self._operations.get(op_id)
+            op = self.operations.get(op_id)
             base = {"status": "Succeeded", "properties": {"provisioningState": "Succeeded"}}
             if op:
                 base.update({"id": op["id"], "name": op["name"], "startTime": op["startTime"], "endTime": op["endTime"]})
+                base.update(op.get("result") or {})
             return _ok(base)
         i = path.find("/subscriptions/")
         if i == -1:
@@ -250,11 +272,36 @@ class AzureArm:
                 names.append(token)
         is_collection = (len(chain) % 2 == 1)
 
+        # Microsoft.AppConfiguration: the substrate-free engine owns the store / key-value semantics;
+        # this class's flat store is its resource map (so it persists with the rest of ARM).
+        if namespace.lower() == "microsoft.appconfiguration":
+            return self._appconfig(method, sub, rg, chain, payload, query)
+
+        # Microsoft.Network/dnsZones (+ record sets): the Azure DNS engine owns the zone semantics.
+        if namespace.lower() == "microsoft.network" and dns_engine.handles(chain):
+            return self._dns(method, sub, rg, chain, payload, query)
+
+        # Microsoft.Insights (action groups, metric / activity log alerts, autoscale): the Azure Monitor engine.
+        if namespace.lower() == "microsoft.insights" and monitor_engine.handles(chain):
+            return self._monitor(method, sub, rg, chain, payload, query)
+
+        # Microsoft.OperationalInsights (Log Analytics workspaces, saved searches, tables, data sources).
+        if namespace.lower() == "microsoft.operationalinsights" and oi_engine.handles(chain):
+            return self._oi(method, sub, rg, chain, payload, query)
+
+        if namespace.lower() == "microsoft.cognitiveservices":
+            return self._cogs(method, sub, rg, chain, payload, query)
+
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
             supported = ", ".join(sorted(c["namespace"] + "/" + c["type"] for c in CATALOG))
             return _err(404, "ResourceTypeNotSupported",
                         f"Type '{namespace}/{type_chain[1]}' is not simulated. Supported: {supported}.")
+
+        # Microsoft.App (Container Apps): the substrate-free engine owns the semantics; this
+        # class's flat store is its resource map (so it persists with the rest of ARM).
+        if namespace.lower() == "microsoft.app":
+            return self._app(method, sub, rg, chain, payload, query)
 
         # POST action verbs (listKeys / start / powerOff / …)
         if method == "POST" and is_collection and len(type_chain) >= 3 and names:
@@ -276,14 +323,12 @@ class AzureArm:
         if method == "GET":
             rec = self.state.get(key)
             if not rec:
+                rec = _apim_default_policy(type_chain, names, self.state, rid)
+            if not rec:
                 return _err(404, "ResourceNotFound", f"Resource '{rid}' not found.")
             return _ok(_view(rec))
         if method in ("PUT", "PATCH"):
-            existed = key in self.state
             resp = self._upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
-            if resp.get("status", 500) < 400:
-                self._log_mutation(method, type_chain, names, leaf_name,
-                                   created=(not existed and method != "PATCH"))
             if lro:
                 resp["status"] = 200
                 op_id = self._make_operation(rid, method)
@@ -292,37 +337,65 @@ class AzureArm:
             return resp
         if method == "DELETE":
             rec = self.state.pop(key, None)
-            if rec is not None:
-                self._log_mutation("DELETE", type_chain, names, leaf_name)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
-    def _log_mutation(self, method, type_chain, names, leaf_name, created=False):
-        """Record a cloudsim event for a top-level or sub-resource ARM mutation.
-        A sub-resource op (type_chain deeper than ns/type, e.g. .../servers/{s}/
-        databases/{d}) is logged against BOTH the child (its own activity) AND the
-        parent, with a verb like CreateDatabase/DeleteTopic — so a parent's Activity
-        tab shows child CRUD the way the Azure portal's does."""
-        # child type = last type segment ("databases","topics","subscriptions",…);
-        # singularize for the verb (databases→Database, topics→Topic, keys→Key).
-        child_type = type_chain[-1] if type_chain else ""
-        verb = {"PUT": "Create", "PATCH": "Update", "DELETE": "Delete"}.get(method, method.title())
-        full_type = "/".join(type_chain)
-        if len(names) >= 2:
-            # sub-resource: parent is the second-to-last name.
-            parent = names[-2]
-            singular = child_type[:-1] if child_type.endswith("s") else child_type
-            action = verb + singular[:1].upper() + singular[1:]
-            self._emit(full_type, parent, action, f"{child_type}/{leaf_name}")
-            self._emit(full_type, leaf_name, verb, f"{full_type}/{leaf_name}")
-        else:
-            action = verb + ("Resource" if method != "DELETE" else "Resource")
-            # Use a clean verb for the top-level resource itself.
-            self._emit(full_type, leaf_name, verb, full_type)
+    def _dns(self, method, sub, rg, chain, payload, query):
+        dn = dns_engine
+        r = dn.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or dn.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
 
-    @staticmethod
-    def _emit(service, resource, action, detail=""):
-        _emit_event(service, resource, action, "ok", detail)
+    def _monitor(self, method, sub, rg, chain, payload, query):
+        r = monitor_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
+    def _oi(self, method, sub, rg, chain, payload, query):
+        r = oi_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        resp = {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or oi_engine.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
+    def _cogs(self, method, sub, rg, chain, payload, query):
+        cs = cogs_engine
+        r = cs.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or cs.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
+    def _appconfig(self, method, sub, rg, chain, payload, query):
+        ac = appconfig_engine
+        r = ac.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or ac.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
+    def _app(self, method, sub, rg, chain, payload, query):
+        app = app_engine
+        r = app.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            result = r["body"] if r["verb"] == "start" and chain[0].lower() == "jobs" else None
+            op_id = self._make_operation(r["rid"], method, result)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or app.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
 
     # ── CRUD primitives ───────────────────────────────────────────────────
     def _list(self, sub, rg, full_type):
@@ -427,10 +500,12 @@ class AzureArm:
             return _ok(None, status=200)
         return _ok(body, status=200 if method in ("PUT", "PATCH", "GET") else 405)
 
-    def _make_operation(self, resource_id, method):
+    def _make_operation(self, resource_id, method, result=None):
         op_id = uuid.uuid4().hex
         now = _now()
-        self._operations[op_id] = {"id": op_id, "name": op_id, "status": "Succeeded",
+        self.operations[op_id] = {"id": op_id, "name": op_id, "status": "Succeeded",
                                    "startTime": now, "endTime": now,
                                    "resourceId": resource_id, "method": method}
+        if result:
+            self.operations[op_id]["result"] = result
         return op_id

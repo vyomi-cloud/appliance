@@ -7,9 +7,9 @@ Run locally: `pytest tests/conformance/console_actions/`
 
 | Provider | Pass | Total | Rate |
 |---|---|---|---|
-| ✓ aws | 114 | 114 | 100.0% |
+| ✓ aws | 115 | 115 | 100.0% |
 | ✓ azure | 52 | 52 | 100.0% |
-| ✓ gcp | 87 | 87 | 100.0% |
+| ✓ gcp | 89 | 89 | 100.0% |
 
 ## AWS
 
@@ -33,15 +33,15 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `dynamodb` | `put` | `POST` | `/api/dynamodb/tables/{name}/items` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `dynamodb` | `query` | `POST` | `/api/dynamodb/tables/{name}/query` | `0` | ✓ 0 — parent resource not created - dependent action |
 | `dynamodb` | `scan` | `POST` | `/api/dynamodb/tables/{name}/scan` | `0` | ✓ 0 — parent resource not created - dependent action |
-| `ec2` | `amis` | `GET` | `/api/ec2/amis` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `ec2` | `create` | `POST` | `/api/ec2/instances` | `507` | ✓ 507 — environmental: 507 |
-| `ec2` | `delete` | `DELETE` | `/api/ec2/instances/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `ec2` | `get` | `GET` | `/api/ec2/instances/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `ec2` | `list` | `GET` | `/api/ec2/instances` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `ec2` | `reboot` | `POST` | `/api/ec2/instances/{name}/reboot` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `ec2` | `start` | `POST` | `/api/ec2/instances/{name}/start` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `ec2` | `stop` | `POST` | `/api/ec2/instances/{name}/stop` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `ec2` | `terminate` | `POST` | `/api/ec2/instances/{name}/terminate` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `ec2` | `amis` | `GET` | `/api/ec2/amis` | `200` | ✓ 200 |
+| `ec2` | `create` | `POST` | `/api/ec2/instances` | `200` | ✓ 200 |
+| `ec2` | `delete` | `DELETE` | `/api/ec2/instances/{name}` | `200` | ✓ 200 |
+| `ec2` | `get` | `GET` | `/api/ec2/instances/{name}` | `200` | ✓ 200 |
+| `ec2` | `list` | `GET` | `/api/ec2/instances` | `200` | ✓ 200 |
+| `ec2` | `reboot` | `POST` | `/api/ec2/instances/{name}/reboot` | `200` | ✓ 200 |
+| `ec2` | `start` | `POST` | `/api/ec2/instances/{name}/start` | `200` | ✓ 200 |
+| `ec2` | `stop` | `POST` | `/api/ec2/instances/{name}/stop` | `200` | ✓ 200 |
+| `ec2` | `terminate` | `POST` | `/api/ec2/instances/{name}/terminate` | `200` | ✓ 200 |
 | `eventbridge` | `api-destinations` | `GET` | `/api/aws/extras/eventbridge/api-destinations` | `200` | ✓ 200 |
 | `eventbridge` | `archives` | `GET` | `/api/aws/extras/eventbridge/archives` | `200` | ✓ 200 |
 | `eventbridge` | `connections` | `GET` | `/api/aws/extras/eventbridge/connections` | `200` | ✓ 200 |
@@ -64,12 +64,12 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `iam` | `users` | `GET` | `/api/iam/users` | `200` | ✓ 200 |
 | `kms` | `aliases` | `GET` | `/api/aws/extras/kms/aliases` | `200` | ✓ 200 |
 | `kms` | `aws-managed-keys` | `GET` | `/api/aws/extras/kms/aws-managed-keys` | `200` | ✓ 200 |
-| `kms` | `create` | `POST` | `/api/aws/extras/kms/keys` | `200` | ✓ 200 |
+| `kms` | `create` | `POST` | `/api/aws/kms/keys` | `200` | ✓ 200 |
 | `kms` | `custom-key-stores` | `GET` | `/api/aws/extras/kms/custom-key-stores` | `200` | ✓ 200 |
-| `kms` | `delete` | `DELETE` | `/api/aws/extras/kms/keys/{name}` | `200` | ✓ 200 |
-| `kms` | `get` | `GET` | `/api/aws/extras/kms/keys/{name}` | `200` | ✓ 200 |
-| `kms` | `keys` | `GET` | `/api/aws/extras/kms/keys` | `200` | ✓ 200 |
-| `kms` | `list` | `GET` | `/api/aws/extras/kms/keys` | `200` | ✓ 200 |
+| `kms` | `delete` | `DELETE` | `/api/aws/kms/keys/{name}` | `200` | ✓ 200 |
+| `kms` | `get` | `GET` | `/api/aws/kms/keys/{name}` | `200` | ✓ 200 |
+| `kms` | `keys` | `GET` | `/api/aws/kms/keys` | `200` | ✓ 200 |
+| `kms` | `list` | `GET` | `/api/aws/kms/keys` | `200` | ✓ 200 |
 | `lambda` | `create` | `POST` | `/api/lambda/functions` | `200` | ✓ 200 |
 | `lambda` | `delete` | `DELETE` | `/api/lambda/functions/{name}` | `200` | ✓ 200 |
 | `lambda` | `get` | `GET` | `/api/lambda/functions/{name}` | `200` | ✓ 200 |
@@ -79,32 +79,33 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `lambda` | `permission` | `POST` | `/api/lambda/functions/{name}/permission` | `200` | ✓ 200 |
 | `lambda` | `updateCode` | `POST` | `/api/lambda/functions/{name}/code` | `200` | ✓ 200 |
 | `lambda` | `updateConfig` | `POST` | `/api/lambda/functions/{name}/configuration` | `200` | ✓ 200 |
-| `rds` | `create` | `POST` | `/api/rds/databases` | `503` | ✓ 503 — environmental: 503 |
-| `rds` | `delete` | `DELETE` | `/api/rds/databases/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `rds` | `get` | `GET` | `/api/rds/databases/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `rds` | `list` | `GET` | `/api/rds/databases` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `rds` | `modify` | `POST` | `/api/rds/databases/{name}/modify` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `rds` | `paramGroups` | `GET` | `/api/rds/parameter-groups` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `rds` | `reboot` | `POST` | `/api/rds/databases/{name}/reboot` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `rds` | `snapshots` | `GET` | `/api/rds/snapshots` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `rds` | `start` | `POST` | `/api/rds/databases/{name}/start` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `rds` | `stop` | `POST` | `/api/rds/databases/{name}/stop` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `rds` | `subnetGroups` | `GET` | `/api/rds/subnet-groups` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `rds` | `create` | `POST` | `/api/rds/databases` | `200` | ✓ 200 |
+| `rds` | `delete` | `DELETE` | `/api/rds/databases/{name}` | `200` | ✓ 200 |
+| `rds` | `get` | `GET` | `/api/rds/databases/{name}` | `200` | ✓ 200 |
+| `rds` | `list` | `GET` | `/api/rds/databases` | `200` | ✓ 200 |
+| `rds` | `modify` | `POST` | `/api/rds/databases/{name}/modify` | `200` | ✓ 200 |
+| `rds` | `paramGroups` | `GET` | `/api/rds/parameter-groups` | `200` | ✓ 200 |
+| `rds` | `reboot` | `POST` | `/api/rds/databases/{name}/reboot` | `200` | ✓ 200 |
+| `rds` | `snapshots` | `GET` | `/api/rds/snapshots` | `200` | ✓ 200 |
+| `rds` | `start` | `POST` | `/api/rds/databases/{name}/start` | `200` | ✓ 200 |
+| `rds` | `stop` | `POST` | `/api/rds/databases/{name}/stop` | `200` | ✓ 200 |
+| `rds` | `subnetGroups` | `GET` | `/api/rds/subnet-groups` | `200` | ✓ 200 |
 | `s3` | `create` | `POST` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
 | `s3` | `delete` | `DELETE` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
+| `s3` | `deleteObject` | `DELETE` | `/api/s3/buckets/{name}/objects/{key}` | `200` | ✓ 200 |
 | `s3` | `get` | `GET` | `/api/s3/buckets/{name}` | `200` | ✓ 200 |
 | `s3` | `list` | `GET` | `/api/s3/buckets` | `200` | ✓ 200 |
 | `s3` | `notifications` | `PUT` | `/api/s3/buckets/{name}/notification` | `200` | ✓ 200 |
 | `s3` | `objects` | `GET` | `/api/s3/buckets/{name}/objects` | `200` | ✓ 200 |
 | `s3` | `uploadObject` | `POST` | `/api/s3/buckets/{name}/objects` | `200` | ✓ 200 |
 | `s3` | `versioning` | `PUT` | `/api/s3/buckets/{name}/versioning` | `200` | ✓ 200 |
-| `secretsmanager` | `create` | `POST` | `/api/aws/extras/secretsmanager/secrets` | `200` | ✓ 200 |
-| `secretsmanager` | `delete` | `DELETE` | `/api/aws/extras/secretsmanager/secrets/{name}` | `200` | ✓ 200 |
-| `secretsmanager` | `get` | `GET` | `/api/aws/extras/secretsmanager/secrets/{name}` | `200` | ✓ 200 |
-| `secretsmanager` | `list` | `GET` | `/api/aws/extras/secretsmanager/secrets` | `200` | ✓ 200 |
+| `secretsmanager` | `create` | `POST` | `/api/aws/secrets` | `200` | ✓ 200 |
+| `secretsmanager` | `delete` | `DELETE` | `/api/aws/secrets/{name}` | `200` | ✓ 200 |
+| `secretsmanager` | `get` | `GET` | `/api/aws/secrets/{name}` | `200` | ✓ 200 |
+| `secretsmanager` | `list` | `GET` | `/api/aws/secrets` | `200` | ✓ 200 |
 | `secretsmanager` | `replicas` | `GET` | `/api/aws/extras/secretsmanager/replicas` | `200` | ✓ 200 |
 | `secretsmanager` | `rotation` | `GET` | `/api/aws/extras/secretsmanager/rotation` | `200` | ✓ 200 |
-| `secretsmanager` | `secrets` | `GET` | `/api/aws/extras/secretsmanager/secrets` | `200` | ✓ 200 |
+| `secretsmanager` | `secrets` | `GET` | `/api/aws/secrets` | `200` | ✓ 200 |
 | `sqs` | `create` | `POST` | `/api/sqs/queues` | `200` | ✓ 200 |
 | `sqs` | `delete` | `DELETE` | `/api/sqs/queues/{name}` | `200` | ✓ 200 |
 | `sqs` | `get` | `GET` | `/api/sqs/queues/{name}` | `200` | ✓ 200 |
@@ -178,10 +179,10 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `storage` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/{name}` | `200` | ✓ 200 |
 | `storage` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/{name}` | `200` | ✓ 200 |
 | `storage` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts` | `200` | ✓ 200 |
-| `vm` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/vyomi-conf-vm` | `507` | ✓ 507 — environmental: 507 |
-| `vm` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `vm` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `vm` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `vm` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/vyomi-conf-vm` | `200` | ✓ 200 |
+| `vm` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `200` | ✓ 200 |
+| `vm` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/{name}` | `200` | ✓ 200 |
+| `vm` | `list` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines` | `200` | ✓ 200 |
 | `vnet` | `create` | `PUT` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/vyomi-conf-vnet` | `200` | ✓ 200 |
 | `vnet` | `delete` | `DELETE` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/{name}` | `200` | ✓ 200 |
 | `vnet` | `get` | `GET` | `/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/{name}` | `200` | ✓ 200 |
@@ -206,17 +207,17 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `cloudsql` | `restart` | `POST` | `/api/gcp/rds/databases/{name}/reboot` | `200` | ✓ 200 |
 | `cloudsql` | `start` | `POST` | `/api/gcp/rds/databases/{name}/start` | `200` | ✓ 200 |
 | `cloudsql` | `stop` | `POST` | `/api/gcp/rds/databases/{name}/stop` | `200` | ✓ 200 |
-| `compute` | `create` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances` | `507` | ✓ 507 — environmental: 507 |
-| `compute` | `delete` | `DELETE` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `compute` | `disks` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/disks` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `compute` | `get` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `compute` | `images` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/images` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `compute` | `instanceGroups` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instanceGroups` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `compute` | `list` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `compute` | `reset` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/reset` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `compute` | `snapshots` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/snapshots` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `compute` | `start` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/start` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `compute` | `stop` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/stop` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `compute` | `create` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances` | `200` | ✓ 200 |
+| `compute` | `delete` | `DELETE` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}` | `200` | ✓ 200 |
+| `compute` | `disks` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/disks` | `200` | ✓ 200 |
+| `compute` | `get` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}` | `200` | ✓ 200 |
+| `compute` | `images` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/images` | `200` | ✓ 200 |
+| `compute` | `instanceGroups` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instanceGroups` | `200` | ✓ 200 |
+| `compute` | `list` | `GET` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances` | `200` | ✓ 200 |
+| `compute` | `reset` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/reset` | `200` | ✓ 200 |
+| `compute` | `snapshots` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/snapshots` | `200` | ✓ 200 |
+| `compute` | `start` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/start` | `200` | ✓ 200 |
+| `compute` | `stop` | `POST` | `/api/gcp/compute/v1/projects/{project}/zones/{zone}/instances/{name}/stop` | `200` | ✓ 200 |
 | `eventarc` | `channels` | `GET` | `/api/gcp/extras/eventarc/channels` | `200` | ✓ 200 |
 | `eventarc` | `create` | `POST` | `/api/gcp/extras/eventarc/triggers` | `200` | ✓ 200 |
 | `eventarc` | `delete` | `DELETE` | `/api/gcp/extras/eventarc/triggers/{name}` | `200` | ✓ 200 |
@@ -224,12 +225,12 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `eventarc` | `list` | `GET` | `/api/gcp/extras/eventarc/triggers` | `200` | ✓ 200 |
 | `eventarc` | `providers` | `GET` | `/api/gcp/extras/eventarc/providers` | `200` | ✓ 200 |
 | `eventarc` | `triggers` | `GET` | `/api/gcp/extras/eventarc/triggers` | `200` | ✓ 200 |
-| `firestore` | `create` | `POST` | `/api/gcp/firestore/v1/projects/{project}/databases` | `404` | ✓ 404 — catalog stub - no backend handler |
-| `firestore` | `delete` | `DELETE` | `/api/gcp/firestore/v1/projects/{project}/databases/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `firestore` | `documents` | `GET` | `/api/gcp/firestore/v1/projects/{project}/databases/{name}/documents` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `firestore` | `get` | `GET` | `/api/gcp/firestore/v1/projects/{project}/databases/{name}` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `firestore` | `indexes` | `GET` | `/api/gcp/firestore/v1/projects/{project}/databases/{name}/collectionGroups/-/indexes` | `0` | ✓ 0 — catalog stub - no backend handler |
-| `firestore` | `list` | `GET` | `/api/gcp/firestore/v1/projects/{project}/databases` | `0` | ✓ 0 — catalog stub - no backend handler |
+| `firestore` | `create` | `POST` | `/api/gcp/firestore/v1/projects/{project}/databases` | `200` | ✓ 200 |
+| `firestore` | `delete` | `DELETE` | `/api/gcp/firestore/v1/projects/{project}/databases/{name}` | `200` | ✓ 200 |
+| `firestore` | `documents` | `GET` | `/api/gcp/firestore/v1/projects/{project}/databases/{name}/documents` | `200` | ✓ 200 |
+| `firestore` | `get` | `GET` | `/api/gcp/firestore/v1/projects/{project}/databases/{name}` | `200` | ✓ 200 |
+| `firestore` | `indexes` | `GET` | `/api/gcp/firestore/v1/projects/{project}/databases/{name}/collectionGroups/-/indexes` | `200` | ✓ 200 |
+| `firestore` | `list` | `GET` | `/api/gcp/firestore/v1/projects/{project}/databases` | `200` | ✓ 200 |
 | `functions` | `call` | `POST` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions/{name}:call` | `200` | ✓ 200 |
 | `functions` | `create` | `POST` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions` | `200` | ✓ 200 |
 | `functions` | `delete` | `DELETE` | `/api/gcp/cloudfunctions/v2/projects/{project}/locations/{region}/functions/{name}` | `200` | ✓ 200 |
@@ -242,35 +243,37 @@ Run locally: `pytest tests/conformance/console_actions/`
 | `iam` | `list` | `GET` | `/api/gcp/iam/v1/projects/{project}/serviceAccounts` | `200` | ✓ 200 |
 | `iam` | `policy` | `GET` | `/api/gcp/iam/v1/projects/{project}:getIamPolicy` | `200` | ✓ 200 |
 | `iam` | `setPolicy` | `POST` | `/api/gcp/iam/v1/projects/{project}:setIamPolicy` | `200` | ✓ 200 |
-| `kms` | `create` | `POST` | `/api/gcp/extras/kms/keys` | `200` | ✓ 200 |
-| `kms` | `delete` | `DELETE` | `/api/gcp/extras/kms/keys/{name}` | `200` | ✓ 200 |
+| `kms` | `create` | `POST` | `/api/gcp/kms/keys` | `200` | ✓ 200 |
+| `kms` | `delete` | `DELETE` | `/api/gcp/kms/keys/{name}` | `200` | ✓ 200 |
 | `kms` | `ekmConnections` | `GET` | `/api/gcp/extras/kms/ekmConnections` | `200` | ✓ 200 |
-| `kms` | `get` | `GET` | `/api/gcp/extras/kms/keys/{name}` | `200` | ✓ 200 |
+| `kms` | `get` | `GET` | `/api/gcp/kms/keys/{name}` | `200` | ✓ 200 |
 | `kms` | `importJobs` | `GET` | `/api/gcp/extras/kms/importJobs` | `200` | ✓ 200 |
 | `kms` | `keyrings` | `GET` | `/api/gcp/extras/kms/keyrings` | `200` | ✓ 200 |
-| `kms` | `keys` | `GET` | `/api/gcp/extras/kms/keys` | `200` | ✓ 200 |
+| `kms` | `keys` | `GET` | `/api/gcp/kms/keys` | `200` | ✓ 200 |
 | `kms` | `keyversions` | `GET` | `/api/gcp/extras/kms/keyversions` | `200` | ✓ 200 |
-| `kms` | `list` | `GET` | `/api/gcp/extras/kms/keys` | `200` | ✓ 200 |
+| `kms` | `list` | `GET` | `/api/gcp/kms/keys` | `200` | ✓ 200 |
 | `pubsub` | `create` | `POST` | `/api/gcp/pubsub/v1/projects/{project}/topics` | `200` | ✓ 200 |
 | `pubsub` | `delete` | `DELETE` | `/api/gcp/pubsub/v1/projects/{project}/topics/{name}` | `200` | ✓ 200 |
 | `pubsub` | `get` | `GET` | `/api/gcp/pubsub/v1/projects/{project}/topics/{name}` | `200` | ✓ 200 |
 | `pubsub` | `list` | `GET` | `/api/gcp/pubsub/v1/projects/{project}/topics` | `200` | ✓ 200 |
 | `pubsub` | `publish` | `POST` | `/api/gcp/pubsub/v1/projects/{project}/topics/{name}:publish` | `200` | ✓ 200 |
 | `pubsub` | `subscriptions` | `GET` | `/api/gcp/pubsub/v1/projects/{project}/subscriptions` | `200` | ✓ 200 |
-| `secretmanager` | `create` | `POST` | `/api/gcp/extras/secretmanager/secrets` | `200` | ✓ 200 |
-| `secretmanager` | `delete` | `DELETE` | `/api/gcp/extras/secretmanager/secrets/{name}` | `200` | ✓ 200 |
-| `secretmanager` | `get` | `GET` | `/api/gcp/extras/secretmanager/secrets/{name}` | `200` | ✓ 200 |
-| `secretmanager` | `list` | `GET` | `/api/gcp/extras/secretmanager/secrets` | `200` | ✓ 200 |
+| `secretmanager` | `create` | `POST` | `/api/gcp/secrets` | `200` | ✓ 200 |
+| `secretmanager` | `delete` | `DELETE` | `/api/gcp/secrets/{name}` | `200` | ✓ 200 |
+| `secretmanager` | `get` | `GET` | `/api/gcp/secrets/{name}` | `200` | ✓ 200 |
+| `secretmanager` | `list` | `GET` | `/api/gcp/secrets` | `200` | ✓ 200 |
 | `secretmanager` | `rotation` | `GET` | `/api/gcp/extras/secretmanager/rotation` | `200` | ✓ 200 |
-| `secretmanager` | `secrets` | `GET` | `/api/gcp/extras/secretmanager/secrets` | `200` | ✓ 200 |
+| `secretmanager` | `secrets` | `GET` | `/api/gcp/secrets` | `200` | ✓ 200 |
 | `secretmanager` | `versions` | `GET` | `/api/gcp/extras/secretmanager/versions` | `200` | ✓ 200 |
 | `storage` | `create` | `POST` | `/api/gcp/storage/v1/b` | `200` | ✓ 200 |
 | `storage` | `delete` | `DELETE` | `/api/gcp/storage/v1/b/{name}` | `200` | ✓ 200 |
+| `storage` | `deleteObject` | `DELETE` | `/api/gcp/storage/v1/b/{name}/o/{object}` | `200` | ✓ 200 |
 | `storage` | `get` | `GET` | `/api/gcp/storage/v1/b/{name}` | `200` | ✓ 200 |
 | `storage` | `iam` | `GET` | `/api/gcp/storage/v1/b/{name}/iam` | `200` | ✓ 200 |
 | `storage` | `list` | `GET` | `/api/gcp/storage/v1/b` | `200` | ✓ 200 |
 | `storage` | `list` | `GET` | `/api/gcp/storage/v1/b` | `200` | ✓ 200 |
 | `storage` | `objects` | `GET` | `/api/gcp/storage/v1/b/{name}/o` | `200` | ✓ 200 |
+| `storage` | `uploadObject` | `POST` | `/api/gcp/storage/v1/b/{name}/upload` | `200` | ✓ 200 |
 | `vpc` | `create` | `POST` | `/api/gcp/compute/v1/projects/{project}/global/networks` | `200` | ✓ 200 |
 | `vpc` | `delete` | `DELETE` | `/api/gcp/compute/v1/projects/{project}/global/networks/{name}` | `200` | ✓ 200 |
 | `vpc` | `firewalls` | `GET` | `/api/gcp/compute/v1/projects/{project}/global/firewalls` | `200` | ✓ 200 |
