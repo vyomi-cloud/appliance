@@ -63,6 +63,54 @@ if [ -n "$v" ]; then
   d=$(vyomi doctor 2>&1); rc=$?; echo "$d" > "$OUT/$NAME-doctor.txt"
   [ -n "$d" ]; check "vyomi doctor runs" $? "exit $rc; $(echo "$d" | head -1)"
 fi
+# ── vyomi commands ────────────────────────────────────────────────────────
+# Every launcher command, run as a user would but against a stub `docker` (it
+# records the compose calls), with a throwaway HOME. A real `vyomi up` is the
+# Startup check's job. `update` hits the real GitHub release + SHA256SUMS.
+if [ -n "$v" ]; then
+  CT=$(mktemp -d); mkdir -p "$CT/bin" "$CT/home"
+  printf '#!/bin/sh\necho "docker $*" >> "%s/docker.log"; exit 0\n' "$CT" > "$CT/bin/docker"; chmod +x "$CT/bin/docker"
+  vy() { env HOME="$CT/home" PATH="$CT/bin:$PATH" VYOMI_SUBSTRATE=docker VYOMI_NO_BANNER=1 CI=1 \
+           VYOMI_URL=http://127.0.0.1:9 VYOMI_NO_SELF_UPDATE=1 "$@"; }
+  pin() { sed -nE 's#.*vyomi/appliance:([0-9]+\.[0-9]+\.[0-9]+).*#\1#p' "$1" 2>/dev/null | head -1; }
+  LATEST=$(curl -fsSL --max-time 15 "https://api.github.com/repos/vyomi-cloud/appliance/releases/latest" 2>/dev/null \
+    | sed -nE 's/.*"tag_name": *"v?([0-9]+\.[0-9]+\.[0-9]+)".*/\1/p' | head -1)
+
+  for flag in --version version -V; do
+    o=$(vy vyomi "$flag" 2>&1); rc=$?; echo "$o" > "$OUT/$NAME-version$flag.txt"
+    [ "$rc" = 0 ] && echo "$o" | head -1 | grep -q "^vyomi $VER "; check "vyomi $flag reports $VER" $? "exit $rc; $(echo "$o" | head -1)"
+  done
+  o=$(vy vyomi --version 2>&1)
+  echo "$o" | grep -q 'simulator : not running'; check "vyomi --version shows the simulator state" $? "$(echo "$o" | grep 'simulator' | head -1)"
+  h=$(vy vyomi help 2>&1)
+  echo "$h" | grep -q update && echo "$h" | grep -q version; check "vyomi help lists update + version" $? ""
+
+  : > "$CT/docker.log"; o=$(vy vyomi status 2>&1); rc=$?
+  [ "$rc" = 0 ] && grep -q 'compose .*cloudlite.yml.* ps' "$CT/docker.log"; check "vyomi status → docker compose ps" $? "exit $rc"
+  : > "$CT/docker.log"; o=$(vy vyomi logs 2>&1); rc=$?
+  [ "$rc" = 0 ] && grep -q 'compose .* logs' "$CT/docker.log"; check "vyomi logs → docker compose logs" $? "exit $rc"
+  : > "$CT/docker.log"; o=$(vy vyomi down 2>&1); rc=$?
+  [ "$rc" = 0 ] && grep -q 'compose .* down' "$CT/docker.log"; check "vyomi down → docker compose down" $? "exit $rc"
+
+  # update: moves to the latest release (pulls its images) ...
+  rm -rf "$CT/home/.vyomi"; : > "$CT/docker.log"
+  o=$(vy vyomi update 2>&1); rc=$?; echo "$o" > "$OUT/$NAME-update.txt"
+  got=$(pin "$CT/home/.vyomi/docker-compose.cloudlite.yml"); [ -n "$got" ] || got="$VER"
+  [ "$rc" = 0 ] && [ -n "$LATEST" ] && [ "$got" = "$LATEST" ] && grep -q "pull" "$CT/docker.log"
+  check "vyomi update → latest release v${LATEST:-?}" $? "exit $rc; compose v$got; $(grep -m1 -E 'Updating|latest release' <<<"$o")"
+  # ... and from an older install it fetches the newer compose (checksum-verified).
+  if [[ "$NAME" == *vyomi-docker* ]] && [ -n "${cf:-}" ] && [ -f "$cf" ]; then
+    sed -E 's#vyomi/appliance:[0-9.]+#vyomi/appliance:3.0.0#g' "$cf" > "$CT/old.yml"
+    rm -rf "$CT/home/.vyomi"; : > "$CT/docker.log"
+    o=$(vy VYOMI_BUNDLED_COMPOSE="$CT/old.yml" vyomi update 2>&1); rc=$?; echo "$o" > "$OUT/$NAME-update-from-old.txt"
+    got=$(pin "$CT/home/.vyomi/docker-compose.cloudlite.yml")
+    [ "$rc" = 0 ] && [ -n "$LATEST" ] && [ "$got" = "$LATEST" ] && grep -q '\.vyomi/docker-compose.cloudlite.yml.* pull' "$CT/docker.log"
+    check "vyomi update from v3.0.0 → v${LATEST:-?} (SHA256-checked)" $? "exit $rc; cached compose v${got:-none}"
+    o=$(vy VYOMI_BUNDLED_COMPOSE="$CT/old.yml" vyomi --version 2>&1)
+    echo "$o" | grep -q "compose   : v$LATEST"; check "after update, vyomi runs the cached v${LATEST:-?}" $? "$(echo "$o" | grep compose)"
+  fi
+  rm -rf "$CT"
+fi
 if [ "$KIND" = brew ]; then
   out=$(brew test "$PKG" 2>&1); rc=$?; echo "$out" > "$OUT/$NAME-brew-test.log"
   check "brew test $PKG" "$rc" "$(echo "$out" | tail -1)"

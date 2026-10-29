@@ -321,6 +321,42 @@ RESOURCE_CATALOG_GCP = [
         ],
     },
     # ========================================================================
+    # Artifact Registry — repositories for container images and language
+    # packages (core/gcp_artifactregistry_core.py, the engine the native
+    # artifactregistry/v1 wire serves).
+    # ========================================================================
+    {
+        "key": "artifactregistry", "label": "Artifact Registry", "icon": "inventory_2",
+        "namespace": "GCP/ArtifactRegistry", "service": "artifactregistry",
+        "collection_path": "/api/gcp/artifactregistry/repositories",
+        "resource_path":   "/api/gcp/artifactregistry/repositories/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "repositories": {"method": "GET",    "path": "/api/gcp/artifactregistry/repositories"},
+            "packages":     {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listPackages/{name}"},
+            "versions":     {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listVersions/{name}"},
+            "tags":         {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listTags/{name}"},
+            "images":       {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listImages/{name}"},
+            "pushSample":   {"method": "POST",   "path": "/api/gcp/sub/artifactregistry/pushSample/{name}"},
+            "delete":       {"method": "DELETE", "path": "/api/gcp/artifactregistry/repositories/{name}"},
+        },
+        "columns": [
+            ["name",       "Name"],
+            ["format",     "Format"],
+            ["mode",       "Mode"],
+            ["location",   "Location"],
+            ["encryption", "Encryption"],
+            ["size",       "Size"],
+            ["created",    "Created"],
+        ],
+        "createFields": [
+            {"name": "name",     "label": "Name",     "default": "my-repo"},
+            {"name": "format",   "label": "Format",   "default": "DOCKER"},
+            {"name": "location", "label": "Location", "default": "us-central1"},
+        ],
+    },
+    # ========================================================================
     # Cloud KMS — keys + key rings + versions + EKM
     # ========================================================================
     {
@@ -469,6 +505,50 @@ RESOURCE_CATALOG_GCP = [
             {"name": "detail",         "label": "Scopes / audience / data",    "default": "https://www.googleapis.com/auth/cloud-platform"},
             {"name": "lifetime",       "label": "Lifetime (access tokens)",    "default": "3600s"},
             {"name": "delegates",      "label": "Delegates (comma-separated service account emails)", "default": ""},
+        ],
+    },
+    # ========================================================================
+    # Cloud Monitoring — alert policies (+ notification channels, custom metrics, time series,
+    # uptime checks, groups over the native API; core/gcp_monitoring_core.py). Console REST at
+    # /api/gcp/monitoring/*; the native /v3/projects/* wire serves the SDKs / gcloud.
+    # ========================================================================
+    {
+        "key": "monitoring", "label": "Cloud Monitoring", "icon": "monitoring",
+        "namespace": "GCP/Monitoring", "service": "monitoring",
+        "collection_path": "/api/gcp/monitoring/policies",
+        "resource_path":   "/api/gcp/monitoring/policies/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "policies": {"method": "GET",    "path": "/api/gcp/monitoring/policies"},
+            "enable":   {"method": "POST",   "path": "/api/gcp/sub/monitoring/enable/{name}"},
+            "disable":  {"method": "POST",   "path": "/api/gcp/sub/monitoring/disable/{name}"},
+            "delete":   {"method": "DELETE", "path": "/api/gcp/monitoring/policies/{name}"},
+        },
+        "columns": [
+            ["display_name",      "Policy name"],
+            ["id",                "Policy ID"],
+            ["state",             "Status"],
+            ["severity_text",     "Severity"],
+            ["metric_type",       "Metric"],
+            ["threshold_text",    "Threshold"],
+            ["condition_count",   "Conditions"],
+            ["channels_text",     "Notification channels"],
+            ["incidents",         "Incidents"],
+            ["last_modified",     "Last modified"],
+        ],
+        "createFields": [
+            {"name": "name",             "label": "Policy name",                         "default": "High CPU utilization"},
+            {"name": "metricType",       "label": "Metric type",                         "default": "compute.googleapis.com/instance/cpu/utilization"},
+            {"name": "resourceType",     "label": "Resource type",                       "default": "gce_instance"},
+            {"name": "comparison",       "label": "Condition (COMPARISON_GT, _GE, _LT, _LE, _EQ, _NE)", "default": "COMPARISON_GT"},
+            {"name": "threshold",        "label": "Threshold value",                     "default": "0.8"},
+            {"name": "duration",         "label": "Retest window (duration)",            "default": "300s"},
+            {"name": "alignmentPeriod",  "label": "Alignment period",                    "default": "60s"},
+            {"name": "aligner",          "label": "Aligner (ALIGN_MEAN, ALIGN_MAX, ...)", "default": "ALIGN_MEAN"},
+            {"name": "email",            "label": "Notification e-mail address",         "default": "ops@example.com"},
+            {"name": "severity",         "label": "Severity (CRITICAL, ERROR or WARNING)", "default": "WARNING"},
+            {"name": "documentation",    "label": "Documentation",                       "default": "CPU utilization above 80% for 5 minutes. Check the instance for runaway processes."},
         ],
     },
     # ========================================================================

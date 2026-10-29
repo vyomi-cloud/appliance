@@ -917,6 +917,39 @@ _KMS_WIZARD = {
 }
 
 
+# ===========================================================================
+# Kinesis Data Streams — Create data stream
+# ===========================================================================
+_KINESIS_WIZARD = {
+    "tabs": [
+        {"key": "basics", "label": "Data stream configuration", "sections": [
+            _account_section(),
+            {"label": "Data stream configuration", "fields": [
+                _name("Data stream name", "my-stream", r"^[a-zA-Z0-9_.-]{1,128}$",
+                      "1-128 chars: letters, digits, underscore, hyphen and period"),
+                {"name": "capacity_mode", "label": "Data stream capacity", "type": "radio",
+                 "default": "Provisioned", "options": [
+                    {"value": "On-demand",   "label": "On-demand — scales automatically, pay per GB"},
+                    {"value": "Provisioned", "label": "Provisioned — you choose the number of shards"},
+                 ]},
+                {"name": "shard_count", "label": "Provisioned shards", "type": "number",
+                 "default": 1, "validate": {"min": 1, "max": 200},
+                 "ifEquals": {"capacity_mode": "Provisioned"}},
+            ]},
+        ]},
+        {"key": "configuration", "label": "Data retention", "sections": [
+            {"label": "Data retention and encryption", "fields": [
+                {"name": "retention_hours", "label": "Data retention period (hours)", "type": "number",
+                 "default": 24, "validate": {"min": 24, "max": 8760}},
+            ]},
+        ]},
+        _tags_tab(),
+        _review_tab(),
+    ],
+    "synthetic_map": {},
+}
+
+
 # ---------------------------------------------------------------------------
 # Public registry — keyed by AWS catalog ``key``
 # ---------------------------------------------------------------------------
@@ -933,4 +966,5 @@ WIZARDS: dict[str, dict] = {
     "eventbridge":    _EVENTBRIDGE_WIZARD,
     "secretsmanager": _SECRETSMANAGER_WIZARD,
     "kms":            _KMS_WIZARD,
+    "kinesis":        _KINESIS_WIZARD,
 }

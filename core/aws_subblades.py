@@ -386,6 +386,34 @@ _KMS_SUB = [
 
 
 # ===========================================================================
+# Kinesis Data Streams — stream detail
+# ===========================================================================
+_KINESIS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Data stream", "items": [
+        {"key": "configuration", "label": "Configuration",       "icon": "tune",          "type": "properties"},
+        {"key": "shards",        "label": "Shards and consumers", "icon": "account_tree", "type": "json"},
+    ]},
+]
+
+
+# ===========================================================================
+# Amazon SNS — topic detail
+# ===========================================================================
+_SNS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Topic", "items": [
+        {"key": "subscriptions", "label": "Subscriptions",   "icon": "notifications_active", "type": "snssubs"},
+        {"key": "publish",       "label": "Publish message", "icon": "send",                 "type": "snspublish"},
+        {"key": "policy",        "label": "Access policy",   "icon": "policy",               "type": "snspolicy"},
+    ]},
+    {"group": "Configuration", "items": [
+        {"key": "properties",    "label": "Properties",      "icon": "info",                 "type": "properties"},
+    ]},
+]
+
+
+# ===========================================================================
 # ELBv2 — load balancer detail
 # ===========================================================================
 _ELBV2_SUB = [
@@ -423,9 +451,54 @@ _LOGS_SUB = [
 ]
 
 
+# ===========================================================================
+# API Gateway V2 — HTTP / WebSocket API detail (generic `apigw2list` tab renderer;
+# `list_key` names the api_paths entry, `cols` the [field, label] grid columns)
+# ===========================================================================
+_APIGW2_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Develop", "items": [
+        {"key": "routes",       "label": "Routes",       "icon": "alt_route",   "type": "apigw2list", "list_key": "routes",
+         "cols": [["routeKey", "Route key"], ["target", "Target"], ["authorizationType", "Authorization"], ["routeId", "Route ID"]]},
+        {"key": "integrations", "label": "Integrations", "icon": "integration_instructions", "type": "apigw2list", "list_key": "integrations",
+         "cols": [["integrationId", "Integration ID"], ["integrationType", "Type"], ["integrationUri", "URI"], ["payloadFormatVersion", "Payload format"]]},
+        {"key": "authorizers",  "label": "Authorization", "icon": "lock_person", "type": "apigw2list", "list_key": "authorizers",
+         "cols": [["name", "Name"], ["authorizerType", "Type"], ["authorizerId", "Authorizer ID"]]},
+    ]},
+    {"group": "Deploy", "items": [
+        {"key": "stages",       "label": "Stages",       "icon": "rocket_launch", "type": "apigw2list", "list_key": "stages",
+         "cols": [["stageName", "Stage"], ["deploymentId", "Deployment"], ["autoDeploy", "Auto-deploy"], ["createdDate", "Created"]]},
+        {"key": "deployments",  "label": "Deployments",  "icon": "history",     "type": "apigw2list", "list_key": "deployments",
+         "cols": [["deploymentId", "Deployment ID"], ["deploymentStatus", "Status"], ["createdDate", "Created"], ["description", "Description"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "monitoring", "label": "Monitoring", "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
+# ===========================================================================
+# CloudWatch — alarm detail (tables read `full[field]` from the alarm GET)
+# ===========================================================================
+_CLOUDWATCH_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Alarm", "items": [
+        {"key": "details", "label": "Details", "icon": "info", "type": "listtable", "field": "details",
+         "columns": [["key", "Setting"], ["value", "Value"]]},
+        {"key": "history", "label": "History", "icon": "history", "type": "listtable", "field": "history",
+         "columns": [["timestamp", "Date"], ["type", "Type"], ["summary", "Description"]]},
+        {"key": "actions", "label": "Actions", "icon": "bolt", "type": "listtable", "field": "action_list",
+         "columns": [["state", "State"], ["action", "Action"], ["enabled", "Enabled"]]},
+    ]},
+    {"group": "Settings", "items": [*_settings_props_locks()]},
+]
+
+
 # ---------------------------------------------------------------------------
 # Public registry
 # ---------------------------------------------------------------------------
+
 SUB_BLADES: dict[str, list] = {
     "ec2":            _EC2_SUB,
     "s3":             _S3_SUB,
@@ -433,14 +506,18 @@ SUB_BLADES: dict[str, list] = {
     "rds":            _RDS_SUB,
     "dynamodb":       _DYNAMODB_SUB,
     "sqs":            _SQS_SUB,
+    "sns":            _SNS_SUB,
     "lambda":         _LAMBDA_SUB,
     "apigateway":     _APIGW_SUB,
+    "apigatewayv2":   _APIGW2_SUB,
     "ssm":            _SSM_SUB,
     "stepfunctions":  _SFN_SUB,
     "vpc":            _VPC_SUB,
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
     "kms":            _KMS_SUB,
+    "kinesis":        _KINESIS_SUB,
     "elbv2":          _ELBV2_SUB,
     "logs":           _LOGS_SUB,
+    "cloudwatch":     _CLOUDWATCH_SUB,
 }

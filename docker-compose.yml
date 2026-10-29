@@ -79,6 +79,28 @@ services:
       - "8222:8222"
     volumes:
       - vyomi-nats:/data
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8222/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  vyomi-victoriametrics:
+    profiles: ["full"]
+    # Shared metrics store (Apache-2.0) for CloudWatch (and, later, Managed Prometheus / Cloud Monitoring /
+    # Azure Monitor): the CloudWatch engine mirrors PutMetricData samples here; PromQL/MetricsQL/Grafana read them.
+    image: victoriametrics/victoria-metrics:v1.104.0
+    command: ["-retentionPeriod=1d", "-memory.allowedPercent=10", "-storageDataPath=/storage"]
+    ports:
+      - "8428:8428"
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8428/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
   vyomi-valkey:
@@ -92,6 +114,42 @@ services:
     mem_limit: 128m
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  vyomi-registry:
+    profiles: ["full"]
+    # Shared OCI registry data plane for Artifact Registry (and, later, ECR / ACR): a real
+    # `docker push` target. CNCF Distribution (Apache-2.0). Images are namespaced
+    # {project}/{repo}/{image}; the engine ingests them from /v2/_catalog.
+    image: registry:2.8.3
+    ports:
+      - "5000:5000"
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5000/v2/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  vyomi-gateway:
+    profiles: ["full"]
+    # Shared L7 gateway (Caddy, Apache-2.0) for API Gateway V2 invoke URLs
+    # (https://{api-id}.execute-api.localhost:9443, http on :9080) and, later, ELB / API Gateway v1 /
+    # GCP API Gateway / APIM. Routes are applied live through the admin API (:2019, internal only);
+    # Caddy forwards to the simulator's integration handler (/_apigw/*).
+    image: caddy:2.8.4-alpine
+    entrypoint: ["/bin/sh", "-c"]
+    command: ['echo ''{"admin":{"listen":"0.0.0.0:2019"}}'' > /tmp/init.json && exec caddy run --config /tmp/init.json']
+    ports:
+      - "9080:9080"
+      - "9443:9443"
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -247,6 +305,8 @@ services:
       CLOUDLEARN_VAULT_TOKEN: vyomi-dev-token
       CLOUDLEARN_NATS_URL: nats://vyomi-nats:4222
       CLOUDLEARN_VALKEY_HOST: vyomi-valkey
+      CLOUDLEARN_REGISTRY_HOST: vyomi-registry
+      CLOUDLEARN_VICTORIAMETRICS_URL: http://vyomi-victoriametrics:8428
       CLOUDLEARN_VALKEY_PORT: "6379"
       CLOUDLEARN_MINIO_URL: http://vyomi-minio:9000
       CLOUDLEARN_MINIO_ACCESS_KEY: cloudlearn

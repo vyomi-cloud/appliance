@@ -1,6 +1,6 @@
 /* Vyomi Nano — boot screen ("nano kernel").
  *
- * Shown on EVERY launch of the dashboard and the consoles, drawn by the first
+ * Shown ONCE per launch (the first Nano page opened; see SEEN below), drawn by the first
  * script in <body> so nothing can hide it, and closed the moment the page is
  * ready. It prints the REAL boot steps with their real timings (the callers in
  * clouds.html and nano-boot.js report them); there is no scripted animation of
@@ -24,6 +24,19 @@
   var off = params.get("nokernel") === "1";
   try { off = off || localStorage.getItem("vyomi.nano.kernel") === "off"; } catch (_) {}
   if (navigator.webdriver && params.get("kernel") !== "1") off = true;   // never in the way of UI tests
+
+  // Once per launch, not per page: only the first Nano page shows it. Every page
+  // after that (a space click, a console, a reload, another tab) skips it while
+  // any Nano page stays open; each open page refreshes SEEN every minute, so a
+  // new launch = no Nano page open for LAUNCH_GAP_MS. The one service-worker
+  // reload of the first boot still shows it (its log is carried in KEY).
+  var SEEN = "vyomi.nano.kernel.seen", LAUNCH_GAP_MS = 30 * 60 * 1000;
+  var carrying = false, last = 0;
+  try { carrying = !!sessionStorage.getItem(KEY); } catch (_) {}
+  try { last = +localStorage.getItem(SEEN) || 0; } catch (_) {}
+  if (!carrying && params.get("kernel") !== "1" && Date.now() - last < LAUNCH_GAP_MS) off = true;
+  function seen() { try { localStorage.setItem(SEEN, String(Date.now())); } catch (_) {} }
+  seen(); setInterval(seen, 60000);
   var reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // 5x7 dot-matrix font for the wordmark.

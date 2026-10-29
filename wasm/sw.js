@@ -147,6 +147,7 @@ const NANO_SERVICES = [
   { name: "kms",            label: "KMS engine",          category: "aws" },
   { name: "secretsmanager", label: "Secrets (KV)",        category: "aws" },
   { name: "sqs",            label: "Messaging (SQS/SNS)", category: "aws" },
+  { name: "cloudwatch",     label: "CloudWatch",          category: "aws" },
   { name: "iam",            label: "IAM",                 category: "aws" },
   { name: "rds",            label: "SqlStore (RDS)",      category: "aws" },
   { name: "gcp",            label: "ResourceStore (GCP)", category: "gcp" },
@@ -208,10 +209,12 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {"microsoft.compute/virtualmachines":70.08,"microsoft.storage/storageaccounts":0.50,"microsoft.sql/servers":4.99,"microsoft.servicebus/namespaces":9.81,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.apimanagement/service":48.42,"microsoft.network/virtualnetworks":0,"microsoft.network/networksecuritygroups":0,"microsoft.eventgrid/topics":0.60,"microsoft.keyvault/vaults":0.03,"microsoft.app/containerapps":39.42,"microsoft.appconfiguration/configurationstores":36.50,"microsoft.network/dnszones":0.50,"microsoft.insights/metricalerts":0.10,"microsoft.operationalinsights/workspaces":2.76,"microsoft.cognitiveservices/accounts":1.00,"microsoft.authorization/roledefinitions":0,blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
+const NANO_RATE = {"microsoft.compute/virtualmachines":70.08,"microsoft.storage/storageaccounts":0.50,"microsoft.sql/servers":4.99,"microsoft.servicebus/namespaces":9.81,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.apimanagement/service":48.42,"microsoft.network/virtualnetworks":0,"microsoft.network/networksecuritygroups":0,"microsoft.eventgrid/topics":0.60,"microsoft.keyvault/vaults":0.03,"microsoft.app/containerapps":39.42,"microsoft.appconfiguration/configurationstores":36.50,"microsoft.network/dnszones":0.50,"microsoft.insights/metricalerts":0.10,"microsoft.operationalinsights/workspaces":2.76,"microsoft.cognitiveservices/accounts":1.00,"microsoft.authorization/roledefinitions":0,blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,sns:0.50,cloudwatch:0.10,apigatewayv2:1.00,kinesis:10.95,monitoring:0.10};
+NANO_RATE.artifactregistry = 0.50;   // core/cost_model.py gcp.artifactregistry
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
+  const by_service = {};     // "<cloud>.<service>" -> USD/month, same keys as the appliance's cost_savings
   let resource_count = 0;
   for (const p of ["aws", "gcp", "azure"]) {
     let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
@@ -219,11 +222,15 @@ async function nanoCostSavings() {
     resource_count += c.resources || 0;
     const bs = c.by_service || {};
     let usd = 0;
-    for (const k in bs) usd += (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+    for (const k in bs) {
+      const svcUsd = (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+      usd += svcUsd;
+      by_service[p + "." + k] = Math.round(svcUsd * 100) / 100;
+    }
     by_provider[p] = Math.round(usd * 100) / 100;
   }
   const savings_usd = Math.round((by_provider.aws + by_provider.gcp + by_provider.azure) * 100) / 100;
-  return { resource_count, savings_usd, by_provider, period: "monthly" };
+  return { resource_count, savings_usd, by_provider, by_service, period: "monthly" };
 }
 
 // Each console gates on an active space whose provider matches it. We derive
@@ -566,6 +573,14 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/aws\/secrets\/(.+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "secrets", "GetSecret", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "secrets", "DeleteSecret", { name: dec(m[1]) }] };
+  // ── CloudWatch alarms (core/cloudwatch_core.py) ─────────────────────
+  if (path === "/api/aws/cloudwatch/alarms") {
+    if (method === "GET")  return { tuple: ["aws", "cloudwatch", "ListAlarms", {}] };
+    if (method === "POST") return { tuple: ["aws", "cloudwatch", "CreateAlarm", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/cloudwatch\/alarms\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "cloudwatch", "GetAlarm", { name: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "cloudwatch", "DeleteAlarm", { name: dec(m[1]) }] };
   // ── KMS (core/kms_core.py) ──────────────────────────────────────────
   if (path === "/api/aws/kms/keys") {
     if (method === "GET")  return { tuple: ["aws", "kms", "ListKeys", {}] };
@@ -600,6 +615,17 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "apigateway", "GetApi", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "apigateway", "DeleteApi", { name: dec(m[1]) }] };
+  // API Gateway V2 (core/apigatewayv2_core.py) — HTTP/WebSocket APIs
+  if (path === "/api/apigatewayv2/apis") {
+    if (method === "GET")  return { tuple: ["aws", "apigatewayv2", "ListApis", {}] };
+    if (method === "POST") return { tuple: ["aws", "apigatewayv2", "CreateApi", body || {}] };
+  }
+  m = path.match(/^\/api\/apigatewayv2\/apis\/([^/]+)\/(routes|integrations|stages|deployments|authorizers|models)$/);
+  if (m && method === "GET") return { tuple: ["aws", "apigatewayv2", "ListChildren", { id: dec(m[1]), kind: m[2] }] };
+  m = path.match(/^\/api\/apigatewayv2\/apis\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "apigatewayv2", "GetApi", { id: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "apigatewayv2", "UpdateApi", { id: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "apigatewayv2", "DeleteApi", { id: dec(m[1]) }] };
   // Systems Manager Parameter Store (core/ssm_core.py) — names carry slashes, so match greedily
   if (path === "/api/ssm/parameters") {
     if (method === "GET")  return { tuple: ["aws", "ssm", "ListParameters", {}] };
@@ -662,6 +688,17 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "extras", "List",   { key: _ex[1] }] };
     if (method === "POST") return { tuple: ["aws", "extras", "Create", { key: _ex[1], ...(body || {}) }] };
   }
+  // Kinesis Data Streams (core/kinesis_core.py) — streams + put record
+  if (path === "/api/kinesis/streams") {
+    if (method === "GET")  return { tuple: ["aws", "kinesis", "ListStreams", {}] };
+    if (method === "POST") return { tuple: ["aws", "kinesis", "CreateStream", body || {}] };
+  }
+  m = path.match(/^\/api\/kinesis\/streams\/([^/]+)\/put$/);
+  if (m && method === "POST") return { tuple: ["aws", "kinesis", "PutRecord", { name: dec(m[1]), ...(body || {}) }] };
+  m = path.match(/^\/api\/kinesis\/streams\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "kinesis", "GetStream", { name: dec(m[1]) }] };
+  if (m && (method === "PUT" || method === "PATCH")) return { tuple: ["aws", "kinesis", "UpdateStream", { name: dec(m[1]), body: body || {} }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "kinesis", "DeleteStream", { name: dec(m[1]) }] };
   // CloudWatch Logs (core/logs_core.py) — the console REST under /api/logs/*
   m = path.match(/^\/api\/logs\/(.+)$/);
   if (m) return { tuple: ["aws", "logs", "Console", { method, path: m[1], query: query || {}, body: body || {} }] };
@@ -679,6 +716,10 @@ async function route(method, path, body, query) {
   if (m && method === "POST") return { tuple: ["aws", "elbv2", "CreateChild", { ...(body || {}), kind: m[1] }] };
   m = path.match(/^\/api\/aws\/elbv2\/(target-groups|listeners)\/([^/]+)$/);
   if (m && method === "DELETE") return { tuple: ["aws", "elbv2", "DeleteChild", { kind: m[1], name: dec(m[2]) }] };
+  // Amazon SNS (core/sns_core.py) — topics, subscriptions, platform applications, message log
+  if (path.startsWith("/api/aws/sns/") && (method === "GET" || method === "POST" || method === "DELETE" || method === "PATCH"))
+    return { tuple: ["aws", "sns", method === "GET" ? "GetSnsResource" : "WriteSnsResource",
+                     { method, path, query: query || {}, body: body || {} }] };
   // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
   if (path === "/api/eventbridge/rules") {
     if (method === "GET")  return { tuple: ["aws", "eventbridge", "ListRules", {}] };

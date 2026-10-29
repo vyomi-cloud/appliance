@@ -43,7 +43,7 @@ _REGISTRY: dict[str, CloudProvider] = {}
 _MUTATING_OPS = {
     "Create", "Update", "Delete", "Terminate", "Start", "Stop", "Reboot", "Modify",
     # native sub-resource ops seen on the _resource path (GCP cores)
-    "CreateSubscription", "CreateDatabase", "DeleteObject", "PutObject", "Pause", "Resume", "Run", "Resize", "Upgrade", "Failover",
+    "CreateSubscription", "CreateDatabase", "DeleteObject", "PutObject", "Pause", "Resume", "Run", "Enable", "Disable", "Resize", "Upgrade", "Failover",
 }
 
 
@@ -76,7 +76,18 @@ def _events_query(params: dict) -> dict:
             service=params.get("service") or None,
             limit=int(params.get("limit") or 200),
         )
-        return {"ok": True, "events": evs}
+        # The console's Activity tab reads the offline appliance's shape:
+        # {at, event, detail:{name, …}} — project the store's events onto it so the
+        # tab is filtered by resource and its Detail column is filled, like offline.
+        out = []
+        for e in evs:
+            d = e.get("detail")
+            d = dict(d) if isinstance(d, dict) else ({"note": d} if d else {})
+            d.setdefault("name", e.get("resource", ""))
+            d.setdefault("service", e.get("service", ""))
+            d.setdefault("status", e.get("status", ""))
+            out.append({**e, "at": e.get("ts", ""), "event": e.get("action", ""), "detail": d})
+        return {"ok": True, "events": out}
     except Exception as e:
         return {"ok": True, "events": [], "error": str(e)}
 
@@ -334,6 +345,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 "kms":            len(A.kms_list_keys().get("value", [])),
                 "secretsmanager": len(A.secrets_list().get("value", [])),
                 "sqs":            len(A.sqs_list_queues().get("queues", [])),
+                "cloudwatch":     len(A.cw_list().get("items", [])),
                 "iam": (len(A.iam_list_users().get("users", [])) +
                         len(A.iam_list_roles().get("roles", [])) +
                         len(A.iam_list_policies().get("policies", [])) +
@@ -341,7 +353,13 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 "rds":            len(A.rds_list().get("databases", [])),
                 "logs":           _logs_group_count(),
                 "elbv2":          len(_elb_census()),
+                "sns":            len(A.MSG.topics),
             }
+            try:   # API Gateway V2 lives in the shared registry store (console + relay wire)
+                from core import nano_registry
+                aws_counts["apigatewayv2"] = len(nano_registry.get()["apigwv2"].apis)
+            except Exception:
+                pass
             try:   # Systems Manager parameters live in the shared registry store
                 from core import nano_registry
                 aws_counts["ssm"] = len(nano_registry.get()["ssm"].parameters)
@@ -358,6 +376,11 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 aws_counts["apigateway"] = len(DP.apigw_list().get("apis", []))
                 aws_counts["vpc"] = len(DP.vpc_list().get("vpcs", []))
                 aws_counts["eventbridge"] = len(DP.extras_list({"key": "eventbridge/rules"}).get("value", []))
+            except Exception:
+                pass
+            try:   # Kinesis Data Streams live in the shared registry store (console + relay wire)
+                from core import nano_registry
+                aws_counts["kinesis"] = len(nano_registry.get()["kinesis"].streams)
             except Exception:
                 pass
             for svc, n in aws_counts.items():
@@ -416,7 +439,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                     by_service[svc] = by_service.get(svc, 0) + n
         if provider == "gcp":
             from . import gcp_core_adapter as GC
-            for svc in ("storage", "firestore", "kms", "secretmanager", "pubsub", "iam", "cloudsql", "cloudscheduler", "container", "iamcredentials", "redis"):
+            for svc in ("storage", "firestore", "kms", "secretmanager", "pubsub", "iam", "cloudsql", "cloudscheduler", "container", "iamcredentials", "monitoring", "redis", "artifactregistry"):
                 n = len(GC.resource_op(svc, "List").get("items", []))
                 if n:
                     by_service[svc] = by_service.get(svc, 0) + n

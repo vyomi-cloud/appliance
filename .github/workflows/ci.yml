@@ -29,6 +29,20 @@ jobs:
         run: python tests/launcher/test_launch_view_consistency.py
 
   # ── Backend stack + conformance (the gate) ──────────────────────────────
+  # ── Nano boot screen: once per launch (real browser) ────────────────────
+  nano-kernel-once:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Shows on the first Nano page only, not on space clicks / consoles / reloads
+        run: |
+          mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm i -s playwright@1.48.2 && npx playwright install --with-deps chromium >/dev/null
+          cd "$GITHUB_WORKSPACE/wasm" && (python3 -m http.server 8731 >/dev/null 2>&1 &) && sleep 1
+          cp "$GITHUB_WORKSPACE/wasm/ui-tests/kernel-once.mjs" /tmp/pw/ && node /tmp/pw/kernel-once.mjs
+
   conformance:
     runs-on: ubuntu-latest
     needs: lint

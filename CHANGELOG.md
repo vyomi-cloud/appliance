@@ -4,6 +4,241 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.30] — 2026-10-29
+
+New service release. **5 product fixes** (GCP 5); 2 reach Nano and 5 reach the offline appliance; 3 test and harness improvements.
+
+### Highlights
+
+- **GCP Cloud Monitoring is now a Vyomi service.** The offline appliance includes a Cloud Monitoring engine, so you can develop against it without a real GCP project.
+- **Cloud Monitoring works in the console and in Nano.** It has console pages and a catalog entry, and it runs in the browser at vyomi.cloud as well as offline.
+- **Nano lists and Metrics events behave better.** A race that could leave lists unpainted is fixed, and Metrics events now show up under their resource.
+- **GCP enable/disable requests now work offline.** The offline appliance now serves these calls, which Artifact Registry had broken.
+
+### New services
+
+- **GCP Cloud Monitoring**
+
+### Fixes — GCP
+
+- **[offline]** Serve enable/disable on /api/gcp/sub/ (exempt from alias rewrite since Artifact Registry)
+- **[Nano + offline]** Fix Nano UI crawl (list paint race, Metrics events under resource path)
+- **[offline]** Hourly hand-over, upstream watch, registry + manifest (ready)
+- **[Nano + offline]** Wire, console REST + catalog, Nano vendoring and adapter, Go SDK test bed
+- **[offline]** Cloud Monitoring engine core + unit tests
+
+<details><summary>Test and harness improvements (3)</summary>
+
+- Console tests (offline + Nano)
+- Gcloud CLI test bed
+- Java SDK test bed (REST API client; google-cloud-monitoring is gRPC-only)
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.30`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
+## [3.0.29] — 2026-10-29
+
+New service release. **6 product fixes** (GCP 6); 4 reach Nano and 6 reach the offline appliance.
+
+### Highlights
+
+- **A GCP container registry is now available in Nano and offline.** You can `docker push` images to it and they show up in the simulator, and the console catalog's sub-blades now merge correctly.
+- **GCP cost savings now work in the console.** The cost-savings view works in both the offline appliance and Nano, including usage events and initial slot setup.
+- **GCP services speak the native v1 wire format, and the console has more coverage.** The new GCP service's engine and console catalog are wired into Nano and the offline appliance.
+- **Java and Go GCP SDKs work offline.** Integer enums and method overrides now come through correctly on the wire, and the gcloud CLI is smoke-tested against the simulator. `MODE_UNSPECIFIED` is now treated as standard.
+
+### New services
+
+- **GCP Artifact Registry**
+
+### Fixes — GCP
+
+- **[Nano + offline]** Rebase onto main; shared registry:2 container backend (docker push ingested into the engine); fix catalog sub-blades merge
+- **[Nano + offline]** Space cost-savings offline (usage events, slot init) and Nano (census); gate green
+- **[Nano + offline]** Console tests (offline + Nano), hourly suites, upstream watch, registry, manifest (ready)
+- **[offline]** Java and Go SDK test beds; int enums and method override on the wire
+- **[offline]** Gcloud CLI smoke; MODE_UNSPECIFIED means standard
+- **[Nano + offline]** Engine, native v1 wire, console catalog, Nano wiring
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.29`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
+## [3.0.28] — 2026-10-29
+
+New service release. **7 product fixes** (AWS 7); 4 reach Nano and 6 reach the offline appliance; 3 test and harness improvements.
+
+### Highlights
+
+- **Amazon SNS is now available in Nano and offline.** You can work with topics, subscriptions, publish, batch publish, FIFO topics, platform applications and SMS, with a matching console experience in the browser and the offline appliance.
+- **SNS delivers messages to subscribers.** Notifications reach HTTP endpoints (with confirmation and signed notifications), Lambda and email, with retries, dead-letter queues and a FIFO deduplication window.
+- **SNS fans out to SQS in the offline appliance.** Messages published to a topic are delivered to subscribed SQS queues, scoped to your space.
+- **Publishing to an endpoint accepts platform-keyed JSON messages.** You can send a different message body per platform in a single publish call.
+- **SNS usage shows up in Nano's savings view.** Nano now counts SNS in its per-service savings figures.
+
+### New services
+
+- **AWS Amazon SNS**
+
+### Fixes — AWS
+
+- **[Nano + offline]** Push delivery through NATS JetStream (HTTP confirm+signed notify, Lambda, email, retries, DLQ, FIFO dedup window); manifest backend nats; Nano by_service savings
+- **[Nano]** Rebase onto main (merge conflicts, vendored core via build_cores, regenerated Nano fixtures)
+- **[offline]** Hourly suites, registry entry (pending-release), manifest ready
+- **[Nano + offline]** CLI smoke; endpoint publish accepts platform-keyed JSON messages
+- **[Nano + offline]** Console catalog + sub-blades + renderers, Nano wiring (sw routes, adapter, census, savings), vendored core
+- **[offline]** Offline wire + console REST (space-scoped store, SQS fan-out), cost model
+- **[offline]** SNS engine — full op surface (topics, subscriptions, publish/batch/FIFO, platform apps, SMS) + console REST + core conformance
+
+<details><summary>Test and harness improvements (3)</summary>
+
+- Java + Go SDK conformance beds
+- Nano console test
+- Offline console test
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.28`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
+## [3.0.27] — 2026-10-29
+
+New service release. **7 product fixes** (AWS 7); 5 reach Nano and 5 reach the offline appliance.
+
+### Highlights
+
+- **Amazon Kinesis Data Streams is now available.** The offline appliance includes a new Kinesis Data Streams engine, and it is wired into the console, service catalog and cost model in both Nano and the offline appliance.
+- **Kinesis works with the Java SDK, Go SDK and AWS CLI.** The simulator now speaks the CBOR wire format the Java SDK uses, and Java, Go and CLI clients are covered by test beds.
+- **Nano counts Kinesis streams in its census and prices them.** Streams show up in the Nano census, and list prices are applied so the savings figure updates with them.
+- **Nano activity events show real detail.** Each event in the Nano activity feed now carries a meaningful Detail instead of a blank one.
+
+### New services
+
+- **AWS Kinesis Data Streams**
+
+### Fixes — AWS
+
+- **[Nano]** Count streams in Nano census + list price so savings update
+- **[Nano]** Nano activity events carry a real Detail
+- **[offline]** Register test beds in the hourly suites, manifest ready
+- **[Nano + offline]** CBOR wire for the Java SDK, Java + CLI test beds
+- **[Nano + offline]** Go SDK test bed, offline console test, manifest, registry, upstream tracking
+- **[Nano + offline]** Offline wire + console routes, Nano wiring, catalog, cost model
+- **[offline]** Kinesis Data Streams engine + core conformance
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.27`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
+## [3.0.26] — 2026-10-29
+
+New service release. **4 product fixes** (AWS 4); 4 reach Nano and 4 reach the offline appliance; 1 test and harness improvements.
+
+### Highlights
+
+- **Metrics get a shared VictoriaMetrics backend.** Metrics from the simulator are now stored in VictoriaMetrics, in both Nano and the offline appliance.
+- **CBOR encoding fixed.** Responses for services that use the CBOR wire format are now encoded correctly, in both Nano and offline.
+- **Nano cost savings and activity detail improved.** The cost savings and activity detail views in Nano were updated in this release.
+- **Wider wire-format and SDK coverage.** The engine handles CBOR, JSON and Query protocols, and the Java and Go SDKs are now exercised against the simulator, along with the CLI and the console, in both Nano and offline.
+
+### New services
+
+- **AWS Amazon CloudWatch**
+
+### Fixes — AWS
+
+- **[Nano + offline]** VictoriaMetrics shared backend (compose, ci-services, metric sink), manifest backend
+- **[Nano + offline]** Fix CBOR encoder, Nano cost savings + activity detail, core unit tests
+- **[Nano + offline]** Java + Go SDK test beds, CLI smoke, console tests, suites/tracked/registry/manifest
+- **[Nano + offline]** Engine (CBOR/JSON/Query wire), offline routes, console catalog, Nano vendoring
+
+<details><summary>Test and harness improvements (1)</summary>
+
+- Fix UI tests' rail selector (matched CloudWatch Logs first)
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.26`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
+## [3.0.25] — 2026-10-29
+
+New service release. **14 product fixes** (AWS 11, all clouds 3); 10 reach Nano and 10 reach the offline appliance; 1 test and harness improvements.
+
+### Highlights
+
+- **New service: AWS API Gateway V2, in Nano and offline.** It now has a working data plane with live routes, Lambda proxy (1.0 and 2.0), JWT and Lambda authorizers, throttling, CORS and HTTP proxy, plus a console, Go SDK and CLI coverage.
+- **Boot screens for `vyomi up` and Nano.** Launching now shows a dot-matrix VYOMI banner with the real launch steps as they happen.
+- **The same launch view in every launcher.** Max (Multipass) and Windows now show the same launch view as the rest (offline appliance).
+- **Nano tunnel is stable.** It no longer loops between connecting and disconnecting.
+- **Fewer Nano console errors.** A stray script that failed on Nano's page is gone, and newer Nano cores for Azure and GCP are no longer overwritten.
+- **Console matches the real AWS console.** Routes and Authorization now show blank where the real console does, such as a route with no authorizer (offline appliance).
+
+### New services
+
+- **AWS API Gateway V2**
+
+### Fixes — AWS
+
+- **[Nano + offline]** Real data plane on the shared Caddy gateway (live routes, Lambda proxy 1.0/2.0, JWT/Lambda authorizers, throttling, CORS, HTTP proxy); repair merge of main
+- **[Nano]** Drop the shipped lazy_backends.js (main removed the include; the script threw on Nano's DOM)
+- **[Nano]** Don't regress main's newer Nano cores (azure_arm/gcp_kms/gcp_storage/nano_*); patch now applies to the portal copy
+- **[offline]** Declare Routes/Authorization blank (real console shows - with no authorizer)
+- **[Nano]** Ship assets/lazy_backends.js in the Nano bundle (consoles referenced it; crawl 404)
+- **[offline]** Declare in-process backend, mark ready
+- **[Nano + offline]** Nano console (SW routes, adapter, census cost savings), hourly suites, tracked upstream, registry + manifest
+- **[offline]** Offline console Playwright test + rail entry
+- **[Nano + offline]** Console REST, catalog, sub-blades, cost model, shared store
+- **[Nano + offline]** Go SDK + CLI test beds; drop non-modelled delete conflicts
+- **[Nano + offline]** Engine core + native /v2 wire + Nano vendoring + core test
+
+### Fixes — all clouds
+
+- **[offline]** The same launch view in every launcher — Max (Multipass) and Windows too
+- **[Nano + offline]** Boot screens — dot-matrix VYOMI + real launch steps for `vyomi up` and Nano
+- **[Nano]** Tunnel no longer loops connecting/disconnecting
+
+<details><summary>Platform and release pipeline (15)</summary>
+
+- User-reported issues are fixed first and closed when the fix ships
+- Platform-feature lane, highest priority in the service pipeline
+- Real release notes and a README 'Latest release' on every release
+- Never gate or auto-merge backend-upgrade PRs
+- Backend-upgrade lane — rebuild existing PR stacks onto main for human review
+- Drop Snap for good — delete packaging/snap
+- Daily PR gets its own concurrency group
+- Crawler recovers when a dialog blocks the service rail
+- Blanks the real console also shows are declared, not invented
+- Let the Claude agent run in self-chained runs (allowed_bots: github-actions)
+- Detect Claude usage limits from the agent's final result only
+- Cheap, permissively licensed offline backends, gate-enforced
+- Pipeline page covers every published AWS/GCP/Azure service (P3 folded per cloud)
+- Nano and offline ship new services together, feature-identical
+- Service pipeline page — per-cloud grid of gate, release and hourly/upstream hand-off
+
+</details>
+
+<details><summary>Test and harness improvements (1)</summary>
+
+- Java SDK test bed
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.25`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.24] — 2026-10-29
 
 Daily conformance release. **56 product fixes** (AWS 24, GCP 12, Azure 11, all clouds 9); 30 reach Nano and 41 reach the offline appliance; 17 test and harness improvements.

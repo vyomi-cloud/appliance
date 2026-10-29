@@ -61,7 +61,9 @@ from core import gcp_cloudsql_core as gcp_sql
 from core import gcp_cloudscheduler_core as gcp_sched
 from core import gcp_container_core as gcp_gke
 from core import gcp_iamcredentials_core as gcp_iamc
+from core import gcp_monitoring_core as gcp_mon
 from core import gcp_redis_core as gcp_redis
+from core import gcp_artifactregistry_core as gcp_ar
 
 
 def _gcp_service(path):
@@ -71,6 +73,8 @@ def _gcp_service(path):
         return "gcp-gcs"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
         return "gcp-cloudsql"
+    if path.startswith("/v3/projects/") or path == "/v3/uptimeCheckIps":   # Cloud Monitoring API v3
+        return "gcp-monitoring"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if "/projects/" in path:
@@ -80,6 +84,8 @@ def _gcp_service(path):
             return "gcp-container"
         if re.search(r"/locations/[^/]+/jobs([/:]|$)", path) or re.search(r"^/v1(beta1)?/projects/[^/]+/locations/?$", path):
             return "gcp-cloudscheduler"
+        if "/locations/" in path and ("/repositories" in path or "/operations/" in path):
+            return "gcp-artifactregistry"
         if "/databases/" in path and "/documents" in path:
             return "gcp-firestore"
         if "/keyRings" in path:
@@ -109,9 +115,12 @@ from core import eventbridge_core as events
 from core import logs_core as logs
 from core import lambda_core as lam
 from core import apigateway_core as apigw
+from core import apigatewayv2_core as apigw2
 from core import ssm_core as ssm
 from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
+from core import kinesis_core as kinesis
+from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
 import types as _types
@@ -162,7 +171,7 @@ _SIGNING = {
     "dynamodb": "dynamodb", "kms": "kms", "secretsmanager": "secretsmanager",
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
-    "events": "events", "lambda": "lambda", "ec2": "vpc", "logs": "logs", "states": "stepfunctions",
+    "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
     "ssm": "ssm",
 }
@@ -171,6 +180,7 @@ _SIGNING = {
 _TARGET_PREFIX = {
     "DynamoDB_": "dynamodb", "TrentService": "kms",
     "secretsmanager": "secretsmanager", "AmazonSQS": "sqs", "AWSEvents": "events",
+    "Kinesis_20131202": "kinesis",
     "Logs_20140328": "logs",
     "AmazonSSM": "ssm",
     "AWSStepFunctions": "stepfunctions",
@@ -218,6 +228,8 @@ _AMBIGUOUS_ELB = {"AddTags", "RemoveTags", "DescribeTags", "DescribeAccountLimit
 for _a in elbv2.OPERATIONS:
     if _a not in _AMBIGUOUS_ELB:
         _QUERY_ACTION.setdefault(_a, "elbv2")
+# CloudWatch actions whose names other Query services also use — routed by SigV4 scope only.
+_GENERIC_ACTIONS = {"TagResource", "UntagResource", "ListTagsForResource"}
 
 
 def _lower_headers(headers):
@@ -253,6 +265,8 @@ class AwsWireRouter:
         self.gcp_gke = s.get("gcp_gke") or gcp_gke.ContainerStore()   # Kubernetes Engine clusters
         self.gcp_redis = s.get("gcp_redis") or gcp_redis.RedisStore()   # Memorystore for Redis instances
         self.gcp_iamc = s.get("gcp_iamc") or gcp_iamc.IamCredentialsStore()   # IAM Service Account Credentials issue log
+        self.gcp_mon = s.get("gcp_mon") or gcp_mon.MonitoringStore()   # Cloud Monitoring (policies, channels, metrics, series)
+        self.gcp_ar = s.get("gcp_ar") or gcp_ar.ArtifactRegistryStore()
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -268,6 +282,9 @@ class AwsWireRouter:
         # API Gateway shares the Lambda store so an AWS_PROXY integration can reach
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
+        self.kinesis = s.get("kinesis") or kinesis.KinesisStore()   # Kinesis Data Streams
+        self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
+        self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
@@ -334,13 +351,20 @@ class AwsWireRouter:
             return "az-servicebus"
         if "/2015-03-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
             return "lambda"
+        if path.startswith("/v2/") and path[4:].split("/", 1)[0] in (   # API Gateway V2 control plane
+                "apis", "domainnames", "vpclinks", "tags", "portals", "portalproducts"):
+            return "apigatewayv2"
         if "/restapis" in path:               # API Gateway v1 control plane
             return "apigateway"
         if "microsoft.authorization" in path.lower():   # Azure RBAC checkAccess
             return "azure-sql-iam-rbac"
         if path.startswith("/azure-sql/") or path == "/azure-sql":  # Azure SQL data plane
             return "azure-sql"
+        if path.startswith("/service/" + cw.TARGET_PREFIX + "/") or lheaders.get("smithy-protocol") == "rpc-v2-cbor":
+            return "cloudwatch"            # CloudWatch rpc-v2-cbor (the default protocol of current SDKs)
         target = lheaders.get("x-amz-target", "") or ""
+        if target.startswith(cw.TARGET_PREFIX + "."):
+            return "cloudwatch"            # CloudWatch JSON 1.0
         if target:
             for prefix, svc in _TARGET_PREFIX.items():
                 if target.startswith(prefix):
@@ -358,6 +382,8 @@ class AwsWireRouter:
             svc = _QUERY_ACTION.get(action)
             if svc:
                 return svc
+            if action in cw.OPERATIONS and action not in _GENERIC_ACTIONS:
+                return "cloudwatch"
         if rds_data.is_data_api_path(path):  # unsigned Data API (rest-json path)
             return "rds-data"
         return "s3"  # default: bucket/key path-style
@@ -425,10 +451,20 @@ class AwsWireRouter:
             return {"status": r.status, "headers": dict(r.headers or {}),
                     "body": r.body or b""}
 
+        if svc == "cloudwatch":   # CloudWatch: rpc-v2-cbor / JSON 1.0 / Query on one engine
+            return cw.wire(self.cw, method, path, headers or {}, bytes(body), query or {})
+
         if svc == "lambda":   # native Lambda REST (function mgmt + sandboxed invoke)
             r = lam.dispatch(self.lam, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "apigatewayv2":   # native API Gateway V2 control plane (/v2/apis, …)
+            r = apigw2.dispatch(self.apigwv2, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            if r.media_type and r.body and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
@@ -461,7 +497,9 @@ class AwsWireRouter:
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
                 "gcp-container": (gcp_gke, self.gcp_gke), "gcp-iamcredentials": (gcp_iamc, self.gcp_iamc),
+                "gcp-monitoring": (gcp_mon, self.gcp_mon),
                 "gcp-redis": (gcp_redis, self.gcp_redis),
+                "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store
@@ -491,6 +529,11 @@ class AwsWireRouter:
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
+        if svc == "kinesis":   # JSON 1.1 (boto3/Go/CLI) or CBOR (Java SDK) by Content-Type
+            status, hdrs, out = kinesis.handle_wire(self.kinesis, lheaders.get("x-amz-target", "") or "",
+                                                    bytes(body), lheaders.get("content-type", ""))
+            return {"status": status, "headers": hdrs, "body": out}
+
         if svc in _JSON_CT:
             target = lheaders.get("x-amz-target", "") or ""
             payload = self._json_body(body)
@@ -502,6 +545,8 @@ class AwsWireRouter:
                 r = secrets.dispatch(self.sec, target, payload)
             elif svc == "events":
                 r = events.dispatch(self.events, target, payload)
+            elif svc == "kinesis":
+                r = kinesis.dispatch(self.kinesis, target, payload)
             elif svc == "logs":
                 r = logs.dispatch(self.logs, target, payload)
             elif svc == "ssm":

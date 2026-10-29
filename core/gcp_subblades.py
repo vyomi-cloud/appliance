@@ -370,6 +370,34 @@ _IAMCREDENTIALS_SUB = [
 
 
 # ============================================================================
+# Cloud Monitoring — alert policy detail (generic `schedkv` renderer; every value filled)
+# ============================================================================
+_MONITORING_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Alert policy", "items": [
+        {"key": "conditions", "label": "Conditions", "icon": "rule", "type": "schedkv",
+         "fields": [["condition_summary", "Conditions"], ["combiner_text", "Trigger when"], ["metric_type", "Metric"],
+                    ["threshold_text", "Threshold"], ["duration_text", "Retest window"]]},
+        {"key": "notifications", "label": "Notifications", "icon": "notifications", "type": "schedkv",
+         "fields": [["channels_text", "Notification channels"], ["channel_count", "Channel count"],
+                    ["severity_text", "Severity"], ["incidents", "Incidents"]]},
+        {"key": "documentation", "label": "Documentation", "icon": "description", "type": "schedkv",
+         "fields": [["documentation_text", "Documentation"], ["labels_text", "User labels"]]},
+        {"key": "history", "label": "History", "icon": "history", "type": "schedkv",
+         "fields": [["created", "Created"], ["created_by", "Created by"], ["last_modified", "Last modified"],
+                    ["state", "Status"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
+# ============================================================================
 # Memorystore for Redis — instance detail (reuses the generic `schedkv` key/value renderer:
 # `fields` is [[field, label], …] read off the instance's console view, every value filled)
 # ============================================================================
@@ -401,6 +429,34 @@ _REDIS_SUB = [
 ]
 
 
+# ============================================================================
+# Artifact Registry — repository detail
+# ============================================================================
+_ARTIFACTREGISTRY_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Artifacts", "items": [
+        {"key": "images",   "label": "Images",   "icon": "deployed_code", "type": "sublist",
+         "source": "images", "empty": "No images yet. Push one with docker, or use Push sample image.",
+         "columns": [["name", "Image"], ["digest", "Digest"], ["tags", "Tags"], ["size", "Size"], ["uploaded", "Uploaded"]],
+         "actions": [{"label": "Push sample image", "op": "pushSample"}]},
+        {"key": "packages", "label": "Packages", "icon": "inventory_2", "type": "sublist",
+         "source": "packages", "empty": "No packages in this repository.",
+         "columns": [["name", "Package"], ["versions", "Versions"], ["tags", "Tags"], ["created", "Created"], ["updated", "Updated"]]},
+        {"key": "versions", "label": "Versions", "icon": "history", "type": "sublist",
+         "source": "versions", "empty": "No versions in this repository.",
+         "columns": [["name", "Version"], ["package", "Package"], ["tags", "Tags"], ["size", "Size"], ["created", "Created"]]},
+        {"key": "tags",     "label": "Tags",     "icon": "sell", "type": "sublist",
+         "source": "tags", "empty": "No tags in this repository.",
+         "columns": [["name", "Tag"], ["package", "Package"], ["version", "Version"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "labels", "label": "Labels", "icon": "sell", "type": "tags"},
+        {"key": "iam",    "label": "Permissions", "icon": "admin_panel_settings", "type": "iam"},
+        *_settings_props(),
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -414,9 +470,11 @@ SUB_BLADES: dict[str, list] = {
     "iam":           _IAM_SUB,
     "eventarc":      _EVENTARC_SUB,
     "secretmanager": _SECRETMANAGER_SUB,
+    "artifactregistry": _ARTIFACTREGISTRY_SUB,
     "kms":           _KMS_SUB,
     "cloudscheduler": _CLOUDSCHEDULER_SUB,
     "iamcredentials": _IAMCREDENTIALS_SUB,
     "container":     _CONTAINER_SUB,
+    "monitoring":    _MONITORING_SUB,
     "redis":         _REDIS_SUB,
 }

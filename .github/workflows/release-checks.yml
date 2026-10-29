@@ -1,7 +1,8 @@
 name: Release checks report
 
 # After every appliance release: install → check → uninstall each Linux/macOS
-# package (DEB + RPM, both variants; Homebrew vyomi + vyomi-docker), collect
+# package (DEB + RPM, both variants; Homebrew vyomi + vyomi-docker) and every
+# vyomi command (--version, help, doctor, status, logs, down, update), collect
 # the MSI (Validate Windows MSI), startup (Validate release startup) and
 # Windows E2E (private vyomi-cloud/release-e2e) results, and commit one
 # RELEASE-CHECKS.md to the release/vX.Y.Z branch.
@@ -160,9 +161,9 @@ jobs:
             echo
             echo "| Package / check | Platform | Result |"
             echo "|---|---|---|"
-            echo "| DEB: cloud-learn + vyomi-docker | Ubuntu (GitHub) | $(res "${{ needs.deb.result }}") |"
-            echo "| RPM: cloud-learn + vyomi-docker | Fedora 40 (GitHub) | $(res "${{ needs.rpm.result }}") |"
-            echo "| Homebrew: vyomi + vyomi-docker | macOS (GitHub) | $(res "${{ needs.brew.result }}") |"
+            echo "| DEB: cloud-learn + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | $(res "${{ needs.deb.result }}") |"
+            echo "| RPM: cloud-learn + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | $(res "${{ needs.rpm.result }}") |"
+            echo "| Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | $(res "${{ needs.brew.result }}") |"
             while IFS='|' read -r label wf id concl; do
               case "$label" in
                 msi) name="MSI: install, upgrade, uninstall (+ signing)"; plat="Windows (GitHub)"; link="${{ github.server_url }}/$R/actions/runs/$id" ;;

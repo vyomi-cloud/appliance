@@ -44,6 +44,7 @@ from core.iam_store import InMemoryIamStore
 from core import iam_core as iam
 from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
+from core import cloudwatch_core as cw
 
 # Shared registry (Fix #2): the console adapter and the native-wire relay
 # (AwsWireRouter via stores=) draw from ONE store set, so console-created resources
@@ -57,6 +58,7 @@ SEC = _R["sec"]
 RDB = _R["rds"]
 IAM = _R["iam"]
 MSG = _R["msg"]
+CW = _R["cw"]
 REGION = "us-east-1"
 
 _CODE_RE = re.compile(rb"<Code>([^<]+)</Code>")
@@ -623,3 +625,20 @@ def rds_snapshots(p=None):
     return {"ok": True, "snapshots": [{"snapshot_id": s["db_snapshot_identifier"],
             "db_instance": s["db_instance_identifier"], "status": s["status"],
             "type": s.get("snapshot_type", "manual"), "created": s.get("created", "")} for s in snaps]}
+
+
+# ── CloudWatch (alarms console; native wire in core/cloudwatch_core.py) ─────
+def cw_list(p=None):
+    return cw.console_list(CW)
+
+
+def cw_create(p):
+    return cw.console_create(CW, p or {})
+
+
+def cw_get(p):
+    return cw.console_get(CW, str(p.get("name") or ""))
+
+
+def cw_delete(p):
+    return cw.console_delete(CW, str(p.get("name") or ""))

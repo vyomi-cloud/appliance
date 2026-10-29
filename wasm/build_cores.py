@@ -41,6 +41,7 @@ CORES = [
     "gcp_pubsub_core.py",                           # GCP: Pub/Sub REST (native google-cloud-pubsub)
     "gcp_iam_core.py",                              # GCP: Cloud IAM REST (SA + policy eval)
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
+    "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
     "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
     "azure_cosmos_core.py",                         # Azure: Cosmos DB SQL/Core API (native azure-cosmos)
     "azure_keyvault_secrets_core.py",               # Azure: Key Vault secrets (native azure-keyvault-secrets)
@@ -52,13 +53,19 @@ CORES = [
     "eventbridge_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
+    "cost_model.py",                                # list prices -> the space cost-savings metrics (pure data)
+    "kinesis_core.py",                             # AWS: Kinesis Data Streams (shards, records, iterators, consumers)
+    "apigatewayv2_core.py",                        # AWS: API Gateway V2 control plane
+    "apigatewayv2_gateway.py",                     # AWS: API Gateway V2 data plane (authorizers, throttling, CORS, Lambda proxy)
     "elbv2_core.py",                                # AWS: Elastic Load Balancing v2 control plane — native Query wire + console REST
     "ssm_core.py",                                 # AWS: Systems Manager (Parameter Store, documents, Run Command, windows, baselines)
     "gcp_cloudscheduler_core.py",                  # expansion GCP: Cloud Scheduler (jobs, cron, pause/resume/run)
     "gcp_iamcredentials_core.py",                  # expansion GCP: IAM Service Account Credentials (access/ID tokens, signBlob, signJwt)
     "gcp_redis_core.py",                           # expansion GCP: Memorystore for Redis (instances, failover, upgrade, import/export, operations)
+    "gcp_monitoring_core.py",                      # expansion GCP: Cloud Monitoring (alert policies, channels, metrics, time series, uptime checks)
     "gcp_container_core.py",                       # expansion GCP: Kubernetes Engine (clusters, node pools, operations)
     "stepfunctions_core.py",                       # AWS: Step Functions (ASL interpreter, executions, activities)
+    "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)
     "logs_core.py",                                # expansion AWS: CloudWatch Logs (log groups/streams/events/insights) — vendored VERBATIM
     "persistent_store.py",                          # v2.4.0: file-backed (sqlite) substrate — the anti-drift gate
@@ -78,7 +85,7 @@ CORES = [
 
 # Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
 # Nano copy of a new service's engine to be identical to core/.
-VERBATIM = {"logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py"}
+VERBATIM = {"gcp_monitoring_core.py", "cloudwatch_core.py", "apigatewayv2_core.py", "logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "gcp_artifactregistry_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
@@ -158,8 +165,25 @@ def check_relay_cores():
     print("relay CORES lists are import-closed ✓")
 
 
+def _expansion_cores():
+    """Cores of services built by the expansion agent (services/manifests/*.json).
+    The service gate requires their Nano copy to be BYTE-IDENTICAL to core/, so they are
+    vendored without the GENERATED header (the file is the canonical source verbatim)."""
+    import glob
+    import json
+    out = set()
+    for f in glob.glob(os.path.join(ROOT, "services", "manifests", "*.json")):
+        try:
+            out.add(os.path.basename(json.load(open(f)).get("core", "")))
+        except Exception:
+            pass
+    out.discard("")
+    return out
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    verbatim = _expansion_cores()
     # Make wasm/core an importable package mirror of the repo `core` package, so
     # the vendored modules' `from core.object_store import ...` resolve in Pyodide.
     with open(os.path.join(OUT, "__init__.py"), "w") as f:
@@ -168,9 +192,7 @@ def main():
         with open(os.path.join(SRC, name)) as f:
             src = f.read()
         with open(os.path.join(OUT, name), "w") as f:
-            # New services are vendored byte-identical (the service gate compares
-            # core/ and wasm/core/ verbatim); legacy cores keep the generated header.
-            f.write(src if name in VERBATIM else HEADER + src)
+            f.write(src if name in verbatim else HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
     check_relay_cores()   # fail loudly if a relay loader lags the cores
 

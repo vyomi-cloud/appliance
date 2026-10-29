@@ -1054,6 +1054,8 @@ def _aws_query_target_service(request: Request) -> str:
         return "secretsmanager"
     if target.startswith("AWSEvents."):
         return "events"
+    if target.startswith("Kinesis_20131202."):
+        return "kinesis"
     if target.startswith("Logs_20140328."):
         return "logs"
     if target.startswith("AmazonSSM."):
@@ -1148,9 +1150,15 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             if str(params.get("Action", "")).strip() in _EC2_VPC_ACTIONS:
                 return await _srv().api_vpc_query(request)
             return await _srv().api_ec2_query(request)
+        if service == "kinesis":
+            from routes.aws_kinesis import handle_wire as _kinesis_wire
+            return await _kinesis_wire(request)
         if service == "logs":
             from routes import aws_logs as _aws_logs
             return await _aws_logs.wire(request)
+        if service == "monitoring":
+            from routes.aws_cloudwatch import handle as _cw_handle
+            return await _cw_handle(request)
         if service == "sqs":
             return await _srv().api_sqs_query(request)
         if service == "elasticloadbalancing":
@@ -1158,6 +1166,9 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             from routes.aws_elbv2 import STORE as _elb_store
             _elb_r = _elb.dispatch(_elb_store, await _srv()._ec2_query_params(request))
             return Response(content=_elb_r.body, status_code=_elb_r.status, media_type="text/xml")
+        if service == "sns":
+            from routes.aws_sns import sns_query as _sns_wire
+            return await _sns_wire(request)
         if service == "rds":
             return await _srv().api_rds_query(request)
         if service == "dynamodb":

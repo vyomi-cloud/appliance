@@ -80,8 +80,11 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.lambda": 0.20,       # minimal invocations
     "aws.s3": 0.50,           # ~20GB storage
     "aws.sqs": 0.40,          # ~1M requests
+    "aws.kinesis": 10.95,     # 1 provisioned shard x 730h @ $0.015/shard-hour
+    "aws.sns": 0.50,          # per topic: ~1M publishes at $0.50 per million
     "aws.dynamodb": 1.25,     # on-demand, light usage
     "aws.apigateway": 3.50,   # ~1M calls
+    "aws.apigatewayv2": 1.00, # HTTP API $1.00/M requests (~1M calls)
     "aws.stepfunctions": 2.50, # Standard workflow: $0.025/1K state transitions (~100K/month)
     "aws.vpc": 0.00,          # free (NAT GW extra)
     "aws.logs": 2.53,         # CloudWatch Logs: ~5GB ingested ($0.50/GB) + ~1GB stored ($0.03/GB)
@@ -89,6 +92,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.kms": 1.00,             # $1.00 per customer-managed key per month
     "aws.eventbridge": 0.00,     # rules / custom buses are free; events billed per use
     "aws.ssm": 0.05,          # Parameter Store advanced-tier parameter $0.05/mo (standard tier is free)
+    "aws.cloudwatch": 0.10,   # standard-resolution metric alarm, per alarm-month
     # GCP
     "gcp.sql": 25.00,         # db-f1-micro 730h
     "gcp.functions": 0.20,    # minimal invocations
@@ -101,10 +105,12 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.redis": 35.77,         # Basic tier $0.049/GB-hr × 1 GB × ~730 h (Standard doubles it)
     "gcp.container": 73.00,     # $0.10/hr cluster management fee (~730 h); one zonal/Autopilot cluster per account is free
     "gcp.iamcredentials": 0.03,  # per issued credential: the API itself is free; priced at the Cloud KMS software-key signing rate (~$0.03 per 10k ops) it replaces
+    "gcp.monitoring": 0.10,     # $0.10 per alert-policy condition per month (metrics ingestion billed per MiB)
     "gcp.cloudscheduler": 0.10, # $0.10 per job per month (first 3 jobs per billing account free)
     "gcp.secretmanager": 0.06,  # $0.06 per active secret version per month
     "gcp.kms": 0.06,            # $0.06 per software key version per month
     "gcp.eventarc": 0.04,       # triggers are free; events $0.40 per million delivered (modelled at ~100K events/month)
+    "gcp.artifactregistry": 0.50,  # ~5 GB stored at $0.10/GB-month (first 0.5 GB free)
     # Azure
     "azure.vm": 0.00,         # priced via VM hourly
     "azure.sql": 4.99,        # Basic DTU

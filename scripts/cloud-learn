@@ -237,6 +237,8 @@ Usage:
   cloud-learn status
   cloud-learn doctor
   cloud-learn upgrade
+  cloud-learn update       Docker tiers: move to the latest release (and this command)
+  cloud-learn version      This command, the running simulator, the latest release
   cloud-learn help
 
 Flags:
@@ -2570,6 +2572,27 @@ _docker_substrate_run() {
   if [ -z "$cf" ] || [ ! -f "$cf" ]; then
     printf 'vyomi: docker-compose.cloudlite.yml not found (set VYOMI_COMPOSE_FILE).\n' >&2; return 1
   fi
+  # `update` and the release cache are the Docker launcher's (packaging/docker/vyomi,
+  # shipped in this bundle), so all launchers move versions the same way: it fetches
+  # the latest release's compose file into ~/.vyomi (SHA256-checked) and upgrades
+  # this command through Homebrew. Every other action runs the newer cached release.
+  local _dl="${ROOT_DIR}/packaging/docker/vyomi"
+  if [ "$action" = "update" ] || [ "$action" = "upgrade" ]; then
+    if [ -f "$_dl" ]; then
+      VYOMI_BUNDLED_COMPOSE="$cf" VYOMI_BREW_FORMULA=vyomi VYOMI_FLAVOUR="vyomi · Docker substrate" \
+        bash "$_dl" update
+      return $?
+    fi
+    printf 'vyomi: this bundle lacks packaging/docker/vyomi; pulling the %s images only.\n' "$(sed -nE 's#.*vyomi/appliance:([0-9.]+).*#\1#p' "$cf" | head -1)" >&2
+  fi
+  if [ -z "${VYOMI_COMPOSE_FILE:-}" ]; then
+    local _cache="${HOME:-/root}/.vyomi/docker-compose.cloudlite.yml" _pv
+    _pv() { sed -nE 's#.*vyomi/appliance:([0-9]+\.[0-9]+\.[0-9]+).*#\1#p' "$1" | head -1; }
+    if [ -f "$_cache" ] && [ "$(_pv "$_cache")" != "$(_pv "$cf")" ] && \
+       [ "$(printf '%s\n%s\n' "$(_pv "$_cache")" "$(_pv "$cf")" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)" = "$(_pv "$_cache")" ]; then
+      cf="$_cache"
+    fi
+  fi
   if ! command -v docker >/dev/null 2>&1; then
     printf 'vyomi: Docker is required for the Free/Lite/Pro tiers.\n  Install Docker: https://docs.docker.com/engine/install/\n' >&2; return 1
   fi
@@ -2625,9 +2648,25 @@ outer_run() {
       && printf '%s\n' "$VYOMI_SUBSTRATE" > "${HOME:-/root}/.vyomi/substrate" 2>/dev/null || true
   fi
   case "$subcmd" in
+    -V|--version|version)
+      # Same report as the Docker launcher, pointed at wherever the simulator runs.
+      local _sub; _sub="$(_resolve_substrate)"
+      local _url="http://localhost:9000"
+      [ "$_sub" = "multipass" ] && _url="http://${APPLIANCE_NAME}.local:9000"
+      _url="${VYOMI_URL:-$_url}"
+      if [ -f "${ROOT_DIR}/packaging/docker/vyomi" ] && [ -f "${ROOT_DIR}/docker-compose.cloudlite.yml" ]; then
+        VYOMI_BUNDLED_COMPOSE="${ROOT_DIR}/docker-compose.cloudlite.yml" VYOMI_URL="$_url" \
+          VYOMI_FLAVOUR="vyomi · $_sub substrate" bash "${ROOT_DIR}/packaging/docker/vyomi" version
+      else
+        printf 'vyomi %s (vyomi · %s substrate)\n' "$(tr -d '[:space:]' < "${ROOT_DIR}/VERSION" 2>/dev/null || echo dev)" "$_sub"
+      fi
+      return 0
+      ;;
+  esac
+  case "$subcmd" in
     up|down|stop|restart|status|ps|logs|update)
       if [ "$(_resolve_substrate)" = "docker" ]; then
-        print_brand_banner
+        [ "$subcmd" = "update" ] || print_brand_banner   # update draws its own
         _docker_substrate_run "$subcmd" "$@"
         return $?
       fi

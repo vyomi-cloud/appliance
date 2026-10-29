@@ -191,13 +191,13 @@ register_azure_routes(app, None)
 # ── Route module registration ────────────────────────────────────────
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
-from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2
-from routes import lazy_backends, shared, console_next, aws_logs, metrics_series
+from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
+from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
-            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2,
-            lazy_backends, shared, console_next, aws_logs, metrics_series]:
+            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
+            lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -2559,6 +2559,13 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # API Gateway V2 — the shared wire/console store (console + SDK/CLI created APIs)
+        from core.apigatewayv2_core import shared_store as _apigwv2_store
+        for api_id, api in _apigwv2_store().apis.items():
+            add("aws", "apigatewayv2", "api", api_id, {"name": api["name"], "created": api["createdDate"]})
+    except Exception:
+        pass
+
     try:   # Systems Manager parameters — the shared wire/console store
         from core.ssm_core import shared_store as _ssm_store
         for _n in _ssm_store().parameters:
@@ -2605,6 +2612,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # Cloud Monitoring — alert policies from the shared wire/console store
+        from core.gcp_monitoring_core import shared_store as _mon_store
+        for _pn, _pol in _mon_store().alert_policies.items():
+            add("gcp", "monitoring", "policy", _pn.rsplit("/", 1)[-1],
+                {"name": _pn.rsplit("/", 1)[-1], "created": (_pol.get("creationRecord") or {}).get("mutateTime", "")})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -2621,12 +2636,27 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             add("aws", "elbv2", "load_balancer", lb.get("LoadBalancerName", lb_arn),
                 {**lb, "name": lb.get("LoadBalancerName", lb_arn), "instance_type": lb.get("Type", "application"),
                  "state": (lb.get("State") or {}).get("Code", "active"), "created": lb.get("CreatedTime", "")})
+    try:   # CloudWatch alarms (durable store owned by routes/aws_cloudwatch.py)
+        from routes.aws_cloudwatch import console_rows as _cw_rows
+        for _row in _cw_rows():
+            add("aws", "cloudwatch", "alarm", _row["arn"], _row)
+    except Exception:
+        pass
+    aws_sns_state = _cloudsim_service_state(space, "sns")
+    for topic_arn, topic in aws_sns_state.get("topics", {}).items():
+        if isinstance(topic, dict):
+            add("aws", "sns", "topic", topic.get("name", topic_arn),
+                {**topic, "state": "active", "created": topic.get("created", "")})
 
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():
         if isinstance(table, dict):
             add("aws", "dynamodb", "table", table_name, table)
 
+    aws_kinesis = _cloudsim_service_state(space, "kinesis")
+    for stream_name, stream in aws_kinesis.get("streams", {}).items():
+        if isinstance(stream, dict):
+            add("aws", "kinesis", "stream", stream_name, stream)
     aws_logs = _cloudsim_service_state(space, "logs")
     for group_name, group in aws_logs.get("log_groups", {}).items():
         if isinstance(group, dict):
@@ -2654,6 +2684,11 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for subscription_id, sub in gcp_pubsub.get("subscriptions", {}).items():
         if isinstance(sub, dict):
             add("gcp", "pubsub", "subscription", subscription_id, sub)
+
+    gcp_ar = _cloudsim_service_state(space, "gcp_artifactregistry")
+    for repo_name, repo in gcp_ar.get("repositories", {}).items():
+        if isinstance(repo, dict):
+            add("gcp", "artifactregistry", "repository", repo_name, repo)
 
     gcp_firestore = _cloudsim_service_state(space, "gcp_firestore")
     for db_id, db in gcp_firestore.get("databases", {}).items():
@@ -23050,6 +23085,7 @@ def api_runtime_host_distribution():
         ("gcp_secretmanager", "secrets", False),
         ("gcp_kms", "keys", False),
         ("gcp_firestore", "databases", False),
+        ("gcp_artifactregistry", "repositories", False),
     ]
     # Azure ARM stores everything keyed by the full resourceId at the
     # top level of the service_state — values are themselves resources
@@ -23524,6 +23560,26 @@ _UNIFIED_INGRESS = os.environ.get("VYOMI_UNIFIED_INGRESS", "").strip().lower() i
 # we registered the @app.post("/{bucket}/{key:path}") catch-all up
 # top (as the file originally did), it swallowed POST /api/auth/...
 # with bucket=api, key=auth/... and returned a NoSuchBucket XML.
+# API Gateway V2 console REST (/api/apigatewayv2/*) — shares its store with the native /v2 wire.
+try:
+    from providers import aws_apigatewayv2_console as _apigwv2_console
+
+    def _apigwv2_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("aws", "apigatewayv2", "api", payload, {}, None, action="delete")
+            _record_usage("apigatewayv2.delete_api", {"api_id": payload})
+        else:
+            _cloudsim_sync_service_resource("aws", "apigatewayv2", "api", payload["apiId"],
+                                            {"name": payload["name"], "created": payload["createdDate"]}, None)
+            _record_usage("apigatewayv2.create_api", {"api_id": payload["apiId"], "name": payload["name"]})
+    _apigwv2_console.register(app, _apigwv2_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[apigatewayv2] console routes skipped: {_e}")
+try:   # API Gateway V2 data plane: the integration handler behind the shared Caddy gateway
+    from providers import aws_apigatewayv2_gateway as _apigwv2_gateway
+    _apigwv2_gateway.register(app, lambda fn, ev: _lambda_invoke_function(fn, ev, source="apigateway"))
+except Exception as _e:   # never let this break appliance boot
+    print(f"[apigatewayv2] gateway handler skipped: {_e}")
 # Systems Manager console REST (/api/ssm/*) — shares its store with the native AmazonSSM wire.
 try:
     from providers import aws_ssm_console as _ssm_console
@@ -23642,6 +23698,23 @@ try:
     _iamc_console.register(app, _iamc_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[iamcredentials] routes skipped: {_e}")
+
+# Cloud Monitoring: native /v3/projects/* wire + console REST (/api/gcp/monitoring/*).
+try:
+    from providers import gcp_monitoring_console as _mon_console
+
+    def _mon_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "monitoring", "policy", payload, {}, None, action="delete")
+            _record_usage("gcp.monitoring.delete_policy", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "monitoring", "policy", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("state", "Enabled")}, None,
+                                            region="global")
+            _record_usage("gcp.monitoring.create_policy", {"name": payload["id"]})
+    _mon_console.register(app, _mon_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[monitoring] routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)
