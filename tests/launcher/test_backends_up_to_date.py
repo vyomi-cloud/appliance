@@ -3,8 +3,8 @@
 Offline: every container a compose file runs is tracked by core/appliance_readiness.py,
 and an optional backend is tracked only by the stacks that run it (its env var is set
 for the simulator exactly when its container is defined), so no stack waits forever on
-a backend it never starts. Nano: every store in core/nano_registry.py belongs to an
-engine in wasm/sw.js NANO_SERVICES, and every store passes the live check the cards use
+a backend it never starts. Nano: fixtures/nano-backends.json (generated from
+core/nano_registry.py by wasm/build_cores.py) is current, and every store passes the live check the cards use
 (nano_persist.health_registry), which must also catch a store that can't be read.
 
     python tests/launcher/test_backends_up_to_date.py
@@ -54,18 +54,16 @@ def main() -> int:
                 bad.append(f"{f}: '{k}' container {'defined' if k in ran else 'absent'} but "
                            f"{env} {'not ' if not sets else ''}set for the simulator")
 
-    reg = (ROOT / "core/nano_registry.py").read_text()
-    stores = set(re.findall(r'^\s+"([a-z0-9_]+)":\s', reg[reg.index("def get("):], re.M))
-    sw = (ROOT / "wasm/sw.js").read_text()
-    block = sw[sw.index("const NANO_SERVICES = ["):]
-    block = block[:block.index("];") + 1]
-    covered = {s for arr in re.findall(r"stores:\s*(\[[^\]]*\])", block) for s in ast.literal_eval(arr)}
-    for s in sorted(stores - covered):
-        bad.append(f"core/nano_registry.py store '{s}' has no engine in wasm/sw.js NANO_SERVICES")
+    # Nano's list is generated from the registry (wasm/build_cores.py); it must be current.
+    import json
+    sys.path.insert(0, str(ROOT / "wasm"))
+    import build_cores
+    listed = json.load(open(ROOT / "wasm/fixtures/nano-backends.json"))
+    if listed != build_cores.nano_backends():
+        bad.append("wasm/fixtures/nano-backends.json is stale: run python3 wasm/build_cores.py")
 
     # Nano's live check (what the Service status cards show) passes on every store of
     # the shipped engines, and reports a store that can't be read.
-    sys.path.insert(0, str(ROOT / "wasm"))
     for m in [m for m in sys.modules if m == "core" or m.startswith("core.")]:
         del sys.modules[m]                     # use the vendored wasm/core, as Nano does
     from core import nano_persist as NP, nano_registry as NR
@@ -82,7 +80,7 @@ def main() -> int:
     if bad:
         print("[FAIL] backend lists are behind the release:\n  " + "\n  ".join(bad))
         return 1
-    print(f"[PASS] readiness tracks all {len(tracked)} offline backends; NANO_SERVICES covers {len(stores)} registry stores; "
+    print(f"[PASS] readiness tracks all {len(tracked)} offline backends; Nano lists all {len(listed)} backends; "
           f"all {len(health)} Nano engine stores pass the live check")
     return 0
 
