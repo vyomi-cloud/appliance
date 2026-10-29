@@ -338,6 +338,15 @@ def _role_assignments(state, method, scope, rest, payload):
 # ── generic extension resources (diagnosticSettings, …) ─────────────────────
 def _generic_ext(state, method, scope, ns, rest, payload):
     typ = ns + "/" + rest[0]
+    if typ.lower() == "microsoft.insights/diagnosticsettings" and method in ("PUT", "PATCH") and len(rest) > 1:
+        pp = _payload_props(payload)
+        if not any(pp.get(k) for k in ("workspaceId", "storageAccountId", "eventHubAuthorizationRuleId", "marketplacePartnerId")):
+            return _err(400, "BadRequest", "A diagnostic setting needs at least one destination (Log Analytics workspace, storage account or event hub).")
+        for k in ("workspaceId", "storageAccountId"):
+            if pp.get(k) and str(pp[k]).lower() not in state:
+                return _err(400, "ResourceNotFound", f"Destination {pp[k]} was not found.")
+        if not any(x.get("enabled") for x in (pp.get("logs") or []) + (pp.get("metrics") or [])):
+            return _err(400, "BadRequest", "Select at least one log category or metric to send.")
     if len(rest) == 1:
         if method != "GET":
             return _err(405, "MethodNotAllowed", "Collection supports GET only.")
@@ -993,6 +1002,8 @@ def after_upsert(state, rec, payload=None) -> None:
         _sql_db_fill(state, rec)
     elif t == SQL_SERVER_T + "/failovergroups":
         _sql_failover_group_fill(state, rec)
+    elif t == VNET_T:
+        _vnet_fill(state, rec)
     elif t == "microsoft.keyvault/vaults":
         p.setdefault("publicNetworkAccess", "Enabled")
         acl = p.setdefault("networkAcls", {})
@@ -1222,6 +1233,10 @@ def validate_write(state, rid, full_type, payload):
     bad = validate_identity(payload)
     if bad:
         return bad
+    if t == VNET_T:
+        bad = _vnet_validate(state, rid, payload, "PUT")
+        if bad:
+            return bad
     if t == WEB_T + "/config" and rid.lower().endswith("/config/web"):
         v = _payload_props(payload).get("minTlsVersion")
         if v is not None and v not in TLS_VERSIONS:
@@ -1630,6 +1645,168 @@ def _site_route(state, method, sub, rg, after, payload):
     return None
 
 
+# ── Virtual networks: address space, subnets (child view of the inline list), DDoS plans ──
+VNET_T = "microsoft.network/virtualnetworks"
+DDOS_T = "Microsoft.Network/ddosProtectionPlans"
+
+
+def _net(prefix):
+    try:
+        return ipaddress.ip_network(str(prefix), strict=False)
+    except ValueError:
+        return None
+
+
+def _vnet_validate(state, rid, payload, method):
+    pp = _payload_props(payload)
+    old = state.get(rid.lower()) or {}
+    space = (pp.get("addressSpace") or (old.get("properties") or {}).get("addressSpace") or {}).get("addressPrefixes") or []
+    nets = []
+    for pfx in space:
+        n = _net(pfx)
+        if n is None:
+            return _err(400, "InvalidAddressPrefixFormat", f"Address prefix {pfx} has an invalid format.")
+        if any(n.overlaps(m) for m in nets):
+            return _err(400, "NetcfgInvalidAddressSpace", f"Address space {pfx} overlaps another address space of the virtual network.")
+        nets.append(n)
+    subnets = pp.get("subnets") if "subnets" in pp else (old.get("properties") or {}).get("subnets") or []
+    seen = []
+    for sn in subnets or []:
+        sp = (sn.get("properties") or {}).get("addressPrefix") or sn.get("addressPrefix")
+        n = _net(sp)
+        if n is None:
+            return _err(400, "InvalidAddressPrefixFormat", f"Subnet {sn.get('name')} has an invalid address prefix {sp}.")
+        if nets and not any(n.subnet_of(m) for m in nets if m.version == n.version):
+            return _err(400, "NetcfgSubnetRangeOutsideVnet",
+                        f"Subnet '{sn.get('name')}' is not valid because its IP address range {sp} is outside the address space of virtual network.")
+        if any(n.overlaps(m) for m in seen):
+            return _err(400, "NetcfgSubnetRangesOverlap", f"Subnet '{sn.get('name')}' {sp} overlaps another subnet.")
+        seen.append(n)
+    if "subnets" in pp:
+        keep = {str(x.get("name", "")).lower() for x in pp.get("subnets") or []}
+        for sn in (old.get("properties") or {}).get("subnets") or []:
+            if str(sn.get("name", "")).lower() not in keep and _subnet_nics(state, f"{rid}/subnets/{sn.get('name')}"):
+                return _err(400, "InUseSubnetCannotBeDeleted",
+                            f"Subnet {sn.get('name')} is in use by network interfaces and cannot be deleted.")
+    dns = (pp.get("dhcpOptions") or {}).get("dnsServers")
+    for d in dns or []:
+        try:
+            ipaddress.ip_address(d)
+        except ValueError:
+            return _err(400, "InvalidDnsServer", f"DNS server {d} is not a valid IP address.")
+    ddos = (pp.get("ddosProtectionPlan") or {}).get("id")
+    if pp.get("enableDdosProtection") and not (ddos or (old.get("properties") or {}).get("ddosProtectionPlan")):
+        return _err(400, "DdosProtectionPlanRequired", "Enabling DDoS protection requires a DDoS protection plan.")
+    if ddos and str(ddos).lower() not in state:
+        return _err(400, "InvalidResourceReference", f"DDoS protection plan {ddos} was not found.")
+    return None
+
+
+def _subnet_nics(state, subnet_id):
+    out = []
+    for nic in _of_type(state, NIC_T):
+        for ipc in (nic.get("properties") or {}).get("ipConfigurations") or []:
+            if str(((ipc.get("properties") or {}).get("subnet") or {}).get("id", "")).lower() == subnet_id.lower():
+                out.append((nic, ipc))
+    return out
+
+
+def _vnet_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    p.setdefault("addressSpace", {"addressPrefixes": []})
+    p.setdefault("subnets", [])
+    p.setdefault("virtualNetworkPeerings", [])
+    p.setdefault("enableDdosProtection", False)
+    p.setdefault("dhcpOptions", {"dnsServers": []})
+    p.setdefault("resourceGuid", str(uuid.uuid5(uuid.NAMESPACE_URL, rec["id"].lower())))
+    for sn in p["subnets"]:
+        if not isinstance(sn, dict):
+            continue
+        sid = f"{rec['id']}/subnets/{sn.get('name')}"
+        sn["id"] = sid
+        sn["type"] = "Microsoft.Network/virtualNetworks/subnets"
+        sp = sn.setdefault("properties", {})
+        if "addressPrefix" in sn and "addressPrefix" not in sp:
+            sp["addressPrefix"] = sn.pop("addressPrefix")
+        sp["provisioningState"] = "Succeeded"
+        sp.setdefault("privateEndpointNetworkPolicies", "Disabled")
+        sp.setdefault("privateLinkServiceNetworkPolicies", "Enabled")
+        used = _subnet_nics(state, sid)
+        if used:
+            sp["ipConfigurations"] = [{"id": ipc["id"]} for _, ipc in used]
+        else:
+            sp.pop("ipConfigurations", None)
+    plan = (p.get("ddosProtectionPlan") or {}).get("id")
+    for d in _of_type(state, DDOS_T):
+        _set_backref_list(d, "virtualNetworks", rec["id"], bool(plan) and plan.lower() == d["id"].lower())
+
+
+def _subnets(state, method, sub, rg, after, payload):
+    vid = scope_id(sub, rg, after[:3])
+    vnet = state.get(vid.lower())
+    if vnet is None:
+        return _err(404, "ResourceNotFound", f"Virtual network '{after[2]}' not found.")
+    _vnet_fill(state, vnet)
+    subs = vnet["properties"]["subnets"]
+    if len(after) == 4:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [dict(x) for x in subs]})
+    name = after[4]
+    cur = next((x for x in subs if str(x.get("name", "")).lower() == name.lower()), None)
+    if method == "GET":
+        return _ok(dict(cur)) if cur else _err(404, "NotFound", f"Subnet '{name}' not found.")
+    if method == "DELETE":
+        if cur is None:
+            return _ok(None, 204)
+        if _subnet_nics(state, f"{vid}/subnets/{cur['name']}"):
+            return _err(400, "InUseSubnetCannotBeDeleted", f"Subnet {name} is in use by network interfaces and cannot be deleted.")
+        vnet["properties"]["subnets"] = [x for x in subs if x is not cur]
+        return _ok(None, 200, vid, "Microsoft.Network/virtualNetworks/subnets", name)
+    if method in ("PUT", "PATCH"):
+        sp = dict((cur or {}).get("properties") or {}) if method == "PATCH" else {}
+        sp.update(_payload_props(payload))
+        new = [x for x in subs if x is not cur] + [{"name": name, "properties": sp}]
+        bad = _vnet_validate(state, vid, {"properties": {"subnets": new}}, "PUT")
+        if bad:
+            return bad
+        vnet["properties"]["subnets"] = new
+        _vnet_fill(state, vnet)
+        out = next(x for x in vnet["properties"]["subnets"] if x["name"] == name)
+        return _ok(dict(out), 200 if cur else 201, vid, "Microsoft.Network/virtualNetworks/subnets", name)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+def _ddos_plans(state, method, sub, rg, after, payload):
+    if len(after) == 2:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_view(r) for r in _of_type(state, DDOS_T)
+                              if rg is None or str(r.get("_rg") or "").lower() == rg.lower()]})
+    name = after[2]
+    rid = scope_id(sub, rg, after[:3])
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        return _ok(_view(rec)) if rec else _err(404, "ResourceNotFound", f"DDoS protection plan '{name}' not found.")
+    if method == "DELETE":
+        rec = state.get(key)
+        if rec and (rec.get("properties") or {}).get("virtualNetworks"):
+            return _err(400, "DdosProtectionPlanInUse", f"DDoS protection plan {name} is associated with virtual networks.")
+        state.pop(key, None)
+        return _ok(None, 200 if rec else 204, rid, DDOS_T, name)
+    if method in ("PUT", "PATCH"):
+        old = state.get(key)
+        rec = old or _new_rec(rid, name, DDOS_T, location=(payload or {}).get("location") or "eastus")
+        rec.setdefault("properties", {}).update({"provisioningState": "Succeeded",
+                                                 "resourceGuid": rec["properties"].get("resourceGuid") or str(uuid.uuid4())})
+        rec["properties"].setdefault("virtualNetworks", [])
+        rec.setdefault("tags", {})
+        state[key] = rec
+        return _ok(_view(rec), 200 if old else 201, rid, DDOS_T, name)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
 # ── entry ────────────────────────────────────────────────────────────────────
 def route(state, method, sub, rg, after, payload=None, query=None, executor=None):
     """Serve the request if it is one this module models, else None.
@@ -1662,6 +1839,10 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
     # Locks at subscription / resource-group scope.
     if low[0] == "microsoft.authorization" and low[1] == "locks":
         return _locks(state, method, scope_id(sub, rg, []), after[1:], payload)
+    if low[0] == "microsoft.network" and low[1] == "virtualnetworks" and len(after) in (4, 5) and low[3] == "subnets":
+        return _subnets(state, method, sub, rg, after, payload)
+    if low[0] == "microsoft.network" and low[1] == "ddosprotectionplans" and len(after) <= 3:
+        return _ddos_plans(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.network" and low[1] == "networkinterfaces" and len(after) <= 3:
         return _nic(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.network" and low[1] == "publicipaddresses" and len(after) <= 3:

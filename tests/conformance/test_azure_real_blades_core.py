@@ -394,7 +394,52 @@ def test_key_vault_blades():
     _check("a role assignment at the vault scope is listed", sorted(x["properties"]["principalId"] for x in lst["value"]) == ["p1", "p2"])
 
 
-TESTS = [test_vm_blades, test_storage_blades, test_sql_blades, test_cosmos_blades, test_function_app_blades, test_key_vault_blades]
+def test_vnet_blades():
+    arm = AzureArm()
+    v = f"{P}/Microsoft.Network/virtualNetworks/vnb"
+    s, b = call(arm, "PUT", v, {"location": "eastus", "properties": {"addressSpace": {"addressPrefixes": ["10.5.0.0/16"]},
+                                "subnets": [{"name": "web", "properties": {"addressPrefix": "10.6.0.0/24"}}]}})
+    _check("subnet outside the address space rejected", s == 400 and b["error"]["code"] == "NetcfgSubnetRangeOutsideVnet")
+    s, b = call(arm, "PUT", v, {"location": "eastus", "properties": {"addressSpace": {"addressPrefixes": ["10.5.0.0/16"]},
+                                "subnets": [{"name": "web", "properties": {"addressPrefix": "10.5.1.0/24"}}]}})
+    _check("vnet created", s in (200, 201))
+    s, sn = call(arm, "PUT", v + "/subnets/db", {"properties": {"addressPrefix": "10.5.1.128/25"}})
+    _check("overlapping subnet rejected", s == 400 and sn["error"]["code"] == "NetcfgSubnetRangesOverlap")
+    s, sn = call(arm, "PUT", v + "/subnets/db", {"properties": {"addressPrefix": "10.5.2.0/24"}})
+    _check("subnet added through the subnets child API", s == 201 and sn["id"].endswith("/subnets/db"))
+    s, ls = call(arm, "GET", v + "/subnets")
+    _check("subnets list", [x["name"] for x in ls["value"]] == ["web", "db"])
+    s, nic = call(arm, "PUT", f"{P}/Microsoft.Network/networkInterfaces/n1", {"location": "eastus", "properties": {
+        "ipConfigurations": [{"name": "c1", "properties": {"subnet": {"id": v + "/subnets/db"}}}]}})
+    s, ls = call(arm, "GET", v + "/subnets/db")
+    _check("subnet reports its connected NIC ip configuration", ls["properties"]["ipConfigurations"][0]["id"].startswith(nic["id"]))
+    _check("subnet in use can't be deleted", call(arm, "DELETE", v + "/subnets/db")[0] == 400)
+    s, b = call(arm, "PATCH", v, {"properties": {"addressSpace": {"addressPrefixes": ["10.7.0.0/16"]}}})
+    _check("address space change that orphans subnets rejected", s == 400)
+    s, b = call(arm, "PATCH", v, {"properties": {"addressSpace": {"addressPrefixes": ["10.5.0.0/16", "10.8.0.0/16"]}}})
+    _check("address range added", b["properties"]["addressSpace"]["addressPrefixes"] == ["10.5.0.0/16", "10.8.0.0/16"])
+    s, b = call(arm, "PATCH", v, {"properties": {"dhcpOptions": {"dnsServers": ["10.5.1.4", "bad"]}}})
+    _check("invalid DNS server rejected", s == 400)
+    s, b = call(arm, "PATCH", v, {"properties": {"dhcpOptions": {"dnsServers": ["10.5.1.4"]}}})
+    _check("custom DNS saved", b["properties"]["dhcpOptions"]["dnsServers"] == ["10.5.1.4"])
+    s, b = call(arm, "PATCH", v, {"properties": {"enableDdosProtection": True}})
+    _check("DDoS protection needs a plan", s == 400)
+    s, plan = call(arm, "PUT", f"{P}/Microsoft.Network/ddosProtectionPlans/plan1", {"location": "eastus"})
+    s, b = call(arm, "PATCH", v, {"properties": {"enableDdosProtection": True, "ddosProtectionPlan": {"id": plan["id"]}}})
+    s, plan = call(arm, "GET", plan["id"])
+    _check("DDoS plan lists the protected vnet", b["properties"]["enableDdosProtection"] is True
+           and plan["properties"]["virtualNetworks"][0]["id"] == v)
+    _check("plan in use can't be deleted", call(arm, "DELETE", plan["id"])[0] == 400)
+    s, b = call(arm, "PUT", v + "/providers/Microsoft.Insights/diagnosticSettings/d1", {"properties": {"logs": [{"category": "VMProtectionAlerts", "enabled": True}]}}, "2021-05-01-preview")
+    _check("diagnostic setting without a destination rejected", s == 400)
+    s, ws = call(arm, "PUT", f"{P}/Microsoft.OperationalInsights/workspaces/law1", {"location": "eastus"}, "2022-10-01")
+    s, b = call(arm, "PUT", v + "/providers/Microsoft.Insights/diagnosticSettings/d1", {"properties": {
+        "workspaceId": ws["id"], "logs": [{"category": "VMProtectionAlerts", "enabled": True}]}}, "2021-05-01-preview")
+    s, ds = call(arm, "GET", v + "/providers/Microsoft.Insights/diagnosticSettings", av="2021-05-01-preview")
+    _check("diagnostic setting to a workspace stored", [x["name"] for x in ds["value"]] == ["d1"])
+
+
+TESTS = [test_vm_blades, test_storage_blades, test_sql_blades, test_cosmos_blades, test_function_app_blades, test_key_vault_blades, test_vnet_blades]
 
 if __name__ == "__main__":
     for t in TESTS:

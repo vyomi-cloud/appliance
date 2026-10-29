@@ -25,7 +25,7 @@ P = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers"
 failed = False
 
 # Services whose blades are all backed by ARM data (metrics chart blades excepted).
-CONVERTED = ["vm", "storage", "sql", "cosmos", "functionapp"]
+CONVERTED = ["vm", "storage", "sql", "cosmos", "functionapp", "vnet", "nsg"]
 
 
 def check(name, ok, extra=""):

@@ -227,12 +227,12 @@ _VNET_SUB = [
         {"key": "subnets",      "label": "Subnets",           "icon": "view_module",  "type": "subnetsList"},
         {"key": "connectedDevs","label": "Connected devices", "icon": "devices",      "type": "connectedDevs"},
         {"key": "peerings",     "label": "Peerings",          "icon": "compare_arrows","type": "peerings"},
-        {"key": "dnsServers",   "label": "DNS servers",       "icon": "dns",          "type": "stub"},
-        {"key": "ddos",         "label": "DDoS protection",   "icon": "shield",       "type": "stub"},
+        {"key": "dnsServers",   "label": "DNS servers",       "icon": "dns",          "type": "vnetDns"},
+        {"key": "ddos",         "label": "DDoS protection",   "icon": "shield",       "type": "vnetDdos"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
-        {"key": "diagnostic",   "label": "Diagnostic settings", "icon": "build",      "type": "stub"},
+        {"key": "diagnostic",   "label": "Diagnostic settings", "icon": "build",      "type": "diagSettings"},
     ]},
 ]
 

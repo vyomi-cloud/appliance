@@ -5641,6 +5641,140 @@ SUB_RENDERERS.kvaccessconfig = async function(svc, full, host){
   if (!items.length) host.append(emptyState("No role assignments apply to " + full.name + "."));
   else host.append(rbTable(["Principal","Role","Scope"], items.map(a => [getPath(a,"properties.principalId") || "", rbLeaf(getPath(a,"properties.roleDefinitionId")), getPath(a,"properties.scope") || ""])));
 };
+// ---- Virtual network blades ----
+function rbAddrCount(p){ const b = Number(String(p).split("/")[1] || 32); return Math.pow(2, 32 - b); }
+SUB_RENDERERS.addressspace = async function(svc, full, host){
+  const slot = el("div",{}); host.append(slot);
+  async function fill(){
+    slot.innerHTML = "";
+    const r = await arm("GET", full.id, undefined, svc.apiVersion);
+    if (!r.ok) { slot.append(emptyState("Could not load the virtual network: " + rbErr(r))); return; }
+    Object.assign(full, r.json);
+    const pfx = getPath(full,"properties.addressSpace.addressPrefixes") || [];
+    const save = async (next) => {
+      const w = await arm("PATCH", full.id, {properties:{addressSpace:{addressPrefixes: next}}}, svc.apiVersion);
+      if (w.ok) { toast("Address space saved"); recordNotif("ok","VNet address space", full.name); fill(); } else toast("Save failed: " + rbErr(w), "err");
+    };
+    if (!pfx.length) slot.append(emptyState(full.name + " has no address space."));
+    else slot.append(rbTable(["Address space","Address range","Addresses",""], pfx.map(p => [p, p, String(rbAddrCount(p)),
+      rbBtn("Delete", () => save(pfx.filter(x => x !== p)), "del", "delete")])));
+    const inp = rbInput("", {placeholder:"e.g. 10.1.0.0/16"});
+    slot.append(rbForm("Add address range", [["Address space", inp]], () => save(pfx.concat([inp.value.trim()])), "Save"));
+  }
+  await fill();
+};
+SUB_RENDERERS.subnetslist = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Subnets of ", el("strong",{}, full.name), "."));
+  const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"}); host.append(bar);
+  const list = el("div",{}); host.append(list);
+  const [nr] = await Promise.all([rbGet(rbRgPath(full, "Microsoft.Network", "networkSecurityGroups"), svc.apiVersion)]);
+  const nsgs = (nr.ok && nr.json.value) || [];
+  async function fill(){
+    list.innerHTML = "";
+    const r = await rbGet(full.id + "/subnets", svc.apiVersion);
+    const subs = (r.ok && r.json.value) || [];
+    if (!subs.length) { list.append(emptyState(full.name + " has no subnets.")); return; }
+    list.append(rbTable(["Name","IPv4 range","Available IPs","Connected devices","Security group",""], subs.map(sn => {
+      const p = sn.properties || {}, used = (p.ipConfigurations || []).length;
+      return [sn.name, p.addressPrefix || "", String(Math.max(0, rbAddrCount(p.addressPrefix) - 5 - used)), String(used),
+              p.networkSecurityGroup ? rbLeaf(p.networkSecurityGroup.id) : "None",
+              rbBtn("Delete", async () => {
+                if (!confirm("Delete subnet '" + sn.name + "'?")) return;
+                const d = await arm("DELETE", full.id + "/subnets/" + encodeURIComponent(sn.name), undefined, svc.apiVersion);
+                if (d.ok || d.status === 204) { toast("Deleted " + sn.name); fill(); } else toast("Delete failed: " + rbErr(d), "err");
+              }, "del", "delete")];
+    })));
+  }
+  bar.append(rbBtn("Subnet", () => {
+    const nm = rbInput("", {placeholder:"Subnet name"}), pr = rbInput("", {placeholder:"e.g. 10.0.1.0/24"});
+    const ng = rbSelect([["","None"]].concat(nsgs.map(n => [n.id, n.name])), "");
+    host.append(rbForm("Add subnet", [["Name", nm], ["Address range", pr], ["Network security group", ng]], async (form) => {
+      const props = {addressPrefix: pr.value.trim()}; if (ng.value) props.networkSecurityGroup = {id: ng.value};
+      const w = await arm("PUT", full.id + "/subnets/" + encodeURIComponent(nm.value.trim()), {properties: props}, svc.apiVersion);
+      if (w.ok) { toast("Subnet added: " + nm.value); recordNotif("ok","Subnet added", full.name + "/" + nm.value); form.remove(); fill(); } else toast("Add failed: " + rbErr(w), "err");
+    }, "Save"));
+  }, "", "add"), rbBtn("Refresh", fill, "sec", "refresh"));
+  await fill();
+};
+SUB_RENDERERS.connecteddevs = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Network interfaces connected to subnets of ", el("strong",{}, full.name), "."));
+  const r = await rbGet(rbRgPath(full, "Microsoft.Network", "networkInterfaces"), svc.apiVersion);
+  const rows = [];
+  ((r.ok && r.json.value) || []).forEach(nic => (getPath(nic,"properties.ipConfigurations") || []).forEach(ipc => {
+    const sid = String(getPath(ipc,"properties.subnet.id") || "");
+    if (!sid.toLowerCase().startsWith(String(full.id).toLowerCase() + "/subnets/")) return;
+    rows.push([nic.name, "Network interface", getPath(ipc,"properties.privateIPAddress") || "", rbLeaf(sid),
+               getPath(nic,"properties.virtualMachine.id") ? rbLeaf(getPath(nic,"properties.virtualMachine.id")) : "Not attached"]);
+  }));
+  if (!rows.length) host.append(emptyState("No devices are connected to " + full.name + "."));
+  else host.append(rbTable(["Device","Type","IP address","Subnet","Attached to"], rows));
+};
+SUB_RENDERERS.vnetdns = async function(svc, full, host){
+  const r = await arm("GET", full.id, undefined, svc.apiVersion);
+  const dns = (r.ok && getPath(r.json,"properties.dhcpOptions.dnsServers")) || [];
+  const mode = rbSelect([["default","Default (Azure-provided)"],["custom","Custom"]], dns.length ? "custom" : "default");
+  const list = rbInput(dns.join(", "), {placeholder:"10.0.0.4, 10.0.0.5"});
+  host.append(rbKv([["DNS servers", dns.length ? dns.join(", ") : "Default (Azure-provided)"], ["Mode", mode], ["Custom DNS servers", list]], "DNS servers — " + full.name));
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Save", async () => {
+    const next = mode.value === "custom" ? list.value.split(",").map(x => x.trim()).filter(Boolean) : [];
+    const w = await arm("PATCH", full.id, {properties:{dhcpOptions:{dnsServers: next}}}, svc.apiVersion);
+    if (w.ok) { toast("DNS servers saved"); recordNotif("ok","VNet DNS servers", full.name); host.innerHTML = ""; SUB_RENDERERS.vnetdns(svc, full, host); } else toast("Save failed: " + rbErr(w), "err");
+  })));
+};
+SUB_RENDERERS.vnetddos = async function(svc, full, host){
+  const base = rbRgPath(full, "Microsoft.Network", "ddosProtectionPlans");
+  const r = await rbGet(base, svc.apiVersion);
+  const plans = (r.ok && r.json.value) || [];
+  const p = full.properties || {};
+  const on = rbSelect([["false","Disable"],["true","Enable"]], String(!!p.enableDdosProtection));
+  const plan = rbSelect(plans.map(x => [x.id, x.name]), getPath(p,"ddosProtectionPlan.id") || (plans[0] && plans[0].id));
+  host.append(rbKv([["DDoS Network Protection", p.enableDdosProtection ? "Enabled" : "Disabled (basic infrastructure protection only)"],
+                    ["Protection plan", getPath(p,"ddosProtectionPlan.id") ? rbLeaf(p.ddosProtectionPlan.id) : "None"],
+                    ["Set to", on], ["Plan", plans.length ? plan : "No DDoS protection plan in this resource group"]], "DDoS protection — " + full.name));
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Save", async () => {
+    const body = {properties: on.value === "true" ? {enableDdosProtection: true, ddosProtectionPlan: {id: plan.value}} : {enableDdosProtection: false, ddosProtectionPlan: null}};
+    const w = await arm("PATCH", full.id, body, svc.apiVersion);
+    if (w.ok) { full.properties = w.json.properties; toast("DDoS protection saved"); host.innerHTML = ""; SUB_RENDERERS.vnetddos(svc, full, host); } else toast("Save failed: " + rbErr(w), "err");
+  })));
+  const nm = rbInput(full.name + "-ddos-plan");
+  host.append(rbForm("Create a DDoS protection plan", [["Name", nm]], async () => {
+    const w = await arm("PUT", base + "/" + encodeURIComponent(nm.value.trim()), {location: full.location}, svc.apiVersion);
+    if (w.ok) { toast("Plan created: " + nm.value); host.innerHTML = ""; SUB_RENDERERS.vnetddos(svc, full, host); } else toast("Create failed: " + rbErr(w), "err");
+  }, "Create"));
+};
+// Diagnostic settings (Microsoft.Insights/diagnosticSettings extension resource) of any resource.
+SUB_RENDERERS.diagsettings = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Diagnostic settings route ", el("strong",{}, full.name), "'s platform logs and metrics to a destination."));
+  const base = full.id + "/providers/Microsoft.Insights/diagnosticSettings";
+  const [ws, st] = await Promise.all([rbGet(rbRgPath(full, "Microsoft.OperationalInsights", "workspaces"), "2022-10-01"), rbGet(rbRgPath(full, "Microsoft.Storage", "storageAccounts"), "2023-01-01")]);
+  const wss = (ws.ok && ws.json.value) || [], sts = (st.ok && st.json.value) || [];
+  const list = el("div",{}); host.append(list);
+  const CATS = {vnet: ["VMProtectionAlerts"]};
+  async function fill(){
+    list.innerHTML = "";
+    const r = await rbGet(base, "2021-05-01-preview");
+    const items = (r.ok && r.json.value) || [];
+    if (!items.length) { list.append(emptyState("No diagnostic settings on " + full.name + ".")); return; }
+    list.append(rbTable(["Name","Log Analytics workspace","Storage account","Logs","Metrics",""], items.map(d => [d.name,
+      rbLeaf(getPath(d,"properties.workspaceId")) || "", rbLeaf(getPath(d,"properties.storageAccountId")) || "",
+      (getPath(d,"properties.logs") || []).filter(x => x.enabled).map(x => x.category || x.categoryGroup).join(", "),
+      (getPath(d,"properties.metrics") || []).filter(x => x.enabled).map(x => x.category).join(", "),
+      rbBtn("Delete", async () => { const x = await arm("DELETE", d.id, undefined, "2021-05-01-preview"); if (x.ok || x.status === 204) { toast("Deleted " + d.name); fill(); } }, "del", "delete")])));
+  }
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Add diagnostic setting", () => {
+    const nm = rbInput("diag-" + full.name), w = rbSelect([["","None"]].concat(wss.map(x => [x.id, x.name])), wss[0] ? wss[0].id : "");
+    const s2 = rbSelect([["","None"]].concat(sts.map(x => [x.id, x.name])), ""), logs = rbSelect([["true","Yes"],["false","No"]], "true"), mets = rbSelect([["true","Yes"],["false","No"]], "true");
+    host.append(rbForm("Diagnostic setting", [["Name", nm], ["Send to Log Analytics workspace", w], ["Archive to a storage account", s2],
+                                              ["Logs (" + (CATS[svc.key] || ["allLogs"]).join(", ") + ")", logs], ["AllMetrics", mets]], async (form) => {
+      const props = {logs: (CATS[svc.key] || []).map(c => ({category: c, enabled: logs.value === "true"})), metrics: [{category:"AllMetrics", enabled: mets.value === "true"}]};
+      if (!CATS[svc.key]) props.logs = [{categoryGroup:"allLogs", enabled: logs.value === "true"}];
+      if (w.value) props.workspaceId = w.value; if (s2.value) props.storageAccountId = s2.value;
+      const r = await arm("PUT", base + "/" + encodeURIComponent(nm.value.trim()), {properties: props}, "2021-05-01-preview");
+      if (r.ok) { toast("Diagnostic setting saved"); recordNotif("ok","Diagnostic setting", full.name); form.remove(); fill(); } else toast("Save failed: " + rbErr(r), "err");
+    }, "Save"));
+  }, "", "add")));
+  await fill();
+};
 // ===== REAL-BLADES:END =====
 
 function emptyState(msg){
