@@ -49,10 +49,9 @@ jobs:
       - name: Install test deps
         run: pip install --quiet requests pytest
 
-      - name: Build simulator and postgres images
+      - name: Build simulator image
         run: |
           docker build -t cloudlearn/simulator:ci .
-          docker build -t vyomi/postgres:16-alpine-pgvector ./packaging/postgres
 
       - name: Boot appliance stack
         run: |
