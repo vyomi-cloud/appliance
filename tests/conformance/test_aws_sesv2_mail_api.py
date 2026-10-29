@@ -407,6 +407,14 @@ def main():
     ses1.delete_receipt_rule_set(RuleSetName=rs)
     check("rule set deletable once inactive", rs not in [x["Name"] for x in ses1.list_receipt_rule_sets()["RuleSets"]])
     requests.post(f"{BASE}/api/aws/sesv2/mail-settings", json={"imap": {"enabled": False}}, timeout=10)
+    # leave the space as found
+    for ident in (sender, dom, rcpt_ok):
+        ses2.delete_email_identity(EmailIdentity=ident)
+    ses2.delete_email_template(TemplateName=f"t-{RUN}")
+    ses2.delete_configuration_set(ConfigurationSetName=f"cs-{RUN}")
+    for a in ("bounce@simulator.amazonses.com", "complaint@simulator.amazonses.com", f"supp-{RUN}@example.net"):
+        ses2.delete_suppressed_destination(EmailAddress=a)
+    s3.delete_object(Bucket=bucket, Key=keys[0]) if keys else None
     sys.exit(1 if failed else 0)
 
 
