@@ -21,6 +21,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 
 WORKFLOW = "conformance-hourly.yml"
@@ -86,15 +87,28 @@ def main() -> int:
     if d["stall"] and not dry:
         body = f"Conformance cycle stalled: {d['stall']}.\n\nRuns: {run_url}"
         if issue:
-            gh("issue", "comment", issue, "-R", repo, "--body", body)
+            # One comment per distinct stall, not one every 15-minute tick.
+            seen = gh("issue", "view", issue, "-R", repo, "--json", "body,comments",
+                      "-q", "[.body] + [.comments[].body] | join(\"\\n\")", check=False)
+            if d["stall"] not in seen:
+                gh("issue", "comment", issue, "-R", repo, "--body", body)
         else:
             gh("issue", "create", "-R", repo, "--title", ISSUE_TITLE, "--body", body)
     elif d["healthy"] and issue and not dry:
         gh("issue", "close", issue, "-R", repo, "--comment", "A conformance cycle succeeded; closing.")
 
     if d["start"] and not dry:
+        before = {r["databaseId"] for r in runs}
         gh("workflow", "run", WORKFLOW, "-R", repo, "--ref", "main")
         print(f"Started the next cycle: {d['reason']}.")
+        # Hold the tick's concurrency lock until GitHub lists the new run, so the
+        # next tick sees it as active and can't start a second cycle.
+        for _ in range(12):
+            time.sleep(5)
+            now_ids = {r["databaseId"] for r in json.loads(gh("run", "list", "-R", repo, "--workflow", WORKFLOW,
+                                                               "-L", "5", "--json", "databaseId") or "[]")}
+            if now_ids - before:
+                break
     else:
         print(f"{'DRY RUN, would ' + ('start' if d['start'] else 'wait') if dry else 'Not starting'}: {d['reason']}.")
     return 0
