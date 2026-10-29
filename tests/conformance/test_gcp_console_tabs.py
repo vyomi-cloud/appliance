@@ -505,25 +505,27 @@ def test_vpc_subnets_tab(c, nets):
 
 def test_vpc_firewalls_routes_flowlogs(c, nets):
     auto, custom = nets
-    st, _ = c.sub("vpc", "createFirewall", custom, {"name": "allow-web", "direction": "INGRESS", "action": "allow",
+    fwn, rtn = uid("allow-web"), uid("to-vpn")
+    st, _ = c.sub("vpc", "createFirewall", custom, {"name": fwn, "direction": "INGRESS", "action": "allow",
                                                     "rules": "tcp:80,443", "ranges": "0.0.0.0/0", "targetTags": "web", "priority": 900})
     assert st == 200
     st, bad = c.sub("vpc", "createFirewall", custom, {"name": "bad", "rules": "icmp:22"})
     assert st == 400
     st, out = c.sub("vpc", "listFirewalls", custom)
-    fw = next(f for f in out["items"] if f["name"] == "allow-web")
+    fw = next(f for f in out["items"] if f["name"] == fwn)
     assert fw["allowed"] == [{"IPProtocol": "tcp", "ports": ["80", "443"]}] and fw["targetTags"] == ["web"] and fw["priority"] == 900
-    st, _ = c.sub("vpc", "setFirewallDisabled", custom, {"name": "allow-web", "disabled": True})
+    st, _ = c.sub("vpc", "setFirewallDisabled", custom, {"name": fwn, "disabled": True})
     st, out = c.sub("vpc", "listFirewalls", custom)
-    assert next(f for f in out["items"] if f["name"] == "allow-web")["disabled"] is True
-    st, _ = c.sub("vpc", "deleteFirewall", custom, {"name": "allow-web"})
-    st, out = c.sub("vpc", "createRoute", custom, {"name": "to-vpn", "destRange": "192.0.2.0/24", "nextHopType": "ip", "nextHop": "10.20.0.5"})
+    assert next(f for f in out["items"] if f["name"] == fwn)["disabled"] is True
+    st, _ = c.sub("vpc", "deleteFirewall", custom, {"name": fwn})
+    st, out = c.sub("vpc", "createRoute", custom, {"name": rtn, "destRange": "192.0.2.0/24", "nextHopType": "ip", "nextHop": "10.20.0.5"})
     assert st == 200
     st, out = c.sub("vpc", "listRoutes", custom)
     types = {r["name"]: r["type"] for r in out["items"]}
-    assert types["to-vpn"] == "Static route" and "Subnet route" in types.values() and "Default route" in types.values()
+    assert types[rtn] == "Static route" and "Subnet route" in types.values() and "Default route" in types.values()
     st, bad = c.sub("vpc", "deleteRoute", custom, {"name": next(n for n, t in types.items() if t == "Subnet route")})
     assert st == 400
+    assert c.sub("vpc", "deleteRoute", custom, {"name": rtn})[0] == 200
     st, _ = c.sub("vpc", "setFlowLogs", custom, {"name": "app", "region": "us-east1", "enable": True, "aggregationInterval": "INTERVAL_30_SEC", "flowSampling": 0.25})
     assert st == 200
     st, out = c.sub("vpc", "listFlowLogs", custom)
