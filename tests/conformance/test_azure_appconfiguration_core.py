@@ -132,4 +132,11 @@ r = arm.handle("PUT", rid + "/keyValues/k1$prod", {}, {"properties": {"value": "
 check("Nano ARM: keyValues PUT/GET", arm.handle("GET", rid + "/keyValues/k1$prod")["body"]["properties"]["value"] == "v")
 check("Nano ARM: state persists via the public map", rid.lower() in arm.state)
 print(f"\n{PASS} passed, {FAIL} failed")
-sys.exit(1 if FAIL else 0)
+
+
+def test_all_checks_pass():
+    assert FAIL == 0
+
+
+if __name__ == "__main__":
+    sys.exit(1 if FAIL else 0)

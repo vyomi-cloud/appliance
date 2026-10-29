@@ -181,8 +181,12 @@ def register(app: FastAPI) -> None:
             _usage("delete_repository", name)
         return JSONResponse(out, status_code=200 if out.get("ok") else 404)
 
+    # /api/gcp/sub/... reaches handlers as /api/sub/... (provider-alias rewrite, like
+    # every other GCP service's detail-tab actions); keep both spellings.
     @app.get("/api/gcp/sub/artifactregistry/{op}/{name}")
     @app.post("/api/gcp/sub/artifactregistry/{op}/{name}")
+    @app.get("/api/sub/artifactregistry/{op}/{name}")
+    @app.post("/api/sub/artifactregistry/{op}/{name}")
     async def api_ar_sub(op: str, name: str, request: Request):
         if op in ("listPackages", "listVersions", "listTags", "listImages"):
             await run_in_threadpool(_sync_registry)

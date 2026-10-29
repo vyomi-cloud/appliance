@@ -171,7 +171,9 @@ class Backends:
         try:
             from core import nano_registry as _reg
             _r = _reg.get()
-            self.resources = _r["resources"]
+            # The registry has no ResourceStore of its own (it can't import wasm/);
+            # register this one so nano_persist (STORE_ATTRS "resources") snapshots it.
+            self.resources = _r.setdefault("resources", ResourceStore())
             self._azure_arm = _r["az_arm"]
         except Exception:
             # Defensive fallback (e.g. registry unavailable in an isolated test):

@@ -41,6 +41,8 @@ STORE_ATTRS = [
     "gcp_redis",  # Memorystore for Redis (core/gcp_redis_core.RedisStore)
     "gcp_iamc",   # IAM Credentials issue log (core/gcp_iamcredentials_core.IamCredentialsStore)
     "gcp_sched",  # Cloud Scheduler (core/gcp_cloudscheduler_core.CloudSchedulerStore)
+    "resources",  # generic catalog CRUD (EC2, Lambda-adjacent, every GCP service; wasm/backends/store.ResourceStore)
+    "compute",  # Lambda functions + API Gateway APIs + VPC model (core/nano_registry.ComputeStore)
     "sfn",      # Step Functions (core/stepfunctions_core.StepFunctionsStore)
     "cw",       # CloudWatch metrics / alarms / dashboards
     "events",   # per-resource cloudsim event/activity log (core/nano_events.EventStore)

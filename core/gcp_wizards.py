@@ -207,7 +207,7 @@ _CLOUDSQL_WIZARD = _basic_wizard(
             {"value": "SQLSERVER_2022_STANDARD", "label": "SQL Server 2022 Standard"},
          ]},
         {"name": "rootPassword", "label": "Password for the postgres user", "type": "password",
-         "required": True,
+         "help": "Optional: leave blank and set it later (or use Generate in the real console).",
          "validate": {"regex": r"^.{8,99}$", "message": "8-99 characters"}},
     ],
     sections=[
@@ -364,11 +364,11 @@ _APIGW_WIZARD = _basic_wizard(
     name_default="my-gateway", region_or_zone="region",
     extra_basic_fields=[
         {"name": "apiConfig", "label": "API config",
-         "default": "", "required": True,
-         "help": "Reference an existing API config (OpenAPI 2.0/3.0 spec) by name."},
+         "default": "",
+         "help": "Reference an existing API config (OpenAPI 2.0/3.0 spec) by name; can be attached after creation."},
         {"name": "__serviceAccount__", "label": "Service account",
-         "default": "", "required": True,
-         "help": "Service account email used to invoke backend services."},
+         "default": "",
+         "help": "Service account email used to invoke backend services; defaults to the project's compute service account."},
     ],
 )
 
@@ -516,7 +516,7 @@ _SECRETMANAGER_WIZARD = _basic_wizard(
     name_default="my-secret", region_or_zone=None,
     extra_basic_fields=[
         {"name": "secret_value", "label": "Secret value", "type": "password",
-         "required": True,
+         "help": "Optional: a secret can be created empty and a version added later.",
          "validate": {"regex": r"^.{1,65535}$", "message": "1-65535 chars"}},
     ],
     sections=[

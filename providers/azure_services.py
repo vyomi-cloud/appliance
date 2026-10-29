@@ -227,7 +227,7 @@ RESOURCE_CATALOG: list[dict] = [
             ["properties.provisioningState", "Status"],
         ],
         "create_fields": [
-            {"name": "name", "label": "Name", "type": "text", "required": True},
+            {"name": "name", "label": "Name", "type": "text", "required": True, "default": "nsg-cloudlearn"},
             {"name": "location", "label": "Location", "type": "text", "default": "eastus"},
         ],
         "defaults": {
@@ -507,8 +507,9 @@ RESOURCE_CATALOG: list[dict] = [
             ["properties.type", "Type"],
         ],
         "create_fields": [
-            {"name": "properties.roleName", "label": "Role Name", "type": "text", "required": True},
-            {"name": "properties.description", "label": "Description", "type": "text"},
+            {"name": "name", "label": "Role definition name (GUID)", "type": "text", "default": "__UUID__"},
+            {"name": "properties.roleName", "label": "Role Name", "type": "text", "required": True, "default": "Custom Role - CloudLearn"},
+            {"name": "properties.description", "label": "Description", "type": "text", "default": "Custom role created from the Vyomi console"},
             {"name": "properties.type", "label": "Type", "type": "select", "options": ["BuiltInRole", "CustomRole"], "default": "CustomRole"},
         ],
         "defaults": {

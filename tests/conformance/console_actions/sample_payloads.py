@@ -113,6 +113,14 @@ _GCP_PAYLOADS: dict[str, dict] = {
     "secretmanager": {"name": "vyomi-conf-secret", "secretId": "vyomi-conf-secret",
                      "secret": {"replication": {"automatic": {}}}},
     "kms":         {"name": "vyomi-conf-key", "keyRingId": "vyomi-conf-ring"},
+    # Console create-form shapes (catalog createFields) for the services whose handlers
+    # take the form directly; an empty body is not a valid create for them.
+    "cloudscheduler": {"name": "vyomi-conf-job", "region": "us-central1", "schedule": "*/30 * * * *",
+                       "targetType": "HTTP", "url": "https://example.com/hook", "httpMethod": "POST"},
+    "container":   {"name": "vyomi-conf-gke", "region": "us-central1", "mode": "Standard", "nodeCount": 1},
+    "redis":       {"name": "vyomi-conf-redis", "region": "us-central1", "tier": "STANDARD_HA", "memorySizeGb": 1},
+    "iamcredentials": {"serviceAccount": "vyomi-conf-sa@cloudlearn.iam.gserviceaccount.com",
+                       "credentialType": "Access token"},
 }
 
 
@@ -146,7 +154,33 @@ _AZURE_PAYLOADS: dict[str, dict] = {
                                    "sku": {"family": "A", "name": "standard"},
                                    "accessPolicies": []}},
     "eventgrid":   {"location": "eastus", "properties": {}},
+    "app":         {"location": "eastus", "kind": "containerapps",
+                    "properties": {"template": {"containers": [{"name": "app", "image": "nginx:latest"}]},
+                                   "configuration": {"ingress": {"targetPort": 80, "external": True}}}},
+    "appconfiguration": {"location": "eastus", "sku": {"name": "Standard"}, "properties": {}},
+    "cognitiveservices": {"location": "eastus", "kind": "OpenAI", "sku": {"name": "S0"},
+                          "properties": {"publicNetworkAccess": "Enabled"}},
+    "dns":         {"location": "global", "properties": {"zoneType": "Public"}},
+    "monitor":     {"location": "global",
+                    "properties": {"severity": 3, "enabled": True, "evaluationFrequency": "PT1M",
+                                   "windowSize": "PT5M",
+                                   "scopes": ["/subscriptions/sim-sub/resourceGroups/cloudlearn-rg"],
+                                   "criteria": {"allOf": [{"name": "HighCpu", "metricName": "Percentage CPU",
+                                                           "operator": "GreaterThan", "timeAggregation": "Average",
+                                                           "threshold": 80}]}}},
+    "operationalinsights": {"location": "eastus",
+                            "properties": {"sku": {"name": "PerGB2018"}, "retentionInDays": 30}},
 }
+
+# Azure resource names that need more than the default `vyomi-conf-<key>` shape
+# (a real DNS zone name has at least two labels).
+_AZURE_NAMES: dict[str, str] = {"dns": "vyomi-conf-{sfx}.example.com"}
+
+
+def azure_resource_name(service: str) -> str:
+    # Per-run suffix: Azure soft-deletes App Configuration stores / AI accounts, so a
+    # fixed name collides when the suite runs twice against the same appliance.
+    return _AZURE_NAMES.get(service.lower(), "vyomi-conf-{svc}-{sfx}").format(svc=service, sfx=_RUN_SUFFIX)
 
 
 def _apply_run_suffix(payload: dict) -> dict:

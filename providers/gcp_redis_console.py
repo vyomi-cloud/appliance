@@ -19,6 +19,17 @@ from core import gcp_redis_core as core
 DEFAULT_PROJECT = "demo"
 
 
+async def _json_body(request):
+    """Console form body; a missing/invalid JSON body is a 400, not a 500."""
+    try:
+        b = await request.json()
+    except ValueError:
+        raise HTTPException(400, detail="Request body must be a JSON object.")
+    if not isinstance(b, dict):
+        raise HTTPException(400, detail="Request body must be a JSON object.")
+    return b
+
+
 def _http_error(r):
     try:
         msg = json.loads(r.body)["error"]["message"]
@@ -95,7 +106,7 @@ def register(app, on_change=None):
 
     @app.post("/api/redis/instances")
     async def create_instance(request: Request):
-        form = await request.json()
+        form = await _json_body(request)
         req = core.job_from_form(form, DEFAULT_PROJECT)
         r = call("POST", f"/v1/{req['parent']}/instances", {"instanceId": req["instanceId"]},
                  json.dumps(req["instance"]).encode())
@@ -123,7 +134,7 @@ def register(app, on_change=None):
         full = find(name)
         p, l, i = loc(full)
         try:
-            b = await request.json()
+            b = await _json_body(request)
         except Exception:
             b = {}
         path = f"/v1/projects/{p}/locations/{l}/instances/{i}"

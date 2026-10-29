@@ -39,6 +39,8 @@ try {
       const items = Array.isArray(l) ? l : (l.items || l.functions || l.databases || l.keys || l.secrets || l.apis || l.triggers || []);
       const row = items.find((i) => String(i.name || "").split("/").pop() === body.name);
       const svc = cat.services.find((x) => x.key === k);
+      // the console derives some columns (VPC mode, function state) from the resource
+      if (row && typeof decorateGcpItems === "function") decorateGcpItems(svc, [row]);
       out[k] = row ? svc.columns.map(([p, label]) => [label, get(row, p)]) : null;
     }
     return out;

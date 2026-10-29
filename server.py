@@ -192,12 +192,12 @@ register_azure_routes(app, None)
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
-from routes import lazy_backends, shared, console_next, aws_logs, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
+from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
-            lazy_backends, shared, console_next, aws_logs, aws_cloudwatch, aws_kinesis, gcp_artifactregistry]:
+            lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -2541,6 +2541,24 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(api, dict):
             add("aws", "apigateway", "api", api_id, api)
 
+    _iam_src = _cloudsim_service_state(space, "iam")
+    if not _iam_src.get("users") and space.get("space_id") == _spaces_state().get("active_space_id"):
+        _iam_src = _iam_state()   # IAM lives in the live (active-space) STATE, not service_states
+    for _iam_kind, _iam_coll in (("user", "users"), ("group", "groups"), ("role", "roles")):
+        for _iam_id, _iam_rec in _iam_src.get(_iam_coll, {}).items():
+            if isinstance(_iam_rec, dict):
+                add("aws", "iam", _iam_kind, str(_iam_id), _iam_rec)
+
+    try:   # Secrets Manager + KMS — the Vault-backed stores the console and SDK/CLI share
+        from core import vault_routes as _vr
+        for _sec_name in _vr._aws_secret_index_get(str(space.get("space_id") or _spaces_state().get("active_space_id") or "default")):
+            add("aws", "secretsmanager", "secret", _sec_name, {"name": _sec_name})
+        for _key_id, _key in list(_vr._kms_keys.items()):
+            if isinstance(_key, dict) and _key.get("KeyState") != "PendingDeletion":
+                add("aws", "kms", "key", _key_id, {"name": _key_id})
+    except Exception:
+        pass
+
     try:   # API Gateway V2 — the shared wire/console store (console + SDK/CLI created APIs)
         from core.apigatewayv2_core import shared_store as _apigwv2_store
         for api_id, api in _apigwv2_store().apis.items():
@@ -2681,6 +2699,32 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     for fn_name, fn in gcp_functions.get("functions", {}).items():
         if isinstance(fn, dict):
             add("gcp", "functions", "function", fn_name, fn, "gcp_functions")
+
+    # Pub/Sub backed by the emulator keeps topics/subscriptions only there (not in
+    # service_states), so list them per project (console project, SDK default projects).
+    try:
+        from core import gcp_pubsub_emulator as _ps_emu
+        if str(space.get("provider") or "") == "gcp" and _ps_emu.available():
+            for _pp in ("123456789012", "cloudlearn", "gcp-dev"):
+                for _t in _ps_emu.list_topics(_pp):
+                    add("gcp", "pubsub", "topic", f"{_pp}/{_t['name']}", {"name": _t["name"]})
+                for _sb in _ps_emu.list_subscriptions(_pp):
+                    add("gcp", "pubsub", "subscription", f"{_pp}/{_sb['name']}", {"name": _sb["name"]})
+    except Exception:
+        pass
+
+    # API Gateway created through the console catalog (routes/gcp_extras.py) lives under
+    # service_states["apigateway"][<project>]["apis"|"gateways"]; the SDK path under gcp_apigateway.
+    _ag_projects = service_states.get("apigateway", {}) if isinstance(service_states.get("apigateway"), dict) else {}
+    if str(space.get("provider") or "") == "gcp":
+        for _proj, _pd in _ag_projects.items():
+            if not isinstance(_pd, dict) or _proj in ("apis", "logs"):
+                continue
+            for _akind, _nkind in (("apis", "api"), ("gateways", "gateway")):
+                for _aname, _arec in (_pd.get(_akind) or {}).items():
+                    if isinstance(_arec, dict):
+                        add("gcp", "apigateway", _nkind, f"{_proj}/{_aname}",
+                            {**_arec, "name": _aname, "created": _arec.get("createTime", "")})
 
     gcp_apigw = _cloudsim_service_state(space, "gcp_apigateway")
     for api_id, api in gcp_apigw.get("apis", {}).items():
@@ -2867,7 +2911,8 @@ def _cloudsim_refresh_bridge(reason: str, detail: dict | None = None) -> None:
         nodes, counts, runtime_instances = _cloudsim_collect_resources(source_space)
         try:
             from core import cost_model as _cm
-            _savings = _cm.estimate_space_savings(nodes)
+            from core import usage_meter as _um
+            _savings = _cm.estimate_space_savings(nodes, usage=_um.snapshot(active_id))
         except Exception:
             _savings = {"real_cloud_cost_usd": 0.0, "simulator_cost_usd": 0.0, "savings_usd": 0.0, "savings_pct": 0.0, "by_provider": {}, "by_service": {}, "resource_count": 0}
         if detail is None:
@@ -12720,6 +12765,186 @@ def _ec2_query_describe_images(params: dict[str, Any]) -> Response:
     return _ec2_success_response("DescribeImagesResponse", build)
 
 
+def _ec2_query_get_image_findings(params: dict[str, Any]) -> Response:
+    image_id = str(params.get("ImageId", "")).strip()
+    if not image_id:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter ImageId", 400)
+    if image_id not in {p["ami"] for p in AMI_CATALOG}:
+        return _ec2_error_response("InvalidAMIID.NotFound", f"The image id '[{image_id}]' does not exist", 400)
+
+    def build(root: ET.Element) -> None:
+        _ec2_sub(root, "imageFindingsSet")
+
+    return _ec2_success_response("GetImageFindingsResponse", build)
+
+
+def _ec2_query_get_capacity_manager_supportability_scores(params: dict[str, Any]) -> Response:
+    for name in ("CapacityAmount", "CapacityUnit", "MarketType"):
+        if not str(params.get(name, "")).strip():
+            return _ec2_error_response("MissingParameter", f"The request must contain the parameter {name}", 400)
+    azs = [str(v) for k, v in sorted(params.items()) if k.startswith("CapacityAvailabilityZoneId.") and str(v).strip()]
+    if not azs:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter CapacityAvailabilityZoneId", 400)
+
+    def build(root: ET.Element) -> None:
+        # The simulator has no capacity constraints, so every zone scores the maximum.
+        _ec2_sub(root, "aggregateScore", "100")
+        scores = _ec2_sub(root, "capacityManagerSupportabilityScoreSet")
+        for az in azs:
+            item = _ec2_sub(scores, "item")
+            _ec2_sub(item, "availabilityZoneId", az)
+            _ec2_sub(item, "score", "100")
+
+    return _ec2_success_response("GetCapacityManagerSupportabilityScoresResponse", build)
+
+
+_EC2_CAPACITY_RESERVATION_FLEETS: dict[str, dict[str, Any]] = {}
+
+
+def _ec2_capacity_fleet_xml(parent: ET.Element, fleet: dict[str, Any]) -> None:
+    _ec2_sub(parent, "capacityReservationFleetId", fleet["id"])
+    _ec2_sub(parent, "capacityReservationFleetArn", fleet["arn"])
+    _ec2_sub(parent, "state", fleet["state"])
+    _ec2_sub(parent, "totalTargetCapacity", str(fleet["target"]))
+    _ec2_sub(parent, "totalFulfilledCapacity", str(fleet["fulfilled"]))
+    _ec2_sub(parent, "tenancy", fleet["tenancy"])
+    if fleet["end_date"]:
+        _ec2_sub(parent, "endDate", fleet["end_date"])
+    _ec2_sub(parent, "createTime", fleet["create_time"])
+    _ec2_sub(parent, "instanceMatchCriteria", fleet["match"])
+    _ec2_sub(parent, "allocationStrategy", fleet["strategy"])
+    tags = _ec2_sub(parent, "tagSet")
+    for tag in fleet["tags"]:
+        item = _ec2_sub(tags, "item")
+        _ec2_sub(item, "key", tag["key"])
+        _ec2_sub(item, "value", tag["value"])
+    reservations = _ec2_sub(parent, "instanceTypeSpecificationSet")
+    for spec in fleet["specs"]:
+        item = _ec2_sub(reservations, "item")
+        _ec2_sub(item, "instanceType", spec["instance_type"])
+        _ec2_sub(item, "instancePlatform", spec["platform"])
+        _ec2_sub(item, "availabilityZone", spec["az"])
+        _ec2_sub(item, "availabilityZoneId", spec["az_id"])
+
+
+def _ec2_query_create_capacity_reservation_fleet(params: dict[str, Any]) -> Response:
+    target = str(params.get("TotalTargetCapacity", "")).strip()
+    if not target:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter TotalTargetCapacity", 400)
+    if not target.isdigit() or int(target) < 1:
+        return _ec2_error_response("InvalidParameterValue", "Value for parameter TotalTargetCapacity must be a positive integer", 400)
+    has_requirements = any(k.startswith("InstanceRequirements.") for k in params)
+    spec_idx = sorted({m.group(1) for k in params if (m := re.match(r"^InstanceTypeSpecification\.(\d+)\.", k))}, key=int)
+    if not spec_idx and not has_requirements:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter InstanceTypeSpecification", 400)
+    region = str(params.get("Region", "") or "us-east-1")
+    fleet_az = str(params.get("AvailabilityZone", "")).strip()
+    fleet_az_id = str(params.get("AvailabilityZoneId", "")).strip()
+    specs = []
+    for i in spec_idx:
+        pre = f"InstanceTypeSpecification.{i}."
+        specs.append({
+            "instance_type": str(params.get(pre + "InstanceType", "")).strip() or "m5.large",
+            "platform": str(params.get(pre + "InstancePlatform", "")).strip() or "Linux/UNIX",
+            "az": str(params.get(pre + "AvailabilityZone", "")).strip() or fleet_az or f"{region}a",
+            "az_id": str(params.get(pre + "AvailabilityZoneId", "")).strip() or fleet_az_id or "use1-az1",
+        })
+    if not specs:
+        specs.append({"instance_type": "m5.large", "platform": "Linux/UNIX", "az": fleet_az or f"{region}a", "az_id": fleet_az_id or "use1-az1"})
+    fleet_id = f"crf-{secrets.token_hex(8)}"
+    end_date = str(params.get("EndDate", "")).strip()
+    fleet = {
+        "id": fleet_id,
+        "arn": f"arn:aws:ec2:{region}:123456789012:capacity-reservation-fleet/{fleet_id}",
+        "state": "active",
+        "target": int(target),
+        "fulfilled": int(target),
+        "tenancy": str(params.get("Tenancy", "")).strip() or "default",
+        "end_date": end_date,
+        "create_time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "match": str(params.get("InstanceMatchCriteria", "")).strip() or "open",
+        "strategy": str(params.get("AllocationStrategy", "")).strip() or "prioritized",
+        "tags": _vpc_parse_tag_specifications(params, "capacity-reservation-fleet"),
+        "specs": specs,
+    }
+    if str(params.get("DryRun", "")).lower() == "true":
+        return _ec2_error_response("DryRunOperation", "Request would have succeeded, but DryRun flag is set.", 412)
+    _EC2_CAPACITY_RESERVATION_FLEETS[fleet_id] = fleet
+
+    def build(root: ET.Element) -> None:
+        _ec2_sub(root, "capacityReservationFleetId", fleet_id)
+        _ec2_sub(root, "state", "submitted")
+        _ec2_sub(root, "totalTargetCapacity", str(fleet["target"]))
+        _ec2_sub(root, "totalFulfilledCapacity", "0")
+        _ec2_sub(root, "instanceMatchCriteria", fleet["match"])
+        _ec2_sub(root, "allocationStrategy", fleet["strategy"])
+        _ec2_sub(root, "createTime", fleet["create_time"])
+        if end_date:
+            _ec2_sub(root, "endDate", end_date)
+        _ec2_sub(root, "tenancy", fleet["tenancy"])
+        reservations = _ec2_sub(root, "fleetCapacityReservationSet")
+        per = max(1, fleet["target"] // len(specs))
+        for spec in specs:
+            item = _ec2_sub(reservations, "item")
+            _ec2_sub(item, "capacityReservationId", f"cr-{secrets.token_hex(8)}")
+            _ec2_sub(item, "availabilityZoneId", spec["az_id"])
+            _ec2_sub(item, "instanceType", spec["instance_type"])
+            _ec2_sub(item, "instancePlatform", spec["platform"])
+            _ec2_sub(item, "availabilityZone", spec["az"])
+            _ec2_sub(item, "totalInstanceCount", str(per))
+            _ec2_sub(item, "fulfilledCapacity", "0")
+            _ec2_sub(item, "ebsOptimized", "false")
+            _ec2_sub(item, "createTime", fleet["create_time"])
+        tags = _ec2_sub(root, "tagSet")
+        for tag in fleet["tags"]:
+            item = _ec2_sub(tags, "item")
+            _ec2_sub(item, "key", tag["key"])
+            _ec2_sub(item, "value", tag["value"])
+
+    return _ec2_success_response("CreateCapacityReservationFleetResponse", build)
+
+
+def _ec2_query_describe_capacity_reservation_fleets(params: dict[str, Any]) -> Response:
+    ids = [str(v) for k, v in sorted(params.items()) if k.startswith("CapacityReservationFleetId.")]
+    for fid in ids:
+        if fid not in _EC2_CAPACITY_RESERVATION_FLEETS:
+            return _ec2_error_response("InvalidCapacityReservationFleetId.NotFound", f"The capacity reservation fleet '{fid}' does not exist", 400)
+    fleets = [_EC2_CAPACITY_RESERVATION_FLEETS[i] for i in ids] if ids else list(_EC2_CAPACITY_RESERVATION_FLEETS.values())
+
+    def build(root: ET.Element) -> None:
+        fleet_set = _ec2_sub(root, "capacityReservationFleetSet")
+        for fleet in fleets:
+            _ec2_capacity_fleet_xml(_ec2_sub(fleet_set, "item"), fleet)
+
+    return _ec2_success_response("DescribeCapacityReservationFleetsResponse", build)
+
+
+def _ec2_query_cancel_capacity_reservation_fleets(params: dict[str, Any]) -> Response:
+    ids = [str(v) for k, v in sorted(params.items()) if k.startswith("CapacityReservationFleetId.")]
+    if not ids:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter CapacityReservationFleetId", 400)
+
+    def build(root: ET.Element) -> None:
+        ok = _ec2_sub(root, "successfulFleetCancellationSet")
+        bad = _ec2_sub(root, "failedFleetCancellationSet")
+        for fid in ids:
+            fleet = _EC2_CAPACITY_RESERVATION_FLEETS.get(fid)
+            if fleet is None:
+                item = _ec2_sub(bad, "item")
+                _ec2_sub(item, "capacityReservationFleetId", fid)
+                err = _ec2_sub(item, "cancelCapacityReservationFleetError")
+                _ec2_sub(err, "code", "capacity-reservation-fleet-not-found")
+                _ec2_sub(err, "message", f"The capacity reservation fleet '{fid}' does not exist")
+                continue
+            item = _ec2_sub(ok, "item")
+            _ec2_sub(item, "capacityReservationFleetId", fid)
+            _ec2_sub(item, "previousFleetState", fleet["state"])
+            _ec2_sub(item, "currentFleetState", "cancelled")
+            fleet["state"] = "cancelled"
+
+    return _ec2_success_response("CancelCapacityReservationFleetsResponse", build)
+
+
 def _ec2_query_describe_instance_status(params: dict[str, Any]) -> Response:
     instances = _ec2_query_filter_instances(params)
 
@@ -13675,6 +13900,16 @@ async def api_ec2_query(request: Request):
             return _ec2_query_describe_instances(params)
         if action == "DescribeImages":
             return _ec2_query_describe_images(params)
+        if action == "GetImageFindings":
+            return _ec2_query_get_image_findings(params)
+        if action == "CreateCapacityReservationFleet":
+            return _ec2_query_create_capacity_reservation_fleet(params)
+        if action == "DescribeCapacityReservationFleets":
+            return _ec2_query_describe_capacity_reservation_fleets(params)
+        if action == "CancelCapacityReservationFleets":
+            return _ec2_query_cancel_capacity_reservation_fleets(params)
+        if action == "GetCapacityManagerSupportabilityScores":
+            return _ec2_query_get_capacity_manager_supportability_scores(params)
         if action == "DescribeInstanceStatus":
             return _ec2_query_describe_instance_status(params)
         if action == "DescribeInstanceTypes":
@@ -15477,6 +15712,7 @@ def api_gcp_pubsub_delete_topic(project: str, topic: str):
         if str(sub.get("project") or project) == project and str(sub.get("topic") or "") == f"projects/{project}/topics/{topic}":
             del gcp_pubsub_state["subscriptions"][sub_id]
             gcp_pubsub_state.get("messages", {}).pop(sub_id, None)
+            _cloudsim_sync_service_resource("gcp", "pubsub", "subscription", sub_id, {}, "gcp_pubsub", action="delete")
     gcp_pubsub_state.get("messages", {}).pop(topic, None)
     _cloudsim_sync_service_resource("gcp", "pubsub", "topic", topic, {}, "gcp_pubsub", action="delete")
     _record_usage("gcp.pubsub.delete_topic", {"project": project, "topic": topic})

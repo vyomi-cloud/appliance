@@ -18,6 +18,17 @@ from core import gcp_iamcredentials_core as core
 DEFAULT_PROJECT = "demo"
 
 
+async def _json_body(request):
+    """Console form body; a missing/invalid JSON body is a 400, not a 500."""
+    try:
+        b = await request.json()
+    except ValueError:
+        raise HTTPException(400, detail="Request body must be a JSON object.")
+    if not isinstance(b, dict):
+        raise HTTPException(400, detail="Request body must be a JSON object.")
+    return b
+
+
 class _Shim:
     """Minimal Request stand-in for providers.gcp_iam.api_gcp_iam_create_service_account."""
 
@@ -83,7 +94,7 @@ def register(app, on_change=None):
 
     @app.post("/api/iamcredentials/credentials")
     async def issue_credential(request: Request):
-        b = await request.json()
+        b = await _json_body(request)
         sa = core.form_service_account(b)
         if "@" in sa and not resolve(sa):   # the console issues for the account, creating it if absent
             acct, _, rest = sa.partition("@")

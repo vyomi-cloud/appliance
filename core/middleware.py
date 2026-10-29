@@ -410,7 +410,68 @@ async def azure_blob_dispatch_middleware(request, call_next):
     return await call_next(request)
 
 
+_METER_TIMER = None
+
+
+def _storage_write_provider(request, path: str) -> str:
+    """Provider whose object-storage data plane this request writes to ('' if none)."""
+    if request.method not in ("PUT", "POST"):
+        return ""
+    if path.startswith("/upload/storage/v1/"):
+        return "gcp"
+    if path.startswith("/azure-data/blob"):
+        return "azure"
+    if "/s3/aws4_request" in (request.headers.get("authorization") or ""):
+        return "aws"
+    return ""
+
+
+def _schedule_savings_refresh() -> None:
+    """Recompute the space's resource graph + cost savings ~1 s after a write (debounced)."""
+    global _METER_TIMER
+    import threading
+    if _METER_TIMER is not None and _METER_TIMER.is_alive():
+        return
+
+    def _refresh():
+        try:
+            from server import _cloudsim_refresh_bridge
+            _cloudsim_refresh_bridge("savings.refresh", {})
+        except Exception:
+            pass
+    _METER_TIMER = threading.Timer(1.0, _refresh)
+    _METER_TIMER.daemon = True
+    _METER_TIMER.start()
+
+
+def _meter_storage_write(request, response, orig_path: str) -> None:
+    """Meter bytes stored + a write request so savings include real storage billing;
+    any other successful write schedules a savings refresh so new resources count."""
+    try:
+        if response.status_code >= 300 or request.method not in ("PUT", "POST", "DELETE", "PATCH"):
+            return
+        provider = _storage_write_provider(request, request.scope.get("path", "") or orig_path)
+        if provider:
+            try:
+                nbytes = int(request.headers.get("x-amz-decoded-content-length")
+                             or request.headers.get("content-length") or 0)
+            except ValueError:
+                nbytes = 0
+            from core import usage_meter
+            space_id = (STATE.get("spaces") or {}).get("active_space_id", "")
+            usage_meter.record(space_id, provider, nbytes)
+        _schedule_savings_refresh()
+    except Exception:
+        pass
+
+
 async def provider_api_alias_middleware(request, call_next):
+    response = await _provider_api_alias(request, call_next)
+    _meter_storage_write(request, response, request.scope.get("path", ""))
+    return response
+
+
+async def _provider_api_alias(request, call_next):
     path = request.scope.get("path", "")
     _gcp_capture_public_base(request)
     if _is_azure_native_path(path):
@@ -822,6 +883,29 @@ async def _tier_enforcement_middleware(request: Request, call_next):
 # Public entry-point: register all middleware on the FastAPI app
 # ---------------------------------------------------------------------------
 
+async def request_recorder_middleware(request, call_next):
+    """Record every provider-scoped request (provider, service, path, status, latency) for the
+    console Metrics tabs. Outermost layer so it times the whole stack; never alters the response."""
+    path = request.url.path
+    if path.startswith(("/api/metrics", "/static/", "/assets/", "/console")) or path in ("/healthz", "/favicon.ico"):
+        return await call_next(request)
+    t0 = time.time()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        try:
+            from core import request_metrics as _rm
+            prov, svc = _rm.classify(path, _resolve_provider_service(request))
+            if prov and svc:
+                _rm.record(prov, svc, request.method, path, status, (time.time() - t0) * 1000.0,
+                           query=request.url.query or "", host=request.headers.get("host", ""))
+        except Exception:
+            pass
+
+
 def register_middleware(app) -> None:
     """Add every middleware layer to *app* in the exact registration order
     that ``server.py`` originally used.
@@ -875,3 +959,6 @@ def register_middleware(app) -> None:
     # before tier-enforcement classifies the provider or the S3 catch-all can
     # claim them. (Starlette runs http middleware in reverse registration order.)
     app.middleware("http")(azure_blob_dispatch_middleware)
+
+    # 9. request_recorder_middleware — registered after azure_blob_dispatch so it is the outermost layer.
+    app.middleware("http")(request_recorder_middleware)

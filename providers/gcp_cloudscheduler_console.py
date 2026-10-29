@@ -5,7 +5,7 @@ adapters over core/gcp_cloudscheduler_core.py on the SAME shared store, so a job
 in the console is visible to the SDK/CLI and vice-versa.
 
 Pub/Sub targets are published into the appliance's Pub/Sub topic when a job fires
-(`:run`, or lazily when its schedule is due)."""
+(`:run`, or when its schedule is due: a 15 s background ticker fires it)."""
 from __future__ import annotations
 
 import json
@@ -16,6 +16,18 @@ from core import gcp_cloudscheduler_core as core
 
 DEFAULT_PROJECT = "demo"
 DEFAULT_REGION = "us-central1"
+TICK_SECONDS = 15
+
+
+async def _json_body(request):
+    """Console form body; a missing/invalid JSON body is a 400, not a 500."""
+    try:
+        b = await request.json()
+    except ValueError:
+        raise HTTPException(400, detail="Request body must be a JSON object.")
+    if not isinstance(b, dict):
+        raise HTTPException(400, detail="Request body must be a JSON object.")
+    return b
 
 
 class _Shim:
@@ -33,7 +45,11 @@ async def _drain(pending, store):
     if not pending:
         return
     from providers import gcp_services
-    for job_name, topic_name, data, attrs in pending:
+    for item in pending:
+        if item[0] == "http":
+            await _deliver_http(item[1], store)
+            continue
+        _, job_name, topic_name, data, attrs = item
         project, topic = topic_name.split("/")[1], topic_name.split("/")[3]
         try:
             await gcp_services.api_gcp_pubsub_publish(
@@ -48,10 +64,85 @@ async def _drain(pending, store):
                 job["status"] = {"code": 13, "message": str(e)}
 
 
+# HTTP status -> google.rpc.Code, as Cloud Scheduler records on the job's `status`
+_HTTP_RPC = {400: 3, 401: 16, 403: 7, 404: 5, 409: 6, 429: 8, 499: 1, 500: 13, 501: 12, 503: 14, 504: 4}
+
+
+def _http_attempt(d):
+    """One blocking HTTP attempt -> {} on 2xx, else a google.rpc.Status-shaped dict."""
+    import base64
+    import socket
+    import urllib.error
+    import urllib.request
+    from urllib.parse import urlsplit, urlunsplit
+    method = d["httpMethod"]
+    headers = {str(k): str(v) for k, v in (d.get("headers") or {}).items()}
+    headers.setdefault("User-Agent", "Google-Cloud-Scheduler")
+    if d.get("oidcToken") or d.get("oauthToken"):
+        headers.setdefault("Authorization", "Bearer vyomi-scheduler-placeholder-token")
+    try:
+        body = base64.b64decode(d.get("body") or "") if d.get("body") else None
+    except Exception:
+        body = None
+    if body is not None and method in ("GET", "HEAD"):
+        body = None
+    deadline = 180.0
+    try:
+        deadline = min(max(float(str(d.get("attemptDeadline") or "180s")[:-1]), 15.0), 1800.0)
+    except ValueError:
+        pass
+    uri = d["uri"]
+    sp = urlsplit(uri)
+    if sp.hostname == "host.docker.internal":
+        try:
+            socket.getaddrinfo(sp.hostname, None)
+        except OSError:   # not resolvable outside Docker Desktop: the user's machine is loopback
+            uri = urlunsplit(sp._replace(netloc=sp.netloc.replace("host.docker.internal", "127.0.0.1")))
+    req = urllib.request.Request(uri, data=body, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=deadline) as resp:
+            resp.read(1024)
+        return {}
+    except urllib.error.HTTPError as e:
+        return {"code": _HTTP_RPC.get(e.code, 13 if e.code >= 500 else 9),
+                "message": "URL_ERROR-ERROR_NOT_FOUND. Original HTTP response code number = %d" % e.code
+                if e.code == 404 else "Original HTTP response code number = %d" % e.code}
+    except (socket.timeout, TimeoutError):
+        return {"code": 4, "message": "Deadline exceeded calling %s" % uri}
+    except Exception as e:   # noqa: BLE001
+        if "timed out" in str(e):
+            return {"code": 4, "message": "Deadline exceeded calling %s" % uri}
+        return {"code": 14, "message": "URL_ERROR-ERROR_CONNECTION. %s" % e}
+
+
+async def _deliver_http(d, store):
+    """Send a due httpTarget request, retrying per retryConfig (backoff capped so a
+    request never hangs), and record the outcome on the job's status."""
+    import asyncio
+    rc = d.get("retryConfig") or {}
+    attempts = 1 + max(int(rc.get("retryCount") or 0), 0)
+    backoff = 5.0
+    try:
+        backoff = float(str(rc.get("minBackoffDuration") or "5s")[:-1])
+    except ValueError:
+        pass
+    status = {}
+    for i in range(attempts):
+        status = await asyncio.to_thread(_http_attempt, d)
+        if not status or i == attempts - 1:
+            break
+        await asyncio.sleep(min(backoff * (2 ** i), 2.0))
+    job = store.jobs.get(d["job"])
+    if job is not None:
+        job["status"] = status
+
+
 def _queue_invoker(pending):
     def invoke(kind, d):
         if kind == "pubsub":
-            pending.append((d["job"], d["topicName"], d.get("data", ""), d.get("attributes") or {}))
+            pending.append(("pubsub", d["job"], d["topicName"], d.get("data", ""), d.get("attributes") or {}))
+        elif kind == "http":
+            pending.append(("http", d))
         return True
     return invoke
 
@@ -80,6 +171,36 @@ def register(app, on_change=None):
         r = core.dispatch(store(), method, path, query or {}, headers or {}, body, invoker=_queue_invoker(pending))
         await _drain(pending, store())
         return r
+
+    # ── background timer ─────────────────────────────────────────────────
+    # Real Cloud Scheduler fires on time with nobody calling it; the core is lazy, so the
+    # appliance drives it. Each tick fires a due ENABLED job at most once (_advance moves
+    # scheduleTime forward) and missed ticks are not replayed.
+    async def tick():
+        # No request here, so bind the GCP provider like the alias middleware does: the
+        # Pub/Sub state is space-scoped by REQUEST_PROVIDER (default "aws").
+        from core.app_context import REQUEST_PROVIDER
+        token = REQUEST_PROVIDER.set("gcp")
+        try:
+            pending: list = []
+            core._advance(store(), invoker=_queue_invoker(pending))
+            await _drain(pending, store())
+        finally:
+            REQUEST_PROVIDER.reset(token)
+
+    async def _ticker():
+        import asyncio
+        while True:
+            await asyncio.sleep(TICK_SECONDS)
+            try:
+                await tick()
+            except Exception as e:   # noqa: BLE001 — a bad job must not stop the timer
+                print(f"[cloudscheduler] tick failed: {e!r}")
+
+    @app.on_event("startup")
+    async def _start_scheduler_ticker():
+        import asyncio
+        app.state.cloudscheduler_ticker = asyncio.create_task(_ticker())
 
     # ── native wire ───────────────────────────────────────────────────────
     async def native(request: Request):
@@ -115,7 +236,7 @@ def register(app, on_change=None):
 
     @app.post("/api/cloudscheduler/jobs")
     async def create_job(request: Request):
-        b = await request.json()
+        b = await _json_body(request)
         job = build_job(b)
         loc = str(b.get("region") or DEFAULT_REGION)
         r = await call("POST", f"/v1/projects/{DEFAULT_PROJECT}/locations/{loc}/jobs", body=json.dumps(job).encode())
@@ -133,7 +254,7 @@ def register(app, on_change=None):
 
     @app.patch("/api/cloudscheduler/jobs/{name}")
     async def patch_job(name: str, request: Request):
-        b = await request.json()
+        b = await _json_body(request)
         p, l, j = parts(name)
         upd = {k: b[k] for k in ("description", "schedule", "timeZone") if b.get(k)}
         r = await call("PATCH", f"/v1/projects/{p}/locations/{l}/jobs/{j}", {"updateMask": ",".join(upd)}, json.dumps(upd).encode())

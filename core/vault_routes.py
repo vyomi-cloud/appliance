@@ -550,6 +550,9 @@ def _register_gcp(app: FastAPI) -> None:
         space = _active_space_id(request)
         got = vc.kv_get("gcp", space, name)
         if got is None:
+            # A secret may exist with no version yet (created empty): metadata only.
+            if name in _gcp_idx_get(space, "secrets"):
+                return {"ok": True, "name": name, "value": ""}
             return JSONResponse(status_code=404,
                                 content={"ok": False, "error": "secret not found", "name": name})
         data = got.get("data", {})
@@ -994,6 +997,19 @@ def aws_vault_resources(space: str) -> dict:
     return {"secrets": secrets, "keys": keys}
 
 
+def _aws_secret_meta(space: str, name: str) -> dict:
+    """Per-secret console metadata (encryption key, ARN, created) kept beside the value."""
+    got = vc.kv_get("aws", space, "__meta__" + name)
+    try:
+        raw = (got.get("data") or {}).get("value", "{}") if got else "{}"
+        meta = json.loads(raw) if isinstance(raw, str) else dict(raw)
+    except Exception:
+        meta = {}
+    meta.setdefault("kms_key_id", "aws/secretsmanager")
+    meta.setdefault("arn", f"arn:aws:secretsmanager:us-east-1:000000000000:secret:{name}")
+    return meta
+
+
 def _aws_alias_for(key_id: str) -> str:
     for a, k in _kms_aliases.items():
         if k == key_id:
@@ -1035,6 +1051,11 @@ def _register_aws_console(app: FastAPI) -> None:
         if vc.kv_put("aws", space, name, value) is None:
             return _vault_unavailable_response("aws.secrets")
         _aws_secret_index_add(space, name)
+        import datetime as _dt
+        vc.kv_put("aws", space, "__meta__" + name, json.dumps({
+            "kms_key_id": body.get("kms_key_id") or "aws/secretsmanager",
+            "created": _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "description": body.get("description", "")}))
         return {"ok": True, "name": name}
 
     @app.get("/api/aws/secrets/{name}")
@@ -1069,6 +1090,7 @@ def _register_aws_console(app: FastAPI) -> None:
     async def aws_console_secret_delete(name: str, request: Request):
         space = _active_space_id(request)
         vc.kv_delete("aws", space, name)
+        vc.kv_delete("aws", space, "__meta__" + name)
         _aws_secret_index_remove(space, name)
         return {"ok": True, "deleted": True, "name": name}
 

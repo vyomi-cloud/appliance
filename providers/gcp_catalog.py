@@ -235,7 +235,7 @@ RESOURCE_CATALOG_GCP = [
         # IPv4Range is legacy-network-only and empty for every modern VPC. Caught by real-SPA conformance.
         "columns": [
             ["name",                 "Name"],
-            ["autoCreateSubnetworks","Mode"],
+            ["mode",                 "Mode"],
             ["routingConfig.routingMode", "Routing mode"],
             ["mtu",                  "MTU"],
         ],

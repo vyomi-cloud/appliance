@@ -857,6 +857,7 @@ async function renderList(main){
               || data.serviceAccounts || data.value || data.results
               || (Array.isArray(data) ? data : []);
   if (svc.key === "pubsub") await decoratePubsubTopics(items, fullPath);
+  decorateGcpItems(svc, items);
 
   const state = {filter:"", sortBy:null, sortDir:1};
   function paint(){
@@ -919,6 +920,20 @@ async function renderList(main){
   }
   fi.addEventListener("input", e => { state.filter = e.target.value; paint(); });
   paint();
+}
+// Columns the real console derives from the resource (VPC mode / auto-mode range, function
+// state) rather than reading one API field. Shared by the offline and Nano consoles.
+function decorateGcpItems(svc, items){
+  items.forEach(it => {
+    if (svc.key === "vpc") {
+      const auto = it.autoCreateSubnetworks !== false;
+      it.mode = auto ? "Auto" : "Custom";
+      it.routingConfig = Object.assign({routingMode: "REGIONAL"}, it.routingConfig || {});
+      it.ipv4Range = it.IPv4Range || (auto ? "10.128.0.0/9 (auto)" : ((it.subnetworks || []).length + " custom subnets"));
+    } else if (svc.key === "functions") {
+      if (!it.state) it.state = String(it.status || "ACTIVE").replace(/^available$/i, "ACTIVE").toUpperCase();
+    }
+  });
 }
 // Pub/Sub topic resources don't carry the console's derived columns: the real
 // console computes them (subscription count from the subscriptions list, key

@@ -86,4 +86,11 @@ check("ARM dispatcher routes Microsoft.Insights to the engine", r["status"] == 2
 r = arm.handle("GET", "/subscriptions/sub1/providers/Microsoft.Insights/metricAlerts", {"api-version": "2018-03-01"})
 check("ARM dispatcher lists at subscription scope", r["status"] == 200 and len(r["body"]["value"]) == 1, r)
 print(f"\n{PASS} passed, {FAIL} failed")
-sys.exit(1 if FAIL else 0)
+
+
+def test_all_checks_pass():
+    assert FAIL == 0
+
+
+if __name__ == "__main__":
+    sys.exit(1 if FAIL else 0)

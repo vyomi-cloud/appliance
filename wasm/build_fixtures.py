@@ -53,6 +53,50 @@ def _gcp_catalog():
                                    active_region="us-central1")
 
 
+# Data-plane services (served by the in-browser cores via /api/azure/{key}, not ARM).
+# They aren't in azure_services.RESOURCE_CATALOG, so they're appended here.
+_AZURE_DATA_PLANE = [
+    [
+        "blobcontainers",
+        "Blob containers",
+        "folder",
+        "Blob container"
+    ],
+    [
+        "cosmosdbs",
+        "Cosmos databases",
+        "storage",
+        "Cosmos database"
+    ],
+    [
+        "kvsecrets",
+        "Key Vault secrets",
+        "key",
+        "Key Vault secret"
+    ],
+    [
+        "kvkeys",
+        "Key Vault keys",
+        "lock",
+        "Key Vault key"
+    ],
+    [
+        "queues",
+        "Storage queues",
+        "queue",
+        "Storage queue"
+    ]
+]
+
+
+def _azure_data_plane_services():
+    return [{"key": k, "label": label, "icon": icon, "dataPlane": True,
+             "collection_path": f"/api/azure/{k}", "resource_path": f"/api/azure/{k}/{{name}}",
+             "name_field": "name", "create_method": "POST", "columns": [["name", "Name"]],
+             "createFields": [{"name": "name", "label": create_label, "default": "demo1"}]}
+            for k, label, icon, create_label in _AZURE_DATA_PLANE]
+
+
 def _azure_catalog():
     # Mirrors azure_services.py's /api/azure/catalog endpoint shape exactly:
     # the console reads CATALOG.subscription/resourceGroup/location + services[].
@@ -69,7 +113,8 @@ def _azure_catalog():
             sys.modules[name] = stub
     m = _load_by_path("providers.azure_services", "providers/azure_services.py")
     return {"subscription": m.DEFAULT_SUBSCRIPTION, "resourceGroup": m.DEFAULT_RG,
-            "location": m.DEFAULT_LOCATION, "services": m.catalog_for_console()}
+            "location": m.DEFAULT_LOCATION,
+            "services": m.catalog_for_console() + _azure_data_plane_services()}
 
 
 # A minimal-but-real shell context so the console's space gate passes and the

@@ -66,6 +66,8 @@ def _create_rest_api(store, body):
     root_id = _new_id()
     _apis(store)[api_id] = {
         "id": api_id, "name": str(body.get("name", "")),
+        "description": str(body.get("description", "")),
+        "created": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         "resources": {root_id: {"id": root_id, "parentId": None, "pathPart": "",
                                 "path": "/", "methods": {}}},
         "deployments": {}}

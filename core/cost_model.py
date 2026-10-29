@@ -109,7 +109,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.cloudscheduler": 0.10, # $0.10 per job per month (first 3 jobs per billing account free)
     "gcp.secretmanager": 0.06,  # $0.06 per active secret version per month
     "gcp.kms": 0.06,            # $0.06 per software key version per month
-    "gcp.eventarc": 0.00,       # triggers are free; events billed per use
+    "gcp.eventarc": 0.04,       # triggers are free; events $0.40 per million delivered (modelled at ~100K events/month)
     "gcp.artifactregistry": 0.50,  # ~5 GB stored at $0.10/GB-month (first 0.5 GB free)
     # Azure
     "azure.vm": 0.00,         # priced via VM hourly
@@ -230,7 +230,8 @@ def estimate_resource_cost(provider: str, service: str, kind: str,
 
 
 def estimate_space_savings(nodes: list[dict],
-                           uptime_hours: float = HOURS_PER_MONTH) -> dict:
+                           uptime_hours: float = HOURS_PER_MONTH,
+                           usage: dict | None = None) -> dict:
     """Given resource nodes from _cloudsim_collect_resources, compute total
     real-cloud cost and savings (simulator cost = $0).
 
@@ -274,6 +275,17 @@ def estimate_space_savings(nodes: list[dict],
             "monthly_rate_usd": cost["monthly_usd"],
             "hourly_rate_usd": cost["hourly_usd"],
         })
+
+    # Usage-based billing: bytes stored + write requests metered per provider.
+    if usage:
+        from core.usage_meter import usage_cost
+        for provider, u in usage.items():
+            usd = usage_cost(provider, u)
+            total += usd
+            by_provider[provider] = by_provider.get(provider, 0.0) + usd
+            by_service[f"{provider}.usage"] = by_service.get(f"{provider}.usage", 0.0) + usd
+    by_provider = {k: round(v, 4) for k, v in by_provider.items()}
+    by_service = {k: round(v, 4) for k, v in by_service.items()}
 
     return {
         "real_cloud_cost_usd": round(total, 6),

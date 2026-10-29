@@ -145,6 +145,7 @@ def _ec2_launch_defaults(body: dict) -> dict:
     out.setdefault("vpc_id", "vpc-0" + h[:16])
     out.setdefault("subnet_id", "subnet-0" + h[16:32])
     out.setdefault("launch_time", _t.strftime("%Y-%m-%dT%H:%M:%S.000Z", _t.gmtime()))
+    out.setdefault("security_groups", ["sg-0" + h[8:24]])   # the VPC's default group, as RunInstances attaches it
     return out
 
 
@@ -213,6 +214,10 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
         if svc in _aca.AZURE_DP_SERVICES:
             return _aca.resource_op(svc, operation, name, body)
     r = backends.resources
+    if name and provider == "aws" and svc == "ec2" and r.get(provider, account, svc, name) is None:
+        # The grid links an instance by its i-… id, the store keys it by Name tag.
+        name = next((k for k, v in r.collections.get(provider + "/" + account + "/" + svc, {}).items()
+                     if v.get("instance_id") == name), name)
     if operation == "List":
         return {"ok": True, "items": r.list(provider, account, svc)}
     if operation == "Create":
@@ -365,6 +370,14 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 aws_counts["stepfunctions"] = len(nano_registry.get()["sfn"].machines)
             except Exception:
                 pass
+            try:   # Lambda + API Gateway + VPC live in the shared registry's compute store
+                from . import dataplane_adapter as DP
+                aws_counts["lambda"] = len(DP.lambda_list().get("functions", []))
+                aws_counts["apigateway"] = len(DP.apigw_list().get("apis", []))
+                aws_counts["vpc"] = len(DP.vpc_list().get("vpcs", []))
+                aws_counts["eventbridge"] = len(DP.extras_list({"key": "eventbridge/rules"}).get("value", []))
+            except Exception:
+                pass
             try:   # Kinesis Data Streams live in the shared registry store (console + relay wire)
                 from core import nano_registry
                 aws_counts["kinesis"] = len(nano_registry.get()["kinesis"].streams)
@@ -434,10 +447,10 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
         # Azure resources live in the ARM core's flat state, keyed by resource id.
         if provider == "azure":
             arm = getattr(backends, "_azure_arm", None)
-            # AzureArm keeps its flat map in `_state` (lower-cased resource ids). Count
+            # AzureArm keeps its flat map in `state` (lower-cased resource ids). Count
             # top-level resources only (<ns>/<type>/<name>); children (subnets, APIs, …)
             # have longer ids and are not separately billed resources.
-            for rid in getattr(arm, "_state", {}) or {}:
+            for rid in getattr(arm, "state", {}) or {}:
                 i = rid.find("/providers/")
                 if i < 0:
                     continue  # resource groups etc. have no /providers/ segment

@@ -289,7 +289,6 @@ def is_gcp_native_path(path: str) -> bool:
         "/api/gcp/secrets",   # v2.0.9 console CRUD — Vault-backed Secret Manager
         "/api/gcp/kms/",      # v2.0.9 console CRUD — Vault-backed Cloud KMS
         "/api/gcp/artifactregistry/",   # Artifact Registry console CRUD
-        "/api/gcp/sub/",      # generic detail-tab sub-resources (same shape as Nano)
     ))
 
 

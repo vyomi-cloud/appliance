@@ -102,6 +102,41 @@ func main() {
 		check("GetQueryResults", err == nil && qr.Status == types.QueryStatusComplete && len(qr.Results) == 1, fmt.Sprint(err))
 	}
 
+	kmsArn := "arn:aws:kms:us-east-1:000000000000:key/1234abcd-12ab-34cd-56ef-1234567890ab"
+	_, err = c.AssociateKmsKey(ctx, &cloudwatchlogs.AssociateKmsKeyInput{LogGroupName: aws.String(group), KmsKeyId: aws.String(kmsArn)})
+	check("AssociateKmsKey", err == nil, fmt.Sprint(err))
+	dg, _ = c.DescribeLogGroups(ctx, &cloudwatchlogs.DescribeLogGroupsInput{LogGroupNamePrefix: aws.String(group)})
+	check("kmsKeyId visible after AssociateKmsKey", dg != nil && len(dg.LogGroups) == 1 && aws.ToString(dg.LogGroups[0].KmsKeyId) == kmsArn, "")
+	_, err = c.DisassociateKmsKey(ctx, &cloudwatchlogs.DisassociateKmsKeyInput{LogGroupName: aws.String(group)})
+	check("DisassociateKmsKey", err == nil, fmt.Sprint(err))
+	dg, _ = c.DescribeLogGroups(ctx, &cloudwatchlogs.DescribeLogGroupsInput{LogGroupNamePrefix: aws.String(group)})
+	check("kmsKeyId cleared after DisassociateKmsKey", dg != nil && len(dg.LogGroups) == 1 && dg.LogGroups[0].KmsKeyId == nil, "")
+
+	_, err = c.TagLogGroup(ctx, &cloudwatchlogs.TagLogGroupInput{LogGroupName: aws.String(group), Tags: map[string]string{"legacy": "yes"}})
+	check("TagLogGroup", err == nil, fmt.Sprint(err))
+	_, err = c.UntagLogGroup(ctx, &cloudwatchlogs.UntagLogGroupInput{LogGroupName: aws.String(group), Tags: []string{"legacy"}})
+	check("UntagLogGroup", err == nil, fmt.Sprint(err))
+	tl, err := c.ListTagsLogGroup(ctx, &cloudwatchlogs.ListTagsLogGroupInput{LogGroupName: aws.String(group)})
+	_, hasLegacy := tl.Tags["legacy"]
+	check("UntagLogGroup removed the tag", err == nil && !hasLegacy && tl.Tags["env"] == "dev", fmt.Sprint(err))
+
+	if sq != nil && sq.QueryId != nil {
+		dq, err := c.DescribeQueries(ctx, &cloudwatchlogs.DescribeQueriesInput{LogGroupName: aws.String(group)})
+		found := false
+		if err == nil {
+			for _, q := range dq.Queries {
+				if aws.ToString(q.QueryId) == aws.ToString(sq.QueryId) {
+					found = true
+				}
+			}
+		}
+		check("DescribeQueries lists the started query", found, fmt.Sprint(err))
+		st, err := c.StopQuery(ctx, &cloudwatchlogs.StopQueryInput{QueryId: sq.QueryId})
+		check("StopQuery on a completed query → Success=false", err == nil && !st.Success, fmt.Sprint(err))
+	}
+	_, err = c.StopQuery(ctx, &cloudwatchlogs.StopQueryInput{QueryId: aws.String("00000000-0000-0000-0000-000000000000")})
+	check("StopQuery unknown id → ResourceNotFoundException", errors.As(err, new(*types.ResourceNotFoundException)), fmt.Sprint(err))
+
 	_, err = c.DeleteLogStream(ctx, &cloudwatchlogs.DeleteLogStreamInput{LogGroupName: aws.String(group), LogStreamName: aws.String(stream)})
 	check("DeleteLogStream", err == nil, fmt.Sprint(err))
 	_, err = c.DeleteLogGroup(ctx, &cloudwatchlogs.DeleteLogGroupInput{LogGroupName: aws.String(group)})

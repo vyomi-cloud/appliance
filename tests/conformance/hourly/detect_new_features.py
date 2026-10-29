@@ -188,6 +188,58 @@ def op_spellings(op: str) -> list[str]:
     return [op, op[0].lower() + op[1:], snake, snake.replace("_", "-")]
 
 
+# Azure engine operations (PutZone, ListStores...) are internal handler names; the
+# official SDKs/CLI call them by ARM verb (CreateOrUpdate, List*, Delete, Stop...).
+# Count one tested when an Azure SDK/CLI test file for that service calls the
+# matching SDK verb.
+AZURE_VERBS = {"Put": ("CreateOrUpdate", "BeginCreate", "create_or_update", "begin_create", "create", "set", "put"),
+               "Patch": ("Update", "update"), "List": ("List", "list"),
+               "Delete": ("Delete", "delete"), "Stop": ("Stop", "stop")}
+AZURE_SVC_NAMES = {"app": ("app", "containerapps"), "operationalinsights": ("operationalinsights", "loganalytics")}
+
+
+def azure_op_tested(service: str, op: str) -> bool:
+    m = re.fullmatch(r"azure_(\w+?)_core", service)
+    verb = re.match(r"Put|Patch|List|Delete|Stop", op)
+    if not m or not verb:
+        return False
+    names = AZURE_SVC_NAMES.get(m.group(1), (m.group(1),))
+    for base, _, files in os.walk(os.path.join(ROOT, "tests")):
+        if any(x in base for x in ("/out", "node_modules", "/target", "/hourly")):
+            continue
+        for f in files:
+            if not f.endswith(SDK_TEST_EXT):
+                continue
+            path = os.path.join(base, f).lower()
+            if "azure" not in path or not any(re.search(r"(?<![a-z])" + n + r"(?![a-z])|" + n + "conformance", path) for n in names):
+                continue
+            try:
+                text = open(os.path.join(base, f), encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            if any(v in text for v in AZURE_VERBS[verb.group(0)]):
+                return True
+    return False
+
+
+# GCP REST cores name handlers after the verb (patch_job, _set_state, _get_op); the
+# official SDKs call them by RPC name. Count one tested when its SDK RPC (with the
+# service's request type, so another service's same-named RPC doesn't count) is called.
+GCP_SDK_ALIASES = {
+    ("gcp_cloudscheduler_core", "PatchJob"): ("UpdateJobRequest",),
+    ("gcp_cloudscheduler_core", "SetState"): ("PauseJobRequest", "ResumeJobRequest"),
+    ("gcp_container_core", "CreatePool"): ("CreateNodePoolRequest",),
+    ("gcp_container_core", "DeletePool"): ("DeleteNodePoolRequest",),
+    ("gcp_container_core", "GetOp"): ("containerpb.GetOperationRequest",),
+    ("gcp_redis_core", "GetOp"): ("redispb.CreateInstanceRequest",),   # LRO Wait() polls GetOperation
+    ("gcp_redis_core", "PatchInstance"): ("UpdateInstanceRequest",),
+}
+
+
+def gcp_op_tested(service: str, op: str, corpus: str) -> bool:
+    return any(a in corpus for a in GCP_SDK_ALIASES.get((service, op), ()))
+
+
 def op_tested(op: str, corpus: str) -> bool:
     return any(re.search(r"(?<![A-Za-z0-9_])" + re.escape(s) + r"(?![A-Za-z0-9_])", corpus) for s in op_spellings(op))
 
@@ -225,7 +277,8 @@ def main() -> None:
     all_corpus = test_corpus()
     for f in inventory:
         if f["kind"] == "operation":
-            f["tested"] = op_tested(f["name"], sdk_corpus)
+            f["tested"] = op_tested(f["name"], sdk_corpus) or (f["cloud"] == "azure" and azure_op_tested(f["service"], f["name"])) \
+                or (f["cloud"] == "gcp" and gcp_op_tested(f["service"], f["name"], sdk_corpus))
         elif f["kind"] == "route":
             f["tested"] = route_tested(f["path"], all_corpus)
         else:

@@ -70,6 +70,10 @@ def lambda_create(p):
     source = p.get("code") or p.get("source") or "def handler(event, context):\n    return {'ok': True, 'event': event}"
     body = {"FunctionName": name, "Runtime": p.get("runtime", "python3.12"),
             "Handler": p.get("handler", "index.handler"), "Code": {"Source": source}}
+    for src, dst in (("memory_size", "MemorySize"), ("memory", "MemorySize"), ("timeout", "Timeout"),
+                     ("description", "Description"), ("role", "Role")):
+        if p.get(src) not in (None, ""):
+            body[dst] = p[src]
     r = lambda_core.dispatch(_COMPUTE, "POST", "/2015-03-31/functions", {}, {}, json.dumps(body).encode())
     if r.status >= 400:
         return {"ok": False, "code": "CreateFailed", **_lam_json(r)}
@@ -176,7 +180,7 @@ def apigw_create(p):
                              {}, {}, json.dumps(integ).encode())
     apigateway_core.dispatch(_COMPUTE, "POST", f"/restapis/{api_id}/deployments",
                              {}, {}, json.dumps({"stageName": p.get("stage", "prod")}).encode())
-    return {"ok": True, "id": api_id, "name": name,
+    return {"ok": True, **_api_row(_COMPUTE._apigateway_apis[api_id]), "id": api_id, "name": name,
             "endpoint": f"/{p.get('stage','prod')}/{path_part}", "method": method}
 
 
@@ -539,11 +543,16 @@ def extras_create(p):
         while f"{leaf}-{n:08x}" in _EXTRAS.get(key, {}):
             n += 1
         name = f"{leaf}-{n:08x}"
-    item = {"name": name, "id": vals.get("id") or name, "state": vals.get("state", "available"), **vals}
+    default_state = "ENABLED" if key.endswith("eventbridge/rules") else "available"
+    item = {"name": name, "id": vals.get("id") or name, "state": vals.get("state") or default_state, **vals}
+    if not item.get("state"):
+        item["state"] = default_state
     item["name"] = name
     item.setdefault("created", _now())
     if key.endswith("eventbridge/rules"):
-        item.setdefault("target_count", 0)   # a new rule has no targets yet
+        # a new rule's target count is what was attached (none yet unless a target was given)
+        if item.get("target_count") in (None, "", "\u2014"):
+            item["target_count"] = 1 if item.get("target_arn") else 0
     _EXTRAS.setdefault(key, {})[name] = item
     return {"ok": True, **item}
 

@@ -295,6 +295,7 @@ def _kms_key_row(key_id: str) -> dict:
             "key_usage": md.get("KeyUsage", "ENCRYPT_DECRYPT"),
             "state": md.get("KeyState", "Enabled"),
             "created": _iso(md.get("CreationDate")),
+            "description": md.get("Description", ""),
             "arn": f"arn:aws:kms:{REGION}:{KMS.account_id}:key/{key_id}"}
 
 
@@ -304,7 +305,7 @@ def kms_list_keys(p=None):
 
 def kms_create_key(p):
     spec = str(p.get("key_spec") or "SYMMETRIC_DEFAULT")
-    r = kms.dispatch(KMS, "TrentService.CreateKey", {"KeySpec": spec})
+    r = kms.dispatch(KMS, "TrentService.CreateKey", {"KeySpec": spec, "Description": str(p.get("description") or "")})
     if r.status != 200:
         return {"ok": False, "code": r.body.get("__type", "Error")}
     key_id = r.body["KeyMetadata"]["KeyId"]
@@ -448,9 +449,12 @@ def sqs_purge(p):
 
 # ── IAM (XML wire — dispatch writes, read store for views) ──────────────────
 def _iam_user_row(u): return {"user_name": u["user_name"], "user_id": u["user_id"],
-                              "created": u["created"], "arn": u["arn"]}
+                              "created": u["created"], "arn": u["arn"], "path": u.get("path", "/"),
+                              "policies": list(u.get("attached_policies", [])),
+                              "groups": [g for g, grp in IAM.groups.items() if u["user_name"] in grp.get("members", [])]}
 def _iam_role_row(r): return {"role_name": r["role_name"], "role_id": r["role_id"],
-                              "created": r["created"], "arn": r["arn"]}
+                              "created": r["created"], "arn": r["arn"], "path": r.get("path", "/"),
+                              "policies": list(r.get("attached_policies", []))}
 def _iam_policy_row(p): return {"policy_name": p["policy_name"], "arn": p["arn"],
                                "attachable": True, "created": p["created"]}
 def _iam_group_row(g): return {"group_name": g["group_name"], "group_id": g["group_id"],

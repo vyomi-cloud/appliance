@@ -56,4 +56,11 @@ check("int enums on request (operationType/status)", s == 200 and op["operationT
 check("autopilot has no node pools", call(st, "GET", L + "/clusters/ap")[1]["nodePools"] == [])
 check("delete cluster", call(st, "DELETE", L + "/clusters/c1")[1]["operationType"] == "DELETE_CLUSTER" and call(st, "GET", L + "/clusters/c1")[0] == 404)
 print(f"RESULT pass={PASS} fail={FAIL}")
-sys.exit(1 if FAIL else 0)
+
+
+def test_all_checks_pass():
+    assert FAIL == 0
+
+
+if __name__ == "__main__":
+    sys.exit(1 if FAIL else 0)

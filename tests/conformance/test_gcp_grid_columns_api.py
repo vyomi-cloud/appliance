@@ -26,6 +26,11 @@ def get_path(obj, path):
     return obj
 
 
+# Columns the console derives from other API fields (decorateGcpItems in the console):
+# the API resource carries the source field, not the column key.
+DERIVED = {("vpc", "mode"): "autoCreateSubnetworks"}
+
+
 def blank(v):
     return v is None or v == "" or v == [] or v == {}
 
@@ -44,7 +49,10 @@ def grid_row(key, name):
     check(f"{key}: created resource {name} is listed", row is not None)
     for path_, label in cols:
         if row is not None:
-            check(f"{key}: column '{label}' ({path_}) filled", not blank(get_path(row, path_)), row.get(path_))
+            src = DERIVED.get((key, path_))
+            val = get_path(row, src or path_)
+            ok = isinstance(val, bool) if src else not blank(val)
+            check(f"{key}: column '{label}' ({src or path_}) filled", ok, val)
 
 
 def main():

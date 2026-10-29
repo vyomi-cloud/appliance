@@ -99,6 +99,7 @@ def _read_aws() -> list[ActionSpec]:
                 provider="aws", service=key, action=action_name,
                 method=str(api_path.get("method", "POST")).upper(),
                 path=str(api_path.get("path", "")),
+                payload=api_path.get("sample") if isinstance(api_path.get("sample"), dict) else None,
                 requires_resource="{name}" in str(api_path.get("path", "")),
                 name_field=name_field,
             ))

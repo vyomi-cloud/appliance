@@ -1620,9 +1620,7 @@ async function renderAnalyticsStub(main, svc, fullKey, schema){
 
   // Sparkline cards (if schema declares any)
   if (schema.sparklines && schema.sparklines.length) {
-    const grid = el("div",{class:"metrics-grid"});
-    schema.sparklines.forEach(([label, lo, hi, suf]) => grid.append(buildSparkline(label, lo, hi, suf)));
-    main.append(grid);
+    renderMeasuredMetrics(main, "", "");
   }
 
   // Table of items (derived or seeded)
@@ -1779,8 +1777,8 @@ function flattenTabs(subBlades){
     if (node.group) (node.items || []).forEach(it => out.push(it));
     else out.push(node);
   });
-  // AWS shows ~8 tabs max; if longer, the rest become an "Overflow" — for now, keep first 10.
-  return out.slice(0, 10);
+  // Every tab is kept (the strip scrolls): dropping the tail hid Metrics / Flow logs on VPC.
+  return out;
 }
 function buildSummaryGrid(svc, full){
   const grid = el("div",{class:"summary-grid"});
@@ -2830,29 +2828,59 @@ SUB_RENDERERS.metrics = function(svc, full, host, tab){
     host.append(tbl);
     return;
   }
-  host.append(el("div",{class:"alert info"}, icon("show_chart"),
-    el("div",{}, "Synthesized CloudWatch metrics. Real telemetry ingestion is future work.")));
-  const series = svc.key === "ec2"
-    ? [["CPU utilization (%)",10,80,"%"],["Network in (KB/s)",50,500,""],["Network out (KB/s)",30,400,""],["Status check failures",0,1,""]]
-    : svc.key === "rds"
-    ? [["CPU (%)",20,80,"%"],["DB connections",2,30,""],["Free storage (GiB)",10,80,""],["Read IOPS",10,200,""]]
-    : svc.key === "lambda"
-    ? [["Invocations",10,500,""],["Duration (ms)",50,300,""],["Errors",0,10,""],["Throttles",0,5,""]]
-    : [["Requests",100,1000,""],["Latency (ms)",10,200,""],["Errors",0,10,""]];
-  const grid = el("div",{class:"metrics-grid"});
-  series.forEach(([l,lo,hi,suf]) => grid.append(buildSparkline(l, lo, hi, suf)));
-  host.append(grid);
+  renderMeasuredMetrics(host, svc.key, itemKey(svc, full));
 };
-function buildSparkline(label, lo, hi, suffix){
+// Measured request metrics (issue #177): charts are drawn from GET /api/metrics/series —
+// what the simulator actually served — never from a seed. An idle resource shows the empty state.
+function buildSeriesChart(label, unit, pts, fields, colors){
   const card = el("div",{class:"metric-card"});
   card.append(el("div",{class:"label"}, label));
-  let seed = 0; for (const c of label) seed = (seed*31 + c.charCodeAt(0)) & 0xffff;
-  const pts = []; for (let i=0;i<24;i++) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; pts.push(lo + (hi-lo) * ((seed % 1000)/1000)); }
-  const w=240, h=60, max=Math.max(...pts), min=Math.min(...pts);
-  const path = pts.map((p,i)=>`${i===0?"M":"L"}${(i*(w-4)/(pts.length-1)+2).toFixed(1)},${(h-2-((p-min)/(max-min||1))*(h-6)).toFixed(1)}`).join(" ");
-  card.append(el("div",{class:"chart",html:`<svg viewBox="0 0 ${w} ${h}" width="100%" preserveAspectRatio="none"><path d="${path}" fill="none" stroke="#ff9900" stroke-width="1.6"/></svg>`}));
-  card.append(el("div",{class:"value"}, pts[pts.length-1].toFixed(suffix==="%"?0:0) + (suffix||" units")));
+  const W = 300, H = 90, L = 34, B = 16, T = 6, R = 4;
+  const vals = pts.flatMap(p => fields.map(f => p[f] || 0));
+  const max = Math.max(1, ...vals);
+  const niceMax = max <= 4 ? Math.ceil(max) : Math.ceil(max / 5) * 5;
+  const bw = (W - L - R) / Math.max(pts.length, 1);
+  const y = v => T + (H - T - B) * (1 - v / niceMax);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${label}">`;
+  svg += `<line x1="${L}" y1="${y(0)}" x2="${W-R}" y2="${y(0)}" stroke="#d5dbdb"/><line x1="${L}" y1="${y(niceMax)}" x2="${W-R}" y2="${y(niceMax)}" stroke="#eaeded"/>`;
+  svg += `<text x="${L-4}" y="${y(niceMax)+3}" font-size="9" text-anchor="end" fill="#687078">${niceMax}</text><text x="${L-4}" y="${y(0)+3}" font-size="9" text-anchor="end" fill="#687078">0</text>`;
+  const tl = t => new Date(t*1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+  if (pts.length) svg += `<text x="${L}" y="${H-3}" font-size="9" fill="#687078">${tl(pts[0].t)}</text><text x="${W-R}" y="${H-3}" font-size="9" text-anchor="end" fill="#687078">${tl(pts[pts.length-1].t)}</text>`;
+  if (fields.length === 1) {
+    pts.forEach((p, i) => { const v = p[fields[0]] || 0; if (!v) return;
+      svg += `<rect x="${(L + i*bw + 0.5).toFixed(1)}" y="${y(v).toFixed(1)}" width="${Math.max(bw-1,1).toFixed(1)}" height="${(y(0)-y(v)).toFixed(1)}" fill="${colors[0]}"><title>${tl(p.t)} — ${v} ${unit}</title></rect>`; });
+  } else {
+    fields.forEach((f, k) => {
+      const d = pts.map((p, i) => `${i?"L":"M"}${(L + (i+0.5)*bw).toFixed(1)},${y(p[f]||0).toFixed(1)}`).join(" ");
+      svg += `<path d="${d}" fill="none" stroke="${colors[k]}" stroke-width="1.5"/>`;
+      pts.forEach((p, i) => { if (p[f]) svg += `<circle cx="${(L + (i+0.5)*bw).toFixed(1)}" cy="${y(p[f]).toFixed(1)}" r="2" fill="${colors[k]}"><title>${tl(p.t)} — ${f.replace("latency_","")} ${p[f]} ${unit}</title></circle>`; });
+    });
+  }
+  svg += `</svg>`;
+  card.append(el("div",{class:"chart",style:"height:auto",html:svg}));
+  const last = pts[pts.length-1] || {};
+  card.append(el("div",{class:"value"}, fields.length === 1
+    ? String(pts.reduce((a, p) => a + (p[fields[0]]||0), 0)) + " " + unit + " (last hour)"
+    : "p50 " + (last.latency_p50||0) + " / p95 " + (last.latency_p95||0) + " " + unit));
   return card;
+}
+function renderMeasuredMetrics(host, service, resource){
+  const wrap = el("div",{}); host.append(wrap);
+  const q = new URLSearchParams({provider:"aws", service: service||"", resource: resource||"", minutes:"60", step:"60"});
+  fetch(ORIGIN+"/api/metrics/series?"+q).then(r=>r.json()).then(d=>{
+    const pts = d.points || [];
+    wrap.append(el("div",{class:"alert info"}, icon("show_chart"),
+      el("div",{}, `Measured from the requests this simulator served for ${resource || service || "AWS"} in the last hour (1-minute resolution). CPU and memory are shown only where a real container backs the resource.`)));
+    if (!d.total_requests) {
+      wrap.append(el("div",{class:"empty"}, "No requests in the last hour"));
+      return;
+    }
+    const grid = el("div",{class:"metrics-grid"});
+    grid.append(buildSeriesChart("Requests", "requests", pts, ["requests"], ["#0972d3"]));
+    grid.append(buildSeriesChart("Errors (4xx/5xx)", "errors", pts, ["errors"], ["#d91515"]));
+    grid.append(buildSeriesChart("Latency", "ms", pts, ["latency_p50","latency_p95"], ["#037f0c","#ff9900"]));
+    wrap.append(grid);
+  }).catch(e => wrap.append(el("div",{class:"alert err"}, "Failed to load metrics: " + e.message)));
 }
 
 // EC2-specific tabs

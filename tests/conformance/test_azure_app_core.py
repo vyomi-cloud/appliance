@@ -109,4 +109,11 @@ j = arm.handle("POST", base + "/jobs/none/start", {}, {})
 check("AzureArm: unknown job → 404", j["status"] == 404)
 
 print(f"\n{PASS} passed, {FAIL} failed")
-sys.exit(1 if FAIL else 0)
+
+
+def test_all_checks_pass():
+    assert FAIL == 0
+
+
+if __name__ == "__main__":
+    sys.exit(1 if FAIL else 0)
