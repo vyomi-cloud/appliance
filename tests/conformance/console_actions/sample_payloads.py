@@ -161,11 +161,13 @@ _AZURE_PAYLOADS: dict[str, dict] = {
 
 # Azure resource names that need more than the default `vyomi-conf-<key>` shape
 # (a real DNS zone name has at least two labels).
-_AZURE_NAMES: dict[str, str] = {"dns": "vyomi-conf.example.com"}
+_AZURE_NAMES: dict[str, str] = {"dns": "vyomi-conf-{sfx}.example.com"}
 
 
 def azure_resource_name(service: str) -> str:
-    return _AZURE_NAMES.get(service.lower(), f"vyomi-conf-{service}")
+    # Per-run suffix: Azure soft-deletes App Configuration stores / AI accounts, so a
+    # fixed name collides when the suite runs twice against the same appliance.
+    return _AZURE_NAMES.get(service.lower(), "vyomi-conf-{svc}-{sfx}").format(svc=service, sfx=_RUN_SUFFIX)
 
 
 def _apply_run_suffix(payload: dict) -> dict:
