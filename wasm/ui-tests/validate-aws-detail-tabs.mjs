@@ -18,6 +18,11 @@ const openService = async (name) => {
   await page.locator("#rail >> text=/^\\s*(\\w+\\s*)?" + name + "\\s*$/").first().click();
   await sleep(2500);
 };
+const openRow = async (text) => {   // the grid pages at 10 rows: filter first
+  await page.locator("#main input[type=search], #main input[type=text], #main input:not([type])").first().fill(text).catch(() => {});
+  await sleep(600);
+  await page.locator("#main tr", { hasText: text }).locator("a.id, a").first().click();
+};
 const tab = async (label) => {
   await page.locator("#main .top-tabs button", { hasText: new RegExp("^\\s*" + label + "\\s*$") }).first().click();
   await sleep(1200);
@@ -38,7 +43,7 @@ try {
   await sleep(1500);
 
   await openService("VPC");
-  await page.locator("#main tr", { hasText: tag + "-vpc" }).locator("a.id, a").first().click();
+  await openRow(tag + "-vpc");
   await sleep(2000);
   const overview = await page.locator("#main").innerText();
   const details = await tab("VPC details");
@@ -49,7 +54,7 @@ try {
   await page.waitForFunction((s) => document.querySelectorAll(s).length > 0, RAIL_SEL, { timeout: 120000 });
   await sleep(2000);
   await openService("EC2");
-  await page.locator("#main tr", { hasText: tag + "-ec2" }).locator("a.id, a").first().click();
+  await openRow(tag + "-ec2");
   await sleep(2000);
   const status = await tab("Status and alarms");
   const mon = await tab("Monitoring");

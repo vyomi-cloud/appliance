@@ -883,6 +883,29 @@ async def _tier_enforcement_middleware(request: Request, call_next):
 # Public entry-point: register all middleware on the FastAPI app
 # ---------------------------------------------------------------------------
 
+async def request_recorder_middleware(request, call_next):
+    """Record every provider-scoped request (provider, service, path, status, latency) for the
+    console Metrics tabs. Outermost layer so it times the whole stack; never alters the response."""
+    path = request.url.path
+    if path.startswith(("/api/metrics", "/static/", "/assets/", "/console")) or path in ("/healthz", "/favicon.ico"):
+        return await call_next(request)
+    t0 = time.time()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        try:
+            from core import request_metrics as _rm
+            prov, svc = _rm.classify(path, _resolve_provider_service(request))
+            if prov and svc:
+                _rm.record(prov, svc, request.method, path, status, (time.time() - t0) * 1000.0,
+                           query=request.url.query or "", host=request.headers.get("host", ""))
+        except Exception:
+            pass
+
+
 def register_middleware(app) -> None:
     """Add every middleware layer to *app* in the exact registration order
     that ``server.py`` originally used.
@@ -936,3 +959,6 @@ def register_middleware(app) -> None:
     # before tier-enforcement classifies the provider or the S3 catch-all can
     # claim them. (Starlette runs http middleware in reverse registration order.)
     app.middleware("http")(azure_blob_dispatch_middleware)
+
+    # 9. request_recorder_middleware — registered after azure_blob_dispatch so it is the outermost layer.
+    app.middleware("http")(request_recorder_middleware)

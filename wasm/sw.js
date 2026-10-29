@@ -807,6 +807,55 @@ async function route(method, path, body, query) {
   return { miss: true };
 }
 
+// ── Request recorder (console Metrics tabs) ──────────────────────────────
+// Every /api/* request the worker serves is recorded as (time, provider, service, path,
+// status, latency_ms) — the in-browser twin of core/request_metrics.py — and persisted to
+// the "meta" store so the series survives a worker restart. Nothing is synthesized.
+const REQLOG = [];
+const REQLOG_MAX = 5000;
+let _reqLoaded = false, _reqSaveT = null;
+const AWS_API_KEYS = new Set(["ec2","vpc","lambda","rds","dynamodb","sqs","sns","s3","apigateway","eventbridge","iam","kms","secretsmanager","ssm","stepfunctions","logs","elbv2","cloudwatch"]);
+function classifyReq(path) {
+  const seg = path.split("/").filter(Boolean);
+  if (seg[0] === "api" && seg.length >= 3 && ["aws", "gcp", "azure"].includes(seg[1])) return [seg[1], seg[2].toLowerCase()];
+  if (seg[0] === "api" && seg.length >= 2 && AWS_API_KEYS.has(seg[1].toLowerCase())) return ["aws", seg[1].toLowerCase()];
+  return null;
+}
+async function reqLogLoad() {
+  if (_reqLoaded) return; _reqLoaded = true;
+  try { const old = await metaGet("reqlog"); if (Array.isArray(old)) REQLOG.unshift(...old.slice(-REQLOG_MAX)); } catch (_) {}
+}
+function recordReq(method, path, query, status, ms) {
+  if (path.startsWith("/api/metrics")) return;
+  const c = classifyReq(path); if (!c) return;
+  const segs = path.split("/").filter(Boolean).map((x) => { try { return decodeURIComponent(x).toLowerCase(); } catch (_) { return x.toLowerCase(); } });
+  for (const v of (query || "").split("&")) { const i = v.indexOf("="); if (i > 0) { try { segs.push(decodeURIComponent(v.slice(i + 1)).toLowerCase()); } catch (_) {} } }
+  REQLOG.push({ t: Date.now() / 1000, p: c[0], s: c[1], m: method, st: status, ms, segs });
+  if (REQLOG.length > REQLOG_MAX) REQLOG.splice(0, REQLOG.length - REQLOG_MAX);
+  if (!_reqSaveT) _reqSaveT = setTimeout(() => { _reqSaveT = null; metaPut("reqlog", REQLOG.slice(-REQLOG_MAX)).catch(() => {}); }, 3000);
+}
+function reqPct(vals, q) { if (!vals.length) return 0; vals = vals.slice().sort((a, b) => a - b); return Math.round(vals[Math.min(vals.length - 1, Math.floor(q * vals.length))] * 100) / 100; }
+async function metricsSeries(q) {
+  await reqLogLoad();
+  const minutes = Math.max(1, Math.min(parseInt(q.get("minutes") || "60", 10) || 60, 1440));
+  const step = Math.max(10, Math.min(parseInt(q.get("step") || "60", 10) || 60, 3600));
+  const provider = q.get("provider") || "", service = q.get("service") || "", resource = (q.get("resource") || "").toLowerCase();
+  const n = Math.max(1, Math.floor(minutes * 60 / step));
+  const end = Math.floor(Date.now() / 1000 / step) * step + step, start = end - n * step;
+  const bk = Array.from({ length: n }, (_, i) => ({ t: start + i * step, requests: 0, errors: 0, lat: [] }));
+  for (const r of REQLOG) {
+    if (r.t < start || r.t >= end) continue;
+    if (provider && r.p !== provider) continue;
+    if (service && r.s !== service) continue;
+    if (resource && !r.segs.includes(resource)) continue;
+    const b = bk[Math.floor((r.t - start) / step)];
+    b.requests++; if (r.st >= 400) b.errors++; b.lat.push(r.ms);
+  }
+  const points = bk.map((b) => ({ t: b.t, requests: b.requests, errors: b.errors, latency_p50: reqPct(b.lat, 0.5), latency_p95: reqPct(b.lat, 0.95) }));
+  return { provider, service, resource: q.get("resource") || "", minutes, step, points,
+           total_requests: points.reduce((a, p) => a + p.requests, 0), total_errors: points.reduce((a, p) => a + p.errors, 0) };
+}
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   // We own /api/* (console REST) AND /subscriptions/* (native Azure ARM).
@@ -816,9 +865,12 @@ self.addEventListener("fetch", (event) => {
   // Strip the mount prefix so all routing below is written against "/api/..."
   // or "/subscriptions/...".
   const apiPath = url.pathname.slice(BASE.length);
+  const _t0 = Date.now();
   event.respondWith((async () => {
+    const _res = await (async () => {
     try {
       const method = event.request.method;
+      if (apiPath === "/api/metrics/series" && method === "GET") return json(await metricsSeries(url.searchParams));
       // ── console-next SPA (slice 1) ──────────────────────────────────
       // The new SPA (served at BASE/console-next/) talks ONLY to /api/console/*.
       // capabilities → the in-browser manifest (dispatched to console_next_adapter
@@ -1152,5 +1204,8 @@ self.addEventListener("fetch", (event) => {
     } catch (e) {
       return json({ ok: false, error: String(e) }, 500);
     }
+    })();
+    try { recordReq(event.request.method, apiPath, url.search.slice(1), _res.status, Date.now() - _t0); } catch (_) {}
+    return _res;
   })());
 });

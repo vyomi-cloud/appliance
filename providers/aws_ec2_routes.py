@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import random
 import time
 from typing import Any
 
@@ -30,49 +29,24 @@ _CLOUDWATCH_METRIC_NAMES = [
 
 
 def _cloudwatch_generate_metrics(instance: dict) -> dict[str, list[dict]]:
-    """Return synthetic CloudWatch-style metric data points for *instance*.
+    """CloudWatch-style data points for *instance*, from what the simulator can measure.
 
-    Each metric gets 5 recent data points spaced ~60 s apart so the caller
-    can render a mini time-series chart.
+    StatusCheckFailed follows the instance state (a stopped instance fails its checks).
+    CPU / network / disk need a real container behind the instance; without telemetry
+    ingestion they have no datapoints — like a real CloudWatch metric with no data, so
+    alarms on them read INSUFFICIENT_DATA. Request-level charts come from
+    /api/metrics/series. Nothing here is random or seeded.
     """
     state = (instance.get("state") or "stopped").lower()
-    inst_type = instance.get("instance_type") or instance.get("type") or "t2.micro"
-    is_running = state == "running"
-
-    # Determine scale factors from instance type
-    type_multiplier = 1.0
-    if "xlarge" in inst_type:
-        type_multiplier = 4.0
-    elif "large" in inst_type:
-        type_multiplier = 2.0
-    elif "medium" in inst_type:
-        type_multiplier = 1.5
-
     now = time.time()
     metrics: dict[str, list[dict]] = {}
-
     for metric_name in _CLOUDWATCH_METRIC_NAMES:
         points = []
-        for i in range(5):
-            ts = now - (4 - i) * 60  # 5 data points, 60 s apart
-            timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts))
-
-            if metric_name == "CPUUtilization":
-                value = round(random.uniform(15.0, 45.0), 2) if is_running else 0.0
-            elif metric_name == "NetworkIn":
-                value = round(random.uniform(5000, 50000) * type_multiplier) if is_running else 0
-            elif metric_name == "NetworkOut":
-                value = round(random.uniform(2000, 30000) * type_multiplier) if is_running else 0
-            elif metric_name == "DiskReadOps":
-                value = round(random.uniform(10, 200) * type_multiplier) if is_running else 0
-            elif metric_name == "DiskWriteOps":
-                value = round(random.uniform(5, 150) * type_multiplier) if is_running else 0
-            elif metric_name == "StatusCheckFailed":
-                value = 0 if is_running else 1
-            else:
-                value = 0
-
-            points.append({"timestamp": timestamp, "value": value, "unit": _metric_unit(metric_name)})
+        if metric_name == "StatusCheckFailed":
+            for i in range(5):
+                ts = now - (4 - i) * 60
+                points.append({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts)),
+                               "value": 0 if state == "running" else 1, "unit": _metric_unit(metric_name)})
         metrics[metric_name] = points
     return metrics
 
