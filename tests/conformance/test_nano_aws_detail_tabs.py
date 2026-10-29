@@ -253,7 +253,28 @@ def sqs():
     check("Purge: empties the queue", put("purge", {}).get("messages_available") == 0)
     check("Purge: twice within 60 s refused", put("purge", {}).get("code") == "AWS.SimpleQueueService.PurgeQueueInProgress")
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs}
+
+
+def secrets():
+    print("── Secrets Manager secret")
+    d("secrets", "CreateSecret", {"name": "tabs-sec", "value": "v1"})
+    sec = lambda s: d("secrets", "GetSecretSection", {"name": "tabs-sec", "section": s})
+    put = lambda s, b: d("secrets", "UpdateSecretSection", {"name": "tabs-sec", "section": s, "method": "PUT", "body": b})
+    check("Secret value: GetSecretValue", sec("value")["secret_string"] == "v1")
+    put("value", {"secret_string": "v2"})
+    v = sec("versions")["versions"]
+    check("Versions: AWSCURRENT / AWSPREVIOUS from secrets_core", v[0]["stages"] == ["AWSCURRENT"] and "AWSPREVIOUS" in v[1]["stages"], v)
+    d("lambda", "CreateFunction", {"name": "rotator"})
+    r = put("rotation", {"enabled": True, "rotation_lambda_arn": "arn:aws:lambda:us-east-1:123456789012:function:rotator", "automatically_after_days": 7})
+    check("Rotation: configured + rotated immediately", r.get("rotation_enabled") and r.get("last_rotated") and len(sec("versions")["versions"]) == 3, r)
+    check("Replication: replica", put("replication", {"region": "ap-south-1"})["replicas"][0]["region"] == "ap-south-1")
+    d("kms", "CreateKey", {"alias": "alias/tabs-key"})
+    keys = d("kms", "ListKeys")
+    kid = (keys.get("value") or keys.get("keys") or [{}])[0].get("key_id") or ""
+    check("Encryption key: an existing KMS key is accepted", put("encryption", {"kms_key_id": kid}).get("kms_key_id") == kid, keys)
+    check("Encryption key: unknown key rejected", put("encryption", {"kms_key_id": "nope"}).get("code") == "ResourceNotFoundException")
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets}
 
 if __name__ == "__main__":
     for k in sys.argv[1:] or list(SECTIONS):

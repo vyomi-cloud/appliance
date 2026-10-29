@@ -347,13 +347,13 @@ _SECRETSMANAGER_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Secret", "items": [
         {"key": "value",         "label": "Secret value",           "icon": "key",           "type": "secretvalue"},
-        {"key": "versions",      "label": "Versions",               "icon": "history",       "type": "stub"},
-        {"key": "rotation",      "label": "Rotation",               "icon": "autorenew",     "type": "stub"},
-        {"key": "replication",   "label": "Replication",            "icon": "public",        "type": "stub"},
+        {"key": "versions",      "label": "Versions",               "icon": "history",       "type": "secVersions"},
+        {"key": "rotation",      "label": "Rotation",               "icon": "autorenew",     "type": "secRotation"},
+        {"key": "replication",   "label": "Replication",            "icon": "public",        "type": "secReplication"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "resourcePolicy","label": "Resource policy",        "icon": "policy",        "type": "iam"},
-        {"key": "kmsKey",        "label": "Encryption key",         "icon": "enhanced_encryption", "type": "stub"},
+        {"key": "resourcePolicy","label": "Resource policy",        "icon": "policy",        "type": "secPolicy"},
+        {"key": "kmsKey",        "label": "Encryption key",         "icon": "enhanced_encryption", "type": "secKey"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [

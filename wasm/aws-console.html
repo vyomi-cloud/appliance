@@ -2524,83 +2524,6 @@ const SUB_RENDERERS = {};
 // Secrets Manager "Secret value" detail tab — mirrors the real AWS console:
 // value hidden until "Retrieve secret value"; then Key/value table or Plaintext;
 // "Edit" makes it editable (add/remove rows) and "Save" PUTs (= PutSecretValue).
-SUB_RENDERERS.secretvalue = function(svc, full, host){
-  const name = String((full && full.name) || getPath(full, svc.name_field) || "");
-  let value = (full && full.value != null) ? String(full.value) : "";
-  let revealed = false, editing = false, plaintext = false;
-  const panel = el("div",{class:"panel"}); host.append(panel);
-
-  function asPairs(s){
-    try { const o = JSON.parse(s); if (o && typeof o === "object" && !Array.isArray(o))
-      return Object.keys(o).map(k => [k, String(o[k])]); } catch(_){}
-    return null;
-  }
-  function saveBar(getVal){
-    const bar = el("div",{style:"display:flex;gap:8px;margin-top:14px"});
-    bar.append(el("button",{class:"btn primary",onclick:async ()=>{
-      const r = await api("PUT", fillPath(svc.resource_path,{name}), {value: getVal()});
-      if (r.ok || [200,204].includes(r.status)){ value = getVal(); editing = false; toast("Secret value saved"); render(); }
-      else toast("Save failed","err");
-    }}, icon("save"), "Save"));
-    bar.append(el("button",{class:"btn",onclick:()=>{ editing = false; render(); }}, "Cancel"));
-    return bar;
-  }
-  function render(){
-    panel.innerHTML = "";
-    panel.append(el("div",{class:"panel-h"}, icon("key"), "Secret value"));
-    const body = el("div",{style:"padding:14px"}); panel.append(body);
-    if (!revealed){
-      body.append(el("div",{style:"color:#5f6b7a;margin-bottom:12px;font-size:13px"},
-        "The secret value is encrypted and hidden. Retrieve it to view or edit."));
-      body.append(el("button",{class:"btn",onclick:async ()=>{
-        try { const r = await api("GET", fillPath(svc.resource_path,{name})); if (r.ok && r.json) value = String(r.json.value ?? value); } catch(_){}
-        revealed = true; render();
-      }}, icon("visibility"), "Retrieve secret value"));
-      return;
-    }
-    const pairs = asPairs(value);
-    const bar = el("div",{style:"display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap"});
-    if (pairs){
-      bar.append(el("button",{class:"btn"+(plaintext?"":" primary"),onclick:()=>{plaintext=false;render();}}, "Key/value"));
-      bar.append(el("button",{class:"btn"+(plaintext?" primary":""),onclick:()=>{plaintext=true;render();}}, "Plaintext"));
-    } else { plaintext = true; }
-    bar.append(el("div",{style:"flex:1"}));
-    if (!editing) bar.append(el("button",{class:"btn",onclick:()=>{editing=true;render();}}, icon("edit"), "Edit"));
-    body.append(bar);
-    if (plaintext || !pairs){
-      const ta = el("textarea",{rows:7,style:"width:100%;box-sizing:border-box;font-family:monospace;font-size:13px;padding:8px;border:1px solid #aab7b8;border-radius:4px"});
-      ta.value = value; ta.readOnly = !editing;
-      body.append(ta);
-      if (editing) body.append(saveBar(()=> ta.value));
-    } else {
-      const tbl = el("table",{class:"aws",style:"width:100%"});
-      const hr = el("tr",{}, el("th",{},"Key"), el("th",{},"Value"));
-      if (editing) hr.append(el("th",{style:"width:44px"},""));
-      tbl.append(hr);
-      const inputs = [];
-      function addRow(k,v){
-        const ki = el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
-        const vi = el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
-        ki.value = k; vi.value = v; ki.readOnly = !editing; vi.readOnly = !editing;
-        const pair = {ki, vi};
-        inputs.push(pair);
-        const tr = el("tr",{}, el("td",{},ki), el("td",{},vi));
-        if (editing) tr.append(el("td",{}, el("button",{class:"btn del",title:"Remove",
-          onclick:()=>{ const idx=inputs.indexOf(pair); if(idx>=0) inputs.splice(idx,1); tr.remove(); }}, "✕")));
-        tbl.append(tr);
-      }
-      pairs.forEach(p => addRow(p[0], p[1]));
-      body.append(tbl);
-      if (editing){
-        body.append(el("button",{class:"btn",style:"margin-top:10px",onclick:()=>addRow("","")}, icon("add"), "Add row"));
-        body.append(saveBar(()=> JSON.stringify(Object.fromEntries(
-          inputs.map(p=>[p.ki.value.trim(), p.vi.value]).filter(e=>e[0])))));
-      }
-    }
-  }
-  render();
-};
-
 // KMS "General configuration" — mirrors the real console: key facts + editable
 // Description (Save) + Enable/Disable key (= UpdateKeyDescription/Enable/DisableKey).
 SUB_RENDERERS.kmsconfig = function(svc, full, host){
@@ -2787,6 +2710,8 @@ SUB_RENDERERS.listtable = function(svc, full, host, tab){
 SUB_RENDERERS.properties = async function(svc, full, host){
   // EC2: every property DescribeInstances returns for the instance, not just the grid row.
   if (svc.key === "ec2") { const r = await api("GET", _ec2p(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
+  // Secrets Manager: DescribeSecret.
+  if (svc.key === "secretsmanager") { const r = await api("GET", _secp(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
   // DynamoDB: the table's DescribeTable summary.
   if (svc.key === "dynamodb") { const r = await api("GET", _ddbp(full, "general")); if (r.ok && r.json) full = {...full, ...r.json}; }
   // RDS: every setting DescribeDBInstances returns for the instance.
@@ -3409,19 +3334,6 @@ async function subApi(method, ns, op, name, body){
 //   kind:"settings" — fields (each {k,label,type?:text|number|toggle|select,
 //                     options?,ph?,default?})
 const SUBRES_CATALOG = {
-  // ── Secrets Manager ──
-  "secretsmanager:versions": {kind:"list", title:"Secret versions", singular:"version",
-    fields:[{k:"name",label:"Version label",ph:"AWSCURRENT"},{k:"description",label:"Description"}],
-    columns:[["name","Version label"],["description","Description"],["status","Status"]]},
-  "secretsmanager:rotation": {kind:"settings", title:"Rotation configuration",
-    fields:[{k:"rotation_enabled",label:"Automatic rotation",type:"toggle",default:false},
-            {k:"rotation_days",label:"Rotate every (days)",type:"number",default:30},
-            {k:"rotation_lambda_arn",label:"Rotation Lambda ARN",ph:"arn:aws:lambda:…"}]},
-  "secretsmanager:replication": {kind:"list", title:"Replica Regions", singular:"replica",
-    fields:[{k:"name",label:"Region",ph:"us-west-2"},{k:"kms_key_id",label:"KMS key",ph:"alias/aws/secretsmanager"}],
-    columns:[["name","Region"],["kms_key_id","KMS key"],["status","Status"]]},
-  "secretsmanager:kmsKey": {kind:"settings", title:"Encryption key",
-    fields:[{k:"kms_key_id",label:"KMS key ID",default:"alias/aws/secretsmanager"}]},
   // ── KMS ──
   "kms:aliases": {kind:"list", title:"Aliases", singular:"alias",
     fields:[{k:"name",label:"Alias name",ph:"alias/my-key"}],
@@ -4790,6 +4702,107 @@ SUB_RENDERERS.snspublish = async function(svc, full, host){
     _dtbl([["timestamp","Time"],["kind","Type"],["protocol","Protocol"],["endpoint","Endpoint",1],["subject","Subject"],["message","Message",1]], log,
       "Nothing has been delivered from " + full.name + " yet."));
   host.append(card, lc);
+};
+
+// ── Secrets Manager secret tabs (GET/PUT /api/aws/secrets/{name}/detail/{section}). ──
+function _secp(full, section){ return "/api/aws/secrets/" + encodeURIComponent(full.name || "") + "/detail/" + section; }
+async function _secput(full, section, body, okMsg){
+  const r = await api("PUT", _secp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Failed: " + _derr(r), "err"); return false;
+}
+// Secret value — like the real console: details, value hidden until "Retrieve
+// secret value" (GetSecretValue), then Key/value or Plaintext; Edit saves a new
+// AWSCURRENT version (PutSecretValue).
+SUB_RENDERERS.secretvalue = async function(svc, full, host){
+  const d = await _dget(host, _secp(full, "details")); if (!d) return;
+  host.append(_dkv("Secret details", [["Encryption key", d.kms_key_id, 1], ["Secret name", d.name], ["Secret ARN", d.arn, 1],
+    ["Description", d.description], ["Versions", d.version_count], ["Last changed", d.last_changed]]));
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  let value = null, editing = false, plaintext = false;
+  const pairs = s => { try { const o = JSON.parse(s); if (o && typeof o === "object" && !Array.isArray(o)) return Object.entries(o).map(([k, v]) => [k, String(v)]); } catch(_){} return null; };
+  function render(){
+    panel.innerHTML = "";
+    panel.append(el("div",{class:"panel-h"}, icon("key"), "Secret value"));
+    const body = el("div",{style:"padding:14px"}); panel.append(body);
+    if (value === null) {
+      body.append(el("div",{class:"small",style:"color:var(--sub);margin-bottom:8px"}, "Retrieve and view the secret value."),
+        el("button",{class:"btn primary","data-testid":"secret-retrieve",onclick:async()=>{
+          const r = await api("GET", _secp(full, "value"));
+          if (!r.ok) { toast("Retrieve failed: " + _derr(r), "err"); return; }
+          value = r.json.secret_string || ""; render();
+        }}, "Retrieve secret value"));
+      return;
+    }
+    const kv = pairs(value);
+    if (!editing) {
+      body.append(el("div",{style:"display:flex;gap:8px;margin-bottom:8px"},
+        el("button",{class:"btn" + (!plaintext ? " primary" : ""),onclick:()=>{ plaintext = false; render(); }}, "Key/value"),
+        el("button",{class:"btn" + (plaintext ? " primary" : ""),onclick:()=>{ plaintext = true; render(); }}, "Plaintext"),
+        el("button",{class:"btn","data-testid":"secret-edit",onclick:()=>{ editing = true; render(); }}, icon("edit"), "Edit")));
+      body.append(kv && !plaintext ? _dtbl([["0","Secret key",1],["1","Secret value",1]], kv, "Empty secret.")
+        : el("pre",{class:"json","data-testid":"secret-plaintext"}, value));
+    } else {
+      const ta = el("textarea",{"data-testid":"secret-edit-text",style:"width:100%;min-height:120px;font-family:Consolas,Menlo,monospace"}); ta.value = value;
+      body.append(ta, el("div",{style:"display:flex;gap:8px;margin-top:10px"},
+        el("button",{class:"btn primary","data-testid":"secret-save",onclick:async()=>{
+          const r = await api("PUT", _secp(full, "value"), {secret_string: ta.value});
+          if (r.ok) { value = ta.value; editing = false; toast("Secret value saved"); render(); } else toast("Save failed: " + _derr(r), "err");
+        }}, icon("save"), "Save"),
+        el("button",{class:"btn",onclick:()=>{ editing = false; render(); }}, "Cancel")));
+    }
+  }
+  render();
+};
+SUB_RENDERERS.secversions = async function(svc, full, host){
+  const j = await _dget(host, _secp(full, "versions")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Versions (" + j.versions.length + ")"),
+    _dtbl([["version_id","Version ID",1],[v => (v.stages || []).join(", ") || "None (deprecated)","Staging labels"],["created","Created on"]], j.versions, "No versions."));
+  host.append(card);
+};
+SUB_RENDERERS.secrotation = async function(svc, full, host){
+  const j = await _dget(host, _secp(full, "rotation")); if (!j) return;
+  host.append(_dkv("Rotation configuration", [["Rotation status", j.rotation_enabled ? "Enabled" : "Disabled"],
+    ...(j.rotation_enabled ? [["Rotation schedule", j.schedule_expression || ("Every " + j.automatically_after_days + " days")], ["Lambda rotation function", j.rotation_lambda_arn, 1],
+      ["Last rotated date", j.last_rotated], ["Next rotation date", j.next_rotation]] : [])]));
+  const fn = el("input",{value:j.rotation_lambda_arn || "",placeholder:"arn:aws:lambda:" + REGION + ":" + ACCOUNT + ":function:my-rotator","data-testid":"sec-rot-fn"});
+  const days = el("input",{type:"number",min:"1",max:"1000",value:j.automatically_after_days || 30});
+  const now = el("input",{type:"checkbox"}); now.checked = true;
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit rotation"), _field("Rotation function (Lambda ARN)", fn), _field("Rotate every (days)", days),
+    el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, now, el("span",{}, "Rotate immediately when the secret is stored")),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary","data-testid":"sec-rot-save",onclick:()=>_secput(full, "rotation", {enabled:true, rotation_lambda_arn:fn.value, automatically_after_days:days.value, rotate_immediately:now.checked}, "Rotation configured")}, icon("save"), "Save"),
+      j.rotation_enabled ? el("button",{class:"btn",onclick:()=>_secput(full, "rotation", {enabled:false}, "Rotation disabled")}, "Disable rotation") : null)));
+};
+SUB_RENDERERS.secreplication = async function(svc, full, host){
+  const j = await _dget(host, _secp(full, "replication")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Replicate secret (primary Region " + j.primary_region + ")"),
+    _dtbl([["region","Region"],["status","Replication status"],["kms_key_id","Encryption key",1],["created","Replicated"],
+      [r => el("button",{class:"btn",onclick:()=>_secput(full, "replication", {action:"remove", region:r.region}, "Replica removed")}, "Remove"),"Actions"]],
+      j.replicas, full.name + " is not replicated to other Regions."));
+  const rg = el("select",{"data-testid":"sec-rep-region"}, ...["us-east-2","us-west-1","us-west-2","eu-west-1","eu-central-1","ap-south-1","ap-southeast-1","ap-northeast-1"].map(r => el("option",{value:r}, r)));
+  card.append(_field("Region", rg), el("button",{class:"btn primary","data-testid":"sec-rep-add",onclick:()=>_secput(full, "replication", {region:rg.value}, "Replica added")}, icon("add"), "Replicate"));
+  host.append(card);
+};
+SUB_RENDERERS.seckey = async function(svc, full, host){
+  const j = await _dget(host, _secp(full, "encryption")); if (!j) return;
+  host.append(_dkv("Encryption key", [["Encryption key", j.kms_key_id, 1]]));
+  const k = el("input",{value:j.kms_key_id,"data-testid":"sec-kms"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit encryption key"), _field("AWS KMS key (ID, ARN or alias; aws/secretsmanager = AWS managed)", k),
+    el("button",{class:"btn primary",onclick:()=>_secput(full, "encryption", {kms_key_id:k.value}, "Encryption key updated")}, icon("save"), "Save")));
+};
+SUB_RENDERERS.secpolicy = async function(svc, full, host){
+  const j = await _dget(host, _secp(full, "policy")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Resource permissions"));
+  if (!j.policy) card.append(el("div",{class:"empty"}, "No resource policy on " + full.name + "."));
+  const ta = el("textarea",{"data-testid":"sec-policy",style:"width:100%;min-height:160px;font-family:Consolas,Menlo,monospace"}); ta.value = j.policy || "";
+  card.append(ta, el("div",{style:"display:flex;gap:8px;margin-top:10px"},
+    el("button",{class:"btn primary",onclick:()=>_secput(full, "policy", {policy:ta.value}, "Resource policy saved")}, icon("save"), "Save"),
+    j.policy ? el("button",{class:"btn",onclick:()=>_secput(full, "policy", {policy:""}, "Resource policy deleted")}, "Delete") : null));
+  host.append(card);
 };
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──

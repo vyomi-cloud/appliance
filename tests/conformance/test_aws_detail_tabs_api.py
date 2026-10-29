@@ -451,7 +451,39 @@ def sqs():
     for n in (q, dlq):
         requests.delete(f"{BASE}/api/sqs/queues/{n}", timeout=30)
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs}
+
+
+def secrets():
+    print("── Secrets Manager secret")
+    name = f"tabs-secret-{int(time.time()) % 100000}"
+    r = requests.post(f"{BASE}/api/aws/secrets", json={"name": name, "value": '{"user":"app","password":"p1"}'}, timeout=30)
+    check("create secret", r.status_code < 300, r.text)
+    p = f"/api/aws/secrets/{name}/detail/"
+    sec = lambda s: get(p + s).json()
+    put = lambda s, b: requests.put(BASE + p + s, json=b, timeout=30)
+    check("Secret value: GetSecretValue returns this secret's value", sec("value")["secret_string"] == '{"user":"app","password":"p1"}')
+    put("value", {"secret_string": '{"user":"app","password":"p2"}'})
+    v = sec("versions")["versions"]
+    check("Versions: the new value is AWSCURRENT, the old one AWSPREVIOUS", len(v) >= 2 and v[0]["stages"] == ["AWSCURRENT"] and v[1]["stages"] == ["AWSPREVIOUS"], v)
+    check("Rotation: a Lambda that does not exist is rejected",
+          put("rotation", {"enabled": True, "rotation_lambda_arn": "arn:aws:lambda:us-east-1:123456789012:function:nope-x", "automatically_after_days": 30}).status_code == 400)
+    fn = f"tabs-rotator-{int(time.time()) % 100000}"
+    requests.post(f"{BASE}/api/lambda/functions", json={"function_name": fn}, timeout=60)
+    r = put("rotation", {"enabled": True, "rotation_lambda_arn": f"arn:aws:lambda:us-east-1:123456789012:function:{fn}", "automatically_after_days": 30})
+    rot = sec("rotation")
+    check("Rotation: enabled with its function, rotated now, next date set", r.status_code == 200 and rot["rotation_enabled"] and rot["last_rotated"] and rot["next_rotation"], rot)
+    check("Rotation: rotating made a new AWSCURRENT version", len(sec("versions")["versions"]) == len(v) + 1)
+    check("Replication: own Region rejected", put("replication", {"region": "us-east-1"}).status_code == 400)
+    put("replication", {"region": "eu-west-1"})
+    check("Replication: replica in eu-west-1 InSync", sec("replication")["replicas"][0]["status"] == "InSync")
+    check("Encryption key: unknown KMS key rejected", put("encryption", {"kms_key_id": "alias/nope-x"}).status_code == 400)
+    check("Resource policy: public policy blocked", put("policy", {"policy": {"Statement": [{"Effect": "Allow", "Principal": "*", "Action": "secretsmanager:GetSecretValue", "Resource": "*"}]}}).status_code == 400)
+    r = put("policy", {"policy": {"Statement": [{"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::123456789012:root"}, "Action": "secretsmanager:GetSecretValue", "Resource": "*"}]}})
+    check("Resource policy: account-scoped policy saved", r.status_code == 200 and "GetSecretValue" in sec("policy")["policy"], r.text)
+    requests.delete(f"{BASE}/api/aws/secrets/{name}", timeout=30)
+    requests.delete(f"{BASE}/api/lambda/functions/{fn}", timeout=30)
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets}
 
 if __name__ == "__main__":
     only = sys.argv[1:] or list(SECTIONS)

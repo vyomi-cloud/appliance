@@ -592,6 +592,10 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "secrets", "ListSecrets", {}] };
     if (method === "POST") return { tuple: ["aws", "secrets", "CreateSecret", body || {}] };
   }
+  // Secret detail tabs (core/aws_console_detail.py): value, versions, rotation, replication, key, policy.
+  m = path.match(/^\/api\/aws\/secrets\/(.+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "secrets", "GetSecretSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "secrets", "UpdateSecretSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/aws\/secrets\/(.+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "secrets", "GetSecret", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "secrets", "DeleteSecret", { name: dec(m[1]) }] };

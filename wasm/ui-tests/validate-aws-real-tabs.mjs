@@ -290,6 +290,29 @@ const SECTIONS = {
     const qv = (await call("GET", `/api/sqs/queues/${q}/detail/configuration`)).json;
     check("sns Publish: the subscribed queue received it", qv.messages_available >= 1, JSON.stringify(qv).slice(0, 200));
   },
+  async secretsmanager() {
+    const name = "rt-sec-" + Date.now().toString(36);
+    await call("POST", "/api/aws/secrets", { name, value: '{"db":"' + name + '"}' });
+    await openService("^secrets manager$");
+    await openRow(name);
+    await tab("Secret value");
+    await page.locator("#main [data-testid=secret-retrieve]").click();
+    await sleep(1500);
+    const v = await page.evaluate(() => document.querySelector("#main")?.innerText || "");
+    check("secretsmanager Secret value: retrieves this secret's value", v.includes(name), v);
+    await page.locator("#main [data-testid=secret-edit]").click();
+    await page.locator("#main [data-testid=secret-edit-text]").fill('{"db":"changed-' + name + '"}');
+    await page.locator("#main [data-testid=secret-save]").click();
+    await sleep(1500);
+    const vers = await tab("Versions");
+    check("secretsmanager Versions: the edit created a new AWSCURRENT version", /AWSCURRENT/.test(vers) && /AWSPREVIOUS/.test(vers), vers);
+    await tab("Replication");
+    await page.locator("#main [data-testid=sec-rep-add]").click();
+    await sleep(1500);
+    await tab("Versions");
+    const rep = await tab("Replication");
+    check("secretsmanager Replication: replica added in the tab persists", /us-east-2/.test(rep) && /InSync/.test(rep), rep);
+  },
 };
 
 let server;

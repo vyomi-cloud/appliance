@@ -48,6 +48,11 @@ def _instance(instance_id: str) -> dict:
     return ensure_model(inst)
 
 
+def _json_dumps(o) -> str:
+    import json
+    return json.dumps(o)
+
+
 def _fail(e: D.DetailError):
     raise HTTPException(e.status, detail={"code": e.code, "message": e.message})
 
@@ -570,6 +575,59 @@ def register(app: FastAPI) -> None:
         ctx.persist_state()
         ctx.record_usage(f"sqs.update_{section}", {"queue_name": name, "resource_id": name})
         return {"section": section, **_queue_view(q)}
+
+    # ── Secrets Manager secret tabs (value in Vault KV v2, metadata beside it) ──
+    def _secret_ctx(name: str, request: Request):
+        from core import vault_routes as V, vault_client as vc
+        space = V._active_space_id(request)
+        if vc.kv_get("aws", space, name) is None:
+            raise HTTPException(404, detail={"code": "ResourceNotFoundException", "message": "Secrets Manager can't find the specified secret."})
+        vers = sorted(vc.kv_list_versions("aws", space, name), key=lambda v: -int(v["version"]))
+        live = [v for v in vers if not v.get("destroyed") and not v.get("deletion_time")]
+        out = [{"version_id": str(v["version"]), "stages": ["AWSCURRENT"] if i == 0 else (["AWSPREVIOUS"] if i == 1 else []),
+                "created": v.get("created_time", "")} for i, v in enumerate(live)]
+        return V, vc, space, V._aws_secret_meta(space, name), out
+
+    @app.get("/api/aws/secrets/{name}/detail/{section}")
+    def secret_section(name: str, section: str, request: Request):
+        V, vc, space, meta, vers = _secret_ctx(name, request)
+        if section == "value":   # GetSecretValue (AWSCURRENT)
+            data = (vc.kv_get("aws", space, name) or {}).get("data", {})
+            value = data.get("value") if "value" in data else _json_dumps(data)
+            return {"section": section, "name": name, "secret_string": value, "version_id": vers[0]["version_id"] if vers else "",
+                    "version_stages": ["AWSCURRENT"]}
+        try:
+            return {"section": section, **D.secret_section(meta, section, vers, name, meta["arn"])}
+        except D.DetailError as e:
+            _fail(e)
+
+    @app.put("/api/aws/secrets/{name}/detail/{section}")
+    async def secret_update(name: str, section: str, request: Request):
+        import json as _json
+        from routes import aws_lambda as L
+        V, vc, space, meta, vers = _secret_ctx(name, request)
+        if section == "value":   # PutSecretValue: a new version takes AWSCURRENT
+            val = (await _body(request)).get("secret_string")
+            if val in (None, ""):
+                raise HTTPException(400, detail={"code": "InvalidParameterException", "message": "SecretString is required."})
+            vc.kv_put("aws", space, name, str(val))
+            ctx.record_usage("secretsmanager.put_secret_value", {"name": name, "resource_id": name})
+            return secret_section(name, "value", request)
+        kms_ok = lambda k: k in V._kms_keys or k in V._kms_aliases or ("alias/" + k) in V._kms_aliases
+        try:
+            follow = D.secret_update(meta, section, await _body(request), lambda f: bool(L._lambda_find_function(f)), kms_ok)
+        except D.DetailError as e:
+            _fail(e)
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, detail={"code": "InvalidParameterException", "message": str(e)})
+        if follow == "rotate":
+            cur = (vc.kv_get("aws", space, name) or {}).get("data", {})
+            vc.kv_put("aws", space, name, cur.get("value") if "value" in cur else cur)   # new version → AWSCURRENT
+            D.secret_mark_rotated(meta)
+        vc.kv_put("aws", space, "__meta__" + name, _json.dumps(meta))
+        ctx.record_usage(f"secretsmanager.update_{section}", {"name": name, "resource_id": name})
+        V2, vc2, space2, meta2, vers2 = _secret_ctx(name, request)
+        return {"section": section, **D.secret_section(meta2, section, vers2, name, meta2["arn"])}
 
     # ── Permissions tab (every service): identity policies covering a resource ──
     @app.get("/api/aws/resource-access")

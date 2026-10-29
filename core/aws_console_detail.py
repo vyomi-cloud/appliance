@@ -2077,3 +2077,111 @@ def sqs_check_purge(queue: dict) -> None:
                           f"Only one PurgeQueue operation on {queue.get('queue_name')} is allowed every 60 seconds.", 403)
     queue["last_purge_epoch"] = time.time()
     queue["last_purge"] = _now()
+
+
+# ── Secrets Manager secret detail (Versions, Rotation, Replication, Encryption
+#    key, Resource policy) over a per-secret metadata dict ──────────────────────
+def _days(n) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + int(n) * 86400))
+
+
+def secret_section(meta: dict, section: str, versions: list, name: str, arn: str) -> dict:
+    """`versions`: [{version_id, stages, created}] newest first (DescribeSecret /
+    ListSecretVersionIds)."""
+    if section == "details":
+        rot = meta.get("rotation") or {}
+        return {"name": name, "arn": arn, "description": meta.get("description", ""),
+                "kms_key_id": meta.get("kms_key_id") or "aws/secretsmanager", "created": meta.get("created", ""),
+                "last_changed": (versions[0]["created"] if versions else ""), "rotation_enabled": bool(rot.get("enabled")),
+                "last_rotated": rot.get("last_rotated", ""), "next_rotation": rot.get("next_rotation", "") if rot.get("enabled") else "",
+                "version_count": len(versions), "replica_count": len(meta.get("replicas") or [])}
+    if section == "versions":
+        return {"versions": versions}
+    if section == "rotation":
+        rot = meta.get("rotation") or {}
+        return {"rotation_enabled": bool(rot.get("enabled")), "rotation_lambda_arn": rot.get("lambda_arn", ""),
+                "automatically_after_days": rot.get("days"), "schedule_expression": rot.get("schedule", ""),
+                "last_rotated": rot.get("last_rotated", ""), "next_rotation": rot.get("next_rotation", "") if rot.get("enabled") else ""}
+    if section == "replication":
+        return {"primary_region": REGION, "replicas": list(meta.get("replicas") or [])}
+    if section == "encryption":
+        return {"kms_key_id": meta.get("kms_key_id") or "aws/secretsmanager"}
+    if section == "policy":
+        return {"policy": meta.get("resource_policy", "")}
+    raise DetailError("InvalidParameterException", f"Unknown secret section '{section}'.")
+
+
+def secret_update(meta: dict, section: str, body: dict, lambda_exists=None, kms_exists=None) -> str:
+    """PutResourcePolicy / RotateSecret / CancelRotateSecret / ReplicateSecretToRegions /
+    RemoveRegionsFromReplication / UpdateSecret(KmsKeyId). Returns the follow-up
+    action the backend must perform ("rotate" when a rotation should run now)."""
+    import json
+    b = dict(body or {})
+    if section == "rotation":
+        if not b.get("enabled") in _TRUE:
+            rot = meta.setdefault("rotation", {})
+            rot["enabled"] = False
+            return ""
+        arn = str(b.get("rotation_lambda_arn") or "").strip()
+        if not arn.startswith("arn:aws:lambda:") or (lambda_exists and not lambda_exists(arn.split(":function:")[-1].split(":")[0])):
+            raise DetailError("InvalidRequestException", "A rotation function is required: the Lambda function ARN must exist.")
+        days, sched = b.get("automatically_after_days"), str(b.get("schedule_expression") or "").strip()
+        if not days and not sched:
+            raise DetailError("InvalidParameterException", "Set a rotation schedule: AutomaticallyAfterDays or ScheduleExpression.")
+        if days not in (None, ""):
+            days = int(days)
+            if not 1 <= days <= 1000:
+                raise DetailError("InvalidParameterException", "AutomaticallyAfterDays must be between 1 and 1000.")
+        if sched and not (sched.startswith("rate(") or sched.startswith("cron(")):
+            raise DetailError("InvalidParameterException", "ScheduleExpression must be a rate() or cron() expression.")
+        meta["rotation"] = {"enabled": True, "lambda_arn": arn, "days": days or None, "schedule": sched,
+                            "last_rotated": (meta.get("rotation") or {}).get("last_rotated", ""),
+                            "next_rotation": _days(days) if days else ""}
+        return "rotate" if b.get("rotate_immediately", True) in _TRUE else ""
+    if section == "replication":
+        reps = meta.setdefault("replicas", [])
+        if b.get("action") == "remove":
+            meta["replicas"] = [r for r in reps if r["region"] != b.get("region")]
+            return ""
+        region = str(b.get("region") or "").strip()
+        import re
+        if not re.fullmatch(r"[a-z]{2}(-gov)?-[a-z]+-\d", region):
+            raise DetailError("InvalidParameterException", f"Invalid region: {region or '(empty)'}")
+        if region == REGION:
+            raise DetailError("InvalidParameterException", "You can't replicate a secret to the Region it is stored in.")
+        if any(r["region"] == region for r in reps):
+            raise DetailError("InvalidParameterException", f"The secret is already replicated to {region}.")
+        reps.append({"region": region, "kms_key_id": str(b.get("kms_key_id") or "aws/secretsmanager"), "status": "InSync",
+                     "status_message": "Replication succeeded", "last_accessed": "", "created": _now()})
+        return ""
+    if section == "encryption":
+        key = str(b.get("kms_key_id") or "").strip() or "aws/secretsmanager"
+        if key != "aws/secretsmanager" and kms_exists and not kms_exists(key):
+            raise DetailError("ResourceNotFoundException", f"The KMS key {key} does not exist.")
+        meta["kms_key_id"] = key
+        return ""
+    if section == "policy":
+        raw = b.get("policy") or ""
+        if not raw:
+            meta["resource_policy"] = ""
+            return ""
+        try:
+            doc = json.loads(raw) if isinstance(raw, str) else dict(raw)
+        except (TypeError, ValueError):
+            raise DetailError("MalformedPolicyDocumentException", "The resource policy must be valid JSON.")
+        for st in _as_list(doc.get("Statement")) or [None]:
+            if not isinstance(st, dict) or st.get("Effect") not in ("Allow", "Deny") or "Principal" not in st:
+                raise DetailError("MalformedPolicyDocumentException", "Each statement needs Effect and Principal.")
+        if b.get("block_public_policy", True) in _TRUE and _is_public_policy(doc):
+            raise DetailError("PublicPolicyException", "You can't save a resource policy that grants broad access to the secret "
+                              "(BlockPublicPolicy).")
+        meta["resource_policy"] = json.dumps(doc, indent=2)
+        return ""
+    raise DetailError("InvalidParameterException", f"Unknown secret section '{section}'.")
+
+
+def secret_mark_rotated(meta: dict) -> None:
+    rot = meta.setdefault("rotation", {})
+    rot["last_rotated"] = _now()
+    if rot.get("days"):
+        rot["next_rotation"] = _days(rot["days"])

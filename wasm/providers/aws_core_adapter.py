@@ -1092,3 +1092,52 @@ def sqs_section(p):
                 return None
         out["source_queues"] = [n for n in MSG.queue_names() if _target(MSG.get_queue(n)) == q["queue_arn"]]
     return out
+
+
+# ── Secrets Manager secret tabs (core/aws_console_detail.py over secrets_core) ──
+def _sec_versions(s):
+    vs = sorted(s.get("versions", {}).items(), key=lambda kv: -(float(kv[1].get("CreatedDate") or 0)))
+    return [{"version_id": vid, "stages": list(v.get("stages") or []), "created": _iso(v.get("CreatedDate"))} for vid, v in vs]
+
+
+def secret_section(p):
+    name = str(p.get("name") or "")
+    s = SEC.get_secret(name)
+    if not s or s.get("deleted_date"):
+        return {"ok": False, "code": "ResourceNotFoundException",
+                "__http": {"status": 404, "body": {"detail": {"code": "ResourceNotFoundException",
+                                                              "message": "Secrets Manager can't find the specified secret."}}}}
+    s.setdefault("created_iso", _iso(s.get("created")))
+    meta = s
+    meta.setdefault("created", s.get("created"))
+    section = str(p.get("section") or "")
+    if p.get("method") == "PUT":
+        body = p.get("body") or {}
+        if section == "value":
+            if body.get("secret_string") in (None, ""):
+                return _det_err(DET.DetailError("InvalidParameterException", "SecretString is required."))
+            secrets.dispatch(SEC, "secretsmanager.PutSecretValue", {"SecretId": name, "SecretString": str(body["secret_string"])})
+        else:
+            fns = getattr(_R["compute"], "_lambda_functions", None) or {}
+            kms_ok = lambda k: k in KMS.keys or k in KMS.aliases or ("alias/" + k) in KMS.aliases
+            try:
+                follow = DET.secret_update(meta, section, body, lambda f: f in fns, kms_ok)
+            except DET.DetailError as e:
+                return _det_err(e)
+            except (TypeError, ValueError) as e:
+                return _det_err(DET.DetailError("InvalidParameterException", str(e)))
+            if follow == "rotate":
+                cur = secrets.dispatch(SEC, "secretsmanager.GetSecretValue", {"SecretId": name}).body
+                secrets.dispatch(SEC, "secretsmanager.PutSecretValue", {"SecretId": name, "SecretString": cur.get("SecretString", "")})
+                DET.secret_mark_rotated(meta)
+            SEC.persist()
+    vers = _sec_versions(s)
+    if section == "value":
+        v = secrets.dispatch(SEC, "secretsmanager.GetSecretValue", {"SecretId": name}).body
+        return {"ok": True, "section": section, "name": name, "secret_string": v.get("SecretString", ""),
+                "version_id": v.get("VersionId", ""), "version_stages": v.get("VersionStages", [])}
+    try:
+        view = DET.secret_section({**meta, "created": s.get("created_iso")}, section, vers, name, s["arn"])
+    except DET.DetailError as e:
+        return _det_err(e)
+    return {"ok": True, "section": section, **view}
