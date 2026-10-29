@@ -12743,6 +12743,26 @@ def _ec2_query_get_image_findings(params: dict[str, Any]) -> Response:
     return _ec2_success_response("GetImageFindingsResponse", build)
 
 
+def _ec2_query_get_capacity_manager_supportability_scores(params: dict[str, Any]) -> Response:
+    for name in ("CapacityAmount", "CapacityUnit", "MarketType"):
+        if not str(params.get(name, "")).strip():
+            return _ec2_error_response("MissingParameter", f"The request must contain the parameter {name}", 400)
+    azs = [str(v) for k, v in sorted(params.items()) if k.startswith("CapacityAvailabilityZoneId.") and str(v).strip()]
+    if not azs:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter CapacityAvailabilityZoneId", 400)
+
+    def build(root: ET.Element) -> None:
+        # The simulator has no capacity constraints, so every zone scores the maximum.
+        _ec2_sub(root, "aggregateScore", "100")
+        scores = _ec2_sub(root, "capacityManagerSupportabilityScoreSet")
+        for az in azs:
+            item = _ec2_sub(scores, "item")
+            _ec2_sub(item, "availabilityZoneId", az)
+            _ec2_sub(item, "score", "100")
+
+    return _ec2_success_response("GetCapacityManagerSupportabilityScoresResponse", build)
+
+
 def _ec2_query_describe_instance_status(params: dict[str, Any]) -> Response:
     instances = _ec2_query_filter_instances(params)
 
@@ -13700,6 +13720,8 @@ async def api_ec2_query(request: Request):
             return _ec2_query_describe_images(params)
         if action == "GetImageFindings":
             return _ec2_query_get_image_findings(params)
+        if action == "GetCapacityManagerSupportabilityScores":
+            return _ec2_query_get_capacity_manager_supportability_scores(params)
         if action == "DescribeInstanceStatus":
             return _ec2_query_describe_instance_status(params)
         if action == "DescribeInstanceTypes":
