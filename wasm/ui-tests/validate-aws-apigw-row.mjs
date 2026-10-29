@@ -28,6 +28,16 @@ try {
   await sleep(6000);
   const names = await page.evaluate(async () => (await (await fetch("/api/apigateway/apis")).json()).apis.map((f) => f.name));
   check("API survives a console reload", names.includes("MyApi"), JSON.stringify(names));
+  const sub = await page.evaluate(async () => {
+    const apis = (await (await fetch("/api/apigateway/apis")).json()).apis;
+    const id = (apis.find((f) => f.name === "MyApi") || {}).id;
+    const out = {};
+    for (const k of ["resources", "stages"]) { const r = await fetch(`/api/apigateway/apis/${id}/${k}`); out[k] = [r.status, r.ok ? await r.json() : null]; }
+    return out;
+  });
+  const res = (sub.resources[1] || {}).resources || [], stg = (sub.stages[1] || {}).stages || [];
+  check("GET .../resources lists the API's resource tree with methods", sub.resources[0] === 200 && res.some((r) => r.path === "/hello" && Object.keys(r.resource_methods).length), JSON.stringify(res).slice(0, 200));
+  check("GET .../stages lists the deployed stage with an invoke URL", sub.stages[0] === 200 && stg.some((s) => s.stage_name && s.invoke_url), JSON.stringify(stg).slice(0, 200));
   check("no page error while opening the create wizard", errors.length === 0, errors.join(";"));
 } catch (e) { check("boot", false, String(e).split("\n")[0]); }
 await browser.close(); server.close();

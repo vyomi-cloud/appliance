@@ -95,6 +95,8 @@ class Aws(CloudProvider):
             ("vpc", "ListVpcs"):          lambda b, a, p: D.vpc_list_vpcs(p),
             ("vpc", "GetVpc"):            lambda b, a, p: D.vpc_get_vpc(p),
             ("vpc", "DeleteVpc"):         lambda b, a, p: D.vpc_delete_vpc(p),
+            ("apigateway", "Resources"):  lambda b, a, p: D.apigw_resources(p),
+            ("apigateway", "Stages"):     lambda b, a, p: D.apigw_stages(p),
             ("apigateway", "GetApi"):     lambda b, a, p: D.apigw_get(p),
             ("apigateway", "DeleteApi"):  lambda b, a, p: D.apigw_delete(p),
             ("apigateway", "Invoke"):     lambda b, a, p: D.apigw_invoke(p),
