@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-29 22:10 UTC · refreshes after every pipeline run_
+_Updated 2026-10-29 22:52 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-10-29 22:10 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 61% · Nano 74%
 - **Hourly tests:** 215 of 223 suites passing (run 22:06 UTC)
-- **Upstream watch:** 56 open changes from the real clouds to adopt
+- **Upstream watch:** 60 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -82,7 +82,7 @@ _Updated 2026-10-29 22:10 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|---|
 | Compute Engine | — | not audited | 🧩 5/18 · 🧩 10/18 | 0 · 0 | ✅ watched | before gate |
 | Cloud Storage | — | not audited | 🧩 7/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
-| Cloud SQL | — | not audited | 🧩 5/17 · 🧩 11/17 | 0 · 0 | ⚠️ 46 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
+| Cloud SQL | — | not audited | 🧩 5/17 · 🧩 11/17 | 0 · 0 | ⚠️ 50 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
 | Pub/Sub | — | not audited | 🧩 5/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | Firestore | — | not audited | 🧩 5/14 · 🧩 7/14 | 0 · 0 | ✅ watched | before gate |
 | Cloud Functions | — | not audited | 🧩 5/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
