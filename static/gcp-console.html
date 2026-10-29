@@ -426,6 +426,17 @@ let STATE = {view: "home", service: null, item: null, detailTab: 0};
 const NOTIFS = [];
 
 // ========== DOM helpers (same pattern as Azure/AWS consoles) =================
+// A tier-locked service answers 403 {error:{code:"tier_…", reason, upgrade_to}}:
+// say which tier unlocks it instead of a bare "HTTP 403".
+function loadFailMsg(r){
+  const e = r && r.json && (r.json.error || r.json);
+  if (r && r.status === 403 && e && /^tier_/.test(String(e.code || ""))) {
+    const t = e.upgrade_to ? e.upgrade_to[0].toUpperCase() + e.upgrade_to.slice(1) : "";
+    return [(e.reason || "This service isn't included in your tier") + ". ",
+            el("a", {href: "/clouds"}, t ? "Upgrade to " + t + " \u2192" : "See tiers \u2192")];
+  }
+  return ["Failed to load: HTTP " + (r ? r.status : "?")];
+}
 function el(tag, attrs={}, ...kids){
   const e = document.createElement(tag);
   for (const [k,v] of Object.entries(attrs)) {
@@ -807,7 +818,7 @@ async function renderList(main){
   const r = await api("GET", fullPath);
   if (!r.ok) {
     tableHolder.innerHTML = "";
-    tableHolder.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status,
+    tableHolder.append(el("div",{class:"empty"}, ...loadFailMsg(r),
       el("div",{style:"font-size:11px;color:var(--hint);margin-top:6px"}, fullPath)));
     return;
   }
