@@ -394,6 +394,44 @@ RESOURCE_CATALOG_AWS = [
         "endpoints": {},
     },
     {
+        # API Gateway V2 — HTTP + WebSocket APIs (core/apigatewayv2_core.py). Console REST
+        # at /api/apigatewayv2/*; the native /v2/* wire serves SDKs/CLI off the same store.
+        "key": "apigatewayv2", "label": "API Gateway V2", "icon": "api",
+        "namespace": "AWS/ApiGatewayV2", "service": "apigatewayv2",
+        "collection_path": "/api/apigatewayv2/apis",
+        "resource_path":   "/api/apigatewayv2/apis/{name}",
+        "name_field":      "api_id",
+        "create_method":   "POST",
+        "rail_items": [
+            {"key": "apis", "label": "HTTP & WebSocket APIs", "icon": "api", "type": "primary"},
+        ],
+        "api_paths": {
+            "routes":       {"method": "GET",    "path": "/api/apigatewayv2/apis/{name}/routes"},
+            "integrations": {"method": "GET",    "path": "/api/apigatewayv2/apis/{name}/integrations"},
+            "stages":       {"method": "GET",    "path": "/api/apigatewayv2/apis/{name}/stages"},
+            "deployments":  {"method": "GET",    "path": "/api/apigatewayv2/apis/{name}/deployments"},
+            "authorizers":  {"method": "GET",    "path": "/api/apigatewayv2/apis/{name}/authorizers"},
+            "models":       {"method": "GET",    "path": "/api/apigatewayv2/apis/{name}/models"},
+            "delete":       {"method": "DELETE", "path": "/api/apigatewayv2/apis/{name}"},
+        },
+        "children": [],
+        "columns": [
+            ["api_id",        "API ID"],
+            ["name",          "Name"],
+            ["protocol_type", "Protocol"],
+            ["api_endpoint",  "Invoke URL"],
+            ["route_count",   "Routes"],
+            ["created",       "Created"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "API name", "default": "my-http-api"},
+            {"name": "protocol_type", "label": "Protocol (HTTP or WEBSOCKET)", "default": "HTTP"},
+            {"name": "target", "label": "Quick-create target (URL or Lambda ARN)", "default": "https://example.com"},
+            {"name": "description", "label": "Description", "default": "Created from the console"},
+        ],
+        "endpoints": {},
+    },
+    {
         # Systems Manager — Parameter Store in the console (core/ssm_core.py also serves
         # documents, Run Command, associations, maintenance windows and patch baselines on
         # the native AmazonSSM wire). Console REST at /api/ssm/*, same store as the SDK/CLI.

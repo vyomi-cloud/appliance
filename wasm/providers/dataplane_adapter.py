@@ -21,6 +21,7 @@ from core import lambda_core, apigateway_core, vpc_core, eventbridge_core
 from core import elbv2_core
 from core import ssm_core
 from core import azure_servicebus_core, azure_sql_core, azure_iam_core
+from core import apigatewayv2_core
 from core import stepfunctions_core
 from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
 
@@ -530,6 +531,70 @@ def extras_config_put(p):
     return {"ok": True}
 
 
+# ── API Gateway V2 (HTTP/WebSocket APIs) — core/apigatewayv2_core.py ────────
+# Store = the shared registry's `apigwv2`, the SAME one the native /v2 relay wire
+# reads/writes, so console-created APIs are visible to the CLI/SDK and vice-versa.
+def _apigwv2():
+    from core import nano_registry
+    return nano_registry.get()["apigwv2"]
+
+
+def _v2(method, path, body=None):
+    r = apigatewayv2_core.dispatch(_apigwv2(), method, path, {}, {},
+                                   json.dumps(body).encode() if body is not None else b"")
+    return r.status, _lam_json(r)
+
+
+def apigwv2_list(p=None):
+    apis = sorted((apigatewayv2_core.console_view(a) for a in _apigwv2().apis.values()),
+                  key=lambda a: (a["created"], a["name"]))
+    return {"ok": True, "apis": apis, "count": len(apis)}
+
+
+def apigwv2_create(p):
+    name = str(p.get("name") or "").strip()
+    if not name:
+        return {"ok": False, "code": "BadRequestException", "message": "name is required"}
+    body = {"name": name, "protocolType": str(p.get("protocol_type") or p.get("protocolType") or "HTTP").upper()}
+    if p.get("description"):
+        body["description"] = p["description"]
+    if body["protocolType"] == "WEBSOCKET":
+        body["routeSelectionExpression"] = p.get("route_selection_expression") or "$request.body.action"
+    elif p.get("target"):
+        body["target"] = p["target"]
+    st, out = _v2("POST", "/v2/apis", body)
+    if st >= 300:
+        return {"ok": False, "code": "BadRequestException", "message": out.get("message", "")}
+    return {"ok": True, **apigatewayv2_core.console_view(_apigwv2().apis[out["apiId"]])}
+
+
+def apigwv2_get(p):
+    api = _apigwv2().apis.get(str(p.get("id") or p.get("name") or ""))
+    if not api:
+        return {"ok": False, "code": "NotFoundException"}
+    return {"ok": True, **apigatewayv2_core.console_view(api)}
+
+
+def apigwv2_delete(p):
+    st, out = _v2("DELETE", f"/v2/apis/{p.get('id') or p.get('name') or ''}")
+    return {"ok": st < 300, "message": out.get("message", "")}
+
+
+def apigwv2_patch(p):
+    api = _apigwv2().apis.get(str(p.get("id") or p.get("name") or ""))
+    if not api:
+        return {"ok": False, "code": "NotFoundException"}
+    if isinstance(p.get("tags"), dict):
+        api["tags"] = {str(k): str(v) for k, v in p["tags"].items()}
+    if p.get("description") is not None:
+        api["description"] = p["description"]
+    return {"ok": True, **apigatewayv2_core.console_view(api)}
+
+
+def apigwv2_children(p):
+    """GET /api/apigatewayv2/apis/{id}/{routes|integrations|stages|deployments|authorizers|models}."""
+    st, out = _v2("GET", f"/v2/apis/{p.get('id')}/{p.get('kind')}")
+    return {"ok": st < 300, **out}
 # ── CloudWatch Logs (core/logs_core.py) ─────────────────────────────────────
 def logs_console(p):
     """Console REST for CloudWatch Logs: the SAME logs_core.console_dispatch the

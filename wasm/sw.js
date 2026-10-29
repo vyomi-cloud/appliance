@@ -208,7 +208,7 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
+const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,apigatewayv2:1.00,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
@@ -593,6 +593,17 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "apigateway", "GetApi", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "apigateway", "DeleteApi", { name: dec(m[1]) }] };
+  // API Gateway V2 (core/apigatewayv2_core.py) — HTTP/WebSocket APIs
+  if (path === "/api/apigatewayv2/apis") {
+    if (method === "GET")  return { tuple: ["aws", "apigatewayv2", "ListApis", {}] };
+    if (method === "POST") return { tuple: ["aws", "apigatewayv2", "CreateApi", body || {}] };
+  }
+  m = path.match(/^\/api\/apigatewayv2\/apis\/([^/]+)\/(routes|integrations|stages|deployments|authorizers|models)$/);
+  if (m && method === "GET") return { tuple: ["aws", "apigatewayv2", "ListChildren", { id: dec(m[1]), kind: m[2] }] };
+  m = path.match(/^\/api\/apigatewayv2\/apis\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "apigatewayv2", "GetApi", { id: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "apigatewayv2", "UpdateApi", { id: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "apigatewayv2", "DeleteApi", { id: dec(m[1]) }] };
   // Systems Manager Parameter Store (core/ssm_core.py) — names carry slashes, so match greedily
   if (path === "/api/ssm/parameters") {
     if (method === "GET")  return { tuple: ["aws", "ssm", "ListParameters", {}] };

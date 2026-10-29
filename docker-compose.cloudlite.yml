@@ -176,6 +176,27 @@ services:
       retries: 5
     restart: unless-stopped
 
+  vyomi-gateway:
+    profiles: ["full"]
+    # Shared L7 gateway (Caddy, Apache-2.0) for API Gateway V2 invoke URLs
+    # (https://{api-id}.execute-api.localhost:9443, http on :9080) and, later, ELB / API Gateway v1 /
+    # GCP API Gateway / APIM. Routes are applied live through the admin API (:2019, internal only);
+    # Caddy forwards to the simulator's integration handler (/_apigw/*).
+    image: caddy:2.8.4-alpine
+    entrypoint: ["/bin/sh", "-c"]
+    command: ['echo ''{"admin":{"listen":"0.0.0.0:2019"}}'' > /tmp/init.json && exec caddy run --config /tmp/init.json']
+    networks: [vyomi-net]
+    ports:
+      - "9080:9080"
+      - "9443:9443"
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   vyomi-minio:
     profiles: ["full"]
     # MinIO removed its public Docker Hub image (docker.io/minio/minio → 404);

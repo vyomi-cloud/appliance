@@ -2541,6 +2541,13 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(api, dict):
             add("aws", "apigateway", "api", api_id, api)
 
+    try:   # API Gateway V2 — the shared wire/console store (console + SDK/CLI created APIs)
+        from core.apigatewayv2_core import shared_store as _apigwv2_store
+        for api_id, api in _apigwv2_store().apis.items():
+            add("aws", "apigatewayv2", "api", api_id, {"name": api["name"], "created": api["createdDate"]})
+    except Exception:
+        pass
+
     try:   # Systems Manager parameters — the shared wire/console store
         from core.ssm_core import shared_store as _ssm_store
         for _n in _ssm_store().parameters:
@@ -23288,6 +23295,26 @@ _UNIFIED_INGRESS = os.environ.get("VYOMI_UNIFIED_INGRESS", "").strip().lower() i
 # we registered the @app.post("/{bucket}/{key:path}") catch-all up
 # top (as the file originally did), it swallowed POST /api/auth/...
 # with bucket=api, key=auth/... and returned a NoSuchBucket XML.
+# API Gateway V2 console REST (/api/apigatewayv2/*) — shares its store with the native /v2 wire.
+try:
+    from providers import aws_apigatewayv2_console as _apigwv2_console
+
+    def _apigwv2_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("aws", "apigatewayv2", "api", payload, {}, None, action="delete")
+            _record_usage("apigatewayv2.delete_api", {"api_id": payload})
+        else:
+            _cloudsim_sync_service_resource("aws", "apigatewayv2", "api", payload["apiId"],
+                                            {"name": payload["name"], "created": payload["createdDate"]}, None)
+            _record_usage("apigatewayv2.create_api", {"api_id": payload["apiId"], "name": payload["name"]})
+    _apigwv2_console.register(app, _apigwv2_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[apigatewayv2] console routes skipped: {_e}")
+try:   # API Gateway V2 data plane: the integration handler behind the shared Caddy gateway
+    from providers import aws_apigatewayv2_gateway as _apigwv2_gateway
+    _apigwv2_gateway.register(app, lambda fn, ev: _lambda_invoke_function(fn, ev, source="apigateway"))
+except Exception as _e:   # never let this break appliance boot
+    print(f"[apigatewayv2] gateway handler skipped: {_e}")
 # Systems Manager console REST (/api/ssm/*) — shares its store with the native AmazonSSM wire.
 try:
     from providers import aws_ssm_console as _ssm_console

@@ -11,3 +11,4 @@ vyomi-elasticmq
 vyomi-vault
 vyomi-azurite
 vyomi-valkey
+vyomi-gateway

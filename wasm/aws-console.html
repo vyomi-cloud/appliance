@@ -753,7 +753,7 @@ function renderRail(){
       ["Compute", ["ec2", "lambda"]],
       ["Storage", ["s3"]],
       ["Databases", ["rds", "dynamodb"]],
-      ["Application Integration", ["sqs", "apigateway", "eventbridge", "stepfunctions"]],
+      ["Application Integration", ["sqs", "apigateway", "apigatewayv2", "eventbridge", "stepfunctions"]],
       ["Networking & Content Delivery", ["vpc", "elbv2"]],
       ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
       ["Management & Governance", ["logs", "ssm"]],
@@ -3965,6 +3965,24 @@ function renderGenericTab(svc, full, host, tab){
         "Currently at defaults. " + desc)));
   }
 }
+
+// API Gateway V2 — generic list tab. `tab.list_key` selects svc.api_paths[list_key];
+// `tab.cols` is [[field,label],…]. Items are the native V2 camelCase shapes ({items:[…]}).
+SUB_RENDERERS.apigw2list = function(svc, full, host, tab){
+  const ap = (svc.api_paths || {})[tab.list_key];
+  fetch(ORIGIN + fillPath(ap.path, {name: full.api_id || full.id})).then(r=>r.json()).then(j=>{
+    const items = j.items || [];
+    if (!items.length) { host.append(el("div",{class:"empty"}, "No " + tab.label.toLowerCase() + " configured for this API yet.")); return; }
+    const cols = tab.cols || [];
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, ...cols.map(c => el("th",{}, c[1]))));
+    items.forEach(it => tbl.append(el("tr",{}, ...cols.map(c => {
+      const v = it[c[0]];
+      return el("td",{class:/uri|id|key/i.test(c[0]) ? "mono small" : ""}, (v === undefined || v === null || v === "") ? "none" : String(v));
+    }))));
+    host.append(tbl);
+  }).catch(e => host.append(el("div",{class:"alert err"}, "Failed to load: " + e.message)));
+};
 
 // Systems Manager — parameter value (SecureString decrypted via GET), editable → PUT = new version.
 SUB_RENDERERS.ssmvalue = function(svc, full, host){

@@ -337,6 +337,11 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 "logs":           _logs_group_count(),
                 "elbv2":          len(_elb_census()),
             }
+            try:   # API Gateway V2 lives in the shared registry store (console + relay wire)
+                from core import nano_registry
+                aws_counts["apigatewayv2"] = len(nano_registry.get()["apigwv2"].apis)
+            except Exception:
+                pass
             try:   # Systems Manager parameters live in the shared registry store
                 from core import nano_registry
                 aws_counts["ssm"] = len(nano_registry.get()["ssm"].parameters)

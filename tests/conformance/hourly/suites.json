@@ -155,6 +155,11 @@
     {"id": "offline-sdk-go-azure-operationalinsights", "target": "offline", "cloud": "azure", "kind": "sdk-go", "cwd": "tests/conformance/azure-sdk-go-operationalinsights", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-azure-operationalinsights", "target": "offline", "cloud": "azure", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-operationalinsights-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-azure-operationalinsights", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-operationalinsights.mjs", "timeout": 600},
-    {"id": "nano-ui-azure-operationalinsights", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-operationalinsights.mjs", "timeout": 600}
+    {"id": "nano-ui-azure-operationalinsights", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-operationalinsights.mjs", "timeout": 600},
+    {"id": "offline-sdk-java-aws-apigatewayv2", "target": "offline", "cloud": "aws", "kind": "sdk-java", "cwd": "tests/conformance/aws-sdk-java", "cmd": "ENDPOINT={ENDPOINT} mvn -q -B compile exec:java -Dexec.mainClass=ApiGatewayV2Conformance", "timeout": 900},
+    {"id": "offline-sdk-go-aws-apigatewayv2", "target": "offline", "cloud": "aws", "kind": "sdk-go", "cwd": "tests/conformance/aws-sdk-go-apigatewayv2", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
+    {"id": "offline-cli-aws-apigatewayv2", "target": "offline", "cloud": "aws", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-apigatewayv2-cli-smoke.sh", "timeout": 300},
+    {"id": "offline-ui-aws-apigatewayv2", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-apigatewayv2.mjs", "timeout": 600},
+    {"id": "nano-ui-aws-apigatewayv2", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-apigatewayv2.mjs", "timeout": 600}
   ]
 }

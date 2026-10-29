@@ -98,6 +98,13 @@ class Aws(CloudProvider):
             ("apigateway", "ListResources"): lambda b, a, p: D.apigw_resources(p),
             ("apigateway", "ListStages"): lambda b, a, p: D.apigw_stages(p),
             ("apigateway", "Invoke"):     lambda b, a, p: D.apigw_invoke(p),
+            # API Gateway V2 — HTTP/WebSocket APIs, via core/apigatewayv2_core.py
+            ("apigatewayv2", "ListApis"):    lambda b, a, p: D.apigwv2_list(p),
+            ("apigatewayv2", "CreateApi"):   lambda b, a, p: D.apigwv2_create(p),
+            ("apigatewayv2", "GetApi"):      lambda b, a, p: D.apigwv2_get(p),
+            ("apigatewayv2", "UpdateApi"):   lambda b, a, p: D.apigwv2_patch(p),
+            ("apigatewayv2", "DeleteApi"):   lambda b, a, p: D.apigwv2_delete(p),
+            ("apigatewayv2", "ListChildren"): lambda b, a, p: D.apigwv2_children(p),
             # Systems Manager Parameter Store, via core/ssm_core.py (shared registry store)
             ("ssm", "ListParameters"):    lambda b, a, p: D.ssm_list(p),
             ("ssm", "PutParameter"):      lambda b, a, p: D.ssm_put(p, False),

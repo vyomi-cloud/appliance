@@ -400,6 +400,13 @@
    "upstream": "operationalinsights",
    "status": "released",
    "released_in": "3.0.23"
+  },
+  {
+   "cloud": "aws",
+   "key": "apigatewayv2",
+   "name": "API Gateway V2",
+   "upstream": "apigatewayv2",
+   "status": "pending-release"
   }
  ]
 }
