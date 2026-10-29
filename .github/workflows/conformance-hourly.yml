@@ -89,6 +89,10 @@ jobs:
           gh issue list -R "${{ github.repository }}" --label upstream-drift --state open --limit 200 \
             --json number,title,labels,createdAt,body > tests/conformance/hourly/out/upstream_issues.json || echo '[]' > tests/conformance/hourly/out/upstream_issues.json
           echo "open upstream-drift issues: $(python3 -c "import json;print(len(json.load(open('tests/conformance/hourly/out/upstream_issues.json'))))")"
+          # Issues filed automatically from users' simulators: the fixers take these first.
+          gh issue list -R "${{ github.repository }}" --label user-reported --state open --limit 200 \
+            --json number,title,labels,createdAt,body,author > tests/conformance/hourly/out/user_reported.json || echo '[]' > tests/conformance/hourly/out/user_reported.json
+          echo "open user-reported issues: $(python3 -c "import json;print(len(json.load(open('tests/conformance/hourly/out/user_reported.json'))))")"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -96,6 +100,7 @@ jobs:
           path: |
             prev/
             tests/conformance/hourly/out/upstream_issues.json
+            tests/conformance/hourly/out/user_reported.json
           retention-days: 7
 
   # Six shards in parallel, each on its own stack: wall time stays flat as
