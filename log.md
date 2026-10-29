@@ -1,3 +1,17 @@
+### Upstream watch — 2026-10-29T03:51:00+00:00
+
+Tracking 3924 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**4 change(s), 4 actionable.**
+- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
+- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
+- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
+- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
+
+Sources that failed this run (1): maven/software.amazon.awssdk:dynamodb: The read operation timed out
+
+Filed 4 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-10-29T02:50:58+00:00
 
 Tracking 3924 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
