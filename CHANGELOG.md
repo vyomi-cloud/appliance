@@ -4,6 +4,45 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.28] — 2026-10-29
+
+New service release. **7 product fixes** (AWS 7); 4 reach Nano and 6 reach the offline appliance; 3 test and harness improvements.
+
+### Highlights
+
+- **Amazon SNS is now available in Nano and offline.** You can work with topics, subscriptions, publish, batch publish, FIFO topics, platform applications and SMS, with a matching console experience in the browser and the offline appliance.
+- **SNS delivers messages to subscribers.** Notifications reach HTTP endpoints (with confirmation and signed notifications), Lambda and email, with retries, dead-letter queues and a FIFO deduplication window.
+- **SNS fans out to SQS in the offline appliance.** Messages published to a topic are delivered to subscribed SQS queues, scoped to your space.
+- **Publishing to an endpoint accepts platform-keyed JSON messages.** You can send a different message body per platform in a single publish call.
+- **SNS usage shows up in Nano's savings view.** Nano now counts SNS in its per-service savings figures.
+
+### New services
+
+- **AWS Amazon SNS**
+
+### Fixes — AWS
+
+- **[Nano + offline]** Push delivery through NATS JetStream (HTTP confirm+signed notify, Lambda, email, retries, DLQ, FIFO dedup window); manifest backend nats; Nano by_service savings
+- **[Nano]** Rebase onto main (merge conflicts, vendored core via build_cores, regenerated Nano fixtures)
+- **[offline]** Hourly suites, registry entry (pending-release), manifest ready
+- **[Nano + offline]** CLI smoke; endpoint publish accepts platform-keyed JSON messages
+- **[Nano + offline]** Console catalog + sub-blades + renderers, Nano wiring (sw routes, adapter, census, savings), vendored core
+- **[offline]** Offline wire + console REST (space-scoped store, SQS fan-out), cost model
+- **[offline]** SNS engine — full op surface (topics, subscriptions, publish/batch/FIFO, platform apps, SMS) + console REST + core conformance
+
+<details><summary>Test and harness improvements (3)</summary>
+
+- Java + Go SDK conformance beds
+- Nano console test
+- Offline console test
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.28`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.27] — 2026-10-29
 
 New service release. **7 product fixes** (AWS 7); 5 reach Nano and 5 reach the offline appliance.

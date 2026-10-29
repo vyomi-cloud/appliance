@@ -419,15 +419,11 @@
   },
   {
    "cloud": "aws",
-   "key": "kinesis",
-   "name": "Kinesis Data Streams",
-   "upstream": "kinesis",
-   "status": "released",
-   "released_in": "3.0.27",
-"key": "sns",
+   "key": "sns",
    "name": "Amazon SNS",
    "upstream": "sns",
-   "status": "pending-release"
+   "status": "released",
+   "released_in": "3.0.28"
   }
  ]
 }
