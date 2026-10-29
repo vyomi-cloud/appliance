@@ -119,3 +119,4 @@
 | 2026-10-29T07:23Z | #65 | aws/sts | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40834033284) |
 | 2026-10-29T07:32Z | #66 | gcp/artifactregistry | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40835377388) |
 | 2026-10-29T07:41Z | #67 | gcp/bigquery | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40836333512) |
+| 2026-10-29T07:59Z | #69 | gcp/cloudtasks | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40837315289) |
