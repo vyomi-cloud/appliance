@@ -185,11 +185,65 @@ def vpc_list_sgs(p=None):
         for g in m.get("sgs", {}).values()]}
 
 
+def _now_z():
+    import datetime
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def _vpc_row(v, m):
+    """Console row: the same snake_case fields the appliance's /api/vpc/vpcs returns."""
+    vid = v["id"]
+    rt = next((r["id"] for r in m.get("route_tables", {}).values() if r["vpc_id"] == vid and r.get("main")), "")
+    sg = next((g["id"] for g in m.get("sgs", {}).values() if g.get("vpc_id") == vid), "")
+    return {"id": vid, "vpc_id": vid, "name": v.get("name") or vid, "cidr": v["cidr"], "cidr_block": v["cidr"],
+            "state": "available", "tenancy": v.get("tenancy", "default"), "created": v.get("created", ""),
+            "dhcp_options_id": v.get("dhcp_options_id", ""), "main_route_table_id": rt,
+            "default_security_group_id": sg, "internet_gateway_id": v.get("igw") or "",
+            "subnet_count": sum(1 for sn in m.get("subnets", {}).values() if sn["vpc_id"] == vid),
+            "tags": v.get("tags", [])}
+
+
+def vpc_list_vpcs(p=None):
+    m = getattr(_VPC, "_vpc_model", None) or {"vpcs": {}}
+    return {"ok": True, "items": [_vpc_row(v, m) for v in m.get("vpcs", {}).values()]}
+
+
+def vpc_get_vpc(p):
+    m = getattr(_VPC, "_vpc_model", None) or {"vpcs": {}}
+    key = str(p.get("name") or "")
+    v = m["vpcs"].get(key) or next((x for x in m["vpcs"].values() if x.get("name") == key), None)
+    return {"ok": True, **_vpc_row(v, m)} if v else {"ok": False, "code": "InvalidVpcID.NotFound"}
+
+
+def vpc_delete_vpc(p):
+    m = getattr(_VPC, "_vpc_model", None) or {"vpcs": {}}
+    key = str(p.get("name") or "")
+    v = m["vpcs"].get(key) or next((x for x in m["vpcs"].values() if x.get("name") == key), None)
+    if not v:
+        return {"ok": False, "code": "InvalidVpcID.NotFound"}
+    vid = v["id"]
+    m["vpcs"].pop(vid, None)
+    for coll in ("subnets", "route_tables", "sgs"):
+        for k in [k for k, x in m.get(coll, {}).items() if (x.get("vpc_id") == vid)]:
+            m[coll].pop(k, None)
+    return {"ok": True, "name": key}
+
+
 def vpc_create(p):
     import re
-    body = _vpc_q("CreateVpc", {"CidrBlock": str(p.get("cidr") or "10.0.0.0/16")}).body
+    cidr = str(p.get("cidr") or p.get("cidr_block") or "10.0.0.0/16")
+    body = _vpc_q("CreateVpc", {"CidrBlock": cidr}).body
     vid = re.search(r"<vpcId>(.*?)</vpcId>", body)
-    return {"ok": bool(vid), "id": vid.group(1) if vid else None, "cidr": p.get("cidr")}
+    if vid:
+        v = _VPC._vpc_model["vpcs"][vid.group(1)]
+        v.update({"name": str(p.get("name") or ""), "created": _now_z(), "tenancy": "default",
+                  "dhcp_options_id": "dopt-" + vid.group(1)[4:12], "tags": []})
+        # a new VPC comes with its default security group, like the real cloud
+        sg = re.search(r"<groupId>(.*?)</groupId>", _vpc_q("CreateSecurityGroup", {"VpcId": vid.group(1)}).body)
+        if sg:
+            _VPC._vpc_model["sgs"][sg.group(1)].update({"name": "default", "description": "default VPC security group"})
+        return {"ok": True, "id": vid.group(1), **_vpc_row(v, _VPC._vpc_model)}
+    return {"ok": False, "id": None, "cidr": cidr}
 
 
 def vpc_create_subnet(p):
@@ -386,8 +440,8 @@ def rbac_check(p):
 # envelope the console expects. Console-only (not native-wire); session-scoped
 # (reload-persistence is a follow-up — would live in nano_registry).
 import itertools as _xit
-_EXTRAS = {}
-_EXTRAS_CFG = {}
+_EXTRAS = _COMPUTE.extras          # public attrs of the registry's compute store → persisted
+_EXTRAS_CFG = _COMPUTE.extras_cfg
 _EXTRAS_SEQ = _xit.count(1)
 
 
@@ -407,6 +461,14 @@ def extras_create(p):
                or f"{leaf}-{format(next(_EXTRAS_SEQ), '08x')}")
     item = {"name": name, "id": vals.get("id") or name, "state": vals.get("state", "available"), **vals}
     item["name"] = name
+    item.setdefault("created", _now_z())
+    if key == "eventbridge/rules":
+        # a new rule is ENABLED; its target count is what was attached
+        if vals.get("state") in (None, ""):
+            item["state"] = "ENABLED"
+        item.setdefault("target_count", 1 if vals.get("target_arn") else 0)
+        item.setdefault("rule_type", "EventPattern")
+        item.setdefault("event_bus_name", "default")
     _EXTRAS.setdefault(key, {})[name] = item
     return {"ok": True, **item}
 

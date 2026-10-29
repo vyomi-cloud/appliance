@@ -51,6 +51,8 @@ class ComputeStore:
         self.lambda_functions: dict = {}
         self.apigateway_apis: dict = {}
         self.vpc_model: dict | None = None
+        self.extras: dict = {}       # console "extras" sub-resources: {fullKey: {name: item}}
+        self.extras_cfg: dict = {}   # console "extras" config records: {fullKey: values}
 
     @property
     def _lambda_functions(self):

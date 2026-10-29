@@ -25,6 +25,8 @@
     {"id": "nano-ui-aws-lambda-row", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-lambda-row.mjs", "timeout": 300},
     {"id": "nano-ui-aws-ec2-row", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-ec2-row.mjs", "timeout": 300},
     {"id": "nano-ui-aws-apigw-row", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-apigw-row.mjs", "timeout": 300},
+    {"id": "nano-ui-aws-vpc-row", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-vpc-row.mjs", "timeout": 300},
+    {"id": "nano-ui-aws-eventbridge-row", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-eventbridge-row.mjs", "timeout": 300},
     {"id": "nano-ui-aws-api", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-api.mjs", "timeout": 600},
     {"id": "nano-ui-aws-tabs", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-tabs.mjs", "timeout": 600},
     {"id": "nano-ui-gcp-tabs", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-functional-tabs.mjs", "timeout": 600},
