@@ -293,6 +293,7 @@ def _kms_key_row(key_id: str) -> dict:
             "key_usage": md.get("KeyUsage", "ENCRYPT_DECRYPT"),
             "state": md.get("KeyState", "Enabled"),
             "created": _iso(md.get("CreationDate")),
+            "description": md.get("Description", ""),
             "arn": f"arn:aws:kms:{REGION}:{KMS.account_id}:key/{key_id}"}
 
 
@@ -302,7 +303,7 @@ def kms_list_keys(p=None):
 
 def kms_create_key(p):
     spec = str(p.get("key_spec") or "SYMMETRIC_DEFAULT")
-    r = kms.dispatch(KMS, "TrentService.CreateKey", {"KeySpec": spec})
+    r = kms.dispatch(KMS, "TrentService.CreateKey", {"KeySpec": spec, "Description": str(p.get("description") or "")})
     if r.status != 200:
         return {"ok": False, "code": r.body.get("__type", "Error")}
     key_id = r.body["KeyMetadata"]["KeyId"]

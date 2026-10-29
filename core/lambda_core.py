@@ -103,10 +103,19 @@ def _extract_source(code: dict) -> str:
     return ""
 
 
+def _now_iso() -> str:
+    """Lambda's LastModified format: 2026-10-29T01:52:56.000+0000."""
+    import datetime as _dt
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+
+
 def _fn_view(fn: dict) -> dict:
     return {"FunctionName": fn["name"], "FunctionArn": fn["arn"],
             "Runtime": fn.get("runtime", "python3.12"), "Handler": fn.get("handler", "index.handler"),
             "CodeSize": len(fn.get("source", "")), "Version": "$LATEST",
+            "MemorySize": fn.get("memory_size", 128), "Timeout": fn.get("timeout", 3),
+            "Role": fn.get("role", ""), "Description": fn.get("description", ""),
+            "PackageType": "Zip", "State": "Active", "Architectures": ["x86_64"],
             "LastModified": fn.get("last_modified", "")}
 
 
@@ -120,7 +129,10 @@ def _create_function(store, body):
           "handler": str(body.get("Handler", "index.handler")),
           "source": _extract_source(body.get("Code") or {}),
           "env": (body.get("Environment") or {}).get("Variables") or {},
-          "last_modified": ""}
+          "memory_size": int(body.get("MemorySize") or 128), "timeout": int(body.get("Timeout") or 3),
+          "role": str(body.get("Role") or "arn:aws:iam::123456789012:role/service-role/lambda-basic-execution"),
+          "description": str(body.get("Description") or ""),
+          "last_modified": _now_iso()}
     _functions(store)[name] = fn
     _persist(store)
     return _json(201, _fn_view(fn))

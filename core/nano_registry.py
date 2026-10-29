@@ -37,6 +37,44 @@ from core.gcp_redis_core import RedisStore
 from core.gcp_container_core import ContainerStore
 from core.azure_arm_core import AzureArm
 
+
+
+class ComputeStore:
+    """Lambda functions + API Gateway APIs + the VPC topology model, held in PUBLIC
+    dict attrs so nano_persist captures them (reload/cross-context persistence).
+    The cores keep their state on `store._lambda_functions` / `_apigateway_apis` /
+    `_vpc_model`; those names alias the public attrs."""
+
+    def __init__(self):
+        self.lambda_functions: dict = {}
+        self.apigateway_apis: dict = {}
+        self.vpc_model: dict | None = None
+
+    @property
+    def _lambda_functions(self):
+        return self.lambda_functions
+
+    @_lambda_functions.setter
+    def _lambda_functions(self, v):
+        self.lambda_functions = v
+
+    @property
+    def _apigateway_apis(self):
+        return self.apigateway_apis
+
+    @_apigateway_apis.setter
+    def _apigateway_apis(self, v):
+        self.apigateway_apis = v
+
+    @property
+    def _vpc_model(self):
+        return self.vpc_model
+
+    @_vpc_model.setter
+    def _vpc_model(self, v):
+        self.vpc_model = v
+
+
 _REG: dict | None = None
 
 
@@ -59,6 +97,7 @@ def get() -> dict:
             "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
             "ssm": SsmStore(),
             "sfn": StepFunctionsStore(),
+            "compute": ComputeStore(),         # Lambda + API Gateway + VPC model (dataplane_adapter)
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),

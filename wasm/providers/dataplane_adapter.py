@@ -26,8 +26,9 @@ from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
 
 # Compute/registry stores. Lambda + API Gateway share ONE namespace so an
 # AWS_PROXY integration reaches the registered functions (the API-GW→Lambda synergy).
-_COMPUTE = types.SimpleNamespace()
-_VPC = types.SimpleNamespace()
+from core import nano_registry
+_COMPUTE = nano_registry.get()["compute"]   # persisted + shared with the relay (nano_persist STORE_ATTRS)
+_VPC = _COMPUTE
 MSG = A.MSG      # EventBridge + Service Bus + SQS all share this
 SQLDB = A.RDB    # Azure SQL shares the SQL store (azuresql: keyspace)
 IDN = A.IAM      # Azure RBAC shares the IAM store (_azure_* attrs)
@@ -42,8 +43,13 @@ def _lam_json(resp):
 
 # ── Lambda ──────────────────────────────────────────────────────────────────
 def _fn_row(fn):
-    return {"name": fn["name"], "runtime": fn.get("runtime", "python3.12"),
-            "handler": fn.get("handler", "index.handler"), "codeSize": len(fn.get("source", ""))}
+    """Console row: the same snake_case fields the appliance's /api/lambda/functions returns."""
+    return {"name": fn["name"], "function_name": fn["name"], "function_arn": fn.get("arn", ""),
+            "runtime": fn.get("runtime", "python3.12"), "handler": fn.get("handler", "index.handler"),
+            "memory_size": fn.get("memory_size", 128), "timeout": fn.get("timeout", 3),
+            "role": fn.get("role", ""), "description": fn.get("description", ""),
+            "package_type": "Zip", "state": "Active", "last_modified": fn.get("last_modified", ""),
+            "codeSize": len(fn.get("source", ""))}
 
 
 def lambda_list(p=None):
@@ -55,6 +61,10 @@ def lambda_create(p):
     source = p.get("code") or p.get("source") or "def handler(event, context):\n    return {'ok': True, 'event': event}"
     body = {"FunctionName": name, "Runtime": p.get("runtime", "python3.12"),
             "Handler": p.get("handler", "index.handler"), "Code": {"Source": source}}
+    for src, dst in (("memory_size", "MemorySize"), ("memory", "MemorySize"), ("timeout", "Timeout"),
+                     ("description", "Description"), ("role", "Role")):
+        if p.get(src) not in (None, ""):
+            body[dst] = p[src]
     r = lambda_core.dispatch(_COMPUTE, "POST", "/2015-03-31/functions", {}, {}, json.dumps(body).encode())
     if r.status >= 400:
         return {"ok": False, "code": "CreateFailed", **_lam_json(r)}
