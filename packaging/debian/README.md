@@ -3,7 +3,7 @@
 Build via `fpm` from the release CI workflow — `fpm` is the cross-distro
 package builder Ruby gem that converts a directory tree into a `.deb`.
 
-The CI publishes the resulting `cloud-learn_<version>_all.deb` to the
+The CI publishes the resulting `vyomi_<version>_all.deb` to the
 GitHub Release and the repo at https://apt.vyomi.cloud.
 
 ## End-user install
@@ -16,17 +16,17 @@ echo "deb [signed-by=/usr/share/keyrings/vyomi.gpg] https://apt.vyomi.cloud stab
 
 # Install
 sudo apt update
-sudo apt install cloud-learn
+sudo apt install vyomi
 
 # Run
-cloud-learn up
+vyomi up
 ```
 
 ## Direct .deb install (no repo)
 
 ```bash
-wget https://github.com/vyomi-cloud/appliance/releases/download/v1.0.0/cloud-learn_1.0.0_all.deb
-sudo dpkg -i cloud-learn_1.0.0_all.deb
+wget https://github.com/vyomi-cloud/appliance/releases/download/v3.0.33/vyomi_3.0.33_all.deb
+sudo dpkg -i vyomi_3.0.33_all.deb
 sudo apt-get install -f   # pulls in `multipass` etc.
 ```
 
@@ -35,7 +35,7 @@ sudo apt-get install -f   # pulls in `multipass` etc.
 ```bash
 gem install fpm
 bash packaging/debian/build-deb.sh 1.0.0
-ls dist/cloud-learn_1.0.0_all.deb
+ls dist/vyomi_3.0.33_all.deb
 ```
 
 See `packaging/debian/build-deb.sh` for the exact fpm invocation.

@@ -106,11 +106,9 @@ jobs:
           fi
           echo "old=$OLD" >> "$GITHUB_OUTPUT"; echo "new=$NEW" >> "$GITHUB_OUTPUT"
           echo "$NEW" > VERSION
-          # Only manifests the release still publishes (Scoop, winget and Snap
-          # were dropped from the pipeline).
-          for f in packaging/rpm/cloud-learn.spec; do
-            [ -f "$f" ] && sed -i "s/$(echo "$OLD" | sed 's/\./\\./g')/$NEW/g" "$f"
-          done
+          # Packages take their version from VERSION at build time (release.yml);
+          # no per-package manifest to bump (Scoop, winget, Snap and the old RPM
+          # spec are gone).
           python3 - "$NEW" <<'PY'
           import sys, json, os
           new = sys.argv[1]
