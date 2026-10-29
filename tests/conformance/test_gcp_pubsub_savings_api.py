@@ -62,9 +62,9 @@ def main():
     c3, _ = snap(lambda c, g: c > c2)
     check(f"subscription raises resource_count ({c2} -> {c3})", c3 > c2)
 
-    requests.delete(f"{ps}/subscriptions/{sub}", timeout=60)
-    requests.delete(f"{ps}/topics/{topic2}", timeout=60)
-    requests.delete(f"{ps}/topics/{topic}", timeout=60)
+    for path in (f"subscriptions/{sub}", f"topics/{topic2}", f"topics/{topic}"):
+        r = requests.delete(f"{ps}/{path}", timeout=60)
+        check(f"DELETE {path.split('/')[0]}", r.status_code < 300, f"{r.status_code} {r.text[:80]}")
     c4, _ = snap(lambda c, g: c <= c0)
     check(f"deleting them drops resource_count ({c3} -> {c4})", c4 <= c0, c0)
     if prev_space:

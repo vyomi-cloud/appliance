@@ -856,6 +856,7 @@ def api_gcp_pubsub_delete_subscription(project: str, subscription: str):
         raise HTTPException(404, detail="Subscription not found")
     del gcp_pubsub_state["subscriptions"][subscription]
     gcp_pubsub_state.get("messages", {}).pop(subscription, None)
+    s._cloudsim_sync_service_resource("gcp", "pubsub", "subscription", subscription, {}, "gcp_pubsub", action="delete")
     return {"done": True}
 
 
