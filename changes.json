@@ -1,16 +1,62 @@
 {
- "at": "2026-10-29T20:51:19+00:00",
+ "at": "2026-10-29T21:51:19+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "aws",
-   "service": "Amazon RDS",
-   "kind": "announcement",
-   "key": "feed:aws:19722697d8b7",
-   "title": "Amazon RDS for Oracle and SQL Server now support storage autoscaling on additional storage volumes",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-rds-oracle-sqlserver-autoscaling-additional-storage-volumes",
-   "detail": "Amazon RDS for SQL Server and Amazon RDS for Oracle now support RDS storage autoscaling on additional storage volumes . RDS storage autoscaling automatically scales storage capacity in response to growing database workloads, with zero downtime. Additional storage volumes allow you to add up to three additional volumes to increase your storage capacity up to 256 TiB. Previously, you had to manually provision storage capacity on the additional storage volumes based on anticipated application capacity demands while autoscaling could be enabled on the primary storage volume. Under-provisioning cou",
-   "actionable": false
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-changed",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:fd389969f2ca",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
+   "detail": {
+    "request": {
+     "was": "SqlWorkloadCapturesStartRequest",
+     "now": "WorkloadCapturesStartRequest"
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-changed",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:f421c3d61dc0",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
+   "detail": {
+    "request": {
+     "was": "SqlWorkloadCapturesStartReplayRequest",
+     "now": "WorkloadCapturesStartReplayRequest"
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-changed",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:c8c00d855f73",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
+   "detail": {
+    "request": {
+     "was": "SqlWorkloadCapturesStopRequest",
+     "now": "WorkloadCapturesStopRequest"
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-changed",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:acd5b7e919b1",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
+   "detail": {
+    "request": {
+     "was": "SqlWorkloadCapturesStopReplayRequest",
+     "now": "WorkloadCapturesStopReplayRequest"
+    }
+   },
+   "actionable": true
   }
  ],
  "errors": []
