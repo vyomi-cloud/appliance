@@ -43,6 +43,7 @@ STORE_ATTRS = [
     "gcp_iamc",   # IAM Credentials issue log (core/gcp_iamcredentials_core.IamCredentialsStore)
     "gcp_sched",  # Cloud Scheduler (core/gcp_cloudscheduler_core.CloudSchedulerStore)
     "sfn",      # Step Functions (core/stepfunctions_core.StepFunctionsStore)
+    "cw",       # CloudWatch metrics / alarms / dashboards
     "events",   # per-resource cloudsim event/activity log (core/nano_events.EventStore)
 ]
 

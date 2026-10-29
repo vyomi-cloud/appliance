@@ -47,6 +47,11 @@ class Aws(CloudProvider):
             ("kms", "GetKey"):      lambda b, a, p: A.kms_get_key(p),
             ("kms", "DeleteKey"):   lambda b, a, p: A.kms_delete_key(p),
             ("kms", "ListAliases"): lambda b, a, p: A.kms_list_aliases(p),
+            # CloudWatch — alarms, via core/cloudwatch_core.py
+            ("cloudwatch", "ListAlarms"):  lambda b, a, p: A.cw_list(p),
+            ("cloudwatch", "CreateAlarm"): lambda b, a, p: A.cw_create(p),
+            ("cloudwatch", "GetAlarm"):    lambda b, a, p: A.cw_get(p),
+            ("cloudwatch", "DeleteAlarm"): lambda b, a, p: A.cw_delete(p),
             # Secrets Manager — via core/secrets_core.py
             ("secrets", "ListSecrets"):  lambda b, a, p: A.secrets_list(p),
             ("secrets", "CreateSecret"): lambda b, a, p: A.secrets_create(p),

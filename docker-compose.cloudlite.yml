@@ -74,6 +74,7 @@ services:
       CLOUDLEARN_VAULT_TOKEN: vyomi-dev-token
       CLOUDLEARN_NATS_URL: nats://vyomi-nats:4222
       CLOUDLEARN_VALKEY_HOST: vyomi-valkey
+      CLOUDLEARN_VICTORIAMETRICS_URL: http://vyomi-victoriametrics:8428
       CLOUDLEARN_VALKEY_PORT: "6379"
       CLOUDLEARN_MINIO_URL: http://vyomi-minio:9000
       CLOUDLEARN_MINIO_ACCESS_KEY: cloudlearn
@@ -159,6 +160,21 @@ services:
     profiles: ["full"]
     image: nats:2-alpine
     networks: [vyomi-net]
+    restart: unless-stopped
+
+  vyomi-victoriametrics:
+    profiles: ["full"]
+    # Shared metrics store (Apache-2.0) for CloudWatch (and, later, Managed Prometheus / Cloud Monitoring /
+    # Azure Monitor): the CloudWatch engine mirrors PutMetricData samples here; PromQL/MetricsQL/Grafana read them.
+    image: victoriametrics/victoria-metrics:v1.104.0
+    command: ["-retentionPeriod=1d", "-memory.allowedPercent=10", "-storageDataPath=/storage"]
+    networks: [vyomi-net]
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8428/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
   vyomi-valkey:

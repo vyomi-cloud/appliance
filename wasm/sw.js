@@ -147,6 +147,7 @@ const NANO_SERVICES = [
   { name: "kms",            label: "KMS engine",          category: "aws" },
   { name: "secretsmanager", label: "Secrets (KV)",        category: "aws" },
   { name: "sqs",            label: "Messaging (SQS/SNS)", category: "aws" },
+  { name: "cloudwatch",     label: "CloudWatch",          category: "aws" },
   { name: "iam",            label: "IAM",                 category: "aws" },
   { name: "rds",            label: "SqlStore (RDS)",      category: "aws" },
   { name: "gcp",            label: "ResourceStore (GCP)", category: "gcp" },
@@ -208,7 +209,7 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,apigatewayv2:1.00,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
+const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,cloudwatch:0.10,ec2:30.37,lambda:0.20,apigateway:3.50,apigatewayv2:1.00,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
@@ -559,6 +560,14 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/aws\/secrets\/(.+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "secrets", "GetSecret", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "secrets", "DeleteSecret", { name: dec(m[1]) }] };
+  // ── CloudWatch alarms (core/cloudwatch_core.py) ─────────────────────
+  if (path === "/api/aws/cloudwatch/alarms") {
+    if (method === "GET")  return { tuple: ["aws", "cloudwatch", "ListAlarms", {}] };
+    if (method === "POST") return { tuple: ["aws", "cloudwatch", "CreateAlarm", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/cloudwatch\/alarms\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "cloudwatch", "GetAlarm", { name: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "cloudwatch", "DeleteAlarm", { name: dec(m[1]) }] };
   // ── KMS (core/kms_core.py) ──────────────────────────────────────────
   if (path === "/api/aws/kms/keys") {
     if (method === "GET")  return { tuple: ["aws", "kms", "ListKeys", {}] };

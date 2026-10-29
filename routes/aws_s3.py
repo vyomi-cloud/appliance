@@ -1151,6 +1151,9 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if service == "logs":
             from routes import aws_logs as _aws_logs
             return await _aws_logs.wire(request)
+        if service == "monitoring":
+            from routes.aws_cloudwatch import handle as _cw_handle
+            return await _cw_handle(request)
         if service == "sqs":
             return await _srv().api_sqs_query(request)
         if service == "elasticloadbalancing":

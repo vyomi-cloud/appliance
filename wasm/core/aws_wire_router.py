@@ -115,6 +115,7 @@ from core import apigatewayv2_core as apigw2
 from core import ssm_core as ssm
 from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
+from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
 import types as _types
@@ -165,7 +166,7 @@ _SIGNING = {
     "dynamodb": "dynamodb", "kms": "kms", "secretsmanager": "secretsmanager",
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
-    "events": "events", "lambda": "lambda", "ec2": "vpc", "logs": "logs", "states": "stepfunctions",
+    "events": "events", "lambda": "lambda", "ec2": "vpc", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
     "ssm": "ssm",
 }
@@ -221,6 +222,8 @@ _AMBIGUOUS_ELB = {"AddTags", "RemoveTags", "DescribeTags", "DescribeAccountLimit
 for _a in elbv2.OPERATIONS:
     if _a not in _AMBIGUOUS_ELB:
         _QUERY_ACTION.setdefault(_a, "elbv2")
+# CloudWatch actions whose names other Query services also use — routed by SigV4 scope only.
+_GENERIC_ACTIONS = {"TagResource", "UntagResource", "ListTagsForResource"}
 
 
 def _lower_headers(headers):
@@ -272,6 +275,7 @@ class AwsWireRouter:
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
         self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
+        self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
@@ -347,7 +351,11 @@ class AwsWireRouter:
             return "azure-sql-iam-rbac"
         if path.startswith("/azure-sql/") or path == "/azure-sql":  # Azure SQL data plane
             return "azure-sql"
+        if path.startswith("/service/" + cw.TARGET_PREFIX + "/") or lheaders.get("smithy-protocol") == "rpc-v2-cbor":
+            return "cloudwatch"            # CloudWatch rpc-v2-cbor (the default protocol of current SDKs)
         target = lheaders.get("x-amz-target", "") or ""
+        if target.startswith(cw.TARGET_PREFIX + "."):
+            return "cloudwatch"            # CloudWatch JSON 1.0
         if target:
             for prefix, svc in _TARGET_PREFIX.items():
                 if target.startswith(prefix):
@@ -365,6 +373,8 @@ class AwsWireRouter:
             svc = _QUERY_ACTION.get(action)
             if svc:
                 return svc
+            if action in cw.OPERATIONS and action not in _GENERIC_ACTIONS:
+                return "cloudwatch"
         if rds_data.is_data_api_path(path):  # unsigned Data API (rest-json path)
             return "rds-data"
         return "s3"  # default: bucket/key path-style
@@ -431,6 +441,9 @@ class AwsWireRouter:
             r = s3.dispatch(self.s3, method, path, query or {}, headers or {}, bytes(body))
             return {"status": r.status, "headers": dict(r.headers or {}),
                     "body": r.body or b""}
+
+        if svc == "cloudwatch":   # CloudWatch: rpc-v2-cbor / JSON 1.0 / Query on one engine
+            return cw.wire(self.cw, method, path, headers or {}, bytes(body), query or {})
 
         if svc == "lambda":   # native Lambda REST (function mgmt + sandboxed invoke)
             r = lam.dispatch(self.lam, method, path, query or {}, headers or {}, bytes(body))

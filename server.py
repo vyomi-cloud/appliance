@@ -192,12 +192,12 @@ register_azure_routes(app, None)
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2
-from routes import lazy_backends, shared, console_next, aws_logs
+from routes import lazy_backends, shared, console_next, aws_logs, aws_cloudwatch
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2,
-            lazy_backends, shared, console_next, aws_logs]:
+            lazy_backends, shared, console_next, aws_logs, aws_cloudwatch]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -2610,6 +2610,12 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             add("aws", "elbv2", "load_balancer", lb.get("LoadBalancerName", lb_arn),
                 {**lb, "name": lb.get("LoadBalancerName", lb_arn), "instance_type": lb.get("Type", "application"),
                  "state": (lb.get("State") or {}).get("Code", "active"), "created": lb.get("CreatedTime", "")})
+    try:   # CloudWatch alarms (durable store owned by routes/aws_cloudwatch.py)
+        from routes.aws_cloudwatch import console_rows as _cw_rows
+        for _row in _cw_rows():
+            add("aws", "cloudwatch", "alarm", _row["arn"], _row)
+    except Exception:
+        pass
 
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():

@@ -408,6 +408,13 @@
    "upstream": "apigatewayv2",
    "status": "released",
    "released_in": "3.0.25"
+  },
+  {
+   "cloud": "aws",
+   "key": "cloudwatch",
+   "name": "Amazon CloudWatch",
+   "upstream": "cloudwatch",
+   "status": "pending-release"
   }
  ]
 }

@@ -41,6 +41,7 @@ from core.gcp_container_core import ContainerStore
 from core.azure_arm_core import AzureArm
 
 import types
+from core.cloudwatch_core import CloudWatchStore
 
 _REG: dict | None = None
 
@@ -95,5 +96,6 @@ def get() -> dict:
             # + bounded: recorded on every mutating dispatch; persisted + cross-tab
             # synced via nano_persist (public dict attr `by_resource`, union-merge).
             "events": EventStore(),
+            "cw": CloudWatchStore(),   # CloudWatch (metrics / alarms / dashboards)
         }
     return _REG
