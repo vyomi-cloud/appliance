@@ -12730,6 +12730,19 @@ def _ec2_query_describe_images(params: dict[str, Any]) -> Response:
     return _ec2_success_response("DescribeImagesResponse", build)
 
 
+def _ec2_query_get_image_findings(params: dict[str, Any]) -> Response:
+    image_id = str(params.get("ImageId", "")).strip()
+    if not image_id:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter ImageId", 400)
+    if image_id not in {p["ami"] for p in AMI_CATALOG}:
+        return _ec2_error_response("InvalidAMIID.NotFound", f"The image id '[{image_id}]' does not exist", 400)
+
+    def build(root: ET.Element) -> None:
+        _ec2_sub(root, "imageFindingsSet")
+
+    return _ec2_success_response("GetImageFindingsResponse", build)
+
+
 def _ec2_query_describe_instance_status(params: dict[str, Any]) -> Response:
     instances = _ec2_query_filter_instances(params)
 
@@ -13685,6 +13698,8 @@ async def api_ec2_query(request: Request):
             return _ec2_query_describe_instances(params)
         if action == "DescribeImages":
             return _ec2_query_describe_images(params)
+        if action == "GetImageFindings":
+            return _ec2_query_get_image_findings(params)
         if action == "DescribeInstanceStatus":
             return _ec2_query_describe_instance_status(params)
         if action == "DescribeInstanceTypes":
