@@ -11,9 +11,14 @@ offline appliance and in Nano (Pyodide). State lives in a `SesV2Store` (plain di
 a `persist()` hook) — the seam the offline appliance backs with the space-scoped state
 and Nano backs with its shared store registry.
 
-Backend: in-process. Mail is never relayed: SendEmail / SendBulkEmail validate the
-request exactly as SES does (verified sender, content shape, configuration set) and
-record the message in the store ("sent mailbox"), which the console and tests read back.
+Backend: Mailpit (shared SMTP container) offline, in-process in Nano. SendEmail /
+SendBulkEmail / the SES SMTP interface validate the request exactly as SES does (verified
+sender, content shape, configuration set, suppression list), build the real RFC 5322 message
+(HTML, attachments, headers, templates), record it in the store ("sent mailbox") and hand it
+to `store.mailer` — set only by the offline appliance (core/ses_mail.py: Mailpit over SMTP, an
+optional per-space relay to the user's own SMTP server, the SES SMTP front end and the inbound
+listener/IMAP poll feeding the SES v1 receipt rules below). With no mailer (Nano: a browser
+cannot speak SMTP) the message is recorded and its SES events are emitted, nothing more.
 
 Operations: Create/Get/List/Delete EmailIdentity (+ DKIM, MailFrom, Feedback, config-set
 attributes, identity policies), Create/Get/List/Delete ConfigurationSet (+ the Put*Options
@@ -28,9 +33,16 @@ The `console_*` helpers at the bottom are the flat REST view the web consoles us
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import re
 import uuid
+from email import message_from_bytes
+from email.message import EmailMessage
+from email.utils import formatdate, getaddresses
+from xml.sax.saxutils import escape as _xesc
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from urllib.parse import unquote
@@ -84,6 +96,11 @@ class SesV2Store:
         self.tags: dict[str, dict] = {}          # resource ARN → {key: value}
         self.messages: list[dict] = []           # the sent mailbox
         self.account: dict = dict(ACCOUNT_DEFAULTS)
+        self.smtp_credentials: dict[str, dict] = {}   # SES SMTP username (access key id) → {hash}
+        self.receipt: dict = {}                       # SES v1 receipt rules: {sets, active, log}
+        self.mail_settings: dict = {}                 # {relay: {...}, imap: {...}}  (passwords sealed)
+
+    mailer = None   # offline-only delivery object (core/ses_mail.py); None in Nano / unit tests
 
     def persist(self) -> None:
         pass
@@ -787,7 +804,7 @@ def _check_dest(d: dict):
                 raise _bad(f"Illegal address: {a}")
 
 
-def _record(store, kind: str, sender: str, dest: dict, content: dict, cs, extra=None) -> str:
+def _record(store, kind: str, sender: str, dest: dict, content: dict, cs, extra=None) -> dict:
     mid = f"{uuid.uuid4().hex[:16]}-{uuid.uuid4().hex[:8]}-{uuid.uuid4().hex[:4]}-000000"
     msg = {"MessageId": mid, "Kind": kind, "From": sender, "To": list(dest.get("ToAddresses") or []),
            "Cc": list(dest.get("CcAddresses") or []), "Bcc": list(dest.get("BccAddresses") or []),
@@ -796,7 +813,214 @@ def _record(store, kind: str, sender: str, dest: dict, content: dict, cs, extra=
         msg.update(extra)
     store.messages.append(msg)
     del store.messages[:-500]
-    return mid
+    return msg
+
+
+# ── message composition (the real RFC 5322 bytes SES would put on the wire) ──
+def _b64(data) -> bytes:
+    if isinstance(data, (bytes, bytearray)):
+        return bytes(data)
+    try:
+        return base64.b64decode(str(data), validate=False)
+    except Exception:
+        return str(data).encode()
+
+
+def _message_id_header(mid: str) -> str:
+    return f"<{mid}@email.amazonses.com>"
+
+
+def _fill_body(m: EmailMessage, text: str, html: str) -> None:
+    if html and text:
+        m.set_content(text)
+        m.add_alternative(html, subtype="html")
+    elif html:
+        m.set_content(html, subtype="html")
+    else:
+        m.set_content(text or "")
+
+
+def _template_content(store, tpl: dict, data_json) -> tuple[str, str, str]:
+    t = _tpl(store, tpl["TemplateName"]) if tpl.get("TemplateName") else _tpl(store, str(tpl.get("TemplateArn", "")).rsplit("/", 1)[-1])
+    try:
+        data = json.loads(data_json) if data_json else {}
+    except ValueError:
+        raise _bad("TemplateData must be valid JSON.")
+    c = t["TemplateContent"]
+    return _render(c.get("Subject", ""), data), _render(c.get("Text", ""), data), _render(c.get("Html", ""), data)
+
+
+def _compose(store, kind: str, sender: str, dest: dict, content: dict, mid: str, reply_to=None,
+             extra_headers=None) -> bytes:
+    if kind == "Raw":
+        raw = _b64(content["Raw"]["Data"])
+        head = raw.split(b"\r\n\r\n", 1)[0].split(b"\n\n", 1)[0]
+        if not re.search(rb"(?im)^message-id:", head):
+            raw = f"Message-ID: {_message_id_header(mid)}\r\n".encode() + raw
+        return raw
+    m = EmailMessage()
+    if kind == "Template":
+        subject, text, html = _template_content(store, content["Template"], content["Template"].get("TemplateData"))
+        hdrs, atts = content["Template"].get("Headers") or [], content["Template"].get("Attachments") or []
+    else:
+        s = content["Simple"]
+        subject = (s.get("Subject") or {}).get("Data", "")
+        body = s.get("Body") or {}
+        text, html = (body.get("Text") or {}).get("Data", ""), (body.get("Html") or {}).get("Data", "")
+        hdrs, atts = s.get("Headers") or [], s.get("Attachments") or []
+    m["Subject"] = subject
+    m["From"] = sender
+    if dest.get("ToAddresses"):
+        m["To"] = ", ".join(dest["ToAddresses"])
+    if dest.get("CcAddresses"):
+        m["Cc"] = ", ".join(dest["CcAddresses"])
+    if reply_to:
+        m["Reply-To"] = ", ".join(reply_to)
+    m["Date"] = formatdate(localtime=False)
+    m["Message-ID"] = _message_id_header(mid)
+    for h in hdrs:
+        if h.get("Name") and h["Name"].lower() not in ("from", "to", "cc", "subject", "message-id"):
+            m[h["Name"]] = h.get("Value", "")
+    for k, v in (extra_headers or {}).items():
+        m[k] = v
+    _fill_body(m, text, html)
+    for a in atts:
+        ctype = a.get("ContentType") or "application/octet-stream"
+        main, _, sub = ctype.partition("/")
+        m.add_attachment(_b64(a.get("RawContent", b"")), maintype=main or "application", subtype=sub or "octet-stream",
+                         filename=a.get("FileName"), disposition=(a.get("ContentDisposition") or "attachment").lower(),
+                         cid=a.get("ContentId"))
+    return m.as_bytes()
+
+
+# ── events + delivery ──────────────────────────────────────────────────────
+SIMULATOR_DOMAIN = "simulator.amazonses.com"
+_EVENT_TYPES = {"Send": "SEND", "Reject": "REJECT", "Bounce": "BOUNCE", "Complaint": "COMPLAINT",
+                "Delivery": "DELIVERY", "DeliveryDelay": "DELIVERY_DELAY"}
+
+
+def _suppress(store, addr: str, reason: str) -> None:
+    store.suppression.setdefault(addr, {"EmailAddress": addr, "Reason": reason, "LastUpdateTime": _epoch(),
+                                        "Attributes": {}})
+
+
+def _identity_verified(store, addr: str) -> bool:
+    a = _sender_domain(addr)
+    dom = a.split("@", 1)[-1]
+    for name, i in store.identities.items():
+        n = name.lower()
+        if i.get("VerifiedForSendingStatus") and (n == a or n == dom):
+            return True
+    return False
+
+
+def _emit_destinations(store, msg: dict, ev: dict) -> None:
+    """Configuration-set event destinations: SNS is published for real (when the appliance
+    provides a mailer); every matching destination is noted on the message."""
+    cs = store.config_sets.get(msg.get("ConfigurationSetName") or "")
+    if not cs:
+        return
+    et = _EVENT_TYPES.get(ev["Type"], ev["Type"].upper())
+    for name, d in cs["event_destinations"].items():
+        if not d.get("Enabled") or et not in (d.get("MatchingEventTypes") or []):
+            continue
+        payload = {"eventType": ev["Type"], "mail": {"timestamp": msg["sent"], "source": msg["From"],
+                   "messageId": msg["MessageId"], "destination": msg["To"] + msg["Cc"] + msg["Bcc"]},
+                   ev["Type"].lower(): {k: v for k, v in ev.items() if k not in ("Type",)}}
+        topic = (d.get("SnsDestination") or {}).get("TopicArn")
+        if topic and store.mailer is not None:
+            try:
+                store.mailer.publish_sns(topic, payload)
+            except Exception as e:   # best effort, like SES's async event publishing
+                msg.setdefault("EventErrors", []).append(f"{name}: {e}")
+        msg.setdefault("EventDestinations", [])
+        if name not in msg["EventDestinations"]:
+            msg["EventDestinations"].append(name)
+
+
+def _relay_split(store, rcpts: list) -> tuple[list, list, str]:
+    """Which recipients go to the user's real SMTP relay: sandbox accounts relay only to
+    verified identities; production access lifts that, subject to a per-hour cap."""
+    cfg = (store.mail_settings or {}).get("relay") or {}
+    if not cfg.get("enabled"):
+        return [], [], ""
+    if store.account.get("ProductionAccessEnabled"):
+        cap = int(cfg.get("hourly_cap") or 200)
+        now = _epoch()
+        log = [t for t in cfg.get("log", []) if now - t < 3600]
+        room = max(0, cap - len(log))
+        ok, over = list(rcpts[:room]), list(rcpts[room:])
+        cfg["log"] = log + [now] * len(ok)
+        return ok, over, f"Hourly relay cap of {cap} reached"
+    ok = [r for r in rcpts if _identity_verified(store, r)]
+    return ok, [r for r in rcpts if r not in ok], "Account is in the SES sandbox: recipient is not a verified identity"
+
+
+def _deliver(store, msg: dict, raw: bytes, rcpts: list) -> None:
+    """Apply suppression / the mailbox simulator, hand the rest to the mailer, record SES events."""
+    ts = _now()
+    events = [{"Type": "Send", "Timestamp": ts}]
+    deliver_to, suppressed = [], []
+    for r in rcpts:
+        a = _sender_domain(r)
+        local, _, dom = a.partition("@")
+        if dom == SIMULATOR_DOMAIN:
+            if local == "bounce":
+                events.append({"Type": "Bounce", "Timestamp": ts, "BounceType": "Permanent", "BounceSubType": "General",
+                               "Recipients": [a], "Diagnostic": "smtp; 550 5.1.1 user unknown (mailbox simulator)"})
+                _suppress(store, a, "BOUNCE")
+            elif local == "complaint":
+                events.append({"Type": "Complaint", "Timestamp": ts, "Recipients": [a], "ComplaintFeedbackType": "abuse"})
+                _suppress(store, a, "COMPLAINT")
+            elif local == "suppressionlist":
+                events.append({"Type": "Bounce", "Timestamp": ts, "BounceType": "Permanent",
+                               "BounceSubType": "OnAccountSuppressionList", "Recipients": [a],
+                               "Diagnostic": "Amazon SES did not send the message to this address because it is on the suppression list"})
+                suppressed.append(a)
+            else:   # success@ / ooto@: accepted by the simulator, never a real mailbox
+                events.append({"Type": "Delivery", "Timestamp": ts, "Recipients": [a],
+                               "SmtpResponse": "250 2.6.0 Message accepted by the SES mailbox simulator"})
+            continue
+        if a in store.suppression:
+            suppressed.append(a)
+            events.append({"Type": "Bounce", "Timestamp": ts, "BounceType": "Permanent",
+                           "BounceSubType": "OnAccountSuppressionList", "Recipients": [a],
+                           "Diagnostic": "Amazon SES did not send the message to this address because it is on the suppression list"})
+            continue
+        deliver_to.append(a)
+    delivery = {"Status": "Simulated", "InboxId": "", "InboxUrl": "", "Relayed": [], "Suppressed": suppressed}
+    if deliver_to:
+        relay_ok, relay_no, why = _relay_split(store, deliver_to)
+        res = None
+        if store.mailer is not None:
+            res = store.mailer.deliver(msg, raw, _sender_domain(msg["From"]), deliver_to, relay_ok)
+        if res is None:   # Nano: recorded only
+            delivery["Status"] = "Recorded (no SMTP in the browser)"
+            events.append({"Type": "Delivery", "Timestamp": ts, "Recipients": deliver_to,
+                           "SmtpResponse": "250 2.0.0 Ok: recorded"})
+        elif res.get("error"):
+            delivery["Status"] = "Failed"
+            events.append({"Type": "Bounce", "Timestamp": ts, "BounceType": "Transient", "BounceSubType": "General",
+                           "Recipients": deliver_to, "Diagnostic": "smtp; " + str(res["error"])})
+        else:
+            delivery.update(Status="Delivered", InboxId=res.get("inbox_id") or "", InboxUrl=res.get("inbox_url") or "")
+            events.append({"Type": "Delivery", "Timestamp": ts, "Recipients": deliver_to,
+                           "SmtpResponse": "250 2.0.0 Ok: queued in the local inbox"})
+            delivery["Relayed"] = list(res.get("relayed") or [])
+            for addr, err in (res.get("relay_failed") or {}).items():
+                events.append({"Type": "Bounce", "Timestamp": ts, "BounceType": "Transient", "BounceSubType": "General",
+                               "Recipients": [addr], "Diagnostic": "smtp; " + str(err)})
+        for addr in relay_no:
+            events.append({"Type": "Reject", "Timestamp": ts, "Recipients": [addr], "Reason": why,
+                           "Note": "A copy is in the local inbox; not relayed to a real mailbox"})
+    msg["Events"] = events
+    msg["Delivery"] = delivery
+    for ev in events:
+        _emit_destinations(store, msg, ev)
+
+
+def _reply_to(b: dict):
+    return b.get("ReplyToAddresses") or None
 
 
 def send_email(store, p, q, b):
@@ -832,9 +1056,16 @@ def send_email(store, p, q, b):
     if not sender:
         raise _bad("FromEmailAddress is required.")
     _check_sender(store, sender)
-    mid = _record(store, kinds[0], sender, dest, content, cs, {"Subject": ((content.get("Simple") or {}).get("Subject") or {}).get("Data", "")})
+    subject = ((content.get("Simple") or {}).get("Subject") or {}).get("Data", "")
+    msg = _record(store, kinds[0], sender, dest, content, cs, {"Subject": subject})
+    raw = _compose(store, kinds[0], sender, dest, content, msg["MessageId"], _reply_to(b),
+                   {"X-SES-CONFIGURATION-SET": cs} if cs else None)
+    if kinds[0] == "Template":
+        msg["Subject"] = (message_from_bytes(raw).get("Subject") or "")
+    rcpts = list(dest.get("ToAddresses") or []) + list(dest.get("CcAddresses") or []) + list(dest.get("BccAddresses") or [])
+    _deliver(store, msg, raw, rcpts)
     store.persist()
-    return _ok({"MessageId": mid})
+    return _ok({"MessageId": msg["MessageId"]})
 
 
 def send_bulk_email(store, p, q, b):
@@ -860,8 +1091,16 @@ def send_bulk_email(store, p, q, b):
         except SesV2Error as err:
             results.append({"Status": "INVALID_PARAMETER", "Error": err.message})
             continue
-        mid = _record(store, "Bulk", sender, e["Destination"], default, cs, {"Subject": ""})
-        results.append({"Status": "SUCCESS", "MessageId": mid})
+        rep = ((e.get("ReplacementEmailContent") or {}).get("ReplacementTemplate") or {}).get("ReplacementTemplateData")
+        body = {"Template": {**tpl, "TemplateData": rep or tpl.get("TemplateData") or "{}",
+                             "Headers": e.get("ReplacementHeaders") or tpl.get("Headers") or []}}
+        msg = _record(store, "Bulk", sender, e["Destination"], default, cs, {"Subject": ""})
+        raw = _compose(store, "Template", sender, e["Destination"], body, msg["MessageId"], _reply_to(b),
+                       {"X-SES-CONFIGURATION-SET": cs} if cs else None)
+        msg["Subject"] = message_from_bytes(raw).get("Subject") or ""
+        d = e["Destination"]
+        _deliver(store, msg, raw, list(d.get("ToAddresses") or []) + list(d.get("CcAddresses") or []) + list(d.get("BccAddresses") or []))
+        results.append({"Status": "SUCCESS", "MessageId": msg["MessageId"]})
     store.persist()
     return _ok({"BulkEmailEntryResults": results})
 
@@ -1156,6 +1395,395 @@ def dispatch(store: SesV2Store, method: str, path: str, query: dict | None, head
     return _error("NotFoundException", f"The action for {PREFIX}{sub} is not valid for this web service.", 404)
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# SES SMTP interface + inbound mail (the SMTP/IMAP sockets live in core/ses_mail.py,
+# offline only; everything they decide is decided here so the rules are one piece of code)
+# ═══════════════════════════════════════════════════════════════════════════
+def smtp_password(secret_access_key: str, region: str = REGION) -> str:
+    """SES SMTP password from an IAM secret access key — the documented v4 derivation."""
+    def sign(key: bytes, msg: str) -> bytes:
+        return hmac.new(key, msg.encode(), hashlib.sha256).digest()
+    sig = sign(("AWS4" + secret_access_key).encode(), "11111111")
+    for m in (region, "ses", "aws4_request", "SendRawEmail"):
+        sig = sign(sig, m)
+    return base64.b64encode(b"\x04" + sig).decode()
+
+
+def smtp_register(store, access_key_id: str, secret_access_key: str) -> dict:
+    if not access_key_id or not secret_access_key:
+        raise _bad("AccessKeyId and SecretAccessKey are required.")
+    pw = smtp_password(secret_access_key, store.region)
+    store.smtp_credentials[access_key_id] = {"hash": hashlib.sha256(pw.encode()).hexdigest(), "created": _now()}
+    store.persist()
+    return {"username": access_key_id, "password": pw, "region": store.region}
+
+
+def smtp_authenticate(store, username: str, password: str, secret_lookup=None) -> bool:
+    c = store.smtp_credentials.get(username)
+    if c:
+        return hmac.compare_digest(c["hash"], hashlib.sha256((password or "").encode()).hexdigest())
+    if secret_lookup:
+        secret = secret_lookup(username)
+        if secret:
+            return hmac.compare_digest(smtp_password(secret, store.region), password or "")
+    return False
+
+
+class SmtpRefused(Exception):
+    def __init__(self, code: int, text: str) -> None:
+        super().__init__(text)
+        self.code, self.text = code, text
+
+
+def smtp_ingest(store, mail_from: str, rcpts: list, raw: bytes) -> str:
+    """One message submitted through the SES SMTP interface (already authenticated).
+    Applies the SES rules and returns the SMTP reply text; raises SmtpRefused."""
+    try:
+        parsed = message_from_bytes(raw)
+        frm = getaddresses([parsed.get("From", "")])
+        sender = (frm[0][1] if frm and frm[0][1] else mail_from) or ""
+        cs = parsed.get("X-SES-CONFIGURATION-SET") or None
+        if cs and cs not in store.config_sets:
+            raise SmtpRefused(554, f"Configuration set <{cs}> does not exist.")
+        _check_account(store, cs)
+        _check_sender(store, sender)
+        if not rcpts:
+            raise SmtpRefused(554, "Must specify at least one recipient address.")
+        if len(rcpts) > 50:
+            raise SmtpRefused(554, "Too many recipients; a message can have at most 50.")
+        tol = {x.lower() for _, x in getaddresses(parsed.get_all("To", []))}
+        ccl = {x.lower() for _, x in getaddresses(parsed.get_all("Cc", []))}
+        tos = [r for r in rcpts if r.lower() in tol]
+        ccs = [r for r in rcpts if r.lower() in ccl and r not in tos]
+        dest = {"ToAddresses": tos, "CcAddresses": ccs, "BccAddresses": [r for r in rcpts if r not in tos and r not in ccs]}
+        msg = _record(store, "Smtp", sender, dest, {"Raw": {"Data": ""}}, cs, {"Subject": parsed.get("Subject", "")})
+        msg["Content"] = {"Raw": {"Data": "(submitted over SMTP)"}}
+        head = raw.split(b"\r\n\r\n", 1)[0].split(b"\n\n", 1)[0]
+        if not re.search(rb"(?im)^message-id:", head):
+            raw = f"Message-ID: {_message_id_header(msg['MessageId'])}\r\n".encode() + raw
+        _deliver(store, msg, raw, list(rcpts))
+        store.persist()
+        return f"Ok {msg['MessageId']}"
+    except SesV2Error as e:
+        raise SmtpRefused(554, f"Message rejected: {e.message}")
+
+
+# ── SES v1 (Query protocol): receipt rule sets + identity verification ─────
+_V1_NS = "http://ses.amazonaws.com/doc/2010-12-01/"
+
+
+def _rcpt(store) -> dict:
+    r = store.receipt
+    r.setdefault("sets", {})
+    r.setdefault("active", "")
+    r.setdefault("log", [])
+    return r
+
+
+def _qtree(params: dict) -> dict:
+    """Flatten `Rule.Actions.member.1.S3Action.BucketName=…` into nested dicts / lists."""
+    root: dict = {}
+    for k, v in params.items():
+        cur = root
+        parts = k.split(".")
+        for pt in parts[:-1]:
+            cur = cur.setdefault(pt, {})
+        cur[parts[-1]] = v
+
+    def fix(n):
+        if isinstance(n, dict):
+            if set(n) == {"member"} and isinstance(n["member"], dict):
+                return [fix(n["member"][i]) for i in sorted(n["member"], key=lambda x: int(x) if str(x).isdigit() else 0)]
+            return {k: fix(v) for k, v in n.items()}
+        if n in ("true", "false"):
+            return n == "true"
+        return n
+    return fix(root)
+
+
+def _xml_of(tag: str, v) -> str:
+    if isinstance(v, dict):
+        return f"<{tag}>" + "".join(_xml_of(k, x) for k, x in v.items()) + f"</{tag}>"
+    if isinstance(v, list):
+        return f"<{tag}>" + "".join(_xml_of("member", x) for x in v) + f"</{tag}>"
+    if isinstance(v, bool):
+        v = "true" if v else "false"
+    return f"<{tag}>{_xesc(str(v))}</{tag}>"
+
+
+def _v1_ok(action: str, result: dict | None = None) -> SesV2Response:
+    inner = "".join(_xml_of(k, x) for k, x in (result or {}).items())
+    body = (f'<{action}Response xmlns="{_V1_NS}"><{action}Result>{inner}</{action}Result>'
+            f"<ResponseMetadata><RequestId>{uuid.uuid4()}</RequestId></ResponseMetadata></{action}Response>")
+    return SesV2Response(200, body.encode(), {}, "text/xml")
+
+
+def _v1_err(code: str, msg: str, status: int = 400) -> SesV2Response:
+    body = (f'<ErrorResponse xmlns="{_V1_NS}"><Error><Type>Sender</Type><Code>{code}</Code>'
+            f"<Message>{_xesc(msg)}</Message></Error><RequestId>{uuid.uuid4()}</RequestId></ErrorResponse>")
+    return SesV2Response(status, body.encode(), {}, "text/xml")
+
+
+_ACTION_KINDS = ("S3Action", "LambdaAction", "SNSAction", "StopAction", "BounceAction", "AddHeaderAction", "WorkmailAction")
+
+
+def _norm_rule(rule: dict) -> dict:
+    if not rule.get("Name") or not re.match(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$", str(rule["Name"])):
+        raise SesV2Error("InvalidParameterValue", "Rule name must be alphanumeric, '-', '_' or '.', and start with a letter or digit.")
+    acts = rule.get("Actions") or []
+    if not isinstance(acts, list):
+        acts = [acts]
+    for a in acts:
+        kinds = [k for k in a if k in _ACTION_KINDS]
+        if len(kinds) != 1:
+            raise SesV2Error("InvalidParameterValue", "Each action must contain exactly one action type.")
+    rec = rule.get("Recipients") or []
+    return {"Name": rule["Name"], "Enabled": bool(rule.get("Enabled", False)),
+            "TlsPolicy": rule.get("TlsPolicy") or "Optional",
+            "Recipients": rec if isinstance(rec, list) else [rec],
+            "Actions": acts, "ScanEnabled": bool(rule.get("ScanEnabled", False))}
+
+
+def _rs(store, name: str) -> dict:
+    s = _rcpt(store)["sets"].get(name)
+    if s is None:
+        raise SesV2Error("RuleSetDoesNotExist", f"Rule set does not exist: {name}")
+    return s
+
+
+def _find_rule(rs: dict, name: str) -> int:
+    for i, r in enumerate(rs["Rules"]):
+        if r["Name"] == name:
+            return i
+    raise SesV2Error("RuleDoesNotExist", f"Rule does not exist: {name}")
+
+
+def _v1_dispatch(store, a: str, t: dict) -> SesV2Response:
+    r = _rcpt(store)
+    if a == "CreateReceiptRuleSet":
+        n = t.get("RuleSetName")
+        if not n or not re.match(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$", str(n)):
+            raise SesV2Error("InvalidParameterValue", "Invalid RuleSetName.")
+        if n in r["sets"]:
+            raise SesV2Error("AlreadyExists", f"Rule set already exists: {n}")
+        r["sets"][n] = {"Name": n, "CreatedTimestamp": _now(), "Rules": []}
+        return _v1_ok(a)
+    if a == "CloneReceiptRuleSet":
+        src = _rs(store, t.get("OriginalRuleSetName", ""))
+        n = t.get("RuleSetName")
+        if n in r["sets"]:
+            raise SesV2Error("AlreadyExists", f"Rule set already exists: {n}")
+        r["sets"][n] = {"Name": n, "CreatedTimestamp": _now(), "Rules": json.loads(json.dumps(src["Rules"]))}
+        return _v1_ok(a)
+    if a == "DeleteReceiptRuleSet":
+        n = t.get("RuleSetName", "")
+        if n == r["active"]:
+            raise SesV2Error("CannotDelete", f"Cannot delete the active rule set: {n}")
+        r["sets"].pop(n, None)
+        return _v1_ok(a)
+    if a == "ListReceiptRuleSets":
+        return _v1_ok(a, {"RuleSets": [{"Name": s["Name"], "CreatedTimestamp": s["CreatedTimestamp"]}
+                                       for s in sorted(r["sets"].values(), key=lambda x: x["Name"])]})
+    if a == "DescribeReceiptRuleSet":
+        s = _rs(store, t.get("RuleSetName", ""))
+        return _v1_ok(a, {"Metadata": {"Name": s["Name"], "CreatedTimestamp": s["CreatedTimestamp"]}, "Rules": s["Rules"]})
+    if a == "DescribeActiveReceiptRuleSet":
+        if not r["active"]:
+            return _v1_ok(a)
+        s = _rs(store, r["active"])
+        return _v1_ok(a, {"Metadata": {"Name": s["Name"], "CreatedTimestamp": s["CreatedTimestamp"]}, "Rules": s["Rules"]})
+    if a == "SetActiveReceiptRuleSet":
+        n = t.get("RuleSetName") or ""
+        if n:
+            _rs(store, n)
+        r["active"] = n
+        return _v1_ok(a)
+    if a == "CreateReceiptRule":
+        s = _rs(store, t.get("RuleSetName", ""))
+        rule = _norm_rule(t.get("Rule") or {})
+        if any(x["Name"] == rule["Name"] for x in s["Rules"]):
+            raise SesV2Error("AlreadyExists", f"Rule already exists: {rule['Name']}")
+        after = t.get("After")
+        pos = _find_rule(s, after) + 1 if after else len(s["Rules"])
+        s["Rules"].insert(pos, rule)
+        return _v1_ok(a)
+    if a == "UpdateReceiptRule":
+        s = _rs(store, t.get("RuleSetName", ""))
+        rule = _norm_rule(t.get("Rule") or {})
+        s["Rules"][_find_rule(s, rule["Name"])] = rule
+        return _v1_ok(a)
+    if a == "DescribeReceiptRule":
+        s = _rs(store, t.get("RuleSetName", ""))
+        return _v1_ok(a, {"Rule": s["Rules"][_find_rule(s, t.get("RuleName", ""))]})
+    if a == "DeleteReceiptRule":
+        s = _rs(store, t.get("RuleSetName", ""))
+        del s["Rules"][_find_rule(s, t.get("RuleName", ""))]
+        return _v1_ok(a)
+    if a == "ReorderReceiptRuleSet":
+        s = _rs(store, t.get("RuleSetName", ""))
+        names = t.get("RuleNames") or []
+        by = {x["Name"]: x for x in s["Rules"]}
+        if sorted(names) != sorted(by):
+            raise SesV2Error("RuleDoesNotExist", "RuleNames must list every rule in the rule set exactly once.")
+        s["Rules"] = [by[n] for n in names]
+        return _v1_ok(a)
+    # identities (v1 view over the same store as v2)
+    if a in ("VerifyEmailIdentity", "VerifyDomainIdentity", "VerifyEmailAddress"):
+        n = t.get("EmailAddress") or t.get("Domain")
+        if n and n not in store.identities:
+            create_email_identity(store, {}, {}, {"EmailIdentity": n})
+        return _v1_ok(a, {"VerificationToken": uuid.uuid4().hex} if a == "VerifyDomainIdentity" else None)
+    if a == "ListIdentities":
+        want = t.get("IdentityType")
+        names = sorted(n for n, i in store.identities.items()
+                       if not want or i["IdentityType"] == {"EmailAddress": "EMAIL_ADDRESS", "Domain": "DOMAIN"}.get(want))
+        return _v1_ok(a, {"Identities": names})
+    if a == "DeleteIdentity":
+        store.identities.pop(t.get("Identity", ""), None)
+        return _v1_ok(a)
+    if a == "GetIdentityVerificationAttributes":
+        ids = t.get("Identities") or []
+        return _v1_ok(a, {"VerificationAttributes": {"entry": [
+            {"key": i, "value": {"VerificationStatus": "Success" if i in store.identities else "NotStarted"}} for i in ids]}})
+    return _v1_err("InvalidAction", f"The action {a} is not valid for this web service.")
+
+
+def dispatch_query(store, params: dict) -> SesV2Response:
+    """SES v1 Query protocol (`Action=…&Version=2010-12-01`), form-decoded into `params`."""
+    a = str(params.get("Action", ""))
+    t = _qtree({k: v for k, v in params.items() if k not in ("Action", "Version")})
+    try:
+        out = _v1_dispatch(store, a, t)
+        store.persist()
+        return out
+    except SesV2Error as e:
+        return _v1_err(e.code, e.message, e.status)
+
+
+V1_ACTIONS = ("CreateReceiptRuleSet", "CloneReceiptRuleSet", "DeleteReceiptRuleSet", "ListReceiptRuleSets",
+              "DescribeReceiptRuleSet", "DescribeActiveReceiptRuleSet", "SetActiveReceiptRuleSet",
+              "CreateReceiptRule", "UpdateReceiptRule", "DescribeReceiptRule", "DeleteReceiptRule",
+              "ReorderReceiptRuleSet", "VerifyEmailIdentity", "VerifyDomainIdentity", "ListIdentities",
+              "DeleteIdentity", "GetIdentityVerificationAttributes")
+
+
+# ── inbound: which receipt rules apply to a message, and what they do ──────
+def _rule_matches(rule: dict, rcpt: str) -> bool:
+    if not rule.get("Enabled"):
+        return False
+    rec = rule.get("Recipients") or []
+    if not rec:
+        return True
+    a = rcpt.lower()
+    dom = a.split("@", 1)[-1]
+    for x in rec:
+        x = x.lower().lstrip(".")
+        if x == a or x == dom or dom.endswith("." + x):
+            return True
+    return False
+
+
+def inbound_accepts(store, rcpt: str) -> bool:
+    """The inbound listener takes mail only for a verified identity (domain or address)."""
+    return _identity_verified(store, rcpt)
+
+
+def inbound_plan(store, rcpts: list, mail_from: str, raw: bytes) -> dict:
+    """Run the ACTIVE rule set against a received message. Returns the actions to execute
+    ({'type', 'cfg', 'rule'}), the SES receipt-event payload and any bounce to answer with."""
+    r = _rcpt(store)
+    parsed = message_from_bytes(raw)
+    mid = uuid.uuid4().hex
+    now = _now()
+    mail = {"timestamp": now, "source": mail_from, "messageId": mid, "destination": list(rcpts),
+            "headersTruncated": False,
+            "headers": [{"name": k, "value": str(v)} for k, v in parsed.items()][:50],
+            "commonHeaders": {"from": [parsed.get("From", "")], "to": [parsed.get("To", "")],
+                              "subject": parsed.get("Subject", ""), "messageId": parsed.get("Message-ID", "")}}
+    plan, hit, bounce = [], [], None
+    s = r["sets"].get(r["active"]) if r["active"] else None
+    stop = False
+    for rule in (s["Rules"] if s else []):
+        if stop:
+            break
+        matched = [x for x in rcpts if _rule_matches(rule, x)]
+        if not matched:
+            continue
+        hit.append(rule["Name"])
+        for act in rule["Actions"]:
+            kind = next(k for k in act if k in _ACTION_KINDS)
+            plan.append({"type": kind, "cfg": act[kind], "rule": rule["Name"], "recipients": matched})
+            if kind == "StopAction":
+                stop = True
+                break
+            if kind == "BounceAction":
+                c = act[kind]
+                bounce = {"code": int(c.get("SmtpReplyCode") or 550), "status": c.get("StatusCode") or "5.1.1",
+                          "message": c.get("Message") or "Mailbox does not exist"}
+                stop = True
+                break
+    receipt = {"timestamp": now, "processingTimeMillis": 1, "recipients": list(rcpts), "spamVerdict": {"status": "PASS"},
+               "virusVerdict": {"status": "PASS"}, "spfVerdict": {"status": "PASS"}, "dkimVerdict": {"status": "PASS"},
+               "dmarcVerdict": {"status": "PASS"}, "action": {}}
+    log = r["log"]
+    log.append({"MessageId": mid, "From": mail_from, "To": list(rcpts), "Subject": parsed.get("Subject", ""),
+                "received": now, "Rules": hit, "Actions": [p["type"] for p in plan]})
+    del log[:-100]
+    store.persist()
+    return {"messageId": mid, "mail": mail, "receipt": receipt, "plan": plan, "bounce": bounce, "rules": hit}
+
+
+def inbound_event(plan: dict, action: dict) -> dict:
+    """The SES -> Lambda / SNS receipt event for one action."""
+    rc = dict(plan["receipt"])
+    rc["action"] = {"type": action["type"].replace("Action", ""), **{k[0].lower() + k[1:]: v for k, v in action["cfg"].items()}}
+    return {"Records": [{"eventSource": "aws:ses", "eventVersion": "1.0", "ses": {"receipt": rc, "mail": plan["mail"]}}]}
+
+
+# ── console view of the above ──────────────────────────────────────────────
+def _mask(cfg: dict) -> dict:
+    out = {k: v for k, v in (cfg or {}).items() if k not in ("password_enc", "log")}
+    out["has_password"] = bool((cfg or {}).get("password_enc"))
+    return out
+
+
+def console_mail_settings(store) -> dict:
+    ms = store.mail_settings or {}
+    relay, imap = ms.get("relay") or {}, ms.get("imap") or {}
+    return {"relay": _mask(relay), "imap": _mask(imap),
+            "sandbox": not store.account.get("ProductionAccessEnabled"),
+            "inbox_ui": getattr(store.mailer, "ui_url", "") if store.mailer else "",
+            "smtp_available": store.mailer is not None}
+
+
+def console_mail_settings_put(store, body: dict) -> dict:
+    if store.mailer is None:
+        raise SesV2Error("NotSupported", "Real delivery needs the offline appliance; the browser cannot speak SMTP.", 400)
+    ms = store.mail_settings
+    for key in ("relay", "imap"):
+        if key not in body:
+            continue
+        inb = body[key] or {}
+        cur = ms.setdefault(key, {})
+        for f in ("enabled", "host", "port", "security", "username", "folder", "hourly_cap", "interval"):
+            if f in inb:
+                cur[f] = inb[f]
+        if inb.get("enabled") and not str(cur.get("host") or "").strip():
+            raise _bad(f"{key}: host is required to enable it.")
+        if inb.get("password"):
+            cur["password_enc"] = store.mailer.seal(str(inb["password"]))
+    store.persist()
+    return console_mail_settings(store)
+
+
+def console_smtp_credentials(store, body: dict) -> dict:
+    r = smtp_register(store, str(body.get("access_key_id") or body.get("AccessKeyId") or "").strip(),
+                      str(body.get("secret_access_key") or body.get("SecretAccessKey") or "").strip())
+    r.update(endpoint=getattr(store.mailer, "smtp_endpoint", "localhost:2587") if store.mailer else "localhost:2587",
+             inbound_endpoint=getattr(store.mailer, "inbound_endpoint", "localhost:2525") if store.mailer else "localhost:2525")
+    return r
+
+
 # ── console REST view (flat, shared by the offline server and Nano) ────────
 def _ts(v) -> str:
     return datetime.fromtimestamp(float(v), timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -1204,7 +1832,7 @@ def console_delete(store, name: str) -> dict:
     return {"deleted": name}
 
 
-CHILD_KINDS = ("configuration-sets", "templates", "contact-lists", "suppression", "sent-emails")
+CHILD_KINDS = ("configuration-sets", "templates", "contact-lists", "suppression", "sent-emails", "received-emails", "mail-settings")
 
 
 def console_children(store, kind: str) -> dict:
@@ -1229,10 +1857,47 @@ def console_children(store, kind: str) -> dict:
     elif kind == "sent-emails":
         rows = [{"name": m["MessageId"], "from": m["From"], "to": ", ".join(m["To"]) or "-",
                  "subject": m.get("Subject") or f"({m['Kind']})", "config_set": m["ConfigurationSetName"] or "Not set",
+                 "delivery": (m.get("Delivery") or {}).get("Status") or "Recorded",
+                 "inbox": (m.get("Delivery") or {}).get("InboxUrl") or "Not delivered to an inbox",
+                 "events": ", ".join(e["Type"] for e in m.get("Events") or []) or "Send",
                  "sent": m["sent"]} for m in reversed(store.messages)]
+    elif kind == "received-emails":
+        rows = [{"name": m["MessageId"], "from": m["From"] or "-", "to": ", ".join(m["To"]) or "-",
+                 "subject": m["Subject"] or "(no subject)", "rules": ", ".join(m["Rules"]) or "No rule matched",
+                 "actions": ", ".join(m["Actions"]) or "None", "received": m["received"]}
+                for m in reversed(_rcpt(store)["log"])]
+    elif kind == "mail-settings":
+        rows = _mail_setting_rows(store)
     else:
         raise _notfound(f"Unknown collection {kind}")
     return {"items": rows}
+
+
+def _mail_setting_rows(store) -> list:
+    ms = console_mail_settings(store)
+    relay, imap, live = ms["relay"], ms["imap"], ms["smtp_available"]
+    act = _rcpt(store)["active"]
+    ep = (getattr(store.mailer, "smtp_endpoint", "localhost:2587"), getattr(store.mailer, "inbound_endpoint", "localhost:2525"))
+
+    def hp(c):
+        return f"{c['host']}:{c.get('port') or 'default'} ({(c.get('security') or 'starttls').upper()})" if c.get("host") else "Not configured"
+    return [
+        {"name": "Sending mode", "value": "Sandbox (verified recipients only)" if ms["sandbox"] else "Production access",
+         "status": "Active", "detail": "Production access is requested with PutAccountDetails; it lifts the relay's sandbox rule."},
+        {"name": "Local inbox", "value": ms["inbox_ui"] or "Not available in Nano",
+         "status": "Always on" if live else "Unavailable",
+         "detail": "Every sent message is delivered to the Mailpit inbox." if live else "Browsers cannot speak SMTP: Nano keeps the API and the Sent list."},
+        {"name": "SES SMTP interface", "value": ep[0] + " (STARTTLS)" if live else "Not available in Nano",
+         "status": "Listening" if live else "Unavailable", "detail": "Use SMTP credentials derived from an IAM secret access key."},
+        {"name": "Deliver to real inboxes (outbound relay)", "value": hp(relay),
+         "status": "Enabled" if relay.get("enabled") else "Disabled",
+         "detail": "Password stored encrypted." if relay.get("has_password") else "Your own SMTP server: Gmail app password, Office 365 or a company relay."},
+        {"name": "Inbound SMTP listener", "value": ep[1] if live else "Not available in Nano",
+         "status": ("Active rule set: " + act) if act else "No active rule set",
+         "detail": "Accepts mail for verified identities and runs the active receipt rule set."},
+        {"name": "Inbound IMAP poll", "value": hp(imap), "status": "Enabled" if imap.get("enabled") else "Disabled",
+         "detail": "Polls a real mailbox and runs new messages through the same receipt rules."},
+    ]
 
 
 def console_child_create(store, kind: str, body: dict) -> dict:
@@ -1282,6 +1947,18 @@ def console_dispatch(store, method: str, path: str, query: dict | None, body: di
                     return 200, console_get(store, parts[1])
                 if method == "DELETE":
                     return 200, console_delete(store, parts[1])
+        elif parts[:1] == ["mail-settings"]:
+            if method == "GET":
+                return 200, {**console_mail_settings(store), "items": _mail_setting_rows(store)}
+            if method == "POST":
+                console_mail_settings_put(store, body)
+                return 200, {**console_mail_settings(store), "items": _mail_setting_rows(store)}
+        elif parts[:1] == ["smtp-credentials"] and method == "POST":
+            return 200, console_smtp_credentials(store, body)
+        elif parts[:1] == ["inbound-poll"] and method == "POST":
+            if store.mailer is None:
+                raise SesV2Error("NotSupported", "Inbound IMAP polling needs the offline appliance.", 400)
+            return 200, store.mailer.poll_imap_now()
         elif parts and parts[0] in CHILD_KINDS:
             if len(parts) == 1 and method == "GET":
                 return 200, console_children(store, parts[0])

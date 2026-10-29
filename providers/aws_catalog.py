@@ -835,7 +835,7 @@ RESOURCE_CATALOG_AWS = [
     # ========================================================================
     # Amazon SES (v2) — verified identities, configuration sets, templates,
     # contact lists, suppression list. Engine: core/sesv2_core.py (native
-    # REST-JSON wire + this console REST); in-process, no mail is relayed.
+    # REST-JSON wire + this console REST); mail is really delivered to Mailpit offline.
     # ========================================================================
     {
         "key": "sesv2", "label": "Amazon SES", "icon": "mail",
@@ -851,6 +851,8 @@ RESOURCE_CATALOG_AWS = [
             "contact-lists":      {"method": "GET",  "path": "/api/aws/sesv2/contact-lists"},
             "suppression":        {"method": "GET",  "path": "/api/aws/sesv2/suppression"},
             "sent-emails":        {"method": "GET",  "path": "/api/aws/sesv2/sent-emails"},
+            "received-emails":    {"method": "GET",  "path": "/api/aws/sesv2/received-emails"},
+            "mail-settings":      {"method": "GET",  "path": "/api/aws/sesv2/mail-settings"},
             "delete":             {"method": "DELETE", "path": "/api/aws/sesv2/identities/{name}"},
         },
         "rail_items": [
@@ -867,6 +869,11 @@ RESOURCE_CATALOG_AWS = [
                 "type": "child", "child_key": "suppression"},
             {"key": "sent-emails", "label": "Sent emails", "icon": "outbox",
                 "type": "child", "child_key": "sent-emails"},
+            {"key": "received-emails", "label": "Received emails", "icon": "move_to_inbox",
+                "type": "child", "child_key": "received-emails"},
+            {"group": "Mail delivery"},
+            {"key": "mail-settings", "label": "Delivery settings", "icon": "settings_ethernet",
+                "type": "child", "child_key": "mail-settings"},
         ],
         "children": [
             {"type": "configuration-sets", "label": "Configuration sets", "icon": "tune"},
@@ -874,6 +881,8 @@ RESOURCE_CATALOG_AWS = [
             {"type": "contact-lists", "label": "Contact lists", "icon": "contacts"},
             {"type": "suppression", "label": "Suppression list", "icon": "block"},
             {"type": "sent-emails", "label": "Sent emails", "icon": "outbox"},
+            {"type": "received-emails", "label": "Received emails", "icon": "move_to_inbox"},
+            {"type": "mail-settings", "label": "Delivery settings", "icon": "settings_ethernet"},
         ],
         "columns": [
             ["identity",   "Identity"],

@@ -1325,7 +1325,11 @@ function childSpec(svc, childType){
       "suppression": {label:"Suppression list", absolutePath:"/api/aws/sesv2/suppression", arrayKey:"items",
         columns: [["name","Email address"],["reason","Reason"],["last_updated","Date added"]]},
       "sent-emails": {label:"Sent emails", absolutePath:"/api/aws/sesv2/sent-emails", arrayKey:"items",
-        columns: [["name","Message ID"],["from","From"],["to","To"],["subject","Subject"],["config_set","Configuration set"],["sent","Sent"]]},
+        columns: [["name","Message ID"],["from","From"],["to","To"],["subject","Subject"],["config_set","Configuration set"],["delivery","Delivery"],["events","SES events"],["inbox","Inbox"],["sent","Sent"]]},
+      "received-emails": {label:"Received emails", absolutePath:"/api/aws/sesv2/received-emails", arrayKey:"items",
+        columns: [["name","Message ID"],["from","From"],["to","To"],["subject","Subject"],["rules","Matched rules"],["actions","Actions run"],["received","Received"]]},
+      "mail-settings": {label:"Delivery settings", absolutePath:"/api/aws/sesv2/mail-settings", arrayKey:"items", settings:true,
+        columns: [["name","Setting"],["value","Value"],["status","Status"],["detail","Details"]]},
     },
     ec2: {
       "amis": {key:"amis", label:"AMIs", absolutePath:"/api/ec2/amis", arrayKey:"amis",
@@ -1352,6 +1356,59 @@ function childSpec(svc, childType){
     },
   };
   return (map[svc.key] || {})[childType] || null;
+}
+
+// SES → Delivery settings: "Deliver to real inboxes" (outbound relay) and inbound IMAP poll.
+async function openMailSettings(main){
+  const cur = (await api("GET", "/api/aws/sesv2/mail-settings")).json || {};
+  const relay = cur.relay || {}, imap = cur.imap || {};
+  const ov = el("div",{style:"position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center"});
+  const box = el("div",{style:"background:var(--bg,#fff);color:var(--fg,#111);padding:20px;border-radius:8px;min-width:460px;max-width:560px;max-height:85vh;overflow:auto"});
+  const f = {};
+  const field = (grp, name, label, val, type) => {
+    const inp = el("input",{type:type||"text", value: val==null?"":String(val), style:"width:100%;padding:6px;margin:2px 0 8px"});
+    if (type==="checkbox") { inp.checked = !!val; inp.style.width="auto"; }
+    f[grp+"."+name] = inp;
+    return el("label",{style:"display:block;font-size:12px"}, label, inp);
+  };
+  const sel = (grp, name, label, val, opts) => {
+    const s = el("select",{style:"width:100%;padding:6px;margin:2px 0 8px"}, ...opts.map(o => el("option",{value:o, selected: o===val ? "selected" : null}, o)));
+    f[grp+"."+name] = s;
+    return el("label",{style:"display:block;font-size:12px"}, label, s);
+  };
+  const err = el("div",{style:"color:#c00;font-size:12px;min-height:16px"});
+  box.append(el("h2",{style:"margin:0 0 4px"}, "Deliver to real inboxes"),
+    el("div",{style:"font-size:12px;opacity:.75;margin-bottom:10px"},
+      "A copy always lands in the local inbox. In the SES sandbox only verified recipients are relayed; production access lifts that."),
+    field("relay","enabled","Relay outbound mail to my SMTP server", relay.enabled, "checkbox"),
+    field("relay","host","SMTP host", relay.host || "smtp.gmail.com"),
+    field("relay","port","Port", relay.port || 587, "number"),
+    sel("relay","security","Security", relay.security || "starttls", ["starttls","tls","none"]),
+    field("relay","username","Username", relay.username || ""),
+    field("relay","password", relay.has_password ? "Password (stored encrypted; leave blank to keep)" : "Password", "", "password"),
+    field("relay","hourly_cap","Hourly send cap (production access)", relay.hourly_cap || 200, "number"),
+    el("h3",{style:"margin:12px 0 4px"}, "Inbound mail (IMAP poll)"),
+    field("imap","enabled","Poll my mailbox for inbound mail", imap.enabled, "checkbox"),
+    field("imap","host","IMAP host", imap.host || ""),
+    field("imap","port","Port", imap.port || 993, "number"),
+    sel("imap","security","Security", imap.security || "tls", ["tls","starttls","none"]),
+    field("imap","username","Username", imap.username || ""),
+    field("imap","password", imap.has_password ? "Password (stored encrypted; leave blank to keep)" : "Password", "", "password"),
+    field("imap","folder","Folder", imap.folder || "INBOX"),
+    err);
+  const val = (k) => { const i = f[k]; return i.type==="checkbox" ? i.checked : i.value; };
+  const body = () => { const o = {relay:{}, imap:{}};
+    for (const g of ["relay","imap"]) for (const k in f) if (k.startsWith(g+".")) { const n = k.slice(g.length+1), v = val(k);
+      if (n==="password" && !v) continue; o[g][n] = (n==="port"||n==="hourly_cap") ? Number(v) : v; }
+    return o; };
+  box.append(el("div",{style:"display:flex;gap:8px;justify-content:flex-end"},
+    el("button",{class:"btn",onclick:()=>ov.remove()}, "Cancel"),
+    el("button",{class:"btn primary",id:"mailSettingsSave",onclick:async()=>{
+      const r = await api("POST", "/api/aws/sesv2/mail-settings", body());
+      if (!r.ok) { err.textContent = (r.json && (r.json.detail || r.json.error)) || "Could not save delivery settings"; return; }
+      ov.remove(); renderChildList(main);
+    }}, "Save")));
+  ov.append(box); document.body.append(ov);
 }
 
 async function renderChildList(main){
@@ -1381,6 +1438,7 @@ async function renderChildList(main){
   headerWrap.append(el("div",{class:"id"},
     el("h1",{class:"page-h"}, spec.label, el("span",{class:"count",id:"childCountChip"}, ""))));
   headerWrap.append(el("div",{style:"display:flex;gap:8px;flex-shrink:0"},
+    spec.settings ? el("button",{class:"btn primary",id:"mailSettingsBtn",onclick:()=>openMailSettings(main)}, icon("settings"), "Configure delivery") : "",
     el("button",{class:"btn",onclick:()=>renderChildList(main)}, icon("refresh"), "Refresh"),
     el("button",{class:"btn",onclick:()=>navigate({view:"list", child:null, item:null})},
       icon("arrow_back"), "Back to "+svc.label)));

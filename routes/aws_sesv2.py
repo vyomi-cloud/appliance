@@ -3,7 +3,9 @@
 
 State is space-scoped (`ctx.sesv2_state`), so identities, templates and the sent
 mailbox follow the active space, show up in its cost-savings metrics and survive
-restarts with it. No mail is relayed: SendEmail validates and records the message.
+restarts with it. SendEmail really delivers: to Mailpit (the local inbox) over SMTP, optionally
+also to the user's own SMTP relay; the SES SMTP interface (:2587) and the inbound listener
+(:2525) live in core/ses_mail.py.
 """
 from __future__ import annotations
 
@@ -14,12 +16,14 @@ from fastapi.responses import JSONResponse
 
 from core import app_context as ctx
 from core import sesv2_core as ses
+from core.ses_mail import SesMail
 
 
 class SpaceSesV2Store(ses.SesV2Store):
     """SesV2Store whose dicts live in the active space's service state."""
 
-    _KEYS = ("identities", "config_sets", "templates", "contact_lists", "suppression", "ip_pools", "tenants", "tags")
+    _KEYS = ("identities", "config_sets", "templates", "contact_lists", "suppression", "ip_pools", "tenants", "tags",
+             "smtp_credentials", "receipt", "mail_settings")
 
     def __init__(self) -> None:
         self.account_id = ctx.AWS_ACCOUNT_ID
@@ -57,6 +61,8 @@ for _k in SpaceSesV2Store._KEYS:
     setattr(SpaceSesV2Store, _k, _prop(_k))
 
 STORE = SpaceSesV2Store()
+MAIL = SesMail(STORE)
+STORE.mailer = MAIL
 
 
 def _query(request: Request) -> dict:
@@ -70,6 +76,8 @@ def _query(request: Request) -> dict:
 
 
 def register(app: FastAPI) -> None:
+    app.on_event("startup")(MAIL.start)   # SES SMTP interface (:2587) + inbound listener (:2525) + IMAP poll
+
     # Console REST (flat view used by the web console + Playwright tests).
     @app.api_route("/api/aws/sesv2/{rest:path}", methods=["GET", "POST", "DELETE"], include_in_schema=False)
     async def sesv2_console(rest: str, request: Request) -> JSONResponse:

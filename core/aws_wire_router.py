@@ -222,6 +222,8 @@ _AMBIGUOUS_ELB = {"AddTags", "RemoveTags", "DescribeTags", "DescribeAccountLimit
 for _a in elbv2.OPERATIONS:
     if _a not in _AMBIGUOUS_ELB:
         _QUERY_ACTION.setdefault(_a, "elbv2")
+for _a in sesv2.V1_ACTIONS:   # SES v1 (receipt rules, identity verification); signs as `ses`
+    _QUERY_ACTION.setdefault(_a, "sesv2")
 # CloudWatch actions whose names other Query services also use — routed by SigV4 scope only.
 _GENERIC_ACTIONS = {"TagResource", "UntagResource", "ListTagsForResource"}
 
@@ -455,8 +457,11 @@ class AwsWireRouter:
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
-        if svc == "sesv2":   # native SES v2 REST-JSON (identities, templates, sending)
-            r = sesv2.dispatch(self.sesv2, method, path, query or {}, headers or {}, bytes(body))
+        if svc == "sesv2":   # native SES v2 REST-JSON (identities, templates, sending) + SES v1 Query (receipt rules)
+            if not sesv2.is_sesv2_path(path) and "Action=" in (self._text(body) or ""):
+                r = sesv2.dispatch_query(self.sesv2, self._query_params(query, body))
+            else:
+                r = sesv2.dispatch(self.sesv2, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             hdrs.setdefault("content-type", r.media_type)
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
