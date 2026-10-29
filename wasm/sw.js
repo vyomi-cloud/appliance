@@ -591,8 +591,6 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "apigateway", "ListApis", {}] };
     if (method === "POST") return { tuple: ["aws", "apigateway", "CreateApi", body || {}] };
   }
-  m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/(resources|stages)$/);
-  if (m && method === "GET") return { tuple: ["aws", "apigateway", m[2] === "stages" ? "Stages" : "Resources", { name: dec(m[1]) }] };
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/invoke$/);
   if (m && method === "POST") return { tuple: ["aws", "apigateway", "Invoke", { id: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/resources$/);

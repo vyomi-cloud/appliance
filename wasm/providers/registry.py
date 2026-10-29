@@ -134,6 +134,7 @@ def _ec2_launch_defaults(body: dict) -> dict:
     out.setdefault("vpc_id", "vpc-0" + h[:16])
     out.setdefault("subnet_id", "subnet-0" + h[16:32])
     out.setdefault("launch_time", _t.strftime("%Y-%m-%dT%H:%M:%S.000Z", _t.gmtime()))
+    out.setdefault("security_groups", ["sg-0" + h[8:24]])   # the VPC's default group, as RunInstances attaches it
     return out
 
 

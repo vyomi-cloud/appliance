@@ -25,7 +25,7 @@ try {
   await sleep(1500);   // let the store snapshot persist
   await page.goto(base + "/aws-console.html");
   await sleep(6000);
-  const names = await page.evaluate(async () => (await (await fetch("/api/vpc/vpcs")).json()).items.map((f) => f.name));
+  const names = await page.evaluate(async () => { const j = await (await fetch("/api/vpc/vpcs")).json(); return (j.items || j.vpcs || []).map((f) => f.name); });
   check("VPC survives a console reload", names.includes("my-vpc"), JSON.stringify(names));
   const lists = await page.evaluate(async () => {
     const o = {};
