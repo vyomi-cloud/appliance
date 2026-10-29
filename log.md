@@ -115,3 +115,4 @@
 | 2026-10-29T06:28Z | #61 | aws/sesv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40826137703) |
 | 2026-10-29T06:54Z | #62 | aws/sns | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40829633018) |
 | 2026-10-29T07:02Z | #65 | aws/sts | success | building | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40832257580) |
+| 2026-10-29T07:11Z | #65 | aws/sts | success | building | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40833145697) |
