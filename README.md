@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-29 00:06 UTC · refreshes after every pipeline run_
+_Updated 2026-10-29 00:21 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -34,7 +34,7 @@ _Updated 2026-10-29 00:06 UTC · refreshes after every pipeline run_
 | Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🔍 In gate ([PR #107](https://github.com/vyomi-cloud/appliance/pull/107)) | 17/18 | mailpit · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Amazon Simple Notification Service [#62](https://github.com/vyomi-cloud/appliance/issues/62) | AWS | 🔍 In gate ([PR #108](https://github.com/vyomi-cloud/appliance/pull/108)) | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 18/19 | caddy · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 20/20 | in-process | in-process | — |
+| AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 19/20 | iac-engine · in-process | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #112](https://github.com/vyomi-cloud/appliance/pull/112)) | 18/18 | in-process | in-process | — |
 | Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🔍 In gate ([PR #114](https://github.com/vyomi-cloud/appliance/pull/114)) | 17/18 | registry · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🔍 In gate ([PR #115](https://github.com/vyomi-cloud/appliance/pull/115)) | 17/18 | duckdb · in-process | in-process | backend is the recommended one, or a different real backend the manifest justifies |
@@ -468,7 +468,7 @@ _Updated 2026-10-29 00:06 UTC · refreshes after every pipeline run_
 | ✅ | has a nano ui test bed |  |
 | ✅ | upstream id tracked by the hourly upstream watcher | cloudformation |
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
-| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
+| ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: iac-engine; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
 | ✅ | blank like the real console: Events / Status reason | AWS console shows - for the Status reason of successful stack events |
 | ✅ | blank like the real console: Outputs / Export name | AWS console shows - for an output that declares no Export |
