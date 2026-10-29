@@ -102,6 +102,16 @@
    ],
    "why": "real SMTP: SES SendEmail and the SES SMTP interface deliver into a local inbox (UI :8025). Optional per-space outbound relay to the user's own SMTP server and optional inbound (local SMTP port or IMAP poll of the user's mailbox) feeding SES receipt rules. See issue #61."
   },
+  "messaging-core": {
+   "kind": "in-process",
+   "license": "(Vyomi code)",
+   "idle_mb": 0,
+   "for": [
+    "azure:servicebus",
+    "azure:Microsoft.ServiceBus"
+   ],
+   "why": "The shared messaging engine of vyomi-messaging: one model for queues, topics and subscriptions with leases/locks (SQS visibility timeout, Service Bus lock duration, Pub/Sub ack deadline), redelivery, dead-letter queues, ordering (FIFO / sessions / ordering keys) and dedup. Foundation: the universal lease engine core/lease.py from Rohith's Service Bus stack (PRs #34-#45, to be merged), which already ports SQS onto it. Protocol adapters sit on top (AMQP 1.0 below, HTTP Query/JSON, HTTP/gRPC); NATS JetStream gives durability. SQS (ElasticMQ today) and Pub/Sub (Google emulator today) converge onto it later, each behind its own conformance suite."
+  },
   "nats": {
    "image": "nats:2.10-alpine",
    "license": "Apache-2.0",
@@ -115,7 +125,11 @@
     "aws:events",
     "gcp:cloudtasks/v2"
    ],
-   "why": "JetStream streams/shards/consumer offsets; already in the stack. Also the durable delivery path for push services (SNS, EventBridge, Cloud Tasks): a stream per topic/bus/queue, a durable consumer per subscription/target, delivery workers that really call HTTP endpoints, Lambda, SQS and email (Mailpit), with retry/backoff, dead-letter queues and FIFO dedup. The in-process engine keeps the API and serves Nano."
+   "why": "JetStream streams/shards/consumer offsets; already in the stack. Also the durable delivery path for push services (SNS, EventBridge, Cloud Tasks): a stream per topic/bus/queue, a durable consumer per subscription/target, delivery workers that really call HTTP endpoints, Lambda, SQS and email (Mailpit), with retry/backoff, dead-letter queues and FIFO dedup. The in-process engine keeps the API and serves Nano.",
+   "agent_for": [
+    "azure:Microsoft.ServiceBus",
+    "azure:servicebus"
+   ]
   },
   "caddy": {
    "image": "caddy:2.8-alpine",
@@ -378,6 +392,19 @@
     "gcp:config/v1"
    ],
    "why": "GCP Infrastructure Manager runs Terraform configurations, so OpenTofu (the MPL-2.0 fork) with the google provider pointed at Vyomi is its faithful backend: deployments, revisions, previews, state in Vyomi GCS. Runs per deployment, nothing idle. Terraform itself is excluded: BSL 1.1 since v1.6 (license_deny)."
+  },
+  "amqp": {
+   "kind": "in-process",
+   "license": "(Vyomi code)",
+   "idle_mb": 0,
+   "role": "protocol",
+   "agent_for": [
+    "azure:servicebus",
+    "azure:Microsoft.ServiceBus",
+    "azure:eventhub",
+    "aws:mq"
+   ],
+   "why": "AMQP 1.0 protocol adapter into messaging-core (Rohith's PRs #35-#45: codec, SASL, CBS auth, sender/receiver links, dispositions, renew-lock, TLS listener on 5671, connection strings), so the native Azure Service Bus and Event Hubs SDKs connect over AMQP as against real Azure; also the AMQP 1.0 transport of Amazon MQ for ActiveMQ. Not for Amazon MQ for RabbitMQ (AMQP 0-9-1, a different protocol: real RabbitMQ). AWS SQS/SNS/Kinesis and GCP Pub/Sub never speak AMQP, so they use their own HTTP/gRPC adapters on the same core."
   }
  },
  "in_process": {
@@ -514,6 +541,10 @@
   "aws:events": {
    "state": "partial",
    "today": "rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered"
+  },
+  "azure:Microsoft.ServiceBus": {
+   "state": "partial",
+   "today": "REST management + messaging only; native SDKs need AMQP (in PRs #35-#45, not merged)"
   }
  },
  "test_beds": {

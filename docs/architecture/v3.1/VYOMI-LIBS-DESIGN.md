@@ -1,6 +1,6 @@
 # vyomi-libs: shared cloud engines as separately released images
 
-**Status:** proposal for review, 2026-10-29
+**Status:** proposal for review, 2026-10-29 (messaging layering added)
 **Decision asked for:** split the shared cloud engines out of the appliance into `vyomi-<lib>` packages. Each one ships
 as its own Docker image, the way `vyomi/cloudsim` and `vyomi/minio` already do, so separate teams can build and
 release them on their own schedule.
@@ -66,7 +66,7 @@ that wheel is what Nano runs.
 | **vyomi-iac** | CloudFormation + Cloud Control, ARM/Bicep deployments, Deployment Manager; GCP Infrastructure Manager | in-process template engine; OpenTofu for Infrastructure Manager | ✅ (in-process) |
 | **vyomi-logs** | CloudWatch Logs, Cloud Logging, Log Analytics, Application Insights | in-process DuckDB log store; Fluent Bit agent; VictoriaLogs optional | ✅ |
 | **vyomi-metrics** | CloudWatch metrics + alarms, Cloud Monitoring, Azure Monitor, managed Prometheus | VictoriaMetrics + vmalert | in-process subset |
-| **vyomi-messaging** | SNS, EventBridge, Cloud Tasks, Kinesis, Event Hubs, Cloud Scheduler, plus the shared dispatcher (timers, HTTP delivery) | NATS JetStream | in-process subset |
+| **vyomi-messaging** | Service Bus, SNS, EventBridge, Cloud Tasks, Kinesis, Event Hubs, Cloud Scheduler, Amazon MQ (ActiveMQ), plus the shared dispatcher (timers, HTTP delivery); later SQS and Pub/Sub | shared messaging core + protocol adapters (AMQP 1.0, HTTP Query/JSON, HTTP/gRPC) on NATS JetStream (§3.1) | in-process subset |
 | **vyomi-gateway** | API Gateway v1/v2, ELB/ALB, GCP API Gateway, API Management, Front Door | Caddy (admin API) | control plane |
 | **vyomi-containers** | Cloud Run, Container Apps, App Runner, ECS | Docker compute + vyomi-gateway; Knative optional (Max) | control plane |
 | **vyomi-kubernetes** | GKE, AKS, EKS | k3s | control plane |
@@ -82,6 +82,33 @@ in the appliance's `core/` until a team wants them.
 
 "Control plane" in the Nano column means the browser keeps the management API but not the backend. It can't run
 Caddy, NATS or k3s.
+
+### 3.1 vyomi-messaging: one core, a protocol adapter per wire format
+
+Every cloud's messaging service needs the same engine, but their native SDKs speak different protocols. Vyomi must
+answer each SDK in its own protocol, so the **protocol is per cloud and the engine is shared**:
+
+| Layer | What it is | Serves |
+|---|---|---|
+| **Protocol adapters** | **AMQP 1.0** (Rohith's Service Bus stack, PRs #34–#45) | Azure Service Bus, Event Hubs; Amazon MQ for ActiveMQ |
+| | **HTTP Query / JSON** | SQS, SNS, Kinesis, EventBridge |
+| | **HTTP / gRPC** | GCP Pub/Sub, Cloud Tasks |
+| | **Kafka** (later) | Event Hubs' Kafka endpoint, Amazon MSK |
+| **Shared messaging core** | Queues, topics and subscriptions; leases/locks (SQS visibility timeout, Service Bus lock duration, Pub/Sub ack deadline); redelivery; dead-letter queues; ordering (FIFO / sessions / ordering keys); dedup | All of the above |
+| **Durable delivery** | NATS JetStream (already in the stack) | All of the above |
+
+- **Why AMQP isn't the common protocol:** only Azure Service Bus, Event Hubs (and IoT Hub) and Amazon MQ for ActiveMQ
+  speak AMQP 1.0. AWS SQS/SNS/Kinesis and GCP Pub/Sub SDKs speak HTTP or gRPC and never AMQP, so an AMQP-only front
+  door would break them.
+- **Foundation:** Rohith's stack. PR #34 extracts the universal lease engine (`core/lease.py`, Pyodide-safe) and ports
+  SQS onto it. PRs #35–#45 add the AMQP 1.0 codec, SASL and CBS auth, sender/receiver links, dispositions, renew-lock,
+  the TLS listener on 5671 and connection strings, and PR #40 the Siftly acceptance scenarios A1–A9. These merge first
+  (rebased onto main, gated on A1–A9 plus every SQS suite), then move into the lib.
+- **Not in scope:** Amazon MQ for **RabbitMQ** speaks AMQP **0-9-1**, a different protocol; it keeps real RabbitMQ.
+- **Convergence:** SQS (ElasticMQ today) and Pub/Sub (Google's emulator today) move onto the shared core later, one at a
+  time, each only after its SDK, CLI, console and Nano suites pass on the new core.
+- **Nano:** the core and the HTTP adapters run in the browser. The AMQP listener is a TCP server, so Nano reaches it
+  only through the relay tunnel.
 
 ## 4. The lib contract (v1)
 
@@ -184,7 +211,7 @@ The OSS backends a lib drives (k3s, VictoriaMetrics, Temporal…) keep their own
 |---|---|---|
 | 0 | Contract v1, `libs/` scaffold, shared base image, lib release workflow (image + wheel + sdist), `libs.lock.json`, Pyodide test harness, Nano wheel loader in `nano-boot.js`, router + provisioner support, dashboard lists libs | A "hello" lib released, pinned, started on demand in the appliance **and** installed from `wasm/wheels/` in Nano |
 | 1 | **vyomi-workflow** first: move `core/stepfunctions_core.py` (already real) into the lib unchanged, then add GCP Workflows | Step Functions suites pass in image and embedded mode; Nano unchanged |
-| 2 | **vyomi-logs** (from `core/logs_core.py`) and **vyomi-messaging** (NATS delivery for SNS, EventBridge, Cloud Tasks, Scheduler; fixes #147–#149, #171) | Real delivery tests pass |
+| 2 | **vyomi-logs** (from `core/logs_core.py`) and **vyomi-messaging**: merge Rohith's Service Bus stack (#34–#45: lease engine + AMQP 1.0) as its core and AMQP adapter, then NATS delivery for SNS, EventBridge, Cloud Tasks, Scheduler (fixes #147–#149, #171) | Siftly A1–A9 pass; every SQS suite still green on the lease engine; real delivery tests pass |
 | 3 | **vyomi-iam** (#172–#175), then **vyomi-identity** | Fake key rejected; least-privilege tests pass |
 | 4 | **vyomi-gateway**, **vyomi-dns**, **vyomi-cache**, **vyomi-mail**, **vyomi-registry** | The 14 released services' "Wired today" all real or explained |
 | 5 | **vyomi-metrics**, **vyomi-iac**, **vyomi-containers**, **vyomi-kubernetes**, **vyomi-ai** | Depends on tier decisions |
