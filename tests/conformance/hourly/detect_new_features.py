@@ -222,6 +222,24 @@ def azure_op_tested(service: str, op: str) -> bool:
     return False
 
 
+# GCP REST cores name handlers after the verb (patch_job, _set_state, _get_op); the
+# official SDKs call them by RPC name. Count one tested when its SDK RPC (with the
+# service's request type, so another service's same-named RPC doesn't count) is called.
+GCP_SDK_ALIASES = {
+    ("gcp_cloudscheduler_core", "PatchJob"): ("UpdateJobRequest",),
+    ("gcp_cloudscheduler_core", "SetState"): ("PauseJobRequest", "ResumeJobRequest"),
+    ("gcp_container_core", "CreatePool"): ("CreateNodePoolRequest",),
+    ("gcp_container_core", "DeletePool"): ("DeleteNodePoolRequest",),
+    ("gcp_container_core", "GetOp"): ("containerpb.GetOperationRequest",),
+    ("gcp_redis_core", "GetOp"): ("redispb.CreateInstanceRequest",),   # LRO Wait() polls GetOperation
+    ("gcp_redis_core", "PatchInstance"): ("UpdateInstanceRequest",),
+}
+
+
+def gcp_op_tested(service: str, op: str, corpus: str) -> bool:
+    return any(a in corpus for a in GCP_SDK_ALIASES.get((service, op), ()))
+
+
 def op_tested(op: str, corpus: str) -> bool:
     return any(re.search(r"(?<![A-Za-z0-9_])" + re.escape(s) + r"(?![A-Za-z0-9_])", corpus) for s in op_spellings(op))
 
@@ -259,7 +277,8 @@ def main() -> None:
     all_corpus = test_corpus()
     for f in inventory:
         if f["kind"] == "operation":
-            f["tested"] = op_tested(f["name"], sdk_corpus) or (f["cloud"] == "azure" and azure_op_tested(f["service"], f["name"]))
+            f["tested"] = op_tested(f["name"], sdk_corpus) or (f["cloud"] == "azure" and azure_op_tested(f["service"], f["name"])) \
+                or (f["cloud"] == "gcp" and gcp_op_tested(f["service"], f["name"], sdk_corpus))
         elif f["kind"] == "route":
             f["tested"] = route_tested(f["path"], all_corpus)
         else:
