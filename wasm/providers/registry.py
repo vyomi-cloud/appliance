@@ -221,6 +221,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
         # them via the same list handlers the console uses.
         if provider == "aws":
             from . import aws_core_adapter as A
+            from . import dataplane_adapter as D
             aws_counts = {
                 "s3":             len(A.s3_list_buckets().get("buckets", [])),
                 "dynamodb":       len(A.ddb_list_tables().get("tables", [])),
@@ -232,6 +233,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                         len(A.iam_list_policies().get("policies", [])) +
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
+                "sts":            len(D.sts_list().get("items", [])),
             }
             for svc, n in aws_counts.items():
                 if n:

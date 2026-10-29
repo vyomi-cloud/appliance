@@ -10,5 +10,5 @@
   "backend": {"kind": "in-process"},
   "suites": ["offline-sdk-java-aws-sts", "offline-sdk-go-aws-sts", "offline-cli-aws-sts",
              "offline-ui-aws-sts", "nano-ui-aws-sts"],
-  "status": "building"
+  "status": "ready"
 }
