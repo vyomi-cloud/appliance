@@ -652,7 +652,7 @@ _LOGGING_WIZARD = _basic_wizard(
             {"name": "destination", "label": "Destination (bucket, dataset, topic or log bucket id)", "default": "my-log-archive", "required": True},
         ]},
         {"label": "Choose logs to include in sink", "fields": [
-            {"name": "filter", "label": "Inclusion filter", "default": "severity>=ERROR"},
+            {"name": "filter", "label": "Inclusion filter", "default": "severity>=WARNING"},
         ]},
     ],
 )
