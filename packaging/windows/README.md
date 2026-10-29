@@ -14,7 +14,7 @@ release:
 1. Download the release source tarball and extract it to `stage\`.
 2. Generate `stage\bin\vyomi.cmd` (the PATH shim → forwards to the launcher).
 3. `dotnet tool install --global wix`
-4. `wix build packaging\windows\cloudlearn.wxs -arch x64 -d Version=<ver> -d StageDir=<abs>\stage -o dist\cloud-learn-<ver>-x64.msi`
+4. `wix build packaging\windows\cloudlearn.wxs -arch x64 -d Version=<ver> -d StageDir=<abs>\stage -o dist\vyomi-<ver>-x64.msi`
 5. (opt-in) sign via Azure Trusted Signing, then attach the MSI to the
    GitHub Release. `winget-submit` (winget-releaser) consumes it.
 
@@ -23,14 +23,14 @@ release:
 ```powershell
 $ver = "2.1.0"
 mkdir stage, stage\bin
-tar -xzf cloud-learn-$ver.tar.gz -C stage --strip-components=1
+tar -xzf vyomi-$ver.tar.gz -C stage --strip-components=1
 '@echo off',
 'powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\scripts\cloud-learn.ps1" %*' |
   Set-Content stage\bin\vyomi.cmd -Encoding ascii
 dotnet tool install --global wix
 wix build packaging\windows\cloudlearn.wxs -arch x64 `
   -d Version=$ver -d "StageDir=$((Resolve-Path stage).Path)" `
-  -o "dist\cloud-learn-$ver-x64.msi"
+  -o "dist\vyomi-$ver-x64.msi"
 ```
 
 ## Runtime expectations

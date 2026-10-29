@@ -281,6 +281,22 @@
       "timeout": 300
     },
     {
+      "id": "nano-ui-azure-metrics",
+      "target": "nano",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-metrics.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "offline-ui-azure-metrics",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/azure node wasm/ui-tests/validate-azure-metrics.mjs",
+      "timeout": 600
+    },
+    {
       "id": "nano-ui-aws-metrics",
       "target": "nano",
       "cloud": "aws",
@@ -342,6 +358,14 @@
       "cloud": "gcp",
       "kind": "ui",
       "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-pubsub-subscriptions.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "nano-ui-gcp-firestore-usage",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-firestore-usage.mjs",
       "timeout": 600
     },
     {
@@ -1743,6 +1767,14 @@
       "kind": "ui",
       "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-monitoring.mjs",
       "timeout": 600
+    },
+    {
+      "id": "nano-ui-aws-secrets-created",
+      "target": "nano",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-secrets-created.mjs",
+      "timeout": 300
     }
   ]
 }

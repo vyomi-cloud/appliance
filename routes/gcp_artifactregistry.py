@@ -128,6 +128,15 @@ def register(app: FastAPI) -> None:
             await run_in_threadpool(_sync_registry)
         r = ar.dispatch(_STORE, request.method, request.url.path, dict(request.query_params),
                         dict(request.headers), body)
+        if r.status == 404 and "/operations/" in request.url.path:
+            # The /operations/{op} path is shared with Kubernetes Engine and Memorystore LROs.
+            from core import gcp_container_core as _gke, gcp_redis_core as _redis
+            for other in (_gke, _redis):
+                r2 = other.dispatch(other.shared_store(), "GET", request.url.path, dict(request.query_params),
+                                    dict(request.headers), body)
+                if r2.status == 200:
+                    r = r2
+                    break
         if request.method != "GET" and r.status < 300:
             _usage("wire", request.url.path)
         return Response(content=r.body, status_code=r.status, media_type=r.media_type)

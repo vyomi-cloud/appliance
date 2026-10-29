@@ -761,6 +761,9 @@ async function route(method, path, body, query) {
   if (go && method === "GET") return { tuple: ["gcp", "_resource", "ListObjects", { service: "storage", body: { bucket: dec(go[1]) } }] };
   go = path.match(/^\/api\/gcp\/storage\/v1\/b\/([^/]+)\/o\/(.+)$/);
   if (go && method === "DELETE") return { tuple: ["gcp", "_resource", "DeleteObject", { service: "storage", body: { bucket: dec(go[1]), key: dec(go[2]) } }] };
+  // Firestore database -> its documents (Usage tab document count)
+  go = path.match(/^\/api\/gcp\/firestore\/v1\/projects\/[^/]+\/databases\/[^/]+\/documents\/?$/);
+  if (go && method === "GET") return { tuple: ["gcp", "_resource", "ListDocuments", { service: "firestore" }] };
   // GCP-only sub-resource routes (additive; AWS/Azure untouched). These serve the
   // detail-view sub-resource tabs (Pub/Sub subscriptions, Cloud SQL databases,
   // Secret Manager / KMS versions) off the proven GCP cores via the shared dispatch.
@@ -856,6 +859,8 @@ function classifyReq(path) {
   const seg = path.split("/").filter(Boolean);
   if (seg[0] === "api" && seg.length >= 3 && ["aws", "gcp", "azure"].includes(seg[1])) return [seg[1], seg[2].toLowerCase()];
   if (seg[0] === "api" && seg.length >= 2 && AWS_API_KEYS.has(seg[1].toLowerCase())) return ["aws", seg[1].toLowerCase()];
+  if (seg[0] === "subscriptions") return ["azure", "arm"];
+  if (seg[0] === "azure-data" && seg.length >= 2) return ["azure", seg[1].toLowerCase()];
   return null;
 }
 async function reqLogLoad() {

@@ -515,6 +515,10 @@ def _resource_op(service, operation, name="", body=None):
         base = f"{_P}/databases/(default)/documents/{COLL}"
         if operation == "List":
             return _ok_list(svc)
+        if operation == "ListDocuments":   # database Usage tab: the documents the database holds
+            st, p = _call(svc, "GET", base)
+            docs = _items(p) if isinstance(p, dict) else []
+            return {"ok": st < 300, "documents": docs, "items": docs}
         if operation == "Create":
             st, p = _call(svc, "POST", base, {"documentId": rid}, {"fields": {}})
             return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "AlreadyExists", "name": rid}

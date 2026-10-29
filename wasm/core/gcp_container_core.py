@@ -32,8 +32,13 @@ RUNNING, PROVISIONING, STOPPING, RECONCILING, ERROR, DEGRADED = (
 REGIONS = ["us-central1", "us-east1", "us-east4", "us-west1", "us-west2", "europe-west1", "europe-west2",
            "europe-west3", "europe-west4", "asia-east1", "asia-northeast1", "asia-south1",
            "asia-southeast1", "australia-southeast1", "southamerica-east1"]
-DEFAULT_VERSION = "1.30.5-gke.1014001"
-VALID_VERSIONS = ["1.31.1-gke.1146000", "1.30.5-gke.1014001", "1.30.4-gke.1348000", "1.29.9-gke.1177000",
+DEFAULT_VERSION = "1.35.9-gke.1505000"
+# Release notes 2026-R46 (Oct 27 2026): these versions are now available; 1.35.8-gke.1919000 is
+# deprecated (still creatable, removed in 90 days) so it is no longer offered in any channel.
+DEPRECATED_VERSIONS = ("1.35.8-gke.1919000",)
+VALID_VERSIONS = ["1.37.1-gke.3020000", "1.36.5-gke.1982000", "1.36.4-gke.2377000", "1.35.9-gke.1505000",
+                  "1.35.8-gke.1975000", "1.35.8-gke.1919000", "1.34.12-gke.1539000", "1.33.13-gke.2207000",
+                  "1.32.13-gke.2906000", "1.31.1-gke.1146000", "1.30.5-gke.1014001", "1.30.4-gke.1348000", "1.29.9-gke.1177000",
                   "1.28.14-gke.1022000"]
 IMAGE_TYPES = ["COS_CONTAINERD", "UBUNTU_CONTAINERD", "COS", "UBUNTU"]
 DEFAULT_IMAGE = "COS_CONTAINERD"
@@ -511,11 +516,12 @@ def _get_op(store, project, location, oid):
 
 
 def server_config(location):
+    offered = [v for v in VALID_VERSIONS if v not in DEPRECATED_VERSIONS]
     return {"defaultClusterVersion": DEFAULT_VERSION, "validNodeVersions": list(VALID_VERSIONS),
             "defaultImageType": DEFAULT_IMAGE, "validImageTypes": list(IMAGE_TYPES),
             "validMasterVersions": list(VALID_VERSIONS),
-            "channels": [{"channel": ch, "defaultVersion": VALID_VERSIONS[i % 3 + 1] if i < 3 else VALID_VERSIONS[3],
-                          "validVersions": VALID_VERSIONS[: 4 - min(i, 2)]} for i, ch in enumerate(CHANNELS)]}
+            "channels": [{"channel": ch, "defaultVersion": offered[i % 3 + 1] if i < 3 else offered[3],
+                          "validVersions": offered[: 4 - min(i, 2)]} for i, ch in enumerate(CHANNELS)]}
 
 
 def job_from_form(b, project="demo"):

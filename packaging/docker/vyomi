@@ -3,7 +3,7 @@
 #
 # Runs the Vyomi simulator via `docker compose` using the pull-only
 # docker-compose.cloudlite.yml shipped in this package. It NEVER installs or
-# touches Multipass / LXD — that's the Max tier (the `cloud-learn`/`vyomi`
+# touches Multipass / LXD — that's the Max tier (the `vyomi`
 # launcher package). Compute (Pro) runs as sibling Docker containers.
 #
 # Usage:  vyomi up | down | restart | status | logs | update | version
@@ -155,9 +155,13 @@ fetch_latest_release() {
   fi
   echo "==> Updating Vyomi ${cur:-?} -> $latest"
   tmp="$(mktemp -d)"; base="https://github.com/$VYOMI_REPO/releases/download/v$latest"
-  tgz="cloud-learn-$latest.tar.gz"
-  if ! curl -fsSL --max-time 300 -o "$tmp/$tgz" "$base/$tgz" || \
-     ! curl -fsSL --max-time 30 -o "$tmp/SHA256SUMS" "$base/SHA256SUMS"; then
+  # The release tarball is vyomi-X.tar.gz (cloud-learn-X.tar.gz before v3.0.33).
+  name=vyomi; tgz="$name-$latest.tar.gz"
+  if ! curl -fsSL --max-time 300 -o "$tmp/$tgz" "$base/$tgz"; then
+    name=cloud-learn; tgz="$name-$latest.tar.gz"
+    curl -fsSL --max-time 300 -o "$tmp/$tgz" "$base/$tgz" || tgz=""
+  fi
+  if [ -z "$tgz" ] || ! curl -fsSL --max-time 30 -o "$tmp/SHA256SUMS" "$base/SHA256SUMS"; then
     echo "vyomi: download of $latest failed; staying on ${cur:-current}." >&2
     rm -rf "$tmp"; return 0
   fi
@@ -168,13 +172,13 @@ fetch_latest_release() {
     echo "vyomi: checksum mismatch for $tgz; staying on ${cur:-current}." >&2
     rm -rf "$tmp"; return 1
   fi
-  tar -xzf "$tmp/$tgz" -C "$tmp" "cloud-learn-$latest/docker-compose.cloudlite.yml"
-  if [ "$(pinned_ver "$tmp/cloud-learn-$latest/docker-compose.cloudlite.yml")" != "$latest" ]; then
+  tar -xzf "$tmp/$tgz" -C "$tmp" "$name-$latest/docker-compose.cloudlite.yml"
+  if [ "$(pinned_ver "$tmp/$name-$latest/docker-compose.cloudlite.yml")" != "$latest" ]; then
     echo "vyomi: release $latest compose file isn't pinned to $latest; staying on ${cur:-current}." >&2
     rm -rf "$tmp"; return 1
   fi
   mkdir -p "$VYOMI_HOME"
-  mv "$tmp/cloud-learn-$latest/docker-compose.cloudlite.yml" "$VYOMI_HOME/docker-compose.cloudlite.yml"
+  mv "$tmp/$name-$latest/docker-compose.cloudlite.yml" "$VYOMI_HOME/docker-compose.cloudlite.yml"
   rm -rf "$tmp"
   COMPOSE_FILE="$VYOMI_HOME/docker-compose.cloudlite.yml"
 }
