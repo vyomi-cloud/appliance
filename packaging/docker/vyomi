@@ -50,7 +50,10 @@ VYOMI_FLAVOUR="${VYOMI_FLAVOUR:-vyomi-docker · Free/Lite/Pro}"
 VYOMI_BREW_FORMULA="${VYOMI_BREW_FORMULA:-vyomi-docker}"
 VYOMI_URL="${VYOMI_URL:-http://localhost:9000}"
 latest_release() {   # newest published release (X.Y.Z), or nothing when offline
-  curl -fsSL --max-time "${1:-15}" "https://api.github.com/repos/$VYOMI_REPO/releases/latest" 2>/dev/null \
+  # GITHUB_TOKEN / GH_TOKEN, when set, lifts GitHub's 60-requests/hour anonymous
+  # limit (shared CI runners and busy office networks hit it).
+  local auth=(); [ -n "${GITHUB_TOKEN:-${GH_TOKEN:-}}" ] && auth=(-H "Authorization: Bearer ${GITHUB_TOKEN:-$GH_TOKEN}")
+  curl -fsSL --max-time "${1:-15}" "${auth[@]}" "https://api.github.com/repos/$VYOMI_REPO/releases/latest" 2>/dev/null \
     | sed -nE 's/.*"tag_name": *"v?([0-9]+\.[0-9]+\.[0-9]+)".*/\1/p' | head -1
 }
 ver_gt() {  # true when $1 is a strictly newer X.Y.Z than $2

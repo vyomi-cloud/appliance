@@ -76,6 +76,9 @@ jobs:
           if docker manifest inspect "vyomi/cloudsim:$VER" >/dev/null 2>&1; then export VYOMI_CLOUDSIM_IMAGE="vyomi/cloudsim:$VER"; fi
           docker compose -f docker-compose.cloudlite.yml -p vyomi pull --quiet
           docker compose -f docker-compose.cloudlite.yml -p vyomi up -d
+          # Second wave, as `vyomi up` does: the heavy backends sit behind the
+          # `full` profile (VictoriaMetrics, Caddy gateway, Valkey, registry, Azurite…).
+          docker compose -f docker-compose.cloudlite.yml -p vyomi --profile full up -d
           docker compose -f docker-compose.cloudlite.yml -p vyomi ps
 
       - name: Check every service comes up and the UI reports it

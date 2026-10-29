@@ -62,7 +62,7 @@ jobs:
     needs: resolve
     runs-on: ubuntu-latest
     container: fedora:40
-    env: { VER: '${{ needs.resolve.outputs.ver }}' }
+    env: { VER: '${{ needs.resolve.outputs.ver }}', GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
     steps:
       - run: dnf install -y -q git tar curl findutils which >/dev/null
       - uses: actions/checkout@v4
@@ -83,7 +83,7 @@ jobs:
   brew:
     needs: resolve
     runs-on: macos-latest
-    env: { VER: '${{ needs.resolve.outputs.ver }}' }
+    env: { VER: '${{ needs.resolve.outputs.ver }}', GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
     steps:
       - uses: actions/checkout@v4
       - name: Tap
