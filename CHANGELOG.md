@@ -4,6 +4,74 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.25] — 2026-10-29
+
+New service release. **14 product fixes** (AWS 11, all clouds 3); 10 reach Nano and 10 reach the offline appliance; 1 test and harness improvements.
+
+### Highlights
+
+- **New service: AWS API Gateway V2, in Nano and offline.** It now has a working data plane with live routes, Lambda proxy (1.0 and 2.0), JWT and Lambda authorizers, throttling, CORS and HTTP proxy, plus a console, Go SDK and CLI coverage.
+- **Boot screens for `vyomi up` and Nano.** Launching now shows a dot-matrix VYOMI banner with the real launch steps as they happen.
+- **The same launch view in every launcher.** Max (Multipass) and Windows now show the same launch view as the rest (offline appliance).
+- **Nano tunnel is stable.** It no longer loops between connecting and disconnecting.
+- **Fewer Nano console errors.** A stray script that failed on Nano's page is gone, and newer Nano cores for Azure and GCP are no longer overwritten.
+- **Console matches the real AWS console.** Routes and Authorization now show blank where the real console does, such as a route with no authorizer (offline appliance).
+
+### New services
+
+- **AWS API Gateway V2**
+
+### Fixes — AWS
+
+- **[Nano + offline]** Real data plane on the shared Caddy gateway (live routes, Lambda proxy 1.0/2.0, JWT/Lambda authorizers, throttling, CORS, HTTP proxy); repair merge of main
+- **[Nano]** Drop the shipped lazy_backends.js (main removed the include; the script threw on Nano's DOM)
+- **[Nano]** Don't regress main's newer Nano cores (azure_arm/gcp_kms/gcp_storage/nano_*); patch now applies to the portal copy
+- **[offline]** Declare Routes/Authorization blank (real console shows - with no authorizer)
+- **[Nano]** Ship assets/lazy_backends.js in the Nano bundle (consoles referenced it; crawl 404)
+- **[offline]** Declare in-process backend, mark ready
+- **[Nano + offline]** Nano console (SW routes, adapter, census cost savings), hourly suites, tracked upstream, registry + manifest
+- **[offline]** Offline console Playwright test + rail entry
+- **[Nano + offline]** Console REST, catalog, sub-blades, cost model, shared store
+- **[Nano + offline]** Go SDK + CLI test beds; drop non-modelled delete conflicts
+- **[Nano + offline]** Engine core + native /v2 wire + Nano vendoring + core test
+
+### Fixes — all clouds
+
+- **[offline]** The same launch view in every launcher — Max (Multipass) and Windows too
+- **[Nano + offline]** Boot screens — dot-matrix VYOMI + real launch steps for `vyomi up` and Nano
+- **[Nano]** Tunnel no longer loops connecting/disconnecting
+
+<details><summary>Platform and release pipeline (15)</summary>
+
+- User-reported issues are fixed first and closed when the fix ships
+- Platform-feature lane, highest priority in the service pipeline
+- Real release notes and a README 'Latest release' on every release
+- Never gate or auto-merge backend-upgrade PRs
+- Backend-upgrade lane — rebuild existing PR stacks onto main for human review
+- Drop Snap for good — delete packaging/snap
+- Daily PR gets its own concurrency group
+- Crawler recovers when a dialog blocks the service rail
+- Blanks the real console also shows are declared, not invented
+- Let the Claude agent run in self-chained runs (allowed_bots: github-actions)
+- Detect Claude usage limits from the agent's final result only
+- Cheap, permissively licensed offline backends, gate-enforced
+- Pipeline page covers every published AWS/GCP/Azure service (P3 folded per cloud)
+- Nano and offline ship new services together, feature-identical
+- Service pipeline page — per-cloud grid of gate, release and hourly/upstream hand-off
+
+</details>
+
+<details><summary>Test and harness improvements (1)</summary>
+
+- Java SDK test bed
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.25`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.24] — 2026-10-29
 
 Daily conformance release. **56 product fixes** (AWS 24, GCP 12, Azure 11, all clouds 9); 30 reach Nano and 41 reach the offline appliance; 17 test and harness improvements.
