@@ -1165,7 +1165,9 @@ async function openDetail(svc, item){
   document.getElementById("bladeTitle").textContent=item.name;
   const body=document.getElementById("bladeBody"); body.innerHTML="";
   // refetch for freshest
-  const res=await arm("GET", resPath(svc,item.name), undefined, svc.apiVersion);
+  // Data-plane services (blob containers, Cosmos DBs, KV secrets/keys, queues) have no ARM
+  // namespace/type: the list record from /api/azure/{key} is the resource.
+  const res=svc.dataPlane ? {ok:false} : await arm("GET", resPath(svc,item.name), undefined, svc.apiVersion);
   const full=(res.ok&&res.json)?res.json:item;
 
   // VM action toolbar (Phase A) — sits ABOVE the sub-nav layout so it's always
