@@ -181,6 +181,24 @@ def capture_registry() -> dict:
     return capture(nano_registry.get())
 
 
+def health_registry() -> dict:
+    """Live engine check for the Service status cards (wasm/sw.js /api/runtime/readiness):
+    every store in this runtime's registry must be built and its state must read back
+    through the same snapshot persistence uses. {store: {"ok", "engine"[, "error"]}}."""
+    from core import nano_registry
+    out = {}
+    for name, st in nano_registry.get().items():
+        engine = type(st).__name__ if st is not None else ""
+        try:
+            if st is None:
+                raise RuntimeError("not built")
+            capture_store(st)
+            out[name] = {"ok": True, "engine": engine}
+        except Exception as e:
+            out[name] = {"ok": False, "engine": engine, "error": f"{type(e).__name__}: {e}"[:200]}
+    return out
+
+
 def restore_registry(blob: dict) -> None:
     """Restore a snapshot into the shared in-context registry (JS calls on boot /
     on a cross-context 'changed' notification)."""

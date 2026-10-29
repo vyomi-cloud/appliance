@@ -189,6 +189,21 @@ def _disp(payload_json):
 import builtins; builtins._disp = _disp
 `);
   st.ok();
+  // ── Live engine status (Dashboard > Service status) ─────────────────
+  // This runtime checks every registry store (built + state reads back) and
+  // records the result; the SW's /api/runtime/readiness builds the cards from
+  // the fresh reports, so a card is "ready" only when an engine really is.
+  async function writeEngines() {
+    const key = "engines:" + (CONSOLE_PROVIDER || "page");
+    try {
+      const stores = JSON.parse(py.runPython("import json\nfrom core import nano_persist as _np\njson.dumps(_np.health_registry())"));
+      await nbMetaPut(key, { ts: Date.now(), stores });
+    } catch (e) {
+      try { await nbMetaPut(key, { ts: Date.now(), error: String(e && e.message || e).slice(0, 200) }); } catch (_) {}
+    }
+  }
+  writeEngines(); setInterval(writeEngines, 30000);
+
   const dispatch = (prov, svc, op, params) =>
     JSON.parse(py.runPython(
       `_disp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));

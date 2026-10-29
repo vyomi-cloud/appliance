@@ -1,0 +1,182 @@
+[
+ {
+  "name": "runtime",
+  "label": "Pyodide runtime",
+  "category": "core"
+ },
+ {
+  "name": "s3",
+  "label": "s3 \u00b7 InMemoryObjectStore",
+  "category": "aws"
+ },
+ {
+  "name": "ddb",
+  "label": "ddb \u00b7 InMemoryNoSqlStore",
+  "category": "aws"
+ },
+ {
+  "name": "kms",
+  "label": "kms \u00b7 InMemoryKeyStore",
+  "category": "aws"
+ },
+ {
+  "name": "sec",
+  "label": "sec \u00b7 InMemoryKvStore",
+  "category": "aws"
+ },
+ {
+  "name": "rds",
+  "label": "rds \u00b7 InMemorySqlStore",
+  "category": "aws"
+ },
+ {
+  "name": "iam",
+  "label": "iam \u00b7 InMemoryIamStore",
+  "category": "aws"
+ },
+ {
+  "name": "msg",
+  "label": "msg \u00b7 InMemoryMessagingStore",
+  "category": "aws"
+ },
+ {
+  "name": "kinesis",
+  "label": "kinesis \u00b7 KinesisStore",
+  "category": "aws"
+ },
+ {
+  "name": "apigwv2",
+  "label": "apigwv2 \u00b7 ApiGwV2Store",
+  "category": "aws"
+ },
+ {
+  "name": "logs",
+  "label": "logs \u00b7 LogsStore",
+  "category": "aws"
+ },
+ {
+  "name": "elbv2",
+  "label": "elbv2 \u00b7 Elbv2Store",
+  "category": "aws"
+ },
+ {
+  "name": "ssm",
+  "label": "ssm \u00b7 SsmStore",
+  "category": "aws"
+ },
+ {
+  "name": "sfn",
+  "label": "sfn \u00b7 StepFunctionsStore",
+  "category": "aws"
+ },
+ {
+  "name": "gcs",
+  "label": "gcs \u00b7 InMemoryObjectStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_fs",
+  "label": "gcp_fs \u00b7 FirestoreStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_kms",
+  "label": "gcp_kms \u00b7 InMemoryKeyStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_sec",
+  "label": "gcp_sec \u00b7 InMemoryKvStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_gke",
+  "label": "gcp_gke \u00b7 ContainerStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_mon",
+  "label": "gcp_mon \u00b7 MonitoringStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_redis",
+  "label": "gcp_redis \u00b7 RedisStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_iamc",
+  "label": "gcp_iamc \u00b7 IamCredentialsStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_sched",
+  "label": "gcp_sched \u00b7 CloudSchedulerStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_msg",
+  "label": "gcp_msg \u00b7 InMemoryMessagingStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_iam",
+  "label": "gcp_iam \u00b7 InMemoryIamStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_sql",
+  "label": "gcp_sql \u00b7 InMemorySqlStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_ar",
+  "label": "gcp_ar \u00b7 ArtifactRegistryStore",
+  "category": "gcp"
+ },
+ {
+  "name": "az_blob",
+  "label": "az_blob \u00b7 AzureBlobStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_cosmos",
+  "label": "az_cosmos \u00b7 CosmosStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_kvsec",
+  "label": "az_kvsec \u00b7 InMemoryKvStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_kvkeys",
+  "label": "az_kvkeys \u00b7 InMemoryKeyStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_queue",
+  "label": "az_queue \u00b7 AzureQueueStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_sb",
+  "label": "az_sb \u00b7 InMemoryMessagingStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_arm",
+  "label": "az_arm \u00b7 AzureArm",
+  "category": "azure"
+ },
+ {
+  "name": "events",
+  "label": "events \u00b7 EventStore",
+  "category": "core"
+ },
+ {
+  "name": "cw",
+  "label": "cw \u00b7 CloudWatchStore",
+  "category": "aws"
+ }
+]

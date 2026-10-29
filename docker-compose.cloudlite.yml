@@ -75,6 +75,7 @@ services:
       CLOUDLEARN_NATS_URL: nats://vyomi-nats:4222
       CLOUDLEARN_VALKEY_HOST: vyomi-valkey
       CLOUDLEARN_REGISTRY_HOST: vyomi-registry
+      VYOMI_GATEWAY_ADMIN: http://vyomi-gateway:2019
       CLOUDLEARN_VICTORIAMETRICS_URL: http://vyomi-victoriametrics:8428
       CLOUDLEARN_VALKEY_PORT: "6379"
       CLOUDLEARN_MINIO_URL: http://vyomi-minio:9000

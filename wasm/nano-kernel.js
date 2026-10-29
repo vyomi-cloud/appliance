@@ -25,18 +25,20 @@
   try { off = off || localStorage.getItem("vyomi.nano.kernel") === "off"; } catch (_) {}
   if (navigator.webdriver && params.get("kernel") !== "1") off = true;   // never in the way of UI tests
 
-  // Once per launch, not per page: only the first Nano page shows it. Every page
-  // after that (a space click, a console, a reload, another tab) skips it while
-  // any Nano page stays open; each open page refreshes SEEN every minute, so a
-  // new launch = no Nano page open for LAUNCH_GAP_MS. The one service-worker
-  // reload of the first boot still shows it (its log is carried in KEY).
-  var SEEN = "vyomi.nano.kernel.seen", LAUNCH_GAP_MS = 30 * 60 * 1000;
+  // Once per launch, not per page. A launch = opening Nano when no Nano page has been
+  // open for LAUNCH_GAP_MS: open pages refresh SEEN every 3 s and on leaving, so a
+  // space click, a console, a reload or another tab (all within seconds) skip it,
+  // and closing Nano then reopening it shows it again. The page loads of one launch
+  // (/nano/ -> clouds.html -> the service worker's reload) carry the screen and its
+  // log (KEY) to the next page until the dashboard is ready.
+  var SEEN = "vyomi.nano.kernel.seen", LAUNCH_GAP_MS = 10 * 1000;
   var carrying = false, last = 0;
   try { carrying = !!sessionStorage.getItem(KEY); } catch (_) {}
   try { last = +localStorage.getItem(SEEN) || 0; } catch (_) {}
   if (!carrying && params.get("kernel") !== "1" && Date.now() - last < LAUNCH_GAP_MS) off = true;
   function seen() { try { localStorage.setItem(SEEN, String(Date.now())); } catch (_) {} }
-  seen(); setInterval(seen, 60000);
+  seen(); setInterval(seen, 3000);
+  window.addEventListener("pagehide", seen);
   var reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // 5x7 dot-matrix font for the wordmark.
@@ -120,6 +122,9 @@
     if (carried) {
       carried.lines.forEach(function (x) { line(x.cls, x.mark, x.key, x.text, x.detail, x.at); });
     }
+    // Left before boot finished (a redirect or the service-worker reload): the next
+    // page of this launch picks the screen up where it stopped.
+    window.addEventListener("pagehide", function () { if (!done) carry(); });
     function skip() { close(true); }
     function onKey(e) { if (e.key === "Escape") skip(); }
     root.addEventListener("click", skip);
@@ -127,6 +132,13 @@
     var guard = setTimeout(function () {                // never trap the user behind it
       if (!done) line("nk-run", "…", "kernel", "taking longer than usual; the page keeps loading underneath", "Esc to continue");
     }, 30000);
+    function carry() {
+      var lines = [].map.call(log.children, function (l) {
+        return { cls: l.className.replace("nk-l ", ""), mark: l.children[1].textContent, key: l.children[2].textContent,
+                 text: l.children[3].textContent, detail: l.children[4].textContent, at: l.children[0].textContent };
+      });
+      try { sessionStorage.setItem(KEY, JSON.stringify({ at: Date.now(), elapsed: now(), lines: lines })); } catch (_) {}
+    }
     function close(now_) {
       if (done) return; done = true; clearTimeout(guard);
       document.removeEventListener("keydown", onKey);
@@ -145,13 +157,7 @@
         };
       },
       info: function (key, text, detail) { line("nk-ok", "·", key, text, detail); },
-      carry: function () {
-        var lines = [].map.call(log.children, function (l) {
-          return { cls: l.className.replace("nk-l ", ""), mark: l.children[1].textContent, key: l.children[2].textContent,
-                   text: l.children[3].textContent, detail: l.children[4].textContent, at: l.children[0].textContent };
-        });
-        try { sessionStorage.setItem(KEY, JSON.stringify({ at: Date.now(), elapsed: now(), lines: lines })); } catch (_) {}
-      },
+      carry: carry,
       ready: function (text) { line("nk-ok", "✓", "ready", text || "ready", secs(now())); close(false); },
       fail: function (err) { line("nk-err", "✗", "kernel", "boot failed: " + String(err && err.message || err), "Esc to continue"); }
     };

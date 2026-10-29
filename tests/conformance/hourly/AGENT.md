@@ -97,6 +97,14 @@ in the prompt and in `$SLICE`). Each has its own appliance stack and relay.
    functions), finishing a service's tabs before moving on; each one gets a
    Playwright check that the tab shows the resource's data and a saved edit
    survives a reload.
+   These arrive as findings: `PLACEHOLDER_PANE` (a "This pane mirrors…", "Not yet
+   wired", fixed Activity/Permissions sentence or a value marked "(simulated)") and
+   `STATIC_TAB` / `STATIC_DETAIL` (no API call and nothing about the resource). They
+   are cleared only by real data: never by rewording or hiding the text, adding an
+   API call whose result the tab doesn't show, or printing the resource name above
+   generic content. Activity = this resource's real events (`/api/cloudsim/events`,
+   Nano `nano_events`); Permissions = the real IAM bindings that apply to it;
+   Metrics = recorded series (`/api/metrics/series`), not synthesized curves.
 4. **Upstream changes** (`upstream_issues.json`): keep Vyomi faithful to the
    real clouds. Oldest first, prefer lifecycle (deprecation/retirement) and
    changed/removed operations over brand-new operations. Implement or adapt in

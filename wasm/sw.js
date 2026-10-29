@@ -134,25 +134,17 @@ const STUBS = {
   "/api/rds/parameter-groups": { parameter_groups: [] },
 };
 
-// Nano's in-WASM "backends" — the analogue of the appliance's OSS services
-// (MinIO/DynamoDB-Local/Vault/... → in-browser cores). Grouped by the same
-// Core/AWS/GCP/Azure categories the readiness strip tiles by. All are always
-// "ready" (one Pyodide runtime, nothing to boot). service-metrics maps live
-// CPU/RAM onto these `name`s from the census + WASM heap.
-const NANO_SERVICES = [
-  { name: "runtime",        label: "Pyodide runtime",     category: "core" },
-  { name: "router",         label: "Conformance router",  category: "core" },
-  { name: "s3",             label: "ObjectStore (S3)",    category: "aws" },
-  { name: "dynamodb",       label: "NoSQL (DynamoDB)",    category: "aws" },
-  { name: "kms",            label: "KMS engine",          category: "aws" },
-  { name: "secretsmanager", label: "Secrets (KV)",        category: "aws" },
-  { name: "sqs",            label: "Messaging (SQS/SNS)", category: "aws" },
-  { name: "cloudwatch",     label: "CloudWatch",          category: "aws" },
-  { name: "iam",            label: "IAM",                 category: "aws" },
-  { name: "rds",            label: "SqlStore (RDS)",      category: "aws" },
-  { name: "gcp",            label: "ResourceStore (GCP)", category: "gcp" },
-  { name: "azure",          label: "ARM (Azure)",         category: "azure" },
-];
+// Nano's backend services for the readiness ribbon + Service status cards: the engine
+// stores core/nano_registry.py builds, listed in fixtures/nano-backends.json by
+// wasm/build_cores.py (CI fails if it's stale), plus the Pyodide runtime.
+let _NANO_BACKENDS = null;
+async function nanoBackends() {
+  if (!_NANO_BACKENDS) {
+    try { _NANO_BACKENDS = await (await fetch(FIX + "/nano-backends.json", { cache: "no-store" })).json(); }
+    catch (_) { return []; }
+  }
+  return _NANO_BACKENDS;
+}
 
 function json(obj, status, extraHeaders) {
   return new Response(obj === null ? "" : JSON.stringify(obj),
@@ -987,9 +979,11 @@ self.addEventListener("fetch", (event) => {
       if (apiPath === "/api/runtime/host-distribution" && method === "GET") {
         // ── Live per-cloud footprint ──────────────────────────────────
         // Console pages census their in-browser backend and persist it to the
-        // "meta" store (see nano-boot.writeCensus). A census is "fresh" only
-        // while its console is open (rewritten every 5s); after TTL we drop it
-        // so the pies reflect LIVE sessions, not stale ghosts.
+        // "meta" store (see nano-boot.writeCensus: every 5 s and on leaving).
+        // Resources persist across sessions (nano_persist -> IndexedDB, restored
+        // on the next boot), so each cloud's LATEST census is its footprint even
+        // when no console is open; only the open-console count (sessions) and the
+        // live WASM heap need a fresh census.
         const CENSUS_TTL = 60000;
         const now = Date.now();
         const live = { aws: { vcpus: 0, ram_mb: 0, disk_mb: 0, resources: 0, vms: 0 },
@@ -998,17 +992,14 @@ self.addEventListener("fetch", (event) => {
         let sessions = 0, liveResources = 0, heap = 0, freshest = 0;
         for (const p of ["aws", "gcp", "azure"]) {
           let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
-          if (!c || typeof c.ts !== "number" || (now - c.ts) >= CENSUS_TTL) continue;
+          if (!c || typeof c.ts !== "number") continue;
           live[p].vcpus = c.vcpus || 0; live[p].ram_mb = c.ram_mb || 0;
           live[p].disk_mb = c.disk_mb || 0; live[p].resources = c.resources || 0;
           live[p].vms = c.vms || 0; live[p].by_service = c.by_service || {};
-          sessions++; liveResources += c.resources || 0;
-          heap += c.wasm_heap_bytes || 0; freshest = Math.max(freshest, c.ts);
+          live[p].as_of = new Date(c.ts).toISOString();
+          liveResources += c.resources || 0; freshest = Math.max(freshest, c.ts);
+          if ((now - c.ts) < CENSUS_TTL) { sessions++; heap += c.wasm_heap_bytes || 0; }
         }
-        // Always report the live footprint so the three CPU/RAM/Disk pies stay
-        // visible. Only FRESH censuses count (a closed console's resources are
-        // ephemeral) — so with no live console the pies honestly show an empty
-        // state ("open a console…") rather than ghosts or a misleading estimate.
         return json({ providers: live, grand_total_resources: liveResources,
                       basis: "resources",
                       runtime: { wasm_heap_bytes: heap, sessions, ts: freshest } });
@@ -1031,15 +1022,39 @@ self.addEventListener("fetch", (event) => {
       // Service status (readiness-strip.js) — the Nano cores are always ready
       // (one Pyodide runtime, nothing to boot), grouped Core/AWS/GCP/Azure.
       if (apiPath === "/api/runtime/readiness" && method === "GET") {
-        const services = NANO_SERVICES.map((s) => ({ ...s, status: "ready" }));
-        const by_category = {};
-        for (const s of services) {
-          const c = (by_category[s.category] = by_category[s.category] || { ready: 0, total: 0, pct: 100 });
-          c.ready++; c.total++;
+        // Real status: the engines run inside a Pyodide runtime (a console tab or the
+        // relay worker), which checks every registry store every 30 s (nano-boot.js /
+        // relay-shared-worker.js -> nano_persist.health_registry). A report older than
+        // 90 s means that runtime is gone. No live runtime -> the engines aren't running.
+        const now = Date.now(), FRESH_MS = 90000, ok = {}, err = {};
+        let live = 0, checked = 0;
+        for (const ctx of ["aws", "gcp", "azure", "page", "relay"]) {
+          let r = null; try { r = await metaGet("engines:" + ctx); } catch (_) {}
+          if (!r || typeof r.ts !== "number" || now - r.ts > FRESH_MS) continue;
+          live++; checked = Math.max(checked, r.ts);
+          if (r.error) { err["*"] = r.error; continue; }
+          for (const [k, v] of Object.entries(r.stores || {})) {
+            if (v && v.ok) ok[k] = true; else if (!ok[k]) err[k] = (v && v.error) || "failed";
+          }
         }
-        return json({ ready: true, status: "ready", percent: 100, overall_pct: 100,
-                      ready_count: services.length, total_count: services.length,
-                      by_category, services });
+        const services = (await nanoBackends()).map((s) => {
+          if (!live) return { ...s, status: "idle" };
+          if (err["*"]) return { ...s, status: "error", error: err["*"] };
+          if (s.name === "runtime" || ok[s.name]) return { ...s, status: "ready" };
+          return { ...s, status: "error", error: err[s.name] || "not reported by the runtime" };
+        });
+        const by_category = {};
+        let rc = 0;
+        for (const s of services) {
+          const c = (by_category[s.category] = by_category[s.category] || { ready: 0, total: 0, pct: 0 });
+          c.total++; if (s.status === "ready") { c.ready++; rc++; }
+          c.pct = Math.round(100 * c.ready / c.total);
+        }
+        const all = rc === services.length;
+        return json({ ready: all, status: live ? (all ? "ready" : "degraded") : "idle",
+                      percent: Math.round(100 * rc / services.length), overall_pct: Math.round(100 * rc / services.length),
+                      ready_count: rc, total_count: services.length, live_runtimes: live,
+                      checked_at: checked ? new Date(checked).toISOString() : null, by_category, services });
       }
       // Per-service live CPU/RAM for the Service-status tiles. Derived from the
       // live census (real resource counts per service) + the real WASM heap — so
@@ -1061,7 +1076,7 @@ self.addEventListener("fetch", (event) => {
                            : s.category === "gcp" ? ((cen.gcp && cen.gcp.resources) || 0)
                            : s.category === "azure" ? ((cen.azure && cen.azure.resources) || 0) : 0;
         const services = {};
-        for (const s of NANO_SERVICES) {
+        for (const s of await nanoBackends()) {
           if (s.name === "runtime") {
             // Real WASM linear heap as % of a 512 MiB visual budget.
             services.runtime = { cpu_pct: r1(Math.min(60, 4 + totalRes * 1.5)),

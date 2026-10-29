@@ -15,6 +15,7 @@ Cores vendored (each green on host CPython AND Pyodide via tests/conformance/):
 
 Run:  python3 wasm/build_cores.py   (part of the bundle build, with build_fixtures.py)
 """
+import json
 import os
 import ast
 import re
@@ -181,6 +182,53 @@ def _expansion_cores():
     return out
 
 
+NANO_BACKENDS = os.path.join(HERE, "fixtures", "nano-backends.json")
+
+
+def _category(store):
+    if store.startswith("gcp_") or store == "gcs":
+        return "gcp"
+    if store.startswith("az_"):
+        return "azure"
+    return "core" if store == "events" else "aws"
+
+
+def nano_backends():
+    """Nano's backend services = the engine stores core/nano_registry.py builds (plain
+    state namespaces aren't backends), plus the Pyodide runtime they run in. Written to
+    fixtures/nano-backends.json for the Service status cards (wasm/sw.js), so the list
+    is the registry's own, release after release."""
+    import importlib
+    import types
+    sys.path.insert(0, HERE)
+    for m in [m for m in sys.modules if m == "core" or m.startswith("core.")]:
+        del sys.modules[m]
+    reg = importlib.import_module("core.nano_registry").get()
+    out = [{"name": "runtime", "label": "Pyodide runtime", "category": "core"}]
+    for key, store in reg.items():
+        if isinstance(store, types.SimpleNamespace):
+            continue
+        out.append({"name": key, "label": f"{key} · {type(store).__name__}", "category": _category(key)})
+    return out
+
+
+def write_nano_backends():
+    with open(NANO_BACKENDS, "w") as f:
+        json.dump(nano_backends(), f, indent=1)
+        f.write("\n")
+
+
+def check_nano_backends():
+    want = nano_backends()
+    try:
+        have = json.load(open(NANO_BACKENDS))
+    except (OSError, ValueError):
+        have = None
+    if have != want:
+        sys.exit("wasm/fixtures/nano-backends.json is stale: run python3 wasm/build_cores.py")
+    print(f"nano-backends.json lists all {len(want)} Nano backends \u2713")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     verbatim = _expansion_cores()
@@ -195,10 +243,12 @@ def main():
             f.write(src if name in verbatim else HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
     check_relay_cores()   # fail loudly if a relay loader lags the cores
+    write_nano_backends()
 
 
 if __name__ == "__main__":
-    if "--check" in sys.argv:          # CI: verify the relay loaders only, write nothing
+    if "--check" in sys.argv:          # CI: verify the relay loaders + backend list, write nothing
         check_relay_cores()
+        check_nano_backends()
     else:
         main()
