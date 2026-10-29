@@ -420,6 +420,71 @@ def register(app: FastAPI) -> None:
         ctx.record_usage(f"lambda.update_{section.replace('-', '_')}", {"function_name": name, "resource_id": name})
         return {"function_name": name, "section": section, **out}
 
+    # ── IAM account tabs: identity providers, password policy, Access Analyzer ──
+    def _shared_resources() -> list:
+        """Resource-based policies in the account (what Access Analyzer evaluates)."""
+        out = []
+        for name, b in ctx.buckets.items():
+            if isinstance(b, dict) and b.get("policy"):
+                out.append({"type": "AWS::S3::Bucket", "arn": f"arn:aws:s3:::{name}", "policy": b["policy"]})
+        try:
+            from routes import aws_lambda as L
+            for fn in L._lambda_list_functions():
+                if fn.get("permissions"):
+                    out.append({"type": "AWS::Lambda::Function", "arn": fn.get("function_arn", ""), "policy": D.lambda_policy_document(fn)})
+        except Exception:
+            pass
+        for r in ctx.iam_state.get("roles", {}).values():
+            doc = r.get("assume_role_policy_document")
+            if doc:
+                out.append({"type": "AWS::IAM::Role", "arn": r.get("arn") or f"arn:aws:iam::{ctx.AWS_ACCOUNT_ID}:role/{r.get('role_name')}",
+                            "policy": doc})
+        return out
+
+    def _iam_section(section: str) -> dict:
+        st, acct = ctx.iam_state, ctx.AWS_ACCOUNT_ID
+        if section == "identity-providers":
+            return {"identity_providers": D.iam_identity_providers(st.setdefault("identity_providers", {}), acct)}
+        if section == "password-policy":
+            return D.iam_password_policy(st.setdefault("account_settings", {}))
+        if section == "access-analyzer":
+            an = st.setdefault("access_analyzers", [])
+            return {"analyzers": D.iam_analyzers(an), "findings": D.access_findings(acct, _shared_resources()) if an else []}
+        raise HTTPException(404, detail={"code": "NoSuchEntity", "message": f"Unknown IAM section {section}"})
+
+    @app.get("/api/iam/detail/{section}")
+    def iam_section(section: str):
+        return _iam_section(section)
+
+    @app.put("/api/iam/detail/{section}")
+    async def iam_update(section: str, request: Request):
+        st, acct = ctx.iam_state, ctx.AWS_ACCOUNT_ID
+        b = await _body(request)
+        try:
+            if section == "identity-providers":
+                if b.get("action") == "delete":
+                    if st.setdefault("identity_providers", {}).pop(str(b.get("provider_id") or ""), None) is None:
+                        raise D.DetailError("NoSuchEntity", "Identity provider not found.", 404)
+                else:
+                    D.iam_create_identity_provider(st.setdefault("identity_providers", {}), b, acct)
+            elif section == "password-policy":
+                D.iam_update_password_policy(st.setdefault("account_settings", {}), b)
+            elif section == "access-analyzer":
+                an = st.setdefault("access_analyzers", [])
+                if b.get("action") == "delete":
+                    st["access_analyzers"] = [a for a in an if a["name"] != b.get("name")]
+                else:
+                    D.iam_create_analyzer(an, b.get("name"), acct)
+            else:
+                raise D.DetailError("NoSuchEntity", f"Unknown IAM section {section}", 404)
+        except D.DetailError as e:
+            _fail(e)
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, detail={"code": "ValidationError", "message": str(e)})
+        ctx.persist_state()
+        ctx.record_usage(f"iam.update_{section.replace('-', '_')}", {"section": section})
+        return _iam_section(section)
+
     # ── Permissions tab (every service): identity policies covering a resource ──
     @app.get("/api/aws/resource-access")
     def resource_access(arn: str, service: str):

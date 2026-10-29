@@ -114,11 +114,11 @@ _IAM_SUB = [
         {"key": "groups",      "label": "User groups",           "icon": "group",           "type": "iamGroups"},
         {"key": "roles",       "label": "Roles",                 "icon": "badge",           "type": "iamRoles"},
         {"key": "policies",    "label": "Policies",              "icon": "policy",          "type": "iamPolicies"},
-        {"key": "providers",   "label": "Identity providers",    "icon": "verified_user",   "type": "stub"},
+        {"key": "providers",   "label": "Identity providers",    "icon": "verified_user",   "type": "iamProviders"},
     ]},
     {"group": "Account settings", "items": [
-        {"key": "passwordPolicy","label":"Password policy",       "icon": "vpn_key",         "type": "stub"},
-        {"key": "accessAdvisor","label":"Access Analyzer",        "icon": "find_in_page",    "type": "stub"},
+        {"key": "passwordPolicy","label":"Password policy",       "icon": "vpn_key",         "type": "iamPasswordPolicy"},
+        {"key": "accessAdvisor","label":"Access Analyzer",        "icon": "find_in_page",    "type": "iamAccessAnalyzer"},
     ]},
 ]
 

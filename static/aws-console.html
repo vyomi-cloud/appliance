@@ -4128,6 +4128,70 @@ SUB_RENDERERS.lambdarole = async function(svc, full, host){
     el("button",{class:"btn primary",onclick:()=>_lamput(full, "role", {role:r.value}, "Execution role updated")}, icon("save"), "Save")));
 };
 
+// ── IAM account tabs (GET/PUT /api/iam/detail/{section}). ──
+async function _iamput(section, body, okMsg){
+  const r = await api("PUT", "/api/iam/detail/" + section, body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Update failed: " + _derr(r), "err"); return false;
+}
+SUB_RENDERERS.iamproviders = async function(svc, full, host){
+  const j = await _dget(host, "/api/iam/detail/identity-providers"); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Identity providers (" + j.identity_providers.length + ")"),
+    _dtbl([["provider_name","Provider"],["provider_type","Type"],["arn","ARN",1],[r => (r.audiences || []).join(", ") || r.url || "","Audience / URL",1],["created","Creation time"],
+      [r => el("button",{class:"btn",onclick:()=>_iamput("identity-providers", {action:"delete", provider_id:r.provider_id}, "Provider deleted")}, "Delete"),"Actions"]],
+      j.identity_providers, "No identity providers in account " + ACCOUNT + "."));
+  const f = {t:el("select",{}, el("option",{value:"OIDC"}, "OpenID Connect"), el("option",{value:"SAML"}, "SAML")), n:el("input",{placeholder:"MySAMLProvider"}),
+    u:el("input",{placeholder:"https://token.actions.githubusercontent.com","data-testid":"idp-url"}), a:el("input",{placeholder:"sts.amazonaws.com","data-testid":"idp-aud"}),
+    m:el("textarea",{placeholder:"<EntityDescriptor …>",style:"width:100%;min-height:60px"})};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Add provider"), _field("Provider type", f.t), _field("Provider name (SAML)", f.n),
+    _field("Provider URL (OIDC)", f.u), _field("Audience (OIDC)", f.a), _field("Metadata document (SAML)", f.m),
+    el("button",{class:"btn primary","data-testid":"idp-add",onclick:()=>_iamput("identity-providers", {provider_type:f.t.value, provider_name:f.n.value, url:f.u.value,
+      audiences:_csv(f.a.value), saml_metadata_document:f.m.value}, "Provider added")}, icon("add"), "Add provider"));
+  host.append(card);
+};
+SUB_RENDERERS.iampasswordpolicy = async function(svc, full, host){
+  const p = await _dget(host, "/api/iam/detail/password-policy"); if (!p) return;
+  host.append(_dkv("Password policy" + (p.custom ? "" : " (IAM default)"), [["Minimum password length", p.minimum_length + " characters"],
+    ["Require at least one uppercase letter", p.require_uppercase ? "Yes" : "No"], ["Require at least one lowercase letter", p.require_lowercase ? "Yes" : "No"],
+    ["Require at least one number", p.require_numbers ? "Yes" : "No"], ["Require at least one non-alphanumeric character", p.require_symbols ? "Yes" : "No"],
+    ["Password expiration", p.max_password_age ? "Expire after " + p.max_password_age + " days" : "Never expire"],
+    ["Prevent password reuse", p.password_reuse_prevention ? "Remember " + p.password_reuse_prevention + " passwords" : "Not enforced"],
+    ["Allow users to change their own password", p.allow_users_to_change_password ? "Yes" : "No"]]));
+  const card = el("div",{class:"kv-card"}); card.append(el("div",{class:"h"}, "Edit password policy"));
+  const inp = {minimum_length:el("input",{type:"number",min:"6",max:"128",value:p.minimum_length,"data-testid":"pwd-min"}),
+    max_password_age:el("input",{type:"number",min:"0",max:"1095",value:p.max_password_age}), password_reuse_prevention:el("input",{type:"number",min:"0",max:"24",value:p.password_reuse_prevention})};
+  const cbs = {};
+  [["require_uppercase","Require at least one uppercase letter"],["require_lowercase","Require at least one lowercase letter"],["require_numbers","Require at least one number"],
+   ["require_symbols","Require at least one non-alphanumeric character"],["allow_users_to_change_password","Allow users to change their own password"]].forEach(([k, l]) => {
+    cbs[k] = el("input",{type:"checkbox"}); if (p[k]) cbs[k].checked = true; card.append(el("label",{class:"check",style:"display:flex;gap:8px;margin:4px 0"}, cbs[k], el("span",{}, l))); });
+  card.append(_field("Minimum password length", inp.minimum_length), _field("Expire passwords after (days, 0 = never)", inp.max_password_age),
+    _field("Remember previous passwords (0 = off)", inp.password_reuse_prevention),
+    el("button",{class:"btn primary","data-testid":"pwd-save",onclick:()=>_iamput("password-policy", {...Object.fromEntries(Object.entries(inp).map(([k, i]) => [k, i.value])),
+      ...Object.fromEntries(Object.entries(cbs).map(([k, c]) => [k, c.checked]))}, "Password policy saved")}, icon("save"), "Save changes"));
+  host.append(card);
+};
+SUB_RENDERERS.iamaccessanalyzer = async function(svc, full, host){
+  const j = await _dget(host, "/api/iam/detail/access-analyzer"); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Analyzers (" + j.analyzers.length + ")"),
+    _dtbl([["name","Name"],["type","Zone of trust"],["status","Status"],["arn","ARN",1],["created","Creation time"],
+      [r => el("button",{class:"btn",onclick:()=>_iamput("access-analyzer", {action:"delete", name:r.name}, "Analyzer deleted")}, "Delete"),"Actions"]],
+      j.analyzers, "No analyzer: create one to find resources shared outside account " + ACCOUNT + "."));
+  if (!j.analyzers.length) {
+    const n = el("input",{value:"ConsoleAnalyzer-" + Date.now().toString(36),"data-testid":"analyzer-name"});
+    card.append(_field("Analyzer name", n), el("button",{class:"btn primary","data-testid":"analyzer-create",onclick:()=>_iamput("access-analyzer", {name:n.value}, "Analyzer created")}, icon("add"), "Create analyzer"));
+  }
+  host.append(card);
+  if (j.analyzers.length) {
+    const f = el("div",{class:"kv-card"});
+    f.append(el("div",{class:"h"}, "Active findings (" + j.findings.length + ")"),
+      _dtbl([["resource","Resource",1],["resource_type","Resource type"],["principal","External principal",1],["shared_through","Shared through"],["action","Access"],["status","Status"]],
+        j.findings, "No findings: no resource policy in this account grants access outside it."));
+    host.append(f);
+  }
+};
+
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──
 // Renders into #disk-widget-slot above the breadcrumb. Auto-refreshes
 // every 30s. Color matches the tier-aware status:

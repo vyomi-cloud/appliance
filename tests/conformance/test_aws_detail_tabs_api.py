@@ -324,7 +324,45 @@ def lambda_():
     check("Test: saved test event", r.status_code == 200 and sec("test-events")["test_events"][0]["event"] == {"n": 4}, r.text)
     requests.delete(f"{BASE}/api/lambda/functions/{name}", timeout=30)
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_}
+
+
+def iam():
+    print("── IAM account settings")
+    sfx = str(int(time.time()) % 100000)
+    put = lambda s, b: requests.put(f"{BASE}/api/iam/detail/{s}", json=b, timeout=30)
+    url = f"https://oidc-{sfx}.example.com"
+    r = put("identity-providers", {"provider_type": "OIDC", "url": url, "audiences": ["sts.amazonaws.com"]})
+    idps = get("/api/iam/detail/identity-providers").json()["identity_providers"]
+    mine = [p for p in idps if p["url"] == url]
+    check("Identity providers: OIDC provider with its ARN", r.status_code == 200 and mine and mine[0]["arn"].endswith(f":oidc-provider/oidc-{sfx}.example.com"), idps)
+    check("Identity providers: http:// URL rejected", put("identity-providers", {"provider_type": "OIDC", "url": "http://x", "audiences": ["a"]}).status_code == 400)
+    check("Identity providers: SAML without metadata rejected", put("identity-providers", {"provider_type": "SAML", "provider_name": "corp"}).status_code == 400)
+    check("Identity providers: same URL twice conflicts", put("identity-providers", {"provider_type": "OIDC", "url": url, "audiences": ["a"]}).status_code == 409)
+    put("identity-providers", {"action": "delete", "provider_id": mine[0]["provider_id"]})
+    check("Identity providers: deleted", not [p for p in get("/api/iam/detail/identity-providers").json()["identity_providers"] if p["url"] == url])
+    check("Password policy: length below 6 rejected", put("password-policy", {"minimum_length": 5}).status_code == 400)
+    r = put("password-policy", {"minimum_length": 14, "require_symbols": True, "max_password_age": 90})
+    pp = get("/api/iam/detail/password-policy").json()
+    check("Password policy: saved", r.status_code == 200 and pp["minimum_length"] == 14 and pp["require_symbols"] and pp["max_password_age"] == 90, pp)
+    aa = get("/api/iam/detail/access-analyzer").json()
+    if not aa["analyzers"]:
+        r = put("access-analyzer", {"name": f"tabs-analyzer-{sfx}"})
+        check("Access Analyzer: analyzer created", r.status_code == 200, r.text)
+    bucket = f"tabs-public-{sfx}"
+    requests.post(f"{BASE}/api/s3/buckets/{bucket}", timeout=30)
+    requests.put(f"{BASE}/api/s3/buckets/{bucket}/config/public_access_block", json={"value": {}}, timeout=30)
+    requests.put(f"{BASE}/api/s3/buckets/{bucket}/config/policy", timeout=30, json={"value": {"Statement": [
+        {"Effect": "Allow", "Principal": "*", "Action": "s3:GetObject", "Resource": f"arn:aws:s3:::{bucket}/*"}]}})
+    f = get("/api/iam/detail/access-analyzer").json()["findings"]
+    check("Access Analyzer: the public bucket is a finding", any(x["resource"] == f"arn:aws:s3:::{bucket}" and x["shared_through"] == "Public access" for x in f), f)
+    requests.delete(f"{BASE}/api/s3/buckets/{bucket}/config/policy", timeout=30)
+    f = get("/api/iam/detail/access-analyzer").json()["findings"]
+    check("Access Analyzer: finding clears when the policy is removed", not any(x["resource"] == f"arn:aws:s3:::{bucket}" for x in f), f)
+    requests.delete(f"{BASE}/api/s3/buckets/{bucket}", timeout=30)
+    roles = get("/api/iam/roles").json()["roles"]
+    check("Roles list carries ARNs", all(r.get("arn", "").startswith("arn:aws:iam::") for r in roles), roles[:2])
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam}
 
 if __name__ == "__main__":
     only = sys.argv[1:] or list(SECTIONS)

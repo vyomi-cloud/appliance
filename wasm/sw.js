@@ -540,6 +540,10 @@ async function route(method, path, body, query) {
     if (method === "POST") return { tuple: ["aws", "iam", "CreateUser", body || {}] };
   }
   if (path === "/api/iam/roles" && method === "GET")    return { tuple: ["aws", "iam", "ListRoles", {}] };
+  // IAM account tabs (core/aws_console_detail.py): identity providers, password policy, Access Analyzer.
+  m = path.match(/^\/api\/iam\/detail\/([a-z-]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "iam", "GetAccountSection", { section: m[1] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "iam", "UpdateAccountSection", { section: m[1], method, body: body || {} }] };
   if (path === "/api/iam/policies" && method === "GET") return { tuple: ["aws", "iam", "ListPolicies", {}] };
   if (path === "/api/iam/groups" && method === "GET")   return { tuple: ["aws", "iam", "ListGroups", {}] };
   if (path === "/api/iam/attachments" && method === "GET") return { tuple: ["aws", "iam", "ListAttachments", {}] };

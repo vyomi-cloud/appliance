@@ -188,7 +188,28 @@ def lambda_():
     ev = d("_events", "List", {"resource": "tabs-fn", "provider": "aws"})["events"]
     check("Activity: function changes recorded", sum(1 for e in ev if e["action"] == "UpdateFunctionSection") >= 5, ev)
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_}
+
+
+def iam():
+    print("── IAM account settings")
+    put = lambda s, b: d("iam", "UpdateAccountSection", {"section": s, "method": "PUT", "body": b})
+    sec = lambda s: d("iam", "GetAccountSection", {"section": s})
+    r = put("identity-providers", {"provider_type": "OIDC", "url": "https://token.actions.githubusercontent.com", "audiences": ["sts.amazonaws.com"]})
+    check("Identity providers: OIDC provider ARN", r["identity_providers"][0]["arn"].endswith(":oidc-provider/token.actions.githubusercontent.com"), r)
+    check("Password policy: IAM default before any change", sec("password-policy")["custom"] is False)
+    check("Password policy: saved", put("password-policy", {"minimum_length": 12}).get("minimum_length") == 12)
+    check("Password policy: reuse prevention > 24 rejected", put("password-policy", {"password_reuse_prevention": 30}).get("code") == "ValidationError")
+    check("Access Analyzer: no findings without an analyzer", sec("access-analyzer")["findings"] == [])
+    put("access-analyzer", {"name": "acct"})
+    check("Access Analyzer: one analyzer per account", put("access-analyzer", {"name": "two"}).get("code") in ("ConflictException", "ServiceQuotaExceededException"))
+    d("lambda", "CreateFunction", {"name": "iam-shared-fn"})
+    d("lambda", "UpdateFunctionSection", {"name": "iam-shared-fn", "section": "policy", "method": "PUT",
+                                          "body": {"statement_id": "x-acct", "principal": "arn:aws:iam::999988887777:root"}})
+    f = sec("access-analyzer")["findings"]
+    check("Access Analyzer: cross-account Lambda permission is a finding",
+          any(x["resource"].endswith(":function:iam-shared-fn") and x["shared_through"] == "Cross-account access" for x in f), f)
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam}
 
 if __name__ == "__main__":
     for k in sys.argv[1:] or list(SECTIONS):

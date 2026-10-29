@@ -960,3 +960,65 @@ def lambda_section(p):
     except (TypeError, ValueError) as e:
         return _det_err(DET.DetailError("InvalidParameterValueException", str(e)))
     return {"ok": True, "function_name": name, "section": section, **out}
+
+
+# ── IAM account tabs (core/aws_console_detail.py). Stored as public attrs on the
+#    IAM store so nano_persist snapshots them with the users/roles/policies. ──
+def _iam_attr(name, default):
+    if not isinstance(getattr(IAM, name, None), type(default)):
+        setattr(IAM, name, default)
+    return getattr(IAM, name)
+
+
+def _nano_shared_resources():
+    out = []
+    for name, b in OBJ.buckets.items():
+        if isinstance(b, dict) and b.get("policy"):
+            out.append({"type": "AWS::S3::Bucket", "arn": f"arn:aws:s3:::{name}", "policy": b["policy"]})
+    for fn in (getattr(_R["compute"], "_lambda_functions", None) or {}).values():
+        if fn.get("permissions"):
+            out.append({"type": "AWS::Lambda::Function", "arn": fn.get("arn", ""), "policy": DET.lambda_policy_document(fn)})
+    for name, r in IAM.roles.items():
+        if r.get("assume_role_policy_document"):
+            out.append({"type": "AWS::IAM::Role", "arn": r.get("arn", ""), "policy": r["assume_role_policy_document"]})
+    return out
+
+
+def _iam_view(section):
+    acct = IAM.account_id
+    if section == "identity-providers":
+        return {"ok": True, "identity_providers": DET.iam_identity_providers(_iam_attr("identity_providers", {}), acct)}
+    if section == "password-policy":
+        return {"ok": True, **DET.iam_password_policy(_iam_attr("account_settings", {}))}
+    if section == "access-analyzer":
+        an = _iam_attr("access_analyzers", [])
+        return {"ok": True, "analyzers": DET.iam_analyzers(an), "findings": DET.access_findings(acct, _nano_shared_resources()) if an else []}
+    return _det_err(DET.DetailError("NoSuchEntity", f"Unknown IAM section {section}", 404))
+
+
+def iam_section(p):
+    section, b = str(p.get("section") or ""), p.get("body") or {}
+    if p.get("method") == "PUT":
+        acct = IAM.account_id
+        try:
+            if section == "identity-providers":
+                store = _iam_attr("identity_providers", {})
+                if b.get("action") == "delete":
+                    if store.pop(str(b.get("provider_id") or ""), None) is None:
+                        raise DET.DetailError("NoSuchEntity", "Identity provider not found.", 404)
+                else:
+                    DET.iam_create_identity_provider(store, b, acct)
+            elif section == "password-policy":
+                DET.iam_update_password_policy(_iam_attr("account_settings", {}), b)
+            elif section == "access-analyzer":
+                an = _iam_attr("access_analyzers", [])
+                if b.get("action") == "delete":
+                    an[:] = [a for a in an if a["name"] != b.get("name")]
+                else:
+                    DET.iam_create_analyzer(an, b.get("name"), acct)
+        except DET.DetailError as e:
+            return _det_err(e)
+        except (TypeError, ValueError) as e:
+            return _det_err(DET.DetailError("ValidationError", str(e)))
+        IAM.persist()
+    return _iam_view(section)

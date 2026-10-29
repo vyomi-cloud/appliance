@@ -1615,3 +1615,132 @@ def _touch_latest(fn: dict) -> None:
         if v.get("version") == "$LATEST":
             v.update(code_sha256=_sha(fn.get(k["code"], "")), handler=fn.get("handler"), runtime=fn.get("runtime"),
                      description=fn.get("description", ""), created=fn["last_modified"])
+
+
+# ── IAM account settings: identity providers, password policy, Access Analyzer ──
+_PWD_DEFAULT = {"minimum_length": 8, "require_symbols": False, "require_numbers": False, "require_uppercase": False,
+                "require_lowercase": False, "allow_users_to_change_password": True, "max_password_age": 0,
+                "password_reuse_prevention": 0, "hard_expiry": False}
+
+
+def iam_identity_providers(store: dict, account: str) -> list:
+    out = []
+    for p in (store or {}).values():
+        typ = str(p.get("provider_type") or "SAML").upper()
+        host = str(p.get("url") or "").replace("https://", "").rstrip("/")
+        arn = (f"arn:aws:iam::{account}:oidc-provider/{host}" if typ == "OIDC"
+               else f"arn:aws:iam::{account}:saml-provider/{p.get('provider_name')}")
+        out.append({**p, "provider_type": typ, "arn": p.get("arn") or arn})
+    return sorted(out, key=lambda x: x.get("created", ""))
+
+
+def iam_create_identity_provider(store: dict, body: dict, account: str) -> dict:
+    """CreateOpenIDConnectProvider / CreateSAMLProvider with IAM's rules."""
+    import re
+    typ = str(body.get("provider_type") or "OIDC").upper()
+    if typ not in ("OIDC", "SAML"):
+        raise DetailError("InvalidInput", "Provider type must be OIDC or SAML.")
+    name = str(body.get("provider_name") or "").strip()
+    url = str(body.get("url") or "").strip()
+    if typ == "OIDC":
+        if not url.startswith("https://"):
+            raise DetailError("InvalidInput", "The provider URL must begin with https://.")
+        name = name or url.replace("https://", "").rstrip("/")
+        if not body.get("audiences"):
+            raise DetailError("InvalidInput", "An OIDC provider needs at least one audience (client ID).")
+    else:
+        if not re.fullmatch(r"[\w._-]{1,128}", name):
+            raise DetailError("ValidationError", "SAML provider name must be 1-128 letters, numbers or ._-")
+        if "<" not in str(body.get("saml_metadata_document") or ""):
+            raise DetailError("InvalidInput", "A SAML provider needs its metadata document (XML).")
+    for p in iam_identity_providers(store, account):
+        if p.get("provider_name") == name or (typ == "OIDC" and p.get("url", "").rstrip("/") == url.rstrip("/")):
+            raise DetailError("EntityAlreadyExists", f"Provider with name {name} already exists.", 409)
+    pid = f"idp-{_hex(12)}"
+    rec = {"provider_id": pid, "provider_name": name, "provider_type": typ, "url": url, "created": _now(), "tags": [],
+           "audiences": [str(a).strip() for a in (body.get("audiences") or []) if str(a).strip()] if typ == "OIDC" else []}
+    store[pid] = rec
+    return iam_identity_providers({pid: rec}, account)[0]
+
+
+def iam_password_policy(settings: dict) -> dict:
+    cur = (settings or {}).get("password_policy") or {}
+    return {**_PWD_DEFAULT, **{k: v for k, v in cur.items() if k in _PWD_DEFAULT}, "custom": bool(cur)}
+
+
+def iam_update_password_policy(settings: dict, body: dict) -> dict:
+    """UpdateAccountPasswordPolicy (minimum length 6-128, max age 0-1095 days,
+    reuse prevention 0-24)."""
+    b = dict(body or {})
+    out = dict(iam_password_policy(settings))
+    out.pop("custom", None)
+    for k in ("require_symbols", "require_numbers", "require_uppercase", "require_lowercase",
+              "allow_users_to_change_password", "hard_expiry"):
+        if k in b:
+            out[k] = b[k] in _TRUE
+    for k, lo, hi in (("minimum_length", 6, 128), ("max_password_age", 0, 1095), ("password_reuse_prevention", 0, 24)):
+        if k in b and b[k] not in (None, ""):
+            n = int(b[k])
+            if not lo <= n <= hi:
+                raise DetailError("ValidationError", f"{k} must be between {lo} and {hi}.")
+            out[k] = n
+    settings["password_policy"] = out
+    return iam_password_policy(settings)
+
+
+def access_findings(account: str, resources: list) -> list:
+    """Access Analyzer (zone of trust = this account): every resource whose
+    resource-based policy grants access to a principal outside the account —
+    anyone ("*") or another account. `resources`: [{type, arn, policy}]."""
+    import json as _j
+    out = []
+    for res in resources or []:
+        doc = res.get("policy")
+        if isinstance(doc, str):
+            try:
+                doc = _j.loads(doc) if doc else {}
+            except ValueError:
+                doc = {}
+        for st in _as_list((doc or {}).get("Statement")):
+            if not isinstance(st, dict) or st.get("Effect") != "Allow":
+                continue
+            pr = st.get("Principal")
+            vals = [pr] if isinstance(pr, str) else ([x for v in pr.values() for x in _as_list(v)] if isinstance(pr, dict) else [])
+            for v in vals:
+                v = str(v)
+                ext = v == "*" or (v.startswith("arn:aws:iam::") and v.split(":")[4] != account) or (v.isdigit() and v != account)
+                if not ext:
+                    continue
+                cond = bool(st.get("Condition"))
+                out.append({"resource_type": res["type"], "resource": res["arn"], "principal": v,
+                            "action": ", ".join(str(a) for a in _as_list(st.get("Action"))),
+                            "shared_through": "Public access" if v == "*" else "Cross-account access",
+                            "condition": _j.dumps(st["Condition"]) if cond else "", "status": "Active",
+                            "id": _finding_id(res["arn"], v, st.get("Action"))})
+    return out
+
+
+def _finding_id(arn, principal, action) -> str:
+    import hashlib
+    h = hashlib.sha256(f"{arn}|{principal}|{action}".encode()).hexdigest()
+    return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
+
+
+def iam_analyzers(store: list) -> list:
+    return list(store or [])
+
+
+def iam_create_analyzer(store: list, name: str, account: str) -> dict:
+    """CreateAnalyzer (type ACCOUNT: the zone of trust is this account)."""
+    import re
+    name = str(name or "").strip()
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,254}", name):
+        raise DetailError("ValidationException", "Analyzer name must start with a letter and use letters, numbers, ._-")
+    if any(a["name"] == name for a in store):
+        raise DetailError("ConflictException", f"Analyzer {name} already exists.", 409)
+    if store:
+        raise DetailError("ServiceQuotaExceededException", "An account can have one account analyzer per Region.", 402)
+    a = {"name": name, "type": "ACCOUNT", "status": "ACTIVE", "created": _now(),
+         "arn": f"arn:aws:access-analyzer:{REGION}:{account}:analyzer/{name}"}
+    store.append(a)
+    return a

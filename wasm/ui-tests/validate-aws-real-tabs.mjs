@@ -180,6 +180,35 @@ const SECTIONS = {
     const al = await tab("Aliases");
     check("lambda Aliases: alias created in the tab is listed after reopening", al.includes(":" + name + ":live"), al);
   },
+  async iam() {
+    const user = "rt-user-" + Date.now().toString(36);
+    await call("POST", "/api/iam/users", { user_name: user, name: user, UserName: user });
+    await openService("^iam$");
+    await openRow(user);
+    await tab("Password policy");
+    await page.locator("#main [data-testid=pwd-min]").fill("17");
+    await page.locator("#main [data-testid=pwd-save]").click();
+    await sleep(1500);
+    await tab("Identity providers");
+    const pp = await tab("Password policy");
+    check("iam Password policy: saved in the tab, persists after reopening", /17 characters/.test(pp), pp);
+    await tab("Identity providers");
+    const host = "rt-" + Date.now().toString(36) + ".example.com";
+    await page.locator("#main [data-testid=idp-url]").fill("https://" + host);
+    await page.locator("#main [data-testid=idp-aud]").fill("sts.amazonaws.com");
+    await page.locator("#main [data-testid=idp-add]").click();
+    await sleep(1500);
+    await tab("Password policy");
+    const idp = await tab("Identity providers");
+    check("iam Identity providers: provider added in the tab is listed with its ARN", idp.includes(":oidc-provider/" + host), idp);
+    const aa = await tab("Access Analyzer");
+    if (await page.locator("#main [data-testid=analyzer-create]").count()) {
+      await page.locator("#main [data-testid=analyzer-create]").click();
+      await sleep(1500);
+    }
+    const aa2 = await tab("Access Analyzer");
+    check("iam Access Analyzer: an account analyzer with findings section", /Active findings/.test(aa2) && /ACCOUNT/.test(aa2), aa + aa2);
+  },
 };
 
 let server;
