@@ -9,7 +9,7 @@
   A self-signed signature is valid only where the certificate is trusted: on any
   other PC it still shows "unknown publisher". Never ship a self-signed MSI.
 
-    pwsh tests/installer/sign-selfsigned.ps1 -Msi cloud-learn-3.0.8-x64.msi [-Out signed.msi]
+    pwsh tests/installer/sign-selfsigned.ps1 -Msi vyomi-3.0.33-x64.msi [-Out signed.msi]
 
   Run as Administrator (trusting the certificate writes to the machine stores).
 #>

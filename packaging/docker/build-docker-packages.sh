@@ -33,7 +33,7 @@ common=(
   --url "https://github.com/vyomi-cloud/appliance"
   --description "Vyomi (Docker substrate) — Free/Lite/Pro tiers. 'vyomi up' = docker compose up; no Multipass/LXD."
   --depends bash
-  --conflicts cloud-learn
+  --conflicts vyomi --conflicts cloud-learn
   --chdir "$STAGE"
 )
 

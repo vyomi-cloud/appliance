@@ -755,8 +755,7 @@ RESOURCE_CATALOG_AWS = [
         "columns": [
             ["name",            "Secret name"],
             ["secret_type",     "Type"],
-            ["last_rotated",    "Last rotated"],
-            ["next_rotation",   "Next rotation"],
+            ["created",         "Created"],
             ["kms_key_id",      "Encryption key"],
         ],
         "createFields": [

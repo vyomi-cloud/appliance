@@ -519,6 +519,12 @@ def _resource_op(service, operation, name="", body=None):
         if operation == "List":
             st, p = _call(svc, "GET", base)
             return {"ok": True, "items": [_rec(x) for x in (p.get("databases") or [])]}
+        if operation == "ListDocuments":   # database Usage tab: the documents the database holds
+            from core.gcp_firestore_core import _DbDocs, _doc_view
+            db = _short(name) if name else "(default)"
+            docs = [_doc_view("projects/%s/databases/%s/documents" % (PROJ, db), r, e)
+                    for r, e in _DbDocs(_STORES["firestore"], db).all()]
+            return {"ok": True, "documents": docs, "items": docs}
         if operation == "Create":
             st, p = _call(svc, "POST", base, {"databaseId": rid},
                           {k: body[k] for k in ("type", "concurrencyMode", "locationId", "appEngineIntegrationMode",

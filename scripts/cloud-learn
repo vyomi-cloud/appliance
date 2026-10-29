@@ -225,21 +225,21 @@ _backfill_install_id() {
 
 usage() {
   cat <<'EOF'
-Vyomi simulator launcher (cloud-learn CLI) — local multi-cloud appliance
+vyomi — Vyomi simulator launcher (Max tier: local multi-cloud appliance)
 
-Usage:
-  cloud-learn up [-v|--verbose] [-y|--yes]
-  cloud-learn down
-  cloud-learn stop
-  cloud-learn force-stop
-  cloud-learn kill
-  cloud-learn restart
-  cloud-learn status
-  cloud-learn doctor
-  cloud-learn upgrade
-  cloud-learn update       Docker tiers: move to the latest release (and this command)
-  cloud-learn version      This command, the running simulator, the latest release
-  cloud-learn help
+Usage (`cloud-learn` still works as a deprecated alias):
+  vyomi up [-v|--verbose] [-y|--yes]
+  vyomi down
+  vyomi stop
+  vyomi force-stop
+  vyomi kill
+  vyomi restart
+  vyomi status
+  vyomi doctor
+  vyomi upgrade
+  vyomi update       Docker tiers: move to the latest release (and this command)
+  vyomi version      This command, the running simulator, the latest release
+  vyomi help
 
 Flags:
   -v, --verbose      Stream raw cloud-init log lines + sub-step detail.

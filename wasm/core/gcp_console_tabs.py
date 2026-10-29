@@ -1155,6 +1155,8 @@ def firestore_op(be, project: str, db: str, op: str, body: dict):
             out.append({"collection": c, "fields": fields})
         return {"ok": True, "items": out}
     if op == "listDocuments":
+        if "collection" not in (body or {}):
+            return None   # the database-wide document list is the service's own read
         coll = str(body.get("collection") or "")
         return {"ok": True, "items": [{"id": d["id"], "path": "%s/%s" % (coll, d["id"]),
                                        "data": _json.dumps({k: fs_from_typed(v) for k, v in (d.get("fields") or {}).items()}, default=str),

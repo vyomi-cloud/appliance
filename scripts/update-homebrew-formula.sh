@@ -5,7 +5,7 @@ export LANG=C
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION_FILE="${CLOUD_LEARN_VERSION_FILE:-${ROOT_DIR}/VERSION}"
-FORMULA_FILE="${CLOUD_LEARN_FORMULA_FILE:-${ROOT_DIR}/packaging/homebrew/Formula/cloud-learn.rb}"
+FORMULA_FILE="${VYOMI_FORMULA_FILE:-${CLOUD_LEARN_FORMULA_FILE:-${ROOT_DIR}/packaging/homebrew/Formula/vyomi.rb}}"
 RELEASE_BASE_URL="${CLOUD_LEARN_RELEASE_BASE_URL:-https://example.com/releases}"
 
 if [ ! -f "$VERSION_FILE" ]; then
@@ -30,7 +30,7 @@ if [ $# -lt 1 ]; then
 fi
 
 SHA256="$1"
-URL="${RELEASE_BASE_URL}/cloud-learn-${VERSION}.tar.gz"
+URL="${RELEASE_BASE_URL}/vyomi-${VERSION}.tar.gz"
 
 python3 - <<'PY' "$FORMULA_FILE" "$URL" "$SHA256" "$VERSION"
 from pathlib import Path
