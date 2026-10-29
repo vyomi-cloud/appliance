@@ -21,7 +21,9 @@ same helpers and slot in next.
 """
 from __future__ import annotations
 
+import base64
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -65,9 +67,105 @@ class PubsubError(Exception):
         self.message = message
 
 
+# ── topic settings + schemas (topics.patch / schemas.*) ───────────────────
+# Shared with the offline appliance (whose topics live in the Google emulator and
+# whose topic settings/schemas are validated with these same functions).
+_KMS_KEY = re.compile(r"^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$")
+_SCHEMA_ID = re.compile(r"^[A-Za-z][A-Za-z0-9\-_.~+%]{2,254}$")
+TOPIC_SETTINGS = ("labels", "kmsKeyName", "messageRetentionDuration", "schemaSettings")
+
+
+def _seconds(d) -> int:
+    s = str(d or "").strip().rstrip("s")
+    try:
+        return int(float(s))
+    except ValueError:
+        raise PubsubError(400, "INVALID_ARGUMENT", "Invalid duration '%s' (use seconds, e.g. 86400s)." % d)
+
+
+def validate_topic_patch(patch: dict, mask: str, schema_exists) -> dict:
+    """topics.patch: the fields named in `mask` (comma list; empty = every field in `patch`)."""
+    fields = [f.strip() for f in (mask or "").split(",") if f.strip()] or [k for k in TOPIC_SETTINGS if k in patch]
+    out = {}
+    for f in fields:
+        if f not in TOPIC_SETTINGS:
+            raise PubsubError(400, "INVALID_ARGUMENT", "Invalid update_mask provided in the UpdateTopicRequest: '%s' is not a known Topic field." % f)
+        v = patch.get(f)
+        if f == "kmsKeyName":
+            v = str(v or "")
+            if v and not _KMS_KEY.match(v):
+                raise PubsubError(400, "INVALID_ARGUMENT", "Invalid kms_key_name: must be projects/*/locations/*/keyRings/*/cryptoKeys/*.")
+        elif f == "messageRetentionDuration":
+            if v:
+                secs = _seconds(v)
+                if not 600 <= secs <= 2678400:
+                    raise PubsubError(400, "INVALID_ARGUMENT", "message_retention_duration must be between 10 minutes and 31 days.")
+                v = "%ds" % secs
+            else:
+                v = ""
+        elif f == "schemaSettings":
+            if v:
+                sch = str((v or {}).get("schema") or "")
+                if not schema_exists(sch):
+                    raise PubsubError(404, "NOT_FOUND", "Schema not found: %s" % sch)
+                enc = str((v or {}).get("encoding") or "JSON").upper()
+                if enc not in ("JSON", "BINARY"):
+                    raise PubsubError(400, "INVALID_ARGUMENT", "Invalid encoding %s (JSON or BINARY)." % enc)
+                v = {"schema": sch, "encoding": enc}
+            else:
+                v = {}
+        elif f == "labels":
+            v = {str(a): str(b) for a, b in (v or {}).items()}
+        out[f] = v
+    return out
+
+
+def validate_schema(schema_id: str, body: dict) -> dict:
+    if not _SCHEMA_ID.match(str(schema_id or "")):
+        raise PubsubError(400, "INVALID_ARGUMENT", "Invalid schema ID '%s': 3-255 chars, starting with a letter." % schema_id)
+    stype = str(body.get("type") or "AVRO").upper()
+    if stype not in ("AVRO", "PROTOCOL_BUFFER"):
+        raise PubsubError(400, "INVALID_ARGUMENT", "Invalid schema type %s (AVRO or PROTOCOL_BUFFER)." % stype)
+    definition = str(body.get("definition") or "")
+    if stype == "AVRO":
+        try:
+            d = json.loads(definition)
+        except Exception:
+            raise PubsubError(400, "INVALID_ARGUMENT", "Invalid schema definition: AVRO schemas must be valid JSON.")
+        if not isinstance(d, dict) or d.get("type") != "record" or not isinstance(d.get("fields"), list) or not d.get("name"):
+            raise PubsubError(400, "INVALID_ARGUMENT", "Invalid schema definition: an AVRO schema needs a record type with a name and fields.")
+    elif "message " not in definition:
+        raise PubsubError(400, "INVALID_ARGUMENT", "Invalid schema definition: a protocol buffer schema must define a message.")
+    return {"type": stype, "definition": definition, "revisionId": uuid.uuid4().hex[:8],
+            "revisionCreateTime": _now_rfc3339()}
+
+
+def check_message(schema: dict | None, encoding: str, data_b64: str) -> None:
+    """Reject a message that does not match the topic's AVRO schema (JSON encoding)."""
+    if not schema or schema.get("type") != "AVRO" or str(encoding).upper() != "JSON":
+        return
+    try:
+        doc = json.loads(base64.b64decode(data_b64 or "").decode("utf-8"))
+    except Exception:
+        raise PubsubError(400, "INVALID_ARGUMENT", "Request contains an invalid argument: message is not valid JSON for the topic schema.")
+    fields = json.loads(schema["definition"]).get("fields", [])
+    missing = [f["name"] for f in fields if isinstance(f, dict) and "default" not in f and f.get("name") not in (doc or {})]
+    if not isinstance(doc, dict) or missing:
+        raise PubsubError(400, "INVALID_ARGUMENT",
+                          "Request contains an invalid argument: message does not match the topic schema (missing %s)." % ", ".join(missing or ["fields"]))
+
+
+def _schemas(store) -> dict:
+    ns = getattr(store, "gcp_pubsub_schemas", None)
+    if not isinstance(ns, dict):
+        ns = {}
+        store.gcp_pubsub_schemas = ns
+    return ns
+
+
 # ── resource views ────────────────────────────────────────────────────────
 def _topic_view(topic: dict) -> dict:
-    return {"name": topic["name"]}
+    return {"name": topic["name"], **{k: topic[k] for k in TOPIC_SETTINGS if topic.get(k)}}
 
 
 def _subscription_view(sub: dict) -> dict:
@@ -275,15 +373,62 @@ def dispatch(store: MessagingStore, method: str, path: str,
     collection = segs[2]
     resource = p  # full resource name for a specific topic/subscription
 
+    query = query or {}
     try:
+        if collection == "schemas":
+            sch = _schemas(store)
+            if len(segs) == 3:
+                if method == "GET":
+                    items = [dict(v, name=k) for k, v in sorted(sch.items()) if k.startswith(f"projects/{project}/schemas/")]
+                    return _json(200, {"schemas": items} if items else {})
+                if method == "POST":
+                    sid = str(query.get("schemaId") or payload.get("name") or "").split("/")[-1]
+                    full = f"projects/{project}/schemas/{sid}"
+                    rec = validate_schema(sid, payload)
+                    if full in sch:
+                        raise PubsubError(409, "ALREADY_EXISTS", f"Schema already exists: {full}")
+                    sch[full] = rec
+                    store.persist()
+                    return _json(200, dict(rec, name=full))
+            elif len(segs) == 4:
+                if resource not in sch:
+                    raise PubsubError(404, "NOT_FOUND", f"Schema not found: {resource}")
+                if method == "GET":
+                    return _json(200, dict(sch[resource], name=resource))
+                if method == "DELETE":
+                    sch.pop(resource)
+                    store.persist()
+                    return _json(200, {})
+            return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on schemas")
+
         if collection == "topics":
             if len(segs) == 3:                       # collection
                 if method == "GET":
                     return _list_topics(store, project)
                 return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on topics")
+            # topics.subscriptions.list
+            if len(segs) == 5 and segs[4] == "subscriptions" and method == "GET":
+                t = _require_topic(store, "/".join(segs[:4]))
+                return _json(200, {"subscriptions": list(t.get("subscriptions", []))} if t.get("subscriptions") else {})
             # specific topic
             if verb == "publish" and method == "POST":
+                t = _require_topic(store, resource)
+                ss = t.get("schemaSettings") or {}
+                if ss:
+                    for m in payload.get("messages") or []:
+                        check_message(_schemas(store).get(ss.get("schema")), ss.get("encoding", "JSON"), m.get("data", ""))
                 return _publish(store, resource, payload)
+            if method == "PATCH":                    # topics.patch {topic, updateMask}
+                t = _require_topic(store, resource)
+                fields = validate_topic_patch(payload.get("topic") or {}, payload.get("updateMask") or "",
+                                              lambda s: s in _schemas(store))
+                for k, v in fields.items():
+                    if v in ("", {}, None):
+                        t.pop(k, None)
+                    else:
+                        t[k] = v
+                store.persist()
+                return _json(200, _topic_view(t))
             if method == "PUT":
                 return _create_topic(store, resource, payload)
             if method == "GET":

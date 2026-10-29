@@ -354,6 +354,166 @@ def _cloudsql(op: str, name: str, body: dict):
 
 
 # ---------------------------------------------------------------------------
+# Pub/Sub — subscriptions, schema, messages, encryption (topics live in the Google
+# Pub/Sub emulator when it runs; topic settings + schemas in gcp_pubsub_state)
+# ---------------------------------------------------------------------------
+def _project() -> str:
+    try:
+        space = _ctx().PLATFORM.get_active_space() or {}
+        return str(space.get("active_account") or "cloudlearn")
+    except Exception:
+        return "cloudlearn"
+
+
+def _ps_err(e):
+    return T.TabError(e.code, e.status, e.message)
+
+
+def _pubsub(op: str, name: str, body: dict):
+    import base64
+    from core import gcp_pubsub_core as psc
+    from core import gcp_pubsub_emulator as emu
+    s = _server()
+    st = s.gcp_pubsub_state
+    project = _project()
+    topic = T.short(name)
+    live = emu.available()
+    if live:
+        t = emu.get_topic(project, topic)
+        if not t:
+            raise T.TabError(404, "NOT_FOUND", "Topic not found: projects/%s/topics/%s" % (project, topic))
+    elif topic not in st.get("topics", {}):
+        raise T.TabError(404, "NOT_FOUND", "Topic not found: projects/%s/topics/%s" % (project, topic))
+    mirror = st.setdefault("topics", {}).setdefault(topic, s._gcp_pubsub_topic_record(project, topic, {}))
+    schemas = st.setdefault("schemas", {})
+    full_topic = "projects/%s/topics/%s" % (project, topic)
+
+    def topic_view():
+        return s._gcp_pubsub_topic_view(project, mirror)
+
+    v = T.view_op("pubsub", op)
+    if v:
+        tv = topic_view()
+        if v == "schema" and (mirror.get("schemaSettings") or {}).get("schema"):
+            sc = schemas.get(T.short(mirror["schemaSettings"]["schema"]))
+            tv["schema"] = s._gcp_pubsub_schema_view(sc) if sc else None
+        return {"ok": True, "item": T.view("pubsub", v, tv)}
+    patch = T.pubsub_topic_patch(op, body)
+    if patch is not None:
+        try:
+            fields = psc.validate_topic_patch(patch, ",".join(patch), lambda n: T.short(n) in schemas)
+        except psc.PubsubError as e:
+            raise _ps_err(e)
+        for k, val in fields.items():
+            mirror[k] = val
+        mirror["updateTime"] = s._now()
+        _usage("pubsub", op, topic, {"topic": topic, "fields": ",".join(fields)})
+        return {"ok": True, "item": topic_view()}
+    if op == "listSchemas":
+        return {"ok": True, "items": [s._gcp_pubsub_schema_view(x) for x in schemas.values()
+                                      if str(x.get("project") or project) == project]}
+    if op == "createSchema":
+        sid = str(body.get("name") or "")
+        try:
+            rec = psc.validate_schema(sid, body)
+        except psc.PubsubError as e:
+            raise _ps_err(e)
+        if sid in schemas:
+            raise T.TabError(409, "ALREADY_EXISTS", "Schema already exists: projects/%s/schemas/%s" % (project, sid))
+        schemas[sid] = s._gcp_pubsub_schema_record(project, {"name": sid, **rec})
+        _usage("pubsub", op, topic, {"schema": sid})
+        return {"ok": True, "name": sid}
+    # subscriptions attached to this topic
+    if op in ("listSubscriptions", "listPullSubscriptions"):   # the Messages tab pulls from pull subscriptions
+        if live:
+            subs = [x for x in emu.list_subscriptions(project) if x.get("topic") == topic]
+        else:
+            subs = [x for x in st.get("subscriptions", {}).values() if T.short(x.get("topic")) == topic]
+        items = [{"name": T.short(x.get("name") or x.get("subscriptionId")),
+                  "ackDeadlineSeconds": x.get("ackDeadlineSeconds", 10),
+                  "messageRetentionDuration": x.get("messageRetentionDuration") or "604800s",
+                  "deliveryType": "Push" if (x.get("pushConfig") or {}).get("pushEndpoint") else "Pull",
+                  "retainAckedMessages": bool(x.get("retainAckedMessages"))} for x in subs]
+        if op == "listPullSubscriptions":
+            items = [x for x in items if x["deliveryType"] == "Pull"]
+        return {"ok": True, "items": items}
+    if op == "createSubscription":
+        sid = T.validate_pubsub_id(body.get("name"))
+        ack = int(body.get("ackDeadlineSeconds") or 10)
+        if not 10 <= ack <= 600:
+            raise T.TabError(400, "INVALID_ARGUMENT", "The ack deadline must be between 10 and 600 seconds.")
+        if live:
+            from google.api_core import exceptions as gax
+            try:
+                emu.create_subscription(project, sid, topic, ack)
+            except gax.AlreadyExists:
+                raise T.TabError(409, "ALREADY_EXISTS", "Subscription already exists: projects/%s/subscriptions/%s" % (project, sid))
+        elif sid in st.setdefault("subscriptions", {}):
+            raise T.TabError(409, "ALREADY_EXISTS", "Subscription already exists: projects/%s/subscriptions/%s" % (project, sid))
+        st.setdefault("subscriptions", {})[sid] = s._gcp_pubsub_subscription_record(project, sid, {"topic": full_topic, "ackDeadlineSeconds": ack})
+        _usage("pubsub", op, topic, {"subscription": sid})
+        return {"ok": True, "name": sid}
+    if op == "deleteSubscription":
+        sid = T.short(body.get("name"))
+        gone = emu.delete_subscription(project, sid) if live else st.get("subscriptions", {}).pop(sid, None) is not None
+        st.get("subscriptions", {}).pop(sid, None)
+        if not gone:
+            raise T.TabError(404, "NOT_FOUND", "Subscription not found: projects/%s/subscriptions/%s" % (project, sid))
+        _usage("pubsub", op, topic, {"subscription": sid})
+        return {"ok": True, "name": sid}
+    # messages: publish to the topic / pull from one of its subscriptions
+    if op == "publishMessage":
+        data = str(body.get("data") or "")
+        attrs = {str(k): str(v) for k, v in (body.get("attributes") or {}).items()}
+        b64 = base64.b64encode(data.encode()).decode()
+        ss = mirror.get("schemaSettings") or {}
+        if ss.get("schema"):
+            sc = schemas.get(T.short(ss["schema"]))
+            try:
+                psc.check_message(sc, ss.get("encoding", "JSON"), b64)
+            except psc.PubsubError as e:
+                raise _ps_err(e)
+        if not data and not attrs:
+            raise T.TabError(400, "INVALID_ARGUMENT", "A message needs data or at least one attribute.")
+        if live:
+            mid = emu.publish(project, topic, data.encode(), attrs)
+        else:
+            mid = s._id("msg")
+            entry = {"messageId": mid, "data": b64, "attributes": attrs, "publishTime": s._now(), "topic": topic}
+            for sub in st.get("subscriptions", {}).values():
+                if T.short(sub.get("topic")) == topic:
+                    st.setdefault("messages", {}).setdefault(str(sub.get("subscriptionId")), []).append({**entry, "ackId": s._id("ack")})
+        _usage("pubsub", op, topic, {"messageId": mid})
+        return {"ok": True, "messageIds": [mid]}
+    if op == "pullMessages":
+        sid = T.short(body.get("subscription"))
+        n = max(1, min(int(body.get("maxMessages") or 10), 100))
+        if live:
+            if not emu.get_subscription(project, sid):
+                raise T.TabError(404, "NOT_FOUND", "Subscription not found: projects/%s/subscriptions/%s" % (project, sid))
+            got = emu.pull(project, sid, n)
+            if body.get("ack") and got:
+                emu.acknowledge(project, sid, [g["ackId"] for g in got])
+        else:
+            q = st.setdefault("messages", {}).get(sid, [])
+            got = [{"ackId": m.get("ackId"), "message": m} for m in q[:n]]
+            if body.get("ack"):
+                st["messages"][sid] = q[n:]
+        items = []
+        for g in got:
+            m = g["message"]
+            try:
+                text = base64.b64decode(m.get("data") or "").decode("utf-8")
+            except Exception:
+                text = str(m.get("data") or "")
+            items.append({"messageId": m.get("messageId"), "publishTime": m.get("publishTime"), "data": text,
+                          "attributes": ", ".join("%s=%s" % kv for kv in (m.get("attributes") or {}).items()) or "No attributes",
+                          "acked": bool(body.get("ack"))})
+        return {"ok": True, "items": items}
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Project IAM policy (every resource's Permissions tab)
 # ---------------------------------------------------------------------------
 def _iam_project(op: str, project: str, body: dict):
@@ -376,6 +536,7 @@ _HANDLERS = {
     "compute": _compute,
     "storage": _storage,
     "cloudsql": _cloudsql,
+    "pubsub": _pubsub,
 }
 
 

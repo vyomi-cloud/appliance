@@ -48,6 +48,9 @@ class NanoClient:
     def get(self, svc, name):
         return self._d("Get", {"service": svc, "name": name})
 
+    def delete(self, svc, name):
+        return self._d("Delete", {"service": svc, "name": name})
+
     def sub(self, svc, op, name, body=None):
         p = {"service": svc, "name": name}
         if body is not None:
@@ -83,6 +86,9 @@ class OfflineClient:
 
     def get(self, svc, name):
         return self._j(self.s.get(BASE + self._fill(self._svc(svc)["resource_path"], name), timeout=30))
+
+    def delete(self, svc, name):
+        return self._j(self.s.delete(BASE + self._fill(self._svc(svc)["resource_path"], name), timeout=30))
 
     def sub(self, svc, op, name, body=None):
         from urllib.parse import quote
@@ -393,3 +399,73 @@ def test_cloudsql_connectivity_flags_insights(c, sqli):
     st, _ = c.sub("cloudsql", "setLabels", sqli, {"labels": {"tier": "gold"}})
     st, out = c.sub("cloudsql", "getLabels", sqli)
     assert out["item"]["labels"] == {"tier": "gold"}
+
+
+# ── Pub/Sub ───────────────────────────────────────────────────────────────────
+@pytest.fixture(scope="module")
+def topic(c):
+    name = uid("tabtopic")
+    st, _ = c.create("pubsub", {"name": name})
+    assert st == 200
+    yield name
+    for sub in (c.sub("pubsub", "listSubscriptions", name)[1].get("items") or []):
+        c.sub("pubsub", "deleteSubscription", name, {"name": sub["name"]})
+    c.delete("pubsub", name)
+
+
+def test_pubsub_subscriptions_and_messages(c, topic):
+    sub = uid("tabsub")
+    st, _ = c.sub("pubsub", "createSubscription", topic, {"name": sub, "ackDeadlineSeconds": 20})
+    assert st == 200
+    st, bad = c.sub("pubsub", "createSubscription", topic, {"name": "goog-x", "ackDeadlineSeconds": 20})
+    assert st == 400
+    st, out = c.sub("pubsub", "listSubscriptions", topic)
+    s = next(x for x in out["items"] if x["name"] == sub)
+    assert s["ackDeadlineSeconds"] == 20 and s["deliveryType"] == "Pull"
+    st, out = c.sub("pubsub", "publishMessage", topic, {"data": "hello tabs", "attributes": {"origin": "test"}})
+    assert st == 200 and out["messageIds"]
+    got = _wait(lambda: c.sub("pubsub", "pullMessages", topic, {"subscription": sub, "maxMessages": 5, "ack": True}),
+                lambda r: r[0] == 200 and r[1]["items"])
+    assert got[1]["items"][0]["data"] == "hello tabs" and "origin=test" in got[1]["items"][0]["attributes"]
+    st, out = c.sub("pubsub", "pullMessages", topic, {"subscription": sub, "maxMessages": 5, "ack": True})
+    assert out["items"] == []      # acknowledged messages are gone
+    st, _ = c.sub("pubsub", "deleteSubscription", topic, {"name": sub})
+    st, out = c.sub("pubsub", "listSubscriptions", topic)
+    assert sub not in [x["name"] for x in out["items"]]
+
+
+def test_pubsub_schema_tab_enforces_the_schema(c, topic):
+    sid = uid("TabSchema")
+    avro = json.dumps({"type": "record", "name": "Ev", "fields": [{"name": "id", "type": "string"}]})
+    st, bad = c.sub("pubsub", "createSchema", topic, {"name": sid, "type": "AVRO", "definition": "{not json"})
+    assert st == 400
+    st, _ = c.sub("pubsub", "createSchema", topic, {"name": sid, "type": "AVRO", "definition": avro})
+    assert st == 200
+    st, out = c.sub("pubsub", "listSchemas", topic)
+    full = next(x["name"] for x in out["items"] if x["name"].endswith("/" + sid))
+    st, _ = c.sub("pubsub", "setSchema", topic, {"schema": full, "encoding": "JSON"})
+    assert st == 200
+    st, out = c.sub("pubsub", "getSchema", topic)
+    assert out["item"]["schemaSettings"]["schema"] == full and out["item"]["schema"]["type"] == "AVRO"
+    st, bad = c.sub("pubsub", "publishMessage", topic, {"data": json.dumps({"other": 1})})
+    assert st == 400
+    st, ok = c.sub("pubsub", "publishMessage", topic, {"data": json.dumps({"id": "a1"})})
+    assert st == 200
+    st, _ = c.sub("pubsub", "setSchema", topic, {"schema": ""})
+    st, out = c.sub("pubsub", "getSchema", topic)
+    assert not out["item"].get("schemaSettings")
+
+
+def test_pubsub_encryption_and_labels(c, topic):
+    key = "projects/%s/locations/global/keyRings/r/cryptoKeys/k" % c.project
+    st, _ = c.sub("pubsub", "setEncryption", topic, {"kmsKeyName": key})
+    assert st == 200
+    st, out = c.sub("pubsub", "getEncryption", topic)
+    assert out["item"]["kmsKeyName"] == key
+    st, topic_get = c.get("pubsub", topic)
+    assert topic_get["kmsKeyName"] == key       # the topic's own GET reports the CMEK key
+    st, bad = c.sub("pubsub", "setEncryption", topic, {"kmsKeyName": "bogus"})
+    assert st == 400
+    st, _ = c.sub("pubsub", "setLabels", topic, {"labels": {"team": "events"}})
+    st, out = c.sub("pubsub", "getLabels", topic)
+    assert out["item"]["labels"] == {"team": "events"}

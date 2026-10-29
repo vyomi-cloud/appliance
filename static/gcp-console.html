@@ -1322,7 +1322,8 @@ function buildSparkline(label, lo, hi, suffix){
 // Offline the appliance serves these routes; in Nano the service worker maps the
 // same URLs onto the in-browser engines (wasm/providers/gcp_core_adapter.py).
 const GT = {};
-function tabName(svc, item){ return String((item && item.name) || getPath(item, svc.name_field) || ""); }
+// The resource id the tab routes take (a full "projects/…/topics/t" name → "t").
+function tabName(svc, item){ return lastSeg(String((item && item.name) || getPath(item, svc.name_field) || "")); }
 function lastSeg(v){ return String(v == null ? "" : v).replace(/\/+$/, "").split("/").pop(); }
 function subPath(svc, op, name){ return "/api/gcp/sub/" + svc.key + "/" + op + "/" + encodeURIComponent(name); }
 function subGet(svc, op, name){ return api("GET", subPath(svc, op, name)); }
@@ -1503,7 +1504,7 @@ async function childList(host, opts){
 // core/nano_events, filtered server-side by resource).
 async function resourceEvents(svc, item){
   const name = tabName(svc, item);
-  const ids = new Set([name, lastSeg(name), item.id, item.instance_id, item.resourceName, item.email, item.uniqueId]
+  const ids = new Set([name, item.name, item.id, item.instance_id, item.resourceName, item.email, item.uniqueId]
     .filter(x => x != null && String(x).length > 1).map(String));
   const r = await api("GET", "/api/cloudsim/events?provider=gcp&resource=" + encodeURIComponent(name) + "&limit=200");
   const all = (r.json && (Array.isArray(r.json) ? r.json : r.json.events)) || [];
@@ -2028,6 +2029,110 @@ GT.sqlinsights = async function(host, svc, item){
     columns: [["query", "Normalized query", x => x.query || x.queryString || x.queryId], ["calls", "Calls", x => x.calls ?? x.executionCount],
               ["meanLatencyMs", "Avg latency (ms)"], ["database", "Database", x => x.database || x.databaseName || "All databases"]],
   });
+};
+
+// ---- Pub/Sub ------------------------------------------------------------------
+GT.pssubscriptions = async function(host, svc, item){
+  const name = lastSeg(tabName(svc, item));
+  await childList(host, {
+    load: () => subGet(svc, "listSubscriptions", name), noun: "subscription", nouns: "subscriptions", emptyIcon: "subscriptions",
+    empty: "No subscriptions attached to " + name + ". Messages published now are dropped until a subscription exists.",
+    columns: [["name", "Subscription ID"], ["deliveryType", "Delivery type"], ["ackDeadlineSeconds", "Ack deadline (s)"],
+              ["messageRetentionDuration", "Message retention"], ["retainAckedMessages", "Retain acked", x => x.retainAckedMessages ? "Yes" : "No"]],
+    create: {label: "Create subscription", submit: "Create", fields: [{name: "name", label: "Subscription ID", placeholder: name + "-sub"},
+      {name: "ackDeadlineSeconds", label: "Ack deadline (s)", type: "number", value: 10, width: 90}],
+      run: v => subPost(svc, "createSubscription", name, {name: v.name.trim(), ackDeadlineSeconds: Number(v.ackDeadlineSeconds)})},
+    rowActions: [{label: "Delete", icon: "delete", danger: true, confirm: x => "Delete subscription " + x.name + "?",
+      run: x => subPost(svc, "deleteSubscription", name, {name: x.name})}],
+  });
+};
+GT.psschema = async function(host, svc, item){
+  const name = lastSeg(tabName(svc, item));
+  let form = "";
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const t = await tabView(svc, item, "Schema");
+    const ss = t.schemaSettings || {};
+    wrap.innerHTML = "";
+    if (ss.schema) {
+      const sc = t.schema || {};
+      wrap.append(kvCardOf("", [["Schema", ss.schema], ["Message encoding", ss.encoding || "JSON"], ["Schema type", sc.type || "Not found"],
+        ["Revision", sc.revisionId || "Not found"]]));
+      if (sc.definition) wrap.append(el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto;white-space:pre-wrap"}, sc.definition));
+    } else wrap.append(emptyOf("schema", name + " has no schema — any message bytes are accepted."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0;flex-wrap:wrap"});
+    bar.append(el("button",{class:"btn", onclick:()=>{ form = "attach"; paint(); }}, icon("link"), ss.schema ? "Change schema" : "Use a schema"));
+    if (ss.schema) bar.append(el("button",{class:"btn", onclick: async ()=>{ const r = await subPost(svc, "setSchema", name, {schema: ""}); if (r.ok) { toast("Schema removed"); paint(); } else toast("Failed: " + errMsg(r), "err"); }}, icon("link_off"), "Remove schema"));
+    bar.append(el("button",{class:"btn", onclick:()=>{ form = "create"; paint(); }}, icon("add"), "Create schema"));
+    wrap.append(bar);
+    if (form === "attach") {
+      const list = ((await subGet(svc, "listSchemas", name)).json || {}).items || [];
+      wrap.append(inlineForm([{name: "schema", label: "Schema", type: "select", value: ss.schema || (list[0] || {}).name,
+        options: list.map(x => ({value: x.name, label: lastSeg(x.name) + " (" + x.type + ")"}))},
+        {name: "encoding", label: "Message encoding", type: "select", value: ss.encoding || "JSON", options: ["JSON", "BINARY"]}], "Save", async v => {
+          const r = await subPost(svc, "setSchema", name, v);
+          if (r.ok) { toast("Schema attached"); form = ""; paint(); } else toast("Failed: " + errMsg(r), "err");
+        }, ()=>{ form = ""; paint(); }));
+      if (!list.length) wrap.append(el("div",{style:"font-size:12px;color:var(--sub)"}, "No schemas in project " + PROJECT + " yet — create one first."));
+    }
+    if (form === "create") wrap.append(inlineForm([{name: "name", label: "Schema ID", placeholder: name + "-schema"},
+      {name: "type", label: "Schema type", type: "select", value: "AVRO", options: ["AVRO", "PROTOCOL_BUFFER"]},
+      {name: "definition", label: "Schema definition", type: "textarea", rows: 8,
+       value: '{\n  "type": "record",\n  "name": "Event",\n  "fields": [\n    {"name": "id", "type": "string"},\n    {"name": "amount", "type": "double"}\n  ]\n}'}], "Create", async v => {
+        const r = await subPost(svc, "createSchema", name, v);
+        if (r.ok) { toast("Schema " + v.name + " created"); form = "attach"; paint(); } else toast("Failed: " + errMsg(r), "err");
+      }, ()=>{ form = ""; paint(); }));
+  }
+  await paint();
+};
+GT.psmessages = async function(host, svc, item){
+  const name = lastSeg(tabName(svc, item));
+  const subs = ((await subGet(svc, "listPullSubscriptions", name)).json || {}).items || [];
+  host.append(el("div",{style:"font-weight:500;margin-bottom:8px"}, "Publish message"));
+  host.append(inlineForm([{name: "data", label: "Message body", type: "textarea", rows: 3, value: ""},
+    {name: "attributes", label: "Attributes (key=value, comma separated)", placeholder: "origin=console", width: 280}], "Publish", async v => {
+      const attributes = Object.fromEntries(String(v.attributes || "").split(",").map(s => s.trim()).filter(Boolean).map(s => { const i = s.indexOf("="); return i > 0 ? [s.slice(0, i).trim(), s.slice(i + 1).trim()] : [s, ""]; }));
+      const r = await subPost(svc, "publishMessage", name, {data: v.data, attributes});
+      if (r.ok) toast("Published message " + ((r.json.messageIds || [])[0] || "")); else toast("Publish failed: " + errMsg(r), "err");
+    }));
+  host.append(el("div",{style:"font-weight:500;margin:14px 0 8px"}, "Pull messages"));
+  if (!subs.length) { host.append(emptyOf("mail", "Pulling needs a subscription — " + name + " has none.")); return; }
+  const out = el("div",{});
+  host.append(inlineForm([{name: "subscription", label: "Subscription", type: "select", value: subs[0].name, options: subs.map(x => x.name)},
+    {name: "maxMessages", label: "Max messages", type: "number", value: 10, width: 80},
+    {name: "ack", label: "Acknowledge pulled messages", type: "checkbox", value: false}], "Pull", async v => {
+      const r = await subPost(svc, "pullMessages", name, {subscription: v.subscription, maxMessages: Number(v.maxMessages), ack: v.ack});
+      out.innerHTML = "";
+      if (!r.ok) { toast("Pull failed: " + errMsg(r), "err"); return; }
+      const items = r.json.items || [];
+      if (!items.length) { out.append(emptyOf("inbox", "No messages waiting on " + v.subscription + ".")); return; }
+      out.append(tableOf([["publishTime", "Publish time"], ["messageId", "Message ID"], ["data", "Message body"], ["attributes", "Attributes"],
+        ["acked", "Ack", x => x.acked ? "Acknowledged" : "Not acknowledged"]], items));
+    }));
+  host.append(out);
+};
+GT.psencryption = async function(host, svc, item){
+  const name = lastSeg(tabName(svc, item));
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const t = await tabView(svc, item, "Encryption");
+    const key = t.kmsKeyName || "";
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("", [["Encryption type", key ? "Customer-managed encryption key (CMEK)" : "Google-managed encryption key"],
+      ["Cloud KMS key", key || "Google-managed (no key to manage)"]]));
+    if (!editing) { wrap.append(el("button",{class:"btn", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit encryption")); return; }
+    const kms = svcByKey("kms");
+    let keys = [];
+    try { const kr = await api("GET", fillCommon(kms.collection_path)); keys = ((kr.json || {}).items || []); } catch(_) {}
+    const keyNames = keys.map(k => k.resourceName || ("projects/" + PROJECT + "/locations/" + (k.location || "global") + "/keyRings/" + (k.keyring || "default") + "/cryptoKeys/" + lastSeg(k.name)));
+    wrap.append(inlineForm([{name: "kmsKeyName", label: "Encryption key", type: "select", value: key,
+      options: [{value: "", label: "Google-managed encryption key"}, ...keyNames.map(k => ({value: k, label: k}))]}], "Save", async v => {
+        const r = await subPost(svc, "setEncryption", name, v);
+        if (r.ok) { toast("Encryption updated"); editing = false; paint(); } else toast("Update failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paint(); }));
+  }
+  await paint();
 };
 // ========== END DETAIL TABS =================================================
 

@@ -972,6 +972,83 @@ def _sql_tab(name, op, body):
     return None
 
 
+def _pubsub_tab(name, op, body):
+    """Pub/Sub topic tabs over core/gcp_pubsub_core (topics.patch, schemas, subscriptions, publish/pull)."""
+    topic = "projects/%s/topics/%s" % (PROJ, _short(name))
+
+    def call(method, path, query=None, payload=None):
+        st, out = _call("pubsub", method, "/v1/" + path, query or {}, payload if payload is not None else b"")
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "FAILED_PRECONDITION", err.get("message") or "Request failed")
+        return out
+
+    t = call("GET", topic)
+    op = op[0].lower() + op[1:]
+    v = _T.view_op("pubsub", op)
+    if v:
+        if v == "schema" and (t.get("schemaSettings") or {}).get("schema"):
+            st, sc = _call("pubsub", "GET", "/v1/" + t["schemaSettings"]["schema"])
+            t["schema"] = sc if st < 300 else None
+        return {"ok": True, "item": _T.view("pubsub", v, t)}
+    patch = _T.pubsub_topic_patch(op, body)
+    if patch is not None:
+        return {"ok": True, "item": call("PATCH", topic, None, {"topic": patch, "updateMask": ",".join(patch)})}
+    if op == "listSchemas":
+        return {"ok": True, "items": call("GET", "projects/%s/schemas" % PROJ).get("schemas", [])}
+    if op == "createSchema":
+        call("POST", "projects/%s/schemas" % PROJ, {"schemaId": body.get("name", "")},
+             {"type": body.get("type"), "definition": body.get("definition")})
+        return {"ok": True, "name": body.get("name")}
+    if op in ("listSubscriptions", "listPullSubscriptions"):   # the Messages tab pulls from pull subscriptions
+        items = []
+        for sn in call("GET", topic + "/subscriptions").get("subscriptions", []):
+            st, sub = _call("pubsub", "GET", "/v1/" + sn)
+            if st < 300:
+                items.append({"name": _short(sub["name"]), "ackDeadlineSeconds": sub.get("ackDeadlineSeconds", 10),
+                              "messageRetentionDuration": sub.get("messageRetentionDuration") or "604800s",
+                              "deliveryType": "Push" if (sub.get("pushConfig") or {}).get("pushEndpoint") else "Pull",
+                              "retainAckedMessages": bool(sub.get("retainAckedMessages"))})
+        if op == "listPullSubscriptions":
+            items = [x for x in items if x["deliveryType"] == "Pull"]
+        return {"ok": True, "items": items}
+    if op == "createSubscription":
+        sid = _T.validate_pubsub_id(body.get("name"))
+        ack = int(body.get("ackDeadlineSeconds") or 10)
+        if not 10 <= ack <= 600:
+            raise _T.TabError(400, "INVALID_ARGUMENT", "The ack deadline must be between 10 and 600 seconds.")
+        call("PUT", "projects/%s/subscriptions/%s" % (PROJ, sid), None, {"topic": topic, "ackDeadlineSeconds": ack})
+        return {"ok": True, "name": sid}
+    if op == "deleteSubscription":
+        call("DELETE", "projects/%s/subscriptions/%s" % (PROJ, _short(body.get("name"))))
+        return {"ok": True, "name": body.get("name")}
+    if op == "publishMessage":
+        data = str(body.get("data") or "")
+        attrs = {str(k): str(v) for k, v in (body.get("attributes") or {}).items()}
+        if not data and not attrs:
+            raise _T.TabError(400, "INVALID_ARGUMENT", "A message needs data or at least one attribute.")
+        out = call("POST", topic + ":publish", None,
+                   {"messages": [{"data": base64.b64encode(data.encode()).decode(), "attributes": attrs}]})
+        return {"ok": True, "messageIds": out.get("messageIds", [])}
+    if op == "pullMessages":
+        sub = "projects/%s/subscriptions/%s" % (PROJ, _short(body.get("subscription")))
+        got = call("POST", sub + ":pull", None, {"maxMessages": max(1, min(int(body.get("maxMessages") or 10), 100))}).get("receivedMessages", [])
+        if body.get("ack") and got:
+            call("POST", sub + ":acknowledge", None, {"ackIds": [g["ackId"] for g in got]})
+        items = []
+        for g in got:
+            m = g["message"]
+            try:
+                text = base64.b64decode(m.get("data") or "").decode("utf-8")
+            except Exception:
+                text = str(m.get("data") or "")
+            items.append({"messageId": m.get("messageId"), "publishTime": m.get("publishTime"), "data": text,
+                          "attributes": ", ".join("%s=%s" % kv for kv in (m.get("attributes") or {}).items()) or "No attributes",
+                          "acked": bool(body.get("ack"))})
+        return {"ok": True, "items": items}
+    return None
+
+
 def _project_policy(op, project, body):
     res = "projects/%s" % (project or PROJ)
     st, pol = _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})
@@ -983,7 +1060,7 @@ def _project_policy(op, project, body):
     return {"ok": st < 300, "project": project, "bindings": out.get("bindings", [])}
 
 
-_TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _sql_tab}
+_TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _sql_tab, "pubsub": _pubsub_tab}
 
 
 def tab_dispatch(svc, operation, name, body, resources=None, account="default"):

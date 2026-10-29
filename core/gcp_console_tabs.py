@@ -127,6 +127,11 @@ VIEWS = {
         "insights": ["name", "databaseVersion", "settings"],
         "logging": ["name", "databaseVersion", "settings"],
     },
+    "pubsub": {
+        "encryption": ["name", "kmsKeyName"],
+        "schema": ["name", "schemaSettings", "schema"],
+        "labels": ["name", "labels"],
+    },
     "storage": {
         "configuration": ["name", "location", "locationType", "storageClass", "iamConfiguration", "versioning",
                           "timeCreated", "updated", "metageneration", "projectNumber", "labels"],
@@ -135,6 +140,33 @@ VIEWS = {
         "retention": ["name", "retentionPolicy", "softDeletePolicy", "versioning"],
     },
 }
+
+
+_PUBSUB_ID = re.compile(r"^[A-Za-z][A-Za-z0-9\-_.~+%]{2,254}$")
+
+
+def validate_pubsub_id(v, what="subscription") -> str:
+    v = str(v or "").strip()
+    if not _PUBSUB_ID.match(v) or v.lower().startswith("goog"):
+        raise TabError(400, "INVALID_ARGUMENT",
+                       "Invalid %s ID '%s': 3-255 characters, start with a letter, letters/digits/-_.~+%% only, "
+                       "and not starting with 'goog'." % (what, v))
+    return v
+
+
+def pubsub_topic_patch(op: str, body: dict):
+    """Topic tab write → the topics.patch `topic` body (validated by the Pub/Sub engine)."""
+    op = op[0].lower() + op[1:]
+    if op == "setEncryption":
+        return {"kmsKeyName": str(body.get("kmsKeyName") or "")}
+    if op == "setSchema":
+        sch = str(body.get("schema") or "")
+        return {"schemaSettings": {"schema": sch, "encoding": body.get("encoding") or "JSON"} if sch else {}}
+    if op == "setRetention":
+        return {"messageRetentionDuration": body.get("messageRetentionDuration") or ""}
+    if op == "setLabels":
+        return {"labels": validate_labels(body.get("labels", {}))}
+    return None
 
 
 def storage_patch(op: str, body: dict):

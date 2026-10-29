@@ -579,11 +579,35 @@ def _pubsub_mirror(s, kind: str, project: str, rid: str, payload: dict | None = 
         pass
 
 
+def _pubsub_topic_settings(t: dict) -> dict:
+    """Emulator topic + the settings the emulator doesn't hold (CMEK key, schema,
+    labels set from the console), kept on the topic's gcp_pubsub_state record."""
+    rec = gcp_pubsub_state.get("topics", {}).get(str(t.get("name") or "").split("/")[-1]) or {}
+    out = dict(t)
+    for k in ("kmsKeyName", "schemaSettings", "labels"):
+        if rec.get(k):
+            out[k] = rec[k]
+    return out
+
+
+def _pubsub_check_schema(topic: str, data_b64: str) -> None:
+    rec = gcp_pubsub_state.get("topics", {}).get(topic) or {}
+    ss = rec.get("schemaSettings") or {}
+    if not ss.get("schema"):
+        return
+    from core import gcp_pubsub_core as _psc
+    sc = gcp_pubsub_state.get("schemas", {}).get(str(ss["schema"]).split("/")[-1])
+    try:
+        _psc.check_message(sc, ss.get("encoding", "JSON"), data_b64)
+    except _psc.PubsubError as e:
+        raise HTTPException(e.code, detail=e.message)
+
+
 def api_gcp_pubsub_list_topics(project: str):
     s = _server()
     project = _gcp_project_name(project)
     if _ps_emu.available():
-        topics = [s._gcp_pubsub_topic_view(project, t) for t in _ps_emu.list_topics(project)]
+        topics = [s._gcp_pubsub_topic_view(project, _pubsub_topic_settings(t)) for t in _ps_emu.list_topics(project)]
         topics.sort(key=lambda item: item.get("name", ""))
         return {"topics": topics, "nextPageToken": "", "kind": "pubsub#topicList"}
     topics = [s._gcp_pubsub_topic_view(project, topic) for topic in gcp_pubsub_state.get("topics", {}).values() if str(topic.get("project") or project) == project]
@@ -625,7 +649,7 @@ def api_gcp_pubsub_get_topic(project: str, topic: str):
         t = _ps_emu.get_topic(project, topic)
         if not t:
             raise HTTPException(404, detail="Topic not found")
-        return s._gcp_pubsub_topic_view(project, t)
+        return s._gcp_pubsub_topic_view(project, _pubsub_topic_settings(t))
     rec = gcp_pubsub_state.get("topics", {}).get(topic)
     if not rec or str(rec.get("project") or project) != project:
         raise HTTPException(404, detail="Topic not found")
@@ -707,6 +731,7 @@ async def api_gcp_pubsub_publish(project: str, topic: str, request: Request):
                 continue
             raw = message.get("data") or ""
             if isinstance(raw, str):
+                _pubsub_check_schema(topic, raw)
                 try:
                     data = _b64.b64decode(raw, validate=True)
                 except (ValueError, _bin.Error):

@@ -115,12 +115,12 @@ _CLOUDSQL_SUB = [
 _PUBSUB_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Topic", "items": [
-        {"key": "subscriptions","label":"Subscriptions",    "icon": "subscriptions","type": "stub"},
-        {"key": "schemas",     "label": "Schema",           "icon": "schema",     "type": "stub"},
-        {"key": "messages",    "label": "Messages",         "icon": "mail",       "type": "stub"},
+        {"key": "subscriptions","label":"Subscriptions",    "icon": "subscriptions","type": "psSubscriptions"},
+        {"key": "schemas",     "label": "Schema",           "icon": "schema",     "type": "psSchema"},
+        {"key": "messages",    "label": "Messages",         "icon": "mail",       "type": "psMessages"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "encryption",  "label": "Encryption",       "icon": "enhanced_encryption","type":"stub"},
+        {"key": "encryption",  "label": "Encryption",       "icon": "enhanced_encryption","type":"psEncryption"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
