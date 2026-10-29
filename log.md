@@ -120,3 +120,4 @@
 | 2026-10-29T07:32Z | #66 | gcp/artifactregistry | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40835377388) |
 | 2026-10-29T07:41Z | #67 | gcp/bigquery | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40836333512) |
 | 2026-10-29T07:59Z | #69 | gcp/cloudtasks | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40837315289) |
+| 2026-10-29T08:06Z | #71 | gcp/dns | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40839247307) |
