@@ -4378,12 +4378,11 @@ SUB_RENDERERS.resourcealerts = async function(svc, full, host){
 // ---- PaaS networking: public network access, firewall rules, private endpoints ----
 SUB_RENDERERS.paasnetworking = async function(svc, full, host){
   const slot = el("div",{}); host.append(slot);
+  let cur = full;                       // the resource as loaded for this blade; refreshed from the PATCH reply
   async function fill(){
     slot.innerHTML = "";
-    const [r, pe] = await Promise.all([arm("GET", full.id, undefined, svc.apiVersion),
-                                       rbGet(full.id + "/privateEndpointConnections", svc.apiVersion)]);
-    if (!r.ok) { slot.append(emptyState("Could not load the resource: " + rbErr(r))); return; }
-    const p = r.json.properties || {};
+    const pe = await rbGet(full.id + "/privateEndpointConnections", svc.apiVersion);
+    const p = cur.properties || {};
     const acl = p.networkAcls || p.networkRuleSet || null;
     const pna = p.publicNetworkAccess || (acl ? (acl.defaultAction === "Deny" ? "Enabled from selected networks" : "Enabled from all networks") : "Enabled");
     const rows = [["Public network access", pna]];
@@ -4404,7 +4403,7 @@ SUB_RENDERERS.paasnetworking = async function(svc, full, host){
       const sel = rbSelect(["Enabled","Disabled"], p.publicNetworkAccess);
       slot.append(rbForm("Change public network access", [["Public network access", sel]], async () => {
         const w = await arm("PATCH", full.id, {properties:{publicNetworkAccess: sel.value}}, svc.apiVersion);
-        if (w.ok) { toast("Public network access: " + sel.value); fill(); } else toast("Save failed: " + rbErr(w), "err");
+        if (w.ok) { cur = w.json; full.properties = w.json.properties; toast("Public network access: " + sel.value); fill(); } else toast("Save failed: " + rbErr(w), "err");
       }));
     }
   }
@@ -4775,6 +4774,130 @@ SUB_RENDERERS.sqldefender = async function(svc, full, host){
     if (w.ok) { toast("Defender " + on.value.toLowerCase() + " on " + full.name); recordNotif("ok","Defender for SQL saved", full.name); }
     else toast("Save failed: " + rbErr(w), "err");
   })));
+};
+// ---- Cosmos DB blades ----
+// Scale: throughput of each database (shared) and container (dedicated) — throughputSettings/default.
+SUB_RENDERERS.throughput = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Provisioned throughput (RU/s) of the databases and containers in ", el("strong",{}, full.name), "."));
+  const slot = el("div",{}); host.append(slot);
+  async function editor(ownerId, label, ts){
+    const r = (ts && getPath(ts,"properties.resource")) || {};
+    const auto = !!(r.autoscaleSettings && r.autoscaleSettings.maxThroughput);
+    const mode = rbSelect([["manual","Manual"],["autoscale","Autoscale"]], auto ? "autoscale" : "manual");
+    const ru = rbInput(auto ? r.autoscaleSettings.maxThroughput : r.throughput, {type:"number", style:"min-width:120px"});
+    slot.append(rbKv([["Throughput", auto ? "Autoscale up to " + r.autoscaleSettings.maxThroughput + " RU/s (min " + r.minimumThroughput + ")" : r.throughput + " RU/s (manual)"],
+                      ["Mode", mode], ["RU/s (max for autoscale)", ru]], label));
+    slot.append(el("div",{class:"blade-actions"}, rbBtn("Save", async () => {
+      const v = Number(ru.value);
+      const body = {properties:{resource: mode.value === "autoscale" ? {autoscaleSettings:{maxThroughput: v}} : {throughput: v}}};
+      const w = await arm("PUT", ownerId + "/throughputSettings/default", body, svc.apiVersion);
+      if (w.ok) { toast(label + ": " + (mode.value === "autoscale" ? "autoscale " : "") + v + " RU/s"); recordNotif("ok","Cosmos throughput updated", label + " " + v + " RU/s"); fill(); }
+      else toast("Update failed: " + rbErr(w), "err");
+    })));
+  }
+  async function fill(){
+    slot.innerHTML = "";
+    const dr = await rbGet(full.id + "/sqlDatabases", svc.apiVersion);
+    const dbs = (dr.ok && dr.json.value) || [];
+    if (!dbs.length) { slot.append(emptyState("No databases in " + full.name + " — create one in Data Explorer.")); return; }
+    for (const db of dbs) {
+      const [t, cr] = await Promise.all([rbGet(db.id + "/throughputSettings", svc.apiVersion), rbGet(db.id + "/containers", svc.apiVersion)]);
+      const shared = ((t.ok && t.json.value) || [])[0];
+      if (shared) await editor(db.id, "Database " + db.name + " (shared throughput)", shared);
+      for (const c of ((cr.ok && cr.json.value) || [])) {
+        const ct = await rbGet(c.id + "/throughputSettings", svc.apiVersion);
+        const ded = ((ct.ok && ct.json.value) || [])[0];
+        if (ded) await editor(c.id, "Container " + db.name + "/" + c.name, ded);
+        else slot.append(rbKv([["Throughput", "Uses the database's shared throughput"]], "Container " + db.name + "/" + c.name));
+      }
+      if (!shared && !((cr.ok && cr.json.value) || []).length) slot.append(rbKv([["Throughput", "No shared throughput — containers get their own"]], "Database " + db.name));
+    }
+  }
+  await fill();
+};
+SUB_RENDERERS.cosmosconsistency = async function(svc, full, host){
+  const r = await arm("GET", full.id, undefined, svc.apiVersion);
+  const cp = (r.ok && getPath(r.json,"properties.consistencyPolicy")) || {};
+  host.append(el("div",{class:"sub-info"}, "Default consistency level of ", el("strong",{}, full.name), " — clients can relax it per request."));
+  const lvl = rbSelect(["Strong","BoundedStaleness","Session","ConsistentPrefix","Eventual"], cp.defaultConsistencyLevel || "Session");
+  const pre = rbInput(cp.maxStalenessPrefix, {type:"number", style:"min-width:140px"}), iv = rbInput(cp.maxIntervalInSeconds, {type:"number", style:"min-width:140px"});
+  host.append(rbKv([["Current level", cp.defaultConsistencyLevel || ""], ["Default consistency", lvl],
+                    ["Max staleness — operations (Bounded staleness)", pre], ["Max staleness — seconds (Bounded staleness)", iv]], "Default consistency"));
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Save", async () => {
+    const body = {properties:{consistencyPolicy:{defaultConsistencyLevel: lvl.value}}};
+    if (lvl.value === "BoundedStaleness") Object.assign(body.properties.consistencyPolicy, {maxStalenessPrefix: Number(pre.value), maxIntervalInSeconds: Number(iv.value)});
+    const w = await arm("PATCH", full.id, body, svc.apiVersion);
+    if (w.ok) { toast("Default consistency: " + lvl.value); recordNotif("ok","Cosmos consistency changed", full.name + " " + lvl.value); host.innerHTML = ""; SUB_RENDERERS.cosmosconsistency(svc, full, host); }
+    else toast("Save failed: " + rbErr(w), "err");
+  })));
+};
+SUB_RENDERERS.backup = async function(svc, full, host){
+  const bp = getPath(full,"properties.backupPolicy") || {};
+  const pm = bp.periodicModeProperties || {};
+  const rows = [["Backup mode", bp.type || ""]];
+  if (bp.type === "Periodic") rows.push(["Backup interval", (pm.backupIntervalInMinutes || "") + " minutes"], ["Backup retention", (pm.backupRetentionIntervalInHours || "") + " hours"],
+                                        ["Backup storage redundancy", pm.backupStorageRedundancy || ""]);
+  else rows.push(["Continuous tier", getPath(bp,"continuousModeProperties.tier") || ""]);
+  const ra = await rbGet(`/subscriptions/${SUB}/providers/Microsoft.DocumentDB/restorableDatabaseAccounts`, svc.apiVersion);
+  const mine = ((ra.ok && ra.json.value) || []).find(x => getPath(x,"properties.accountName") === full.name);
+  rows.push(["Point-in-time restore", mine ? "Available from " + getPath(mine,"properties.oldestRestorableTime") : "Not available — point-in-time restore needs continuous backup"]);
+  host.append(rbKv(rows, "Backup policy — " + full.name));
+  if (bp.type === "Periodic") {
+    const iv = rbInput(pm.backupIntervalInMinutes, {type:"number", style:"min-width:120px"}), ret = rbInput(pm.backupRetentionIntervalInHours, {type:"number", style:"min-width:120px"});
+    const red = rbSelect(["Geo","Zone","Local"], pm.backupStorageRedundancy || "Geo");
+    host.append(rbForm("Change periodic backup", [["Interval (minutes, 60-1440)", iv], ["Retention (hours, 8-720)", ret], ["Storage redundancy", red]], async () => {
+      const w = await arm("PATCH", full.id, {properties:{backupPolicy:{type:"Periodic", periodicModeProperties:{backupIntervalInMinutes: Number(iv.value), backupRetentionIntervalInHours: Number(ret.value), backupStorageRedundancy: red.value}}}}, svc.apiVersion);
+      if (w.ok) { full.properties = w.json.properties; toast("Backup policy saved"); host.innerHTML = ""; SUB_RENDERERS.backup(svc, full, host); } else toast("Save failed: " + rbErr(w), "err");
+    }));
+    host.append(el("div",{class:"blade-actions"}, rbBtn("Switch to continuous backup (7 days)", async () => {
+      if (!confirm("Migrate " + full.name + " to continuous backup? This can't be reverted.")) return;
+      const w = await arm("PATCH", full.id, {properties:{backupPolicy:{type:"Continuous", continuousModeProperties:{tier:"Continuous7Days"}}}}, svc.apiVersion);
+      if (w.ok) { full.properties = w.json.properties; toast("Continuous backup enabled"); host.innerHTML = ""; SUB_RENDERERS.backup(svc, full, host); } else toast("Migration failed: " + rbErr(w), "err");
+    }, "sec")));
+  }
+};
+// Microsoft Defender (advanced threat protection) on any resource that supports it.
+SUB_RENDERERS.defender = async function(svc, full, host){
+  const base = full.id + "/providers/Microsoft.Security/advancedThreatProtectionSettings";
+  const r = await rbGet(base, "2019-01-01");
+  const cur = ((r.ok && r.json.value) || [])[0];
+  const on = !!getPath(cur || {}, "properties.isEnabled");
+  host.append(rbKv([["Microsoft Defender for " + svc.label, on ? "On" : "Off"], ["Setting", cur ? cur.name : "Not configured"]], "Microsoft Defender for Cloud — " + full.name));
+  host.append(el("div",{class:"blade-actions"}, rbBtn(on ? "Turn off" : "Turn on", async () => {
+    const w = await arm("PUT", base + "/current", {properties:{isEnabled: !on}}, "2019-01-01");
+    if (w.ok) { toast("Defender " + (!on ? "on" : "off") + " for " + full.name); recordNotif("ok","Defender updated", full.name); host.innerHTML = ""; SUB_RENDERERS.defender(svc, full, host); }
+    else toast("Update failed: " + rbErr(w), "err");
+  })));
+};
+// Replicate data globally: the account's regions (failover priority, write/read) + add/remove regions.
+SUB_RENDERERS.replicate = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Regions ", el("strong",{}, full.name), " replicates to. The region with failover priority 0 takes writes."));
+  const slot = el("div",{}); host.append(slot);
+  const lr = await rbGet(`/subscriptions/${SUB}/locations`, "2022-12-01");
+  const regions = (lr.ok && lr.json.value) || [];
+  async function save(locations, extra){
+    const w = await arm("PATCH", full.id, {properties: Object.assign({locations}, extra || {})}, svc.apiVersion);
+    if (w.ok) { full.properties = w.json.properties; toast("Replication updated for " + full.name); recordNotif("ok","Cosmos regions updated", full.name); fill(); }
+    else toast("Update failed: " + rbErr(w), "err");
+  }
+  function fill(){
+    slot.innerHTML = "";
+    const p = full.properties || {};
+    const locs = (p.locations || []).slice().sort((a,b) => a.failoverPriority - b.failoverPriority);
+    const writes = (p.writeLocations || []).map(x => x.locationName);
+    slot.append(rbTable(["Region","Failover priority","Role","Zone redundant",""], locs.map(l => [l.locationName, String(l.failoverPriority),
+      writes.includes(l.locationName) ? "Write" : "Read", l.isZoneRedundant ? "Yes" : "No",
+      l.failoverPriority === 0 ? "" : rbBtn("Remove", () => save(locs.filter(x => x !== l).map((x, i) => ({locationName: x.locationName, failoverPriority: i, isZoneRedundant: x.isZoneRedundant}))), "del", "delete")])));
+    slot.append(rbKv([["Multi-region writes", p.enableMultipleWriteLocations ? "Enabled" : "Disabled"], ["Service-managed failover", p.enableAutomaticFailover ? "On" : "Off"]], "Settings"));
+    const have = locs.map(l => String(l.locationName).toLowerCase());
+    const avail = regions.filter(r => !have.includes(String(r.displayName).toLowerCase()));
+    const add = rbSelect(avail.map(r => [r.displayName, r.displayName + (getPath(r,"metadata.pairedRegion.0.name") ? " (paired with " + getPath(r,"metadata.pairedRegion.0.name") + ")" : "")]), avail[0] && avail[0].displayName);
+    const af = rbSelect([["false","Off"],["true","On"]], String(!!p.enableAutomaticFailover));
+    slot.append(rbForm("Add read region / failover", [["Region", add], ["Service-managed failover", af]], () =>
+      save(locs.map(x => ({locationName: x.locationName, failoverPriority: x.failoverPriority, isZoneRedundant: x.isZoneRedundant}))
+               .concat(add.value ? [{locationName: add.value, failoverPriority: locs.length, isZoneRedundant: false}] : []), {enableAutomaticFailover: af.value === "true"})));
+  }
+  fill();
 };
 // ===== REAL-BLADES:END =====
 

@@ -260,6 +260,9 @@ class AzureArm:
             return _ok({"id": f"/subscriptions/{sub}", "subscriptionId": sub,
                         "displayName": "CloudLearn Subscription", "state": "Enabled"})
 
+        if len(rest_segs) == 1 and rest_segs[0].lower() == "locations" and method == "GET":
+            return _ok(ext_engine.subscription_locations(sub))
+
         # resource groups
         if rest_segs[0].lower() == "resourcegroups" and len(rest_segs) <= 2:
             if len(rest_segs) == 1:

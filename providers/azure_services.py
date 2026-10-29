@@ -731,6 +731,10 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         return JSONResponse({"id": f"/subscriptions/{sub}", "subscriptionId": sub,
                              "displayName": "CloudLearn Subscription", "state": "Enabled"})
 
+    if len(rest_segs) == 1 and rest_segs[0].lower() == "locations" and method == "GET":
+        from core import azure_arm_ext_core as _ext_loc
+        return JSONResponse(_ext_loc.subscription_locations(sub))
+
     # Resource-group collection / item: /subscriptions/{sub}/resourcegroups[/{rg}]
     if rest_segs[0].lower() == "resourcegroups" and (len(rest_segs) == 1 or
                                                       (len(rest_segs) == 2)):

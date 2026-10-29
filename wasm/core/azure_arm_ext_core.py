@@ -995,6 +995,16 @@ def after_upsert(state, rec, payload=None) -> None:
         _sql_db_fill(state, rec)
     elif t == SQL_SERVER_T + "/failovergroups":
         _sql_failover_group_fill(state, rec)
+    elif t == COSMOS_T:
+        bp = (_payload_props(payload).get("backupPolicy") or {}) if payload is not None else {}
+        if bp.get("type") == "Continuous":
+            p["backupPolicy"] = {"type": "Continuous", "continuousModeProperties": bp.get("continuousModeProperties") or {"tier": "Continuous7Days"}}
+            rec.setdefault("_backup_since", _now())
+        _cosmos_fill(rec)
+    elif t in (COSMOS_DB_T, COSMOS_CONT_T):
+        _cosmos_resource_fill(state, rec, payload)
+    elif t in (COSMOS_DB_T + "/throughputsettings", COSMOS_CONT_T + "/throughputsettings"):
+        _cosmos_throughput_fill(rec)
     elif t == STORAGE_T + "/fileservices/shares":
         p.setdefault("shareQuota", 5120)
         p.setdefault("accessTier", "TransactionOptimized")
@@ -1195,6 +1205,14 @@ def validate_write(state, rid, full_type, payload):
     bad = validate_identity(payload)
     if bad:
         return bad
+    if t == COSMOS_T:
+        bad = _cosmos_validate(payload)
+        if bad:
+            return bad
+    if t in (COSMOS_DB_T + "/throughputsettings", COSMOS_CONT_T + "/throughputsettings"):
+        bad = _cosmos_throughput_validate(payload)
+        if bad:
+            return bad
     if t == SQL_DB_T + "/backupshorttermretentionpolicies":
         d = pp.get("retentionDays")
         if d is not None and not (isinstance(d, int) and 1 <= d <= 35):
@@ -1217,6 +1235,160 @@ def validate_write(state, rid, full_type, payload):
             if str(db).lower() not in state or not str(db).lower().startswith(own + "/databases/"):
                 return _err(400, "FailoverGroupDatabaseInvalid", f"Database '{db}' does not exist on the primary server.")
     return None
+
+
+# ── Cosmos DB: consistency, regions, backup policy, database/container throughput ──
+COSMOS_T = "microsoft.documentdb/databaseaccounts"
+COSMOS_DB_T = COSMOS_T + "/sqldatabases"
+COSMOS_CONT_T = COSMOS_DB_T + "/containers"
+CONSISTENCY_LEVELS = ("Eventual", "ConsistentPrefix", "Session", "BoundedStaleness", "Strong")
+_REGION_NAMES = {"eastus": "East US", "eastus2": "East US 2", "westus": "West US", "westus2": "West US 2",
+                 "westus3": "West US 3", "centralus": "Central US", "northeurope": "North Europe",
+                 "westeurope": "West Europe", "uksouth": "UK South", "southeastasia": "Southeast Asia",
+                 "eastasia": "East Asia", "centralindia": "Central India", "japaneast": "Japan East",
+                 "australiaeast": "Australia East"}
+
+
+def _region_name(loc):
+    return _REGION_NAMES.get(str(loc or "").replace(" ", "").lower(), loc)
+
+
+def _cosmos_fill(rec):
+    p = rec.setdefault("properties", {})
+    cp = p.setdefault("consistencyPolicy", {})
+    cp.setdefault("defaultConsistencyLevel", "Session")
+    cp.setdefault("maxIntervalInSeconds", 5)
+    cp.setdefault("maxStalenessPrefix", 100)
+    locs = p.get("locations")
+    if not isinstance(locs, list) or not locs:
+        locs = [{"locationName": _region_name(rec.get("location")), "failoverPriority": 0, "isZoneRedundant": False}]
+    for i, l in enumerate(sorted(locs, key=lambda x: x.get("failoverPriority", 0))):
+        l["locationName"] = _region_name(l.get("locationName"))
+        l.setdefault("failoverPriority", i)
+        l.setdefault("isZoneRedundant", False)
+        l["id"] = f"{rec.get('name')}-{str(l['locationName']).replace(' ', '').lower()}"
+        l["provisioningState"] = "Succeeded"
+    p["locations"] = locs
+    first = min(locs, key=lambda x: x.get("failoverPriority", 0))
+    multi = bool(p.get("enableMultipleWriteLocations"))
+    p["writeLocations"] = [dict(l) for l in locs] if multi else [dict(first)]
+    p["readLocations"] = [dict(l) for l in locs]
+    p.setdefault("enableMultipleWriteLocations", False)
+    p.setdefault("enableAutomaticFailover", False)
+    p.setdefault("publicNetworkAccess", "Enabled")
+    p.setdefault("ipRules", [])
+    p.setdefault("isVirtualNetworkFilterEnabled", False)
+    p.setdefault("virtualNetworkRules", [])
+    p.setdefault("minimalTlsVersion", "Tls12")
+    p.setdefault("backupPolicy", {"type": "Periodic", "periodicModeProperties": {
+        "backupIntervalInMinutes": 240, "backupRetentionIntervalInHours": 8, "backupStorageRedundancy": "Geo"}})
+    p.setdefault("instanceId", str(uuid.uuid5(uuid.NAMESPACE_URL, rec["id"].lower())))
+    p.setdefault("createMode", "Default")
+
+
+def _cosmos_resource_fill(state, rec, payload):
+    """sqlDatabases / containers carry properties.resource (id, _rid, _ts) and, when
+    created with options.throughput / autoscaleSettings, a throughputSettings/default."""
+    p = rec.setdefault("properties", {})
+    res = p.setdefault("resource", {})
+    res["id"] = rec.get("name")
+    res.setdefault("_rid", base64.b64encode(hashlib.sha256(rec["id"].lower().encode()).digest()[:6]).decode())
+    res.setdefault("_etag", '"' + str(uuid.uuid4()) + '"')
+    res["_ts"] = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+    if str(rec.get("_type") or "").lower() == COSMOS_CONT_T:
+        res.setdefault("partitionKey", {"paths": ["/id"], "kind": "Hash", "version": 2})
+        res.setdefault("indexingPolicy", {"indexingMode": "consistent", "automatic": True,
+                                          "includedPaths": [{"path": "/*"}], "excludedPaths": [{"path": "/\"_etag\"/?"}]})
+    opts = (_payload_props(payload).get("options") or {}) if payload is not None else {}
+    want = None
+    if isinstance(opts, dict) and (opts.get("throughput") or (opts.get("autoscaleSettings") or {}).get("maxThroughput")):
+        mx = (opts.get("autoscaleSettings") or {}).get("maxThroughput")
+        want = {"throughput": int(mx) // 10 if mx else int(opts["throughput"])}
+        if mx:
+            want["autoscaleSettings"] = {"maxThroughput": int(mx)}
+    elif payload is not None and str(rec.get("_type") or "").lower() == COSMOS_CONT_T \
+            and f"{rec['id'].rsplit('/containers/', 1)[0]}/throughputSettings/default".lower() not in state:
+        want = {"throughput": 400}            # a container in a database without shared throughput gets its own
+    if want is not None and f"{rec['id']}/throughputSettings/default".lower() not in state:
+        t = _new_rec(f"{rec['id']}/throughputSettings/default", "default", rec["_type"] + "/throughputSettings")
+        want["minimumThroughput"] = "400" if "autoscaleSettings" not in want else str(max(400, want["autoscaleSettings"]["maxThroughput"] // 10))
+        t["properties"] = {"resource": want}
+        state[t["id"].lower()] = t
+
+
+def _cosmos_throughput_validate(payload):
+    r = (_payload_props(payload).get("resource") or {})
+    mx = (r.get("autoscaleSettings") or {}).get("maxThroughput")
+    if mx is not None:
+        if not isinstance(mx, int) or mx < 1000 or mx % 1000:
+            return _err(400, "BadRequest", "Autoscale max throughput must be at least 1000 RU/s and a multiple of 1000.")
+        return None
+    t = r.get("throughput")
+    if not isinstance(t, int) or t < 400 or t % 100:
+        return _err(400, "BadRequest", "Manual throughput must be at least 400 RU/s and a multiple of 100.")
+    return None
+
+
+def _cosmos_throughput_fill(rec):
+    r = rec.setdefault("properties", {}).setdefault("resource", {})
+    mx = (r.get("autoscaleSettings") or {}).get("maxThroughput")
+    if mx:
+        r["throughput"] = int(mx) // 10
+        r["minimumThroughput"] = str(max(400, int(mx) // 10))
+    else:
+        r.pop("autoscaleSettings", None)
+        r["minimumThroughput"] = "400"
+
+
+def _cosmos_validate(payload):
+    cp = _payload_props(payload).get("consistencyPolicy")
+    if isinstance(cp, dict):
+        lvl = cp.get("defaultConsistencyLevel")
+        if lvl is not None and lvl not in CONSISTENCY_LEVELS:
+            return _err(400, "BadRequest", f"defaultConsistencyLevel must be one of {', '.join(CONSISTENCY_LEVELS)}.")
+        if lvl == "BoundedStaleness":
+            pre, iv = cp.get("maxStalenessPrefix", 100), cp.get("maxIntervalInSeconds", 5)
+            if not (isinstance(pre, int) and 10 <= pre <= 2147483647) or not (isinstance(iv, int) and 5 <= iv <= 86400):
+                return _err(400, "BadRequest", "Bounded staleness needs maxStalenessPrefix 10-2147483647 and maxIntervalInSeconds 5-86400.")
+    bp = _payload_props(payload).get("backupPolicy")
+    if isinstance(bp, dict) and bp.get("type") == "Periodic":
+        pm = bp.get("periodicModeProperties") or {}
+        iv, ret = pm.get("backupIntervalInMinutes", 240), pm.get("backupRetentionIntervalInHours", 8)
+        if not (isinstance(iv, int) and 60 <= iv <= 1440) or not (isinstance(ret, int) and 8 <= ret <= 720):
+            return _err(400, "BadRequest", "Periodic backup interval must be 60-1440 minutes and retention 8-720 hours.")
+    return None
+
+
+def _cosmos_restorable(state, sub):
+    out = []
+    for r in _of_type(state, COSMOS_T):
+        if r.get("_sub") != sub:
+            continue
+        _cosmos_fill(r)
+        bp = r["properties"].get("backupPolicy") or {}
+        if bp.get("type") != "Continuous":
+            continue
+        iid = r["properties"]["instanceId"]
+        out.append({"id": f"/subscriptions/{sub}/providers/Microsoft.DocumentDB/locations/{r.get('location')}/restorableDatabaseAccounts/{iid}",
+                    "name": iid, "type": "Microsoft.DocumentDB/locations/restorableDatabaseAccounts", "location": r.get("location"),
+                    "properties": {"accountName": r.get("name"), "creationTime": r.get("_created"), "apiType": "Sql",
+                                   "oldestRestorableTime": r.get("_backup_since") or r.get("_created"),
+                                   "restorableLocations": [{"locationName": l["locationName"], "regionalDatabaseAccountInstanceId": iid,
+                                                            "creationTime": r.get("_created")} for l in r["properties"]["locations"]]}})
+    return out
+
+
+def subscription_locations(sub):
+    """GET /subscriptions/{sub}/locations — the regions the subscription can deploy to."""
+    out = []
+    for name, display in sorted(_REGION_NAMES.items(), key=lambda kv: kv[1]):
+        pair = PAIRED_REGIONS.get(name)
+        md = {"regionType": "Physical", "regionCategory": "Recommended", "geographyGroup": "", "pairedRegion": []}
+        if pair:
+            md["pairedRegion"] = [{"name": pair, "id": f"/subscriptions/{sub}/locations/{pair}"}]
+        out.append({"id": f"/subscriptions/{sub}/locations/{name}", "name": name, "displayName": display,
+                    "regionalDisplayName": display, "type": "Region", "metadata": md})
+    return {"value": out}
 
 
 # ── entry ────────────────────────────────────────────────────────────────────
@@ -1267,6 +1439,8 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
         r = _storage_action(state, rid, rec, after[3], payload)
         if r is not None:
             return r
+    if low[0] == "microsoft.documentdb" and low[1] == "restorabledatabaseaccounts" and len(after) == 2 and rg is None:
+        return _ok({"value": _cosmos_restorable(state, sub)}) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
     if low[0] == "microsoft.sql" and low[1] == "locations" and len(after) == 4 and low[3] == "capabilities":
         return _ok(_sql_capabilities(after[2])) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
     if low[0] == "microsoft.compute" and low[1] == "restorepointcollections":

@@ -138,14 +138,14 @@ _COSMOS_SUB = [
     {"group": "Settings", "items": [
         {"key": "throughput",   "label": "Throughput (RU/s)", "icon": "speed",        "type": "throughput"},
         {"key": "replicate",    "label": "Replicate data globally", "icon": "public", "type": "replicate"},
-        {"key": "consistency",  "label": "Default consistency",     "icon": "tune",   "type": "stub"},
+        {"key": "consistency",  "label": "Default consistency",     "icon": "tune",   "type": "cosmosConsistency"},
         {"key": "backup",       "label": "Backup & Restore",  "icon": "backup",       "type": "backup"},
         {"key": "networking",   "label": "Networking",        "icon": "lan",          "type": "networking"},
         {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "identity"},
         *_settings_props_locks(),
     ]},
     {"group": "Integrations", "items": [
-        {"key": "defender",     "label": "Microsoft Defender","icon": "shield",       "type": "stub"},
+        {"key": "defender",     "label": "Microsoft Defender","icon": "shield",       "type": "defender"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "insights",     "label": "Insights",          "icon": "monitoring",   "type": "metrics"},

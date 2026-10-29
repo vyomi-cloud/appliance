@@ -277,7 +277,57 @@ def test_sql_blades():
            [x["properties"]["databaseName"] for x in dd["value"]] == ["app"] and dd["value"][0]["properties"]["deletionDate"])
 
 
-TESTS = [test_vm_blades, test_storage_blades, test_sql_blades]
+def test_cosmos_blades():
+    arm = AzureArm()
+    av = "2024-05-15"
+    acct = f"{P}/Microsoft.DocumentDB/databaseAccounts/cosb"
+    s, a = call(arm, "PUT", acct, {"location": "eastus", "kind": "GlobalDocumentDB", "properties": {}}, av)
+    p = a["properties"]
+    _check("account reports its region, consistency and periodic backup policy",
+           p["locations"][0]["locationName"] == "East US" and p["consistencyPolicy"]["defaultConsistencyLevel"] == "Session"
+           and p["backupPolicy"]["periodicModeProperties"]["backupIntervalInMinutes"] == 240)
+    s, b = call(arm, "PATCH", acct, {"properties": {"consistencyPolicy": {"defaultConsistencyLevel": "Wrong"}}}, av)
+    _check("invalid consistency level rejected", s == 400)
+    s, b = call(arm, "PATCH", acct, {"properties": {"consistencyPolicy": {"defaultConsistencyLevel": "BoundedStaleness",
+                                                                          "maxStalenessPrefix": 1000, "maxIntervalInSeconds": 300}}}, av)
+    _check("bounded staleness saved", b["properties"]["consistencyPolicy"]["maxIntervalInSeconds"] == 300)
+    s, b = call(arm, "PATCH", acct, {"properties": {"locations": [{"locationName": "East US", "failoverPriority": 0},
+                                                                  {"locationName": "westus", "failoverPriority": 1}]}}, av)
+    _check("added read region; writes stay in the priority-0 region",
+           [l["locationName"] for l in b["properties"]["readLocations"]] == ["East US", "West US"]
+           and [l["locationName"] for l in b["properties"]["writeLocations"]] == ["East US"])
+    s, rest = call(arm, "GET", f"/subscriptions/{SUB}/providers/Microsoft.DocumentDB/restorableDatabaseAccounts", av=av)
+    _check("periodic account is not point-in-time restorable", all(x["properties"]["accountName"] != "cosb" for x in rest["value"]))
+    s, b = call(arm, "PATCH", acct, {"properties": {"backupPolicy": {"type": "Continuous"}}}, av)
+    s, rest = call(arm, "GET", f"/subscriptions/{SUB}/providers/Microsoft.DocumentDB/restorableDatabaseAccounts", av=av)
+    _check("continuous backup makes it restorable",
+           b["properties"]["backupPolicy"]["type"] == "Continuous" and any(x["properties"]["accountName"] == "cosb" for x in rest["value"]))
+    s, db = call(arm, "PUT", acct + "/sqlDatabases/shop", {"properties": {"resource": {"id": "shop"}, "options": {"throughput": 400}}}, av)
+    _check("database resource id set", db["properties"]["resource"]["id"] == "shop")
+    s, ts = call(arm, "GET", acct + "/sqlDatabases/shop/throughputSettings", av=av)
+    _check("database created with shared 400 RU/s", ts["value"][0]["properties"]["resource"]["throughput"] == 400)
+    s, b = call(arm, "PUT", acct + "/sqlDatabases/shop/throughputSettings/default", {"properties": {"resource": {"throughput": 450}}}, av)
+    _check("450 RU/s (not a multiple of 100) rejected", s == 400)
+    s, b = call(arm, "PUT", acct + "/sqlDatabases/shop/throughputSettings/default", {"properties": {"resource": {"throughput": 500}}}, av)
+    _check("manual 500 RU/s saved", s == 200 and b["properties"]["resource"]["throughput"] == 500)
+    s, b = call(arm, "PUT", acct + "/sqlDatabases/shop/throughputSettings/default", {"properties": {"resource": {"autoscaleSettings": {"maxThroughput": 1500}}}}, av)
+    _check("autoscale max must be a multiple of 1000", s == 400)
+    s, b = call(arm, "PUT", acct + "/sqlDatabases/shop/throughputSettings/default", {"properties": {"resource": {"autoscaleSettings": {"maxThroughput": 4000}}}}, av)
+    _check("autoscale 4000 → baseline 400", b["properties"]["resource"]["throughput"] == 400)
+    call(arm, "PUT", acct + "/sqlDatabases/logs", {"properties": {"resource": {"id": "logs"}}}, av)
+    s, c = call(arm, "PUT", acct + "/sqlDatabases/logs/containers/events", {"properties": {"resource": {"id": "events"}}}, av)
+    s, ct = call(arm, "GET", acct + "/sqlDatabases/logs/containers/events/throughputSettings", av=av)
+    _check("container in a database without shared throughput gets dedicated 400 RU/s",
+           ct["value"][0]["properties"]["resource"]["throughput"] == 400 and c["properties"]["resource"]["partitionKey"]["paths"] == ["/id"])
+    s, loc = call(arm, "GET", f"/subscriptions/{SUB}/locations", av="2022-12-01")
+    _check("subscription locations list regions with their pairs",
+           any(x["name"] == "eastus" and x["metadata"]["pairedRegion"][0]["name"] == "westus" for x in loc["value"]))
+    s, d = call(arm, "PUT", acct + "/providers/Microsoft.Security/advancedThreatProtectionSettings/current", {"properties": {"isEnabled": True}}, "2019-01-01")
+    s, dl = call(arm, "GET", acct + "/providers/Microsoft.Security/advancedThreatProtectionSettings", av="2019-01-01")
+    _check("Defender setting stored on the account", dl["value"][0]["properties"]["isEnabled"] is True)
+
+
+TESTS = [test_vm_blades, test_storage_blades, test_sql_blades, test_cosmos_blades]
 
 if __name__ == "__main__":
     for t in TESTS:
