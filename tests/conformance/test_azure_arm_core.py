@@ -150,6 +150,20 @@ def run() -> int:
     _check("patch preserves properties",
            r["body"]["properties"]["hardwareProfile"]["vmSize"] == "Standard_B1s")
 
+    # 17. APIM ships a default global policy: GET .../policies/policy is 200 (not 404)
+    apim = _p(RG, "Microsoft.ApiManagement", "service", "apim-pol")
+    pol = apim + "/policies/policy"
+    r = arm.handle("GET", pol, {"api-version": "2023-05-01-preview"})
+    _check("apim policy 404 before the service exists", r["status"] == 404)
+    arm.handle("PUT", apim, {"api-version": "2023-05-01-preview"}, {"location": "eastus"})
+    r = arm.handle("GET", pol, {"api-version": "2023-05-01-preview"})
+    _check("apim default global policy 200", r["status"] == 200
+           and "<policies>" in r["body"]["properties"]["value"])
+    arm.handle("PUT", pol, {"api-version": "2023-05-01-preview"},
+               {"properties": {"format": "xml", "value": "<policies><inbound /></policies>"}})
+    r = arm.handle("GET", pol, {"api-version": "2023-05-01-preview"})
+    _check("apim saved policy persists", r["body"]["properties"]["value"] == "<policies><inbound /></policies>")
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 

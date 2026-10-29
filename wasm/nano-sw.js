@@ -26,6 +26,9 @@ const NANO_BASE = location.pathname.replace(/\/[^/]*$/, "");
     // Started uncontrolled -> the page's initial /api reads failed -> reload to
     // a controlled load (guarded against an infinite loop).
     const n = Number(sessionStorage.getItem("nano-sw-reload") || "0");
-    if (n < 4) { sessionStorage.setItem("nano-sw-reload", String(n + 1)); location.reload(); }
+    if (n < 4) {
+      try { if (window.__nk) { window.__nk.info("service", "reloading once under the service worker"); window.__nk.carry(); } } catch (_) {}
+      sessionStorage.setItem("nano-sw-reload", String(n + 1)); location.reload();
+    }
   } catch (_) { /* page still renders, just without served /api reads */ }
 })();

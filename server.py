@@ -43,6 +43,7 @@ import sys
 import threading
 import time
 import socket
+import tempfile
 import uuid
 import textwrap
 import traceback
@@ -152,6 +153,16 @@ from core.models import *  # noqa: F401,F403  — backward compat
 # ── App creation ──────────────────────────────────────────────────────
 app = FastAPI(title="CloudLearn Cloud Simulator", version="2.0.0", docs_url=None, redoc_url=None)
 
+
+# A handler calling `await request.json()` on an empty or malformed body is a
+# client error, not a crash: an unhandled JSONDecodeError surfaced as a 500 and
+# closed the keep-alive connection, so the client's NEXT request failed with
+# "Remote end closed connection" (console-actions ssm.create -> ssm.list).
+@app.exception_handler(json.JSONDecodeError)
+async def _invalid_json_body(request: Request, exc: json.JSONDecodeError):
+    return JSONResponse({"detail": f"Request body is not valid JSON: {exc.msg}",
+                         "code": "InvalidRequestBody"}, status_code=400)
+
 # ── Backend route registration (EARLY) ───────────────────────────────
 _aws_xamz_dispatchers: dict = {}
 try:
@@ -180,13 +191,13 @@ register_azure_routes(app, None)
 # ── Route module registration ────────────────────────────────────────
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
-from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb
-from routes import lazy_backends, shared, console_next, aws_cloudformation
+from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2
+from routes import lazy_backends, shared, console_next, aws_logs, aws_cloudformation
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
-            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb,
-            lazy_backends, shared, console_next, aws_cloudformation]:
+            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2,
+            lazy_backends, shared, console_next, aws_logs, aws_cloudformation]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -1566,6 +1577,8 @@ def _iam_route_action_resource(request: Request) -> tuple[str, str] | None:
             if not tail:
                 if method == "GET":
                     return ("ec2:DescribeInstances", resource)
+                if method == "DELETE":
+                    return ("ec2:TerminateInstances", resource)
             elif tail == ["start"] and method == "POST":
                 return ("ec2:StartInstances", resource)
             elif tail == ["stop"] and method == "POST":
@@ -2467,11 +2480,13 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             _cloudsim_add_runtime_instance(runtime_instances, resource_id, provider, service, bundle_key or "", resource)
         try:
             from core import cost_model as _cm
-            _cost = _cm.estimate_resource_cost(
-                provider, service, kind,
-                resource.get("instance_type") or resource.get("machine_type") or resource.get("machineType")
-                or resource.get("db_instance_class") or resource.get("vmSize") or "",
-            )
+            _props = resource.get("properties") if isinstance(resource.get("properties"), dict) else {}
+            _itype = (resource.get("instance_type") or resource.get("machine_type") or resource.get("machineType")
+                      or resource.get("db_instance_class") or resource.get("vmSize")
+                      or (_props.get("hardwareProfile") or {}).get("vmSize") or "")
+            if _itype:
+                node["instance_type"] = _itype   # estimate_space_savings prices VMs by size
+            _cost = _cm.estimate_resource_cost(provider, service, kind, _itype)
             node["estimated_real_cost_usd"] = _cost["monthly_usd"]
             node["estimated_hourly_usd"] = _cost["hourly_usd"]
         except Exception:
@@ -2526,6 +2541,52 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(api, dict):
             add("aws", "apigateway", "api", api_id, api)
 
+    try:   # Systems Manager parameters — the shared wire/console store
+        from core.ssm_core import shared_store as _ssm_store
+        for _n in _ssm_store().parameters:
+            add("aws", "ssm", "parameter", _n, {"name": _n})
+    except Exception:
+        pass
+
+    try:   # Step Functions — the shared wire/console store (console + SDK/CLI created state machines)
+        from core.stepfunctions_core import shared_store as _sfn_store
+        for sm_name, sm in _sfn_store().machines.items():
+            add("aws", "stepfunctions", "state_machine", sm_name, {"name": sm_name, "created": sm["creationDate"]})
+    except Exception:
+        pass
+
+    try:   # Cloud Scheduler — the shared wire/console store (console + SDK/CLI created jobs)
+        from core.gcp_cloudscheduler_core import shared_store as _gcs_sched_store
+        for _jn, _job in _gcs_sched_store().jobs.items():
+            add("gcp", "cloudscheduler", "job", _jn.rsplit("/", 1)[-1],
+                {"name": _jn.rsplit("/", 1)[-1], "created": _job.get("userUpdateTime", "")})
+    except Exception:
+        pass
+
+    try:   # Memorystore for Redis — the shared wire/console store (console + SDK/CLI created instances)
+        from core.gcp_redis_core import shared_store as _redis_store
+        for _rn, _ri in _redis_store().instances.items():
+            add("gcp", "redis", "instance", _rn.rsplit("/", 1)[-1],
+                {"name": _rn.rsplit("/", 1)[-1], "created": _ri.get("createTime", "")})
+    except Exception:
+        pass
+
+    try:   # Kubernetes Engine — the shared wire/console store (console + SDK/CLI created clusters)
+        from core.gcp_container_core import shared_store as _gke_store
+        for _cn, _cl in _gke_store().clusters.items():
+            add("gcp", "container", "cluster", _cn.rsplit("/", 1)[-1],
+                {"name": _cn.rsplit("/", 1)[-1], "created": _cl.get("createTime", "")})
+    except Exception:
+        pass
+
+    try:   # IAM Credentials — the shared wire/console issue log (never the secrets)
+        from core.gcp_iamcredentials_core import shared_store as _iamc_store
+        for _cid, _cr in _iamc_store().issued.items():
+            add("gcp", "iamcredentials", "credential", _cid,
+                {"name": _cid, "created": _cr.get("issueTime", "")})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -2542,11 +2603,22 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             add("aws", "cloudformation", "stack", _row["stack_id"], _row)
     except Exception:
         pass
+    aws_elbv2 = _cloudsim_service_state(space, "elbv2")
+    for lb_arn, lb in aws_elbv2.get("load_balancers", {}).items():
+        if isinstance(lb, dict):
+            add("aws", "elbv2", "load_balancer", lb.get("LoadBalancerName", lb_arn),
+                {**lb, "name": lb.get("LoadBalancerName", lb_arn), "instance_type": lb.get("Type", "application"),
+                 "state": (lb.get("State") or {}).get("Code", "active"), "created": lb.get("CreatedTime", "")})
 
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():
         if isinstance(table, dict):
             add("aws", "dynamodb", "table", table_name, table)
+
+    aws_logs = _cloudsim_service_state(space, "logs")
+    for group_name, group in aws_logs.get("log_groups", {}).items():
+        if isinstance(group, dict):
+            add("aws", "logs", "log_group", group_name, group)
 
     gcp_compute = _cloudsim_service_state(space, "gcp_compute")
     for instance_id, instance in gcp_compute.get("instances", {}).items():
@@ -2614,6 +2686,61 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(policy, dict):
             add("gcp", "iam", "policy", policy_id, policy)
 
+    # Rail extras (generic create backend): billable AWS/GCP resources that live
+    # under service_states["aws_extras"|"gcp_extras"][<svc>/<kind>]["items"].
+    # (service, kind) pairs priced in core/cost_model.SERVICE_MONTHLY.
+    for provider, extras_key, scan in (
+        ("aws", "aws_extras", (("secretsmanager", "secrets"), ("kms", "keys"),
+                               ("eventbridge", "rules"), ("eventbridge", "event-buses"))),
+        ("gcp", "gcp_extras", (("secretmanager", "secrets"), ("kms", "keys"),
+                               ("eventarc", "triggers"))),
+    ):
+        extras = service_states.get(extras_key, {})
+        if not isinstance(extras, dict):
+            continue
+        for svc, kind in scan:
+            slot = extras.get(f"{svc}/{kind}", {})
+            items = slot.get("items", {}) if isinstance(slot, dict) else {}
+            for item_id, item in (items.items() if isinstance(items, dict) else []):
+                if isinstance(item, dict):
+                    add(provider, svc, kind.rstrip("s"), str(item_id), item)
+
+    # Vault-backed GCP Secret Manager secrets / Cloud KMS keys (console + SDK
+    # create them in Vault with a name index, not in service_states).
+    try:
+        from core import vault_routes as _vr
+        _sid = next((k for k, v in _spaces_state().get("spaces", {}).items() if v is space), "")
+        if _sid:
+            for _svc, _kind, _vkind in (("secretmanager", "secret", "secrets"), ("kms", "key", "kms")):
+                for _entry, _created in _vr.gcp_vault_index(_sid, _vkind).items():
+                    _name = _entry.partition("/")[2] or _entry
+                    add("gcp", _svc, _kind, f"vault:{_vkind}:{_entry}", {"name": _name, "created": _created})
+    except Exception:
+        pass
+
+    # Vault-backed AWS Secrets Manager secrets / KMS keys (console + SDK write
+    # to Vault and _kms_keys, not to service_states["aws_extras"]).
+    try:
+        from core import vault_routes as _vr
+        _sid = next((k for k, v in _spaces_state().get("spaces", {}).items() if v is space), "")
+        if _sid:
+            _aws_v = _vr.aws_vault_resources(_sid)
+            for _svc, _kind, _bucket in (("secretsmanager", "secret", "secrets"), ("kms", "key", "keys")):
+                for _name, _created in _aws_v[_bucket].items():
+                    add("aws", _svc, _kind, f"vault:{_bucket}:{_name}", {"name": _name, "created": _created})
+    except Exception:
+        pass
+
+    # AWS IAM identities (free, but they are resources of the space).
+    _aws_iam = service_states.get("iam") or {}
+    if not _aws_iam.get("users") and not _aws_iam.get("roles") and not _aws_iam.get("groups"):
+        _aws_iam = iam_state   # IAM console/API writes land in the process-wide IAM store
+    if isinstance(_aws_iam, dict):
+        for _bucket, _kind in (("users", "user"), ("groups", "group"), ("roles", "role")):
+            for _iid, _item in (_aws_iam.get(_bucket) or {}).items():
+                if isinstance(_item, dict):
+                    add("aws", "iam", _kind, str(_iid), _item)
+
     # Azure ARM resources (space-scoped under service_states["azure_arm"]["resources"]).
     # Same DB-derived path as AWS/GCP: service + kind are mapped from the stored
     # ARM type via the catalog (nested children fold to their parent service).
@@ -2634,7 +2761,62 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             kind = full_type.split("/")[-1] if full_type else "resource"
             add("azure", service or "resource", kind, str(rec.get("id") or rid), rec)
 
+    _cloudsim_attach_storage_usage(nodes, space)
     return nodes, counts, runtime_instances
+
+
+_AZURITE_USAGE_CACHE: dict = {"at": 0.0, "bytes": 0, "blobs": 0}
+
+
+def _azurite_usage() -> tuple[int, int]:
+    """(bytes, blob count) stored in the Azurite blob service, cached for a few
+    seconds because every /api/spaces read recomputes savings."""
+    now = time.time()
+    if now - _AZURITE_USAGE_CACHE["at"] < 4.0:
+        return _AZURITE_USAGE_CACHE["bytes"], _AZURITE_USAGE_CACHE["blobs"]
+    total = blobs = 0
+    try:
+        from core import azure_blob_store as _abs
+        if _abs.available():
+            svc = _abs._svc()
+            for c in svc.list_containers():
+                for b in svc.get_container_client(c.name).list_blobs():
+                    total += int(b.size or 0)
+                    blobs += 1
+    except Exception:
+        pass
+    _AZURITE_USAGE_CACHE.update({"at": now, "bytes": total, "blobs": blobs})
+    return total, blobs
+
+
+def _cloudsim_attach_storage_usage(nodes: list[dict], space: dict) -> None:
+    """Stamp bucket / storage-account nodes with stored bytes and write-request
+    counts so core.cost_model bills usage (GB-month + PUTs), not just existence.
+    Azure blob data lives in Azurite, which is not keyed by ARM account, so its
+    total is attributed to the first storage account in the space."""
+    try:
+        azure_done = False
+        s3_objects = _cloudsim_service_state(space, "s3").get("objects", {}) or {}
+        gcs_objects = _cloudsim_service_state(space, "gcp_storage").get("objects", {}) or {}
+        for node in nodes:
+            prov, svc = node.get("provider"), node.get("service")
+            if prov == "aws" and svc == "s3" and node.get("kind") == "bucket":
+                size = cnt = 0
+                for ent in (s3_objects.get(node["resource_id"]) or {}).values():
+                    for v in (ent.get("versions") or []) if isinstance(ent, dict) else []:
+                        if isinstance(v, dict) and not v.get("is_delete_marker"):
+                            size += int(v.get("size") or len(v.get("data") or b""))
+                            cnt += 1
+                node["stored_bytes"], node["write_requests"] = size, cnt
+            elif prov == "gcp" and svc == "storage" and node.get("kind") == "bucket":
+                objs = gcs_objects.get(node["resource_id"]) or {}
+                node["stored_bytes"] = sum(int(o.get("size") or 0) for o in objs.values() if isinstance(o, dict))
+                node["write_requests"] = len(objs)
+            elif prov == "azure" and svc == "storage" and not azure_done:
+                azure_done = True
+                node["stored_bytes"], node["write_requests"] = _azurite_usage()
+    except Exception:
+        pass
 
 
 def _cloudsim_refresh_bridge(reason: str, detail: dict | None = None) -> None:
@@ -5990,7 +6172,7 @@ api = APIRouter(prefix="/api/s3")
 def api_list_buckets():
     return {
         "owner": "cloudlearn-simulator",
-        "buckets": [{"name": n, **{k: v for k, v in m.items() if k not in {"tags", "notifications"}}} for n, m in buckets.items()],
+        "buckets": [{"name": n, **{k: v for k, v in m.items() if k not in {"tags", "notifications"}}, "creation_date": m.get("created", "")} for n, m in buckets.items()],
         "count": len(buckets),
     }
 
@@ -6686,13 +6868,30 @@ def _allocate_host_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _instance_work_root() -> Path:
+    root = INSTANCE_WORK_ROOT
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        probe = root / f".probe_{os.getpid()}"
+        probe.touch()
+        probe.unlink()
+        return root
+    except (PermissionError, OSError):
+        fallback = Path(tempfile.gettempdir()) / "cloudlearn" / "deployments"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
 def _instance_workspace(instance_id: str) -> Path:
-    return (INSTANCE_WORK_ROOT / instance_id).resolve()
+    return (_instance_work_root() / instance_id).resolve()
 
 
 def _ensure_instance_workspace(instance: dict) -> Path:
     workspace = _instance_workspace(instance["instance_id"])
-    workspace.mkdir(parents=True, exist_ok=True)
+    try:
+        workspace.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        pass
     instance["workspace"] = str(workspace)
     instance["deployment_path"] = str(workspace)
     return workspace
@@ -12047,6 +12246,13 @@ def api_ec2_list_instances():
     return {"instances": instances, "count": len(instances)}
 
 
+def api_ec2_get_instance(instance_id: str):
+    instance = ec2_state["instances"].get(instance_id)
+    if not instance:
+        raise HTTPException(404, detail="NoSuchInstance")
+    return instance
+
+
 def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True, host_os_hint: str = ""):
     # Host-budget gate (clamp 30%-50% of host CPU+RAM): reject upfront if the
     # chosen instance_type would push the simulator past its share of the host.
@@ -12086,7 +12292,10 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
     _cloudsim_validate_ec2_launch_policy(_cloudsim_active_space_ref(), req, profile, runtime_backend)
     host_port = _allocate_host_port()
     workspace = _instance_workspace(instance_id)
-    workspace.mkdir(parents=True, exist_ok=True)
+    try:
+        workspace.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        pass
     runtime_image = profile.get("runtime_image") or (LXD_RUNTIME_IMAGE if _appliance_mode_enabled() else MULTIPASS_RUNTIME_IMAGE if runtime_backend == "multipass" else LXD_RUNTIME_IMAGE)
     runtime_backend_requested = "lxd" if _appliance_mode_enabled() else (req.runtime_backend or "").strip().lower()
     instance = {
@@ -12140,8 +12349,10 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
         "runtime_bundle_name": _cloudsim_runtime_bundle("ec2").get("name", ""),
         "runtime_bundle_kind": _cloudsim_runtime_bundle("ec2").get("kind", ""),
     }
-    if req.command:
+    if req.command or not req.subnet_id:
+        # Real EC2 auto-assigns a public IPv4 to launches into the default VPC/subnet.
         instance["public_ip"] = _public_ip()
+        instance["public_dns"] = _ec2_public_dns_name(instance)
     ec2_state["instances"][instance_id] = instance
     _cloudsim_sync_ec2_resource(instance, "upsert")
     if auto_start:
@@ -12593,6 +12804,51 @@ def _ec2_query_describe_volumes(params: dict[str, Any]) -> Response:
     return _ec2_success_response("DescribeVolumesResponse", build)
 
 
+_EC2_REGIONS = [
+    ("us-east-1", 6), ("us-east-2", 3), ("us-west-1", 2), ("us-west-2", 4),
+    ("eu-west-1", 3), ("eu-west-2", 3), ("eu-central-1", 3),
+    ("ap-south-1", 3), ("ap-southeast-1", 3), ("ap-southeast-2", 3), ("ap-northeast-1", 3),
+]
+
+
+def _ec2_query_describe_regions(params: dict[str, Any]) -> Response:
+    wanted = {str(v) for k, v in params.items() if k.lower().startswith("regionname") and v and not isinstance(v, list)}
+    for k, v in params.items():
+        if k.lower().startswith("regionname") and isinstance(v, list):
+            wanted.update(str(x) for x in v)
+    rows = [r for r, _ in _EC2_REGIONS if not wanted or r in wanted]
+
+    def build(root: ET.Element) -> None:
+        region_set = _ec2_sub(root, "regionInfo")
+        for r in rows:
+            item = _ec2_sub(region_set, "item")
+            _ec2_sub(item, "regionName", r)
+            _ec2_sub(item, "regionEndpoint", f"ec2.{r}.amazonaws.com")
+            _ec2_sub(item, "optInStatus", "opt-in-not-required")
+
+    return _ec2_success_response("DescribeRegionsResponse", build)
+
+
+def _ec2_query_describe_availability_zones(params: dict[str, Any]) -> Response:
+    region = os.environ.get("AWS_DEFAULT_REGION") or "us-east-1"
+    count = dict(_EC2_REGIONS).get(region, 3)
+    zones = [f"{region}{chr(97 + i)}" for i in range(count)]
+
+    def build(root: ET.Element) -> None:
+        zone_set = _ec2_sub(root, "availabilityZoneInfo")
+        for i, z in enumerate(zones):
+            item = _ec2_sub(zone_set, "item")
+            _ec2_sub(item, "zoneName", z)
+            _ec2_sub(item, "zoneState", "available")
+            _ec2_sub(item, "optInStatus", "opt-in-not-required")
+            _ec2_sub(item, "regionName", region)
+            _ec2_sub(item, "zoneId", f"{region.split('-')[0]}{region.split('-')[1][0]}{region[-1]}-az{i + 1}")
+            _ec2_sub(item, "groupName", region)
+            _ec2_sub(item, "zoneType", "availability-zone")
+
+    return _ec2_success_response("DescribeAvailabilityZonesResponse", build)
+
+
 def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
     # Tier quantity cap — Free=1 VM/space; Student=10; Developer=50; Enterprise=∞.
     # Enforced BEFORE consuming MinCount so we never partially create.
@@ -12688,21 +12944,28 @@ def _gcp_compute_instance_bucket() -> dict[str, dict]:
 
 
 def _gcp_compute_find_instance(project: str, zone: str, instance_ref: str) -> dict | None:
-    instance = _gcp_compute_instance_bucket().get(instance_ref)
+    bucket = _gcp_compute_instance_bucket()
+    instance = bucket.get(instance_ref)
     if not isinstance(instance, dict):
-        for candidate in _gcp_compute_instance_bucket().values():
+        for candidate in list(bucket.values()) + list(gcp_compute_state.get("instances", {}).values()):
             if not isinstance(candidate, dict):
                 continue
-            if str(candidate.get("name") or "").strip() == str(instance_ref or "").strip():
+            cand_name = str(candidate.get("name") or "").strip()
+            cand_id = str(candidate.get("instance_id") or candidate.get("id") or "").strip()
+            target = str(instance_ref or "").strip()
+            if cand_name == target or cand_id == target:
                 instance = candidate
                 break
     if not isinstance(instance, dict):
         return None
-    if str(instance.get("project") or "").strip() != str(project or "").strip():
+    cand_proj = str(instance.get("project") or "cloudlearn").strip()
+    req_proj = str(project or "cloudlearn").strip()
+    if cand_proj != req_proj:
         return None
-    requested_zone = str(zone or "").strip().lower()
+    requested_zone = str(zone or "").strip().lower().rstrip("/").split("/")[-1]
     if requested_zone and requested_zone not in {"-", "*", "_all", "all"}:
-        if str(instance.get("zone") or instance.get("az") or "").strip() != zone:
+        instance_zone = str(instance.get("zone") or instance.get("az") or "us-central1-a").rstrip("/").split("/")[-1].lower()
+        if instance_zone != requested_zone:
             return None
     return instance
 
@@ -13092,7 +13355,10 @@ def _gcp_compute_create_instance_instance(project: str, zone: str, payload: dict
         # the instance and defer provisioning rather than failing the control-plane call.
         runtime_backend = "simulated"
     workspace = _instance_workspace(instance_id)
-    workspace.mkdir(parents=True, exist_ok=True)
+    try:
+        workspace.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        pass
     runtime_image = profile.get("runtime_image") or (
         MULTIPASS_RUNTIME_IMAGE if runtime_backend == "multipass" else LXD_RUNTIME_IMAGE
     )
@@ -13388,6 +13654,10 @@ async def api_ec2_query(request: Request):
             return _ec2_query_describe_security_groups(params)
         if action == "DescribeVolumes":
             return _ec2_query_describe_volumes(params)
+        if action == "DescribeRegions":
+            return _ec2_query_describe_regions(params)
+        if action == "DescribeAvailabilityZones":
+            return _ec2_query_describe_availability_zones(params)
         if action == "RunInstances":
             return _ec2_query_run_instances(params)
         if action == "StartInstances":
@@ -13597,9 +13867,11 @@ def api_gcp_compute_reset_instance(project: str, zone: str, instance: str):
     if not instance:
         raise HTTPException(404, detail="NoSuchInstance")
     previous_state = instance.get("state", "running")
-    if previous_state != "running":
-        raise HTTPException(409, detail="InstanceNotRunning")
-    _reboot_runtime_process(instance)
+    if previous_state == "running":
+        _reboot_runtime_process(instance)
+    else:
+        _start_runtime_process(instance)
+        instance["state"] = "running"
     instance["launch_status"] = "ready"
     _gcp_compute_sync_resource_links()
     _cloudsim_sync_gcp_compute_resource(instance, "upsert")
@@ -15062,6 +15334,9 @@ async def api_gcp_pubsub_put_topic(project: str, topic: str, request: Request):
                 t = _pe.create_topic(project, topic_id, labels)
             except _gax.AlreadyExists:
                 t = _pe.get_topic(project, topic_id) or {"name": topic_id}
+            _ps_rec = _gcp_pubsub_topic_record(project, topic_id, payload)
+            gcp_pubsub_state.setdefault("topics", {})[topic_id] = _ps_rec
+            _cloudsim_sync_service_resource("gcp", "pubsub", "topic", topic_id, _ps_rec, "gcp_pubsub")
             return _gcp_pubsub_topic_view(project, t)
     except HTTPException:
         raise
@@ -15087,6 +15362,28 @@ async def api_gcp_pubsub_put_subscription(project: str, subscription: str, reque
     sub_id = str(subscription or payload.get("name") or "").split("/")[-1].strip()
     if not sub_id:
         raise HTTPException(400, detail="Subscription id is required")
+    from core import gcp_pubsub_emulator as _ps_emu
+    if _ps_emu.available():
+        topic_id = str(payload.get("topic") or "").split("/")[-1].strip()
+        if not topic_id:
+            raise HTTPException(400, detail="Topic is required")
+        from google.api_core import exceptions as _gax
+        try:
+            sub = await asyncio.to_thread(
+                _ps_emu.create_subscription, project, sub_id, topic_id,
+                int(payload.get("ackDeadlineSeconds") or 10),
+                str(payload.get("messageRetentionDuration") or ""),
+                payload.get("labels") if isinstance(payload.get("labels"), dict) else None,
+                bool(payload.get("enableMessageOrdering", False)),
+            )
+            _ps_rec = _gcp_pubsub_subscription_record(project, sub_id, payload)
+            gcp_pubsub_state.setdefault("subscriptions", {})[sub_id] = _ps_rec
+            _cloudsim_sync_service_resource("gcp", "pubsub", "subscription", sub_id, _ps_rec, "gcp_pubsub")
+            return _gcp_pubsub_subscription_view(project, sub)
+        except _gax.AlreadyExists:
+            raise HTTPException(409, detail="Subscription already exists")
+        except _gax.NotFound:
+            raise HTTPException(404, detail="Topic not found")
     rec = _gcp_pubsub_subscription_record(project, sub_id, payload)
     if not rec.get("topic"):
         raise HTTPException(400, detail="Topic is required")
@@ -15920,6 +16217,7 @@ def api_gcp_vpc_list_networks(project: str):
             "description": network.get("description", ""),
             "IPv4Range": network.get("IPv4Range", ""),
             "gatewayIPv4": network.get("gatewayIPv4", ""),
+            "mtu": int(network.get("mtu") or 1460),
             "selfLink": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}",
             "selfLinkWithId": network.get("selfLinkWithId", f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}?id={network.get('id') or _gcp_compute_numeric_id(f'{project}:{network_name}')}"),
             "autoCreateSubnetworks": bool(network.get("autoCreateSubnetworks", True)),
@@ -15949,6 +16247,7 @@ async def api_gcp_vpc_create_network(project: str, request: Request):
         "description": str(payload.get("description") or ""),
         "IPv4Range": str(payload.get("IPv4Range") or ""),
         "gatewayIPv4": str(payload.get("gatewayIPv4") or ""),
+        "mtu": int(payload.get("mtu") or 1460),
         "autoCreateSubnetworks": bool(payload.get("autoCreateSubnetworks", True)),
         "routingMode": str(payload.get("routingMode") or "REGIONAL"),
         "subnetworks": payload.get("subnetworks", []) if isinstance(payload.get("subnetworks"), list) else [],
@@ -15965,6 +16264,7 @@ async def api_gcp_vpc_create_network(project: str, request: Request):
         "description": rec["description"],
         "IPv4Range": rec["IPv4Range"],
         "gatewayIPv4": rec["gatewayIPv4"],
+        "mtu": rec["mtu"],
         "selfLink": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{name}",
         "selfLinkWithId": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{name}?id={rec['id']}",
         "autoCreateSubnetworks": rec["autoCreateSubnetworks"],
@@ -15987,6 +16287,7 @@ def api_gcp_vpc_get_network(project: str, network: str):
         "description": rec.get("description", ""),
         "IPv4Range": rec.get("IPv4Range", ""),
         "gatewayIPv4": rec.get("gatewayIPv4", ""),
+        "mtu": int(rec.get("mtu") or 1460),
         "selfLink": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{network}",
         "selfLinkWithId": f"{_gcp_compute_network_root()}/projects/{project}/global/networks/{network}?id={rec.get('id', _gcp_compute_numeric_id(f'{project}:{network}'))}",
         "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks", True)),
@@ -16486,9 +16787,12 @@ def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
 
 
 def _gcp_pubsub_topic_view(project: str, topic: dict) -> dict:
+    # Records store the full resource name; only prefix a bare id.
     name = str(topic.get("name") or "")
+    if not name.startswith("projects/"):
+        name = f"projects/{project}/topics/{name}"
     view = {
-        "name": f"projects/{project}/topics/{name}",
+        "name": name,
         "labels": topic.get("labels", {}),
         "messageStoragePolicy": topic.get("messageStoragePolicy", {
             "allowedPersistenceRegions": [],
@@ -16515,9 +16819,13 @@ def _gcp_pubsub_subscription_view(project: str, subscription: dict) -> dict:
     name = str(subscription.get("name") or "")
     if not name.startswith("projects/"):
         name = f"projects/{project}/subscriptions/{name}"
+    # The emulator hands back a bare topic id; the real API returns the full name.
+    topic = str(subscription.get("topic") or "")
+    if topic and not topic.startswith("projects/") and topic != "_deleted-topic_":
+        topic = f"projects/{project}/topics/{topic}"
     return {
         "name": name,
-        "topic": subscription.get("topic", ""),
+        "topic": topic,
         "ackDeadlineSeconds": subscription.get("ackDeadlineSeconds", 10),
         "retainAckedMessages": subscription.get("retainAckedMessages", False),
         "messageRetentionDuration": subscription.get("messageRetentionDuration", "604800s"),
@@ -16592,6 +16900,7 @@ def _gcp_functions_view(project: str, location: str, function: dict) -> dict:
         "name": f"{_gcp_functions_root()}/projects/{project}/locations/{location}/functions/{name}",
         "description": function.get("description", ""),
         "status": function.get("status", "ACTIVE"),
+        "state": function.get("status", "ACTIVE"),  # Cloud Functions v2 field the console's Status column reads
         "entryPoint": function.get("entryPoint", "handler"),
         "runtime": function.get("runtime", "python311"),
         "code": function.get("code", ""),
@@ -17896,7 +18205,7 @@ def _vpc_query_delete_vpc(params: dict[str, Any]) -> Response:
     return _ec2_success_response("DeleteVpcResponse", build)
 
 
-def _vpc_query_authorize_security_group_ingress(params: dict[str, Any]) -> Response:
+def _vpc_query_authorize_security_group_ingress(params: dict[str, Any], direction: str = "ingress") -> Response:
     group_id = str(params.get("GroupId", params.get("groupId", ""))).strip()
     group_name = str(params.get("GroupName", params.get("groupName", ""))).strip()
     if not group_id and not group_name:
@@ -17939,14 +18248,14 @@ def _vpc_query_authorize_security_group_ingress(params: dict[str, Any]) -> Respo
             "protocol": str(entry.get("IpProtocol", "tcp")),
             "from_port": int(str(entry.get("FromPort", 0)) or 0),
             "to_port": int(str(entry.get("ToPort", 65535)) or 65535),
-            "cidr": str(entry.get("CidrIp", entry.get("CidrIpv6", "0.0.0.0/0"))),
-            "source_sg": str(entry.get("GroupId", entry.get("SourceSecurityGroupName", ""))),
-            "description": str(entry.get("Description", "")),
+            "cidr": str(entry.get("CidrIp", entry.get("IpRanges.1.CidrIp", entry.get("CidrIpv6", entry.get("Ipv6Ranges.1.CidrIpv6", "0.0.0.0/0"))))),
+            "source_sg": str(entry.get("GroupId", entry.get("Groups.1.GroupId", entry.get("SourceSecurityGroupName", "")))),
+            "description": str(entry.get("Description", entry.get("IpRanges.1.Description", ""))),
             "created": _now(),
         }
-        target_group.setdefault("ingress", [])
-        if rule not in target_group["ingress"]:
-            target_group["ingress"].append(rule)
+        target_group.setdefault(direction, [])
+        if rule not in target_group[direction]:
+            target_group[direction].append(rule)
 
     def build(root: ET.Element) -> None:
         _ec2_sub(root, "return", "true")
@@ -17956,20 +18265,21 @@ def _vpc_query_authorize_security_group_ingress(params: dict[str, Any]) -> Respo
             _ec2_sub(item, "securityGroupRuleId", f"sgr-{secrets.token_hex(4)}")
             _ec2_sub(item, "groupId", target_group_id)
             _ec2_sub(item, "groupOwnerId", AWS_ACCOUNT_ID)
-            _ec2_sub(item, "isEgress", "false")
+            _ec2_sub(item, "isEgress", "true" if direction == "egress" else "false")
             _ec2_sub(item, "ipProtocol", str(rule.get("IpProtocol", "tcp")))
             _ec2_sub(item, "fromPort", str(rule.get("FromPort", 0)))
             _ec2_sub(item, "toPort", str(rule.get("ToPort", 65535)))
-            if str(rule.get("CidrIp", "")).startswith("::"):
+            cidr_in = str(rule.get("CidrIp", rule.get("IpRanges.1.CidrIp", "0.0.0.0/0")))
+            if cidr_in.startswith("::"):
                 rng = _ec2_sub(item, "referencedGroupInfo")
                 _ec2_sub(rng, "groupId", str(rule.get("GroupId", "")))
             else:
                 ranges = _ec2_sub(item, "ipRanges")
                 range_item = _ec2_sub(ranges, "item")
-                _ec2_sub(range_item, "cidrIp", str(rule.get("CidrIp", "0.0.0.0/0")))
-                _ec2_sub(range_item, "description", str(rule.get("Description", "")))
+                _ec2_sub(range_item, "cidrIp", cidr_in)
+                _ec2_sub(range_item, "description", str(rule.get("Description", rule.get("IpRanges.1.Description", ""))))
 
-    return _ec2_success_response("AuthorizeSecurityGroupIngressResponse", build)
+    return _ec2_success_response("AuthorizeSecurityGroupEgressResponse" if direction == "egress" else "AuthorizeSecurityGroupIngressResponse", build)
 
 
 RDS_ENGINE_CATALOG = {
@@ -20650,6 +20960,8 @@ async def api_vpc_query(request: Request):
             return _vpc_query_describe_security_groups(params)
         if action == "AuthorizeSecurityGroupIngress":
             return _vpc_query_authorize_security_group_ingress(params)
+        if action == "AuthorizeSecurityGroupEgress":
+            return _vpc_query_authorize_security_group_ingress(params, "egress")
         if action == "CreateRouteTable":
             return _vpc_query_create_route_table(params)
         if action == "DescribeRouteTables":
@@ -21099,6 +21411,9 @@ def _aws_query_target_service(request: Request) -> str:
     # EventBridge uses AWSEvents.* targets.
     if target.startswith("AWSEvents."):
         return "events"
+    # Systems Manager uses AmazonSSM.* targets.
+    if target.startswith("AmazonSSM."):
+        return "ssm"
     return ""
 
 
@@ -21212,6 +21527,12 @@ async def api_iam_query(request: Request) -> Response:
         if action == "ListPolicies":
             members = "".join(f"<member>{_iam_policy_fields(p)}</member>" for p in iam_state["policies"].values())
             return _iam_envelope("ListPolicies", f"<IsTruncated>false</IsTruncated><Policies>{members}</Policies>")
+        if action == "GetPolicy":
+            name = params.get("PolicyArn", "").rsplit("/", 1)[-1]
+            target = next((p for pid, p in iam_state["policies"].items() if p.get("policy_name") == name or pid == name), None)
+            if not target:
+                return _iam_query_error("NoSuchEntity", f"Policy {params.get('PolicyArn', '')} was not found.", 404)
+            return _iam_envelope("GetPolicy", f"<Policy>{_iam_policy_fields(target)}</Policy>")
         if action == "CreatePolicy":
             raw_doc = params.get("PolicyDocument", "")
             try:
@@ -21267,6 +21588,24 @@ _EC2_VPC_ACTIONS = {
 }
 
 
+def _ssm_usage(target: str, payload: dict, resp) -> None:
+    """Mirror SDK/CLI Parameter Store writes into the CloudSim resource table + usage
+    meter, exactly as console-created parameters are (so counts/cost-savings agree)."""
+    try:
+        op = target.rsplit(".", 1)[-1]
+        if resp.status >= 300:
+            return
+        if op == "PutParameter":
+            _cloudsim_sync_service_resource("aws", "ssm", "parameter", payload["Name"], {"name": payload["Name"]}, None)
+            _record_usage("ssm.put_parameter", {"name": payload["Name"]})
+        elif op in ("DeleteParameter", "DeleteParameters"):
+            for n in ([payload.get("Name")] if op == "DeleteParameter" else payload.get("Names") or []):
+                _cloudsim_sync_service_resource("aws", "ssm", "parameter", n, {}, None, action="delete")
+                _record_usage("ssm.delete_parameter", {"name": n})
+    except Exception:
+        pass
+
+
 async def aws_query_root(request: Request) -> Response:
     """Root dispatch for real AWS SDK/CLI query + JSON protocol requests."""
     service = _aws_query_target_service(request)
@@ -21287,6 +21626,17 @@ async def aws_query_root(request: Request) -> Response:
         return await api_iam_query(request)
     if service == "sts":
         return await api_sts_query(request)
+    if service == "ssm":
+        # Systems Manager: in-process engine (core/ssm_core.py) shared with the console REST.
+        from core import ssm_core as _ssm_core
+        try:
+            _payload = json.loads(await request.body() or b"{}")
+        except Exception:
+            _payload = {}
+        _r = _ssm_core.dispatch(_ssm_core.shared_store(), request.headers.get("x-amz-target", ""), _payload)
+        _ssm_usage(request.headers.get("x-amz-target", ""), _payload, _r)
+        return Response(content=json.dumps(_r.body), status_code=_r.status,
+                        media_type="application/x-amz-json-1.1", headers=dict(_r.headers or {}))
     if service in ("kms", "secretsmanager", "events"):
         # Backend-backed services. The X-Amz-Target prefix maps to one of the
         # dispatchers registered in _aws_xamz_dispatchers by vault_routes /
@@ -22944,6 +23294,125 @@ _UNIFIED_INGRESS = os.environ.get("VYOMI_UNIFIED_INGRESS", "").strip().lower() i
 # we registered the @app.post("/{bucket}/{key:path}") catch-all up
 # top (as the file originally did), it swallowed POST /api/auth/...
 # with bucket=api, key=auth/... and returned a NoSuchBucket XML.
+# Systems Manager console REST (/api/ssm/*) — shares its store with the native AmazonSSM wire.
+try:
+    from providers import aws_ssm_console as _ssm_console
+
+    def _ssm_changed(action, name):
+        if action == "delete":
+            _cloudsim_sync_service_resource("aws", "ssm", "parameter", name, {}, None, action="delete")
+            _record_usage("ssm.delete_parameter", {"name": name})
+        else:
+            _cloudsim_sync_service_resource("aws", "ssm", "parameter", name, {"name": name}, None)
+            _record_usage("ssm.put_parameter", {"name": name})
+    _ssm_console.register(app, _ssm_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[ssm] console routes skipped: {_e}")
+# Step Functions console REST (/api/stepfunctions/*) — shares its store with the native JSON wire.
+try:
+    from providers import aws_stepfunctions_console as _sfn_console
+
+    def _sfn_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("aws", "stepfunctions", "state_machine", payload, {}, None, action="delete")
+            _record_usage("stepfunctions.delete_state_machine", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("aws", "stepfunctions", "state_machine", payload["name"],
+                                            {"name": payload["name"], "created": payload["created"]}, None)
+            _record_usage("stepfunctions.create_state_machine", {"name": payload["name"]})
+    _sfn_console.register(app, _sfn_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[stepfunctions] console routes skipped: {_e}")
+
+# Cloud Scheduler: native /v1/projects/*/locations/*/jobs wire + console REST (/api/gcp/cloudscheduler/*).
+try:
+    from providers import gcp_cloudscheduler_console as _gcs_sched_console
+
+    def _gcs_sched_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "cloudscheduler", "job", payload, {}, None, action="delete")
+            _record_usage("gcp.cloudscheduler.delete_job", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "cloudscheduler", "job", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("state", "ENABLED")}, None,
+                                            region=payload.get("region", "us-central1"))
+            _record_usage("gcp.cloudscheduler.create_job", {"name": payload["id"]})
+    _gcs_sched_console.register(app, _gcs_sched_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[cloudscheduler] routes skipped: {_e}")
+
+# Kubernetes Engine: native /v1/projects/*/locations/*/clusters wire + console REST (/api/gcp/container/*).
+try:
+    from providers import gcp_container_console as _gke_console
+
+    def _gke_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "container", "cluster", payload, {}, None, action="delete")
+            _record_usage("gcp.container.delete_cluster", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "container", "cluster", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("status", "RUNNING")}, None,
+                                            region=payload.get("region", "us-central1"))
+            _record_usage("gcp.container.create_cluster", {"name": payload["id"]})
+    _gke_console.register(app, _gke_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[container] routes skipped: {_e}")
+
+# Azure Container Apps: run each active revision on the Docker compute backend (Pro/Max); control plane only below.
+try:
+    from providers import azure_app_runtime as _azure_app_runtime
+    _azure_app_runtime.attach()
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-app] runtime skipped: {_e}")
+
+# Azure App Configuration data plane (/azure-data/appconfig/{store}/kv …); the ARM control plane is in azure_services.
+try:
+    from providers import azure_appconfiguration_routes as _azure_appconfig_routes
+    _azure_appconfig_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-appconfig] routes skipped: {_e}")
+
+# Azure DNS resolution (/azure-data/dns/query); the ARM control plane (dnsZones) is in azure_services.
+try:
+    from providers import azure_dns_routes as _azure_dns_routes
+    _azure_dns_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-dns] routes skipped: {_e}")
+
+# Memorystore for Redis: native /v1/projects/*/locations/*/instances wire + console REST (/api/gcp/redis/*).
+try:
+    from providers import gcp_redis_console as _redis_console
+
+    def _redis_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "redis", "instance", payload, {}, None, action="delete")
+            _record_usage("gcp.redis.delete_instance", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "redis", "instance", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("status", "READY")}, None,
+                                            region=payload.get("region", "us-central1"))
+            _record_usage("gcp.redis.create_instance", {"name": payload["id"]})
+    _redis_console.register(app, _redis_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[redis] routes skipped: {_e}")
+
+# IAM Service Account Credentials: native /v1/projects/-/serviceAccounts/{sa}:verb wire + console REST (/api/gcp/iamcredentials/*).
+try:
+    from providers import gcp_iamcredentials_console as _iamc_console
+
+    def _iamc_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "iamcredentials", "credential", payload, {}, None, action="delete")
+            _record_usage("gcp.iamcredentials.delete_credential", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "iamcredentials", "credential", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("state", "ISSUED")}, None,
+                                            region="global")
+            _record_usage("gcp.iamcredentials.%s" % payload.get("method", "issue"), {"name": payload["id"]})
+    _iamc_console.register(app, _iamc_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[iamcredentials] routes skipped: {_e}")
+
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)
     # on the DEFAULT path — targeted, additive routes for path prefixes that have no

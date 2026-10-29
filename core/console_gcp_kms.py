@@ -60,6 +60,20 @@ def _call(action: str, payload: dict) -> dict:
     return body
 
 
+_PROJECT, _LOCATION, _RING = "cloudlearn", "global", "default"
+_STATE = {"Enabled": "ENABLED", "Disabled": "DISABLED", "PendingDeletion": "DESTROY_SCHEDULED",
+          "PendingImport": "PENDING_IMPORT", "Unavailable": "DESTROYED"}
+
+
+def _gcp_name(key_id: str) -> str:
+    """Cloud KMS resource name of a key (the shape every GCP API returns), not an ARN."""
+    return f"projects/{_PROJECT}/locations/{_LOCATION}/keyRings/{_RING}/cryptoKeys/{key_id}"
+
+
+def _gcp_state(state: str) -> str:
+    return _STATE.get(state, str(state or "").upper())
+
+
 # ── list / describe / create ──────────────────────────────────────────────
 def list_keys() -> dict:
     """List keys with a short describe summary (state, description, usage) — SAME JSON
@@ -74,9 +88,9 @@ def list_keys() -> dict:
             md = {}
         out.append({
             "key_id": kid,
-            "arn": k.get("KeyArn", md.get("Arn", "")),
+            "arn": _gcp_name(kid),
             "description": md.get("Description", ""),
-            "state": md.get("KeyState", ""),
+            "state": _gcp_state(md.get("KeyState", "")),
             "enabled": bool(md.get("Enabled", False)),
             "usage": md.get("KeyUsage", ""),
             "spec": md.get("KeySpec", ""),
@@ -89,9 +103,9 @@ def describe_key(key_id: str) -> dict:
     md = _call("DescribeKey", {"KeyId": key_id}).get("KeyMetadata", {})
     return {
         "key_id": md.get("KeyId", ""),
-        "arn": md.get("Arn", ""),
+        "arn": _gcp_name(md.get("KeyId", "")),
         "description": md.get("Description", ""),
-        "state": md.get("KeyState", ""),
+        "state": _gcp_state(md.get("KeyState", "")),
         "enabled": bool(md.get("Enabled", False)),
         "usage": md.get("KeyUsage", ""),
         "spec": md.get("KeySpec", ""),
@@ -104,8 +118,8 @@ def create_key(description: str = "") -> dict:
     if description:
         payload["Description"] = description
     md = _call("CreateKey", payload).get("KeyMetadata", {})
-    return {"key_id": md.get("KeyId", ""), "arn": md.get("Arn", ""),
-            "description": md.get("Description", ""), "state": md.get("KeyState", "")}
+    return {"key_id": md.get("KeyId", ""), "arn": _gcp_name(md.get("KeyId", "")),
+            "description": md.get("Description", ""), "state": _gcp_state(md.get("KeyState", ""))}
 
 
 # ── crypto playground ─────────────────────────────────────────────────────

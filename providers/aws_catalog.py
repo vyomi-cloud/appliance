@@ -243,7 +243,7 @@ RESOURCE_CATALOG_AWS = [
         "namespace": "AWS/DynamoDB", "service": "dynamodb",
         "collection_path": "/api/dynamodb/tables",
         "resource_path":   "/api/dynamodb/tables/{name}",
-        "name_field":      "name",
+        "name_field":      "table_name",
         "create_method":   "POST",
         "rail_items": [
             {"key": "dashboard",    "label": "Dashboard",         "icon": "dashboard",   "type": "stub"},
@@ -287,7 +287,7 @@ RESOURCE_CATALOG_AWS = [
         "namespace": "AWS/SQS", "service": "sqs",
         "collection_path": "/api/sqs/queues",
         "resource_path":   "/api/sqs/queues/{name}",
-        "name_field":      "name",
+        "name_field":      "queue_name",
         "create_method":   "POST",
         "rail_items": [
             {"key": "queues",     "label": "Queues",     "icon": "queue",   "type": "primary"},
@@ -392,6 +392,79 @@ RESOURCE_CATALOG_AWS = [
         "createFields": [
             {"name": "name", "label": "API name", "default": "MyApi"},
             {"name": "description", "label": "Description", "default": ""},
+        ],
+        "endpoints": {},
+    },
+    {
+        # Systems Manager — Parameter Store in the console (core/ssm_core.py also serves
+        # documents, Run Command, associations, maintenance windows and patch baselines on
+        # the native AmazonSSM wire). Console REST at /api/ssm/*, same store as the SDK/CLI.
+        "key": "ssm", "label": "Systems Manager", "icon": "settings_suggest",
+        "namespace": "AWS/SSM", "service": "ssm",
+        "collection_path": "/api/ssm/parameters",
+        "resource_path":   "/api/ssm/parameters/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "rail_items": [
+            {"key": "parameters", "label": "Parameter Store", "icon": "settings_suggest", "type": "primary"},
+        ],
+        "api_paths": {
+            "history": {"method": "GET",    "path": "/api/ssm/parameters/{name}/history"},
+            "delete":  {"method": "DELETE", "path": "/api/ssm/parameters/{name}"},
+        },
+        "children": [],
+        "columns": [
+            ["name",          "Name"],
+            ["type",          "Type"],
+            ["tier",          "Tier"],
+            ["version",       "Version"],
+            ["data_type",     "Data type"],
+            ["last_modified", "Last modified"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Name", "default": "/vyomi/app/config"},
+            {"name": "type", "label": "Type (String, StringList or SecureString)", "default": "String"},
+            {"name": "tier", "label": "Tier (Standard or Advanced)", "default": "Standard"},
+            {"name": "value", "label": "Value", "default": "hello-from-vyomi"},
+            {"name": "description", "label": "Description", "default": "Created from the console"},
+        ],
+        "editable": True,   # per-row Edit -> PUT resource_path {value} (new parameter version)
+        "endpoints": {},
+    },
+    {
+        # Step Functions — state machines + executions (core/stepfunctions_core.py). Console
+        # REST at /api/stepfunctions/*; the native AWSStepFunctions.* JSON wire serves
+        # SDKs/CLI off the same store.
+        "key": "stepfunctions", "label": "Step Functions", "icon": "account_tree",
+        "namespace": "AWS/States", "service": "stepfunctions",
+        "collection_path": "/api/stepfunctions/machines",
+        "resource_path":   "/api/stepfunctions/machines/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "rail_items": [
+            {"key": "machines", "label": "State machines", "icon": "account_tree", "type": "primary"},
+        ],
+        "api_paths": {
+            "executions": {"method": "GET",    "path": "/api/stepfunctions/machines/{name}/executions"},
+            "versions":   {"method": "GET",    "path": "/api/stepfunctions/machines/{name}/versions"},
+            "aliases":    {"method": "GET",    "path": "/api/stepfunctions/machines/{name}/aliases"},
+            "delete":     {"method": "DELETE", "path": "/api/stepfunctions/machines/{name}"},
+        },
+        "children": [],
+        "columns": [
+            ["name",           "Name"],
+            ["type",           "Type"],
+            ["status",         "Status"],
+            ["state_count",    "States"],
+            ["execution_count", "Executions"],
+            ["created",        "Created"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "State machine name", "default": "my-state-machine"},
+            {"name": "type", "label": "Type (STANDARD or EXPRESS)", "default": "STANDARD"},
+            {"name": "role_arn", "label": "Execution role ARN", "default": "arn:aws:iam::000000000000:role/service-role/StepFunctions-ExecutionRole"},
+            {"name": "definition", "label": "Definition (Amazon States Language)",
+             "default": "{\"Comment\": \"A Hello World example\", \"StartAt\": \"Hello\", \"States\": {\"Hello\": {\"Type\": \"Pass\", \"Result\": \"Hello\", \"Next\": \"World\"}, \"World\": {\"Type\": \"Pass\", \"Result\": \"World\", \"End\": true}}}"},
         ],
         "endpoints": {},
     },
@@ -516,6 +589,44 @@ RESOURCE_CATALOG_AWS = [
         "endpoints": {},
     },
     # ========================================================================
+    # CloudWatch Logs — log groups are the primary entity. Engine:
+    # core/logs_core.py (same file Nano runs); console REST under /api/logs.
+    # ========================================================================
+    {
+        "key": "logs", "label": "CloudWatch Logs", "icon": "subject",
+        "namespace": "AWS/Logs", "service": "logs",
+        "collection_path": "/api/logs/log-groups",
+        "resource_path":   "/api/logs/log-groups/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "editable":        False,
+        "api_paths": {
+            "streams":              {"method": "GET", "path": "/api/logs/log-groups/{name}/streams"},
+            "events":               {"method": "GET", "path": "/api/logs/log-groups/{name}/events"},
+            "metric-filters":       {"method": "GET", "path": "/api/logs/log-groups/{name}/metric-filters"},
+            "subscription-filters": {"method": "GET", "path": "/api/logs/log-groups/{name}/subscription-filters"},
+            "delete":               {"method": "DELETE", "path": "/api/logs/log-groups/{name}"},
+        },
+        "rail_items": [
+            {"key": "log-groups", "label": "Log groups", "icon": "subject", "type": "primary"},
+        ],
+        "columns": [
+            ["name",                "Log group"],
+            ["log_class",           "Log class"],
+            ["retention",           "Retention"],
+            ["stream_count",        "Log streams"],
+            ["metric_filter_count", "Metric filters"],
+            ["stored",              "Stored bytes"],
+            ["created",             "Creation time"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Log group name", "default": "/aws/vyomi/my-app"},
+            {"name": "retention_in_days", "label": "Retention (days, 0 = never expire)", "default": "30"},
+            {"name": "log_group_class", "label": "Log class", "default": "Standard"},
+        ],
+        "endpoints": {},
+    },
+    # ========================================================================
     # Secrets Manager — secrets + rotation + replication
     # ========================================================================
     {
@@ -597,6 +708,51 @@ RESOURCE_CATALOG_AWS = [
         "createFields": [
             {"name": "name",     "label": "Alias",    "default": "my-kms-key"},
             {"name": "key_spec", "label": "Key spec", "default": "SYMMETRIC_DEFAULT"},
+        ],
+        "endpoints": {},
+    },    # ========================================================================
+    # Elastic Load Balancing — application / network / gateway load balancers.
+    # Engine: core/elbv2_core.py (native Query wire + this console REST).
+    # ========================================================================
+    {
+        "key": "elbv2", "label": "Elastic Load Balancing", "icon": "alt_route",
+        "namespace": "AWS/ApplicationELB", "service": "elbv2",
+        "collection_path": "/api/aws/elbv2/load-balancers",
+        "resource_path":   "/api/aws/elbv2/load-balancers/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "loadBalancers": {"method": "GET",  "path": "/api/aws/elbv2/load-balancers"},
+            "targetGroups":  {"method": "GET",  "path": "/api/aws/elbv2/target-groups"},
+            "listeners":     {"method": "GET",  "path": "/api/aws/elbv2/listeners"},
+            "delete":        {"method": "DELETE", "path": "/api/aws/elbv2/load-balancers/{name}"},
+        },
+        "rail_items": [
+            {"key": "load-balancers", "label": "Load balancers", "icon": "alt_route", "type": "primary"},
+            {"group": "Routing"},
+            {"key": "target-groups",  "label": "Target groups",  "icon": "dns",
+                "type": "child", "child_key": "target-groups"},
+            {"key": "listeners",      "label": "Listeners",      "icon": "hearing",
+                "type": "child", "child_key": "listeners"},
+        ],
+        "children": [
+            {"type": "target-groups", "label": "Target groups", "icon": "dns"},
+            {"type": "listeners", "label": "Listeners", "icon": "hearing"},
+        ],
+        "columns": [
+            ["name",               "Name"],
+            ["dns_name",           "DNS name"],
+            ["state",              "State"],
+            ["type",               "Type"],
+            ["scheme",             "Scheme"],
+            ["vpc_id",             "VPC ID"],
+            ["availability_zones", "Availability Zones"],
+            ["created",            "Date created"],
+        ],
+        "createFields": [
+            {"name": "name", "label": "Load balancer name", "default": "my-alb"},
+            {"name": "type", "label": "Type (application, network, gateway)", "default": "application"},
+            {"name": "scheme", "label": "Scheme (internet-facing, internal)", "default": "internet-facing"},
         ],
         "endpoints": {},
     },

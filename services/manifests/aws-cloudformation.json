@@ -36,7 +36,8 @@
     "ValidateTemplate"
   ],
   "backend": {
-    "kind": "in-process"
+    "kind": "in-process",
+    "name": "iac-engine"
   },
   "suites": [
     "offline-sdk-java-aws-cloudformation",

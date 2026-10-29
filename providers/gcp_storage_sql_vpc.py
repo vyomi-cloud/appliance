@@ -165,14 +165,30 @@ async def api_gcp_storage_upload_object(bucket: str, request: Request):
     bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
     if not bucket_rec:
         raise HTTPException(404, detail="Bucket not found")
-    form = await request.form()
-    upload = form.get("file")
-    if upload is None or not hasattr(upload, "read"):
-        raise HTTPException(400, detail="missing 'file' field")
-    name = str(getattr(upload, "filename", None)
-               or request.query_params.get("name") or "object").strip()
-    data = await upload.read()
-    ct = getattr(upload, "content_type", None) or "application/octet-stream"
+    content_type = request.headers.get("content-type", "")
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        upload = form.get("file")
+        if upload is None or not hasattr(upload, "read"):
+            raise HTTPException(400, detail="missing 'file' field")
+        name = str(getattr(upload, "filename", None)
+                   or request.query_params.get("name") or "object").strip()
+        data = await upload.read()
+        ct = getattr(upload, "content_type", None) or "application/octet-stream"
+    else:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if isinstance(body, dict):
+            name = str(body.get("name") or body.get("key") or request.query_params.get("name") or "object").strip()
+            raw_content = body.get("content") or body.get("contents") or "sample-content"
+            data = raw_content.encode("utf-8") if isinstance(raw_content, str) else bytes(raw_content)
+            ct = body.get("content_type") or body.get("contentType") or "text/plain"
+        else:
+            name = str(request.query_params.get("name") or "object").strip()
+            data = await request.body()
+            ct = content_type or "application/octet-stream"
     try:
         from core import gcp_gcs_store as gcs
         from core.app_context import tenant_scoped_bucket

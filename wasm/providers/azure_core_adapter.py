@@ -174,6 +174,21 @@ def _call(svc_mod, store, method, path, query=None, headers=None, body=b""):
     return r.status, txt
 
 
+def kv_raw(method, params):
+    """Console Key Vault data plane: forward /{secrets|keys}[/…] to the native
+    Key Vault core and return its HTTP envelope (JSON body) under __http."""
+    kind = params.get("kind")
+    mod, st = (_kvsec, _STORES["kvsecrets"]) if kind == "secrets" else (_kvkeys, _STORES["kvkeys"])
+    body = params.get("body")
+    status, txt = _call(mod, st, method, "/" + kind + (params.get("rest") or ""), APIV, {},
+                        body if body is not None else b"")
+    try:
+        data = json.loads(txt) if txt else None
+    except Exception:
+        data = {"raw": txt}
+    return {"ok": status < 400, "__http": {"status": status, "headers": {}, "body": data}}
+
+
 def _xml_names(xml):
     return re.findall(r"<Name>([^<]*)</Name>", xml)
 
@@ -214,6 +229,26 @@ def resource_op(service, operation, name="", body=None):
     # ---- Blob containers (XML list) ----
     if service == "blobcontainers":
         st = _STORES[service]
+        # Console shapes (/api/azure/storage/{account}/containers…): {value:[…]}.
+        if operation == "ConsoleList":
+            _, x = _call(_blob, st, "GET", "/", {"comp": "list"}, XMS)
+            out = []
+            for n in _xml_names(x):
+                _, bx = _call(_blob, st, "GET", f"/{n}", {"restype": "container", "comp": "list"}, XMS)
+                out.append({"name": n, "blobCount": len(re.findall(r"<Blob>", bx))})
+            return {"ok": True, "value": out}
+        if operation == "ListBlobs":
+            _, bx = _call(_blob, st, "GET", f"/{name}", {"restype": "container", "comp": "list"}, XMS)
+            blobs = []
+            for b in re.findall(r"<Blob>(.*?)</Blob>", bx, re.S):
+                g = lambda tag: (re.search(rf"<{tag}>([^<]*)</{tag}>", b) or [None, ""])[1]
+                blobs.append({"name": g("Name"), "size": int(g("Content-Length") or 0),
+                              "contentType": g("Content-Type"), "lastModified": g("Last-Modified"),
+                              "etag": g("Etag")})
+            return {"ok": True, "value": blobs}
+        if operation == "DeleteObject":
+            s, _ = _call(_blob, st, "DELETE", f"/{name}/{body.get('blob', '')}", {}, XMS)
+            return {"ok": s < 300, "deleted": s < 300, "container": name, "blob": body.get("blob")}
         if operation == "List":
             _, x = _call(_blob, st, "GET", "/", {"comp": "list"}, XMS)
             return {"ok": True, "items": [{"name": n} for n in _xml_names(x)]}
@@ -281,6 +316,9 @@ def resource_op(service, operation, name="", body=None):
     # ---- Storage queues (XML list) ----
     if service == "queues":
         st = _STORES[service]
+        if operation == "ConsoleList":
+            _, x = _call(_queue, st, "GET", "/", {"comp": "list"}, XMS)
+            return {"ok": True, "value": _xml_names(x)}
         if operation == "List":
             _, x = _call(_queue, st, "GET", "/", {"comp": "list"}, XMS)
             return {"ok": True, "items": [{"name": n} for n in _xml_names(x)]}
