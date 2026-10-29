@@ -4,31 +4,43 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 
 | Suites green | Checks passing | Checks failing | Nano UI clean | Offline UI clean | Open UI findings | API routes with tests |
 |---|---|---|---|---|---|---|
-| 0/0 | 0 | 0 | 27/52 | 31/52 | 98 | 14.3% (46/322) |
+| 0/0 | 0 | 0 | 10/32 | 30/52 | 79 | 14.3% (46/322) |
 
 ## By cloud
 
 | Cloud | Suites green | Checks ✓ | Checks ✗ | Nano UI clean | Offline UI clean | Open findings |
 |---|---|---|---|---|---|---|
-| [AWS](#aws) | 0/0 | 0 | 0 | 8/16 | 9/16 | 32 |
-| [GCP](#gcp) | 0/0 | 0 | 0 | 5/16 | 6/16 | 38 |
-| [Azure](#azure) | 0/0 | 0 | 0 | 14/20 | 16/20 | 28 |
+| [AWS](#aws) | 0/0 | 0 | 0 | 5/16 | 9/16 | 39 |
+| [GCP](#gcp) | 0/0 | 0 | 0 | 5/16 | 6/16 | 35 |
+| [Azure](#azure) | 0/0 | 0 | 0 | 0/0 | 15/20 | 5 |
 
 <a id="aws"></a>
 ## AWS
 
-**UI findings: 32**
+**UI findings: 39**
 
-<details><summary><b>RDS</b> (offline) — 6 finding(s)</summary>
+<details><summary><b>EC2</b> (offline) — 6 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` | Endpoints | tab Endpoints: column "ENDPOINT" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PRIVATE IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 ADDRESS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "PUBLIC IPV4 DNS" shows "-"/blank in 1 row(s) |
+| `DEAD_TAB` | Monitoring | clicking the tab changes nothing |
 | `PLACEHOLDER_CELL` | Networking | tab Networking: column "SUBNET ID" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` | Networking | tab Networking: column "SECURITY GROUPS" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "IAM ROLE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "LAUNCH TIME" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Security | tab Security: column "STATE TRANSITION REASON" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>DynamoDB</b> (nano) — 5 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Streams and triggers | /api/aws/sub/dynamodb~Music~streams/get/_settings → 404 |
+| `HTTP_404` | Read/write capacity | /api/aws/sub/dynamodb~Music~capacity/get/_settings → 404 |
+| `HTTP_404` | Encryption at rest | /api/aws/sub/dynamodb~Music~encryption/get/_settings → 404 |
+| `HTTP_404` | Time to live | /api/aws/sub/dynamodb~Music~ttl/get/_settings → 404 |
 
 </details>
 
@@ -44,24 +56,24 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 
 </details>
 
-<details><summary><b>VPC</b> (offline) — 4 finding(s)</summary>
+<details><summary><b>Secrets Manager</b> (nano) — 4 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $79.45 (real aws would bill this resource) |
-| `DEAD_TAB` | VPC details | clicking the tab changes nothing |
-| `PLACEHOLDER_CELL` | Security groups | tab Security groups: column "Security group ID" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Security groups | tab Security groups: column "Name" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Last rotated" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Next rotation" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Rotation | /api/aws/sub/secretsmanager~my-secret~rotation/get/_settings → 404 |
+| `HTTP_404` | Encryption key | /api/aws/sub/secretsmanager~my-secret~kmsKey/get/_settings → 404 |
 
 </details>
 
-<details><summary><b>IAM</b> (offline) — 3 finding(s)</summary>
+<details><summary><b>SQS</b> (nano) — 3 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 17 after creating a resource |
-| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $95.88 (real aws would bill this resource) |
-| `PLACEHOLDER_CELL` | Users | tab Users: column "ARN" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Purge messages | /api/aws/sub/sqs~MyQueue~purge/get/_settings → 404 |
+| `PLACEHOLDER_CELL` | Dead-letter queue | tab Dead-letter queue: column "MAXIMUM RECEIVES" shows "-"/blank in 1 row(s) |
+| `HTTP_404` | Encryption | /api/aws/sub/sqs~MyQueue~encryption/get/_settings → 404 |
 
 </details>
 
@@ -74,12 +86,12 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 
 </details>
 
-<details><summary><b>Secrets Manager</b> (nano) — 2 finding(s)</summary>
+<details><summary><b>IAM</b> (offline) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "Last rotated" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "Next rotation" shows "-"/blank in 1 row(s) |
+| `SAVINGS_NOT_UPDATED` |  | create: resource_count stayed 17 after creating a resource |
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $95.88 (real aws would bill this resource) |
 
 </details>
 
@@ -108,14 +120,6 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 
 </details>
 
-<details><summary><b>DynamoDB</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
-
-</details>
-
 <details><summary><b>API Gateway</b> (nano) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
@@ -140,6 +144,22 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 
 </details>
 
+<details><summary><b>KMS</b> (nano) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_404` | Key rotation | /api/aws/sub/kms~626541d698db43988b502aa4102ec7e7~rotation/get/_settings → 404 |
+
+</details>
+
+<details><summary><b>Systems Manager</b> (nano) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` | History | tab History: column "Labels" shows "-"/blank in 1 row(s) |
+
+</details>
+
 <details><summary><b>DynamoDB</b> (offline) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
@@ -156,12 +176,20 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 
 </details>
 
+<details><summary><b>VPC</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `SAVINGS_NOT_UPDATED` |  | create: aws savings stayed $79.45 (real aws would bill this resource) |
+
+</details>
+
 <a id="gcp"></a>
 ## GCP
 
-**UI findings: 38**
+**UI findings: 35**
 
-<details><summary><b>VPC Network</b> (nano) — 7 finding(s)</summary>
+<details><summary><b>VPC Network</b> (nano) — 4 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
@@ -169,9 +197,6 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 | `PLACEHOLDER_CELL` |  | after create: column "ROUTING MODE" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | after create: column "IPV4 RANGE" shows "-"/blank in 1 row(s) |
 | `SAVINGS_NOT_UPDATED` |  | create: gcp savings stayed $134.18 (real gcp would bill this resource) |
-| `PLACEHOLDER_CELL` | Network metrics | tab Network metrics: column "SUBNETS" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Network metrics | tab Network metrics: column "FIREWALL RULES" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Network metrics | tab Network metrics: column "ROUTES" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -349,71 +374,13 @@ Run **not yet** · commit `` · Nano (in-browser) + offline appliance · updated
 <a id="azure"></a>
 ## Azure
 
-**UI findings: 28**
+**UI findings: 5**
 
-<details><summary><b>Resource groups</b> (nano) — 19 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | list: column "Virtual Machines" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Storage accounts" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "SQL servers" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Service Bus" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Cosmos DB" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Function apps" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "API Management" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Virtual networks" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Network Security Group" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Event Grid topics" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Key vaults" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Container Apps" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "App Configuration" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "DNS zones" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Monitor alerts" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Log Analytics" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Azure AI services" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Role Definition" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | list: column "Entra ID / RBAC" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>Virtual Machines</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PAGE_ERROR` |  | Cannot set properties of null (setting 'innerHTML') |
-
-</details>
-
-<details><summary><b>API Management</b> (nano) — 1 finding(s)</summary>
+<details><summary><b>API Management</b> (offline) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
 | `HTTP_404` | Policies | /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/apim-cloudlearn/policies/policy?api-version=2023-05-01-preview → 404 |
-
-</details>
-
-<details><summary><b>Network Security Group</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
-
-</details>
-
-<details><summary><b>Role Definition</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CREATE_NO_ROW` |  | create with defaults added no resource to the list |
-
-</details>
-
-<details><summary><b>Entra ID / RBAC</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `CRAWL_ERROR` |  | locator.click: Timeout 5000ms exceeded. |
 
 </details>
 
@@ -455,14 +422,15 @@ None.
 
 ## Upstream changes (AWS / GCP / Azure backlog)
 
-36 open `upstream-drift` issue(s) — real cloud changes the agent is working through. [All](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) · [watcher log](https://github.com/vyomi-cloud/appliance/tree/upstream-state)
+37 open `upstream-drift` issue(s) — real cloud changes the agent is working through. [All](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) · [watcher log](https://github.com/vyomi-cloud/appliance/tree/upstream-state)
 
 | Issue | Cloud | Kind | Change | Opened |
 |---|---|---|---|---|
+| #171 | AWS |  | [aws] EventBridge: deliver to every target type through NATS (today only SQS targets) | 2026-10-28 |
 | #169 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed | 2026-10-28 |
 | #170 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed | 2026-10-28 |
-| #167 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed | 2026-10-28 |
 | #168 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed | 2026-10-28 |
+| #167 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed | 2026-10-28 |
 | #165 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed | 2026-10-28 |
 | #166 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed | 2026-10-28 |
 | #163 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed | 2026-10-28 |
@@ -835,6 +803,7 @@ SetVersionState
 
 | Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |
 |---|---|---|---|---|---|---|
+|  | 0/0 | 0 | 0 | 79 | 14.3% |  |
 |  | 0/0 | 0 | 0 | 98 | 14.3% |  |
 |  | 0/0 | 0 | 0 | 86 | 14.3% |  |
 |  | 0/0 | 0 | 0 | 104 | 14.3% |  |
@@ -858,6 +827,5 @@ SetVersionState
 |  | 0/0 | 0 | 0 | 84 | 14.3% |  |
 |  | 0/0 | 0 | 0 | 78 | 14.3% |  |
 |  | 0/0 | 0 | 0 | 107 | 14.3% |  |
-|  | 0/0 | 0 | 0 | 76 | 14.3% |  |
 
 Raw data in this branch: `results.json`, `ui-findings.json`, `history.json`.
