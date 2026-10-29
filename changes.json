@@ -1,81 +1,31 @@
 {
- "at": "2026-10-29T22:51:21+00:00",
+ "at": "2026-10-29T23:51:23+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStartRequest",
-     "now": "SqlWorkloadCapturesStartRequest"
-    }
-   },
-   "actionable": true
+   "cloud": "sdk",
+   "service": "pypi:azure-storage-blob",
+   "kind": "release",
+   "key": "ver:pypi:azure-storage-blob:12.31.1",
+   "title": "pypi:azure-storage-blob: 12.31.0 \u2192 12.31.1",
+   "actionable": false
   },
   {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStartReplayRequest",
-     "now": "SqlWorkloadCapturesStartReplayRequest"
-    }
-   },
-   "actionable": true
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStopRequest",
-     "now": "SqlWorkloadCapturesStopRequest"
-    }
-   },
-   "actionable": true
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStopReplayRequest",
-     "now": "SqlWorkloadCapturesStopReplayRequest"
-    }
-   },
-   "actionable": true
-  },
-  {
-   "cloud": "aws",
-   "service": "Aurora",
-   "kind": "announcement",
-   "key": "feed:aws:fa12cab7949d",
-   "title": "Amazon Aurora now supports post-quantum TLS key exchange",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/aurora-postgresql-post-quantum-tls-key-exchange/",
-   "detail": "Starting today, Amazon Aurora PostgreSQL-Compatible Edition introduces support for post-quantum TLS (PQ-TLS) key exchange, providing you with post-quantum cryptography options for encrypting your data in transit. Amazon Aurora PostgreSQL versions 18 and higher support modification of the ssl_groups parameter. You can select cryptographic groups from the Amazon Aurora PostgreSQL allow list to align with your organization's security standards. Amazon Aurora is designed for high performance and availability at global scale with full PostgreSQL compatibility. It provides scale-to-zero serverless c",
+   "cloud": "sdk",
+   "service": "pypi:azure-storage-queue",
+   "kind": "release",
+   "key": "ver:pypi:azure-storage-queue:12.18.1",
+   "title": "pypi:azure-storage-queue: 12.18.0 \u2192 12.18.1",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Amazon EC2",
+   "service": "CloudWatch",
    "kind": "announcement",
-   "key": "feed:aws:b4b7161dcdb0",
-   "title": "AWS DataSync Enhanced mode now supports Amazon FSx for Windows File Server, FSx for NetApp ONTAP, and Red Hat OpenShift Virtualization",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/datasync-enhanced-fsx-openshift/",
-   "detail": "AWS DataSync Enhanced mode now supports Amazon FSx for Windows File Server and Amazon FSx for NetApp ONTAP as source or destination locations. You can now run Windows to Windows transfers, such as from an on-premises file server to FSx for Windows File Server. Additionally, Enhanced mode agents can now run on Red Hat OpenShift Virtualization version 4.20 or later. With this launch, you can use the same location options in Enhanced mode as in Basic mode. Enhanced mode processes data in parallel for higher performance, removes file count limitations, and provides detailed data transfer metrics. ",
+   "key": "feed:aws:170ad3ea8496",
+   "title": "Amazon Managed Grafana now supports in-place upgrade to Grafana version 13.2",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/managed-grafana-upgrade-version-13-2/",
+   "detail": "Amazon Managed Grafana now supports in-place upgrade from Grafana version 12.4 to 13.2. Upgrading to version 13.2 brings features launched as part of open-source Grafana versions 13.0 to 13.2. These include Git Sync for dashboards, dynamic dashboards, and PromQL query support in the Amazon CloudWatch data source plugin. With Git Sync, you can treat dashboards as code by linking a workspace to a Git repository. Dashboard modifications can be tracked, reviewed, and reverted through version control. Dynamic dashboards bring a more adaptable approach to layout and paneling. You can construct respo",
    "actionable": false
   }
  ],

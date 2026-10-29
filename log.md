@@ -1,3 +1,14 @@
+### Upstream watch — 2026-10-29T23:51:23+00:00
+
+Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**3 change(s), 0 actionable.**
+- · `announcement` Amazon Managed Grafana now supports in-place upgrade to Grafana version 13.2 ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/managed-grafana-upgrade-version-13-2/))
+- · `release` pypi:azure-storage-blob: 12.31.0 → 12.31.1
+- · `release` pypi:azure-storage-queue: 12.18.0 → 12.18.1
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-10-29T22:51:21+00:00
 
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
