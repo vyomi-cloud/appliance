@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-29 00:55 UTC · refreshes after every pipeline run_
+_Updated 2026-10-29 01:53 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 50 services (AWS 16 · GCP 16 · Azure 18) of 1,068 the clouds publish
-- **Building now:** nothing
-- **In the gate / releasing:** Amazon CloudWatch (AWS), Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), Amazon Simple Notification Service (AWS), AmazonApiGatewayV2 (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), Artifact Registry API (GCP), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Monitoring API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), applicationinsights (Azure), containerregistry (Azure), containerservice (Azure), eventhub (Azure), msi (Azure), redis (Azure)
+- **Building now:** Amazon CloudWatch (AWS, 17/18 checks), Amazon Cognito Identity Provider (AWS, 18/18 checks), Amazon EC2 Container Service (AWS, 19/19 checks), Amazon Elastic Container Registry (AWS, 20/20 checks), Amazon ElastiCache (AWS, 20/20 checks), Amazon Kinesis (AWS, 17/18 checks), Amazon Route 53 (AWS, 20/20 checks), Amazon Simple Email Service (AWS, 17/18 checks), Amazon Simple Notification Service (AWS, 17/18 checks), AmazonApiGatewayV2 (AWS, 18/19 checks), AWS CloudFormation (AWS, 19/20 checks), AWS Security Token Service (AWS, 18/18 checks), Artifact Registry API (GCP, 17/18 checks), BigQuery API (GCP, 17/18 checks), Cloud DNS API (GCP, 17/18 checks), Cloud Logging API (GCP, 17/18 checks), Cloud Monitoring API (GCP, 17/18 checks), Cloud Run Admin API (GCP, 19/19 checks), Cloud Tasks API (GCP, 17/18 checks), Workflows API (GCP, 17/18 checks), applicationinsights (Azure, 16/17 checks), containerregistry (Azure, 20/20 checks), containerservice (Azure, 16/17 checks), eventhub (Azure, 16/17 checks), msi (Azure, 17/17 checks), redis (Azure, 20/20 checks)
+- **In the gate / releasing:** nothing
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 57% · Nano 60%
 - **Hourly tests:** 0 of 0 suites passing
@@ -16,40 +16,40 @@ _Updated 2026-10-29 00:55 UTC · refreshes after every pipeline run_
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 16 | 0 | 12 | 17 | 51% · 60% |
-| GCP | 16 | 0 | 8 | 12 | 48% · 61% |
-| Azure | 18 | 0 | 6 | 12 | 70% · not measured yet |
+| AWS | 16 | 12 | 0 | 17 | 51% · 60% |
+| GCP | 16 | 8 | 0 | 12 | 48% · 61% |
+| Azure | 18 | 6 | 0 | 12 | 70% · not measured yet |
 
 ## In progress
 
 | Service | Cloud | Stage | Checks | Real backend | Built with | Still missing |
 |---|---|---|---|---|---|---|
-| Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🔍 In gate ([PR #95](https://github.com/vyomi-cloud/appliance/pull/95)) | 17/18 | victoriametrics · Lite · + vmalert agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🔍 In gate ([PR #96](https://github.com/vyomi-cloud/appliance/pull/96)) | 18/18 | in-process | in-process | — |
-| Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🔍 In gate ([PR #101](https://github.com/vyomi-cloud/appliance/pull/101)) | 19/19 | docker · Pro · + caddy gateway | docker · Pro | — |
-| Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🔍 In gate ([PR #100](https://github.com/vyomi-cloud/appliance/pull/100)) | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
-| Amazon ElastiCache [#56](https://github.com/vyomi-cloud/appliance/issues/56) | AWS | 🔍 In gate ([PR #102](https://github.com/vyomi-cloud/appliance/pull/102)) | 20/20 | valkey · Lite | valkey · 8 MB · Lite | — |
-| Amazon Kinesis [#58](https://github.com/vyomi-cloud/appliance/issues/58) | AWS | 🔍 In gate ([PR #104](https://github.com/vyomi-cloud/appliance/pull/104)) | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Amazon Route 53 [#60](https://github.com/vyomi-cloud/appliance/issues/60) | AWS | 🔍 In gate ([PR #106](https://github.com/vyomi-cloud/appliance/pull/106)) | 20/20 | coredns · Lite | coredns · 15 MB · Lite | — |
-| Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🔍 In gate ([PR #107](https://github.com/vyomi-cloud/appliance/pull/107)) | 17/18 | mailpit · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Amazon Simple Notification Service [#62](https://github.com/vyomi-cloud/appliance/issues/62) | AWS | 🔍 In gate ([PR #108](https://github.com/vyomi-cloud/appliance/pull/108)) | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🔍 In gate ([PR #91](https://github.com/vyomi-cloud/appliance/pull/91)) | 18/19 | caddy · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #93](https://github.com/vyomi-cloud/appliance/pull/93)) | 19/20 | iac-engine · in-process | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #112](https://github.com/vyomi-cloud/appliance/pull/112)) | 18/18 | in-process | in-process | — |
-| Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🔍 In gate ([PR #114](https://github.com/vyomi-cloud/appliance/pull/114)) | 17/18 | registry · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🔍 In gate ([PR #115](https://github.com/vyomi-cloud/appliance/pull/115)) | 17/18 | duckdb · in-process | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🔍 In gate ([PR #120](https://github.com/vyomi-cloud/appliance/pull/120)) | 17/18 | coredns · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🔍 In gate ([PR #122](https://github.com/vyomi-cloud/appliance/pull/122)) | 17/18 | logstore · in-process · + fluent-bit agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Cloud Monitoring API [#74](https://github.com/vyomi-cloud/appliance/issues/74) | GCP | 🔍 In gate ([PR #123](https://github.com/vyomi-cloud/appliance/pull/123)) | 17/18 | victoriametrics · Lite · + vmalert agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🔍 In gate ([PR #125](https://github.com/vyomi-cloud/appliance/pull/125)) | 19/19 | docker · Pro · + caddy gateway | docker · Pro | — |
-| Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #118](https://github.com/vyomi-cloud/appliance/pull/118)) | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #126](https://github.com/vyomi-cloud/appliance/pull/126)) | 17/18 | workflow-engine · in-process · + temporal engine | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🔍 In gate ([PR #129](https://github.com/vyomi-cloud/appliance/pull/129)) | 16/17 | logstore · in-process · + fluent-bit agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| containerregistry [#82](https://github.com/vyomi-cloud/appliance/issues/82) | Azure | 🔍 In gate ([PR #131](https://github.com/vyomi-cloud/appliance/pull/131)) | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
-| containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🔍 In gate ([PR #132](https://github.com/vyomi-cloud/appliance/pull/132)) | 16/17 | k3s · Max | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| eventhub [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🔍 In gate ([PR #134](https://github.com/vyomi-cloud/appliance/pull/134)) | 16/17 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| msi [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🔍 In gate ([PR #136](https://github.com/vyomi-cloud/appliance/pull/136)) | 17/17 | in-process | in-process | — |
-| redis [#89](https://github.com/vyomi-cloud/appliance/issues/89) | Azure | 🔍 In gate ([PR #141](https://github.com/vyomi-cloud/appliance/pull/141)) | 20/20 | valkey · Lite | valkey · 8 MB · Lite | — |
+| Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🛠 Building | 17/18 | victoriametrics · Lite · + vmalert agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🛠 Building | 18/18 | in-process | in-process | — |
+| Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🛠 Building | 19/19 | docker · Pro · + caddy gateway | docker · Pro | — |
+| Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🛠 Building | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
+| Amazon ElastiCache [#56](https://github.com/vyomi-cloud/appliance/issues/56) | AWS | 🛠 Building | 20/20 | valkey · Lite | valkey · 8 MB · Lite | — |
+| Amazon Kinesis [#58](https://github.com/vyomi-cloud/appliance/issues/58) | AWS | 🛠 Building | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Amazon Route 53 [#60](https://github.com/vyomi-cloud/appliance/issues/60) | AWS | 🛠 Building | 20/20 | coredns · Lite | coredns · 15 MB · Lite | — |
+| Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🛠 Building | 17/18 | mailpit · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Amazon Simple Notification Service [#62](https://github.com/vyomi-cloud/appliance/issues/62) | AWS | 🛠 Building | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🛠 Building | 18/19 | caddy · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🛠 Building | 19/20 | iac-engine · in-process | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🛠 Building | 18/18 | in-process | in-process | — |
+| Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🛠 Building | 17/18 | registry · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🛠 Building | 17/18 | duckdb · in-process | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🛠 Building | 17/18 | coredns · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🛠 Building | 17/18 | logstore · in-process · + fluent-bit agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Cloud Monitoring API [#74](https://github.com/vyomi-cloud/appliance/issues/74) | GCP | 🛠 Building | 17/18 | victoriametrics · Lite · + vmalert agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🛠 Building | 19/19 | docker · Pro · + caddy gateway | docker · Pro | — |
+| Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🛠 Building | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🛠 Building | 17/18 | workflow-engine · in-process · + temporal engine | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🛠 Building | 16/17 | logstore · in-process · + fluent-bit agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| containerregistry [#82](https://github.com/vyomi-cloud/appliance/issues/82) | Azure | 🛠 Building | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
+| containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🛠 Building | 16/17 | k3s · Max | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| eventhub [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🛠 Building | 16/17 | nats · Lite · + amqp protocol | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| msi [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🛠 Building | 17/17 | in-process | in-process | — |
+| redis [#89](https://github.com/vyomi-cloud/appliance/issues/89) | Azure | 🛠 Building | 20/20 | valkey · Lite | valkey · 8 MB · Lite | — |
 
 ## Released services
 
@@ -106,7 +106,7 @@ _Updated 2026-10-29 00:55 UTC · refreshes after every pipeline run_
 | Virtual Machines | — | not audited | 🧩 10/13 | 0 · – | ✅ watched | before gate |
 | Storage accounts | — | not audited | 🧩 9/13 | 0 · – | ✅ watched | before gate |
 | SQL servers | — | not audited | 🧩 8/13 | 0 · – | ✅ watched | before gate |
-| Service Bus | — | not audited | 🧩 9/13 | 0 · – | ✅ watched | before gate |
+| Service Bus | messaging-core · in-process · + nats agent · + amqp protocol | 🟡 REST management + messaging only; native SDKs need AMQP (in PRs #35-#45, not merged) | 🧩 9/13 | 0 · – | ✅ watched | before gate |
 | Cosmos DB | — | not audited | 🧩 8/13 | 0 · – | ✅ watched | before gate |
 | Function apps | — | not audited | 🧩 7/13 | 0 · – | ✅ watched | before gate |
 | API Management | caddy · Lite | not audited | 🧩 9/13 | 1 · – | ✅ watched | before gate |
@@ -137,7 +137,7 @@ _Updated 2026-10-29 00:55 UTC · refreshes after every pipeline run_
 | Amazon EventBridge Scheduler | P2 | not filed | in-process |
 | Amazon Kinesis Firehose | P2 | not filed | nats · Lite |
 | Amazon OpenSearch Service | P2 | not filed | opensearch · Max |
-| AmazonMQ | P2 | not filed | rabbitmq · Pro |
+| AmazonMQ | P2 | not filed | rabbitmq · Pro · + amqp protocol |
 | Auto Scaling | P2 | not filed | in-process |
 | AWS AppSync | P2 | not filed | in-process |
 | AWS Backup | P2 | not filed | in-process |
