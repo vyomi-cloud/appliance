@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-29 03:02 UTC · refreshes after every pipeline run_
+_Updated 2026-10-29 03:16 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -187,6 +187,14 @@ _Updated 2026-10-29 03:02 UTC · refreshes after every pipeline run_
 | synapse | P2 | not filed | duckdb · in-process |
 
 </details>
+
+## Platform features (highest priority)
+
+Built by the agent ahead of everything else, then **reviewed and merged by a person**.
+
+| Feature | Stage | Review PR |
+|---|---|---|
+| Automatic issue reporting from Nano, offline and sandboxes (user's GitHub account, bot fallback) [#187](https://github.com/vyomi-cloud/appliance/issues/187) | 📋 Queued | — |
 
 ## Backend upgrades
 
