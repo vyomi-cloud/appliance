@@ -554,6 +554,11 @@ async function route(method, path, body, query) {
     if (method === "POST") return { tuple: ["aws", "rds", "CreateDatabase", body || {}] };
   }
   if (path === "/api/rds/snapshots" && method === "GET") return { tuple: ["aws", "rds", "Snapshots", {}] };
+  // DB instance detail tabs (core/aws_console_detail.py): connectivity, configuration, events.
+  m = path.match(/^\/api\/rds\/databases\/([^/]+)\/(connectivity|subnet-group|pending-maintenance|performance-insights|configuration|events)$/);
+  if (m && method === "GET") return { tuple: ["aws", "rds", "DescribeDBInstanceDetail", { name: dec(m[1]), tab: m[2] }] };
+  if (m && m[2] === "configuration" && method === "PUT")
+    return { tuple: ["aws", "rds", "ModifyDBInstanceConfiguration", { name: dec(m[1]), body: body || {} }] };
   m = path.match(/^\/api\/rds\/databases\/([^/]+)\/(start|stop|reboot|modify)$/);
   if (m && method === "POST") return { tuple: ["aws", "rds", m[2][0].toUpperCase() + m[2].slice(1), { name: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/rds\/databases\/([^/]+)$/);

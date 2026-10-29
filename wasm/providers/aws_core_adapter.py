@@ -595,7 +595,10 @@ def rds_create(p):
                            "MasterUsername": str(p.get("master_username") or "admin")})
     if r.status != 200:
         return {"ok": False, "code": _xml_code(r.body)}
-    return {"ok": True, **_rds_row(RDB.get_instance(name))}
+    db = RDB.get_instance(name)
+    DET.rds_ensure(db, ec2_net())        # placed in the default VPC, default backup/maintenance settings
+    DET.rds_record_event(db, "CreateDBInstance")
+    return {"ok": True, **_rds_row(db)}
 
 
 def rds_get(p):
@@ -611,11 +614,19 @@ def _rds_action(name, action):
     if r.status != 200:
         return {"ok": False, "code": _xml_code(r.body), "name": name}
     db = RDB.get_instance(name)
+    if db:
+        DET.rds_record_event(db, action)
     return {"ok": True, **(_rds_row(db) if db else {"name": name})}
 
 
 def rds_delete(p):
     name = str(p.get("name") or "")
+    db = RDB.get_instance(name)
+    if db:
+        try:
+            DET.rds_check_delete(db)     # deletion protection
+        except DET.DetailError as e:
+            return _det_err(e)
     r = rds.dispatch(RDB, {"Action": "DeleteDBInstance", "DBInstanceIdentifier": name})
     if r.status != 200:
         return {"ok": False, "code": _xml_code(r.body), "name": name}
@@ -849,3 +860,49 @@ def s3_notifications(p):
         return _det_err(e)
     n = {**DET.s3_notifications_default(), **(b.get("notifications") or {})}
     return {"ok": True, "bucket": name, **n}
+
+
+# ── RDS DB instance tabs (core/aws_console_detail.py) ───────────────────────
+def _rds_db(p):
+    name = str(p.get("name") or "")
+    db = RDB.get_instance(name)
+    if db is not None:
+        DET.rds_ensure(db, ec2_net())
+    return db
+
+
+def _rds_nf(p):
+    return {"ok": False, "code": "DBInstanceNotFound",
+            "__http": {"status": 404, "body": {"detail": {"code": "DBInstanceNotFound",
+                                                          "message": f"DBInstance {p.get('name')} not found."}}}}
+
+
+def rds_detail(p):
+    db = _rds_db(p)
+    if db is None:
+        return _rds_nf(p)
+    tab = p.get("tab")
+    if tab == "pending-maintenance":
+        return {"ok": True, "db_instance_identifier": db["db_instance_identifier"],
+                "pending_maintenance_actions": DET.rds_pending_maintenance(db)}
+    if tab == "performance-insights":
+        return {"ok": True, **DET.rds_performance_insights(db)}
+    if tab in ("connectivity", "subnet-group"):
+        return {"ok": True, **DET.rds_connectivity(db, ec2_net(), {"db_subnet_group_name": "default"})}
+    if tab == "events":
+        return {"ok": True, "db_instance_identifier": db["db_instance_identifier"], "events": DET.rds_events(db)}
+    return {"ok": True, **DET.rds_configuration(db)}
+
+
+def rds_modify_configuration(p):
+    db = _rds_db(p)
+    if db is None:
+        return _rds_nf(p)
+    try:
+        out = DET.rds_modify(db, p.get("body") or {})
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (ValueError, TypeError) as e:
+        return _det_err(DET.DetailError("InvalidParameterValue", str(e)))
+    RDB.persist()
+    return {"ok": True, **out}

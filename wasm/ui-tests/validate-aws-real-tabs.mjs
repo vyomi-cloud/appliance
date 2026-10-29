@@ -100,6 +100,28 @@ const SECTIONS = {
     const pol = await tab("Bucket Policy");
     check("s3 Bucket Policy: names this bucket's ARN", pol.includes("arn:aws:s3:::" + name), pol);
   },
+  async rds() {
+    const name = "rt-db-" + Date.now().toString(36);
+    const c = await call("POST", "/api/rds/databases", { db_instance_identifier: name, name, engine: "postgres",
+      master_username: "postgres", master_user_password: "Password123!" });
+    check("rds: created", c.status < 300, JSON.stringify(c).slice(0, 200));
+    const conn = (await call("GET", `/api/rds/databases/${name}/connectivity`)).json;
+    await openService("^rds$");
+    await openRow(name);
+    const net = await tab("Networking");
+    check("rds Networking: its VPC, subnets and security group", net.includes(conn.vpc_id) && net.includes(conn.subnets[0].subnet_id)
+      && net.includes(conn.security_groups[0].group_id), net);
+    await tab("Automated backups");
+    await page.locator("#main input[data-cfg=backup_retention_period]").fill("9");
+    await page.locator("#main button", { hasText: "Apply immediately" }).click();
+    await sleep(1500);
+    await tab("Maintenance");
+    const bk = await tab("Automated backups");
+    check("rds Automated backups: retention change persists after reopening the tab", /Enabled \(9 Days\)/.test(bk), bk);
+    const logs = await tab("Logs & events");
+    check("rds Logs & events: this instance's modification event", /Finished applying modification to backup_retention_period/.test(logs), logs);
+    await call("DELETE", `/api/rds/databases/${name}`);
+  },
 };
 
 let server;

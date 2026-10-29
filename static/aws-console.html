@@ -2696,6 +2696,8 @@ SUB_RENDERERS.listtable = function(svc, full, host, tab){
 SUB_RENDERERS.properties = async function(svc, full, host){
   // EC2: every property DescribeInstances returns for the instance, not just the grid row.
   if (svc.key === "ec2") { const r = await api("GET", _ec2p(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
+  // RDS: every setting DescribeDBInstances returns for the instance.
+  if (svc.key === "rds") { const r = await api("GET", _rdsp(full, "configuration")); if (r.ok && r.json) { const {instance_classes, log_types, ...c} = r.json; full = {...full, ...c}; } }
   // S3: the bucket overview plus its default encryption and Object Ownership.
   if (svc.key === "s3") {
     const [e, o] = await Promise.all([api("GET", _s3p(full, "config/encryption")), api("GET", _s3p(full, "config/ownership"))]);
@@ -2900,33 +2902,6 @@ SUB_RENDERERS.connect = function(svc, full, host){
       wrap.innerHTML = "";
       wrap.append(el("div",{class:"alert warn"}, el("div",{}, `Connect endpoint error: ${e.message}`)));
     });
-};
-SUB_RENDERERS.rdsnetworking = function(svc, full, host){
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, svc.key === "rds" ? "Connectivity & security" : "Networking details"));
-  const g = el("div",{class:"kv-grid"});
-  // RDS instances have an endpoint / subnet group, not EC2 IPv4 addresses.
-  const rows = svc.key === "rds" ? [
-    ["Endpoint",             full.endpoint_address || full.endpoint || (full.db_instance_identifier ? full.db_instance_identifier+"."+REGION+".rds.amazonaws.com" : "")],
-    ["Port",                 full.endpoint_port || full.port || 5432],
-    ["VPC ID",               full.vpc_id || "default"],
-    ["Subnet group",         full.db_subnet_group_name || "default"],
-    ["Availability Zone",    full.availability_zone || REGION+"a"],
-    ["Security groups",      (full.security_group_ids||[]).join(", ") || "default (sg-default)"],
-    ["Publicly accessible",  full.publicly_accessible ? "Yes" : "No"],
-  ] : [
-    ["Private IPv4 address", full.private_ip || "—"],
-    ["Public IPv4 address",  full.public_ip || "—"],
-    ["Public IPv4 DNS",      full.public_dns || "—"],
-    ["VPC ID",               full.vpc_id || "default"],
-    ["Subnet ID",            full.subnet_id || "subnet-default"],
-    ["Availability Zone",    full.availability_zone || REGION+"a"],
-    ["Security groups",      ((full.security_groups && full.security_groups.length ? full.security_groups : (full.security_group_ids || [])).map(g => (g && (g.groupName || g.name || g.id)) || g).join(", ")) || "default (sg-default)"],
-    ["Network interfaces",   String((full.network_interfaces||[]).length || 1)],
-  ];
-  rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k),
-    el("div",{class:"v"+(/id|address/i.test(k)?" mono":"")}, String(v)))));
-  card.append(g); host.append(card);
 };
 SUB_RENDERERS.sgrules = function(svc, full, host){
   host.append(el("div",{class:"alert info"}, icon("shield"),
@@ -3277,29 +3252,6 @@ SUB_RENDERERS.dynamoquery = function(svc, full, host){
 };
 
 // RDS
-SUB_RENDERERS.rdsendpoints = function(svc, full, host){
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Endpoint & port"));
-  card.append(el("div",{class:"kv-grid"},
-    el("div",{}, el("div",{class:"k"}, "Endpoint"), el("div",{class:"v mono"}, full.endpoint_address || full.endpoint || (full.db_instance_identifier ? full.db_instance_identifier+"."+REGION+".rds.amazonaws.com" : "—"))),
-    el("div",{}, el("div",{class:"k"}, "Port"),     el("div",{class:"v"}, String(full.endpoint_port || full.port || 5432))),
-    el("div",{}, el("div",{class:"k"}, "Status"),   el("div",{class:"v"}, full.status || "available")),
-    el("div",{}, el("div",{class:"k"}, "Master username"), el("div",{class:"v"}, full.master_username || "postgres"))));
-  host.append(card);
-  // Codespaces sandbox: reach this DB from a remote laptop through the jump host.
-  // Present only when the appliance runs in a Codespace AND the DB has a real
-  // backend connection (guarded — a no-op everywhere else).
-  if (full.connect_help) {
-    const ch = full.connect_help;
-    const c2 = el("div",{class:"kv-card"});
-    c2.append(el("div",{class:"h"}, "Connect from your laptop (Codespaces)"));
-    c2.append(el("div",{class:"kv-grid"},
-      el("div",{}, el("div",{class:"k"}, "1 · Tunnel (keep open)"), el("div",{class:"v mono"}, ch.tunnel_command)),
-      el("div",{}, el("div",{class:"k"}, "2 · Connect"),            el("div",{class:"v mono"}, ch.client_command))));
-    c2.append(el("div",{class:"small"}, ch.note));
-    host.append(c2);
-  }
-};
 SUB_RENDERERS.rdssnapshots = function(svc, full, host){
   fetch(ORIGIN+svc.api_paths.snapshots.path).then(r=>r.json()).then(j=>{
     const snaps = (j.snapshots || j.value || []).filter(s => !s.db_instance || s.db_instance === full.db_instance_identifier);
@@ -3842,6 +3794,117 @@ SUB_RENDERERS.s3cors = async function(svc, full, host){
       allowed_origins:_csv(f.o.value), allowed_headers:_csv(f.h.value), expose_headers:_csv(f.e.value), max_age_seconds:f.age.value || null}], "CORS rule added")},
       icon("add"), "Save changes"));
   host.append(card);
+};
+
+// ── RDS DB instance tabs: connectivity, Modify, backups, maintenance, logs &
+//    events, Performance Insights (GET/PUT /api/rds/databases/{id}/…).
+function _rdsp(full, tail){ return "/api/rds/databases/" + encodeURIComponent(full.db_instance_identifier || full.name || "") + "/" + tail; }
+// An editable settings card: fields [{k, label, type:"number"|"text"|"bool"|"select"|"multi", options}]
+// pre-filled from `cfg`, saved with ModifyDBInstance (PUT …/configuration).
+function _rdsEditor(full, title, cfg, fields){
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, title));
+  const get = {};
+  fields.forEach(f => {
+    let inp;
+    if (f.type === "bool") {
+      inp = el("input",{type:"checkbox","data-cfg":f.k}); if (cfg[f.k]) inp.checked = true;
+      card.append(el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, inp, el("span",{}, f.label)));
+      get[f.k] = () => inp.checked; return;
+    }
+    if (f.type === "multi") {
+      const boxes = (f.options || []).map(o => { const b = el("input",{type:"checkbox","data-cfg":f.k + ":" + o}); if ((cfg[f.k] || []).includes(o)) b.checked = true;
+        card.append(el("label",{class:"check",style:"display:flex;gap:8px;margin:4px 0"}, b, el("span",{}, f.label + ": " + o))); return [o, b]; });
+      get[f.k] = () => boxes.filter(([, b]) => b.checked).map(([o]) => o); return;
+    }
+    if (f.type === "select") { inp = el("select",{"data-cfg":f.k}, ...(f.options || []).map(o => el("option",{value:o}, o))); inp.value = cfg[f.k] ?? ""; }
+    else inp = el("input",{type: f.type === "number" ? "number" : "text", "data-cfg":f.k, value: cfg[f.k] ?? ""});
+    card.append(_field(f.label, inp));
+    get[f.k] = () => f.type === "number" ? Number(inp.value) : inp.value;
+  });
+  card.append(el("button",{class:"btn primary",onclick:async()=>{
+    const body = {}; fields.forEach(f => { const v = get[f.k](); if (JSON.stringify(v) !== JSON.stringify(cfg[f.k])) body[f.k] = v; });
+    if (!Object.keys(body).length) { toast("No changes to apply"); return; }
+    const r = await api("PUT", _rdsp(full, "configuration"), body);
+    if (r.ok) { toast("DB instance modified"); _rerender(); } else toast("Modify failed: " + _derr(r), "err");
+  }}, icon("save"), "Apply immediately"));
+  return card;
+}
+
+SUB_RENDERERS.rdsendpoints = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "connectivity")); if (!c) return;
+  host.append(_dkv("Endpoint & port", [["Endpoint", c.endpoint, 1], ["Port", c.port], ["Master username", c.master_username],
+    ["IAM DB authentication", c.iam_db_auth ? "Enabled" : "Not enabled"], ["Certificate authority", c.certificate_authority]]));
+  // Codespaces sandbox: reach this DB from a remote laptop through the jump host.
+  if (full.connect_help) {
+    const ch = full.connect_help;
+    host.append(_dkv("Connect from your laptop (Codespaces)", [["1 · Tunnel (keep open)", ch.tunnel_command, 1], ["2 · Connect", ch.client_command, 1]]),
+      el("div",{class:"small"}, ch.note));
+  }
+};
+SUB_RENDERERS.rdsnetworking = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "subnet-group")); if (!c) return;
+  host.append(_dkv("Networking", [["Availability Zone", c.availability_zone], ["VPC", c.vpc_id, 1], ["Subnet group", c.subnet_group],
+    ["Network type", c.network_type], ["Multi-AZ", c.multi_az ? "Yes" : "No"]]));
+  const sn = el("div",{class:"kv-card"}); sn.append(el("div",{class:"h"}, "Subnets (" + c.subnets.length + ")"),
+    _dtbl([["subnet_id","Subnet ID",1],["cidr","IPv4 CIDR",1],["availability_zone","Availability Zone"]], c.subnets, "The subnet group has no subnets."));
+  const sg = el("div",{class:"kv-card"}); sg.append(el("div",{class:"h"}, "Security"),
+    _dtbl([["group_id","VPC security group",1],["group_name","Name"],["status","Status"]], c.security_groups, "No VPC security groups."));
+  host.append(sn, sg, _dkv("", [["Publicly accessible", c.publicly_accessible ? "Yes" : "No"]]));
+};
+SUB_RENDERERS.rdsmodify = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "configuration")); if (!c) return;
+  host.append(_rdsEditor(full, "Modify DB instance: " + c.db_instance_identifier, c, [
+    {k:"db_instance_class", label:"DB instance class", type:"select", options:c.instance_classes},
+    {k:"allocated_storage", label:"Allocated storage (GiB)", type:"number"},
+    {k:"multi_az", label:"Multi-AZ deployment", type:"bool"},
+    {k:"publicly_accessible", label:"Publicly accessible", type:"bool"},
+    {k:"deletion_protection", label:"Enable deletion protection", type:"bool"},
+    {k:"copy_tags_to_snapshot", label:"Copy tags to snapshots", type:"bool"},
+    {k:"auto_minor_version_upgrade", label:"Enable auto minor version upgrade", type:"bool"}]));
+};
+SUB_RENDERERS.rdsbackups = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "configuration")); if (!c) return;
+  host.append(_dkv("Backup", [["Automated backups", c.automated_backups + (c.backup_retention_period ? " (" + c.backup_retention_period + " Days)" : "")],
+    ["Backup window", c.preferred_backup_window + " UTC"], ["Copy tags to snapshots", c.copy_tags_to_snapshot ? "Enabled" : "Disabled"],
+    ["Latest restore time", c.latest_restorable_time || c.created], ["Encryption", c.storage_encrypted ? "Enabled (" + c.kms_key_id + ")" : "Not enabled"]]));
+  host.append(_rdsEditor(full, "Edit backup settings", c, [
+    {k:"backup_retention_period", label:"Backup retention period (days, 0 disables automated backups)", type:"number"},
+    {k:"preferred_backup_window", label:"Backup window (hh24:mi-hh24:mi UTC)", type:"text"},
+    {k:"copy_tags_to_snapshot", label:"Copy tags to snapshots", type:"bool"}]));
+};
+SUB_RENDERERS.rdsmaintenance = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "configuration")); if (!c) return;
+  const pm = await _dget(host, _rdsp(full, "pending-maintenance")); if (!pm) return;
+  host.append(_dkv("Maintenance", [["Auto minor version upgrade", c.auto_minor_version_upgrade ? "Enabled" : "Disabled"],
+    ["Maintenance window", c.preferred_maintenance_window + " UTC"], ["Engine version", c.engine + " " + c.engine_version]]));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Pending maintenance (" + pm.pending_maintenance_actions.length + ")"),
+    _dtbl([["action","Action"],["description","Description"],["auto_applied_after_date","Apply date"]], pm.pending_maintenance_actions,
+      "No maintenance is pending for " + c.db_instance_identifier + "."));
+  host.append(card);
+  host.append(_rdsEditor(full, "Edit maintenance", c, [
+    {k:"preferred_maintenance_window", label:"Maintenance window (ddd:hh24:mi-ddd:hh24:mi UTC)", type:"text"},
+    {k:"auto_minor_version_upgrade", label:"Enable auto minor version upgrade", type:"bool"}]));
+};
+SUB_RENDERERS.rdslogs = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "configuration")); if (!c) return;
+  const e = await _dget(host, _rdsp(full, "events")); if (!e) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Recent events (" + e.events.length + ")"),
+    _dtbl([["date","Time"],["category","Category"],["message","Message"]], e.events, "No events recorded for " + c.db_instance_identifier + "."));
+  host.append(card);
+  host.append(_dkv("Log exports", [["Published to CloudWatch Logs", (c.enabled_cloudwatch_logs_exports || []).join(", ") || "None"]]));
+  host.append(_rdsEditor(full, "Edit log exports", c, [{k:"enabled_cloudwatch_logs_exports", label:"Export", type:"multi", options:c.log_types}]));
+};
+SUB_RENDERERS.rdsperformance = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "configuration")); if (!c) return;
+  const pi = await _dget(host, _rdsp(full, "performance-insights")); if (!pi) return;
+  host.append(_dkv("Performance Insights", [["Performance Insights", pi.enabled ? "Enabled" : "Disabled"], ["Resource ID", pi.identifier, 1],
+    ["Retention period", pi.retention_period + " days"], ...(pi.enabled ? [["AWS KMS key", pi.kms_key_id, 1]] : [])]));
+  host.append(_rdsEditor(full, "Edit Performance Insights", c, [
+    {k:"performance_insights_enabled", label:"Turn on Performance Insights", type:"bool"},
+    {k:"performance_insights_retention_period", label:"Retention period (7, 731 or a multiple of 31 days)", type:"number"}]));
 };
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──

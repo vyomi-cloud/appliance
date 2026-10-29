@@ -187,7 +187,49 @@ def s3():
     check("Permissions: evaluated for the bucket ARN", acc["resource_arn"] == f"arn:aws:s3:::{name}")
     requests.delete(f"{BASE}{p}?force=1", timeout=30)
 
-SECTIONS = {"ec2": ec2, "s3": s3}
+
+
+def rds():
+    print("── RDS DB instance")
+    did = f"tabs-db-{int(time.time()) % 100000}"
+    r = requests.post(f"{BASE}/api/rds/databases", timeout=180, json={
+        "db_instance_identifier": did, "engine": "postgres", "master_username": "postgres", "master_user_password": "Password123!"})
+    check("create DB instance", r.status_code < 300, r.text)
+    p = f"/api/rds/databases/{did}"
+    c = get(p + "/connectivity").json()
+    vpcs = {v["vpc_id"] for v in get("/api/vpc/vpcs").json()["vpcs"]}
+    check("Connectivity: endpoint + port of this instance", c["endpoint"] and c["port"], c)
+    check("Connectivity: in a real VPC with its subnets", c["vpc_id"] in vpcs and c["subnets"], c)
+    check("Networking: subnet group view matches", get(p + "/subnet-group").json()["vpc_id"] == c["vpc_id"])
+    check("Security: VPC security group from that VPC", c["security_groups"] and c["security_groups"][0]["group_id"].startswith("sg-"), c)
+    cfg = get(p + "/configuration").json()
+    check("Configuration: backup retention / windows reported", cfg["backup_retention_period"] >= 0 and "-" in cfg["preferred_backup_window"], cfg)
+    put = lambda body: requests.put(BASE + p + "/configuration", json=body, timeout=30)
+    r = put({"backup_retention_period": 14, "preferred_backup_window": "04:00-04:45", "copy_tags_to_snapshot": False})
+    check("Automated backups: modify persists", r.status_code == 200 and get(p + "/configuration").json()["backup_retention_period"] == 14, r.text)
+    check("Automated backups: retention > 35 rejected", put({"backup_retention_period": 36}).status_code == 400)
+    check("Maintenance: window format enforced", put({"preferred_maintenance_window": "funday:01:00"}).status_code == 400)
+    r = put({"preferred_maintenance_window": "tue:06:00-tue:06:30", "auto_minor_version_upgrade": False})
+    check("Maintenance: modify persists", r.status_code == 200 and get(p + "/configuration").json()["preferred_maintenance_window"] == "tue:06:00-tue:06:30", r.text)
+    check("Maintenance: no pending actions", get(p + "/pending-maintenance").json()["pending_maintenance_actions"] == [])
+    check("Modify: storage can't shrink", put({"allocated_storage": 5}).status_code == 400)
+    r = put({"performance_insights_enabled": True, "performance_insights_retention_period": 31})
+    check("Performance Insights: turned on", r.status_code == 200 and get(p + "/performance-insights").json()["enabled"] is True, r.text)
+    check("Performance Insights: invalid retention rejected", put({"performance_insights_retention_period": 10}).status_code == 400)
+    r = put({"enabled_cloudwatch_logs_exports": ["postgresql"]})
+    check("Logs: export postgresql log", r.status_code == 200 and get(p + "/configuration").json()["enabled_cloudwatch_logs_exports"] == ["postgresql"], r.text)
+    check("Logs: MySQL log type refused for postgres", put({"enabled_cloudwatch_logs_exports": ["slowquery"]}).status_code == 400)
+    ev = get(p + "/events").json()["events"]
+    check("Logs & events: creation + modification events for this instance",
+          any("created" in e["message"] for e in ev) and any("modification" in e["message"] for e in ev), ev)
+    put({"deletion_protection": True})
+    r = requests.delete(BASE + p, timeout=60)
+    check("Deletion protection blocks DeleteDBInstance", r.status_code == 400 and "deletion protection" in r.text, r.text)
+    put({"deletion_protection": False})
+    r = requests.delete(BASE + p, timeout=120)
+    check("delete once protection is off", r.status_code < 300, r.text)
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds}
 
 if __name__ == "__main__":
     only = sys.argv[1:] or list(SECTIONS)

@@ -245,6 +245,72 @@ def register(app: FastAPI) -> None:
         ctx.record_usage(f"s3.delete_bucket_{kind}", {"bucket": name, "resource_id": name})
         return {"bucket": name, "kind": kind, "value": D.s3_bucket_config(b, kind)}
 
+    # ── RDS DB instance tabs ────────────────────────────────────────────────
+    def _db(db_id: str) -> dict:
+        from routes import aws_rds as R
+        db = R._rds_find_db_instance(db_id)
+        if not isinstance(db, dict):
+            raise HTTPException(404, detail="DBInstanceNotFound")
+        before = len(db)
+        D.rds_ensure(db, _net())
+        if len(db) != before:
+            ctx.persist_state()
+        return db
+
+    @app.get("/api/rds/databases/{db_id}/connectivity")
+    def rds_connectivity(db_id: str):
+        from routes import aws_rds as R
+        db = _db(db_id)
+        grp = R._rds_find_db_subnet_group(str(db.get("db_subnet_group_name") or "").lower()) or db.get("db_subnet_group")
+        return D.rds_connectivity(db, _net(), grp)
+
+    @app.get("/api/rds/databases/{db_id}/subnet-group")
+    def rds_subnet_group(db_id: str):
+        # DescribeDBSubnetGroups for the instance's group (+ its VPC security groups).
+        return rds_connectivity(db_id)
+
+    @app.get("/api/rds/databases/{db_id}/pending-maintenance")
+    def rds_pending(db_id: str):
+        return {"db_instance_identifier": db_id, "pending_maintenance_actions": D.rds_pending_maintenance(_db(db_id))}
+
+    @app.get("/api/rds/databases/{db_id}/performance-insights")
+    def rds_pi(db_id: str):
+        return D.rds_performance_insights(_db(db_id))
+
+    @app.get("/api/rds/databases/{db_id}/configuration")
+    def rds_configuration(db_id: str):
+        return D.rds_configuration(_db(db_id))
+
+    @app.put("/api/rds/databases/{db_id}/configuration")
+    async def rds_modify(db_id: str, request: Request):
+        db = _db(db_id)
+        try:
+            out = D.rds_modify(db, await _body(request))
+        except (D.DetailError, ValueError, TypeError) as e:
+            if isinstance(e, D.DetailError):
+                _fail(e)
+            raise HTTPException(400, detail={"code": "InvalidParameterValue", "message": str(e)})
+        ctx.persist_state()
+        ctx.record_usage("rds.modify_db_instance", {"db_instance_identifier": db_id, "resource_id": db_id})
+        return out
+
+    @app.get("/api/rds/databases/{db_id}/events")
+    def rds_events(db_id: str):
+        db = _db(db_id)
+        return {"db_instance_identifier": db_id, "events": D.rds_events(db, list(ctx.rds_state.get("events") or []))}
+
+    @app.delete("/api/rds/databases/{db_id}")
+    def rds_delete(db_id: str, skip_final_snapshot: bool = True, final_snapshot_identifier: str = ""):
+        # DeleteDBInstance honours deletion protection, as RDS does.
+        from routes import aws_rds as R
+        db = R._rds_find_db_instance(db_id)
+        if isinstance(db, dict):
+            try:
+                D.rds_check_delete(db)
+            except D.DetailError as e:
+                _fail(e)
+        return R.api_rds_delete_database(db_id, skip_final_snapshot, final_snapshot_identifier)
+
     # ── Permissions tab (every service): identity policies covering a resource ──
     @app.get("/api/aws/resource-access")
     def resource_access(arn: str, service: str):

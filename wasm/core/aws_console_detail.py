@@ -936,3 +936,215 @@ def s3_access_summary(bucket: dict) -> str:
         except ValueError:
             pass
     return "Bucket and objects not public"
+
+
+# ── RDS DB instance detail (Connectivity, Maintenance & backups, Logs & events,
+#    Performance Insights, Modify) ───────────────────────────────────────────
+RDS_INSTANCE_CLASSES = ["db.t3.micro", "db.t3.small", "db.t3.medium", "db.t3.large", "db.t4g.micro", "db.t4g.small",
+                        "db.t4g.medium", "db.m5.large", "db.m5.xlarge", "db.m6g.large", "db.m6i.large", "db.r5.large",
+                        "db.r6g.large"]
+RDS_LOG_TYPES = {"postgres": ["postgresql", "upgrade"], "mysql": ["audit", "error", "general", "slowquery"],
+                 "mariadb": ["audit", "error", "general", "slowquery"]}
+_RDS_EVENT_TEXT = {
+    "CreateDBInstance": ("creation", "DB instance created"),
+    "StartDBInstance": ("notification", "DB instance started"),
+    "StopDBInstance": ("notification", "DB instance stopped"),
+    "RebootDBInstance": ("availability", "DB instance restarted"),
+    "ModifyDBInstance": ("configuration change", "Finished applying modification to DB instance"),
+    "CreateDBSnapshot": ("backup", "Manual snapshot created"),
+}
+_DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+
+def _hhmm(s: str) -> int:
+    h, m = s.split(":")
+    h, m = int(h), int(m)
+    if not (0 <= h < 24 and 0 <= m < 60):
+        raise ValueError
+    return h * 60 + m
+
+
+def _check_backup_window(w: str) -> None:
+    try:
+        a, b = w.split("-")
+        span = (_hhmm(b) - _hhmm(a)) % 1440
+    except (ValueError, AttributeError):
+        raise DetailError("InvalidParameterValue", "The backup window must be in the format hh24:mi-hh24:mi.")
+    if span < 30:
+        raise DetailError("InvalidParameterValue", "The backup window must be at least 30 minutes.")
+
+
+def _check_maintenance_window(w: str) -> None:
+    try:
+        a, b = w.lower().split("-")
+        da, ta = a.split(":", 1)
+        db_, tb = b.split(":", 1)
+        if da not in _DAYS or db_ not in _DAYS:
+            raise ValueError
+        start = _DAYS.index(da) * 1440 + _hhmm(ta)
+        end = _DAYS.index(db_) * 1440 + _hhmm(tb)
+    except (ValueError, AttributeError):
+        raise DetailError("InvalidParameterValue", "The maintenance window must be in the format ddd:hh24:mi-ddd:hh24:mi.")
+    if (end - start) % (7 * 1440) < 30:
+        raise DetailError("InvalidParameterValue", "The maintenance window must be at least 30 minutes.")
+
+
+def rds_ensure(db: dict, net=None) -> dict:
+    """Settings DescribeDBInstances always returns, filled once (and kept) for DB
+    instances recorded before they were modeled. Windows default to the ones the
+    RDS console proposes for us-east-1 (backup 03:00-03:30 UTC, maintenance
+    sun:05:00-sun:05:30) unless the instance already has one."""
+    db.setdefault("preferred_backup_window", "03:00-03:30")
+    db.setdefault("preferred_maintenance_window", "sun:05:00-sun:05:30")
+    db.setdefault("backup_retention_period", 7)
+    db.setdefault("auto_minor_version_upgrade", True)
+    db.setdefault("copy_tags_to_snapshot", True)
+    db.setdefault("deletion_protection", False)
+    db.setdefault("storage_encrypted", True)
+    db.setdefault("kms_key_id", "alias/aws/rds")
+    db.setdefault("performance_insights_enabled", False)
+    db.setdefault("performance_insights_retention_period", 7)
+    db.setdefault("enabled_cloudwatch_logs_exports", [])
+    db.setdefault("ca_certificate_identifier", "rds-ca-rsa2048-g1")
+    db.setdefault("iam_database_authentication_enabled", False)
+    db.setdefault("network_type", "IPV4")
+    db.setdefault("multi_az", False)
+    db.setdefault("publicly_accessible", False)
+    db.setdefault("availability_zone", "us-east-1a")
+    db.setdefault("rds_events", [])
+    if net is not None:
+        vpc = db.get("vpc_id") if db.get("vpc_id") and net.vpc(db["vpc_id"]) else ""
+        if not vpc:
+            sg = (db.get("db_subnet_group") or {}).get("vpc_id") or ""
+            vpc = sg if sg and net.vpc(sg) else net.default_vpc()["vpc_id"]
+            db["vpc_id"] = vpc
+        if not [g for g in db.get("vpc_security_group_ids") or db.get("security_group_ids") or [] if net.sg(g)]:
+            d = (net.vpc(vpc) or {}).get("default_sg")
+            db["vpc_security_group_ids"] = [d] if d else []
+    return db
+
+
+def rds_record_event(db: dict, action: str, message: str = "") -> None:
+    cat, text = _RDS_EVENT_TEXT.get(action, ("notification", action))
+    db.setdefault("rds_events", []).append({"date": _now(), "category": cat, "message": message or text,
+                                            "source_identifier": db.get("db_instance_identifier", ""),
+                                            "source_type": "db-instance"})
+    del db["rds_events"][:-100]
+
+
+def rds_events(db: dict, account_events: list | None = None) -> list:
+    """DescribeEvents for this DB instance (newest first)."""
+    did = db.get("db_instance_identifier", "")
+    out = list(db.get("rds_events") or [])
+    for e in account_events or []:
+        det = e.get("detail") or {}
+        if str(det.get("db_instance_identifier", "")).lower() == did.lower() and e.get("action") in _RDS_EVENT_TEXT:
+            cat, text = _RDS_EVENT_TEXT[e["action"]]
+            out.append({"date": e.get("timestamp", ""), "category": cat, "message": text,
+                        "source_identifier": did, "source_type": "db-instance"})
+    return sorted(out, key=lambda x: x.get("date", ""), reverse=True)
+
+
+def rds_connectivity(db: dict, net, subnet_group: dict | None = None) -> dict:
+    """Connectivity & security: endpoint, network placement and VPC security groups."""
+    vpc = db.get("vpc_id", "")
+    sg_rec = subnet_group or db.get("db_subnet_group") or {}
+    sids = [s for s in sg_rec.get("subnet_ids") or db.get("subnet_ids") or [] if net and net.subnet(s)]
+    subnets = [net.subnet(s) for s in sids] if sids else (net.subnets_of(vpc) if net else [])
+    sgs = []
+    for g in db.get("vpc_security_group_ids") or db.get("security_group_ids") or []:
+        rec = net.sg(g) if net else None
+        sgs.append({"group_id": g, "group_name": (rec or {}).get("group_name", ""), "status": "active"})
+    return {"endpoint": db.get("endpoint_address") or db.get("endpoint") or "", "port": db.get("endpoint_port") or db.get("port"),
+            "availability_zone": db.get("availability_zone", ""), "vpc_id": vpc, "network_type": db.get("network_type", "IPV4"),
+            "subnet_group": sg_rec.get("db_subnet_group_name") or db.get("db_subnet_group_name") or "default",
+            "subnets": [{"subnet_id": s["subnet_id"], "cidr": s["cidr"], "availability_zone": s["az"]} for s in subnets if s],
+            "security_groups": sgs, "publicly_accessible": bool(db.get("publicly_accessible")),
+            "certificate_authority": db.get("ca_certificate_identifier", ""), "multi_az": bool(db.get("multi_az")),
+            "master_username": db.get("master_username", ""), "iam_db_auth": bool(db.get("iam_database_authentication_enabled"))}
+
+
+_RDS_KEYS = ("db_instance_class", "allocated_storage", "storage_type", "backup_retention_period", "preferred_backup_window",
+             "preferred_maintenance_window", "auto_minor_version_upgrade", "copy_tags_to_snapshot", "deletion_protection",
+             "publicly_accessible", "multi_az", "performance_insights_enabled", "performance_insights_retention_period",
+             "enabled_cloudwatch_logs_exports", "storage_encrypted", "kms_key_id", "ca_certificate_identifier",
+             "engine", "engine_version", "db_instance_status", "status", "latest_restorable_time", "created",
+             "iam_database_authentication_enabled")
+
+_RDS_MODIFIABLE = _RDS_KEYS[:14]   # class … log exports: what ModifyDBInstance changes from the console
+
+
+def rds_configuration(db: dict) -> dict:
+    out = {k: db.get(k) for k in _RDS_KEYS if k in db}
+    out["db_instance_identifier"] = db.get("db_instance_identifier", "")
+    out["log_types"] = RDS_LOG_TYPES.get(str(db.get("engine", "postgres")).split("-")[0], [])
+    out["instance_classes"] = RDS_INSTANCE_CLASSES
+    out["automated_backups"] = "Enabled" if int(db.get("backup_retention_period") or 0) > 0 else "Disabled"
+    out["pending_maintenance"] = []
+    return out
+
+
+def rds_modify(db: dict, changes: dict) -> dict:
+    """ModifyDBInstance with RDS's rules for the fields the console edits."""
+    c = dict(changes or {})
+    if "db_instance_class" in c and c["db_instance_class"] not in RDS_INSTANCE_CLASSES:
+        raise DetailError("InvalidParameterCombination", f"RDS does not support creating a DB instance with the following "
+                          f"combination: DBInstanceClass={c['db_instance_class']}, Engine={db.get('engine', 'postgres')}.")
+    if "allocated_storage" in c:
+        n = int(c["allocated_storage"])
+        if n < int(db.get("allocated_storage") or 20):
+            raise DetailError("InvalidParameterValue", "Invalid storage size: you can't reduce the allocated storage of a DB instance.")
+        if n > 65536:
+            raise DetailError("InvalidParameterValue", "Invalid storage size: the maximum is 65536 GiB.")
+        c["allocated_storage"] = n
+    if "backup_retention_period" in c:
+        n = int(c["backup_retention_period"])
+        if not 0 <= n <= 35:
+            raise DetailError("InvalidParameterValue", "The backup retention period must be between 0 and 35 days.")
+        c["backup_retention_period"] = n
+    if "preferred_backup_window" in c:
+        _check_backup_window(str(c["preferred_backup_window"]))
+    if "preferred_maintenance_window" in c:
+        _check_maintenance_window(str(c["preferred_maintenance_window"]))
+    if "performance_insights_retention_period" in c:
+        n = int(c["performance_insights_retention_period"])
+        if not (n in (7, 731) or (n % 31 == 0 and 31 <= n <= 713)):
+            raise DetailError("InvalidParameterValue", "Performance Insights retention must be 7 days, 731 days, or a multiple of 31.")
+        c["performance_insights_retention_period"] = n
+    if "enabled_cloudwatch_logs_exports" in c:
+        allowed = RDS_LOG_TYPES.get(str(db.get("engine", "postgres")).split("-")[0], [])
+        bad = [t for t in c["enabled_cloudwatch_logs_exports"] or [] if t not in allowed]
+        if bad:
+            raise DetailError("InvalidParameterCombination", f"You cannot use the log types '{bad[0]}' with engine {db.get('engine')}.")
+    for k in ("auto_minor_version_upgrade", "copy_tags_to_snapshot", "deletion_protection", "publicly_accessible",
+              "multi_az", "performance_insights_enabled"):
+        if k in c:
+            c[k] = c[k] in _TRUE
+    applied = [k for k in c if k in _RDS_MODIFIABLE and db.get(k) != c[k]]
+    for k in applied:
+        db[k] = c[k]
+    db["updated"] = _now()
+    if applied:
+        rds_record_event(db, "ModifyDBInstance", "Finished applying modification to " + ", ".join(applied))
+    return rds_configuration(db)
+
+
+def rds_check_delete(db: dict) -> None:
+    if db.get("deletion_protection"):
+        raise DetailError("InvalidParameterCombination",
+                          "Cannot delete protected DB Instance, please disable deletion protection and try again.")
+
+
+def rds_pending_maintenance(db: dict) -> list:
+    """DescribePendingMaintenanceActions for this instance. Nothing is scheduled
+    unless an engine upgrade or OS patch is pending; the simulator schedules none."""
+    return list(db.get("pending_maintenance_actions") or [])
+
+
+def rds_performance_insights(db: dict) -> dict:
+    """Performance Insights GetResourceMetadata: whether PI is on for the instance."""
+    on = bool(db.get("performance_insights_enabled"))
+    return {"identifier": "db-" + str(db.get("db_instance_identifier", "")).upper(), "enabled": on,
+            "retention_period": db.get("performance_insights_retention_period", 7),
+            "kms_key_id": (db.get("kms_key_id") or "alias/aws/rds") if on else "",
+            "features": {"UNIFIED_SQL_ID": "ENABLED" if on else "DISABLED"}}

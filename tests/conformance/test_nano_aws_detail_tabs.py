@@ -112,7 +112,30 @@ def s3():
     ev = d("_events", "List", {"resource": "tabs-bkt", "provider": "aws"})["events"]
     check("Activity: bucket configuration changes recorded", any(e["action"] == "PutBucketConfig" for e in ev), ev)
 
-SECTIONS = {"ec2": ec2, "s3": s3}
+
+
+def rds():
+    print("── RDS DB instance")
+    d("rds", "CreateDatabase", {"name": "tabs-db", "engine": "postgres"})
+    det = lambda t: d("rds", "DescribeDBInstanceDetail", {"name": "tabs-db", "tab": t})
+    mod = lambda body: d("rds", "ModifyDBInstanceConfiguration", {"name": "tabs-db", "body": body})
+    c = det("connectivity")
+    vpcs = {v["id"] for v in d("vpc", "List")["vpcs"]}
+    check("Connectivity: endpoint/port + placed in the default VPC with subnets", c["endpoint"] and c["vpc_id"] in vpcs and len(c["subnets"]) == 6, c)
+    check("Security: the VPC's default security group", c["security_groups"][0]["group_name"] == "default", c)
+    check("Modify: backup retention persists", mod({"backup_retention_period": 3}).get("ok") and det("configuration")["backup_retention_period"] == 3)
+    check("Modify: storage can't shrink", mod({"allocated_storage": 1}).get("code") == "InvalidParameterValue")
+    check("Maintenance: window persists", mod({"preferred_maintenance_window": "wed:02:00-wed:02:30"}).get("ok")
+          and det("configuration")["preferred_maintenance_window"] == "wed:02:00-wed:02:30")
+    check("Performance Insights: on", mod({"performance_insights_enabled": True}).get("ok") and det("performance-insights")["enabled"] is True)
+    d("rds", "Stop", {"name": "tabs-db"})
+    ev = det("events")["events"]
+    check("Logs & events: created / modified / stopped", {e["message"].split(" to ")[0] for e in ev} >= {"DB instance created", "DB instance stopped"}
+          and any("modification" in e["message"] for e in ev), ev)
+    mod({"deletion_protection": True})
+    check("deletion protection blocks delete", d("rds", "DeleteDatabase", {"name": "tabs-db"}).get("code") == "InvalidParameterCombination")
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds}
 
 if __name__ == "__main__":
     for k in sys.argv[1:] or list(SECTIONS):
