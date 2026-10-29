@@ -84,6 +84,7 @@ class CloudTasksStore:
 
 _SHARED: CloudTasksStore | None = None
 _DELIVER = None
+_ENQUEUE = None
 
 
 def shared_store() -> CloudTasksStore:
@@ -98,6 +99,63 @@ def set_deliverer(fn) -> None:
     """fn(task_dict) -> (http_status:int, detail:str). None → simulated 200."""
     global _DELIVER
     _DELIVER = fn
+
+
+def set_enqueuer(fn) -> None:
+    """fn(task_name) is called after a task is created so a data plane (the offline
+    appliance's NATS JetStream dispatcher) can deliver it. None → tasks only wait for RunTask."""
+    global _ENQUEUE
+    _ENQUEUE = fn
+
+
+def backoff_seconds(rc: dict, attempt: int) -> float:
+    """Wait before the next attempt after `attempt` (>=1) failed dispatches: minBackoff doubles
+    maxDoublings times, then grows linearly by 2^(maxDoublings-1)*minBackoff, capped at maxBackoff."""
+    mn = _parse_duration(rc.get("minBackoff", "0.100s"), "minBackoff")
+    mx = _parse_duration(rc.get("maxBackoff", "3600s"), "maxBackoff")
+    d = int(rc.get("maxDoublings", 16))
+    k = max(1, int(attempt))
+    if d <= 0:
+        return min(mx, mn)
+    if k <= d:
+        return min(mx, mn * 2 ** (k - 1))
+    return min(mx, mn * 2 ** (d - 1) * (k - d + 1))
+
+
+def record_attempt(store, name: str, status: int, detail: str = "") -> tuple[str, float]:
+    """Book one dispatch attempt of a stored task and decide what happens next.
+    Returns ("done"|"retry"|"dead", delay_seconds). 2xx completes the task; otherwise the
+    queue's retryConfig (maxAttempts, maxRetryDuration, backoff) decides retry vs. giving up."""
+    t = store.tasks.get(name)
+    if t is None:
+        return "done", 0.0
+    qn = name.split("/tasks/")[0]
+    q = store.queues.get(qn)
+    now = _now()
+    ok = 200 <= int(status) < 300
+    attempt = {"scheduleTime": t["scheduleTime"], "dispatchTime": now, "responseTime": now,
+               "responseStatus": {"code": 0 if ok else (5 if int(status) == 404 else 13),
+                                  "message": "" if ok else str(detail)}}
+    t["dispatchCount"] += 1
+    t["responseCount"] += 1
+    t.setdefault("firstAttempt", attempt)
+    t["lastAttempt"] = attempt
+    short = name.rsplit("/", 1)[-1]
+    if ok:
+        del store.tasks[name]
+        _log(store, qn, "Dispatch", f"{short} → HTTP {status} (completed)")
+        return "done", 0.0
+    rc = (q or {}).get("retryConfig") or DEFAULT_RETRY_CONFIG
+    max_attempts = int(rc.get("maxAttempts", 100))
+    max_dur = _parse_duration(rc.get("maxRetryDuration", "0s"), "maxRetryDuration")
+    age = (_utcnow() - _parse_ts(t["createTime"], "createTime")).total_seconds()
+    delay = backoff_seconds(rc, t["dispatchCount"])
+    if (max_attempts != -1 and t["dispatchCount"] >= max_attempts) or (max_dur and age + delay > max_dur):
+        del store.tasks[name]
+        _log(store, qn, "Dispatch", f"{short} → HTTP {status}; gave up after {t['dispatchCount']} attempt(s)")
+        return "dead", 0.0
+    _log(store, qn, "Dispatch", f"{short} → HTTP {status}; attempt {t['dispatchCount']}, retry in {delay:g}s")
+    return "retry", delay
 
 
 # ── primitives ────────────────────────────────────────────────────────────
@@ -538,6 +596,11 @@ def create_task(store, parent: str, body: dict) -> dict:
         rec["appEngineHttpRequest"] = a
     store.tasks[name] = rec
     _log(store, parent, "CreateTask", name.rsplit("/", 1)[-1])
+    if _ENQUEUE is not None:
+        try:
+            _ENQUEUE(name)
+        except Exception:    # the data plane never fails the API call
+            pass
     return _task_view(rec, full)
 
 

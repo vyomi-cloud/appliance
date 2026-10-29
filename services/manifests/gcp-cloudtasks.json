@@ -34,6 +34,11 @@
   ],
   "status": "ready",
   "backend": {
-    "kind": "in-process"
+    "kind": "container",
+    "name": "nats",
+    "image": "nats:2-alpine",
+    "license": "Apache-2.0",
+    "tier": "lite",
+    "compose_service": "vyomi-nats"
   }
 }

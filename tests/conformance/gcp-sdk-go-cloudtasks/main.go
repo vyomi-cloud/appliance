@@ -165,10 +165,12 @@ func main() {
 	}
 	named := qname + "/tasks/named-" + sfx
 	_, err = c.CreateTask(ctx, &taskspb.CreateTaskRequest{Parent: qname, Task: &taskspb.Task{Name: named,
-		MessageType: &taskspb.Task_HttpRequest{HttpRequest: &taskspb.HttpRequest{Url: "https://example.com/n"}}}})
+		MessageType: &taskspb.Task_HttpRequest{HttpRequest: &taskspb.HttpRequest{Url: "https://example.com/n"}},
+		ScheduleTime: timestamppb.New(time.Now().Add(time.Hour))}})
 	must("CreateTask with an explicit name", err)
 	_, err = c.CreateTask(ctx, &taskspb.CreateTaskRequest{Parent: qname, Task: &taskspb.Task{Name: named,
-		MessageType: &taskspb.Task_HttpRequest{HttpRequest: &taskspb.HttpRequest{Url: "https://example.com/n"}}}})
+		MessageType: &taskspb.Task_HttpRequest{HttpRequest: &taskspb.HttpRequest{Url: "https://example.com/n"}},
+		ScheduleTime: timestamppb.New(time.Now().Add(time.Hour))}})
 	chk("CreateTask duplicate name → ALREADY_EXISTS (409)", isHTTP(err, 409), fmt.Sprint(err))
 	_, err = c.CreateTask(ctx, &taskspb.CreateTaskRequest{Parent: qname, Task: &taskspb.Task{
 		MessageType: &taskspb.Task_HttpRequest{HttpRequest: &taskspb.HttpRequest{Url: "ftp://nope"}}}})
@@ -208,7 +210,8 @@ func main() {
 		chk("GetTask after delete → NOT_FOUND", isHTTP(err, 404), fmt.Sprint(err))
 	}
 	c.CreateTask(ctx, &taskspb.CreateTaskRequest{Parent: qname, Task: &taskspb.Task{
-		MessageType: &taskspb.Task_HttpRequest{HttpRequest: &taskspb.HttpRequest{Url: "https://example.com/p"}}}})
+		MessageType: &taskspb.Task_HttpRequest{HttpRequest: &taskspb.HttpRequest{Url: "https://example.com/p"}},
+		ScheduleTime: timestamppb.New(time.Now().Add(time.Hour))}})
 	must("PurgeQueue", func() error { _, e := c.PurgeQueue(ctx, &taskspb.PurgeQueueRequest{Name: qname}); return e }())
 	tit = c.ListTasks(ctx, &taskspb.ListTasksRequest{Parent: qname})
 	_, e := tit.Next()

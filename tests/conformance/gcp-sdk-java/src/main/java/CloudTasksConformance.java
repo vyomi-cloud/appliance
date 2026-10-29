@@ -17,6 +17,9 @@ import java.util.concurrent.Callable;
  *   ENDPOINT=http://127.0.0.1:9000 mvn -q -B compile exec:java -Dexec.mainClass=CloudTasksConformance
  */
 public class CloudTasksConformance {
+  // Tasks are really dispatched now; park these an hour out so the checks see them queued.
+  static final com.google.protobuf.Timestamp FUTURE = com.google.protobuf.Timestamp.newBuilder().setSeconds(java.time.Instant.now().getEpochSecond() + 3600).build();
+
   static int pass = 0, fail = 0;
 
   static void chk(String name, boolean ok, String detail) {
@@ -95,7 +98,7 @@ public class CloudTasksConformance {
       Policy pol = step("GetIamPolicy", () -> c.getIamPolicy(com.google.iam.v1.GetIamPolicyRequest.newBuilder().setResource(qname).build()));
       if (pol != null) chk("GetIamPolicy returns the binding", pol.getBindingsCount() == 1 && pol.getBindings(0).getRole().equals("roles/cloudtasks.enqueuer"), pol.toString());
 
-      Task t1 = step("CreateTask", () -> c.createTask(CreateTaskRequest.newBuilder().setParent(qname).setTask(Task.newBuilder()
+      Task t1 = step("CreateTask", () -> c.createTask(CreateTaskRequest.newBuilder().setParent(qname).setTask(Task.newBuilder().setScheduleTime(FUTURE)
           .setHttpRequest(HttpRequest.newBuilder().setUrl("https://example.com/handler").setHttpMethod(HttpMethod.POST)
               .putHeaders("X-Test", "1").setBody(ByteString.copyFromUtf8("hello-task")))).build()));
       if (t1 != null) {
@@ -108,7 +111,7 @@ public class CloudTasksConformance {
         }
       }
       String named = qname + "/tasks/named-" + sfx;
-      Task nt = Task.newBuilder().setName(named).setHttpRequest(HttpRequest.newBuilder().setUrl("https://example.com/n")).build();
+      Task nt = Task.newBuilder().setName(named).setScheduleTime(FUTURE).setHttpRequest(HttpRequest.newBuilder().setUrl("https://example.com/n")).build();
       step("CreateTask with an explicit name", () -> c.createTask(qname, nt));
       expect("CreateTask duplicate name → ALREADY_EXISTS", StatusCode.Code.ALREADY_EXISTS, () -> c.createTask(qname, nt));
       expect("CreateTask bad URL → INVALID_ARGUMENT", StatusCode.Code.INVALID_ARGUMENT, () -> c.createTask(qname,
@@ -125,7 +128,7 @@ public class CloudTasksConformance {
         step("DeleteTask", () -> { c.deleteTask(t1.getName()); return Boolean.TRUE; });
         expect("GetTask after delete → NOT_FOUND", StatusCode.Code.NOT_FOUND, () -> c.getTask(t1.getName()));
       }
-      c.createTask(qname, Task.newBuilder().setHttpRequest(HttpRequest.newBuilder().setUrl("https://example.com/p")).build());
+      c.createTask(qname, Task.newBuilder().setScheduleTime(FUTURE).setHttpRequest(HttpRequest.newBuilder().setUrl("https://example.com/p")).build());
       step("PurgeQueue", () -> c.purgeQueue(qname));
       chk("PurgeQueue empties the queue", !c.listTasks(qname).iterateAll().iterator().hasNext(), "tasks remain");
 

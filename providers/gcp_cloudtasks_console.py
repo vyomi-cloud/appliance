@@ -73,6 +73,14 @@ def _save():
 def register(app, on_change=None):
     """`on_change(action, queue_view_or_name)` lets the host sync CloudSim events/usage."""
     _load()
+    delivery = None
+    if os.environ.get("VYOMI_CLOUDTASKS_DELIVERY", "on") != "off":
+        # Tasks are really dispatched (HTTP / App Engine targets), durably through NATS JetStream.
+        from core.gcp_cloudtasks_delivery import Delivery
+        delivery = Delivery(core.shared_store, save=_save)
+        core.set_enqueuer(delivery.enqueue)
+        app.on_event("startup")(delivery.start)
+
     def changed(action, payload):
         if on_change:
             try:
@@ -170,4 +178,7 @@ def register(app, on_change=None):
 
         @app.get(pfx + "/queues/{name}/{kind}")
         def queue_children(name: str, kind: str):
+            if kind == "stats":   # dispatcher counters: observable rate limits / concurrency
+                q = _find(name)
+                return delivery.queue_stats(q["name"]) if delivery else {"mode": "off"}
             return core.children(store(), _find(name), kind)
