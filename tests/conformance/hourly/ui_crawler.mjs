@@ -46,9 +46,13 @@ const PREV = (() => {
 const shardOf = (key) => [...key].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % TAB_SHARDS;
 const OFFLINE_BASE = (process.env.VYOMI_BASE_URL || "http://localhost:9000").replace(/\/$/, "");
 
-const CONSOLES = TARGET === "nano"
+// CLOUDS=aws[,gcp,…] limits the crawl to those consoles (one detect shard per
+// cloud); unset = all three.
+const ONLY_CLOUDS = (process.env.CLOUDS || "").split(",").map((c) => c.trim()).filter(Boolean);
+const CONSOLES = (TARGET === "nano"
   ? [{ cloud: "aws", path: "/aws-console.html" }, { cloud: "gcp", path: "/gcp-console.html" }, { cloud: "azure", path: "/azure-console.html" }]
-  : [{ cloud: "aws", path: "/console/aws" }, { cloud: "gcp", path: "/console/gcp" }, { cloud: "azure", path: "/console/azure" }];
+  : [{ cloud: "aws", path: "/console/aws" }, { cloud: "gcp", path: "/console/gcp" }, { cloud: "azure", path: "/console/azure" }]
+).filter((c) => !ONLY_CLOUDS.length || ONLY_CLOUDS.includes(c.cloud));
 
 // Resource-detail tabs: AWS `.top-tabs` buttons, GCP `.sub-nav` items, Azure
 // blade `.sub-nav-item`s (as the wasm/ui-tests tab validators use), plus
@@ -158,12 +162,13 @@ const savingsSnapshot = (page) => page.evaluate(async () => {
 
 // Every resource created must show up in the space's savings: resource_count
 // goes up, and the creating cloud's saved dollars go up (real cloud would bill it).
-// Services the real cloud does not bill for (Azure virtual networks, NSGs and
-// RBAC role definitions/assignments cost nothing): the resource count must still
-// move, but there are no dollars to save.
-const FREE_OF_CHARGE = { gcp: /^(VPC Network|IAM & Admin)$/i, aws: /^(IAM|VPC|EventBridge)$/i, azure: /^(virtual networks?|network security group|entra id \/ rbac|role definition)$/i };
+// Services whose resources the real cloud does not bill at all (AWS IAM identities,
+// VPCs, EventBridge rules/buses; Azure VNets, NSGs, RBAC; GCP VPC networks, service accounts, Eventarc triggers): the dollar check does not apply, only resource_count.
+const FREE_RESOURCES = new Set(["aws:IAM", "aws:VPC", "aws:EventBridge",
+  "gcp:VPC Network", "gcp:IAM & Admin", "gcp:Eventarc",
+  "azure:Virtual networks", "azure:Network Security Group", "azure:Role Definition", "azure:Entra ID / RBAC"]);
 
-function savingsFindings(cloud, before, after, stage, service = "") {
+function savingsFindings(cloud, before, after, stage, service) {
   const f = [];
   if (!before.ok || !after.ok) return [{ type: "SAVINGS_UNAVAILABLE", detail: `${stage}: /api/spaces cost_savings unreadable` }];
   if (after.count === null || after.usd === null) return [{ type: "SAVINGS_MISSING", detail: `${stage}: active space has no cost_savings metrics` }];
@@ -171,7 +176,7 @@ function savingsFindings(cloud, before, after, stage, service = "") {
     f.push({ type: "SAVINGS_NOT_UPDATED", detail: `${stage}: resource_count stayed ${before.count} after creating a resource` });
   }
   const b = before.byProvider[cloud] || 0, a = after.byProvider[cloud] || 0;
-  if (!(a > b) && !FREE_OF_CHARGE[cloud]?.test(service.trim())) f.push({ type: "SAVINGS_NOT_UPDATED", detail: `${stage}: ${cloud} savings stayed $${b} (real ${cloud} would bill this resource)` });
+  if (!(a > b) && !FREE_RESOURCES.has(`${cloud}:${service}`)) f.push({ type: "SAVINGS_NOT_UPDATED", detail: `${stage}: ${cloud} savings stayed $${b} (real ${cloud} would bill this resource)` });
   return f;
 }
 
@@ -201,12 +206,13 @@ const rowCount = (page) => page.locator(ROW_SEL).count();
 // Create a resource accepting every form default, return to the service list
 // (create pages navigate away from it), and check the new row is there, fully
 // populated, and reflected in the space's cost savings.
-async function createWithDefaults(page, drain, cloud, backToList, service = "") {
+async function createWithDefaults(page, drain, cloud, backToList, service) {
   const f = [];
   const btn = page.locator("#main button, #main [role=button]").filter({ hasText: CREATE_BTN }).first();
   if (!(await btn.count())) return f;
   const rowsBefore = await rowCount(page);
   const savBefore = await savingsSnapshot(page);
+  const listText = await page.locator("#main").innerText().catch(() => "");
   try {
     await btn.click({ timeout: 3000 });
     await sleep(1200);
@@ -214,8 +220,17 @@ async function createWithDefaults(page, drain, cloud, backToList, service = "") 
     // Azure's create form is a multi-step wizard in the #blade side pane (no
     // dialog role): step through Next / Review + create to the final Create.
     const blade = page.locator("#blade.open");
+    // The wizard marks required fields with a "*" (.req) rather than the
+    // `required` attribute, and refuses to advance until they are filled.
+    const fillWizardRequired = async () => {
+      for (const w of await blade.locator(".wiz-field:has(.req)").all()) {
+        const inp = w.locator("input[type=text], input:not([type])").first();
+        if (await inp.count() && !(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl-${Date.now().toString(36)}`).catch(() => {});
+      }
+    };
     if (await blade.count()) {
       for (let step = 0; step < 12; step++) {
+        await fillWizardRequired();
         const fin = blade.locator("button").filter({ hasText: /^\s*create\s*$/i });
         if (await fin.count()) break;
         const next = blade.locator("button").filter({ hasText: /^\s*(next|review \+ create)\s*$/i }).last();
@@ -226,6 +241,28 @@ async function createWithDefaults(page, drain, cloud, backToList, service = "") 
     }
     const dialog = (await blade.count()) ? blade : page.locator("[role=dialog]:visible, .modal:visible, .drawer:visible").last();
     const scope = (await dialog.count()) ? dialog : page.locator("#main");
+    // Fields the real cloud also leaves empty and requires (a database admin
+    // password, a required name with no default) cannot be "accepted as default":
+    // fill them as a user would so the crawl can reach the created resource.
+    // A default name that already exists (an earlier crawl created it) would be
+    // rejected or overwritten by the real cloud; give it a fresh suffix so the
+    // create adds a row.
+    for (const inp of await scope.locator("input[type=text]").all()) {
+      const v = await inp.inputValue().catch(() => "");
+      if (v && /^[a-z0-9][a-z0-9._-]*$/i.test(v) && listText.includes(v)) await inp.fill(`${v}-${Date.now().toString(36).slice(-4)}`).catch(() => {});
+    }
+    for (const inp of await scope.locator("input[type=password]").all()) {
+      if (!(await inp.inputValue().catch(() => "x"))) await inp.fill("Vyomi-Crawl-1a!").catch(() => {});
+    }
+    // Flat Azure create blades ("Name" with no default) mark nothing as required.
+    for (const f of await scope.locator(".field").all()) {
+      if (!/^\s*name\s*\*?\s*$/i.test(await f.locator("label").first().innerText().catch(() => "")) && !(await f.locator(".req").count())) continue;
+      const inp = f.locator("input").first();
+      if (await inp.count() && !(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl-${Date.now().toString(36)}`).catch(() => {});
+    }
+    for (const inp of await scope.locator("input[required]:not([type=radio]):not([type=checkbox]):not([type=password])").all()) {
+      if (!(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl-${Date.now().toString(36)}`).catch(() => {});
+    }
     const submit = scope.locator("button, [type=submit]").filter({ hasText: SUBMIT_BTN }).filter({ hasNotText: NOT_SUBMIT }).last();
     if (!(await submit.count())) { f.push({ type: "CREATE_NO_SUBMIT", detail: "create form has no submit button" }); return f; }
     await submit.click({ timeout: 3000 });
@@ -264,7 +301,7 @@ async function crawlConsole(browser, base, con, needsSW) {
       net.push({ status: s, url: u.replace(base, "").slice(0, 200), body });
     }
   });
-  page.on("pageerror", (e) => errs.push(String(e.message).split("\n")[0].slice(0, 300)));
+  page.on("pageerror", (e) => { if (process.env.CRAWL_STACK) console.error("PAGEERROR", e.stack); errs.push(String(e.message).split("\n")[0].slice(0, 300)); });
   // Successful data calls (the console's /api/* fetches, served by the
   // appliance offline or the service worker in Nano) per surface.
   // Any data fetch counts (Nano serves cloud-native paths like
@@ -361,7 +398,7 @@ async function crawlConsole(browser, base, con, needsSW) {
             await sleep(1500);
           };
           const hasCreate = await page.locator("#main button, #main [role=button]").filter({ hasText: CREATE_BTN }).count();
-          const cf = await createWithDefaults(page, drain, con.cloud, backToList, svc.label || "");
+          const cf = await createWithDefaults(page, drain, con.cloud, backToList, svc.label);
           row.findings.push(...cf);
           if (hasCreate) surface("create", "create with defaults", cf, 1, "");
           // Values that identify the first resource (names, ids): a tab that

@@ -33,6 +33,11 @@
 <link rel="icon" href="assets/swagger/favicon-32x32.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0">
 <style>
+/* Clickable things always show the hand cursor. Many console links are <a> without an href
+   (JS-handled), which browsers render with the text I-beam. First in the sheet and low
+   specificity, so later rules (cursor:not-allowed on disabled controls) still win. */
+a,[onclick],[role="link"],[role="button"],[role="tab"],[role="menuitem"],summary,label[for],select,
+button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:not(:disabled){cursor:pointer}
   :root{ --azblue:#0078d4; --azblue-d:#005a9e; --ink:#201f1e; --sub:#605e5c;
          --line:#e1dfdd; --bg:#faf9f8; --rail:#0b1b2b; --rail2:#16334d; }
   *{box-sizing:border-box}
@@ -51,7 +56,7 @@
   .subchip{font-size:12px;color:#cfe0ee;background:#0f2233;border:1px solid #1d3a55;border-radius:3px;padding:5px 9px;white-space:nowrap}
   /* layout */
   .body{display:flex;height:calc(100vh - 48px)}
-  nav{width:230px;background:#0b1b2b;color:#cfe0ee;overflow-y:auto;flex-shrink:0;transition:width .12s}
+  nav{width:230px;background:#0b1b2b;color:#cfe0ee;overflow-y:auto;flex-shrink:0;transition:width .12s;padding-bottom:44px} /* clear the fixed Nano footer so the last service scrolls into reach */
   nav.collapsed{width:48px}
   .navhead{padding:12px 14px;font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:#7fa0bd}
   .navitem{display:flex;align-items:center;gap:12px;padding:9px 14px;cursor:pointer;font-size:13px;color:#dbe7f1;border-left:3px solid transparent;white-space:nowrap}
@@ -437,6 +442,8 @@
   <script type="module" src="./nano-boot.js?v=4"></script>
 </head>
 <body>
+<script src="./nano-kernel.js"></script>
+<script>window.__nk = window.NanoKernel && NanoKernel.start("Azure console");</script>
 <header>
   <button class="hicons" style="background:none;border:none" id="menuBtn" title="Menu">
     <span class="material-symbols-outlined" style="color:#cfe0ee">menu</span>
@@ -1024,9 +1031,12 @@ async function selectHome(){
 }
 async function selectRG(){
   markActive("__rg__");
-  const res=await arm("GET", `/subscriptions/${SUB}/resourcegroups`, undefined, "2021-04-01");
   const main=document.getElementById("main"); main.innerHTML="";
   main.append(crumb(["Home","Resource groups"]), pageHead("folder","Resource groups",""));
+  main.append(el("div",{class:"empty",id:"rgLoading"},"Loading…"));
+  const res=await arm("GET", `/subscriptions/${SUB}/resourcegroups`, undefined, "2021-04-01");
+  if(CURRENT!=="__rg__") return;
+  document.getElementById("rgLoading")?.remove();
   const wrap=el("div",{class:"wrap"});
   const t=el("table"); t.append(el("tr",{},el("th",{},"Name"),el("th",{},"Location"),el("th",{},"Status")));
   (res.json.value||[]).forEach(g=>{
@@ -1165,10 +1175,19 @@ async function openDetail(svc, item){
   document.getElementById("bladeTitle").textContent=item.name;
   const body=document.getElementById("bladeBody"); body.innerHTML="";
   // refetch for freshest
-  // Data-plane services (blob containers, Cosmos DBs, KV secrets/keys, queues) have no ARM
-  // namespace/type: the list record from /api/azure/{key} is the resource.
-  const res=svc.dataPlane ? {ok:false} : await arm("GET", resPath(svc,item.name), undefined, svc.apiVersion);
-  const full=(res.ok&&res.json)?res.json:item;
+  let full=item;
+  if(svc.dataPlane){
+    // Data-plane services (Blob containers, Cosmos DBs, KV secrets/keys) have no ARM
+    // namespace/type: the record is the list row plus the core's own item route.
+    try{
+      const r=await fetch(ORIGIN+String(svc.resource_path||(svc.collection_path+"/{name}")).replace("{name}",encodeURIComponent(item.name)));
+      const j=r.ok?await r.json():null;
+      if(j) full=Object.assign({}, j, item);
+    }catch(e){}
+  } else {
+    const res=await arm("GET", resPath(svc,item.name), undefined, svc.apiVersion);
+    if(res.ok&&res.json) full=res.json;
+  }
 
   // VM action toolbar (Phase A) — sits ABOVE the sub-nav layout so it's always
   // visible regardless of which sub-blade is open.
@@ -1950,7 +1969,7 @@ SUB_RENDERERS.storagequeues = function(svc, full, host){
 // SDK uses), so console-created secrets are SDK-readable and vice-versa.
 SUB_RENDERERS.kvsecrets = function(svc, full, host){
   const vault = full.name;
-  const base = ORIGIN + "/azure-data/keyvault/" + encodeURIComponent(vault) + "/secrets";
+  const base = ORIGIN + "/api/azure/keyvault/" + encodeURIComponent(vault) + "/secrets";
   const nameFromId = id => { const m = String(id||"").split("/secrets/")[1]; return m ? m.split("/")[0] : (id||""); };
   const wrap = el("div",{}); host.append(wrap);
   function render(){
@@ -2037,7 +2056,7 @@ SUB_RENDERERS.kvsecrets = function(svc, full, host){
 // native CryptographyClient can encrypt/decrypt against the same key.
 SUB_RENDERERS.kvkeys = function(svc, full, host){
   const vault = full.name;
-  const base = ORIGIN + "/azure-data/keyvault/" + encodeURIComponent(vault) + "/keys";
+  const base = ORIGIN + "/api/azure/keyvault/" + encodeURIComponent(vault) + "/keys";
   const nameFromKid = kid => { const m = String(kid||"").split("/keys/")[1]; return m ? m.split("/")[0] : (kid||""); };
   const wrap = el("div",{}); host.append(wrap);
   function render(){
@@ -4834,7 +4853,7 @@ function openFlatCreate(svc, body){
       inp = el("input",{value:dv});
     }
     inputs[f.name]=inp;
-    form.append(el("div",{class:"field"}, el("label",{},f.label), inp));
+    form.append(el("div",{class:"field"}, el("label",{},f.label, f.required ? el("span",{class:"req"},"*") : null), inp));
   });
   if(!svc.dataPlane)
     form.append(el("div",{class:"field"}, el("label",{},"Location"), (inputs.__loc__=el("input",{value:LOCATION}))));
@@ -4850,8 +4869,12 @@ function openFlatCreate(svc, body){
 }
 
 async function submitCreate(svc, inputs){
-  const name=(inputs["name"]?.value||"").trim();
+  // Role definitions have no user-chosen name: ARM keys them by a GUID and the
+  // form only asks for the role name (properties.roleName).
+  const name=inputs["name"] ? inputs["name"].value.trim() : (svc.type==="roleDefinitions" ? uuid() : "");
   if(!name){ toast("Name is required","err"); return; }
+  const missing=svc.createFields.find(f=>f.required && f.name!=="name" && inputs[f.name] && !String(inputs[f.name].value||"").trim());
+  if(missing){ toast(missing.label+" is required","err"); return; }
   if(svc.dataPlane){
     // Data-plane create → the in-WASM core via /api/azure/{key} (not ARM).
     const r=await fetch(ORIGIN+"/api/azure/"+svc.key,{method:"POST",

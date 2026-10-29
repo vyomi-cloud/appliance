@@ -39,45 +39,7 @@ from core.gcp_redis_core import RedisStore
 from core.gcp_container_core import ContainerStore
 from core.azure_arm_core import AzureArm
 
-
-
-class ComputeStore:
-    """Lambda functions + API Gateway APIs + the VPC topology model, held in PUBLIC
-    dict attrs so nano_persist captures them (reload/cross-context persistence).
-    The cores keep their state on `store._lambda_functions` / `_apigateway_apis` /
-    `_vpc_model`; those names alias the public attrs."""
-
-    def __init__(self):
-        self.lambda_functions: dict = {}
-        self.apigateway_apis: dict = {}
-        self.vpc_model: dict | None = None
-        self.extras: dict = {}       # console "extras" sub-resources: {fullKey: {name: item}}
-        self.extras_cfg: dict = {}   # console "extras" config records: {fullKey: values}
-
-    @property
-    def _lambda_functions(self):
-        return self.lambda_functions
-
-    @_lambda_functions.setter
-    def _lambda_functions(self, v):
-        self.lambda_functions = v
-
-    @property
-    def _apigateway_apis(self):
-        return self.apigateway_apis
-
-    @_apigateway_apis.setter
-    def _apigateway_apis(self, v):
-        self.apigateway_apis = v
-
-    @property
-    def _vpc_model(self):
-        return self.vpc_model
-
-    @_vpc_model.setter
-    def _vpc_model(self, v):
-        self.vpc_model = v
-
+import types
 
 _REG: dict | None = None
 
@@ -97,6 +59,12 @@ def get() -> dict:
             "rds": InMemorySqlStore(),
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
+            # Console compute/network models: Lambda + API Gateway share ONE namespace
+            # (AWS_PROXY reaches the registered functions); VPC has its own. They
+            # live here (not as module singletons) so nano_persist snapshots them.
+            "compute": types.SimpleNamespace(),
+            "vpc_net": types.SimpleNamespace(),
+            "extras": types.SimpleNamespace(items={}, cfg={}),   # console EC2/VPC/EventBridge sub-resource CRUD
             "logs": LogsStore(),               # CloudWatch Logs (core/logs_core.py)
             "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
             "ssm": SsmStore(),

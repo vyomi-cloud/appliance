@@ -159,7 +159,7 @@ RESOURCE_CATALOG_GCP = [
             ["name",      "Database ID"],
             ["type",      "Type"],
             ["locationId","Location"],
-            ["deleteProtectionState", "Delete protection"],
+            ["createTime","Created"],
         ],
         "createFields": [
             {"name": "name", "label": "Database ID", "default": "(default)"},
@@ -231,13 +231,13 @@ RESOURCE_CATALOG_GCP = [
             {"type": "firewalls",   "label": "Firewall rules", "icon": "shield"},
         ],
         # v2.0.4: subnetworkCount doesn't exist; response uses
-        # `subnetworks` (array of URIs). Surface IPv4Range instead since
-        # it's flat. Caught by real-SPA conformance.
+        # `subnetworks` (array of URIs). Surface MTU (a real console column) —
+        # IPv4Range is legacy-network-only and empty for every modern VPC. Caught by real-SPA conformance.
         "columns": [
             ["name",                 "Name"],
             ["mode",                 "Mode"],
             ["routingConfig.routingMode", "Routing mode"],
-            ["ipv4Range",            "IPv4 range"],
+            ["mtu",                  "MTU"],
         ],
         "createFields": [
             {"name": "name", "label": "Network name", "default": "my-vpc"},

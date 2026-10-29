@@ -568,6 +568,10 @@ def _resource_op(service, operation, name="", body=None):
             subs = p.get("subscriptions", []) if isinstance(p, dict) else []
             subs = [s for s in subs if s.get("topic") == topic_full]
             return {"ok": st < 300, "items": [_rec(s) for s in subs]}
+        if operation == "ListAllSubscriptions":   # every subscription in the project
+            st, p = _call(svc, "GET", f"{_P}/subscriptions")
+            subs = [_rec(s) for s in (p.get("subscriptions", []) if isinstance(p, dict) else [])]
+            return {"ok": st < 300, "subscriptions": subs, "items": subs}
         if operation == "CreateSubscription":
             sub_id = str(body.get("name") or body.get("subscriptionId") or "").strip()
             topic_full = f"projects/{PROJ}/topics/{name}"

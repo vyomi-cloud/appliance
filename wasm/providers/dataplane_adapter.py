@@ -26,9 +26,9 @@ from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
 
 # Compute/registry stores. Lambda + API Gateway share ONE namespace so an
 # AWS_PROXY integration reaches the registered functions (the API-GW→Lambda synergy).
-from core import nano_registry
-_COMPUTE = nano_registry.get()["compute"]   # persisted + shared with the relay (nano_persist STORE_ATTRS)
-_VPC = _COMPUTE
+from core import nano_registry as _R
+_COMPUTE = _R.get()["compute"]
+_VPC = _R.get()["vpc_net"]
 MSG = A.MSG      # EventBridge + Service Bus + SQS all share this
 SQLDB = A.RDB    # Azure SQL shares the SQL store (azuresql: keyspace)
 IDN = A.IAM      # Azure RBAC shares the IAM store (_azure_* attrs)
@@ -42,14 +42,21 @@ def _lam_json(resp):
 
 
 # ── Lambda ──────────────────────────────────────────────────────────────────
+def _now():
+    import datetime
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
 def _fn_row(fn):
-    """Console row: the same snake_case fields the appliance's /api/lambda/functions returns."""
-    return {"name": fn["name"], "function_name": fn["name"], "function_arn": fn.get("arn", ""),
-            "runtime": fn.get("runtime", "python3.12"), "handler": fn.get("handler", "index.handler"),
+    # Legacy keys (name/codeSize) stay for existing callers; the AWS-shaped keys are
+    # what the console grid columns read (function_name, memory_size, timeout…).
+    return {"name": fn["name"], "runtime": fn.get("runtime", "python3.12"),
+            "handler": fn.get("handler", "index.handler"), "codeSize": len(fn.get("source", "")),
+            "function_name": fn["name"], "function_arn": fn.get("arn", ""),
             "memory_size": fn.get("memory_size", 128), "timeout": fn.get("timeout", 3),
-            "role": fn.get("role", ""), "description": fn.get("description", ""),
-            "package_type": "Zip", "state": "Active", "last_modified": fn.get("last_modified", ""),
-            "codeSize": len(fn.get("source", ""))}
+            "state": "Active", "package_type": "Zip",
+            "created": fn.get("created") or fn.get("last_modified") or "",
+            "last_modified": fn.get("last_modified") or fn.get("created") or ""}
 
 
 def lambda_list(p=None):
@@ -68,7 +75,11 @@ def lambda_create(p):
     r = lambda_core.dispatch(_COMPUTE, "POST", "/2015-03-31/functions", {}, {}, json.dumps(body).encode())
     if r.status >= 400:
         return {"ok": False, "code": "CreateFailed", **_lam_json(r)}
-    return {"ok": True, **_fn_row(_COMPUTE._lambda_functions[name])}
+    fn = _COMPUTE._lambda_functions[name]
+    fn["memory_size"] = int(p.get("memory_size") or p.get("memory") or 128)
+    fn["timeout"] = int(p.get("timeout") or 3)
+    fn["created"] = fn["last_modified"] = _now()
+    return {"ok": True, **_fn_row(fn)}
 
 
 def lambda_get(p):
@@ -114,11 +125,45 @@ def apigw_list(p=None):
     return {"ok": True, "apis": [_api_row(a) for a in apis.values()]}
 
 
-def apigw_get(p):
+def _api_row(a):
+    return {"id": a["id"], "name": a["name"], "routes": len(a["resources"]) - 1,
+            "stages": list(a["deployments"].keys()),
+            "rest_api_id": a["id"], "description": a.get("description", ""),
+            "endpoint_type": "REGIONAL", "created": a.get("created", ""), "status": "available"}
+
+
+def _api_find(key):
     apis = getattr(_COMPUTE, "_apigateway_apis", {})
-    key = str(p.get("name") or p.get("id") or "")
-    a = apis.get(key) or next((x for x in apis.values() if x["name"] == key), None)
+    return apis.get(key) or next((a for a in apis.values() if a["name"] == key), None)
+
+
+def apigw_get(p):
+    a = _api_find(str(p.get("name") or p.get("id") or ""))
     return {"ok": True, **_api_row(a)} if a else {"ok": False, "code": "NotFoundException"}
+
+
+def apigw_resources(p):
+    """GET /api/apigateway/apis/{id}/resources — console API detail > Resources tab."""
+    a = _api_find(str(p.get("id") or ""))
+    if not a:
+        return {"ok": False, "code": "NotFoundException"}
+    rows = [{"resource_id": r["id"], "path": r.get("path", "/"), "path_part": r.get("pathPart", ""),
+             "parent_id": r.get("parentId") or "",
+             "resource_methods": {m: {} for m in r.get("methods", {})}}
+            for r in a["resources"].values() if r.get("parentId")]
+    return {"ok": True, "api_id": a["id"], "resources": rows, "count": len(rows)}
+
+
+def apigw_stages(p):
+    """GET /api/apigateway/apis/{id}/stages — console API detail > Stages tab."""
+    a = _api_find(str(p.get("id") or ""))
+    if not a:
+        return {"ok": False, "code": "NotFoundException"}
+    rows = [{"stage_name": n, "deployment_id": d.get("deploymentId", ""), "description": "",
+             "invoke_url": f"https://{a['id']}.execute-api.us-east-1.amazonaws.com/{n}",
+             "created": a.get("created", "")}
+            for n, d in a["deployments"].items()]
+    return {"ok": True, "stages": rows, "count": len(rows)}
 
 
 def apigw_create(p):
@@ -127,6 +172,8 @@ def apigw_create(p):
     name = str(p.get("name") or "").strip()
     api = _lam_json(apigateway_core.dispatch(_COMPUTE, "POST", "/restapis", {}, {}, json.dumps({"name": name}).encode()))
     api_id, root = api["id"], api["rootResourceId"]
+    _COMPUTE._apigateway_apis[api_id]["created"] = _now()
+    _COMPUTE._apigateway_apis[api_id]["description"] = str(p.get("description") or "")
     path_part = str(p.get("path") or "hello").strip("/")
     method = str(p.get("method") or "GET").upper()
     res = _lam_json(apigateway_core.dispatch(_COMPUTE, "POST", f"/restapis/{api_id}/resources/{root}",
@@ -178,9 +225,9 @@ def apigw_stages(p):
 
 
 def apigw_delete(p):
-    apis = getattr(_COMPUTE, "_apigateway_apis", {})
-    key = str(p.get("name") or p.get("id") or "")
-    apis.pop(key if key in apis else next((i for i, a in apis.items() if a["name"] == key), key), None)
+    a = _api_find(str(p.get("name") or p.get("id") or ""))
+    if a:
+        getattr(_COMPUTE, "_apigateway_apis", {}).pop(a["id"], None)
     return {"ok": True}
 
 
@@ -201,10 +248,30 @@ def _vpc_q(action, params):
 def vpc_list(p=None):
     m = getattr(_VPC, "_vpc_model", {"vpcs": {}, "subnets": {}, "sgs": {}})
     return {"ok": True,
-            "vpcs": [{"id": v["id"], "cidr": v["cidr"]} for v in m.get("vpcs", {}).values()],
+            "vpcs": [_vpc_row(v, m) for v in m.get("vpcs", {}).values()],
             "subnets": [{"id": s["id"], "vpcId": s["vpc_id"], "cidr": s["cidr"]} for s in m.get("subnets", {}).values()],
             "securityGroups": [{"id": g["id"], "vpcId": g["vpc_id"],
                                 "ingressRules": len(g["ingress"])} for g in m.get("sgs", {}).values()]}
+
+
+def _vpc_row(v, m):
+    return {"id": v["id"], "cidr": v["cidr"],
+            "vpc_id": v["id"], "name": v.get("name") or v["id"], "cidr_block": v["cidr"],
+            "state": "available", "tenancy": "default", "created": v.get("created", ""),
+            "dhcp_options_id": "dopt-" + v["id"].split("-", 1)[-1][:8],
+            "main_route_table_id": next((r["id"] for r in m.get("route_tables", {}).values()
+                                         if r.get("vpc_id") == v["id"] and r.get("main")), ""),
+            "default_security_group_id": next((g["id"] for g in m.get("sgs", {}).values()
+                                               if g.get("vpc_id") == v["id"] and g.get("name") == "default"), ""),
+            "internet_gateway_id": v.get("igw") or "",
+            "subnet_count": sum(1 for s in m.get("subnets", {}).values() if s.get("vpc_id") == v["id"])}
+
+
+def vpc_get(p):
+    m = getattr(_VPC, "_vpc_model", {"vpcs": {}, "subnets": {}})
+    key = str(p.get("name") or p.get("id") or "")
+    v = m.get("vpcs", {}).get(key) or next((x for x in m.get("vpcs", {}).values() if x.get("name") == key), None)
+    return {"ok": True, **_vpc_row(v, m)} if v else {"ok": False, "code": "InvalidVpcID.NotFound"}
 
 
 def vpc_list_sgs(p=None):
@@ -218,104 +285,50 @@ def vpc_list_sgs(p=None):
 
 
 def vpc_list_subnets(p=None):
-    """GET /api/vpc/subnets — snake_case rows the VPC Subnets tab renders."""
-    import ipaddress
+    """GET /api/vpc/subnets — console VPC > Subnets tab."""
     m = getattr(_VPC, "_vpc_model", {"subnets": {}})
-    rows = []
-    for i, s in enumerate(m.get("subnets", {}).values()):
-        try:
-            n = ipaddress.ip_network(s["cidr"], strict=False)
-            free = max(n.num_addresses - 5, 0)
-        except ValueError:
-            free = 0
-        rows.append({"id": s["id"], "subnet_id": s["id"], "vpc_id": s["vpc_id"],
-                     "name": s.get("name") or s["id"], "cidr_block": s["cidr"], "state": "available",
-                     "availability_zone": s.get("availability_zone") or "us-east-1" + "abc"[i % 3],
-                     "available_ip_count": free, "route_table_id": s.get("route_table") or "",
-                     "map_public_ip_on_launch": False})
-    return {"ok": True, "subnets": rows}
+    rows = [{"id": s["id"], "subnet_id": s["id"], "name": s.get("name") or s["id"],
+             "vpc_id": s["vpc_id"], "cidr_block": s["cidr"],
+             "availability_zone": s.get("az") or "us-east-1a", "state": "available"}
+            for s in m.get("subnets", {}).values()]
+    return {"ok": True, "subnets": rows, "count": len(rows)}
 
 
 def vpc_list_route_tables(p=None):
+    """GET /api/vpc/route-tables — console VPC > Route tables tab."""
     m = getattr(_VPC, "_vpc_model", {"route_tables": {}})
-    rows = []
-    for r in m.get("route_tables", {}).values():
-        rows.append({"id": r["id"], "route_table_id": r["id"], "vpc_id": r["vpc_id"],
-                     "name": r.get("name") or r["id"], "is_main": bool(r.get("main")),
-                     "routes": [{"destination": x.get("dest"), "target_id": x.get("target")} for x in r.get("routes", [])],
-                     "associations": [{"subnet_id": sid} for sid in r.get("subnets", [])]})
-    return {"ok": True, "route_tables": rows}
+    rows = [{"id": r["id"], "route_table_id": r["id"], "name": r.get("name") or r["id"],
+             "vpc_id": r["vpc_id"], "is_main": bool(r.get("main")),
+             "routes": [{"destination": x.get("dest"), "target": x.get("target")} for x in r.get("routes", [])],
+             "associations": [{"subnet_id": sid} for sid in r.get("subnets", [])]}
+            for r in m.get("route_tables", {}).values()]
+    return {"ok": True, "route_tables": rows, "count": len(rows)}
 
 
 def vpc_list_igws(p=None):
+    """GET /api/vpc/internet-gateways — console VPC > Internet gateways tab."""
     m = getattr(_VPC, "_vpc_model", {"igws": {}})
-    rows = []
-    for g in m.get("igws", {}).values():
-        att = [{"vpc_id": g["vpc_id"], "state": "available"}] if g.get("vpc_id") else []
-        rows.append({"id": g["id"], "internet_gateway_id": g["id"], "name": g.get("name") or g["id"],
-                     "state": "attached" if att else "detached", "attachments": att})
-    return {"ok": True, "internet_gateways": rows}
-
-
-def _now_z():
-    import datetime
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-
-
-def _vpc_row(v, m):
-    """Console row: the same snake_case fields the appliance's /api/vpc/vpcs returns."""
-    vid = v["id"]
-    rt = next((r["id"] for r in m.get("route_tables", {}).values() if r["vpc_id"] == vid and r.get("main")), "")
-    sg = next((g["id"] for g in m.get("sgs", {}).values() if g.get("vpc_id") == vid), "")
-    return {"id": vid, "vpc_id": vid, "name": v.get("name") or vid, "cidr": v["cidr"], "cidr_block": v["cidr"],
-            "state": "available", "tenancy": v.get("tenancy", "default"), "created": v.get("created", ""),
-            "dhcp_options_id": v.get("dhcp_options_id", ""), "main_route_table_id": rt,
-            "default_security_group_id": sg, "internet_gateway_id": v.get("igw") or "",
-            "subnet_count": sum(1 for sn in m.get("subnets", {}).values() if sn["vpc_id"] == vid),
-            "tags": v.get("tags", [])}
-
-
-def vpc_list_vpcs(p=None):
-    m = getattr(_VPC, "_vpc_model", None) or {"vpcs": {}}
-    return {"ok": True, "items": [_vpc_row(v, m) for v in m.get("vpcs", {}).values()]}
-
-
-def vpc_get_vpc(p):
-    m = getattr(_VPC, "_vpc_model", None) or {"vpcs": {}}
-    key = str(p.get("name") or "")
-    v = m["vpcs"].get(key) or next((x for x in m["vpcs"].values() if x.get("name") == key), None)
-    return {"ok": True, **_vpc_row(v, m)} if v else {"ok": False, "code": "InvalidVpcID.NotFound"}
-
-
-def vpc_delete_vpc(p):
-    m = getattr(_VPC, "_vpc_model", None) or {"vpcs": {}}
-    key = str(p.get("name") or "")
-    v = m["vpcs"].get(key) or next((x for x in m["vpcs"].values() if x.get("name") == key), None)
-    if not v:
-        return {"ok": False, "code": "InvalidVpcID.NotFound"}
-    vid = v["id"]
-    m["vpcs"].pop(vid, None)
-    for coll in ("subnets", "route_tables", "sgs"):
-        for k in [k for k, x in m.get(coll, {}).items() if (x.get("vpc_id") == vid)]:
-            m[coll].pop(k, None)
-    return {"ok": True, "name": key}
+    rows = [{"id": g["id"], "internet_gateway_id": g["id"], "name": g.get("name") or g["id"],
+             "attachments": ([{"vpc_id": g["vpc_id"], "state": "available"}] if g.get("vpc_id") else []),
+             "state": "attached" if g.get("vpc_id") else "detached"}
+            for g in m.get("igws", {}).values()]
+    return {"ok": True, "internet_gateways": rows, "count": len(rows)}
 
 
 def vpc_create(p):
     import re
-    cidr = str(p.get("cidr") or p.get("cidr_block") or "10.0.0.0/16")
+    cidr = str(p.get("cidr_block") or p.get("cidr") or "10.0.0.0/16")
     body = _vpc_q("CreateVpc", {"CidrBlock": cidr}).body
     vid = re.search(r"<vpcId>(.*?)</vpcId>", body)
     if vid:
-        v = _VPC._vpc_model["vpcs"][vid.group(1)]
-        v.update({"name": str(p.get("name") or ""), "created": _now_z(), "tenancy": "default",
-                  "dhcp_options_id": "dopt-" + vid.group(1)[4:12], "tags": []})
-        # a new VPC comes with its default security group, like the real cloud
+        rec = _VPC._vpc_model["vpcs"][vid.group(1)]
+        rec["name"] = str(p.get("name") or "")
+        rec["created"] = _now()
+        # Every real VPC is created with a default security group.
         sg = re.search(r"<groupId>(.*?)</groupId>", _vpc_q("CreateSecurityGroup", {"VpcId": vid.group(1)}).body)
         if sg:
-            _VPC._vpc_model["sgs"][sg.group(1)].update({"name": "default", "description": "default VPC security group"})
-        return {"ok": True, "id": vid.group(1), **_vpc_row(v, _VPC._vpc_model)}
-    return {"ok": False, "id": None, "cidr": cidr}
+            _VPC._vpc_model["sgs"][sg.group(1)].update(name="default", description="default VPC security group")
+    return {"ok": bool(vid), "id": vid.group(1) if vid else None, "cidr": cidr}
 
 
 def vpc_create_subnet(p):
@@ -329,6 +342,9 @@ def vpc_create_sg(p):
     import re
     body = _vpc_q("CreateSecurityGroup", {"VpcId": str(p.get("vpcId") or "")}).body
     gid = re.search(r"<groupId>(.*?)</groupId>", body)
+    if gid:
+        _VPC._vpc_model["sgs"][gid.group(1)].update(
+            name=str(p.get("name") or p.get("groupName") or gid.group(1)), description=str(p.get("description") or ""))
     return {"ok": bool(gid), "id": gid.group(1) if gid else None}
 
 
@@ -511,10 +527,11 @@ def rbac_check(p):
 # keyed by the console's fullKey ("ec2/volumes"), returning the {value:[...]}
 # envelope the console expects. Console-only (not native-wire); session-scoped
 # (reload-persistence is a follow-up — would live in nano_registry).
-import itertools as _xit
-_EXTRAS = _COMPUTE.extras          # public attrs of the registry's compute store → persisted
-_EXTRAS_CFG = _COMPUTE.extras_cfg
-_EXTRAS_SEQ = _xit.count(1)
+# Held in the persisted registry ("extras": public dicts `items` / `cfg`) so the
+# rows survive a page reload like every other store.
+_XNS = _R.get()["extras"]
+_EXTRAS = _XNS.items
+_EXTRAS_CFG = _XNS.cfg
 
 
 def _extras_vals(p):
@@ -529,18 +546,17 @@ def extras_create(p):
     key = p.get("key", "")
     vals = _extras_vals(p)
     leaf = key.split("/")[-1].rstrip("s") or "resource"
-    name = str(vals.get("name") or vals.get("Name")
-               or f"{leaf}-{format(next(_EXTRAS_SEQ), '08x')}")
+    name = str(p.get("name") or vals.get("Name") or "")
+    if not name:
+        n = len(_EXTRAS.get(key, {})) + 1
+        while f"{leaf}-{n:08x}" in _EXTRAS.get(key, {}):
+            n += 1
+        name = f"{leaf}-{n:08x}"
     item = {"name": name, "id": vals.get("id") or name, "state": vals.get("state", "available"), **vals}
     item["name"] = name
-    item.setdefault("created", _now_z())
-    if key == "eventbridge/rules":
-        # a new rule is ENABLED; its target count is what was attached
-        if vals.get("state") in (None, ""):
-            item["state"] = "ENABLED"
-        item.setdefault("target_count", 1 if vals.get("target_arn") else 0)
-        item.setdefault("rule_type", "EventPattern")
-        item.setdefault("event_bus_name", "default")
+    item.setdefault("created", _now())
+    if key.endswith("eventbridge/rules"):
+        item.setdefault("target_count", 0)   # a new rule has no targets yet
     _EXTRAS.setdefault(key, {})[name] = item
     return {"ok": True, **item}
 

@@ -57,6 +57,16 @@ in the prompt and in `$SLICE`). Each has its own appliance stack and relay.
 
 ## Priorities, in order
 
+0. **User-reported issues first** (`user_reported` in your slice): GitHub issues filed
+   automatically when a user's simulator (Nano, offline or a sandbox) hit an unexpected
+   failure. They are real users blocked right now, so they go before everything below.
+   For each: reproduce it from the report (cloud, service, action, status, error, stack
+   frames; the details are scrubbed, so recreate the resource yourself), add a
+   conformance test that fails before the fix, fix it, and put `Fixes #<issue>` in the
+   commit subject. The release that ships it comments "Shipped in vX.Y.Z" on the issue
+   and closes it (scripts/close_shipped_issues.py), so never close it yourself. If you
+   can't reproduce it, say what you tried in your summary and leave it open.
+
 1. **Broken or unimplemented UI.** Work through UI findings, Nano and offline.
    Fix the product, not the test: the consoles are `static/{aws,gcp,azure}-console.html`
    (offline) and `wasm/{aws,gcp,azure}-console.html` (Nano); APIs live in `routes/`,

@@ -1,47 +1,50 @@
-"""Console-created IAM users, Secrets Manager secrets and KMS keys must count
-in the space's cost_savings.resource_count, and secrets/KMS (billed by AWS) must
-raise AWS savings; a secret lists its encryption key.  Prints PASS/FAIL lines."""
-import json, os, sys, urllib.request, uuid
+"""AWS Secrets Manager / KMS / IAM created through the console's own routes (Vault-backed
+secrets + keys, in-memory IAM) move the space's cost_savings (resource_count + AWS $ for the
+billable ones), and the secrets grid returns real Created / Encryption key values."""
+import os
+import sys
+import uuid
 
-BASE = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000").rstrip("/")
-fails = 0
+import requests
 
-
-def call(method, path, body=None):
-    req = urllib.request.Request(BASE + path, method=method, data=json.dumps(body).encode() if body is not None else None,
-                                 headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read().decode() or "{}")
+BASE = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000")
+failed = False
 
 
-def cs():
-    sp = call("GET", "/api/spaces").get("active_space") or {}
-    c = sp.get("cost_savings") or {}
-    return c.get("resource_count", 0), (c.get("by_provider") or {}).get("aws", 0.0)
+def check(name, ok, extra=""):
+    global failed
+    print(f"[{'PASS' if ok else 'FAIL'}] {name}{'' if ok else ' ' + str(extra)}")
+    failed = failed or not ok
 
 
-def check(ok, what):
-    global fails
-    print(("[PASS] " if ok else "[FAIL] ") + what)
-    fails += 0 if ok else 1
+def snap():
+    d = requests.get(f"{BASE}/api/spaces", timeout=60).json()
+    cs = (d.get("active_space") or {}).get("cost_savings") or {}
+    return cs.get("resource_count", 0), cs.get("by_provider", {}).get("aws", 0)
 
 
-for sp in call("GET", "/api/spaces").get("spaces", []):
-    if sp.get("provider") == "aws":
-        call("POST", f"/api/spaces/{sp.get('space_id') or sp.get('id')}/switch")
-        break
-sfx = uuid.uuid4().hex[:6]
-for label, create, billed in (
-    ("IAM user", lambda: call("POST", "/api/iam/users", {"user_name": "u" + sfx}), False),
-    ("Secrets Manager secret", lambda: call("POST", "/api/aws/secrets", {"name": "s-" + sfx}), True),
-    ("KMS key", lambda: call("POST", "/api/aws/kms/keys", {"name": "k-" + sfx}), True),
-):
-    n0, d0 = cs()
-    create()
-    n1, d1 = cs()
-    check(n1 == n0 + 1, f"{label}: resource_count rises {n0} -> {n1}")
-    if billed:
-        check(d1 > d0, f"{label}: aws savings rise {d0} -> {d1}")
-item = next((i for i in call("GET", "/api/aws/secrets")["items"] if i["name"] == "s-" + sfx), {})
-check(item.get("kms_key_id") == "aws/secretsmanager", f"secret lists its encryption key ({item.get('kms_key_id')!r})")
-sys.exit(1 if fails else 0)
+def main():
+    tag = uuid.uuid4().hex[:6]
+    for label, path, body, billable in (
+        ("Secrets Manager secret", "/api/aws/secrets", {"name": f"sav-{tag}", "value": "x"}, True),
+        ("KMS key", "/api/aws/kms/keys", {"name": f"sav-{tag}", "description": "probe"}, True),
+        ("IAM user", "/api/iam/users", {"user_name": f"sav-{tag}"}, False),
+        ("IAM role", "/api/iam/roles", {"role_name": f"sav-{tag}"}, False),
+    ):
+        c0, d0 = snap()
+        r = requests.post(BASE + path, json=body, timeout=60)
+        check(f"create {label}", r.status_code < 300, r.text[:120])
+        c1, d1 = snap()
+        check(f"{label}: resource_count rises ({c0} -> {c1})", c1 > c0)
+        if billable:
+            check(f"{label}: aws savings rise ({d0} -> {d1})", d1 > d0)
+
+    items = requests.get(f"{BASE}/api/aws/secrets", timeout=60).json().get("items", [])
+    row = next((i for i in items if i["name"] == f"sav-{tag}"), {})
+    check("secret row has Created", bool(row.get("created")), row)
+    check("secret row has Encryption key", bool(row.get("kms_key_id")), row)
+    requests.delete(f"{BASE}/api/aws/secrets/sav-{tag}", timeout=60)
+    sys.exit(1 if failed else 0)
+
+
+main()

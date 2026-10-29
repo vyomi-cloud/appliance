@@ -29,9 +29,11 @@ All endpoints fall back to a metadata-only response when Vault is unreachable
 """
 from __future__ import annotations
 
+import os
 import base64
 import json
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
@@ -114,6 +116,36 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
             ct = ct_in
         pt = vc.transit_decrypt("aws", space, key_name, ct) or ""
         return {"KeyId": key, "Plaintext": pt}
+    if op in ("Encapsulate", "Decapsulate"):
+        # ML-KEM, simulated: the shared secret is random and the ciphertext is that
+        # secret sealed with the key's transit key, so Decapsulate recovers it.
+        if body.get("EncapsulationAlgorithm") != "ML_KEM":
+            return {"__type": "ValidationException", "message": "EncapsulationAlgorithm must be ML_KEM."}
+        stored = _kms_keys.get(key_name)
+        if not stored:
+            return {"__type": "NotFoundException", "message": f"Key '{key}' does not exist."}
+        if stored.get("KeyState") != "Enabled":
+            return {"__type": "DisabledException" if stored.get("KeyState") == "Disabled" else "KMSInvalidStateException",
+                    "message": f"{stored['Arn']} is {stored.get('KeyState')}."}
+        if stored.get("KeyUsage") != "ENCAPSULATE_DECAPSULATE":
+            return {"__type": "InvalidKeyUsageException",
+                    "message": f"{stored['Arn']} key usage is not ENCAPSULATE_DECAPSULATE."}
+        if op == "Encapsulate":
+            secret_b64 = base64.b64encode(os.urandom(32)).decode()
+            ct = vc.transit_encrypt("aws", space, key_name, secret_b64) or ""
+            return {"KeyId": stored["Arn"], "SharedSecret": secret_b64,
+                    "SharedSecretCiphertextBlob": base64.b64encode(ct.encode()).decode(),
+                    "EncapsulationAlgorithm": "ML_KEM"}
+        blob_in = body.get("SharedSecretCiphertextBlob", "")
+        try:
+            ct = base64.b64decode(blob_in).decode()
+        except Exception:
+            ct = ""
+        pt = vc.transit_decrypt("aws", space, key_name, ct) if ct.startswith("vault:") else None
+        if pt is None:
+            return {"__type": "IncorrectKeyException",
+                    "message": "The key supplied does not match the ciphertext's key."}
+        return {"KeyId": stored["Arn"], "SharedSecret": pt, "EncapsulationAlgorithm": "ML_KEM"}
     if op == "GenerateDataKey":
         spec = body.get("KeySpec", "AES_256")
         vc.transit_create_key("aws", space, key_name)
@@ -136,6 +168,8 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
             "Origin": "AWS_KMS",
             "CreationDate": time.time(),
         }
+        if metadata["KeyUsage"] == "ENCAPSULATE_DECAPSULATE":
+            metadata["EncapsulationAlgorithms"] = ["ML_KEM"]
         _kms_keys[key_id] = metadata
         return {"KeyMetadata": metadata}
     if op == "DescribeKey":
@@ -175,6 +209,19 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
             return {"__type": "NotFoundException", "message": f"Key {key_name} not found."}
         stored["Enabled"] = False
         stored["KeyState"] = "Disabled"
+        return {}
+    if op in ("EnableKeyRotation", "DisableKeyRotation", "GetKeyRotationStatus"):
+        stored = _kms_keys.get(key_name)
+        if not stored:
+            return {"__type": "NotFoundException", "message": f"Key '{key}' does not exist."}
+        if op == "GetKeyRotationStatus":
+            out = {"KeyId": stored["KeyId"], "KeyRotationEnabled": bool(stored.get("KeyRotationEnabled"))}
+            if out["KeyRotationEnabled"]:
+                out["RotationPeriodInDays"] = int(stored.get("RotationPeriodInDays", 365))
+            return out
+        stored["KeyRotationEnabled"] = op == "EnableKeyRotation"
+        if stored["KeyRotationEnabled"]:
+            stored["RotationPeriodInDays"] = int(body.get("RotationPeriodInDays") or stored.get("RotationPeriodInDays") or 365)
         return {}
     if op == "CreateAlias":
         alias_name = body.get("AliasName", "")
@@ -252,11 +299,15 @@ def _gcp_idx_get(space: str, kind: str) -> list:
         return []
 
 
-_GCP_IDX_CREATED: dict[tuple[str, str], str] = {}
-
-
-def _gcp_idx_created(space: str, entry: str) -> str:
-    return _GCP_IDX_CREATED.get((space, entry)) or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+def _gcp_idx_created(space: str, kind: str) -> dict:
+    """name -> RFC3339 creation time, kept beside the name index."""
+    got = vc.kv_get("gcp", space, f"__idx__{kind}_created")
+    try:
+        raw = (got.get("data") or {}).get("value", "{}") if got else "{}"
+        d = json.loads(raw) if isinstance(raw, str) else dict(raw)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
 
 
 def _gcp_idx_add(space: str, kind: str, entry: str) -> None:
@@ -264,11 +315,24 @@ def _gcp_idx_add(space: str, kind: str, entry: str) -> None:
     _GCP_IDX_CREATED.setdefault((space, entry), time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     if entry not in items:
         vc.kv_put("gcp", space, f"__idx__{kind}", json.dumps(sorted(items + [entry])))
+        created = _gcp_idx_created(space, kind)
+        created.setdefault(entry, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
+        vc.kv_put("gcp", space, f"__idx__{kind}_created", json.dumps(created))
 
 
 def _gcp_idx_remove(space: str, kind: str, entry: str) -> None:
     items = [x for x in _gcp_idx_get(space, kind) if x != entry]
     vc.kv_put("gcp", space, f"__idx__{kind}", json.dumps(items))
+    created = _gcp_idx_created(space, kind)
+    if created.pop(entry, None) is not None:
+        vc.kv_put("gcp", space, f"__idx__{kind}_created", json.dumps(created))
+
+
+def gcp_vault_index(space: str, kind: str) -> dict:
+    """Vault-backed GCP secrets / KMS keys of a space as {name: created}; used
+    by the cost-savings collector so console/SDK-created resources are billed."""
+    created = _gcp_idx_created(space, kind)
+    return {n: created.get(n, "") for n in _gcp_idx_get(space, kind)}
 
 
 def _register_gcp(app: FastAPI) -> None:
@@ -384,6 +448,36 @@ def _register_gcp(app: FastAPI) -> None:
             "state": "ENABLED",
         }
 
+    # Version state transitions (:disable / :enable / :destroy). Vault KV keeps the
+    # value; the lifecycle state lives here and gates :access like the real service.
+    _gcp_ver_state: dict = {}
+
+    def _gcp_ver_set(request: Request, project: str, secret: str, version: str, state: str):
+        space = _active_space_id(request)
+        ver = version
+        if version == "latest":
+            ver = "1"
+        _gcp_ver_state[(space, secret, ver)] = state
+        return {
+            "name": f"projects/{project}/secrets/{secret}/versions/{ver}",
+            "createTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "state": state,
+            **({"destroyTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+               if state == "DESTROYED" else {}),
+        }
+
+    @app.post("/v1/projects/{project}/secrets/{secret}/versions/{version}:disable")
+    async def gcp_secrets_version_disable(project: str, secret: str, version: str, request: Request):
+        return _gcp_ver_set(request, project, secret, version, "DISABLED")
+
+    @app.post("/v1/projects/{project}/secrets/{secret}/versions/{version}:enable")
+    async def gcp_secrets_version_enable(project: str, secret: str, version: str, request: Request):
+        return _gcp_ver_set(request, project, secret, version, "ENABLED")
+
+    @app.post("/v1/projects/{project}/secrets/{secret}/versions/{version}:destroy")
+    async def gcp_secrets_version_destroy(project: str, secret: str, version: str, request: Request):
+        return _gcp_ver_set(request, project, secret, version, "DESTROYED")
+
     # Real Google Secret Manager allows BOTH GET and POST on :access; the
     # google-cloud-go SDK's REST transport uses GET (with the ?$alt=json query
     # param appended). Register both so unmodified SDK clients work.
@@ -391,6 +485,11 @@ def _register_gcp(app: FastAPI) -> None:
     @app.post("/v1/projects/{project}/secrets/{secret}/versions/{version}:access")
     async def gcp_secrets_access(project: str, secret: str, version: str, request: Request):
         space = _active_space_id(request)
+        st = _gcp_ver_state.get((space, secret, "1" if version == "latest" else version), "ENABLED")
+        if st != "ENABLED":
+            return JSONResponse({"error": {"code": 400, "status": "FAILED_PRECONDITION",
+                "message": f"Secret Version [projects/{project}/secrets/{secret}/versions/{version}] is in {st} state."}},
+                status_code=400)
         v = None if version == "latest" else int(version)
         got = vc.kv_get("gcp", space, secret, version=v)
         if got is None:
@@ -417,12 +516,19 @@ def _register_gcp(app: FastAPI) -> None:
     @app.get("/api/gcp/secrets")
     async def gcp_console_secrets_list(request: Request):
         space = _active_space_id(request)
+        created = _gcp_idx_created(space, "secrets")
+        names = _gcp_idx_get(space, "secrets")
+        if any(n not in created for n in names):   # secrets indexed before creation times were recorded
+            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            for n in names:
+                created.setdefault(n, stamp)
+            vc.kv_put("gcp", space, "__idx__secrets_created", json.dumps(created))
         items = []
-        for n in _gcp_idx_get(space, "secrets"):
-            meta = (vc.kv_get("gcp", space, n) or {}).get("metadata") or {}
-            items.append({"name": n, "replication": "automatic",
-                          "latest_version": str(meta["version"]) if meta.get("version") else "No versions",
-                          "created": meta.get("created_time") or _gcp_idx_created(space, n)})
+        for n in names:
+            got = vc.kv_get("gcp", space, n)
+            version = str(((got or {}).get("metadata") or {}).get("version") or 1)
+            items.append({"name": n, "replication": "automatic", "created": created.get(n, ""),
+                          "latest_version": version})
         return {"items": items}
 
     @app.post("/api/gcp/secrets")
@@ -435,11 +541,8 @@ def _register_gcp(app: FastAPI) -> None:
         name = (body.get("name") or body.get("secretId") or body.get("secret_id") or "").strip()
         if not name:
             return JSONResponse(status_code=400, content={"ok": False, "error": "missing 'name'"})
-        # A secret may be created empty (value added later as a version); when Vault
-        # is unreachable the secret is still recorded metadata-only, never a 503.
-        value = body.get("value")
-        if value:
-            vc.kv_put("gcp", space, name, value)
+        if vc.kv_put("gcp", space, name, body.get("value") or body.get("secret_value") or "changeme") is None:
+            return _vault_unavailable_response("gcp.secrets")
         _gcp_idx_add(space, "secrets", name)
         return {"ok": True, "name": name}
 
@@ -856,15 +959,43 @@ def _aws_secret_index_get(space: str) -> list:
         return []
 
 
+def _aws_secret_created(space: str) -> dict:
+    """name -> RFC3339 creation time, kept beside the name index."""
+    got = vc.kv_get("aws", space, "__idx__secrets_created")
+    try:
+        raw = (got.get("data") or {}).get("value", "{}") if got else "{}"
+        d = json.loads(raw) if isinstance(raw, str) else dict(raw)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
 def _aws_secret_index_add(space: str, name: str) -> None:
     names = _aws_secret_index_get(space)
     if name not in names:
         vc.kv_put("aws", space, "__idx__secrets", json.dumps(sorted(names + [name])))
+        created = _aws_secret_created(space)
+        created.setdefault(name, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
+        vc.kv_put("aws", space, "__idx__secrets_created", json.dumps(created))
 
 
 def _aws_secret_index_remove(space: str, name: str) -> None:
     names = [n for n in _aws_secret_index_get(space) if n != name]
     vc.kv_put("aws", space, "__idx__secrets", json.dumps(names))
+    created = _aws_secret_created(space)
+    if created.pop(name, None) is not None:
+        vc.kv_put("aws", space, "__idx__secrets_created", json.dumps(created))
+
+
+def aws_vault_resources(space: str) -> dict:
+    """Vault-backed AWS Secrets Manager secrets / KMS keys as {kind: {id: created}};
+    used by the cost-savings collector so console/SDK-created ones are billed."""
+    created = _aws_secret_created(space)
+    secrets = {n: created.get(n, "") for n in _aws_secret_index_get(space)}
+    keys = {k: v.get("CreationDate") or ""
+            for k, v in _kms_keys.items()
+            if v.get("KeyState", "Enabled") != "PendingDeletion"}
+    return {"secrets": secrets, "keys": keys}
 
 
 def _aws_secret_meta(space: str, name: str) -> dict:
@@ -891,9 +1022,18 @@ def _register_aws_console(app: FastAPI) -> None:
     @app.get("/api/aws/secrets")
     async def aws_console_secrets_list(request: Request):
         space = _active_space_id(request)
+        created = _aws_secret_created(space)
+        names = _aws_secret_index_get(space)
+        if any(n not in created for n in names):   # indexed before creation times were recorded
+            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            for n in names:
+                created.setdefault(n, stamp)
+            vc.kv_put("aws", space, "__idx__secrets_created", json.dumps(created))
         return {"items": [{"name": n, "secret_type": "SecretString",
-                           **_aws_secret_meta(space, n)}
-                          for n in _aws_secret_index_get(space)]}
+                           "created": created.get(n, ""),
+                           "kms_key_id": "aws/secretsmanager",
+                           "arn": f"arn:aws:secretsmanager:us-east-1:000000000000:secret:{n}"}
+                          for n in names]}
 
     @app.post("/api/aws/secrets")
     async def aws_console_secret_create(request: Request):

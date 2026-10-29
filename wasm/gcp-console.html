@@ -33,6 +33,11 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined">
 <style>
+/* Clickable things always show the hand cursor. Many console links are <a> without an href
+   (JS-handled), which browsers render with the text I-beam. First in the sheet and low
+   specificity, so later rules (cursor:not-allowed on disabled controls) still win. */
+a,[onclick],[role="link"],[role="button"],[role="tab"],[role="menuitem"],summary,label[for],select,
+button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:not(:disabled){cursor:pointer}
   :root{
     /* GCP-faithful tokens — verified in the audit (matches real console) */
     --blue:#1a73e8; --blue-d:#1765cc; --blue-l:#e8f0fe; --blue-tint:#cfe2ff;
@@ -353,6 +358,8 @@
 <style>#avatarBtn{display:none!important;}</style>
 </head>
 <body>
+<script src="./nano-kernel.js"></script>
+<script>window.__nk = window.NanoKernel && NanoKernel.start("GCP console");</script>
 
 <!-- ==================== TOP BAR ==================== -->
 <header class="gc-top">
@@ -902,7 +909,7 @@ async function renderList(main){
       const path = svc.columns[state.sortBy][0];
       filtered.sort((a,b) => String(getPath(a,path)||"").localeCompare(String(getPath(b,path)||"")) * state.sortDir);
     }
-    document.getElementById("countChip").textContent = filtered.length ? `(${filtered.length})` : "";
+    const chip = document.getElementById("countChip"); if (chip) chip.textContent = filtered.length ? `(${filtered.length})` : "";
     stats.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;
@@ -1698,7 +1705,8 @@ function _recordFieldCount(field){
     try {
       const r = await api("GET", fillCommon(svc.resource_path, {name}));
       if (r.ok && r.json) { const v = getPath(r.json, field); if (Array.isArray(v)) return v.length;
-        if (v && typeof v === "object") return Object.keys(v).length; }
+        if (v && typeof v === "object") return Object.keys(v).length;
+        return 0; }   // the resource loaded and has no such children yet: a count of 0, not "-"
     } catch(_){}
     return null;
   };

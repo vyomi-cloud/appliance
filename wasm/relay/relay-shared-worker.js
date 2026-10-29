@@ -31,6 +31,7 @@ const CORES = [
   "azure_keyvault_keys_core.py", "azure_queue_core.py", "azure_servicebus_core.py",
   "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "vpc_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py",
   "azure_sql_core.py", "azure_iam_core.py",
+  "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py",
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it
   "aws_wire_router.py",
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)
@@ -177,19 +178,33 @@ builtins._capture = _capture; builtins._restore = _restore
 
 function connect() {
   if (state.stopped) return;
+  // One live socket per worker. The relay (relay.vyomi.cloud) lets a newer
+  // registration for a session supersede the older one, so two sockets here
+  // would close each other forever (the "connecting/disconnecting" loop).
+  if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
   state.phase = "connecting"; announce();
   const url = wsUrlFor(state.mode);
-  ws = new WebSocket(url);
+  const sock = new WebSocket(url);
+  ws = sock;
   let opened = false;
-  ws.onopen = () => {
+  sock.onopen = () => {
+    if (sock !== ws) { try { sock.close(1000, "stale"); } catch (_) {} return; }
     opened = true; cloudFailStreak = 0; state.note = null; state.idle = false;
     state.phase = "connected"; state.external = externalFor(state.mode);
     state.lastActivity = Date.now();
     log("registered [" + state.mode + "] · apps → " + state.external, "ok");
     announce();
   };
-  ws.onclose = (ev) => {
+  sock.onclose = (ev) => {
+    if (sock !== ws) return;                       // a replaced socket: never schedules a reconnect
     if (state.stopped) { state.phase = "off"; announce(); return; }
+    // 1012 = another Nano window/browser registered this session after us. Grabbing
+    // it straight back makes the two take turns forever; stop and say so instead.
+    if (ev.code === 1012) {
+      state.phase = "off"; state.note = "tunnel moved to another Nano window — Reconnect to take it back";
+      log("Tunnel taken over by another Nano window or browser for this session. Reconnect here to take it back.", "dim");
+      announce(); return;
+    }
     if (state.idle) { state.phase = "idle"; announce(); return; }   // paused — wait for the user, no auto-reconnect
     // A registration that never opens: on LOCALHOST the local relay isn't running
     // (localhost never uses the cloud relay — it can't register there); on PROD the
@@ -207,17 +222,17 @@ function connect() {
     state.phase = "connecting"; log("disconnected (code " + ev.code + "); retrying…", "dim"); announce();
     setTimeout(connect, state.note ? 5000 : 1000);   // back off once the hint is shown
   };
-  ws.onerror = () => log("ws error [" + state.mode + "]", "err");
-  ws.onmessage = async (ev) => {
+  sock.onerror = () => { if (sock === ws) log("ws error [" + state.mode + "]", "err"); };
+  sock.onmessage = async (ev) => {
     let req; try { req = JSON.parse(ev.data); } catch { return; }
-    if (req.type === "ping") { ws.send(JSON.stringify({ type: "pong" })); return; }
+    if (req.type === "ping") { sock.send(JSON.stringify({ type: "pong" })); return; }
     try {
       const resp = JSON.parse(await handle(JSON.stringify(req)));
-      ws.send(JSON.stringify({ id: req.id, ...resp }));
+      sock.send(JSON.stringify({ id: req.id, ...resp }));
       state.served++; state.lastActivity = Date.now(); announce();
       scheduleStoresSave();   // persist the shared registry + notify the console (parity)
     } catch (e) {
-      ws.send(JSON.stringify({ id: req.id, status: 500,
+      sock.send(JSON.stringify({ id: req.id, status: 500,
         headers: { "content-type": "text/plain" }, body: btoa("nano endpoint error: " + e) }));
     }
   };
@@ -262,8 +277,14 @@ function idlePause() {
   announce();
 }
 
+let starting = null;
 async function start(msg) {
   msg = msg || {};
+  if (starting) { if (msg.session) state.session = msg.session; announce(); return starting; }
+  starting = _start(msg).finally(() => { starting = null; });
+  return starting;
+}
+async function _start(msg) {
   if (msg.session) state.session = msg.session;
   if (msg.config) state.cfg = { ...DEFAULT_CFG, ...msg.config };
   if (state.phase === "connected" || (state.phase === "connecting" && !state.stopped && ws)) { announce(); return; }

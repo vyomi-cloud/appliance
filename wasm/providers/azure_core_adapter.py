@@ -174,6 +174,21 @@ def _call(svc_mod, store, method, path, query=None, headers=None, body=b""):
     return r.status, txt
 
 
+def kv_raw(method, params):
+    """Console Key Vault data plane: forward /{secrets|keys}[/…] to the native
+    Key Vault core and return its HTTP envelope (JSON body) under __http."""
+    kind = params.get("kind")
+    mod, st = (_kvsec, _STORES["kvsecrets"]) if kind == "secrets" else (_kvkeys, _STORES["kvkeys"])
+    body = params.get("body")
+    status, txt = _call(mod, st, method, "/" + kind + (params.get("rest") or ""), APIV, {},
+                        body if body is not None else b"")
+    try:
+        data = json.loads(txt) if txt else None
+    except Exception:
+        data = {"raw": txt}
+    return {"ok": status < 400, "__http": {"status": status, "headers": {}, "body": data}}
+
+
 def _xml_names(xml):
     return re.findall(r"<Name>([^<]*)</Name>", xml)
 

@@ -8,6 +8,11 @@ suites are scored from their findings JSON: a service with no findings passes.
     python3 tests/conformance/hourly/run_suites.py                    # everything
     python3 tests/conformance/hourly/run_suites.py --target nano      # one target
     python3 tests/conformance/hourly/run_suites.py --only nano-ui-aws-api,offline-cli-aws
+    python3 tests/conformance/hourly/run_suites.py --target offline --cloud gcp   # one detect shard
+Detect shards (--target T --cloud C) run that target's suites for one cloud and
+write out/results-T-C.json. The UI crawls (cloud "all") run in every cloud shard,
+limited to that cloud's console (CLOUDS env) and writing ui-T-C.json; any other
+"all" suite runs in the aws shard of its target. merge_shards.py joins them.
 
 Env: VYOMI_BASE_URL (offline sim, default http://localhost:9000),
      RELAY_HTTP (Nano relay, default http://127.0.0.1:8090).
@@ -59,13 +64,39 @@ def ui_score(path: str) -> tuple[int, int, list]:
     return len(rows) - len(broken), len(broken), broken
 
 
+CLOUDS = ("aws", "gcp", "azure")
+SHARD_HOME = "aws"   # cloud-less suites (other than the crawls) run in this cloud's shard
+
+
+def is_crawl(s: dict) -> bool:
+    return s["kind"] == "ui" and "ui_crawler" in s["cmd"]
+
+
+def in_shard(s: dict, cloud: str) -> bool:
+    """Whether suite `s` belongs to the `cloud` shard of its target."""
+    if s.get("cloud") in CLOUDS:
+        return s["cloud"] == cloud
+    return is_crawl(s) or cloud == SHARD_HOME
+
+
+def for_shard(s: dict, cloud: str) -> dict:
+    """A crawl split per cloud: its console filter and its own output file."""
+    if not is_crawl(s):
+        return s
+    s = dict(s)
+    s["cmd"] = re.sub(r"OUT=(\S+?)\.json", lambda m: f"OUT={m.group(1)}-{cloud}.json", s["cmd"])
+    s["cmd"] = f"CLOUDS={cloud} " + s["cmd"]
+    s["log_suffix"] = f".{cloud}"
+    return s
+
+
 def run_suite(s: dict, subs: dict) -> dict:
     cmd = s["cmd"]
     for k, v in subs.items():
         cmd = cmd.replace("{" + k + "}", v)
     cwd = os.path.join(ROOT, s.get("cwd", ""))
     os.makedirs(os.path.join(OUT, "logs"), exist_ok=True)
-    log_path = os.path.join(OUT, "logs", f"{s['id']}.log")
+    log_path = os.path.join(OUT, "logs", f"{s['id']}{s.get('log_suffix', '')}.log")
     t0 = time.time()
     try:
         p = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True,
@@ -80,7 +111,7 @@ def run_suite(s: dict, subs: dict) -> dict:
     res = {k: s.get(k) for k in ("id", "target", "cloud", "kind")}
     res["duration_s"] = round(time.time() - t0, 1)
     res["exit_code"] = code
-    if s["kind"] == "ui" and "ui_crawler" in s["cmd"]:
+    if is_crawl(s):
         m = re.search(r"OUT=(\S+)", s["cmd"])
         passed, failed, broken = ui_score(os.path.join(ROOT, m.group(1)) if m else "")
         res["broken_services"] = broken
@@ -102,7 +133,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--target", default="all", choices=["all", "offline", "nano"])
     ap.add_argument("--only", default="")
+    ap.add_argument("--cloud", default="all", choices=["all", *CLOUDS],
+                    help="one detect shard: needs --target offline|nano")
     a = ap.parse_args()
+    if a.cloud != "all" and a.target == "all":
+        ap.error("--cloud needs --target offline or nano")
 
     endpoint = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000").rstrip("/")
     u = urlparse(endpoint)
@@ -112,6 +147,8 @@ def main() -> int:
     suites = json.load(open(os.path.join(HERE, "suites.json")))["suites"]
     only = {x for x in a.only.split(",") if x}
     suites = [s for s in suites if (a.target == "all" or s["target"] == a.target) and (not only or s["id"] in only)]
+    if a.cloud != "all":
+        suites = [for_shard(s, a.cloud) for s in suites if in_shard(s, a.cloud)]
 
     # Two lanes, one per target, each sequential: offline suites share the
     # appliance's active space (the offline crawl creates resources and checks
@@ -130,7 +167,10 @@ def main() -> int:
     os.makedirs(OUT, exist_ok=True)
     # A partial re-run (--only / --target, e.g. the agent verifying a fix) must
     # not overwrite the full hour's results the report is built from.
-    name = "results.json" if (a.target == "all" and not only) else "results-partial.json"
+    if a.cloud != "all":
+        name = f"results-{a.target}-{a.cloud}.json"   # a detect shard (merge_shards.py joins them)
+    else:
+        name = "results.json" if (a.target == "all" and not only) else "results-partial.json"
     json.dump(out, open(os.path.join(OUT, name), "w"), indent=1)
     bad = [r["id"] for r in results if r["status"] != "pass"]
     print(f"\n{len(results) - len(bad)}/{len(results)} suites green" + (f"; failing: {', '.join(bad)}" if bad else ""))

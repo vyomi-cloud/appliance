@@ -7,6 +7,11 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined">
 <style>
+/* Clickable things always show the hand cursor. Many console links are <a> without an href
+   (JS-handled), which browsers render with the text I-beam. First in the sheet and low
+   specificity, so later rules (cursor:not-allowed on disabled controls) still win. */
+a,[onclick],[role="link"],[role="button"],[role="tab"],[role="menuitem"],summary,label[for],select,
+button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:not(:disabled){cursor:pointer}
   :root{
     /* GCP-faithful tokens — verified in the audit (matches real console) */
     --blue:#1a73e8; --blue-d:#1765cc; --blue-l:#e8f0fe; --blue-tint:#cfe2ff;
@@ -421,6 +426,17 @@ let STATE = {view: "home", service: null, item: null, detailTab: 0};
 const NOTIFS = [];
 
 // ========== DOM helpers (same pattern as Azure/AWS consoles) =================
+// A tier-locked service answers 403 {error:{code:"tier_…", reason, upgrade_to}}:
+// say which tier unlocks it instead of a bare "HTTP 403".
+function loadFailMsg(r){
+  const e = r && r.json && (r.json.error || r.json);
+  if (r && r.status === 403 && e && /^tier_/.test(String(e.code || ""))) {
+    const t = e.upgrade_to ? e.upgrade_to[0].toUpperCase() + e.upgrade_to.slice(1) : "";
+    return [(e.reason || "This service isn't included in your tier") + ". ",
+            el("a", {href: "/clouds"}, t ? "Upgrade to " + t + " \u2192" : "See tiers \u2192")];
+  }
+  return ["Failed to load: HTTP " + (r ? r.status : "?")];
+}
 function el(tag, attrs={}, ...kids){
   const e = document.createElement(tag);
   for (const [k,v] of Object.entries(attrs)) {
@@ -802,7 +818,7 @@ async function renderList(main){
   const r = await api("GET", fullPath);
   if (!r.ok) {
     tableHolder.innerHTML = "";
-    tableHolder.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status,
+    tableHolder.append(el("div",{class:"empty"}, ...loadFailMsg(r),
       el("div",{style:"font-size:11px;color:var(--hint);margin-top:6px"}, fullPath)));
     return;
   }
@@ -826,7 +842,7 @@ async function renderList(main){
       const path = svc.columns[state.sortBy][0];
       filtered.sort((a,b) => String(getPath(a,path)||"").localeCompare(String(getPath(b,path)||"")) * state.sortDir);
     }
-    document.getElementById("countChip").textContent = filtered.length ? `(${filtered.length})` : "";
+    const chip = document.getElementById("countChip"); if (chip) chip.textContent = filtered.length ? `(${filtered.length})` : "";
     stats.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;

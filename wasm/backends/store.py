@@ -126,19 +126,33 @@ class ResourceStore:
         coll[name] = rec
         return rec
 
+    def _key_for(self, coll: dict, name: str) -> str | None:
+        """Key of the record addressed by `name`: its store key, or its
+        instance_id (EC2 detail pages open by id, the grid is keyed by Name)."""
+        if name in coll:
+            return name
+        for k, v in coll.items():
+            if isinstance(v, dict) and v.get("instance_id") and v.get("instance_id") == name:
+                return k
+        return None
+
     def get(self, provider: str, account: str, service: str, name: str) -> dict | None:
-        return self.collections.get(_ns(provider, account, service), {}).get(name)
+        coll = self.collections.get(_ns(provider, account, service), {})
+        k = self._key_for(coll, name)
+        return coll.get(k) if k is not None else None
 
     def update(self, provider: str, account: str, service: str, name: str, patch: dict) -> dict | None:
         coll = self.collections.get(_ns(provider, account, service), {})
-        rec = coll.get(name)
+        rec = coll.get(self._key_for(coll, name))
         if rec is None:
             return None
         rec.update(patch)
         return rec
 
     def delete(self, provider: str, account: str, service: str, name: str) -> bool:
-        return self.collections.get(_ns(provider, account, service), {}).pop(name, None) is not None
+        coll = self.collections.get(_ns(provider, account, service), {})
+        k = self._key_for(coll, name)
+        return k is not None and coll.pop(k, None) is not None
 
 
 class Backends:

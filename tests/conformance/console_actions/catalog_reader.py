@@ -63,7 +63,7 @@ def _read_aws() -> list[ActionSpec]:
     if not isinstance(services, list):
         return []
     specs: list[ActionSpec] = []
-    from .sample_payloads import payload_for
+    from .sample_payloads import payload_for, form_payload
     for svc in services:
         key = str(svc.get("key", "")).strip()
         if not key:
@@ -81,7 +81,7 @@ def _read_aws() -> list[ActionSpec]:
             specs.append(ActionSpec(
                 provider="aws", service=key, action="create",
                 method=str(svc.get("create_method") or "POST").upper(),
-                path=create_template, payload=payload_for("aws", key),
+                path=create_template, payload=payload_for("aws", key) or form_payload("aws", svc),
                 requires_resource="{name}" in create_template,
                 name_field=name_field,
             ))
@@ -136,7 +136,7 @@ def _read_gcp() -> list[ActionSpec]:
     if not isinstance(services, list):
         return []
     specs: list[ActionSpec] = []
-    from .sample_payloads import payload_for
+    from .sample_payloads import payload_for, form_payload
     for svc in services:
         key = str(svc.get("key", "")).strip()
         if not key:
@@ -152,7 +152,7 @@ def _read_gcp() -> list[ActionSpec]:
             specs.append(ActionSpec(
                 provider="gcp", service=key, action="create",
                 method=str(svc.get("create_method") or "POST").upper(),
-                path=coll, payload=payload_for("gcp", key),
+                path=coll, payload=payload_for("gcp", key) or form_payload("gcp", svc),
                 name_field=name_field,
             ))
         if res:
@@ -195,7 +195,7 @@ def _read_azure() -> list[ActionSpec]:
     if not isinstance(services, list):
         return []
     specs: list[ActionSpec] = []
-    from .sample_payloads import payload_for, azure_resource_name
+    from .sample_payloads import payload_for, form_payload
     for svc in services:
         key = str(svc.get("key", "")).strip()
         if not key:
@@ -213,8 +213,8 @@ def _read_azure() -> list[ActionSpec]:
         ))
         specs.append(ActionSpec(
             provider="azure", service=key, action="create",
-            method="PUT", path=res.replace("{name}", azure_resource_name(key)),
-            payload=payload_for("azure", key), requires_resource=True,
+            method="PUT", path=res.replace("{name}", _azure_name(svc, key)),
+            payload=payload_for("azure", key) or form_payload("azure", svc), requires_resource=True,
         ))
         specs.append(ActionSpec(
             provider="azure", service=key, action="get",
@@ -274,3 +274,15 @@ if __name__ == "__main__":
     for s in specs: by[s.provider] = by.get(s.provider, 0) + 1
     print(f"Total: {len(specs)} actions")
     for k, v in sorted(by.items()): print(f"  {k}: {v}")
+
+def _azure_name(svc: dict, key: str) -> str:
+    """Resource name for the Azure create PUT. DNS-style services (the form's
+    default name has a dot, e.g. a DNS zone) need a domain-shaped name."""
+    from .sample_payloads import _RUN_SUFFIX
+    default = next((str(f.get("default") or "") for f in (svc.get("createFields") or [])
+                    if isinstance(f, dict) and f.get("name") == "name"), "")
+    # Unique per run: soft-deleted Azure resources (App Configuration stores,
+    # AI accounts, Key Vaults) keep their name reserved, so a fixed name 409s
+    # on the next run, as real Azure does.
+    base = f"vyomi-conf-{key}-{_RUN_SUFFIX}"
+    return f"{base}.example.com" if "." in default else base
