@@ -1,6 +1,17 @@
 {
- "at": "2026-10-29T04:51:01+00:00",
+ "at": "2026-10-29T05:50:59+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "aws",
+   "service": "CloudWatch",
+   "kind": "announcement",
+   "key": "feed:aws:b6845b171f95",
+   "title": "Amazon CloudWatch Omni is now available in additional AWS Regions",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-cloudwatch-omni-8-regions/",
+   "detail": "AWS announces that Amazon CloudWatch Omni is now available in eight additional AWS Regions. CloudWatch Omni is an AI-powered observability experience, organized around your teams and the applications they run, that helps you observe and troubleshoot your applications and agents in one place. It combines the interoperability of OpenTelemetry with the scale and reliability of CloudWatch, and meets you where you work \u2014 a standalone web experience with single sign-on (SSO), or a local IDE extension. With CloudWatch Omni, You create spaces in your central accounts to see telemetry across your AWS a",
+   "actionable": false
+  }
+ ],
  "errors": []
 }
