@@ -438,7 +438,8 @@
    "key": "monitoring",
    "name": "Cloud Monitoring",
    "upstream": "monitoring/v3",
-   "status": "pending-release"
+   "status": "released",
+   "released_in": "3.0.30"
   }
  ]
 }

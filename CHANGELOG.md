@@ -4,6 +4,42 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.30] — 2026-10-29
+
+New service release. **5 product fixes** (GCP 5); 2 reach Nano and 5 reach the offline appliance; 3 test and harness improvements.
+
+### Highlights
+
+- **GCP Cloud Monitoring is now a Vyomi service.** The offline appliance includes a Cloud Monitoring engine, so you can develop against it without a real GCP project.
+- **Cloud Monitoring works in the console and in Nano.** It has console pages and a catalog entry, and it runs in the browser at vyomi.cloud as well as offline.
+- **Nano lists and Metrics events behave better.** A race that could leave lists unpainted is fixed, and Metrics events now show up under their resource.
+- **GCP enable/disable requests now work offline.** The offline appliance now serves these calls, which Artifact Registry had broken.
+
+### New services
+
+- **GCP Cloud Monitoring**
+
+### Fixes — GCP
+
+- **[offline]** Serve enable/disable on /api/gcp/sub/ (exempt from alias rewrite since Artifact Registry)
+- **[Nano + offline]** Fix Nano UI crawl (list paint race, Metrics events under resource path)
+- **[offline]** Hourly hand-over, upstream watch, registry + manifest (ready)
+- **[Nano + offline]** Wire, console REST + catalog, Nano vendoring and adapter, Go SDK test bed
+- **[offline]** Cloud Monitoring engine core + unit tests
+
+<details><summary>Test and harness improvements (3)</summary>
+
+- Console tests (offline + Nano)
+- Gcloud CLI test bed
+- Java SDK test bed (REST API client; google-cloud-monitoring is gRPC-only)
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.30`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.29] — 2026-10-29
 
 New service release. **6 product fixes** (GCP 6); 4 reach Nano and 6 reach the offline appliance.
