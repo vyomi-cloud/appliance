@@ -16,8 +16,10 @@ r["5 reload"] = await shown(p, "/gcp-console.html");
 const p2 = await ctx.newPage(); r["6 new tab, Nano still open"] = await shown(p2, "/azure-console.html");
 await p.evaluate(() => { sessionStorage.setItem("nano-kernel-log", JSON.stringify({at: Date.now(), elapsed: 500, lines: []})); });
 r["7 first boot's SW reload (carried)"] = await shown(p, "/clouds.html");
-await p.evaluate(() => localStorage.setItem("vyomi.nano.kernel.seen", String(Date.now() - 31*60*1000)));
-await p2.close(); r["8 relaunch after 30+ min closed"] = await shown(p, "/clouds.html");
+await p2.close(); await p.close();
+const p3 = await ctx.newPage(); await p3.evaluate(() => 0);
+await new Promise((res) => setTimeout(res, 11000));      // Nano closed > 10 s = a new launch
+r["8 Nano closed, reopened 11s later"] = await shown(p3, "/clouds.html");
 const ctx2 = await b.newContext(); r["9 fresh browser profile"] = await shown(await ctx2.newPage(), "/clouds.html");
 const want = { "1": true, "2": false, "3": false, "4": false, "5": false, "6": false, "7": true, "8": true, "9": true };
 let bad = 0; for (const [k, v] of Object.entries(r)) { const ok = v === want[k[0]]; bad += !ok; console.log(`${ok ? "PASS" : "FAIL"}  ${k}: boot screen ${v ? "shown" : "skipped"}`); }
