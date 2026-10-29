@@ -195,7 +195,7 @@ def _read_azure() -> list[ActionSpec]:
     if not isinstance(services, list):
         return []
     specs: list[ActionSpec] = []
-    from .sample_payloads import payload_for
+    from .sample_payloads import payload_for, azure_resource_name
     for svc in services:
         key = str(svc.get("key", "")).strip()
         if not key:
@@ -213,7 +213,7 @@ def _read_azure() -> list[ActionSpec]:
         ))
         specs.append(ActionSpec(
             provider="azure", service=key, action="create",
-            method="PUT", path=res.replace("{name}", f"vyomi-conf-{key}"),
+            method="PUT", path=res.replace("{name}", azure_resource_name(key)),
             payload=payload_for("azure", key), requires_resource=True,
         ))
         specs.append(ActionSpec(
