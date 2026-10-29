@@ -1744,3 +1744,224 @@ def iam_create_analyzer(store: list, name: str, account: str) -> dict:
          "arn": f"arn:aws:access-analyzer:{REGION}:{account}:analyzer/{name}"}
     store.append(a)
     return a
+
+
+# ── VPC detail: attributes, NAT gateways, endpoints, network ACLs, flow logs ──
+# Records live in the network state (offline vpc_state / vpc_core's model) under
+# these collections; NACLs use vpc_core's own shape so the reachability analyzer
+# evaluates the same entries the console edits.
+_VPC_COLL = {"nat_gateways": ("nat_gateways", "nat_gws"), "endpoints": ("vpc_endpoints", "vpc_endpoints"),
+             "nacls": ("network_acls", "nacls"), "flow_logs": ("flow_logs", "flow_logs"), "attrs": ("vpc_attributes", "vpc_attrs"),
+             "eips": ("elastic_ips", "eips")}
+_GATEWAY_SERVICES = {"s3", "dynamodb"}
+
+
+def _coll(net, kind: str) -> dict:
+    off, core = _VPC_COLL[kind]
+    if isinstance(net, OfflineNet):
+        return net.s.setdefault(off, {})
+    return net.m.setdefault(core, {})
+
+
+def _route_tables_of(net, vpc_id: str) -> list:
+    if isinstance(net, OfflineNet):
+        return [{"id": k, "main": bool(v.get("is_main"))} for k, v in net.s["route_tables"].items() if v.get("vpc_id") == vpc_id]
+    return [{"id": k, "main": bool(v.get("main"))} for k, v in net.m["route_tables"].items() if v.get("vpc_id") == vpc_id]
+
+
+def vpc_ensure_default_nacl(net, vpc_id: str) -> dict:
+    """Every VPC has a default network ACL that allows all traffic in and out and
+    is associated with every subnet not associated with another ACL."""
+    nacls = _coll(net, "nacls")
+    d = next((n for n in nacls.values() if n.get("vpc_id") == vpc_id and n.get("is_default")), None)
+    if d is None:
+        nid = f"acl-{_hex(17)}"
+        d = nacls[nid] = {"id": nid, "vpc_id": vpc_id, "is_default": True, "subnets": [], "entries": [
+            {"rule_number": 100, "protocol": "-1", "allow": True, "egress": False, "cidr": "0.0.0.0/0", "from_port": None, "to_port": None},
+            {"rule_number": 100, "protocol": "-1", "allow": True, "egress": True, "cidr": "0.0.0.0/0", "from_port": None, "to_port": None}]}
+    claimed = {s for n in nacls.values() if n is not d for s in n.get("subnets") or []}
+    d["subnets"] = [s["subnet_id"] for s in net.subnets_of(vpc_id) if s["subnet_id"] not in claimed]
+    return d
+
+
+def vpc_section(net, vpc_id: str, section: str) -> dict:
+    if not net.vpc(vpc_id):
+        raise DetailError("InvalidVpcID.NotFound", f"The vpc ID '{vpc_id}' does not exist", 404)
+    if section == "details":
+        a = _coll(net, "attrs").setdefault(vpc_id, {"enable_dns_support": True, "enable_dns_hostnames": net.vpc(vpc_id)["is_default"]})
+        v = net.vpc(vpc_id)
+        return {"vpc_id": vpc_id, "cidr_block": v["cidr"], "is_default": v["is_default"], "default_security_group_id": v["default_sg"],
+                "default_network_acl_id": vpc_ensure_default_nacl(net, vpc_id)["id"],
+                "main_route_table_id": next((r["id"] for r in _route_tables_of(net, vpc_id) if r["main"]), ""),
+                "enable_dns_support": a["enable_dns_support"], "enable_dns_hostnames": a["enable_dns_hostnames"],
+                "subnet_count": len(net.subnets_of(vpc_id))}
+    if section == "nat_gateways":
+        return {"nat_gateways": [n for n in _coll(net, "nat_gateways").values() if n["vpc_id"] == vpc_id]}
+    if section == "endpoints":
+        return {"endpoints": [e for e in _coll(net, "endpoints").values() if e["vpc_id"] == vpc_id],
+                "route_tables": [r["id"] for r in _route_tables_of(net, vpc_id)],
+                "subnets": [s["subnet_id"] for s in net.subnets_of(vpc_id)]}
+    if section == "nacls":
+        vpc_ensure_default_nacl(net, vpc_id)
+        out = []
+        for n in _coll(net, "nacls").values():
+            if n["vpc_id"] != vpc_id:
+                continue
+            ents = sorted(n.get("entries") or [], key=lambda e: (e["egress"], e["rule_number"]))
+            out.append({"network_acl_id": n["id"], "is_default": bool(n.get("is_default")), "subnets": list(n.get("subnets") or []),
+                        "entries": [{**e, "direction": "Outbound" if e["egress"] else "Inbound", "action": "Allow" if e["allow"] else "Deny",
+                                     "port_range": port_range(e)} for e in ents]})
+        return {"network_acls": out, "subnets": [s["subnet_id"] for s in net.subnets_of(vpc_id)]}
+    if section == "flow_logs":
+        return {"flow_logs": [f for f in _coll(net, "flow_logs").values() if f["resource_id"] == vpc_id]}
+    raise DetailError("InvalidParameterValue", f"Unknown VPC section '{section}'.")
+
+
+def vpc_update_section(net, vpc_id: str, section: str, body: dict, bucket_exists=None) -> dict:
+    """ModifyVpcAttribute, Create/DeleteNatGateway, Create/DeleteVpcEndpoints,
+    Create/DeleteNetworkAcl(Entry), ReplaceNetworkAclAssociation, Create/DeleteFlowLogs."""
+    if not net.vpc(vpc_id):
+        raise DetailError("InvalidVpcID.NotFound", f"The vpc ID '{vpc_id}' does not exist", 404)
+    b = dict(body or {})
+    act = b.get("action") or "create"
+    subnets = {s["subnet_id"] for s in net.subnets_of(vpc_id)}
+    if section == "details":
+        a = _coll(net, "attrs").setdefault(vpc_id, {"enable_dns_support": True, "enable_dns_hostnames": False})
+        for k in ("enable_dns_support", "enable_dns_hostnames"):
+            if k in b:
+                a[k] = b[k] in _TRUE
+        if a["enable_dns_hostnames"] and not a["enable_dns_support"]:
+            raise DetailError("InvalidParameterCombination", "DNS hostnames require DNS resolution (enableDnsSupport) to be enabled.")
+    elif section == "nat_gateways":
+        nats = _coll(net, "nat_gateways")
+        if act == "delete":
+            n = nats.get(str(b.get("id") or ""))
+            if not n:
+                raise DetailError("NatGatewayNotFound", f"The Nat Gateway {b.get('id')} was not found", 404)
+            n["state"] = "deleted"
+            n["deleted"] = _now()
+        else:
+            sid = str(b.get("subnet_id") or "")
+            if sid not in subnets:
+                raise DetailError("InvalidSubnetID.NotFound", f"The subnet ID '{sid}' does not exist in {vpc_id}")
+            conn = str(b.get("connectivity_type") or "public")
+            if conn not in ("public", "private"):
+                raise DetailError("InvalidParameterValue", "ConnectivityType must be public or private.")
+            sub = net.subnet(sid)
+            nid = f"nat-{_hex(17)}"
+            rec = {"id": nid, "vpc_id": vpc_id, "subnet_id": sid, "connectivity_type": conn, "state": "available",
+                   "private_ip": _pick_ip(sub["cidr"]), "created": _now(), "name": str(b.get("name") or "")}
+            if conn == "public":
+                alloc = f"eipalloc-{_hex(17)}"
+                ip = f"3.{int(_hex(2), 16) % 223 + 1}.{int(_hex(2), 16)}.{int(_hex(2), 16) % 254 + 1}"
+                _coll(net, "eips")[alloc] = {"allocation_id": alloc, "public_ip": ip, "association": nid, "domain": "vpc", "created": _now()}
+                rec.update(allocation_id=alloc, public_ip=ip)
+            nats[nid] = rec
+    elif section == "endpoints":
+        eps = _coll(net, "endpoints")
+        if act == "delete":
+            if eps.pop(str(b.get("id") or ""), None) is None:
+                raise DetailError("InvalidVpcEndpointId.NotFound", f"The VPC endpoint ID '{b.get('id')}' does not exist", 404)
+        else:
+            svc = str(b.get("service") or "").strip().lower()
+            if not svc:
+                raise DetailError("InvalidServiceName", "A service name is required.")
+            full_name = svc if svc.startswith("com.amazonaws.") else f"com.amazonaws.{REGION}.{svc}"
+            short = full_name.rsplit(".", 1)[-1]
+            typ = str(b.get("endpoint_type") or ("Gateway" if short in _GATEWAY_SERVICES else "Interface"))
+            if typ == "Gateway" and short not in _GATEWAY_SERVICES:
+                raise DetailError("InvalidParameter", f"The service {full_name} doesn't support Gateway endpoints.")
+            if any(e["service_name"] == full_name and e["vpc_id"] == vpc_id and e["endpoint_type"] == typ for e in eps.values()):
+                raise DetailError("RouteAlreadyExists", f"An endpoint for {full_name} already exists in {vpc_id}.")
+            rec = {"id": f"vpce-{_hex(17)}", "vpc_id": vpc_id, "service_name": full_name, "endpoint_type": typ, "state": "available",
+                   "created": _now(), "policy": {"Statement": [{"Effect": "Allow", "Principal": "*", "Action": "*", "Resource": "*"}]}}
+            if typ == "Gateway":
+                rts = [r for r in (b.get("route_table_ids") or []) if r in {x["id"] for x in _route_tables_of(net, vpc_id)}]
+                rec["route_table_ids"] = rts or [r["id"] for r in _route_tables_of(net, vpc_id) if r["main"]]
+            else:
+                sids = [s for s in (b.get("subnet_ids") or []) if s in subnets] or sorted(subnets)[:1]
+                rec.update(subnet_ids=sids, private_dns_enabled=b.get("private_dns_enabled", True) in _TRUE,
+                           security_group_ids=[net.vpc(vpc_id)["default_sg"]],
+                           dns_name=f"{rec['id']}.{short}.{REGION}.vpce.amazonaws.com")
+            eps[rec["id"]] = rec
+    elif section == "nacls":
+        nacls = _coll(net, "nacls")
+        vpc_ensure_default_nacl(net, vpc_id)
+        if act == "create":
+            nid = f"acl-{_hex(17)}"
+            # A new network ACL denies all traffic until rules are added (only the * rules).
+            nacls[nid] = {"id": nid, "vpc_id": vpc_id, "is_default": False, "subnets": [], "entries": []}
+        else:
+            n = nacls.get(str(b.get("network_acl_id") or ""))
+            if not n or n["vpc_id"] != vpc_id:
+                raise DetailError("InvalidNetworkAclID.NotFound", f"The network ACL '{b.get('network_acl_id')}' does not exist")
+            if act == "delete":
+                if n.get("is_default"):
+                    raise DetailError("InvalidParameterValue", "cannot delete default network ACL")
+                if n.get("subnets"):
+                    raise DetailError("DependencyViolation", f"The network ACL '{n['id']}' has dependencies and cannot be deleted.")
+                nacls.pop(n["id"])
+            elif act == "add_entry":
+                num = int(b.get("rule_number") or 0)
+                if not 1 <= num <= 32766:
+                    raise DetailError("InvalidParameterValue", "Rule number must be between 1 and 32766.")
+                egress = b.get("egress") in _TRUE
+                if any(e["rule_number"] == num and e["egress"] == egress for e in n["entries"]):
+                    raise DetailError("NetworkAclEntryAlreadyExists", f"The network acl entry identified by {num} already exists.")
+                # stored by name (tcp/udp/icmp) — what vpc_core's reachability analyzer matches on
+                proto = {"6": "tcp", "17": "udp", "1": "icmp"}.get(str(b.get("protocol") or "-1"), str(b.get("protocol") or "-1").lower())
+                fp = b.get("from_port")
+                n["entries"].append({"rule_number": num, "protocol": proto, "allow": str(b.get("rule_action") or "allow").lower() == "allow",
+                                     "egress": egress, "cidr": str(b.get("cidr") or "0.0.0.0/0"),
+                                     "from_port": int(fp) if fp not in (None, "") and proto != "-1" else None,
+                                     "to_port": int(b.get("to_port") or fp) if fp not in (None, "") and proto != "-1" else None})
+            elif act == "delete_entry":
+                num, egress = int(b.get("rule_number") or 0), b.get("egress") in _TRUE
+                before = len(n["entries"])
+                n["entries"] = [e for e in n["entries"] if not (e["rule_number"] == num and e["egress"] == egress)]
+                if len(n["entries"]) == before:
+                    raise DetailError("InvalidNetworkAclEntry.NotFound", f"No entry {num} in {n['id']}.")
+            elif act == "associate":
+                sid = str(b.get("subnet_id") or "")
+                if sid not in subnets:
+                    raise DetailError("InvalidSubnetID.NotFound", f"The subnet ID '{sid}' does not exist in {vpc_id}")
+                for other in nacls.values():
+                    if sid in (other.get("subnets") or []):
+                        other["subnets"].remove(sid)
+                n.setdefault("subnets", []).append(sid)
+                # the analyzer reads the subnet's own NACL pointer (vpc_core model)
+                if isinstance(net, CoreNet) and sid in net.m["subnets"]:
+                    net.m["subnets"][sid]["nacl"] = n["id"]
+        vpc_ensure_default_nacl(net, vpc_id)
+    elif section == "flow_logs":
+        fls = _coll(net, "flow_logs")
+        if act == "delete":
+            if fls.pop(str(b.get("id") or ""), None) is None:
+                raise DetailError("InvalidFlowLogId.NotFound", f"The flow log ID '{b.get('id')}' does not exist", 404)
+        else:
+            traffic = str(b.get("traffic_type") or "ALL").upper()
+            if traffic not in ("ACCEPT", "REJECT", "ALL"):
+                raise DetailError("InvalidParameter", "TrafficType must be ACCEPT, REJECT or ALL.")
+            dtype = str(b.get("destination_type") or "cloud-watch-logs")
+            dest = str(b.get("destination") or "").strip()
+            if dtype == "s3":
+                bucket = dest.replace("arn:aws:s3:::", "").split("/")[0]
+                if not bucket or (bucket_exists and not bucket_exists(bucket)):
+                    raise DetailError("InvalidParameter", f"LogDestination: {dest or '(empty)'} does not exist.")
+                dest = f"arn:aws:s3:::{bucket}"
+            elif dtype == "cloud-watch-logs":
+                if not dest:
+                    raise DetailError("InvalidParameter", "LogGroupName is required for CloudWatch Logs.")
+            else:
+                raise DetailError("InvalidParameter", "LogDestinationType must be cloud-watch-logs or s3.")
+            agg = int(b.get("max_aggregation_interval") or 600)
+            if agg not in (60, 600):
+                raise DetailError("InvalidParameter", "MaxAggregationInterval must be 60 or 600 seconds.")
+            fid = f"fl-{_hex(17)}"
+            fls[fid] = {"id": fid, "resource_id": vpc_id, "traffic_type": traffic, "destination_type": dtype, "destination": dest,
+                        "max_aggregation_interval": agg, "status": "ACTIVE", "deliver_logs_status": "SUCCESS", "created": _now(),
+                        "log_format": "${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} "
+                                      "${packets} ${bytes} ${start} ${end} ${action} ${log-status}"}
+    else:
+        raise DetailError("InvalidParameterValue", f"Unknown VPC section '{section}'.")
+    return vpc_section(net, vpc_id, section)

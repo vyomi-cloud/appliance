@@ -362,7 +362,56 @@ def iam():
     roles = get("/api/iam/roles").json()["roles"]
     check("Roles list carries ARNs", all(r.get("arn", "").startswith("arn:aws:iam::") for r in roles), roles[:2])
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam}
+
+
+def vpc():
+    print("── VPC")
+    r = requests.post(f"{BASE}/api/vpc/vpcs", json={"name": f"tabs-vpc-{int(time.time()) % 100000}", "cidr_block": "10.42.0.0/16"}, timeout=30)
+    check("create VPC", r.status_code < 300, r.text)
+    vid = r.json()["vpc_id"]
+    sub = requests.post(f"{BASE}/api/vpc/subnets", json={"vpc_id": vid, "cidr_block": "10.42.1.0/24", "availability_zone": "us-east-1a"}, timeout=30).json()
+    p = f"/api/vpc/vpcs/{vid}/detail/"
+    sec = lambda s: get(p + s).json()
+    put = lambda s, b: requests.put(BASE + p + s, json=b, timeout=30)
+    d = sec("details")
+    check("VPC details: CIDR, main route table, default NACL + SG", d["cidr_block"] == "10.42.0.0/16" and d["main_route_table_id"].startswith("rtb-")
+          and d["default_network_acl_id"].startswith("acl-") and d["default_security_group_id"].startswith("sg-"), d)
+    check("VPC details: hostnames need DNS resolution", put("details", {"enable_dns_support": False, "enable_dns_hostnames": True}).status_code == 400)
+    put("details", {"enable_dns_hostnames": True})
+    check("VPC details: DNS hostnames enabled persists", sec("details")["enable_dns_hostnames"] is True)
+    r = put("nat_gateways", {"subnet_id": sub["subnet_id"], "connectivity_type": "public", "name": "tabs-nat"})
+    nat = sec("nat_gateways")["nat_gateways"][0]
+    check("NAT gateways: public NAT in the subnet with an Elastic IP", r.status_code == 200 and nat["subnet_id"] == sub["subnet_id"]
+          and nat["allocation_id"].startswith("eipalloc-") and nat["private_ip"].startswith("10.42.1."), nat)
+    check("NAT gateways: subnet of another VPC rejected", put("nat_gateways", {"subnet_id": "subnet-nope"}).status_code == 400)
+    put("nat_gateways", {"action": "delete", "id": nat["id"]})
+    check("NAT gateways: delete -> deleted", sec("nat_gateways")["nat_gateways"][0]["state"] == "deleted")
+    r = put("endpoints", {"service": "s3"})
+    ep = sec("endpoints")["endpoints"][0]
+    check("Endpoints: S3 gateway endpoint on the main route table", r.status_code == 200 and ep["endpoint_type"] == "Gateway"
+          and ep["route_table_ids"] == [d["main_route_table_id"]], ep)
+    check("Endpoints: SQS gateway endpoint rejected (interface only)", put("endpoints", {"service": "sqs", "endpoint_type": "Gateway"}).status_code == 400)
+    put("endpoints", {"service": "sqs"})
+    check("Endpoints: SQS interface endpoint with a DNS name", any(e["endpoint_type"] == "Interface" and e["dns_name"].endswith(".vpce.amazonaws.com")
+          for e in sec("endpoints")["endpoints"]))
+    n = sec("nacls")["network_acls"]
+    check("Network ACLs: default NACL allows all and covers the subnet", n[0]["is_default"] and sub["subnet_id"] in n[0]["subnets"], n)
+    put("nacls", {"action": "create"})
+    new = next(x for x in sec("nacls")["network_acls"] if not x["is_default"])
+    r = put("nacls", {"action": "add_entry", "network_acl_id": new["network_acl_id"], "rule_number": 110, "protocol": "6", "from_port": 443, "cidr": "0.0.0.0/0"})
+    check("Network ACLs: inbound rule 110 tcp/443 added", r.status_code == 200, r.text)
+    check("Network ACLs: duplicate rule number rejected", put("nacls", {"action": "add_entry", "network_acl_id": new["network_acl_id"], "rule_number": 110}).status_code == 400)
+    put("nacls", {"action": "associate", "network_acl_id": new["network_acl_id"], "subnet_id": sub["subnet_id"]})
+    n = {x["network_acl_id"]: x for x in sec("nacls")["network_acls"]}
+    check("Network ACLs: association moves the subnet off the default NACL", n[new["network_acl_id"]]["subnets"] == [sub["subnet_id"]]
+          and sub["subnet_id"] not in n[d["default_network_acl_id"]]["subnets"], n)
+    check("Network ACLs: default NACL cannot be deleted", put("nacls", {"action": "delete", "network_acl_id": d["default_network_acl_id"]}).status_code == 400)
+    check("Flow logs: S3 destination must exist", put("flow_logs", {"destination_type": "s3", "destination": "arn:aws:s3:::nope-nope-x"}).status_code == 400)
+    r = put("flow_logs", {"traffic_type": "REJECT", "destination": "/vpc/tabs"})
+    fl = sec("flow_logs")["flow_logs"]
+    check("Flow logs: REJECT flow log to CloudWatch Logs", r.status_code == 200 and fl[0]["traffic_type"] == "REJECT" and fl[0]["resource_id"] == vid, fl)
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc}
 
 if __name__ == "__main__":
     only = sys.argv[1:] or list(SECTIONS)

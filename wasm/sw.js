@@ -676,6 +676,10 @@ async function route(method, path, body, query) {
   // VPC (core/vpc_core.py) — topology + reachability analyzer
   if (path === "/api/vpc" && method === "GET") return { tuple: ["aws", "vpc", "List", {}] };
   if (path === "/api/vpc/vpcs" && method === "GET") return { tuple: ["aws", "vpc", "List", {}] };
+  // VPC detail tabs (core/aws_console_detail.py): attributes, NAT gateways, endpoints, NACLs, flow logs.
+  m = path.match(/^\/api\/vpc\/vpcs\/([^/]+)\/detail\/([a-z_-]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "vpc", "DescribeVpcSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "vpc", "ModifyVpcSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/vpc\/vpcs\/([^/]+)$/);
   if (m && method === "GET") return { tuple: ["aws", "vpc", "GetVpc", { name: dec(m[1]) }] };
   if (path === "/api/vpc/vpcs" && method === "POST") return { tuple: ["aws", "vpc", "CreateVpc", body || {}] };

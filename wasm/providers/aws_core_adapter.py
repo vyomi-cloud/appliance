@@ -1022,3 +1022,18 @@ def iam_section(p):
             return _det_err(DET.DetailError("ValidationError", str(e)))
         IAM.persist()
     return _iam_view(section)
+
+
+# ── VPC tabs (core/aws_console_detail.py; records live in the vpc_core model) ──
+def vpc_detail_section(p):
+    vid, section = str(p.get("name") or ""), str(p.get("section") or "").replace("-", "_")
+    try:
+        if p.get("method") == "PUT":
+            out = DET.vpc_update_section(ec2_net(), vid, section, p.get("body") or {}, lambda b: b in OBJ.buckets)
+        else:
+            out = DET.vpc_section(ec2_net(), vid, section)
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (TypeError, ValueError) as e:
+        return _det_err(DET.DetailError("InvalidParameterValue", str(e)))
+    return {"ok": True, "vpc_id": vid, "section": p.get("section"), **out}

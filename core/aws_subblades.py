@@ -300,19 +300,19 @@ _SFN_SUB = [
 _VPC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"group": "Virtual private cloud", "items": [
-        {"key": "details",          "label": "VPC details",            "icon": "info",         "type": "overview"},
+        {"key": "details",          "label": "VPC details",            "icon": "info",         "type": "vpcDetails"},
         {"key": "subnets",          "label": "Subnets",                "icon": "view_module",  "type": "subnets"},
         {"key": "routeTables",      "label": "Route tables",           "icon": "route",        "type": "routeTables"},
         {"key": "internetGateways", "label": "Internet gateways",      "icon": "language",     "type": "igws"},
-        {"key": "natGateways",      "label": "NAT gateways",           "icon": "swap_horiz",   "type": "stub"},
-        {"key": "endpoints",        "label": "Endpoints",              "icon": "hub",          "type": "stub"},
+        {"key": "natGateways",      "label": "NAT gateways",           "icon": "swap_horiz",   "type": "vpcNat"},
+        {"key": "endpoints",        "label": "Endpoints",              "icon": "hub",          "type": "vpcEndpoints"},
     ]},
     {"group": "Security", "items": [
         {"key": "securityGroups",   "label": "Security groups",        "icon": "shield",       "type": "sgRules"},
-        {"key": "nacls",            "label": "Network ACLs",           "icon": "verified_user","type": "stub"},
+        {"key": "nacls",            "label": "Network ACLs",           "icon": "verified_user","type": "vpcNacls"},
     ]},
     {"group": "Monitoring", "items": [
-        {"key": "flowLogs",         "label": "Flow logs",              "icon": "list_alt",     "type": "stub"},
+        {"key": "flowLogs",         "label": "Flow logs",              "icon": "list_alt",     "type": "vpcFlowLogs"},
         {"key": "metrics",          "label": "Metrics",                "icon": "show_chart",   "type": "metrics"},
     ]},
 ]

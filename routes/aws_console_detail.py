@@ -485,6 +485,29 @@ def register(app: FastAPI) -> None:
         ctx.record_usage(f"iam.update_{section.replace('-', '_')}", {"section": section})
         return _iam_section(section)
 
+    # ── VPC tabs: attributes, NAT gateways, endpoints, network ACLs, flow logs ──
+    @app.get("/api/vpc/vpcs/{vpc_id}/detail/{section}")
+    def vpc_section(vpc_id: str, section: str):
+        try:
+            out = D.vpc_section(_net(), vpc_id, section.replace("-", "_"))
+        except D.DetailError as e:
+            _fail(e)
+        ctx.persist_state()   # the default network ACL is created on first view
+        return {"vpc_id": vpc_id, "section": section, **out}
+
+    @app.put("/api/vpc/vpcs/{vpc_id}/detail/{section}")
+    async def vpc_update(vpc_id: str, section: str, request: Request):
+        try:
+            out = D.vpc_update_section(_net(), vpc_id, section.replace("-", "_"), await _body(request),
+                                       lambda b: b in ctx.buckets)
+        except D.DetailError as e:
+            _fail(e)
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, detail={"code": "InvalidParameterValue", "message": str(e)})
+        ctx.persist_state()
+        ctx.record_usage(f"vpc.update_{section.replace('-', '_')}", {"vpc_id": vpc_id, "resource_id": vpc_id})
+        return {"vpc_id": vpc_id, "section": section, **out}
+
     # ── Permissions tab (every service): identity policies covering a resource ──
     @app.get("/api/aws/resource-access")
     def resource_access(arn: str, service: str):

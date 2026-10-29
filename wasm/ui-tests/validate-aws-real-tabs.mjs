@@ -209,6 +209,31 @@ const SECTIONS = {
     const aa2 = await tab("Access Analyzer");
     check("iam Access Analyzer: an account analyzer with findings section", /Active findings/.test(aa2) && /ACCOUNT/.test(aa2), aa + aa2);
   },
+  async vpc() {
+    const name = "rt-vpc-" + Date.now().toString(36);
+    const v = await call("POST", "/api/vpc/vpcs", { name, cidr_block: "10.77.0.0/16" });
+    const vid = v.json.vpc_id || v.json.id;
+    await call("POST", "/api/vpc/subnets", { vpc_id: vid, vpcId: vid, cidr_block: "10.77.3.0/24", cidr: "10.77.3.0/24", availability_zone: "us-east-1a" });
+    await openService("^vpc$");
+    await openRow(vid);
+    const det = await tab("VPC details");
+    check("vpc details: this VPC's CIDR + main network ACL", det.includes("10.77.0.0/16") && /acl-/.test(det), det);
+    await tab("Endpoints");
+    await page.locator("#main [data-testid=vpce-create]").click();
+    await sleep(1500);
+    await tab("NAT gateways");
+    const ep = await tab("Endpoints");
+    check("vpc Endpoints: S3 gateway endpoint created in the tab persists", /com\.amazonaws\.us-east-1\.s3/.test(ep) && /vpce-/.test(ep), ep);
+    await tab("Flow logs");
+    await page.locator("#main [data-testid=flowlog-dest]").fill("/vpc/" + name);
+    await page.locator("#main [data-testid=flowlog-create]").click();
+    await sleep(1500);
+    await tab("Network ACLs");
+    const fl = await tab("Flow logs");
+    check("vpc Flow logs: flow log created in the tab persists", fl.includes("/vpc/" + name), fl);
+    const nacl = await tab("Network ACLs");
+    check("vpc Network ACLs: the default NACL with its allow rules", /\(default\)/.test(nacl) && /Allow/.test(nacl), nacl);
+  },
 };
 
 let server;

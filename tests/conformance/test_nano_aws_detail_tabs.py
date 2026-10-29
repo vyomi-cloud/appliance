@@ -209,7 +209,27 @@ def iam():
     check("Access Analyzer: cross-account Lambda permission is a finding",
           any(x["resource"].endswith(":function:iam-shared-fn") and x["shared_through"] == "Cross-account access" for x in f), f)
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam}
+
+
+def vpc():
+    print("── VPC")
+    vid = d("vpc", "CreateVpc", {"cidr_block": "10.9.0.0/16", "name": "tabs-vpc"})["id"]
+    sid = d("vpc", "CreateSubnet", {"vpcId": vid, "cidr": "10.9.1.0/24"})["id"]
+    sec = lambda s: d("vpc", "DescribeVpcSection", {"name": vid, "section": s})
+    put = lambda s, b: d("vpc", "ModifyVpcSection", {"name": vid, "section": s, "method": "PUT", "body": b})
+    check("VPC details: default NACL + main route table", sec("details")["default_network_acl_id"].startswith("acl-") and sec("details")["main_route_table_id"])
+    put("nacls", {"action": "create"})
+    acl = next(x for x in sec("nacls")["network_acls"] if not x["is_default"])["network_acl_id"]
+    put("nacls", {"action": "add_entry", "network_acl_id": acl, "rule_number": 100, "protocol": "6", "from_port": 22, "cidr": "0.0.0.0/0", "rule_action": "deny"})
+    put("nacls", {"action": "add_entry", "network_acl_id": acl, "rule_number": 100, "egress": True, "protocol": "-1", "cidr": "0.0.0.0/0"})
+    put("nacls", {"action": "associate", "network_acl_id": acl, "subnet_id": sid})
+    r = d("vpc", "Analyze", {"sourceIp": "10.9.1.10", "destIp": "10.9.1.20", "port": 22})
+    check("Network ACLs: a console deny rule blocks SSH in the reachability analyzer", r["reachable"] is False and "NACL" in r["reason"], r)
+    check("NAT gateways: private NAT in the subnet", put("nat_gateways", {"subnet_id": sid, "connectivity_type": "private"})["nat_gateways"][0]["private_ip"].startswith("10.9.1."))
+    check("Endpoints: DynamoDB gateway endpoint", put("endpoints", {"service": "dynamodb"})["endpoints"][0]["endpoint_type"] == "Gateway")
+    check("Flow logs: to CloudWatch Logs", put("flow_logs", {"destination": "/vpc/x"})["flow_logs"][0]["status"] == "ACTIVE")
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc}
 
 if __name__ == "__main__":
     for k in sys.argv[1:] or list(SECTIONS):

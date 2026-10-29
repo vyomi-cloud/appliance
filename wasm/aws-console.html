@@ -3516,20 +3516,6 @@ const SUBRES_CATALOG = {
   "sqs:encryption": {kind:"settings", title:"Encryption",
     fields:[{k:"sqs_managed_sse",label:"Amazon SQS managed SSE",type:"toggle",default:true},
             {k:"kms_master_key_id",label:"KMS key (if using KMS)",ph:"alias/aws/sqs"}]},
-  // ── VPC ──
-  "vpc:natGateways": {kind:"list", title:"NAT gateways", singular:"NAT gateway",
-    fields:[{k:"name",label:"Name",ph:"nat-1"},{k:"subnet_id",label:"Subnet",ph:"subnet-abc"}],
-    columns:[["name","Name"],["subnet_id","Subnet"],["status","Status"]]},
-  "vpc:endpoints": {kind:"list", title:"VPC endpoints", singular:"endpoint",
-    fields:[{k:"name",label:"Name",ph:"s3-endpoint"},{k:"service",label:"Service",ph:"com.amazonaws.us-east-1.s3"}],
-    columns:[["name","Name"],["service","Service"],["status","Status"]]},
-  "vpc:nacls": {kind:"list", title:"Network ACLs", singular:"network ACL",
-    fields:[{k:"name",label:"Name",ph:"nacl-1"}],
-    columns:[["name","Name"],["status","Status"]]},
-  "vpc:flowLogs": {kind:"list", title:"Flow logs", singular:"flow log",
-    fields:[{k:"name",label:"Name",ph:"flow-1"},{k:"destination",label:"Destination",ph:"cloud-watch-logs"},
-            {k:"traffic_type",label:"Traffic type",ph:"ALL"}],
-    columns:[["name","Name"],["destination","Destination"],["traffic_type","Traffic"],["status","Status"]]},
   // ── SQS (purge = a single toggle-style confirmation setting) ──
   "sqs:purge": {kind:"settings", title:"Purge messages",
     fields:[{k:"confirm_purge",label:"Mark queue for purge",type:"toggle",default:false}]},
@@ -4656,6 +4642,101 @@ SUB_RENDERERS.iamaccessanalyzer = async function(svc, full, host){
         j.findings, "No findings: no resource policy in this account grants access outside it."));
     host.append(f);
   }
+};
+
+// ── VPC tabs (GET/PUT /api/vpc/vpcs/{id}/detail/{section}). ──
+function _vpcp(full, section){ return "/api/vpc/vpcs/" + encodeURIComponent(full.vpc_id || full.id || full.name || "") + "/detail/" + section; }
+async function _vpcput(full, section, body, okMsg){
+  const r = await api("PUT", _vpcp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Failed: " + _derr(r), "err"); return false;
+}
+SUB_RENDERERS.vpcdetails = async function(svc, full, host){
+  const d = await _dget(host, _vpcp(full, "details")); if (!d) return;
+  host.append(_dkv("Details", [["VPC ID", d.vpc_id, 1], ["State", full.state || "available"], ["IPv4 CIDR", d.cidr_block, 1],
+    ["Default VPC", d.is_default ? "Yes" : "No"], ["Tenancy", full.tenancy || "default"], ["DHCP option set", full.dhcp_options_id, 1],
+    ["Main route table", d.main_route_table_id, 1], ["Main network ACL", d.default_network_acl_id, 1],
+    ["Default security group", d.default_security_group_id, 1], ["Subnets", d.subnet_count],
+    ["DNS resolution", d.enable_dns_support ? "Enabled" : "Disabled"], ["DNS hostnames", d.enable_dns_hostnames ? "Enabled" : "Disabled"],
+    ["Owner ID", ACCOUNT, 1]]));
+  const s = el("input",{type:"checkbox","data-testid":"vpc-dns-support"}); if (d.enable_dns_support) s.checked = true;
+  const h = el("input",{type:"checkbox","data-testid":"vpc-dns-hostnames"}); if (d.enable_dns_hostnames) h.checked = true;
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit VPC settings"),
+    el("label",{class:"check",style:"display:flex;gap:8px;margin:4px 0"}, s, el("span",{}, "Enable DNS resolution")),
+    el("label",{class:"check",style:"display:flex;gap:8px;margin:4px 0"}, h, el("span",{}, "Enable DNS hostnames")),
+    el("button",{class:"btn primary","data-testid":"vpc-settings-save",onclick:()=>_vpcput(full, "details", {enable_dns_support:s.checked, enable_dns_hostnames:h.checked}, "VPC settings saved")}, icon("save"), "Save")));
+};
+SUB_RENDERERS.vpcnat = async function(svc, full, host){
+  const j = await _dget(host, _vpcp(full, "nat_gateways")); if (!j) return;
+  const sn = await api("GET", _vpcp(full, "endpoints"));
+  const subnets = (sn.json || {}).subnets || [];
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "NAT gateways (" + j.nat_gateways.length + ")"),
+    _dtbl([["id","NAT gateway ID",1],["name","Name"],["connectivity_type","Connectivity type"],["state","State"],["public_ip","Primary public IPv4 address",1],
+      ["private_ip","Primary private IPv4 address",1],["subnet_id","Subnet",1],["created","Created"],
+      [r => r.state === "available" ? el("button",{class:"btn",onclick:()=>_vpcput(full, "nat_gateways", {action:"delete", id:r.id}, "NAT gateway deleted")}, "Delete") : "", "Actions"]],
+      j.nat_gateways, "No NAT gateways in " + (full.vpc_id || "this VPC") + "."));
+  const f = {n:el("input",{placeholder:"my-nat"}), s:el("select",{"data-testid":"nat-subnet"}, ...subnets.map(x => el("option",{value:x}, x))),
+    c:el("select",{}, el("option",{value:"public"}, "Public"), el("option",{value:"private"}, "Private"))};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Create NAT gateway"), _field("Name", f.n), _field("Subnet", f.s), _field("Connectivity type", f.c),
+    el("button",{class:"btn primary","data-testid":"nat-create",onclick:()=>_vpcput(full, "nat_gateways", {name:f.n.value, subnet_id:f.s.value, connectivity_type:f.c.value}, "NAT gateway created")}, icon("add"), "Create NAT gateway"));
+  host.append(card);
+};
+SUB_RENDERERS.vpcendpoints = async function(svc, full, host){
+  const j = await _dget(host, _vpcp(full, "endpoints")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Endpoints (" + j.endpoints.length + ")"),
+    _dtbl([["id","VPC endpoint ID",1],["service_name","Service name",1],["endpoint_type","Endpoint type"],["state","Status"],
+      [r => (r.route_table_ids || r.subnet_ids || []).join(", "),"Route tables / subnets",1],[r => r.dns_name || "","DNS name",1],
+      [r => el("button",{class:"btn",onclick:()=>_vpcput(full, "endpoints", {action:"delete", id:r.id}, "Endpoint deleted")}, "Delete"),"Actions"]],
+      j.endpoints, "No VPC endpoints in " + (full.vpc_id || "this VPC") + "."));
+  const svcIn = el("input",{value:"s3","data-testid":"vpce-service"});
+  const t = el("select",{}, el("option",{value:""}, "Default for the service"), el("option",{value:"Gateway"}, "Gateway"), el("option",{value:"Interface"}, "Interface"));
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Create endpoint"), _field("Service (e.g. s3, dynamodb, sqs, com.amazonaws." + REGION + ".kms)", svcIn), _field("Type", t),
+    el("button",{class:"btn primary","data-testid":"vpce-create",onclick:()=>_vpcput(full, "endpoints", {service:svcIn.value, endpoint_type:t.value || undefined}, "Endpoint created")}, icon("add"), "Create endpoint"));
+  host.append(card);
+};
+SUB_RENDERERS.vpcnacls = async function(svc, full, host){
+  const j = await _dget(host, _vpcp(full, "nacls")); if (!j) return;
+  j.network_acls.forEach(n => {
+    const card = el("div",{class:"kv-card"});
+    card.append(el("div",{class:"h"}, n.network_acl_id + (n.is_default ? " (default)" : "") + " · " + n.subnets.length + " subnet associations",
+      !n.is_default && !n.subnets.length ? el("button",{class:"btn",style:"margin-left:auto",onclick:()=>_vpcput(full, "nacls", {action:"delete", network_acl_id:n.network_acl_id}, "Network ACL deleted")}, "Delete") : null),
+      _dtbl([["direction","Direction"],["rule_number","Rule number"],[e => e.protocol === "-1" ? "All" : e.protocol,"Protocol"],["port_range","Port range"],["cidr","Source / destination",1],["action","Allow/Deny"],
+        [e => el("button",{class:"btn",onclick:()=>_vpcput(full, "nacls", {action:"delete_entry", network_acl_id:n.network_acl_id, rule_number:e.rule_number, egress:e.egress}, "Rule deleted")}, "Delete"),"Actions"]],
+        n.entries, "No rules: every packet is denied by the * rule."));
+    const f = {num:el("input",{type:"number",min:"1",max:"32766",value:"100"}), dir:el("select",{}, el("option",{value:"false"}, "Inbound"), el("option",{value:"true"}, "Outbound")),
+      pr:el("select",{}, el("option",{value:"6"}, "TCP (6)"), el("option",{value:"17"}, "UDP (17)"), el("option",{value:"-1"}, "All")), port:el("input",{placeholder:"443"}),
+      cidr:el("input",{value:"0.0.0.0/0"}), act:el("select",{}, el("option",{value:"allow"}, "Allow"), el("option",{value:"deny"}, "Deny")),
+      sub:el("select",{}, ...j.subnets.map(s => el("option",{value:s}, s)))};
+    card.append(el("div",{style:"display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px"}, _field("Rule number", f.num), _field("Direction", f.dir),
+      _field("Protocol", f.pr), _field("Port", f.port), _field("CIDR", f.cidr), _field("Action", f.act)),
+      el("div",{style:"display:flex;gap:8px"},
+        el("button",{class:"btn primary",onclick:()=>_vpcput(full, "nacls", {action:"add_entry", network_acl_id:n.network_acl_id, rule_number:f.num.value, egress:f.dir.value === "true",
+          protocol:f.pr.value, from_port:f.port.value, to_port:f.port.value, cidr:f.cidr.value, rule_action:f.act.value}, "Rule added")}, icon("add"), "Add rule"),
+        !n.is_default ? el("span",{style:"display:flex;gap:6px;align-items:center"}, f.sub,
+          el("button",{class:"btn",onclick:()=>_vpcput(full, "nacls", {action:"associate", network_acl_id:n.network_acl_id, subnet_id:f.sub.value}, "Subnet associated")}, "Associate subnet")) : null));
+    host.append(card);
+  });
+  host.append(el("button",{class:"btn primary","data-testid":"nacl-create",onclick:()=>_vpcput(full, "nacls", {action:"create"}, "Network ACL created")}, icon("add"), "Create network ACL"));
+};
+SUB_RENDERERS.vpcflowlogs = async function(svc, full, host){
+  const j = await _dget(host, _vpcp(full, "flow_logs")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Flow logs (" + j.flow_logs.length + ")"),
+    _dtbl([["id","Flow log ID",1],["traffic_type","Filter"],["destination_type","Destination type"],["destination","Destination",1],["max_aggregation_interval","Max aggregation interval (s)"],
+      ["status","Status"],["created","Creation time"],
+      [r => el("button",{class:"btn",onclick:()=>_vpcput(full, "flow_logs", {action:"delete", id:r.id}, "Flow log deleted")}, "Delete"),"Actions"]],
+      j.flow_logs, "No flow logs capture traffic for " + (full.vpc_id || "this VPC") + "."));
+  const f = {t:el("select",{}, el("option",{value:"ALL"}, "All"), el("option",{value:"ACCEPT"}, "Accept"), el("option",{value:"REJECT"}, "Reject")),
+    dt:el("select",{}, el("option",{value:"cloud-watch-logs"}, "CloudWatch Logs"), el("option",{value:"s3"}, "Amazon S3 bucket")),
+    d:el("input",{placeholder:"/vpc/flow-logs  or  arn:aws:s3:::my-bucket","data-testid":"flowlog-dest"}),
+    a:el("select",{}, el("option",{value:"600"}, "10 minutes"), el("option",{value:"60"}, "1 minute"))};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Create flow log"), _field("Filter", f.t), _field("Destination", f.dt), _field("Log group / bucket ARN", f.d),
+    _field("Maximum aggregation interval", f.a),
+    el("button",{class:"btn primary","data-testid":"flowlog-create",onclick:()=>_vpcput(full, "flow_logs", {traffic_type:f.t.value, destination_type:f.dt.value, destination:f.d.value,
+      max_aggregation_interval:f.a.value}, "Flow log created")}, icon("add"), "Create flow log"));
+  host.append(card);
 };
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──
