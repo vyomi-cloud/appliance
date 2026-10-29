@@ -128,3 +128,4 @@
 | 2026-10-29T08:58Z | #77 | gcp/workflows | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40845623204) |
 | 2026-10-29T09:05Z | #80 | azure/applicationinsights | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40846308162) |
 | 2026-10-29T09:18Z | #82 | azure/containerregistry | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40847140513) |
+| 2026-10-29T09:28Z | #83 | azure/containerservice | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40848927566) |
