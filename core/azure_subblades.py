@@ -156,16 +156,16 @@ _COSMOS_SUB = [
 _FUNCTIONAPP_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Functions", "items": [
-        {"key": "functions",    "label": "Functions",         "icon": "bolt",         "type": "stub"},
-        {"key": "appKeys",      "label": "App keys",          "icon": "key",          "type": "stub"},
+        {"key": "functions",    "label": "Functions",         "icon": "bolt",         "type": "functionsList"},
+        {"key": "appKeys",      "label": "App keys",          "icon": "key",          "type": "appKeys"},
     ]},
     {"group": "Settings", "items": [
         {"key": "configuration","label": "Environment variables", "icon": "settings", "type": "configuration"},
         {"key": "authentication","label": "Authentication",   "icon": "lock_person",  "type": "authentication"},
         {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "identity"},
         {"key": "networking",   "label": "Networking",        "icon": "lan",          "type": "networking"},
-        {"key": "tls",          "label": "TLS/SSL settings",  "icon": "https",        "type": "stub"},
-        {"key": "scaleUp",      "label": "Scale up (App Service plan)", "icon": "trending_up", "type": "stub"},
+        {"key": "tls",          "label": "TLS/SSL settings",  "icon": "https",        "type": "webTls"},
+        {"key": "scaleUp",      "label": "Scale up (App Service plan)", "icon": "trending_up", "type": "webScaleUp"},
         *_settings_props_locks(),
     ]},
     {"group": "Deployment", "items": [
@@ -174,7 +174,7 @@ _FUNCTIONAPP_SUB = [
     ]},
     {"group": "Monitoring", "items": [
         {"key": "appInsights",  "label": "Application Insights", "icon": "insights", "type": "metrics"},
-        {"key": "logStream",    "label": "Log stream",        "icon": "stream",       "type": "stub"},
+        {"key": "logStream",    "label": "Log stream",        "icon": "stream",       "type": "logStream"},
         {"key": "metrics",      "label": "Metrics",           "icon": "show_chart",   "type": "metrics"},
     ]},
 ]

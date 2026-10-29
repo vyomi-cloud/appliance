@@ -507,10 +507,10 @@ class AzureArm:
             rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
         ext_engine.apply_identity(rec, payload)
         ext_engine.mark_changed(rec)
-        ext_engine.after_upsert(self.state, rec, payload)
 
         rec.setdefault("properties", {})
         rec["properties"].setdefault("provisioningState", "Succeeded")
+        ext_engine.after_upsert(self.state, rec, payload)
         for path_expr, suffix in endpoints.items():
             if _get_path(rec, path_expr) in (None, ""):
                 _set_path(rec, path_expr, base + suffix.replace("__NAME__", name))

@@ -1260,10 +1260,10 @@ def _upsert(rid: str, key: str, full_type: str, name: str, catalog: dict,
     from core import azure_arm_ext_core as _ext
     _ext.apply_identity(rec, payload)
     _ext.mark_changed(rec)
-    _ext.after_upsert(_state, rec, payload)
 
     rec.setdefault("properties", {})
     rec["properties"].setdefault("provisioningState", "Succeeded")
+    _ext.after_upsert(_state, rec, payload)
 
     # fill simulator-origin endpoints if not provided
     for path_expr, suffix in endpoints.items():

@@ -5424,6 +5424,193 @@ SUB_RENDERERS.replicate = async function(svc, full, host){
   }
   fill();
 };
+// ---- Function app blades (Microsoft.Web/sites) ----
+SUB_RENDERERS.functionslist = function(svc, full, host){
+  return rbChildCrud(full, host, {
+    coll: "functions", apiv: svc.apiVersion, child: "Function",
+    intro: "Functions in " + full.name + ".", empty: "No functions in " + full.name + " yet — create one.",
+    columns: [["properties.config.bindings.0.type","Trigger"],["properties.isDisabled","Disabled"],["properties.language","Language"],["properties.invoke_url_template","Invoke URL"]],
+    fields: [{key:"trigger", label:"Template", type:"select", options:[["httpTrigger","HTTP trigger"],["timerTrigger","Timer trigger"],["queueTrigger","Azure Queue Storage trigger"],["blobTrigger","Azure Blob Storage trigger"]], default:"httpTrigger"},
+             {key:"auth", label:"Authorization level", type:"select", options:["function","anonymous","admin"], default:"function"},
+             {key:"arg", label:"Schedule (timer) / queue or path (storage)", default:"0 */5 * * * *"}],
+    body: v => {
+      const b = {httpTrigger: [{type:"httpTrigger", direction:"in", name:"req", authLevel: v.auth, methods:["get","post"]},{type:"http", direction:"out", name:"$return"}],
+                 timerTrigger: [{type:"timerTrigger", direction:"in", name:"mytimer", schedule: v.arg}],
+                 queueTrigger: [{type:"queueTrigger", direction:"in", name:"msg", queueName: v.arg, connection:"AzureWebJobsStorage"}],
+                 blobTrigger: [{type:"blobTrigger", direction:"in", name:"blob", path: v.arg, connection:"AzureWebJobsStorage"}]}[v.trigger];
+      return {properties:{config:{bindings: b}}};
+    },
+    rowActions: (it, refresh) => [rbBtn(getPath(it,"properties.isDisabled") ? "Enable" : "Disable", async () => {
+      const r = await arm("PUT", it.id, {properties: Object.assign({}, it.properties, {isDisabled: !getPath(it,"properties.isDisabled")})}, svc.apiVersion);
+      if (r.ok) { toast(it.name + (getPath(r.json,"properties.isDisabled") ? " disabled" : " enabled")); refresh(); } else toast("Update failed: " + rbErr(r), "err");
+    }, "sec")],
+  });
+};
+SUB_RENDERERS.appkeys = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Host keys authorize calls to every function in ", el("strong",{}, full.name), "; the master key also grants admin access."));
+  const slot = el("div",{}); host.append(slot);
+  async function fill(){
+    slot.innerHTML = "";
+    const r = await arm("POST", full.id + "/host/default/listkeys", {}, svc.apiVersion);
+    if (!r.ok) { slot.append(emptyState("Could not list keys: " + rbErr(r))); return; }
+    const rows = [["_master", "Master key", r.json.masterKey, null]];
+    Object.entries(r.json.functionKeys || {}).forEach(([k, v]) => rows.push([k, "Host key", v, k]));
+    Object.entries(r.json.systemKeys || {}).forEach(([k, v]) => rows.push([k, "System key", v, null]));
+    slot.append(rbTable(["Name","Type","Value",""], rows.map(([n, t, v, del]) => [n, t, el("span",{class:"mono"}, v),
+      del && del !== "default" ? rbBtn("Delete", async () => {
+        if (!confirm("Delete host key '" + del + "'?")) return;
+        const d = await arm("DELETE", full.id + "/host/default/functionKeys/" + encodeURIComponent(del), undefined, svc.apiVersion);
+        if (d.ok || d.status === 204) { toast("Deleted " + del); fill(); } else toast("Delete failed: " + rbErr(d), "err");
+      }, "del", "delete") : ""])));
+  }
+  host.append(el("div",{class:"blade-actions"}, rbBtn("New host key", () => {
+    const nm = rbInput("", {placeholder:"Key name"}), val = rbInput("", {placeholder:"Leave blank to generate"});
+    host.append(rbForm("Add host key", [["Name", nm], ["Value", val]], async (form) => {
+      if (!nm.value.trim()) { toast("Name is required","err"); return; }
+      const r = await arm("PUT", full.id + "/host/default/functionKeys/" + encodeURIComponent(nm.value.trim()), {properties: val.value ? {value: val.value} : {}}, svc.apiVersion);
+      if (r.ok) { toast("Host key added: " + nm.value); form.remove(); fill(); } else toast("Add failed: " + rbErr(r), "err");
+    }, "OK"));
+  }, "", "add")));
+  await fill();
+};
+SUB_RENDERERS.configuration = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "App settings of ", el("strong",{}, full.name), " — injected into the function host as environment variables."));
+  const slot = el("div",{}); host.append(slot);
+  let settings = {};
+  async function save(next){
+    const w = await arm("PUT", full.id + "/config/appsettings", {properties: next}, svc.apiVersion);
+    if (w.ok) { toast("App settings saved"); recordNotif("ok","App settings saved", full.name); fill(); } else toast("Save failed: " + rbErr(w), "err");
+  }
+  async function fill(){
+    slot.innerHTML = "";
+    const r = await arm("POST", full.id + "/config/appsettings/list", {}, svc.apiVersion);
+    if (!r.ok) { slot.append(emptyState("Could not list app settings: " + rbErr(r))); return; }
+    settings = r.json.properties || {};
+    slot.append(rbTable(["Name","Value",""], Object.entries(settings).map(([k, v]) => [el("span",{class:"mono"}, k), el("span",{class:"mono small"}, String(v)),
+      rbBtn("Delete", () => { const n = Object.assign({}, settings); delete n[k]; save(n); }, "del", "delete")])));
+  }
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Add", () => {
+    const k = rbInput("", {placeholder:"NAME"}), v = rbInput("", {placeholder:"value"});
+    host.append(rbForm("Add/Edit application setting", [["Name", k], ["Value", v]], async (form) => {
+      if (!k.value.trim()) { toast("Name is required","err"); return; }
+      form.remove(); save(Object.assign({}, settings, {[k.value.trim()]: v.value}));
+    }, "Apply"));
+  }, "", "add")));
+  await fill();
+};
+SUB_RENDERERS.authentication = async function(svc, full, host){
+  const r = await rbGet(full.id + "/config/authsettingsV2", svc.apiVersion);
+  const a = (r.ok && r.json.properties) || {};
+  const idp = a.identityProviders || {};
+  const on = rbSelect([["false","Disabled"],["true","Enabled"]], String(!!getPath(a,"platform.enabled")));
+  const req = rbSelect([["false","Allow unauthenticated access"],["true","Require authentication"]], String(!!getPath(a,"globalValidation.requireAuthentication")));
+  const act = rbSelect([["RedirectToLoginPage","HTTP 302 Found redirect"],["Return401","HTTP 401 Unauthorized"],["Return403","HTTP 403 Forbidden"],["AllowAnonymous","Allow anonymous"]], getPath(a,"globalValidation.unauthenticatedClientAction") || "RedirectToLoginPage");
+  const prov = k => idp[k] && idp[k].enabled ? "Configured (client " + (getPath(idp[k],"registration.clientId") || "") + ")" : "Not configured";
+  host.append(rbKv([["App Service authentication", on], ["Restrict access", req], ["Unauthenticated requests", act],
+                    ["Microsoft", prov("azureActiveDirectory")], ["GitHub", prov("gitHub")], ["Google", prov("google")]], "Authentication — " + full.name));
+  const pk = rbSelect([["azureActiveDirectory","Microsoft"],["gitHub","GitHub"],["google","Google"]], "azureActiveDirectory"), cid = rbInput("", {placeholder:"Client (application) ID"});
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Save", async () => {
+    const body = {properties: Object.assign({}, a, {platform: Object.assign({}, a.platform, {enabled: on.value === "true"}),
+      globalValidation: {requireAuthentication: req.value === "true", unauthenticatedClientAction: act.value}})};
+    const w = await arm("PUT", full.id + "/config/authsettingsV2", body, svc.apiVersion);
+    if (w.ok) { toast("Authentication saved"); host.innerHTML = ""; SUB_RENDERERS.authentication(svc, full, host); } else toast("Save failed: " + rbErr(w), "err");
+  })));
+  host.append(rbForm("Add identity provider", [["Provider", pk], ["Client ID", cid]], async () => {
+    if (!cid.value.trim()) { toast("Client ID is required","err"); return; }
+    const providers = Object.assign({}, idp, {[pk.value]: {enabled: true, registration: {clientId: cid.value.trim()}}});
+    const w = await arm("PUT", full.id + "/config/authsettingsV2", {properties: Object.assign({}, a, {platform: Object.assign({}, a.platform, {enabled: true}), identityProviders: providers})}, svc.apiVersion);
+    if (w.ok) { toast("Identity provider added"); host.innerHTML = ""; SUB_RENDERERS.authentication(svc, full, host); } else toast("Save failed: " + rbErr(w), "err");
+  }, "Add"));
+};
+SUB_RENDERERS.webtls = async function(svc, full, host){
+  const r = await rbGet(full.id + "/config/web", svc.apiVersion);
+  const c = (r.ok && r.json.properties) || {};
+  const https = rbSelect([["false","Off"],["true","On"]], String(!!getPath(full,"properties.httpsOnly")));
+  const tls = rbSelect(["1.0","1.1","1.2","1.3"], c.minTlsVersion || "1.2"), ftps = rbSelect(["AllAllowed","FtpsOnly","Disabled"], c.ftpsState || "FtpsOnly");
+  const h2 = rbSelect([["false","1.1"],["true","2.0"]], String(!!c.http20Enabled));
+  host.append(rbKv([["HTTPS Only", https], ["Minimum inbound TLS version", tls], ["FTP state", ftps], ["HTTP version", h2]], "TLS/SSL settings — " + full.name));
+  const binds = getPath(full,"properties.hostNameSslStates") || [];
+  host.append(rbTable(["Host name","SSL state","Type"], binds.map(b => [b.name, b.sslState, b.hostType])));
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Save", async () => {
+    const [a, b] = await Promise.all([arm("PATCH", full.id, {properties:{httpsOnly: https.value === "true"}}, svc.apiVersion),
+      arm("PATCH", full.id + "/config/web", {properties:{minTlsVersion: tls.value, ftpsState: ftps.value, http20Enabled: h2.value === "true"}}, svc.apiVersion)]);
+    if (a.ok && b.ok) { full.properties = a.json.properties; toast("TLS/SSL settings saved"); recordNotif("ok","TLS settings saved", full.name); }
+    else toast("Save failed: " + rbErr(a.ok ? b : a), "err");
+  })));
+};
+SUB_RENDERERS.webscaleup = async function(svc, full, host){
+  const pid = getPath(full,"properties.serverFarmId");
+  const slot = el("div",{}); host.append(slot);
+  async function fill(){
+    slot.innerHTML = "";
+    if (!pid) { slot.append(emptyState(full.name + " has no App Service plan.")); return; }
+    const r = await rbGet(pid, "2023-12-01");
+    if (!r.ok) { slot.append(emptyState("Could not load the App Service plan: " + rbErr(r))); return; }
+    const plan = r.json, sku = plan.sku || {};
+    slot.append(rbKv([["App Service plan", plan.name], ["Pricing tier", sku.name + " (" + sku.tier + ")"], ["Instances", String(sku.capacity)],
+                      ["Apps in this plan", String(getPath(plan,"properties.numberOfSites"))], ["Status", getPath(plan,"properties.status") || ""]], "App Service plan"));
+    const sel = rbSelect([["Y1","Y1 — Consumption (serverless)"],["EP1","EP1 — Elastic Premium"],["EP2","EP2 — Elastic Premium"],["EP3","EP3 — Elastic Premium"],
+                          ["B1","B1 — Basic"],["S1","S1 — Standard"],["P1v3","P1v3 — Premium v3"],["P2v3","P2v3 — Premium v3"]], sku.name);
+    slot.append(rbForm("Scale up", [["Pricing tier", sel]], async () => {
+      const w = await arm("PATCH", pid, {sku:{name: sel.value}}, "2023-12-01");
+      if (w.ok) { toast("Plan scaled to " + sel.value); recordNotif("ok","App Service plan scaled", plan.name + " → " + sel.value); fill(); } else toast("Scale failed: " + rbErr(w), "err");
+    }, "Apply"));
+  }
+  await fill();
+};
+SUB_RENDERERS.logstream = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Platform and application log lines from ", el("strong",{}, full.name), ", newest first."));
+  const out = el("pre",{class:"keyval",style:"max-height:420px;overflow:auto"});
+  async function fill(){
+    const r = await rbGet(full.id + "/extensions/api/logs", svc.apiVersion);
+    const lines = (r.ok && r.json.value) || [];
+    out.textContent = lines.length ? lines.map(l => l.timestamp + "  [" + l.level + "]  " + l.message).join("\n") : "No log lines yet.";
+  }
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Refresh", fill, "sec", "refresh")));
+  host.append(out);
+  await fill();
+};
+SUB_RENDERERS.deploycenter = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Deployment source and history of ", el("strong",{}, full.name), "."));
+  const slot = el("div",{}); host.append(slot);
+  async function fill(){
+    slot.innerHTML = "";
+    const [c, d] = await Promise.all([rbGet(full.id + "/config/web", svc.apiVersion), rbGet(full.id + "/deployments", svc.apiVersion)]);
+    const cfg = (c.ok && c.json.properties) || {};
+    slot.append(rbKv([["Source", cfg.scmType || "None"], ["Stack", cfg.linuxFxVersion || ""],
+                      ["Git clone URI", cfg.scmType === "LocalGit" ? "https://" + full.name + ".scm.azurewebsites.net:443/" + full.name + ".git" : "Only for Local Git"]], "Settings"));
+    const deps = ((d.ok && d.json.value) || []).slice().sort((a,b) => String(b.properties.start_time).localeCompare(a.properties.start_time));
+    slot.append(el("div",{class:"sub-info",style:"margin-top:12px"}, "Deployment history"));
+    if (!deps.length) slot.append(emptyState("No deployments to " + full.name + " yet."));
+    else slot.append(rbTable(["Time","Status","Deployer","Author","Message","Active"], deps.map(x => [x.properties.start_time, x.properties.status === 4 ? "Success" : String(x.properties.status),
+      x.properties.deployer, x.properties.author, x.properties.message, x.properties.active ? "Yes" : ""])));
+    const src = rbSelect([["None","None"],["LocalGit","Local Git"],["GitHub","GitHub"],["ExternalGit","External Git"]], cfg.scmType || "None");
+    const repo = rbInput("", {placeholder:"https://github.com/org/repo (GitHub / External Git)"}), branch = rbInput("main");
+    slot.append(rbForm("Change source", [["Source", src], ["Repository", repo], ["Branch", branch]], async () => {
+      if (["GitHub","ExternalGit"].includes(src.value)) {
+        if (!repo.value.trim()) { toast("Repository URL is required","err"); return; }
+        const sc = await arm("PUT", full.id + "/sourcecontrols/web", {properties:{repoUrl: repo.value.trim(), branch: branch.value || "main", isManualIntegration: src.value === "ExternalGit"}}, svc.apiVersion);
+        if (!sc.ok) { toast("Source control failed: " + rbErr(sc), "err"); return; }
+      }
+      const w = await arm("PATCH", full.id + "/config/web", {properties:{scmType: src.value}}, svc.apiVersion);
+      if (w.ok) { toast("Deployment source: " + src.value); fill(); } else toast("Save failed: " + rbErr(w), "err");
+    }));
+    const msg = rbInput("Manual deployment"), file = el("input",{type:"file",accept:".py",class:"sub-select"});
+    slot.append(rbForm("Push a deployment", [["Handler (.py, entry point main)", file], ["Message", msg]], async () => {
+      const f = file.files && file.files[0];
+      if (!f) { toast("Choose the handler file to deploy","err"); return; }
+      const code = await f.text();
+      const c2 = await arm("PATCH", full.id, {properties:{code, entryPoint: "main"}}, svc.apiVersion);
+      if (!c2.ok) { toast("Deploy failed: " + rbErr(c2), "err"); return; }
+      full.properties = c2.json.properties;
+      const id = Date.now().toString(16);
+      const w = await arm("PUT", full.id + "/deployments/" + id, {properties:{message: (msg.value || "Deployment") + " (" + f.name + ", " + f.size + " bytes)",
+        deployer: "Push-Deployer", author: "portal"}}, svc.apiVersion);
+      if (w.ok) { toast("Deployment " + id + " succeeded"); recordNotif("ok","Function app deployed", full.name + " " + id); fill(); } else toast("Deploy failed: " + rbErr(w), "err");
+    }, "Deploy"));
+  }
+  await fill();
+};
 // ===== REAL-BLADES:END =====
 
 function emptyState(msg){

@@ -327,7 +327,54 @@ def test_cosmos_blades():
     _check("Defender setting stored on the account", dl["value"][0]["properties"]["isEnabled"] is True)
 
 
-TESTS = [test_vm_blades, test_storage_blades, test_sql_blades, test_cosmos_blades]
+def test_function_app_blades():
+    arm = AzureArm()
+    av = "2023-12-01"
+    site = f"{P}/Microsoft.Web/sites/fnb"
+    s, a = call(arm, "PUT", site, {"location": "eastus", "kind": "functionapp", "properties": {"runtime": "python"}}, av)
+    plan_id = a["properties"]["serverFarmId"]
+    s, plan = call(arm, "GET", plan_id, av=av)
+    _check("site gets a Consumption (Y1) plan that counts it", plan["sku"]["name"] == "Y1" and plan["properties"]["numberOfSites"] == 1)
+    s, b = call(arm, "PATCH", plan_id, {"sku": {"name": "Z9"}}, av)
+    _check("unknown pricing tier rejected", s == 400)
+    s, b = call(arm, "PATCH", plan_id, {"sku": {"name": "EP1"}}, av)
+    _check("scale up to Elastic Premium", b["sku"]["tier"] == "ElasticPremium")
+    _check("plan with apps can't be deleted", call(arm, "DELETE", plan_id, av=av)[0] == 409)
+    s, cfg = call(arm, "GET", site + "/config/web", av=av)
+    _check("site config has TLS 1.2 / FTPS only / no source control",
+           cfg["properties"]["minTlsVersion"] == "1.2" and cfg["properties"]["scmType"] == "None")
+    s, b = call(arm, "PATCH", site + "/config/web", {"properties": {"minTlsVersion": "0.9"}}, av)
+    _check("invalid TLS version rejected", s == 400)
+    s, st = call(arm, "POST", site + "/config/appsettings/list", {}, av)
+    _check("app settings carry the worker runtime", st["properties"]["FUNCTIONS_WORKER_RUNTIME"] == "python")
+    call(arm, "PUT", site + "/config/appsettings", {"properties": {"FUNCTIONS_WORKER_RUNTIME": "python", "MODE": "prod"}}, av)
+    s, st = call(arm, "POST", site + "/config/appsettings/list", {}, av)
+    _check("app settings replaced by PUT", st["properties"] == {"FUNCTIONS_WORKER_RUNTIME": "python", "MODE": "prod"})
+    s, au = call(arm, "GET", site + "/config/authsettingsV2", av=av)
+    _check("authentication off by default", au["properties"]["platform"]["enabled"] is False)
+    s, k = call(arm, "POST", site + "/host/default/listkeys", {}, av)
+    _check("host keys: master + default", k["masterKey"] and "default" in k["functionKeys"])
+    call(arm, "PUT", site + "/host/default/functionKeys/ci", {"properties": {"value": "abc123"}}, av)
+    s, k2 = call(arm, "POST", site + "/host/default/listkeys", {}, av)
+    _check("new host key persisted, master unchanged", k2["functionKeys"]["ci"] == "abc123" and k2["masterKey"] == k["masterKey"])
+    s, fn = call(arm, "PUT", site + "/functions/hello", {"properties": {}}, av)
+    _check("function gets an HTTP trigger and invoke URL", fn["properties"]["config"]["bindings"][0]["type"] == "httpTrigger"
+           and fn["properties"]["invoke_url_template"].endswith("/api/hello"))
+    call(arm, "PUT", site + "/deployments/d1", {"properties": {"message": "v1"}}, av)
+    call(arm, "PUT", site + "/deployments/d2", {"properties": {"message": "v2"}}, av)
+    s, ds = call(arm, "GET", site + "/deployments", av=av)
+    act = {d["name"]: d["properties"]["active"] for d in ds["value"]}
+    _check("latest deployment is the active one", act == {"d1": False, "d2": True})
+    call(arm, "POST", site + "/stop", {}, av)
+    s, h = call(arm, "GET", site + "/providers/Microsoft.ResourceHealth/availabilityStatuses/current", av="2023-07-01-preview")
+    _check("stopped app is Unavailable in Resource Health", h["properties"]["availabilityState"] == "Unavailable")
+    s, lg = call(arm, "GET", site + "/extensions/api/logs", av=av)
+    msgs = [x["message"] for x in lg["value"]]
+    _check("log stream records stop, deployments and config changes",
+           any("stopped" in m for m in msgs) and any("d2" in m for m in msgs) and any("appsettings" in m for m in msgs))
+
+
+TESTS = [test_vm_blades, test_storage_blades, test_sql_blades, test_cosmos_blades, test_function_app_blades]
 
 if __name__ == "__main__":
     for t in TESTS:

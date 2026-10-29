@@ -995,6 +995,17 @@ def after_upsert(state, rec, payload=None) -> None:
         _sql_db_fill(state, rec)
     elif t == SQL_SERVER_T + "/failovergroups":
         _sql_failover_group_fill(state, rec)
+    elif t == WEB_T:
+        _site_fill(state, rec)
+    elif t == WEB_T + "/functions":
+        _function_fill(state, rec, payload)
+    elif t == WEB_T + "/deployments":
+        _deployment_fill(state, rec, payload)
+    elif t == WEB_T + "/config":
+        p.pop("provisioningState", None)           # site config is a plain settings document
+        site = state.get(rec["id"].rsplit("/config/", 1)[0].lower())
+        if site and payload is not None:
+            site_log(site, f"Configuration '{rec['name']}' updated.")
     elif t == COSMOS_T:
         bp = (_payload_props(payload).get("backupPolicy") or {}) if payload is not None else {}
         if bp.get("type") == "Continuous":
@@ -1205,6 +1216,13 @@ def validate_write(state, rid, full_type, payload):
     bad = validate_identity(payload)
     if bad:
         return bad
+    if t == WEB_T + "/config" and rid.lower().endswith("/config/web"):
+        v = _payload_props(payload).get("minTlsVersion")
+        if v is not None and v not in TLS_VERSIONS:
+            return _err(400, "BadRequest", f"minTlsVersion must be one of {', '.join(TLS_VERSIONS)}.")
+        st = _payload_props(payload).get("ftpsState")
+        if st is not None and st not in ("AllAllowed", "FtpsOnly", "Disabled"):
+            return _err(400, "BadRequest", "ftpsState must be AllAllowed, FtpsOnly or Disabled.")
     if t == COSMOS_T:
         bad = _cosmos_validate(payload)
         if bad:
@@ -1391,6 +1409,221 @@ def subscription_locations(sub):
     return {"value": out}
 
 
+# ── App Service / Function apps: plan, site config, auth, keys, functions, deployments, logs ──
+WEB_T = "microsoft.web/sites"
+PLAN_T = "Microsoft.Web/serverfarms"
+PLAN_SKUS = {"Y1": ("Dynamic", "Y"), "EP1": ("ElasticPremium", "EP"), "EP2": ("ElasticPremium", "EP"),
+             "EP3": ("ElasticPremium", "EP"), "F1": ("Free", "F"), "B1": ("Basic", "B"), "B2": ("Basic", "B"),
+             "B3": ("Basic", "B"), "S1": ("Standard", "S"), "S2": ("Standard", "S"), "S3": ("Standard", "S"),
+             "P1v3": ("PremiumV3", "Pv3"), "P2v3": ("PremiumV3", "Pv3"), "P3v3": ("PremiumV3", "Pv3")}
+TLS_VERSIONS = ("1.0", "1.1", "1.2", "1.3")
+
+
+def _key():
+    return base64.urlsafe_b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes).decode().rstrip("=") + "=="
+
+
+def site_log(rec, message, level="Information"):
+    """Append one line to the app's log stream (platform + application events)."""
+    logs = rec.setdefault("_logs", [])
+    logs.append({"timestamp": _now(), "level": level, "message": str(message)[:2000]})
+    del logs[:-500]
+
+
+def _site_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    name, rg = rec.get("name", ""), rec.get("_rg") or ""
+    p.setdefault("httpsOnly", False)
+    p.setdefault("state", "Running")
+    p.setdefault("enabled", True)
+    p.setdefault("hostNameSslStates", [
+        {"name": f"{name}.azurewebsites.net", "sslState": "Disabled", "hostType": "Standard"},
+        {"name": f"{name}.scm.azurewebsites.net", "sslState": "Disabled", "hostType": "Repository"}])
+    if not p.get("serverFarmId"):
+        sub = rec.get("_sub") or rec["id"].split("/")[2]
+        plan_name = f"ASP-{rg}-{name}"[:60]
+        pid = f"/subscriptions/{sub}/resourceGroups/{rg}/providers/{PLAN_T}/{plan_name}"
+        if pid.lower() not in state:
+            plan = _new_rec(pid, plan_name, PLAN_T, location=rec.get("location") or "eastus")
+            plan["kind"] = "functionapp"
+            plan["sku"] = {"name": "Y1", "tier": "Dynamic", "size": "Y1", "family": "Y", "capacity": 0}
+            plan["properties"] = {"status": "Ready", "reserved": True, "maximumElasticWorkerCount": 1,
+                                  "provisioningState": "Succeeded"}
+            plan["tags"] = {}
+            state[pid.lower()] = plan
+        p["serverFarmId"] = pid
+    _ensure_child(state, rec, "config", "web", "Microsoft.Web/sites/config", {
+        "numberOfWorkers": 1, "linuxFxVersion": "Python|" + ("3.11" if str(p.get("runtime", "python")).startswith("python") else "18"),
+        "alwaysOn": False, "http20Enabled": False, "minTlsVersion": "1.2", "scmMinTlsVersion": "1.2",
+        "ftpsState": "FtpsOnly", "scmType": "None", "use32BitWorkerProcess": False, "webSocketsEnabled": False,
+        "cors": {"allowedOrigins": [], "supportCredentials": False}, "functionAppScaleLimit": 200})
+    _ensure_child(state, rec, "config", "appsettings", "Microsoft.Web/sites/config", {
+        "FUNCTIONS_EXTENSION_VERSION": "~4",
+        "FUNCTIONS_WORKER_RUNTIME": "python" if str(p.get("runtime", "python")).startswith("python") else str(p.get("runtime"))})
+    _ensure_child(state, rec, "config", "authsettingsV2", "Microsoft.Web/sites/config", {
+        "platform": {"enabled": False, "runtimeVersion": "~1"},
+        "globalValidation": {"requireAuthentication": False, "unauthenticatedClientAction": "RedirectToLoginPage"},
+        "identityProviders": {}, "login": {"tokenStore": {"enabled": False}}})
+    if not isinstance(rec.get("_hostkeys"), dict):
+        rec["_hostkeys"] = {"masterKey": _key(), "functionKeys": {"default": _key()}, "systemKeys": {}}
+        site_log(rec, f"Host started for function app '{name}' (runtime {p.get('runtime', 'python')}).")
+
+
+def _function_fill(state, rec, payload):
+    site_id = rec["id"].rsplit("/functions/", 1)[0]
+    site = state.get(site_id.lower()) or {}
+    sp = site.get("properties") or {}
+    p = rec.setdefault("properties", {})
+    p["name"] = rec["name"]
+    p.setdefault("language", "python" if str(sp.get("runtime", "python")).startswith("python") else sp.get("runtime"))
+    p.setdefault("isDisabled", False)
+    cfg = p.setdefault("config", {})
+    cfg.setdefault("bindings", [{"type": "httpTrigger", "direction": "in", "name": "req", "authLevel": "function",
+                                 "methods": ["get", "post"]}, {"type": "http", "direction": "out", "name": "$return"}])
+    host = str(sp.get("defaultHostName") or f"{site.get('name', '')}.azurewebsites.net")
+    trig = (cfg["bindings"][0] if cfg["bindings"] else {}).get("type", "")
+    if trig == "httpTrigger":
+        p["invoke_url_template"] = (host.rstrip("/") + "/" + rec["name"]) if host.startswith("http") else f"https://{host}/api/{rec['name']}"
+    else:
+        p.pop("invoke_url_template", None)
+    p["href"] = f"https://{site.get('name', '')}.scm.azurewebsites.net/api/functions/{rec['name']}"
+    p["script_href"] = p["href"].replace("/api/functions/", "/api/vfs/site/wwwroot/") + "/__init__.py"
+    if payload is not None and site:
+        site_log(site, f"Function '{rec['name']}' {'disabled' if p['isDisabled'] else 'updated'} ({trig}).")
+
+
+def _deployment_fill(state, rec, payload):
+    site_id = rec["id"].rsplit("/deployments/", 1)[0]
+    site = state.get(site_id.lower())
+    p = rec.setdefault("properties", {})
+    p.setdefault("status", 4)                      # 4 = Success (Kudu DeployStatus)
+    p.setdefault("author", "N/A")
+    p.setdefault("deployer", "Push-Deployer")
+    p.setdefault("message", "Created via a push deployment")
+    p.setdefault("start_time", rec.get("_created") or _now())
+    p.setdefault("end_time", p["start_time"])
+    p.setdefault("active", False)
+    if payload is not None and site:               # a new deployment becomes the active one
+        for d in _of_type(state, "Microsoft.Web/sites/deployments"):
+            if d["id"].lower().startswith(site_id.lower() + "/") and d is not rec:
+                d["properties"]["active"] = False
+        p["active"] = True
+        site_log(site, f"Deployment {rec['name']} by {p['deployer']} succeeded: {p['message']}")
+
+
+def _plan_validate(payload):
+    sku = (payload or {}).get("sku") or {}
+    if sku.get("name") and sku["name"] not in PLAN_SKUS:
+        return _err(400, "BadRequest", f"The pricing tier '{sku['name']}' is not allowed. Allowed: {', '.join(PLAN_SKUS)}.")
+    return None
+
+
+def _plans(state, method, sub, rg, after, payload):
+    if len(after) == 2:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_plan_view(state, r) for r in _of_type(state, PLAN_T)
+                              if rg is None or str(r.get("_rg") or "").lower() == rg.lower()]})
+    name = after[2]
+    rid = scope_id(sub, rg, after[:3])
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        return _ok(_plan_view(state, rec)) if rec else _err(404, "ResourceNotFound", f"App Service plan '{name}' not found.")
+    if method == "DELETE":
+        if _plan_sites(state, rid):
+            return _err(409, "Conflict", f"Server farm '{name}' cannot be deleted because it has web app(s) assigned to it.")
+        rec = state.pop(key, None)
+        return _ok(None, 200 if rec else 204, rid, PLAN_T, name)
+    if method in ("PUT", "PATCH"):
+        bad = _plan_validate(payload)
+        if bad:
+            return bad
+        old = state.get(key)
+        rec = old or _new_rec(rid, name, PLAN_T, location=(payload or {}).get("location") or "eastus")
+        sku = dict(rec.get("sku") or {"name": "Y1"})
+        sku.update((payload or {}).get("sku") or {})
+        tier, fam = PLAN_SKUS.get(sku["name"], ("Dynamic", "Y"))
+        sku.update({"tier": tier, "family": fam, "size": sku["name"]})
+        sku.setdefault("capacity", 0 if tier == "Dynamic" else 1)
+        rec["sku"] = sku
+        rec["kind"] = (payload or {}).get("kind") or rec.get("kind") or "functionapp"
+        props = dict(rec.get("properties") or {})
+        props.update(_payload_props(payload))
+        props.update({"status": "Ready", "provisioningState": "Succeeded"})
+        rec["properties"] = props
+        rec.setdefault("tags", {})
+        state[key] = rec
+        for site in _plan_sites(state, rid):
+            site_log(site, f"App Service plan scaled to {sku['name']} ({tier}).")
+        return _ok(_plan_view(state, rec), 200 if old else 201, rid, PLAN_T, name)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+def _plan_sites(state, plan_id):
+    return [r for r in _of_type(state, "Microsoft.Web/sites")
+            if str((r.get("properties") or {}).get("serverFarmId", "")).lower() == plan_id.lower()]
+
+
+def _plan_view(state, rec):
+    v = _view(rec)
+    v["properties"] = dict(v.get("properties") or {}, numberOfSites=len(_plan_sites(state, rec["id"])))
+    return v
+
+
+def _site_route(state, method, sub, rg, after, payload):
+    """POST start/stop/restart, host keys, function keys, Kudu log tail (ARM extensions passthrough)."""
+    low = [a.lower() for a in after]
+    site_id = scope_id(sub, rg, after[:3])
+    site = state.get(site_id.lower())
+    rest = low[3:]
+    if not rest:
+        return None
+    if site is None:
+        return _err(404, "ResourceNotFound", f"Site '{after[2]}' not found.")
+    _site_fill(state, site)
+    p = site.setdefault("properties", {})
+    if rest in (["start"], ["stop"], ["restart"]) and method == "POST":
+        if rest[0] == "stop":
+            p["state"] = "Stopped"
+            site_log(site, "Site stopped by user request.")
+        else:
+            p["state"] = "Running"
+            site_log(site, "Site restarted by user request." if rest[0] == "restart" else "Site started by user request.")
+            site_log(site, f"Host started for function app '{site.get('name')}'.")
+        mark_changed(site)
+        return _ok(None, 200, site_id, "Microsoft.Web/sites/" + rest[0], site.get("name", ""))
+    if rest == ["config", "appsettings", "list"] and method == "POST":
+        return _ok(_view(state[f"{site_id}/config/appsettings".lower()]))
+    hk = site["_hostkeys"]
+    if rest == ["host", "default", "listkeys"] and method == "POST":
+        return _ok(dict(hk))
+    if len(rest) == 5 and rest[:3] == ["host", "default", "functionkeys"] or len(rest) == 4 and rest[:3] == ["host", "default", "functionkeys"]:
+        kname = after[6]
+        if method == "PUT":
+            val = (_payload_props(payload).get("value") or _key())
+            hk["functionKeys"][kname] = val
+            site_log(site, f"Host key '{kname}' set.")
+            return _ok({"id": f"{site_id}/host/default/functionKeys/{kname}", "name": kname,
+                        "properties": {"name": kname, "value": val}}, 201, site_id, "Microsoft.Web/sites/host/functionKeys", kname)
+        if method == "DELETE":
+            if kname == "default":
+                return _err(400, "BadRequest", "The default host key can't be deleted.")
+            existed = hk["functionKeys"].pop(kname, None)
+            if existed:
+                site_log(site, f"Host key '{kname}' deleted.")
+            return _ok(None, 200 if existed else 204, site_id, "Microsoft.Web/sites/host/functionKeys", kname)
+    if len(rest) == 3 and rest[0] == "functions" and rest[2] == "listkeys" and method == "POST":
+        fn = state.get(f"{site_id}/functions/{after[4]}".lower())
+        if not fn:
+            return _err(404, "NotFound", f"Function '{after[4]}' not found.")
+        fk = fn.setdefault("_keys", {"default": _key()})
+        return _ok(dict(fk))
+    if rest[:1] == ["extensions"] and rest[1:] == ["api", "logs"] and method == "GET":
+        return _ok({"value": list(reversed(site.get("_logs") or []))[:200]})
+    return None
+
+
 # ── entry ────────────────────────────────────────────────────────────────────
 def route(state, method, sub, rg, after, payload=None, query=None, executor=None):
     """Serve the request if it is one this module models, else None.
@@ -1437,6 +1670,13 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
             return _err(404, "ResourceNotFound", f"Storage account '{after[2]}' not found.")
         _storage_fill(rec)
         r = _storage_action(state, rid, rec, after[3], payload)
+        if r is not None:
+            return r
+    if low[0] == "microsoft.web" and low[1] == "serverfarms" and len(after) <= 3:
+        return _plans(state, method, sub, rg, after, payload)
+    if low[0] == "microsoft.web" and low[1] == "sites" and len(after) >= 4 and (
+            method == "POST" or low[3] in ("host", "extensions")):
+        r = _site_route(state, method, sub, rg, after, payload)
         if r is not None:
             return r
     if low[0] == "microsoft.documentdb" and low[1] == "restorabledatabaseaccounts" and len(after) == 2 and rg is None:
