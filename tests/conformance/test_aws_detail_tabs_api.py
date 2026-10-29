@@ -411,7 +411,47 @@ def vpc():
     fl = sec("flow_logs")["flow_logs"]
     check("Flow logs: REJECT flow log to CloudWatch Logs", r.status_code == 200 and fl[0]["traffic_type"] == "REJECT" and fl[0]["resource_id"] == vid, fl)
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc}
+
+
+def sqs():
+    print("── SQS queue")
+    sfx = str(int(time.time()) % 100000)
+    q, dlq = f"tabs-q-{sfx}", f"tabs-dlq-{sfx}"
+    for n in (q, dlq):
+        check(f"create {n}", requests.post(f"{BASE}/api/sqs/queues", json={"queue_name": n, "name": n}, timeout=30).status_code < 300)
+    p = f"/api/sqs/queues/{q}/detail/"
+    sec = lambda s: get(p + s).json()
+    put = lambda s, b: requests.put(BASE + p + s, json=b, timeout=30)
+    c = sec("configuration")
+    check("Configuration: this queue's ARN/URL and SQS defaults", c["queue_arn"].endswith(":" + q) and c["visibility_timeout"] == 30
+          and c["message_retention_period"] == 345600 and c["encryption"] == "SSE-SQS", c)
+    r = put("configuration", {"visibility_timeout": 45, "delay_seconds": 5})
+    check("Configuration: change persists", r.status_code == 200 and sec("attributes")["visibility_timeout"] == 45, r.text)
+    check("Configuration: native GetQueueAttributes agrees", get(f"/api/sqs/queues/{q}").json()["attributes"]["VisibilityTimeout"] == "45")
+    check("Configuration: retention under 60 s rejected", put("configuration", {"message_retention_period": 30}).status_code == 400)
+    put("configuration", {"delay_seconds": 0})
+    requests.post(f"{BASE}/api/sqs/queues/{q}/send", json={"message_body": "hello-tabs"}, timeout=30)
+    check("Send and receive: available count reflects the sent message", sec("configuration")["messages_available"] == 1, sec("configuration"))
+    dlq_arn = get(f"/api/sqs/queues/{dlq}").json()["queue_arn"]
+    r = put("dlq", {"enabled": True, "dead_letter_target_arn": dlq_arn, "max_receive_count": 3})
+    check("Dead-letter queue: redrive policy set", r.status_code == 200 and sec("dlq")["redrive_policy"]["maxReceiveCount"] == 3, r.text)
+    check("Dead-letter queue: the DLQ lists this queue as a source", q in get(f"/api/sqs/queues/{dlq}/detail/dlq").json()["source_queues"])
+    check("Dead-letter queue: maxReceiveCount 0 rejected", put("dlq", {"enabled": True, "dead_letter_target_arn": dlq_arn, "max_receive_count": 0}).status_code == 400)
+    check("Dead-letter queue: missing target rejected", put("dlq", {"enabled": True, "dead_letter_target_arn": dlq_arn + "x", "max_receive_count": 2}).status_code == 400)
+    r = put("encryption", {"mode": "SSE-KMS", "kms_master_key_id": "alias/aws/sqs", "kms_data_key_reuse_period": 600})
+    check("Encryption: SSE-KMS saved", r.status_code == 200 and sec("encryption")["encryption"] == "SSE-KMS", r.text)
+    check("Encryption: visible to GetQueueAttributes", get(f"/api/sqs/queues/{q}").json()["attributes"].get("KmsMasterKeyId") == "alias/aws/sqs")
+    arn = c["queue_arn"]
+    pol = {"Statement": [{"Effect": "Allow", "Principal": {"Service": "sns.amazonaws.com"}, "Action": "sqs:SendMessage", "Resource": arn}]}
+    check("Access policy: saved", put("policy", {"policy": pol}).status_code == 200 and "sns.amazonaws.com" in sec("policy")["policy"])
+    check("Access policy: other queue's ARN rejected", put("policy", {"policy": {"Statement": [{"Effect": "Allow", "Principal": "*", "Action": "sqs:*", "Resource": arn + "x"}]}}).status_code == 400)
+    r = put("purge", {})
+    check("Purge: queue emptied", r.status_code == 200 and sec("configuration")["messages_available"] == 0, r.text)
+    check("Purge: a second purge within 60 s is refused", put("purge", {}).status_code == 403)
+    for n in (q, dlq):
+        requests.delete(f"{BASE}/api/sqs/queues/{n}", timeout=30)
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs}
 
 if __name__ == "__main__":
     only = sys.argv[1:] or list(SECTIONS)

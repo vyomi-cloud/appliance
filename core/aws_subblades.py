@@ -186,13 +186,13 @@ _SQS_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Messages", "items": [
         {"key": "sendReceive", "label": "Send and receive messages", "icon": "send", "type": "sqsMessages"},
-        {"key": "purge",       "label": "Purge messages",     "icon": "delete_forever","type": "stub"},
+        {"key": "purge",       "label": "Purge messages",     "icon": "delete_forever","type": "sqsPurge"},
     ]},
     {"group": "Configuration", "items": [
-        {"key": "configuration","label":"Configuration",       "icon": "tune",        "type": "properties"},
+        {"key": "configuration","label":"Configuration",       "icon": "tune",        "type": "sqsConfig"},
         {"key": "deadLetter",  "label": "Dead-letter queue",   "icon": "warning",     "type": "sqsDLQ"},
-        {"key": "encryption",  "label": "Encryption",          "icon": "enhanced_encryption","type": "stub"},
-        {"key": "iam",         "label": "Access policy",       "icon": "policy",      "type": "iam"},
+        {"key": "encryption",  "label": "Encryption",          "icon": "enhanced_encryption","type": "sqsEncryption"},
+        {"key": "policy",      "label": "Access policy",       "icon": "policy",      "type": "sqsPolicy"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "monitoring",  "label": "Monitoring",          "icon": "show_chart",  "type": "metrics"},

@@ -229,7 +229,31 @@ def vpc():
     check("Endpoints: DynamoDB gateway endpoint", put("endpoints", {"service": "dynamodb"})["endpoints"][0]["endpoint_type"] == "Gateway")
     check("Flow logs: to CloudWatch Logs", put("flow_logs", {"destination": "/vpc/x"})["flow_logs"][0]["status"] == "ACTIVE")
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc}
+
+
+def sqs():
+    print("── SQS queue")
+    for n in ("tabs-q", "tabs-dlq"):
+        d("sqs", "CreateQueue", {"name": n})
+    sec = lambda s, q="tabs-q": d("sqs", "GetQueueSection", {"name": q, "section": s})
+    put = lambda s, b: d("sqs", "SetQueueSection", {"name": "tabs-q", "section": s, "method": "PUT", "body": b})
+    check("Configuration: SQS defaults + SSE-SQS", sec("configuration")["visibility_timeout"] == 30 and sec("configuration")["encryption"] == "SSE-SQS")
+    check("Configuration: visibility timeout 0 saved", put("configuration", {"visibility_timeout": 0}).get("visibility_timeout") == 0)
+    dlq_arn = sec("configuration", "tabs-dlq")["queue_arn"]
+    check("DLQ: redrive after 1 receive", put("dlq", {"enabled": True, "dead_letter_target_arn": dlq_arn, "max_receive_count": 1}).get("redrive_policy")["maxReceiveCount"] == 1)
+    d("sqs", "Send", {"name": "tabs-q", "body": "poison"})
+    d("sqs", "Receive", {"name": "tabs-q"})
+    d("sqs", "Receive", {"name": "tabs-q"})   # received once already -> dead-lettered by sqs_core
+    check("DLQ: the console redrive policy moves the message to the DLQ", sec("configuration", "tabs-dlq")["messages_available"] == 1
+          and sec("configuration")["messages_available"] == 0, (sec("configuration"), sec("configuration", "tabs-dlq")))
+    check("Encryption: SSE-KMS", put("encryption", {"mode": "SSE-KMS", "kms_master_key_id": "alias/aws/sqs"}).get("encryption") == "SSE-KMS")
+    check("Encryption: back to SSE-SQS clears the key", put("encryption", {"mode": "SSE-SQS"}).get("kms_master_key_id") == "")
+    check("Access policy: invalid JSON rejected", put("policy", {"policy": "{nope"}).get("code") == "InvalidAttributeValue")
+    d("sqs", "Send", {"name": "tabs-q", "body": "x"})
+    check("Purge: empties the queue", put("purge", {}).get("messages_available") == 0)
+    check("Purge: twice within 60 s refused", put("purge", {}).get("code") == "AWS.SimpleQueueService.PurgeQueueInProgress")
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs}
 
 if __name__ == "__main__":
     for k in sys.argv[1:] or list(SECTIONS):

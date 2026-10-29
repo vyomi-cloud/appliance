@@ -1963,3 +1963,117 @@ def vpc_update_section(net, vpc_id: str, section: str, body: dict, bucket_exists
     else:
         raise DetailError("InvalidParameterValue", f"Unknown VPC section '{section}'.")
     return vpc_section(net, vpc_id, section)
+
+
+# ── SQS queue detail (Configuration, Dead-letter queue, Encryption, Access
+#    policy, Purge) — over the queue's native attribute map ───────────────────
+SQS_DEFAULTS = {"VisibilityTimeout": "30", "MessageRetentionPeriod": "345600", "MaximumMessageSize": "262144",
+                "DelaySeconds": "0", "ReceiveMessageWaitTimeSeconds": "0", "SqsManagedSseEnabled": "true"}
+_SQS_RANGES = {"VisibilityTimeout": (0, 43200), "MessageRetentionPeriod": (60, 1209600), "MaximumMessageSize": (1024, 262144),
+               "DelaySeconds": (0, 900), "ReceiveMessageWaitTimeSeconds": (0, 20), "KmsDataKeyReusePeriodSeconds": (60, 86400)}
+_SQS_FIELDS = {"visibility_timeout": "VisibilityTimeout", "message_retention_period": "MessageRetentionPeriod",
+               "max_message_size": "MaximumMessageSize", "delay_seconds": "DelaySeconds",
+               "receive_wait_time_seconds": "ReceiveMessageWaitTimeSeconds"}
+
+
+def sqs_view(name: str, arn: str, url: str, fifo: bool, attrs: dict, counts: dict) -> dict:
+    a = {**SQS_DEFAULTS, **{k: str(v) for k, v in (attrs or {}).items() if v is not None}}
+    if a.get("KmsMasterKeyId"):
+        a["SqsManagedSseEnabled"] = "false"
+    redrive = a.get("RedrivePolicy")
+    if isinstance(redrive, str) and redrive:
+        import json
+        try:
+            redrive = json.loads(redrive)
+        except ValueError:
+            redrive = {}
+    return {"queue_name": name, "queue_arn": arn, "queue_url": url, "type": "FIFO" if fifo else "Standard",
+            "visibility_timeout": int(a["VisibilityTimeout"]), "message_retention_period": int(a["MessageRetentionPeriod"]),
+            "max_message_size": int(a["MaximumMessageSize"]), "delay_seconds": int(a["DelaySeconds"]),
+            "receive_wait_time_seconds": int(a["ReceiveMessageWaitTimeSeconds"]),
+            "encryption": "SSE-KMS" if a.get("KmsMasterKeyId") else ("SSE-SQS" if a.get("SqsManagedSseEnabled") == "true" else "Disabled"),
+            "kms_master_key_id": a.get("KmsMasterKeyId", ""), "kms_data_key_reuse_period": int(a.get("KmsDataKeyReusePeriodSeconds") or 300),
+            "redrive_policy": redrive or None, "policy": a.get("Policy", ""),
+            "messages_available": int(counts.get("available", 0)), "messages_in_flight": int(counts.get("in_flight", 0)),
+            "messages_delayed": int(counts.get("delayed", 0))}
+
+
+def sqs_validate(section: str, body: dict, name: str, arn: str, fifo: bool, queue_lookup=None) -> dict:
+    """SetQueueAttributes with SQS's limits; returns the native attributes to set
+    (an empty string value removes that attribute)."""
+    import json
+    b = dict(body or {})
+    out = {}
+    if section == "configuration":
+        for k, attr in _SQS_FIELDS.items():
+            if k in b and b[k] not in (None, ""):
+                n = int(b[k])
+                lo, hi = _SQS_RANGES[attr]
+                if not lo <= n <= hi:
+                    raise DetailError("InvalidAttributeValue", f"Invalid value for the parameter {attr}: must be between {lo} and {hi}.")
+                out[attr] = str(n)
+    elif section == "dlq":
+        if not b.get("enabled") in _TRUE:
+            out["RedrivePolicy"] = ""
+        else:
+            target = str(b.get("dead_letter_target_arn") or "")
+            tname = target.rsplit(":", 1)[-1]
+            if target == arn:
+                raise DetailError("InvalidParameterValue", "Value for parameter RedrivePolicy is invalid. Reason: a queue can't be its own dead-letter queue.")
+            t = queue_lookup(tname) if queue_lookup else {"fifo": tname.endswith(".fifo")}
+            if not t:
+                raise DetailError("InvalidParameterValue", f"Value for parameter RedrivePolicy is invalid. Reason: Dead letter target does not exist.")
+            if bool(t.get("fifo")) != fifo:
+                raise DetailError("InvalidParameterValue", "Value for parameter RedrivePolicy is invalid. Reason: Dead-letter target owner and queue type must match.")
+            n = int(b.get("max_receive_count") or 0)
+            if not 1 <= n <= 1000:
+                raise DetailError("InvalidParameterValue", "Value for parameter RedrivePolicy is invalid. Reason: maxReceiveCount must be between 1 and 1000.")
+            out["RedrivePolicy"] = json.dumps({"deadLetterTargetArn": target, "maxReceiveCount": n}, separators=(",", ":"))
+    elif section == "encryption":
+        mode = str(b.get("mode") or "SSE-SQS")
+        if mode == "SSE-KMS":
+            key = str(b.get("kms_master_key_id") or "").strip()
+            if not key:
+                raise DetailError("InvalidAttributeValue", "KmsMasterKeyId is required for SSE-KMS.")
+            reuse = int(b.get("kms_data_key_reuse_period") or 300)
+            lo, hi = _SQS_RANGES["KmsDataKeyReusePeriodSeconds"]
+            if not lo <= reuse <= hi:
+                raise DetailError("InvalidAttributeValue", f"KmsDataKeyReusePeriodSeconds must be between {lo} and {hi}.")
+            out.update(KmsMasterKeyId=key, KmsDataKeyReusePeriodSeconds=str(reuse), SqsManagedSseEnabled="false")
+        elif mode == "SSE-SQS":
+            out.update(KmsMasterKeyId="", KmsDataKeyReusePeriodSeconds="", SqsManagedSseEnabled="true")
+        elif mode == "Disabled":
+            out.update(KmsMasterKeyId="", KmsDataKeyReusePeriodSeconds="", SqsManagedSseEnabled="false")
+        else:
+            raise DetailError("InvalidAttributeValue", "Encryption must be SSE-SQS, SSE-KMS or Disabled.")
+    elif section == "policy":
+        raw = b.get("policy") or ""
+        if raw:
+            try:
+                doc = json.loads(raw) if isinstance(raw, str) else dict(raw)
+            except (ValueError, TypeError):
+                raise DetailError("InvalidAttributeValue", "Invalid value for the parameter Policy: the policy must be JSON.")
+            sts = _as_list(doc.get("Statement"))
+            if not sts:
+                raise DetailError("InvalidAttributeValue", "Invalid value for the parameter Policy: Statement is required.")
+            for st in sts:
+                if not isinstance(st, dict) or st.get("Effect") not in ("Allow", "Deny") or "Principal" not in st:
+                    raise DetailError("InvalidAttributeValue", "Invalid value for the parameter Policy: each statement needs Effect and Principal.")
+                if any(str(r) not in (arn, "*") and not _match(str(r), arn) for r in _as_list(st.get("Resource")) or [arn]):
+                    raise DetailError("InvalidAttributeValue", "Invalid value for the parameter Policy: Resource must be this queue's ARN.")
+            out["Policy"] = json.dumps(doc, indent=2)
+        else:
+            out["Policy"] = ""
+    else:
+        raise DetailError("InvalidParameterValue", f"Unknown queue section '{section}'.")
+    return out
+
+
+def sqs_check_purge(queue: dict) -> None:
+    """PurgeQueue: one purge per queue every 60 seconds."""
+    last = float(queue.get("last_purge_epoch") or 0)
+    if last and time.time() - last < 60:
+        raise DetailError("AWS.SimpleQueueService.PurgeQueueInProgress",
+                          f"Only one PurgeQueue operation on {queue.get('queue_name')} is allowed every 60 seconds.", 403)
+    queue["last_purge_epoch"] = time.time()
+    queue["last_purge"] = _now()

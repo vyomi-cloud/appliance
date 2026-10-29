@@ -3172,39 +3172,6 @@ SUB_RENDERERS.bucketobjects = function(svc, full, host){
 };
 // Lambda specific
 // SQS
-SUB_RENDERERS.sqsmessages = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("send"),
-    el("div",{}, "Send a test message or poll for messages.")));
-  const ta = el("textarea",{style:"width:100%;min-height:80px"});
-  ta.value = '{"hello":"world"}';
-  host.append(el("div",{class:"field"}, ta));
-  const out = el("pre",{class:"json",style:"margin-top:12px"});
-  host.append(el("div",{style:"margin-top:14px;display:flex;gap:8px"},
-    el("button",{class:"btn primary",onclick:async()=>{
-      const r = await api(svc.api_paths.send.method,
-        fillPath(svc.api_paths.send.path, {name: full.name}), {body: ta.value});
-      if (r.ok) toast("Message sent"); else toast("Send failed", "err");
-    }}, icon("send"), "Send message"),
-    el("button",{class:"btn",onclick:async()=>{
-      const r = await api(svc.api_paths.receive.method,
-        fillPath(svc.api_paths.receive.path, {name: full.name}), {max_messages: 10});
-      out.textContent = JSON.stringify(r.json, null, 2);
-    }}, icon("download"), "Poll for messages")));
-  host.append(out);
-};
-SUB_RENDERERS.sqsdlq = function(svc, full, host){
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Dead-letter queue"));
-  // Like the real console: with no redrive policy the tab only says "Disabled"
-  // (no queue / maximum-receives fields to fill).
-  card.append(el("div",{class:"kv-grid"},
-    ...(full.dlq_arn ? [
-      el("div",{}, el("div",{class:"k"}, "Queue"), el("div",{class:"v"}, full.dlq_arn)),
-      el("div",{}, el("div",{class:"k"}, "Maximum receives"), el("div",{class:"v"}, String(full.max_receive_count||5)))]
-    : [el("div",{}, el("div",{class:"k"}, "Dead-letter queue"), el("div",{class:"v"}, "Disabled"))])));
-  host.append(card);
-};
-
 // SNS
 SUB_RENDERERS.snssubs = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
@@ -3512,13 +3479,6 @@ const SUBRES_CATALOG = {
     fields:[{k:"name",label:"Grantee principal",ph:"arn:aws:iam::…:role/app"},
             {k:"operations",label:"Operations",ph:"Encrypt,Decrypt"}],
     columns:[["name","Grantee"],["operations","Operations"],["status","Status"]]},
-  // ── SQS ──
-  "sqs:encryption": {kind:"settings", title:"Encryption",
-    fields:[{k:"sqs_managed_sse",label:"Amazon SQS managed SSE",type:"toggle",default:true},
-            {k:"kms_master_key_id",label:"KMS key (if using KMS)",ph:"alias/aws/sqs"}]},
-  // ── SQS (purge = a single toggle-style confirmation setting) ──
-  "sqs:purge": {kind:"settings", title:"Purge messages",
-    fields:[{k:"confirm_purge",label:"Mark queue for purge",type:"toggle",default:false}]},
   // ── API Gateway sub-resources ──
   "apigateway:authorizers": {kind:"list", title:"Authorizers", singular:"authorizer",
     fields:[{k:"name",label:"Name",ph:"jwt-auth"},{k:"type",label:"Type",ph:"JWT"}],
@@ -4736,6 +4696,98 @@ SUB_RENDERERS.vpcflowlogs = async function(svc, full, host){
     _field("Maximum aggregation interval", f.a),
     el("button",{class:"btn primary","data-testid":"flowlog-create",onclick:()=>_vpcput(full, "flow_logs", {traffic_type:f.t.value, destination_type:f.dt.value, destination:f.d.value,
       max_aggregation_interval:f.a.value}, "Flow log created")}, icon("add"), "Create flow log"));
+  host.append(card);
+};
+
+// ── SQS queue tabs (GET/PUT /api/sqs/queues/{q}/detail/{section}). ──
+function _sqsp(full, section){ return "/api/sqs/queues/" + encodeURIComponent(full.queue_name || full.name || "") + "/detail/" + section; }
+async function _sqsput(full, section, body, okMsg){
+  const r = await api("PUT", _sqsp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Failed: " + _derr(r), "err"); return false;
+}
+function _sqsCounts(q){ return [["Messages available", q.messages_available], ["Messages in flight", q.messages_in_flight], ["Messages delayed", q.messages_delayed]]; }
+SUB_RENDERERS.sqsmessages = async function(svc, full, host){
+  const q = await _dget(host, _sqsp(full, "configuration")); if (!q) return;
+  host.append(_dkv("Queue " + q.queue_name, [["Type", q.type], ..._sqsCounts(q), ["URL", q.queue_url, 1]]));
+  const ta = el("textarea",{"data-testid":"sqs-body",style:"width:100%;min-height:80px"}); ta.value = "";
+  const grp = el("input",{placeholder:"Message group ID (FIFO)"});
+  const out = el("div",{});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Send message"), _field("Message body", ta), ...(q.type === "FIFO" ? [_field("Message group ID", grp)] : []),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary","data-testid":"sqs-send",onclick:async()=>{
+        if (!ta.value) { toast("Enter a message body", "err"); return; }
+        const body = {message_body: ta.value, body: ta.value, MessageBody: ta.value}; if (q.type === "FIFO") { body.message_group_id = grp.value; body.MessageGroupId = grp.value; }
+        const r = await api(svc.api_paths.send.method, fillPath(svc.api_paths.send.path, {name: q.queue_name}), body);
+        if (r.ok) { toast("Message sent"); _rerender(); } else toast("Send failed: " + _derr(r), "err");
+      }}, icon("send"), "Send message"),
+      el("button",{class:"btn","data-testid":"sqs-poll",onclick:async()=>{
+        const r = await api(svc.api_paths.receive.method, fillPath(svc.api_paths.receive.path, {name: q.queue_name}), {max_number_of_messages: 10, max: 10});
+        const msgs = ((r.json || {}).messages || []).map(m => ({id: m.message_id || m.MessageId, body: m.body ?? m.Body, receives: m.receive_count ?? (m.Attributes || {}).ApproximateReceiveCount ?? "", sent: m.sent || m.created || ""}));
+        out.innerHTML = "";
+        out.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Received messages (" + msgs.length + ")"),
+          _dtbl([["id","ID",1],["body","Body",1],["receives","Receive count"],["sent","Sent"]], msgs, "No messages available in " + q.queue_name + ".")));
+      }}, icon("download"), "Poll for messages"))));
+  host.append(out);
+};
+SUB_RENDERERS.sqspurge = async function(svc, full, host){
+  const q = await _dget(host, _sqsp(full, "purge")); if (!q) return;
+  host.append(_dkv("Purge " + q.queue_name, _sqsCounts(q)));
+  host.append(el("div",{class:"alert warn"}, icon("warning"), el("div",{}, "Purging deletes every message in " + q.queue_name + ". You can purge a queue once every 60 seconds.")),
+    el("button",{class:"btn danger","data-testid":"sqs-purge",onclick:()=>_sqsput(full, "purge", {}, "Queue purged")}, icon("delete_forever"), "Purge"));
+};
+SUB_RENDERERS.sqsconfig = async function(svc, full, host){
+  const q = await _dget(host, _sqsp(full, "attributes")); if (!q) return;   // GetQueueAttributes
+  host.append(_dkv("Details", [["Name", q.queue_name], ["Type", q.type], ["ARN", q.queue_arn, 1], ["URL", q.queue_url, 1], ["Encryption", q.encryption],
+    ["Visibility timeout", q.visibility_timeout + " seconds"], ["Message retention period", Math.round(q.message_retention_period / 86400 * 10) / 10 + " days"],
+    ["Maximum message size", q.max_message_size / 1024 + " KB"], ["Delivery delay", q.delay_seconds + " seconds"],
+    ["Receive message wait time", q.receive_wait_time_seconds + " seconds"], ..._sqsCounts(q)]));
+  const f = {};
+  [["visibility_timeout","Visibility timeout (seconds, 0-43200)"],["message_retention_period","Message retention (seconds, 60-1209600)"],
+   ["max_message_size","Maximum message size (bytes, 1024-262144)"],["delay_seconds","Delivery delay (seconds, 0-900)"],
+   ["receive_wait_time_seconds","Receive message wait time (seconds, 0-20)"]].forEach(([k, l]) => f[k] = [l, el("input",{type:"number",value:q[k],"data-cfg":k})]);
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit configuration"), ...Object.values(f).map(([l, i]) => _field(l, i)),
+    el("button",{class:"btn primary","data-testid":"sqs-config-save",onclick:()=>_sqsput(full, "configuration", Object.fromEntries(Object.entries(f).map(([k, [, i]]) => [k, i.value])), "Queue configuration saved")}, icon("save"), "Save")));
+};
+SUB_RENDERERS.sqsdlq = async function(svc, full, host){
+  const q = await _dget(host, _sqsp(full, "dlq")); if (!q) return;
+  const rp = q.redrive_policy;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Dead-letter queue"));
+  // Like the real console: with no redrive policy the tab only says "Disabled".
+  card.append(el("div",{class:"kv-grid"}, ...(rp ? [
+      el("div",{}, el("div",{class:"k"}, "Queue"), el("div",{class:"v mono"}, rp.deadLetterTargetArn)),
+      el("div",{}, el("div",{class:"k"}, "Maximum receives"), el("div",{class:"v"}, String(rp.maxReceiveCount)))]
+    : [el("div",{}, el("div",{class:"k"}, "Dead-letter queue"), el("div",{class:"v"}, "Disabled"))])));
+  if (q.source_queues.length) card.append(el("div",{class:"small",style:"margin-top:8px"}, "This queue is the dead-letter queue of: " + q.source_queues.join(", ")));
+  const sel = el("select",{"data-testid":"sqs-dlq-target"}, ...q.queues.map(x => el("option",{value:x.queue_arn}, x.queue_name + (x.fifo ? " (FIFO)" : ""))));
+  if (rp) sel.value = rp.deadLetterTargetArn;
+  const mr = el("input",{type:"number",min:"1",max:"1000",value: rp ? rp.maxReceiveCount : 10});
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Edit"), ...(q.queues.length ? [_field("Choose queue", sel), _field("Maximum receives (1-1000)", mr)]
+      : [el("div",{class:"empty"}, "Create another queue to use as this queue's dead-letter queue.")]),
+    el("div",{style:"display:flex;gap:8px"},
+      q.queues.length ? el("button",{class:"btn primary","data-testid":"sqs-dlq-save",onclick:()=>_sqsput(full, "dlq", {enabled:true, dead_letter_target_arn:sel.value, max_receive_count:mr.value}, "Dead-letter queue set")}, icon("save"), "Save") : null,
+      rp ? el("button",{class:"btn",onclick:()=>_sqsput(full, "dlq", {enabled:false}, "Dead-letter queue disabled")}, "Disable") : null));
+  host.append(card);
+};
+SUB_RENDERERS.sqsencryption = async function(svc, full, host){
+  const q = await _dget(host, _sqsp(full, "encryption")); if (!q) return;
+  host.append(_dkv("Encryption", [["Server-side encryption", q.encryption === "SSE-SQS" ? "Enabled (Amazon SQS key, SSE-SQS)" : q.encryption === "SSE-KMS" ? "Enabled (AWS KMS key, SSE-KMS)" : "Disabled"],
+    ...(q.encryption === "SSE-KMS" ? [["AWS KMS key", q.kms_master_key_id, 1], ["Data key reuse period", q.kms_data_key_reuse_period + " seconds"]] : [])]));
+  const mode = el("select",{"data-testid":"sqs-sse-mode"}, el("option",{value:"SSE-SQS"}, "Amazon SQS key (SSE-SQS)"), el("option",{value:"SSE-KMS"}, "AWS KMS key (SSE-KMS)"), el("option",{value:"Disabled"}, "Disabled")); mode.value = q.encryption;
+  const key = el("input",{value:q.kms_master_key_id || "alias/aws/sqs"}), reuse = el("input",{type:"number",min:"60",max:"86400",value:q.kms_data_key_reuse_period});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit encryption"), _field("Encryption key type", mode), _field("AWS KMS key (SSE-KMS)", key), _field("Data key reuse period (seconds)", reuse),
+    el("button",{class:"btn primary","data-testid":"sqs-sse-save",onclick:()=>_sqsput(full, "encryption", {mode:mode.value, kms_master_key_id:key.value, kms_data_key_reuse_period:reuse.value}, "Encryption saved")}, icon("save"), "Save")));
+};
+SUB_RENDERERS.sqspolicy = async function(svc, full, host){
+  const q = await _dget(host, _sqsp(full, "policy")); if (!q) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Access policy"), el("div",{class:"small",style:"color:var(--sub);margin-bottom:6px"}, "Queue ARN: " + q.queue_arn));
+  if (!q.policy) card.append(el("div",{class:"empty"}, "No access policy: only the queue owner (account " + ACCOUNT + ") can use " + q.queue_name + "."));
+  const ta = el("textarea",{"data-testid":"sqs-policy",style:"width:100%;min-height:180px;font-family:Consolas,Menlo,monospace"}); ta.value = q.policy || "";
+  card.append(ta, el("div",{style:"display:flex;gap:8px;margin-top:10px"},
+    el("button",{class:"btn primary",onclick:()=>_sqsput(full, "policy", {policy: ta.value}, "Access policy saved")}, icon("save"), "Save"),
+    q.policy ? el("button",{class:"btn",onclick:()=>_sqsput(full, "policy", {policy: ""}, "Access policy removed")}, "Remove") : null));
   host.append(card);
 };
 

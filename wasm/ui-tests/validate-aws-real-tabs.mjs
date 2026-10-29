@@ -234,6 +234,37 @@ const SECTIONS = {
     const nacl = await tab("Network ACLs");
     check("vpc Network ACLs: the default NACL with its allow rules", /\(default\)/.test(nacl) && /Allow/.test(nacl), nacl);
   },
+  async sqs() {
+    const name = "rt-q-" + Date.now().toString(36), dlq = name + "-dlq";
+    for (const n of [name, dlq]) await call("POST", "/api/sqs/queues", { name: n, queue_name: n });
+    await openService("^sqs$");
+    await openRow(name);
+    await tab("Send and receive messages");
+    await page.locator("#main [data-testid=sqs-body]").fill("hello " + name);
+    await page.locator("#main [data-testid=sqs-send]").click();
+    await sleep(1500);
+    const sr = await tab("Send and receive messages");
+    check("sqs Send and receive: the sent message is counted as available", /Messages available\s*\n\s*1\b/i.test(sr), sr);
+    await page.locator("#main [data-testid=sqs-poll]").click();
+    await sleep(1500);
+    const polled = await page.evaluate(() => document.querySelector("#main")?.innerText || "");
+    check("sqs Poll: receives the message body", polled.includes("hello " + name), polled);
+    await tab("Dead-letter queue");
+    const opt = await page.locator("#main [data-testid=sqs-dlq-target] option", { hasText: dlq }).first().getAttribute("value");
+    await page.locator("#main [data-testid=sqs-dlq-target]").selectOption(opt);
+    await page.locator("#main [data-testid=sqs-dlq-save]").click();
+    await sleep(1500);
+    await tab("Encryption");
+    const dl = await tab("Dead-letter queue");
+    check("sqs Dead-letter queue: set in the tab, persists after reopening", dl.includes(":" + dlq), dl);
+    await tab("Configuration");
+    await page.locator("#main input[data-cfg=visibility_timeout]").fill("75");
+    await page.locator("#main [data-testid=sqs-config-save]").click();
+    await sleep(1500);
+    await tab("Encryption");
+    const cfg = await tab("Configuration");
+    check("sqs Configuration: visibility timeout change persists", /75 seconds/.test(cfg), cfg);
+  },
 };
 
 let server;

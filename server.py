@@ -4311,6 +4311,10 @@ def _sqs_queue_attributes(queue: dict) -> dict[str, str]:
     redrive_policy = queue.get("redrive_policy") or {}
     if redrive_policy:
         attrs["RedrivePolicy"] = json.dumps(redrive_policy, separators=(",", ":"), default=str)
+    # Encryption (SqsManagedSseEnabled / KmsMasterKeyId …) and the access Policy
+    # the console sets (routes/aws_console_detail.py).
+    attrs.update({k: v for k, v in (queue.get("extra_attributes") or {}).items() if v not in (None, "")})
+    attrs.setdefault("SqsManagedSseEnabled", "true")
     return attrs
 
 

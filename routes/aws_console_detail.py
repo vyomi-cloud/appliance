@@ -508,6 +508,69 @@ def register(app: FastAPI) -> None:
         ctx.record_usage(f"vpc.update_{section.replace('-', '_')}", {"vpc_id": vpc_id, "resource_id": vpc_id})
         return {"vpc_id": vpc_id, "section": section, **out}
 
+    # ── SQS queue tabs ──────────────────────────────────────────────────────
+    def _queue(name: str) -> dict:
+        from routes import aws_sqs as Q
+        q = Q._sqs_find_queue(name)
+        if not isinstance(q, dict):
+            raise HTTPException(404, detail="AWS.SimpleQueueService.NonExistentQueue")
+        return q
+
+    def _queue_view(q: dict) -> dict:
+        s = _srv()
+        attrs = s._sqs_queue_attributes(q)
+        live = [m for m in q.get("messages", []) if not m.get("deleted")]
+        counts = {"available": sum(1 for m in live if not m.get("in_flight") and s._sqs_message_is_visible(m)),
+                  "in_flight": sum(1 for m in live if m.get("in_flight")),
+                  "delayed": sum(1 for m in live if not m.get("in_flight") and not s._sqs_message_is_visible(m))}
+        return D.sqs_view(q["queue_name"], q.get("queue_arn", ""), q.get("queue_url", ""), bool(q.get("fifo_queue")), attrs, counts)
+
+    @app.get("/api/sqs/queues/{name}/detail/{section}")
+    def sqs_section(name: str, section: str):
+        q = _queue(name)
+        out = _queue_view(q)
+        if section == "dlq":
+            from routes import aws_sqs as Q
+            out["queues"] = [{"queue_name": x["queue_name"], "queue_arn": x.get("queue_arn", ""), "fifo": bool(x.get("fifo_queue"))}
+                             for x in Q._sqs_list_queues() if x["queue_name"] != name]
+            out["source_queues"] = [x["queue_name"] for x in Q._sqs_list_queues()
+                                    if (x.get("redrive_policy") or {}).get("deadLetterTargetArn") == q.get("queue_arn")]
+        return {"section": section, **out}
+
+    @app.put("/api/sqs/queues/{name}/detail/{section}")
+    async def sqs_update(name: str, section: str, request: Request):
+        from routes import aws_sqs as Q
+        q = _queue(name)
+        try:
+            if section == "purge":
+                D.sqs_check_purge(q)
+                _srv()._sqs_purge_queue(q)
+            else:
+                def lookup(n):
+                    t = Q._sqs_find_queue(n)
+                    return {"fifo": bool(t.get("fifo_queue"))} if t else None
+                attrs = D.sqs_validate(section, await _body(request), name, q.get("queue_arn", ""), bool(q.get("fifo_queue")), lookup)
+                std = {k: v for k, v in attrs.items() if k in ("VisibilityTimeout", "MessageRetentionPeriod", "MaximumMessageSize",
+                                                               "DelaySeconds", "ReceiveMessageWaitTimeSeconds", "RedrivePolicy")}
+                if "RedrivePolicy" in std and not std["RedrivePolicy"]:
+                    std["RedrivePolicy"] = {}
+                if std:
+                    Q._sqs_update_queue_attributes(q, std)
+                extra = q.setdefault("extra_attributes", {})
+                for k, v in attrs.items():
+                    if k not in std:
+                        if v == "":
+                            extra.pop(k, None)
+                        else:
+                            extra[k] = v
+        except D.DetailError as e:
+            _fail(e)
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, detail={"code": "InvalidAttributeValue", "message": str(e)})
+        ctx.persist_state()
+        ctx.record_usage(f"sqs.update_{section}", {"queue_name": name, "resource_id": name})
+        return {"section": section, **_queue_view(q)}
+
     # ── Permissions tab (every service): identity policies covering a resource ──
     @app.get("/api/aws/resource-access")
     def resource_access(arn: str, service: str):

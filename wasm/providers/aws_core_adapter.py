@@ -1037,3 +1037,58 @@ def vpc_detail_section(p):
     except (TypeError, ValueError) as e:
         return _det_err(DET.DetailError("InvalidParameterValue", str(e)))
     return {"ok": True, "vpc_id": vid, "section": p.get("section"), **out}
+
+
+# ── SQS queue tabs (core/aws_console_detail.py over sqs_core's attribute map) ──
+def _sqs_view(q):
+    now = MSG.now()
+    live = [m for m in q.get("messages", []) if not m.get("deleted")]
+    counts = {"available": sum(1 for m in live if m.get("visible_at", 0) <= now),
+              "in_flight": sum(1 for m in live if m.get("visible_at", 0) > now and (m.get("in_flight") or m.get("receive_count"))),
+              "delayed": 0}
+    counts["delayed"] = len(live) - counts["available"] - counts["in_flight"]
+    attrs = {**(q.get("attributes") or {}), "VisibilityTimeout": q.get("visibility_timeout", 30), "DelaySeconds": q.get("delay_seconds", 0)}
+    return DET.sqs_view(q["queue_name"], q["queue_arn"], q["queue_url"], bool(q.get("fifo")), attrs, counts)
+
+
+def sqs_section(p):
+    name = str(p.get("name") or "")
+    q = MSG.get_queue(name)
+    if not q:
+        return {"ok": False, "code": "QueueDoesNotExist",
+                "__http": {"status": 404, "body": {"detail": {"code": "AWS.SimpleQueueService.NonExistentQueue",
+                                                              "message": "The specified queue does not exist."}}}}
+    section = str(p.get("section") or "")
+    if p.get("method") == "PUT":
+        try:
+            if section == "purge":
+                DET.sqs_check_purge(q)
+                sqs.dispatch(MSG, "AmazonSQS.PurgeQueue", {"QueueUrl": q["queue_url"]})
+            else:
+                def lookup(n):
+                    t = MSG.get_queue(n)
+                    return {"fifo": bool(t.get("fifo"))} if t else None
+                attrs = DET.sqs_validate(section, p.get("body") or {}, name, q["queue_arn"], bool(q.get("fifo")), lookup)
+                sqs.dispatch(MSG, "AmazonSQS.SetQueueAttributes", {"QueueUrl": q["queue_url"], "Attributes": attrs})
+                if "DelaySeconds" in attrs:
+                    q["delay_seconds"] = int(attrs["DelaySeconds"])
+                for k in [k for k, v in q.get("attributes", {}).items() if v == ""]:
+                    q["attributes"].pop(k)
+                MSG.persist()
+        except DET.DetailError as e:
+            return _det_err(e)
+        except (TypeError, ValueError) as e:
+            return _det_err(DET.DetailError("InvalidAttributeValue", str(e)))
+    out = {"ok": True, "section": section, **_sqs_view(q)}
+    if section == "dlq":
+        out["queues"] = [{"queue_name": n, "queue_arn": MSG.get_queue(n)["queue_arn"], "fifo": bool(MSG.get_queue(n).get("fifo"))}
+                         for n in MSG.queue_names() if n != name]
+        import json as _json
+        def _target(x):
+            rp = (x.get("attributes") or {}).get("RedrivePolicy")
+            try:
+                return (_json.loads(rp) if isinstance(rp, str) and rp else rp or {}).get("deadLetterTargetArn")
+            except Exception:
+                return None
+        out["source_queues"] = [n for n in MSG.queue_names() if _target(MSG.get_queue(n)) == q["queue_arn"]]
+    return out

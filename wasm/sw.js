@@ -578,6 +578,10 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "sqs", "ListQueues", {}] };
     if (method === "POST") return { tuple: ["aws", "sqs", "CreateQueue", body || {}] };
   }
+  // Queue detail tabs (core/aws_console_detail.py): configuration, DLQ, encryption, access policy, purge.
+  m = path.match(/^\/api\/sqs\/queues\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "sqs", "GetQueueSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "sqs", "SetQueueSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/sqs\/queues\/([^/]+)\/(send|receive|purge)$/);
   if (m && method === "POST") return { tuple: ["aws", "sqs", m[2][0].toUpperCase() + m[2].slice(1), { name: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/sqs\/queues\/([^/]+)$/);
