@@ -690,7 +690,10 @@ function _shouldSkipAutoRefresh(){
   // Also skip if a dropdown / modal is open (would close it under their cursor).
   const selectedCount = document.querySelectorAll('input[type="checkbox"]:checked').length;
   const hasOpenDropdown = !!document.querySelector('.dropdown.open, .modal.open');
-  return selectedCount > 0 || hasOpenDropdown;
+  // Nor while the user is typing in a detail-tab editor (user data, settings…).
+  const ae = document.activeElement;
+  const editing = !!(ae && /^(TEXTAREA|INPUT|SELECT)$/.test(ae.tagName) && ae.closest("#main"));
+  return selectedCount > 0 || hasOpenDropdown || editing;
 }
 
 function navigate(next){
@@ -2728,20 +2731,6 @@ SUB_RENDERERS.activitylog = async function(svc, full, host){
   }
   load();
 };
-SUB_RENDERERS.iam = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("admin_panel_settings"),
-    el("div",{}, "IAM permissions and resource-based policies attached to this resource.")));
-  // FUNCTIONAL: attach/list/detach policy statements for this resource, persisted
-  // via the generic sub-resource store (durable across reload + cross-tab).
-  renderSubResourceTab(svc, full, host, {key:"perms", type:"iam", icon:"admin_panel_settings"}, {
-    kind:"list", title:"Attached policies", singular:"policy",
-    fields:[{k:"name",label:"Policy name",ph:"AllowReadAccess"},
-            {k:"policy_arn",label:"Policy ARN (managed) — optional",ph:"arn:aws:iam::aws:policy/ReadOnlyAccess"},
-            {k:"effect",label:"Effect",ph:"Allow | Deny"},
-            {k:"actions",label:"Actions",ph:"s3:GetObject,s3:ListBucket"}],
-    columns:[["name","Policy"],["effect","Effect"],["actions","Actions"],["status","Status"]],
-  });
-};
 SUB_RENDERERS.tags = function(svc, full, host){
   const tags = (full.tags && typeof full.tags === "object") ? full.tags : {};
   const state = {tags: {...tags}};
@@ -2795,7 +2784,9 @@ SUB_RENDERERS.listtable = function(svc, full, host, tab){
   }))));
   host.append(tbl);
 };
-SUB_RENDERERS.properties = function(svc, full, host){
+SUB_RENDERERS.properties = async function(svc, full, host){
+  // EC2: every property DescribeInstances returns for the instance, not just the grid row.
+  if (svc.key === "ec2") { const r = await api("GET", _ec2p(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "All properties"));
   const grid = el("div",{style:"display:grid;grid-template-columns:280px 1fr;gap:4px 12px;font-size:12.5px"});
@@ -2888,6 +2879,17 @@ function renderMeasuredMetrics(host, service, resource){
 SUB_RENDERERS.connect = function(svc, full, host){
   host.append(el("div",{class:"alert info"}, icon("terminal"),
     el("div",{}, "Connect to your instance via SSH (real key + port forward) or via the LXD shell fallback.")));
+  // SSH client instructions from the instance itself (public DNS, the AMI's login user, key pair).
+  const sshCard = el("div",{}); host.append(sshCard);
+  api("GET", _ec2p(full, "details")).then(r => {
+    if (!r.ok || !r.json) return;
+    const d = r.json;
+    sshCard.append(_dkv("SSH client", [["Instance ID", d.instance_id, 1], ["Public DNS", d.public_dns_name, 1],
+      ["Public IPv4 address", d.public_ip_address, 1], ["Username", d.default_username], ["Example", d.ssh_command, 1]]));
+    sshCard.append(el("div",{class:"small",style:"margin:-6px 0 14px;color:var(--sub)"}, d.key_name
+      ? "The key used to launch this instance is " + d.key_name + ".pem."
+      : "No key pair is associated with this instance; it was launched without one."));
+  });
 
   // Container for the live values — populated by an async fetch to the
   // /connect-info endpoint, which lazy-provisions the SSH key + lxc proxy
@@ -2970,7 +2972,7 @@ SUB_RENDERERS.connect = function(svc, full, host){
       wrap.append(el("div",{class:"alert warn"}, el("div",{}, `Connect endpoint error: ${e.message}`)));
     });
 };
-SUB_RENDERERS.ec2networking = function(svc, full, host){
+SUB_RENDERERS.rdsnetworking = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, svc.key === "rds" ? "Connectivity & security" : "Networking details"));
   const g = el("div",{class:"kv-grid"});
@@ -2996,32 +2998,6 @@ SUB_RENDERERS.ec2networking = function(svc, full, host){
   rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k),
     el("div",{class:"v"+(/id|address/i.test(k)?" mono":"")}, String(v)))));
   card.append(g); host.append(card);
-};
-SUB_RENDERERS.ec2security = function(svc, full, host){
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Security details"));
-  const g = el("div",{class:"kv-grid"});
-  [
-    ["IAM role",       full.iam_instance_profile || "—"],
-    ["Owner",          ACCOUNT],
-    ["Launch time",    full.launch_time || full.created || "—"],
-    ["Key pair name",  full.key_name || "(no key pair)"],
-    ["State transition reason", full.state_reason || "—"],
-  ].forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, String(v)))));
-  card.append(g); host.append(card);
-};
-SUB_RENDERERS.ec2storage = function(svc, full, host){
-  const tbl = el("table",{class:"aws"});
-  tbl.append(el("tr",{}, el("th",{}, "Volume ID"), el("th",{}, "Type"),
-    el("th",{}, "Size (GiB)"), el("th",{}, "Encrypted"), el("th",{}, "Status")));
-  const vols = full.block_device_mappings || [{volume_id:"vol-root", volume_type:"gp3", size_gb:8, encrypted:true, status:"in-use"}];
-  vols.forEach(v => tbl.append(el("tr",{},
-    el("td",{}, el("a",{class:"id"}, v.volume_id || v.device_name || "—")),
-    el("td",{}, v.volume_type || "gp3"),
-    el("td",{}, String(v.size_gb || v.volume_size || 8)),
-    el("td",{}, String(v.encrypted ?? true)),
-    el("td",{}, stateBadge(v.status || "in-use")))));
-  host.append(tbl);
 };
 SUB_RENDERERS.sgrules = function(svc, full, host){
   host.append(el("div",{class:"alert info"}, icon("shield"),
@@ -3522,9 +3498,6 @@ SUB_RENDERERS.apistages = function(svc, full, host){
 // =====================================================================
 const TAB_ALIASES = {
   // keyed by lower-cased tab label (preferred) — falls back to the tab key/type.
-  "ec2 serial console":["serial_console","serial_console_output","console_output"],
-  "user data":["user_data","userData","metadata.user_data"],
-  "iam role":["iam_instance_profile","iam_role","instance_profile","iam.role"],
   "versions":["versions","version_ids","version","versioning.versions"],
   "lifecycle rules":["lifecycle","lifecycle.rule","lifecycle_rules","lifecycle_configuration"],
   "default encryption":["encryption","server_side_encryption","sse","encryption_configuration"],
@@ -3571,9 +3544,6 @@ const TAB_ALIASES = {
   "grants":["grants","grant"],
 };
 const TAB_DESC = {
-  "ec2 serial console":"Text-based access to the instance's serial port for low-level troubleshooting.",
-  "user data":"Boot-time script/metadata passed to the instance at launch.",
-  "iam role":"IAM instance profile/role granting the instance AWS permissions.",
   "versions":"Versions/revisions tracked for this resource.",
   "lifecycle rules":"Rules that transition or expire objects by age/prefix.",
   "default encryption":"Server-side encryption applied to new objects by default.",
@@ -3808,20 +3778,6 @@ const SUBRES_CATALOG = {
             {k:"max_retry_attempts",label:"Max retry attempts",type:"number",default:185}]},
   "eventbridge:logs": {kind:"settings", title:"Trace logs",
     fields:[{k:"trace_enabled",label:"Enable trace logging",type:"toggle",default:false}]},
-  // ── EC2 (user data = editable settings) ──
-  "ec2:userData": {kind:"settings", title:"User data",
-    fields:[{k:"user_data",label:"User data script",ph:"#!/bin/bash\n..."}]},
-  // ── EC2 IAM role (instance profile association = editable settings) ──
-  // In AWS you associate/replace an IAM instance profile on a running instance;
-  // modeled here as an editable setting (role ARN + profile name) that persists.
-  "ec2:iam": {kind:"settings", title:"IAM role (instance profile)",
-    fields:[{k:"iam_instance_profile",label:"Instance profile ARN",ph:"arn:aws:iam::123456789012:instance-profile/my-role"},
-            {k:"role_name",label:"Role name",ph:"my-ec2-role"}]},
-  // ── EC2 serial console (account-level access toggle = editable settings).
-  //    The serial OUTPUT itself is a derived read-only stream — rendered by a
-  //    dedicated renderer below the settings form (see renderSerialConsoleTab).
-  "ec2:console": {kind:"serialConsole", title:"EC2 serial console",
-    fields:[{k:"serial_console_access",label:"Serial console access",type:"toggle",default:false}]},
 };
 
 function subresCfg(svc, tab){
@@ -3964,81 +3920,12 @@ async function renderSettingsTab(svc, full, host, tab, cfg){
   render();
 }
 
-// ── FUNCTIONAL EC2 serial console: editable access setting + derived output ──
-// AWS splits this into (a) an editable account/instance-level "serial console
-// access" toggle (persisted, real), and (b) a derived read-only serial-port
-// OUTPUT stream (the boot log — not user-editable, as in the real cloud). We
-// render BOTH: the toggle rides the standard settings machinery (durable via the
-// generic ResourceStore), and the output is a simulated-but-non-empty boot log
-// seeded from the instance's real attributes.
-async function renderSerialConsoleTab(svc, full, host, tab, cfg){
-  const parent = itemKey(svc, full);
-  const ns = subNs(svc.key, parent, tab.key || tab.type);
-  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin:-2px 0 14px"},
-    cfg.title + " for " + (parent || "this instance") + "."));
-
-  // (a) Editable access toggle — load → edit → save(upsert) → readback (durable).
-  const panel = el("div",{class:"panel"}); host.append(panel);
-  async function current(){
-    try { const r = await subApi("GET", ns, "get", "_settings");
-          if (r.ok && r.json && (r.json.ok !== false)) return r.json; } catch(_){}
-    return null;
-  }
-  async function renderAccess(){
-    panel.innerHTML = "";
-    panel.append(el("div",{class:"panel-h"}, icon("tune"), "Serial console access"));
-    const b = el("div",{style:"padding:16px"}); panel.append(b);
-    const cur = (await current()) || {};
-    const valNow = cur.serial_console_access;
-    const on = (valNow === true || valNow === "true" || valNow === "on");
-    const row = el("div",{style:"margin:10px 0;display:grid;grid-template-columns:230px 1fr;gap:12px;align-items:center;max-width:640px"});
-    row.append(el("label",{style:"font-size:13px;color:#16191f"}, "Serial console access"));
-    const cb = el("input",{type:"checkbox"}); cb.checked = on; row.append(cb); b.append(row);
-    const act = el("div",{style:"margin-top:16px;display:flex;gap:8px"});
-    act.append(el("button",{class:"btn primary",onclick:async()=>{
-      const r = await subApi("POST", ns, "create", undefined,
-        {name:"_settings", serial_console_access: cb.checked});
-      if (r.ok || [200,201].includes(r.status)) {
-        toast("Serial console access " + (cb.checked?"enabled":"disabled"));
-        recordNotif("ok","Serial console access " + (cb.checked?"enabled":"disabled") + " for " + parent);
-        renderAccess();
-      } else toast("Save failed ("+r.status+")","err");
-    }}, icon("save"), "Save changes"));
-    act.append(el("button",{class:"btn",onclick:renderAccess}, "Reset"));
-    b.append(act);
-  }
-  await renderAccess();
-
-  // (b) Derived read-only serial OUTPUT stream (the boot log). Non-empty,
-  // seeded from the instance's real attributes. Read-only — matches AWS, where
-  // GetConsoleOutput returns a system-produced log you cannot edit.
-  const out = el("div",{class:"panel",style:"margin-top:16px"}); host.append(out);
-  out.append(el("div",{class:"panel-h"}, icon("terminal"), "Serial port output",
-    el("span",{style:"margin-left:auto;font-size:11px;color:#a19f9d;font-weight:400"}, "Read-only (system-generated)")));
-  const amiLine = full.image_id || full.ami || "ami-0abcdef1234567890";
-  const itype = full.instance_type || "t3.micro";
-  const ip = full.private_ip || "10.0.0.10";
-  const host4 = (full.public_dns || ("ip-" + ip.replace(/\./g,"-"))) ;
-  const lines = [
-    "[    0.000000] Booting " + (parent || "instance") + " (" + itype + ")",
-    "[    0.004211] Linux version 6.1.0-aws (buildd@aws) ",
-    "[    0.512004] Loading AMI " + amiLine,
-    "[    1.204551] cloud-init: Cloud-init v. 23.4 running 'init-local'",
-    "[    2.880113] cloud-init: Network configured: " + ip + " (" + host4 + ")",
-    "[    3.410229] systemd[1]: Reached target Multi-User System.",
-    "[    4.001872] " + (parent || "instance") + " login: ",
-  ];
-  out.append(el("pre",{class:"json",style:"background:#0f1b2d;color:#d6e2f0;max-height:320px;overflow:auto"},
-    lines.join("\n")));
-}
-
 function renderGenericTab(svc, full, host, tab){
   // FUNCTIONAL engine first: a catalog-matched tab becomes a working sub-resource
   // browser or an editable settings form (never a read-only empty state).
   const cfg = subresCfg(svc, tab);
   if (cfg) {
     const fn = cfg.kind === "list" ? renderSubResourceTab
-             : cfg.kind === "serialConsole" ? renderSerialConsoleTab
              : renderSettingsTab;
     Promise.resolve(fn(svc, full, host, tab, cfg)).catch(e =>
       host.append(el("div",{class:"alert err"}, "Tab error: " + e.message)));
@@ -4135,6 +4022,242 @@ SUB_RENDERERS.ssmlist = function(svc, full, host, tab){
     }))));
     host.append(tbl);
   }).catch(e => host.append(el("div",{class:"alert err"}, "Failed to load: " + e.message)));
+};
+
+// =====================================================================
+// Resource-detail tabs backed by the real per-resource model
+// (core/aws_console_detail.py — offline: routes/aws_console_detail.py,
+// Nano: wasm/providers/aws_core_adapter.py). Each tab fetches THIS resource's
+// data and every action persists through the same API.
+// =====================================================================
+const DASH = "–";   // what the AWS console prints for an unset field
+function _dv(v){
+  if (v === true) return "Enabled";
+  if (v === false) return "Disabled";
+  return (v === undefined || v === null || v === "") ? DASH : String(v);
+}
+function _dkv(title, pairs, extra){
+  const card = el("div",{class:"kv-card"});
+  if (title) card.append(el("div",{class:"h"}, title, ...(extra ? [extra] : [])));
+  const g = el("div",{class:"kv-grid"});
+  pairs.forEach(([k, v, mono]) => g.append(el("div",{}, el("div",{class:"k"}, k),
+    el("div",{class:"v"+(mono ? " mono" : "")}, _dv(v)))));
+  card.append(g);
+  return card;
+}
+function _dtbl(cols, rows, emptyMsg){
+  if (!rows.length) return el("div",{class:"empty"}, emptyMsg);
+  const t = el("table",{class:"aws"});
+  t.append(el("tr",{}, ...cols.map(c => el("th",{}, c[1]))));
+  rows.forEach(r => t.append(el("tr",{}, ...cols.map(c => {
+    const v = typeof c[0] === "function" ? c[0](r) : getPath(r, c[0]);
+    return el("td",{class: c[2] ? "mono small" : ""}, (v && v.nodeType) ? v : _dv(v));
+  }))));
+  return t;
+}
+function _derr(r){
+  const d = r && r.json && (r.json.detail || r.json.error || r.json);
+  return (d && (d.message || (typeof d === "string" ? d : d.code))) || ("HTTP " + (r ? r.status : "?"));
+}
+async function _dget(host, path){
+  const r = await api("GET", path);
+  if (!r.ok) { host.append(el("div",{class:"alert err"}, icon("error"), el("div",{}, "Failed to load: " + _derr(r)))); return null; }
+  return r.json || {};
+}
+function _ec2p(full, tail){ return "/api/ec2/instances/" + encodeURIComponent(full.instance_id || full.name || "") + "/" + tail; }
+function _rerender(){ renderDetail(document.getElementById("main")); }
+
+// ARN of the resource on screen (what IAM policies name in Resource).
+function resourceArn(svc, full){
+  if (full.arn && String(full.arn).startsWith("arn:")) return full.arn;
+  if (full.ARN) return full.ARN;
+  const id = itemKey(svc, full), A = ACCOUNT || "123456789012", R = REGION;
+  switch (svc.key) {
+    case "ec2": return `arn:aws:ec2:${R}:${A}:instance/${full.instance_id || id}`;
+    case "s3": return `arn:aws:s3:::${id}`;
+    case "rds": return `arn:aws:rds:${R}:${A}:db:${id}`;
+    case "dynamodb": return `arn:aws:dynamodb:${R}:${A}:table/${id}`;
+    case "lambda": return `arn:aws:lambda:${R}:${A}:function:${id}`;
+    case "sqs": return `arn:aws:sqs:${R}:${A}:${id}`;
+    case "sns": return `arn:aws:sns:${R}:${A}:${id}`;
+    case "eventbridge": return `arn:aws:events:${R}:${A}:rule/${id}`;
+    case "secretsmanager": return `arn:aws:secretsmanager:${R}:${A}:secret:${id}`;
+    case "kms": return `arn:aws:kms:${R}:${A}:key/${full.key_id || id}`;
+    case "kinesis": return `arn:aws:kinesis:${R}:${A}:stream/${id}`;
+    case "stepfunctions": return `arn:aws:states:${R}:${A}:stateMachine:${id}`;
+    case "ssm": return `arn:aws:ssm:${R}:${A}:parameter/${String(id).replace(/^\//, "")}`;
+    case "apigateway": return `arn:aws:apigateway:${R}::/restapis/${full.rest_api_id || full.id || id}`;
+    case "apigatewayv2": return `arn:aws:apigateway:${R}::/apis/${full.api_id || full.id || id}`;
+    case "logs": return `arn:aws:logs:${R}:${A}:log-group:${id}`;
+    case "cloudwatch": return `arn:aws:cloudwatch:${R}:${A}:alarm:${id}`;
+    case "elbv2": return `arn:aws:elasticloadbalancing:${R}:${A}:loadbalancer/app/${id}`;
+    case "vpc": return `arn:aws:ec2:${R}:${A}:vpc/${full.vpc_id || id}`;
+    default: return `arn:aws:${svc.service || svc.key}:${R}:${A}:${id}`;
+  }
+}
+const _IAM_PREFIX = {stepfunctions:"states", eventbridge:"events", elbv2:"elasticloadbalancing", vpc:"ec2", apigatewayv2:"apigateway", cloudwatch:"cloudwatch"};
+
+// Permissions — the identity-based IAM policy statements in this account that
+// grant this service's actions on this resource (users, groups and roles).
+SUB_RENDERERS.iam = async function(svc, full, host){
+  const arn = resourceArn(svc, full), prefix = _IAM_PREFIX[svc.key] || svc.service || svc.key;
+  host.append(_dkv("Resource", [["ARN", arn, true], ["Service namespace", prefix]]));
+  const j = await _dget(host, "/api/aws/resource-access?arn=" + encodeURIComponent(arn) + "&service=" + encodeURIComponent(prefix));
+  if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Identity-based policies that apply (" + (j.statements || []).length + ")"));
+  card.append(_dtbl([["principal","Principal"],["principal_type","Type"],["policy","Policy"],["effect","Effect"],["actions","Actions",1],["resource","Resource",1]],
+    j.statements || [], "No IAM user, group or role in account " + (ACCOUNT || "") + " has a policy granting " + prefix + " actions on " + arn + "."));
+  host.append(card);
+};
+
+// EC2 — Details: the instance summary (DescribeInstances) + instance settings
+// (ModifyInstanceAttribute: termination/stop protection, shutdown behavior, monitoring).
+SUB_RENDERERS.ec2details = async function(svc, full, host){
+  const d = await _dget(host, _ec2p(full, "details")); if (!d) return;
+  host.append(_dkv("Instance summary", [
+    ["Instance ID", d.instance_id, 1], ["Instance state", d.state], ["Instance type", d.instance_type],
+    ["Public IPv4 address", d.public_ip_address, 1], ["Private IPv4 addresses", d.private_ip_address, 1],
+    ["Public DNS", d.public_dns_name, 1], ["Private IP DNS name (IPv4 only)", d.private_dns_name, 1],
+    ["VPC ID", d.vpc_id, 1], ["Subnet ID", d.subnet_id, 1], ["Availability Zone", d.availability_zone],
+    ["IAM Role", d.iam_instance_profile, 1], ["Key pair assigned at launch", d.key_name]]));
+  host.append(_dkv("Instance details", [
+    ["AMI ID", d.image_id, 1], ["AMI name", d.image_name], ["Platform details", d.platform_details],
+    ["Launch time", d.launch_time], ["Reservation", d.reservation_id, 1], ["Owner", d.owner_id, 1],
+    ["Root device name", d.root_device_name, 1], ["Root device type", d.root_device_type],
+    ["State transition reason", d.state_transition_reason], ["Monitoring", d.monitoring]]));
+  const wrap = el("div",{class:"kv-card"});
+  wrap.append(el("div",{class:"h"}, "Instance settings"));
+  const vals = {disable_api_termination: d.termination_protection, disable_api_stop: d.stop_protection,
+                instance_initiated_shutdown_behavior: d.instance_initiated_shutdown_behavior, monitoring: d.monitoring === "enabled"};
+  const cb = (k, label) => { const i = el("input",{type:"checkbox","data-attr":k,onchange:e=>{vals[k]=e.target.checked;}}); if (vals[k]) i.checked = true;
+    return el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, i, el("span",{}, label)); };
+  const sel = el("select",{"data-attr":"instance_initiated_shutdown_behavior",onchange:e=>{vals.instance_initiated_shutdown_behavior=e.target.value;}},
+    el("option",{value:"stop"}, "Stop"), el("option",{value:"terminate"}, "Terminate"));
+  sel.value = vals.instance_initiated_shutdown_behavior || "stop";
+  wrap.append(cb("disable_api_termination", "Termination protection"), cb("disable_api_stop", "Stop protection"),
+    cb("monitoring", "Detailed CloudWatch monitoring"),
+    el("div",{class:"field"}, el("label",{}, "Shutdown behavior"), sel),
+    el("button",{class:"btn primary",onclick:async()=>{
+      const r = await api("PUT", _ec2p(full, "attributes"), vals);
+      if (r.ok) { toast("Instance settings saved"); _rerender(); } else toast("Save failed: " + _derr(r), "err");
+    }}, icon("save"), "Save"));
+  host.append(wrap);
+};
+
+// EC2 — Networking: the instance's VPC/subnet/addresses and its network interfaces.
+SUB_RENDERERS.ec2networking = async function(svc, full, host){
+  if (svc.key === "rds") return SUB_RENDERERS.rdsnetworking(svc, full, host);
+  const j = await _dget(host, _ec2p(full, "network-interfaces")); if (!j) return;
+  const enis = j.network_interfaces || [], p = enis[0] || {};
+  host.append(_dkv("Networking details", [
+    ["Public IPv4 address", p.public_ip_address, 1], ["Private IPv4 addresses", p.private_ip_address, 1],
+    ["Public DNS", p.public_dns_name, 1], ["Private IP DNS name (IPv4 only)", p.private_dns_name, 1],
+    ["VPC ID", p.vpc_id, 1], ["Subnet ID", p.subnet_id, 1], ["Subnet IPv4 CIDR", p.subnet_cidr, 1],
+    ["Availability Zone", p.availability_zone]]));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Network interfaces (" + enis.length + ")"));
+  card.append(_dtbl([["network_interface_id","Interface ID",1],["description","Description"],["device_index","Device index"],
+    ["private_ip_address","Private IPv4 address",1],["public_ip_address","Public IPv4 address",1],["mac_address","MAC address",1],
+    [r => (r.security_groups||[]).map(g => g.group_id + " (" + g.group_name + ")").join(", "),"Security groups",1],
+    ["attachment_status","Attachment status"],["attach_time","Attachment time"]], enis, "No network interfaces."));
+  host.append(card);
+};
+
+// EC2 — Security: IAM role, key pair, security groups and their rules.
+SUB_RENDERERS.ec2security = async function(svc, full, host){
+  const s = await _dget(host, _ec2p(full, "security")); if (!s) return;
+  const prof = s.iam_instance_profile;
+  host.append(_dkv("Security details", [
+    ["IAM Role", prof ? prof.role_name : "", 1], ["Owner ID", s.owner_id, 1], ["Launch time", s.launch_time],
+    ["Security groups", (s.security_groups || []).map(g => g.group_id + " (" + g.group_name + ")").join(", "), 1]]));
+  const rules = [["group_id","Security group ID",1],["group_name","Security group name"],["port_range","Port range"],
+                 [r => r.protocol === "-1" ? "All" : String(r.protocol).toUpperCase(),"Protocol"],["source","Source / destination",1],["description","Description"]];
+  const ib = el("div",{class:"kv-card"}); ib.append(el("div",{class:"h"}, "Inbound rules (" + (s.inbound_rules||[]).length + ")"),
+    _dtbl(rules, s.inbound_rules || [], "No inbound rules: the security groups allow no inbound traffic."));
+  const ob = el("div",{class:"kv-card"}); ob.append(el("div",{class:"h"}, "Outbound rules (" + (s.outbound_rules||[]).length + ")"),
+    _dtbl(rules, s.outbound_rules || [], "No outbound rules."));
+  host.append(ib, ob);
+};
+
+// EC2 — Storage: root device + every EBS volume attached to the instance.
+SUB_RENDERERS.ec2storage = async function(svc, full, host){
+  const s = await _dget(host, _ec2p(full, "storage")); if (!s) return;
+  host.append(_dkv("Root device details", [["Root device name", s.root_device_name, 1], ["Root device type", s.root_device_type],
+    ["EBS optimization", s.ebs_optimized ? "enabled" : "disabled"]]));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Block devices (" + (s.block_devices||[]).length + ")"));
+  card.append(_dtbl([["volume_id","Volume ID",1],["device_name","Device name",1],["size","Volume size (GiB)"],["volume_type","Volume type"],
+    ["attachment_status","Attachment status"],["attach_time","Attachment time"],[r => r.encrypted ? "Yes" : "No","Encrypted"],
+    [r => r.delete_on_termination ? "Yes" : "No","Delete on termination"]], s.block_devices || [], "No block devices."));
+  host.append(card);
+};
+
+// EC2 — User data: what the instance was launched with; editable while stopped
+// (ModifyInstanceAttribute userData requires a stopped instance, as in AWS).
+SUB_RENDERERS.ec2userdata = async function(svc, full, host){
+  const j = await _dget(host, _ec2p(full, "user-data")); if (!j) return;
+  const stopped = String(j.state || "").toLowerCase() === "stopped";
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "User data for " + (full.instance_id || "")));
+  if (!stopped) card.append(el("div",{class:"alert info"}, icon("info"),
+    el("div",{}, "Instance state is " + (j.state || "unknown") + ". User data can only be edited while the instance is stopped.")));
+  const ta = el("textarea",{"data-testid":"ec2-user-data",style:"width:100%;min-height:160px;font-family:Consolas,Menlo,monospace"});
+  ta.value = j.user_data || ""; if (!stopped) ta.setAttribute("readonly", "");
+  if (!j.user_data) card.append(el("div",{class:"small",style:"color:var(--sub);margin-bottom:6px"}, "This instance was launched without user data."));
+  card.append(ta);
+  if (stopped) card.append(el("div",{style:"margin-top:10px"}, el("button",{class:"btn primary",onclick:async()=>{
+    const r = await api("PUT", _ec2p(full, "user-data"), {user_data: ta.value});
+    if (r.ok) { toast("User data saved"); _rerender(); } else toast("Save failed: " + _derr(r), "err");
+  }}, icon("save"), "Save")));
+  host.append(card);
+};
+
+// EC2 — IAM role: the instance profile association (Modify IAM role).
+SUB_RENDERERS.ec2iamrole = async function(svc, full, host){
+  const j = await _dget(host, _ec2p(full, "iam-instance-profile")); if (!j) return;
+  const p = j.iam_instance_profile;
+  host.append(p ? _dkv("IAM instance profile", [["IAM Role", p.role_name], ["Instance profile ARN", p.arn, 1],
+    ["Role ARN", p.role_arn, 1], ["Association ID", p.association_id, 1], ["State", p.state]])
+    : el("div",{class:"empty"}, "No IAM role is attached to " + (full.instance_id || "this instance") + "."));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Modify IAM role"));
+  const roles = j.roles || [];
+  if (!roles.length) card.append(el("div",{class:"empty"}, "No IAM roles in this account yet. Create a role in IAM to attach it to this instance."));
+  else {
+    const sel = el("select",{"data-testid":"ec2-iam-role"}, ...roles.map(n => el("option",{value:n}, n)));
+    if (p) sel.value = p.role_name;
+    card.append(el("div",{class:"field"}, el("label",{}, "IAM role"), sel),
+      el("div",{style:"display:flex;gap:8px"},
+        el("button",{class:"btn primary",onclick:async()=>{
+          const r = await api("PUT", _ec2p(full, "iam-instance-profile"), {name: sel.value});
+          if (r.ok) { toast("IAM role updated"); _rerender(); } else toast("Update failed: " + _derr(r), "err");
+        }}, icon("save"), "Update IAM role"),
+        p ? el("button",{class:"btn",onclick:async()=>{
+          const r = await api("DELETE", _ec2p(full, "iam-instance-profile"));
+          if (r.ok) { toast("IAM role removed"); _rerender(); } else toast("Remove failed: " + _derr(r), "err");
+        }}, icon("link_off"), "Remove IAM role") : null));
+  }
+  host.append(card);
+};
+
+// EC2 — serial console: the account's EC2 serial console access setting and the
+// instance's console output (GetConsoleOutput).
+SUB_RENDERERS.ec2serial = async function(svc, full, host){
+  const acc = await _dget(host, "/api/ec2/serial-console-access"); if (!acc) return;
+  const out = await _dget(host, _ec2p(full, "console-output")); if (!out) return;
+  const on = !!acc.serial_console_access_enabled;
+  host.append(_dkv("EC2 serial console", [["Instance ID", full.instance_id, 1], ["Serial port", "ttyS0"],
+    ["EC2 serial console access (account)", on ? "Allowed" : "Not allowed"]],
+    el("button",{class:"btn",style:"margin-left:auto",onclick:async()=>{
+      const r = await api("PUT", "/api/ec2/serial-console-access", {enabled: !on});
+      if (r.ok) { toast("Serial console access " + (on ? "disallowed" : "allowed")); _rerender(); } else toast("Failed: " + _derr(r), "err");
+    }}, on ? "Disallow" : "Allow")));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Console output", el("span",{class:"small",style:"margin-left:8px;color:var(--sub);font-weight:400"}, out.timestamp || "")));
+  card.append(out.output ? el("pre",{class:"json","data-testid":"ec2-console-output"}, out.output)
+    : el("div",{class:"empty"}, "No console output has been recorded for " + (full.instance_id || "this instance") + "."));
+  host.append(card);
 };
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──

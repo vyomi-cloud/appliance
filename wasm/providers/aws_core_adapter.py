@@ -642,3 +642,144 @@ def cw_get(p):
 
 def cw_delete(p):
     return cw.console_delete(CW, str(p.get("name") or ""))
+
+
+# ── Resource-detail tabs (core/aws_console_detail.py — the same engine the offline
+#    routes/aws_console_detail.py runs). EC2 instances live in the generic catalog
+#    store (backends.resources, service "ec2"); their network is the VPC core model.
+from core import aws_console_detail as DET
+
+_EXTRAS = _R["extras"]
+
+
+def _det_err(e):
+    return {"ok": False, "code": e.code, "message": e.message,
+            "__http": {"status": e.status, "body": {"detail": {"code": e.code, "message": e.message}}}}
+
+
+def ec2_net():
+    return DET.CoreNet(_R["vpc_net"])
+
+
+def _iam_role_lookup(name):
+    r = IAM.roles.get(name)
+    return {"role_name": name, "arn": r.get("arn")} if r else None
+
+
+def ec2_apply_launch(body: dict) -> dict:
+    """RunInstances placement for a console launch (called by the registry's EC2 Create)."""
+    rec = dict(body or {})
+    DET.apply_launch(rec, body, ec2_net(), _iam_role_lookup)
+    return rec
+
+
+def _ec2_rec(b, a, p):
+    rec = b.resources.get("aws", a, "ec2", str(p.get("name") or p.get("id") or ""))
+    if rec is not None:
+        try:
+            DET.ensure_instance_model(rec, ec2_net())
+        except DET.DetailError:
+            pass
+        rec.setdefault("owner_id", IAM.account_id)
+    return rec
+
+
+def _nf(p):
+    iid = str(p.get("name") or "")
+    return {"ok": False, "code": "InvalidInstanceID.NotFound",
+            "__http": {"status": 404, "body": {"detail": {"code": "InvalidInstanceID.NotFound",
+                                                          "message": f"The instance ID '{iid}' does not exist"}}}}
+
+
+def ec2_detail(b, a, p):
+    rec = _ec2_rec(b, a, p)
+    if rec is None:
+        return _nf(p)
+    tab = p.get("tab")
+    if tab == "details":
+        return {"ok": True, **DET.details_view(rec)}
+    if tab == "network-interfaces":
+        return {"ok": True, "network_interfaces": DET.network_interfaces_view(rec, ec2_net())}
+    if tab == "security":
+        return {"ok": True, **DET.security_view(rec, ec2_net())}
+    if tab == "storage":
+        vols = [v for v in (_EXTRAS.items.get("ec2/volumes") or {}).values()
+                if any(x.get("instance_id") == rec.get("instance_id") for x in v.get("attachments") or [])] \
+            if isinstance(_EXTRAS.items.get("ec2/volumes"), dict) else []
+        return {"ok": True, **DET.storage_view(rec, vols)}
+    if tab == "user-data":
+        return {"ok": True, "instance_id": rec.get("instance_id"), "user_data": rec.get("user_data") or "",
+                "state": rec.get("state", "")}
+    if tab == "iam-instance-profile":
+        return {"ok": True, "instance_id": rec.get("instance_id"), "iam_instance_profile": rec.get("iam_instance_profile") or None,
+                "roles": sorted(IAM.roles)}
+    if tab == "console-output":
+        # Nano runs no instance OS, so nothing has been written to the console.
+        return {"ok": True, **DET.console_output(rec, "")}
+    return {"ok": False, "code": "UnknownTab"}
+
+
+def ec2_modify(b, a, p):
+    """ModifyInstanceAttribute / user data / IAM instance profile writes."""
+    rec = _ec2_rec(b, a, p)
+    if rec is None:
+        return _nf(p)
+    body = p.get("body") or {}
+    try:
+        what = p.get("tab")
+        if what == "attributes":
+            return {"ok": True, **DET.modify_attributes(rec, body)}
+        if what == "user-data":
+            return {"ok": True, **DET.set_user_data(rec, body.get("user_data", ""))}
+        if what == "iam-instance-profile":
+            if p.get("method") == "DELETE":
+                return {"ok": True, "instance_id": rec.get("instance_id"), "iam_instance_profile": None,
+                        "disassociated": DET.disassociate_iam_instance_profile(rec)}
+            return {"ok": True, "instance_id": rec.get("instance_id"),
+                    "iam_instance_profile": DET.associate_iam_instance_profile(rec, body.get("name", ""), _iam_role_lookup, IAM.account_id)}
+    except DET.DetailError as e:
+        return _det_err(e)
+    return {"ok": False, "code": "UnknownTab"}
+
+
+def ec2_guard(rec: dict, operation: str):
+    """Termination / stop protection + state-transition reason for lifecycle ops."""
+    try:
+        if operation == "Terminate":
+            DET.check_terminate(rec)
+        elif operation == "Stop":
+            DET.check_stop(rec)
+    except DET.DetailError as e:
+        return _det_err(e)
+    DET.record_state_change(rec, {"Terminate": "terminated", "Stop": "stopped", "Start": "running"}.get(operation, ""))
+    return None
+
+
+def ec2_serial_access(p):
+    cfg = _EXTRAS.cfg.setdefault("ec2/account-attributes", {})
+    if p.get("method") == "PUT":
+        cfg["serial_console_access"] = (p.get("body") or {}).get("enabled") in DET._TRUE
+    return {"ok": True, "serial_console_access_enabled": bool(cfg.get("serial_console_access"))}
+
+
+def iam_principals() -> list:
+    """Nano IAM users / groups / roles with their attached + inline policy documents."""
+    def docs(rec):
+        out = []
+        for arn in rec.get("attached_policies") or []:
+            pol = IAM.policies.get(arn)
+            if pol:
+                out.append({"name": pol.get("policy_name", arn), "arn": arn, "document": pol.get("document")})
+        for name, doc in (rec.get("inline_policies") or {}).items():
+            out.append({"name": name + " (inline)", "arn": "", "document": doc})
+        return out
+    out = []
+    for kind, coll in (("User", IAM.users), ("Group", IAM.groups), ("Role", IAM.roles)):
+        for name, rec in coll.items():
+            out.append({"type": kind, "name": name, "arn": rec.get("arn", ""), "policies": docs(rec)})
+    return out
+
+
+def resource_access(p):
+    arn = str(p.get("arn") or "")
+    return {"ok": True, "resource_arn": arn, "statements": DET.resource_access(iam_principals(), arn, str(p.get("service") or ""))}

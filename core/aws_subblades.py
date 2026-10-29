@@ -58,7 +58,7 @@ def _settings_props_locks():
 _EC2_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Instance", "items": [
-        {"key": "details",        "label": "Details",                "icon": "info",          "type": "overview"},
+        {"key": "details",        "label": "Details",                "icon": "info",          "type": "ec2Details"},
         {"key": "statusChecks",   "label": "Status and alarms",      "icon": "monitor_heart", "type": "metrics"},
         {"key": "monitoring",     "label": "Monitoring",             "icon": "show_chart",    "type": "metrics"},
         {"key": "networking",     "label": "Networking",             "icon": "lan",           "type": "ec2Networking"},
@@ -67,11 +67,11 @@ _EC2_SUB = [
     ]},
     {"group": "Connect", "items": [
         {"key": "connect",        "label": "Connect",                "icon": "terminal",      "type": "connect"},
-        {"key": "console",        "label": "EC2 serial console",     "icon": "terminal",      "type": "stub"},
+        {"key": "console",        "label": "EC2 serial console",     "icon": "terminal",      "type": "ec2Serial"},
     ]},
     {"group": "Operations", "items": [
-        {"key": "userData",       "label": "User data",              "icon": "code",          "type": "stub"},
-        {"key": "iam",            "label": "IAM role",               "icon": "admin_panel_settings", "type": "stub"},
+        {"key": "userData",       "label": "User data",              "icon": "code",          "type": "ec2UserData"},
+        {"key": "iamRole",        "label": "IAM role",               "icon": "admin_panel_settings", "type": "ec2IamRole"},
         *_settings_props_locks(),
     ]},
 ]

@@ -142,11 +142,12 @@ def _ec2_launch_defaults(body: dict) -> dict:
     out.setdefault("public_dns", "ec2-" + out["public_ip"].replace(".", "-") + ".compute-1.amazonaws.com")
     out.setdefault("image_id", "ami-0" + h[25:32] + h[:9])
     out.setdefault("availability_zone", "us-east-1a")
-    out.setdefault("vpc_id", "vpc-0" + h[:16])
-    out.setdefault("subnet_id", "subnet-0" + h[16:32])
+    out.setdefault("az", out["availability_zone"])
     out.setdefault("launch_time", _t.strftime("%Y-%m-%dT%H:%M:%S.000Z", _t.gmtime()))
-    out.setdefault("security_groups", ["sg-0" + h[8:24]])   # the VPC's default group, as RunInstances attaches it
-    return out
+    # Placement (default VPC + subnet, default / launch-wizard security group),
+    # the primary ENI, root volume and IAM profile: core/aws_console_detail.
+    from . import aws_core_adapter as _A
+    return _A.ec2_apply_launch(out)
 
 
 def _gcp_fill(svc: str, rec):
@@ -228,6 +229,9 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
         return {"ok": True, **r.create(provider, account, svc, body)}
     if operation == "Get":
         rec = r.get(provider, account, svc, name)
+        if rec and provider == "aws" and svc == "ec2":
+            from . import aws_core_adapter as _A   # instances launched before placement was modeled
+            rec = _A._ec2_rec(backends, account, {"name": name}) or rec
         if not rec and name == "_settings":
             # Detail-tab settings that were never saved: an empty record, so the
             # tab renders each field's default (not a 404 for a normal state).
@@ -236,6 +240,14 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
     if operation == "Update":
         rec = r.update(provider, account, svc, name, body)
         return {"ok": True, **rec} if rec else {"ok": False, "code": "NotFound", "name": name}
+    if provider == "aws" and svc == "ec2" and operation in ("Delete", "Terminate", "Stop", "Start"):
+        # Termination / stop protection and the state-transition reason (core/aws_console_detail).
+        rec = r.get(provider, account, svc, name)
+        if rec is not None:
+            from . import aws_core_adapter as _A
+            err = _A.ec2_guard(rec, "Terminate" if operation == "Delete" else operation)
+            if err:
+                return err
     if operation == "Delete":
         ok = r.delete(provider, account, svc, name)
         return {"ok": ok, "code": None if ok else "NotFound", "name": name}

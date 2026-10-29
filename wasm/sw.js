@@ -664,6 +664,17 @@ async function route(method, path, body, query) {
   if (/^\/api\/aws\/ec2\/instances\/[^/]+\/connect-info$/.test(path) && method === "GET")
     return { response: json({ detail: { error: "NoRuntime", hint: "Nano has no instance runtime to SSH into; use the Vyomi appliance for SSH/console access." } }, 409) };
   if (path === "/api/ec2/amis" && method === "GET") return { response: json({ ok: true, amis: [] }) };
+  // EC2 instance detail tabs (core/aws_console_detail.py, same engine as offline).
+  m = path.match(/^\/api\/ec2\/instances\/([^/]+)\/(details|network-interfaces|security|storage|user-data|iam-instance-profile|console-output)$/);
+  if (m && method === "GET") return { tuple: ["aws", "ec2", "DescribeInstanceDetail", { name: dec(m[1]), tab: m[2] }] };
+  m = path.match(/^\/api\/ec2\/instances\/([^/]+)\/(attributes|user-data|iam-instance-profile)$/);
+  if (m && (method === "PUT" || method === "DELETE"))
+    return { tuple: ["aws", "ec2", "ModifyInstanceAttribute", { name: dec(m[1]), tab: m[2], method, body: body || {} }] };
+  if (path === "/api/ec2/serial-console-access" && method === "GET") return { tuple: ["aws", "ec2", "GetSerialConsoleAccess", {}] };
+  if (path === "/api/ec2/serial-console-access" && method === "PUT") return { tuple: ["aws", "ec2", "ModifySerialConsoleAccess", { method, body: body || {} }] };
+  // Permissions tab (every AWS service): identity policies covering the resource ARN.
+  if (path === "/api/aws/resource-access" && method === "GET")
+    return { tuple: ["aws", "iam", "ResourceAccess", { arn: (query && query.arn) || "", service: (query && query.service) || "" }] };
   // Console "extras" — generic EC2/VPC sub-resource CRUD (volumes, snapshots,
   // launch templates, spot requests, endpoint services). Specific extras + fixtures
   // (kms/aliases, secretsmanager/*) are matched earlier, so only the unrouted ones

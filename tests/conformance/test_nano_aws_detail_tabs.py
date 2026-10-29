@@ -1,0 +1,92 @@
+"""Nano: AWS console resource-detail tabs show THIS resource's real data.
+
+Drives the same dispatch chain the in-browser console uses (wasm/sw.js route →
+registry → aws provider handlers → aws_core_adapter → core/aws_console_detail.py
+and the service cores) and checks each tab's values are the resource's own and
+that tab actions persist. Host CPython, repo layout (mirrors the Pyodide FS).
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from wasm.backends.store import Backends  # noqa: E402
+from wasm import providers as P            # noqa: E402
+
+failed = False
+B = Backends()
+
+
+def check(name, ok, extra=""):
+    global failed
+    print(f"[{'PASS' if ok else 'FAIL'}] {name}{'' if ok else '  ' + str(extra)[:400]}")
+    failed = failed or not ok
+
+
+def d(svc, op, params=None):
+    return P.dispatch(B, "aws", svc, op, params=params or {})
+
+
+def ec2():
+    print("── EC2 instance")
+    r = d("_resource", "Create", {"service": "ec2", "body": {
+        "name": "tabs-web", "instance_type": "t3.micro", "image_id": "ami-ubuntu-24.04-x86_64", "key_name": "kp-tabs",
+        "storage_gb": 20, "root_volume_type": "gp3", "root_volume_encrypted": True, "user_data": "#!/bin/bash\necho hi",
+        "create_security_group": {"requested": True, "ssh_cidr": "0.0.0.0/0", "allow_http": True}}})
+    iid = r["instance_id"]
+    tab = lambda t: d("ec2", "DescribeInstanceDetail", {"name": iid, "tab": t})
+    det = tab("details")
+    check("Details: AMI name + login user of the chosen image", det["image_name"].startswith("Ubuntu Server 24.04") and det["default_username"] == "ubuntu", det)
+    check("Details: SSH command uses the key pair + public DNS", det["ssh_command"] == f'ssh -i "kp-tabs.pem" ubuntu@{r["public_dns"]}', det)
+    vpcs = {v["id"]: v for v in d("vpc", "List")["vpcs"]}
+    check("placed in the default VPC (VPC console lists it)", vpcs.get(det["vpc_id"], {}).get("cidr") == "172.31.0.0/16", vpcs)
+    subs = {s["id"]: s for s in d("vpc", "ListSubnets")["subnets"]}
+    check("subnet is the default VPC's subnet for the AZ", subs.get(det["subnet_id"], {}).get("vpc_id") == det["vpc_id"], subs)
+    eni = tab("network-interfaces")["network_interfaces"]
+    check("Networking: ENI with the instance's private IP in its subnet", len(eni) == 1 and eni[0]["private_ip_address"] == r["private_ip"]
+          and eni[0]["subnet_id"] == det["subnet_id"], eni)
+    sec = tab("security")
+    check("Security: launch-wizard group with SSH + HTTP", sec["security_groups"][0]["group_name"] == "launch-wizard-1"
+          and {x["port_range"] for x in sec["inbound_rules"]} == {"22", "80"}, sec)
+    sgs = {g["id"] for g in d("vpc", "ListSecurityGroups")["security_groups"]}
+    check("Security: group exists in the VPC model", sec["security_groups"][0]["group_id"] in sgs, sgs)
+    st = tab("storage")["block_devices"]
+    check("Storage: root volume from the launch (20 GiB gp3, encrypted)", st[0]["size"] == 20 and st[0]["encrypted"] is True and st[0]["volume_type"] == "gp3", st)
+    check("User data: launch script", tab("user-data")["user_data"] == "#!/bin/bash\necho hi")
+    m = d("ec2", "ModifyInstanceAttribute", {"name": iid, "tab": "user-data", "body": {"user_data": "x"}})
+    check("User data: refused while running", m.get("code") == "IncorrectInstanceState", m)
+    d("_resource", "Stop", {"service": "ec2", "name": iid})
+    check("Details: user-initiated stop reason", tab("details")["state_transition_reason"].startswith("User initiated"))
+    m = d("ec2", "ModifyInstanceAttribute", {"name": iid, "tab": "user-data", "body": {"user_data": "echo changed"}})
+    check("User data: saved while stopped", m.get("ok") and tab("user-data")["user_data"] == "echo changed", m)
+    d("ec2", "ModifyInstanceAttribute", {"name": iid, "tab": "attributes", "body": {"disable_api_termination": True}})
+    t = d("_resource", "Terminate", {"service": "ec2", "name": iid})
+    check("termination protection enforced", t.get("code") == "OperationNotPermitted", t)
+    d("iam", "CreateUser", {"name": "tabs-dev"})
+    from wasm.providers import aws_core_adapter as A
+    from core import iam_core
+    iam_core.dispatch(A.IAM, {"Action": "CreateRole", "RoleName": "tabs-role", "AssumeRolePolicyDocument": "{}"})
+    p = d("ec2", "ModifyInstanceAttribute", {"name": iid, "tab": "iam-instance-profile", "body": {"name": "tabs-role"}})
+    check("IAM role: associate an existing role", p.get("ok") and p["iam_instance_profile"]["role_name"] == "tabs-role", p)
+    check("IAM role: unknown role rejected", d("ec2", "ModifyInstanceAttribute", {"name": iid, "tab": "iam-instance-profile", "body": {"name": "ghost"}}).get("code") == "InvalidParameterValue")
+    arn = f"arn:aws:ec2:us-east-1:123456789012:instance/{iid}"
+    iam_core.dispatch(A.IAM, {"Action": "PutUserPolicy", "UserName": "tabs-dev", "PolicyName": "ops",
+                              "PolicyDocument": '{"Statement":[{"Effect":"Allow","Action":"ec2:*","Resource":"' + arn + '"}]}'})
+    acc = d("iam", "ResourceAccess", {"arn": arn, "service": "ec2"})["statements"]
+    check("Permissions: the user's inline policy on this instance", any(x["principal"] == "tabs-dev" for x in acc), acc)
+    check("Permissions: not for another instance", not d("iam", "ResourceAccess", {"arn": arn + "x", "service": "ec2"})["statements"])
+    ev = d("_events", "List", {"resource": iid, "provider": "aws"})["events"]
+    check("Activity: this instance's attribute/profile changes recorded", any(e["action"] == "ModifyInstanceAttribute" for e in ev), ev)
+
+
+SECTIONS = {"ec2": ec2}
+
+if __name__ == "__main__":
+    for k in sys.argv[1:] or list(SECTIONS):
+        try:
+            SECTIONS[k]()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            check(f"{k}: section ran", False, repr(e))
+    sys.exit(1 if failed else 0)

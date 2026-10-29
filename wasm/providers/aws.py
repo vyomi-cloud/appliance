@@ -171,6 +171,14 @@ class Aws(CloudProvider):
             ("eventbridge", "PutEvent"):  lambda b, a, p: D.eb_put_event(p),
             # CloudWatch Logs — console REST, via core/logs_core.py
             ("logs", "Console"):          lambda b, a, p: D.logs_console(p),
+            # Resource-detail tabs (core/aws_console_detail.py): EC2 instance
+            # network/storage/security/attributes/user data/IAM profile + the
+            # Permissions tab's IAM policy evaluation.
+            ("ec2", "DescribeInstanceDetail"):  lambda b, a, p: A.ec2_detail(b, a, p),
+            ("ec2", "ModifyInstanceAttribute"): lambda b, a, p: A.ec2_modify(b, a, p),
+            ("ec2", "GetSerialConsoleAccess"):  lambda b, a, p: A.ec2_serial_access(p),
+            ("ec2", "ModifySerialConsoleAccess"): lambda b, a, p: A.ec2_serial_access(p),
+            ("iam", "ResourceAccess"):          lambda b, a, p: A.resource_access(p),
         }
 
 
