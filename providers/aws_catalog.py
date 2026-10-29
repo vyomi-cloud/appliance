@@ -333,8 +333,12 @@ RESOURCE_CATALOG_AWS = [
             "platform-applications": {"method": "GET",  "path": "/api/aws/sns/platform-applications"},
             "deliveries":            {"method": "GET",  "path": "/api/aws/sns/deliveries"},
             "sms-sandbox":           {"method": "GET",  "path": "/api/aws/sns/sms-sandbox"},
-            "publish":               {"method": "POST", "path": "/api/aws/sns/topics/{name}/publish"},
-            "subscribe":             {"method": "POST", "path": "/api/aws/sns/topics/{name}/subscriptions"},
+            # "sample" = a valid request body for the action (the console form's values);
+            # tests/conformance/console_actions sends it.
+            "publish":               {"method": "POST", "path": "/api/aws/sns/topics/{name}/publish",
+                                      "sample": {"message": "Hello from Vyomi", "subject": "conformance"}},
+            "subscribe":             {"method": "POST", "path": "/api/aws/sns/topics/{name}/subscriptions",
+                                      "sample": {"protocol": "email", "endpoint": "dev@example.com"}},
             "delete":                {"method": "DELETE", "path": "/api/aws/sns/topics/{name}"},
         },
         "rail_items": [
