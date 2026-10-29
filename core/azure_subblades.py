@@ -84,19 +84,19 @@ _STORAGE_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Data storage", "items": [
         {"key": "containers",   "label": "Containers",        "icon": "folder",       "type": "containers"},
-        {"key": "fileShares",   "label": "File shares",       "icon": "folder_shared","type": "stub"},
+        {"key": "fileShares",   "label": "File shares",       "icon": "folder_shared","type": "fileShares"},
         {"key": "queues",       "label": "Queues",            "icon": "queue",        "type": "storagequeues"},
-        {"key": "tables",       "label": "Tables",            "icon": "table_chart",  "type": "stub"},
+        {"key": "tables",       "label": "Tables",            "icon": "table_chart",  "type": "storageTables"},
     ]},
     {"group": "Security + networking", "items": [
         {"key": "networking",   "label": "Networking",        "icon": "lan",          "type": "networking"},
         {"key": "encryption",   "label": "Encryption",        "icon": "enhanced_encryption", "type": "encryption"},
         {"key": "accessKeys",   "label": "Access keys",       "icon": "key",          "type": "accessKeys"},
-        {"key": "sas",          "label": "Shared access signature", "icon": "vpn_key", "type": "stub"},
+        {"key": "sas",          "label": "Shared access signature", "icon": "vpn_key", "type": "storageSas"},
     ]},
     {"group": "Data management", "items": [
         {"key": "lifecycle",    "label": "Lifecycle management", "icon": "history_toggle_off", "type": "lifecycle"},
-        {"key": "replication",  "label": "Geo-replication",   "icon": "public",       "type": "stub"},
+        {"key": "replication",  "label": "Geo-replication",   "icon": "public",       "type": "geoReplication"},
     ]},
     {"group": "Settings", "items": _settings_props_locks()},
     {"group": "Monitoring", "items": [

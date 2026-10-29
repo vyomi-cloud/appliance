@@ -42,10 +42,13 @@ whose activity log the operation belongs to).
 """
 from __future__ import annotations
 
+import base64
 import datetime
 import hashlib
+import hmac
 import ipaddress
 import uuid
+from urllib.parse import quote
 
 TENANT_ID = "00000000-0000-0000-0000-000000000000"   # the simulator's Entra tenant (Key Vault default)
 LOCK_LEVELS = ("CanNotDelete", "ReadOnly")
@@ -919,6 +922,158 @@ def _rpc_view(state, rec):
     return v
 
 
+# ── storage accounts: keys, account SAS, geo-replication / failover ──────────
+STORAGE_T = "microsoft.storage/storageaccounts"
+# Azure region pairs (the secondary of a geo-redundant account).
+PAIRED_REGIONS = {"eastus": "westus", "westus": "eastus", "eastus2": "centralus", "centralus": "eastus2",
+                  "westus2": "westcentralus", "westcentralus": "westus2", "northcentralus": "southcentralus",
+                  "southcentralus": "northcentralus", "westus3": "eastus", "northeurope": "westeurope",
+                  "westeurope": "northeurope", "uksouth": "ukwest", "ukwest": "uksouth",
+                  "southeastasia": "eastasia", "eastasia": "southeastasia", "centralindia": "southindia",
+                  "southindia": "centralindia", "japaneast": "japanwest", "japanwest": "japaneast",
+                  "australiaeast": "australiasoutheast", "australiasoutheast": "australiaeast"}
+GEO_SKUS = ("standard_grs", "standard_ragrs", "standard_gzrs", "standard_ragzrs")
+SAS_VERSION = "2022-11-02"
+
+
+def _initial_storage_keys(account: str):
+    # Same derivation the appliance data plane hands SDKs (core/azure_dataplane.storage_keys),
+    # so a connection string built from listKeys works against it unchanged.
+    seed = hashlib.sha256(("cloudlearn-azure-" + account).encode()).digest()
+    return [base64.b64encode(seed).decode(), base64.b64encode(seed[::-1]).decode()]
+
+
+def _storage_fill(rec):
+    """Fields ARM reports on every storage account, kept consistent with its sku."""
+    p = rec.setdefault("properties", {})
+    name = rec.get("name", "")
+    now = _now()
+    if not isinstance(rec.get("_keys"), list) or len(rec["_keys"]) != 2:
+        rec["_keys"] = _initial_storage_keys(name)
+        p["keyCreationTime"] = {"key1": rec.get("_created") or now, "key2": rec.get("_created") or now}
+    p.setdefault("creationTime", rec.get("_created") or now)
+    p.setdefault("publicNetworkAccess", "Enabled")
+    p.setdefault("minimumTlsVersion", "TLS1_2")
+    p.setdefault("allowSharedKeyAccess", True)
+    p.setdefault("supportsHttpsTrafficOnly", True)
+    acl = p.setdefault("networkAcls", {})
+    acl.setdefault("defaultAction", "Allow")
+    acl.setdefault("bypass", "AzureServices")
+    acl.setdefault("ipRules", [])
+    acl.setdefault("virtualNetworkRules", [])
+    enc = p.setdefault("encryption", {})
+    enc.setdefault("keySource", "Microsoft.Storage")
+    enc.setdefault("requireInfrastructureEncryption", False)
+    svcs = enc.setdefault("services", {})
+    for svc in ("blob", "file", "queue", "table"):
+        svcs.setdefault(svc, {"enabled": True, "keyType": "Account", "lastEnabledTime": rec.get("_created") or now})
+    loc = str(rec.get("location") or "eastus").lower()
+    sku = str((rec.get("sku") or {}).get("name") or "Standard_LRS").lower()
+    p["primaryLocation"] = loc
+    p["statusOfPrimary"] = "available"
+    if sku in GEO_SKUS:
+        p["secondaryLocation"] = PAIRED_REGIONS.get(loc, "westus")
+        p["statusOfSecondary"] = "available"
+    else:
+        p.pop("secondaryLocation", None)
+        p.pop("statusOfSecondary", None)
+
+
+def after_upsert(state, rec, payload=None) -> None:
+    """Type-specific fields ARM computes on write (called by both dispatchers)."""
+    t = str(rec.get("_type") or "").lower()
+    p = rec.setdefault("properties", {})
+    if t == STORAGE_T:
+        _storage_fill(rec)
+    elif t == STORAGE_T + "/fileservices/shares":
+        p.setdefault("shareQuota", 5120)
+        p.setdefault("accessTier", "TransactionOptimized")
+        p.setdefault("enabledProtocols", "SMB")
+        if payload is not None:
+            p["lastModifiedTime"] = _now()
+    elif t == STORAGE_T + "/tableservices/tables":
+        p["tableName"] = rec.get("name")
+    elif t == STORAGE_T + "/encryptionscopes":
+        p.setdefault("source", "Microsoft.Storage")
+        p.setdefault("state", "Enabled")
+        p.setdefault("creationTime", rec.get("_created") or _now())
+        if payload is not None:
+            p["lastModifiedTime"] = _now()
+
+
+def _storage_keys_view(rec):
+    p = rec.get("properties") or {}
+    kct = p.get("keyCreationTime") or {}
+    return {"keys": [{"keyName": f"key{i + 1}", "value": v, "permissions": "FULL",
+                      "creationTime": kct.get(f"key{i + 1}")} for i, v in enumerate(rec["_keys"])]}
+
+
+def _account_sas(rec, body):
+    b = body or {}
+    ss, srt, sp, se = (str(b.get(k) or "") for k in ("signedServices", "signedResourceTypes", "signedPermission", "signedExpiry"))
+    if not (ss and srt and sp and se):
+        return _err(400, "InvalidValuesForRequestParameters",
+                    "signedServices, signedResourceTypes, signedPermission and signedExpiry are required.")
+    if set(ss) - set("bfqt") or set(srt) - set("sco") or set(sp) - set("rwdlacuptfix"):
+        return _err(400, "InvalidValuesForRequestParameters",
+                    "signedServices must use b,f,q,t; signedResourceTypes s,c,o; signedPermission r,w,d,l,a,c,u,p,t,f,i,x.")
+    st, sip = str(b.get("signedStart") or ""), str(b.get("signedIp") or "")
+    if st and se <= st:
+        return _err(400, "InvalidValuesForRequestParameters", "signedExpiry must be after signedStart.")
+    spr = str(b.get("signedProtocol") or "https,http")
+    if spr not in ("https", "https,http"):
+        return _err(400, "InvalidValuesForRequestParameters", "signedProtocol must be https or https,http.")
+    key_name = str(b.get("keyToSign") or "key1")
+    if key_name not in ("key1", "key2"):
+        return _err(400, "InvalidValuesForRequestParameters", "keyToSign must be key1 or key2.")
+    if (rec.get("properties") or {}).get("allowSharedKeyAccess") is False:
+        return _err(403, "KeyBasedAuthenticationNotPermitted",
+                    "Key based authentication is not permitted on this storage account (allowSharedKeyAccess is false).")
+    key = rec["_keys"][int(key_name[-1]) - 1]
+    ses = str(b.get("signedEncryptionScope") or "")
+    to_sign = "\n".join([rec.get("name", ""), sp, ss, srt, st, se, sip, spr, SAS_VERSION, ses, ""])
+    sig = base64.b64encode(hmac.new(base64.b64decode(key), to_sign.encode("utf-8"), hashlib.sha256).digest()).decode()
+    parts = [("sv", SAS_VERSION), ("ss", ss), ("srt", srt), ("sp", sp), ("se", se)]
+    if st:
+        parts.append(("st", st))
+    if sip:
+        parts.append(("sip", sip))
+    parts.append(("spr", spr))
+    if ses:
+        parts.append(("ses", ses))
+    parts.append(("sig", sig))
+    return _ok({"accountSasToken": "&".join(f"{k}={quote(v, safe='')}" for k, v in parts)})
+
+
+def _storage_action(state, rid, rec, action, payload):
+    a = action.lower()
+    if a == "listkeys":
+        return _ok(_storage_keys_view(rec))
+    if a == "regeneratekey":
+        kn = str((payload or {}).get("keyName") or "")
+        if kn not in ("key1", "key2"):
+            return _err(400, "InvalidValuesForRequestParameters", "keyName must be key1 or key2.")
+        i = int(kn[-1]) - 1
+        rec["_keys"][i] = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes + uuid.uuid4().bytes + uuid.uuid4().bytes).decode()
+        rec.setdefault("properties", {}).setdefault("keyCreationTime", {})[kn] = _now()
+        return _ok(_storage_keys_view(rec), 200, rid, "Microsoft.Storage/storageAccounts/regenerateKey", rec.get("name", ""))
+    if a == "listaccountsas":
+        return _account_sas(rec, payload)
+    if a == "failover":
+        p = rec.setdefault("properties", {})
+        sku = str((rec.get("sku") or {}).get("name") or "").lower()
+        if sku not in GEO_SKUS or not p.get("secondaryLocation"):
+            return _err(400, "FailoverNotSupported",
+                        "Account failover is only supported for geo-redundant (GRS, RA-GRS, GZRS, RA-GZRS) accounts.")
+        new_primary = p["secondaryLocation"]
+        rec["location"] = new_primary
+        rec["sku"] = dict(rec.get("sku") or {}, name="Standard_ZRS" if "gzrs" in sku else "Standard_LRS")
+        p["lastGeoFailoverTime"] = _now()
+        _storage_fill(rec)
+        return _ok(None, 200, rid, "Microsoft.Storage/storageAccounts/failover", rec.get("name", ""))
+    return None
+
+
 # ── entry ────────────────────────────────────────────────────────────────────
 def route(state, method, sub, rg, after, payload=None, query=None, executor=None):
     """Serve the request if it is one this module models, else None.
@@ -957,6 +1112,15 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
         return _pip(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.devtestlab" and low[1] == "schedules" and len(after) <= 3:
         return _schedules(state, method, sub, rg, after, payload)
+    if low[0] == "microsoft.storage" and low[1] == "storageaccounts" and len(after) == 4 and method == "POST":
+        rid = scope_id(sub, rg, after[:3])
+        rec = state.get(rid.lower())
+        if rec is None:
+            return _err(404, "ResourceNotFound", f"Storage account '{after[2]}' not found.")
+        _storage_fill(rec)
+        r = _storage_action(state, rid, rec, after[3], payload)
+        if r is not None:
+            return r
     if low[0] == "microsoft.compute" and low[1] == "restorepointcollections":
         return _restore_points(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.compute" and low[1] == "virtualmachines" and len(after) == 4 \

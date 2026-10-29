@@ -3280,10 +3280,13 @@ SUB_RENDERERS.lifecycle = function(svc, full, host){
   const policyUrl = full.id + "/managementPolicies/default";
   const state = {rules: []};
   function reload(){
-    fetch(ORIGIN + policyUrl + "?api-version=" + svc.apiVersion)
+    // List the account's management policies (at most the one named "default")
+    // instead of GETting default, which ARM answers 404 until a policy is saved.
+    fetch(ORIGIN + full.id + "/managementPolicies?api-version=" + svc.apiVersion)
       .then(r => r.ok ? r.json() : {})
       .then(j => {
-        state.rules = getPath(j, "properties.policy.rules") || [];
+        const pol = ((j && j.value) || []).find(x => String(x.name).toLowerCase() === "default") || {};
+        state.rules = getPath(pol, "properties.policy.rules") || [];
         render();
       }).catch(()=>{ state.rules = []; render(); });
   }
@@ -4986,6 +4989,191 @@ async function rbVmWizardFinish(name, values, vm){
     {location: vm.location, properties:{status:"Enabled", taskType:"ComputeVmShutdownTask", dailyRecurrence:{time}, timeZoneId:"UTC",
      notificationSettings:{status:"Disabled", timeInMinutes:30}, targetResourceId: vm.id}}, RB_API.devtestlab);
 }
+// ---- generic child-collection CRUD under this resource (ARM PUT/GET/DELETE) ----
+//   cfg = {coll, apiv, intro, empty, child, columns:[[path,label]], fields:[{key,label,type,options,default}],
+//          body(values) -> ARM body, rowActions?(item, refresh) -> [buttons]}
+async function rbChildCrud(full, host, cfg){
+  if (cfg.intro) host.append(el("div",{class:"sub-info"}, cfg.intro));
+  const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"}); host.append(bar);
+  const list = el("div",{}); host.append(list);
+  const coll = full.id + "/" + cfg.coll;
+  async function fill(){
+    list.innerHTML = "";
+    const r = await rbGet(coll, cfg.apiv);
+    const items = (r.ok && r.json && r.json.value) || [];
+    if (!r.ok) { list.append(emptyState("Could not load " + cfg.child.toLowerCase() + "s: " + rbErr(r))); return; }
+    if (!items.length) { list.append(emptyState(cfg.empty)); return; }
+    list.append(rbTable(["Name"].concat(cfg.columns.map(c => c[1]), [""]), items.map(it => {
+      const acts = el("span",{style:"display:flex;gap:6px;justify-content:flex-end"});
+      (cfg.rowActions ? cfg.rowActions(it, fill) : []).forEach(b => acts.append(b));
+      if (cfg.deletable !== false) acts.append(rbBtn("Delete", async () => {
+        if (!confirm("Delete " + cfg.child.toLowerCase() + " '" + it.name + "'?")) return;
+        const d = await arm("DELETE", it.id, undefined, cfg.apiv);
+        if (d.ok || d.status === 204) { toast("Deleted " + it.name); recordNotif("info", cfg.child + " deleted", it.name); fill(); }
+        else toast("Delete failed: " + rbErr(d), "err");
+      }, "del", "delete"));
+      return [it.name].concat(cfg.columns.map(c => { const v = getPath(it, c[0]); return v == null ? "" : (typeof v === "object" ? JSON.stringify(v) : String(v)); }), [acts]);
+    })));
+  }
+  bar.append(rbBtn("Add " + cfg.child.toLowerCase(), () => {
+    const nm = rbInput("", {placeholder: cfg.child + " name"});
+    const inputs = {};
+    const rows = [["Name", nm]];
+    (cfg.fields || []).forEach(f => {
+      inputs[f.key] = f.type === "select" ? rbSelect(f.options, f.default) : rbInput(f.default, {type: f.type || "text"});
+      rows.push([f.label, inputs[f.key]]);
+    });
+    host.append(rbForm("Add " + cfg.child.toLowerCase(), rows, async (form) => {
+      const n = nm.value.trim(); if (!n) { toast("Name is required","err"); return; }
+      const vals = {}; Object.entries(inputs).forEach(([k, i]) => { vals[k] = i.type === "number" ? Number(i.value) : i.value; });
+      const r = await arm("PUT", coll + "/" + encodeURIComponent(n), cfg.body(vals), cfg.apiv);
+      if (r.ok) { toast(cfg.child + " created: " + n); recordNotif("ok", cfg.child + " created", n); form.remove(); fill(); }
+      else toast("Create failed: " + rbErr(r), "err");
+    }, "Create"));
+  }, "", "add"), rbBtn("Refresh", fill, "sec", "refresh"));
+  await fill();
+}
+
+// ---- Storage: Access keys (listKeys / regenerateKey) ----
+SUB_RENDERERS.accesskeys = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Access keys authenticate your applications' requests to ", el("strong",{}, full.name), ". Rotate them regularly."));
+  const slot = el("div",{}); host.append(slot);
+  const ep = getPath(full,"properties.primaryEndpoints") || {};
+  async function fill(){
+    slot.innerHTML = "";
+    const r = await arm("POST", full.id + "/listKeys", {}, svc.apiVersion);
+    if (!r.ok) { slot.append(emptyState("Could not list keys: " + rbErr(r))); return; }
+    (r.json.keys || []).forEach(k => {
+      const cs = "DefaultEndpointsProtocol=https;AccountName=" + full.name + ";AccountKey=" + k.value +
+        (ep.blob ? ";BlobEndpoint=" + ep.blob : ";EndpointSuffix=core.windows.net") + (ep.queue ? ";QueueEndpoint=" + ep.queue : "") + (ep.table ? ";TableEndpoint=" + ep.table : "");
+      const w = el("div",{class:"keyblock"});
+      w.append(el("div",{class:"k"}, k.keyName + (k.creationTime ? " — last rotated " + k.creationTime : "")));
+      w.append(el("div",{class:"hint"}, "Key"), el("pre",{class:"keyval"}, k.value));
+      w.append(el("div",{class:"hint"}, "Connection string"), el("pre",{class:"keyval"}, cs));
+      w.append(el("div",{class:"row"},
+        rbBtn("Copy key", () => { navigator.clipboard.writeText(k.value); toast("Copied"); }, "sec"),
+        rbBtn("Copy connection string", () => { navigator.clipboard.writeText(cs); toast("Copied"); }, "sec"),
+        rbBtn("Rotate key", async () => {
+          if (!confirm("Regenerate " + k.keyName + "? Applications using it stop working until updated.")) return;
+          const g = await arm("POST", full.id + "/regenerateKey", {keyName: k.keyName}, svc.apiVersion);
+          if (g.ok) { toast(k.keyName + " regenerated"); recordNotif("info","Storage key rotated", full.name + " " + k.keyName); fill(); }
+          else toast("Rotate failed: " + rbErr(g), "err");
+        })));
+      slot.append(w);
+    });
+  }
+  await fill();
+};
+
+// ---- Storage: Encryption (account encryption settings + encryption scopes) ----
+SUB_RENDERERS.encryption = async function(svc, full, host){
+  const enc = getPath(full,"properties.encryption") || {};
+  const svcs = enc.services || {};
+  const rows = [["Encryption type", enc.keySource === "Microsoft.Keyvault" ? "Customer-managed keys" : "Microsoft-managed keys"],
+                ["Key source", enc.keySource || ""],
+                ["Infrastructure encryption", enc.requireInfrastructureEncryption ? "Enabled" : "Disabled"]];
+  Object.keys(svcs).forEach(k => rows.push([k[0].toUpperCase() + k.slice(1) + " service", (svcs[k].enabled ? "Encrypted" : "Not encrypted") + " · " + (svcs[k].keyType || "Account") + " key"]));
+  if (enc.keyvaultproperties && enc.keyvaultproperties.keyname) rows.push(["Key vault key", enc.keyvaultproperties.keyvaulturi + " / " + enc.keyvaultproperties.keyname]);
+  host.append(rbKv(rows, "Encryption"));
+  host.append(el("div",{style:"margin-top:14px"}));
+  await rbChildCrud(full, host, {
+    coll: "encryptionScopes", apiv: svc.apiVersion, child: "Encryption scope", deletable: false,
+    intro: "Encryption scopes let you encrypt individual containers or blobs with their own key.",
+    empty: "No encryption scopes on " + full.name + ".",
+    columns: [["properties.source","Encryption type"],["properties.state","State"],["properties.creationTime","Created"]],
+    fields: [{key:"source", label:"Encryption type", type:"select", options:[["Microsoft.Storage","Microsoft-managed keys"]], default:"Microsoft.Storage"},
+             {key:"infra", label:"Infrastructure encryption", type:"select", options:[["false","Disabled"],["true","Enabled"]], default:"false"}],
+    body: v => ({properties:{source: v.source, state:"Enabled", requireInfrastructureEncryption: v.infra === "true"}}),
+    rowActions: (it, refresh) => [rbBtn(getPath(it,"properties.state") === "Enabled" ? "Disable" : "Enable", async () => {
+      const ns = getPath(it,"properties.state") === "Enabled" ? "Disabled" : "Enabled";
+      const r = await arm("PATCH", it.id, {properties:{state: ns}}, svc.apiVersion);
+      if (r.ok) { toast(it.name + " " + ns.toLowerCase()); refresh(); } else toast("Update failed: " + rbErr(r), "err");
+    }, "sec")],
+  });
+};
+
+// ---- Storage: Shared access signature (ListAccountSas) ----
+SUB_RENDERERS.storagesas = async function(svc, full, host){
+  const r = await arm("GET", full.id, undefined, svc.apiVersion);
+  const acct = r.ok ? r.json : full;
+  const ep = getPath(acct,"properties.primaryEndpoints") || {};
+  if (getPath(acct,"properties.allowSharedKeyAccess") === false) {
+    host.append(emptyState("Shared key access is disabled on " + full.name + " (allowSharedKeyAccess = false), so account SAS tokens can't be signed."));
+    return;
+  }
+  host.append(el("div",{class:"sub-info"}, "An account shared access signature grants restricted access to ", el("strong",{}, full.name), "'s services, signed with one of its access keys."));
+  const now = new Date(), exp = new Date(now.getTime() + 8*3600*1000);
+  const iso = d => d.toISOString().slice(0,19) + "Z";
+  const ss = rbInput("bfqt"), srt = rbInput("sco"), sp = rbInput("rwdlacup"), st = rbInput(iso(now)), se = rbInput(iso(exp));
+  const spr = rbSelect([["https","HTTPS only"],["https,http","HTTPS and HTTP"]], "https"), key = rbSelect(["key1","key2"], "key1");
+  host.append(rbKv([["Allowed services (b,f,q,t)", ss], ["Allowed resource types (s,c,o)", srt], ["Allowed permissions", sp],
+                    ["Start (UTC)", st], ["Expiry (UTC)", se], ["Allowed protocols", spr], ["Signing key", key],
+                    ["Blob service endpoint", ep.blob || ""]], "Generate SAS"));
+  const out = el("div",{});
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Generate SAS and connection string", async () => {
+    const g = await arm("POST", full.id + "/ListAccountSas", {signedServices: ss.value, signedResourceTypes: srt.value, signedPermission: sp.value,
+      signedStart: st.value, signedExpiry: se.value, signedProtocol: spr.value, keyToSign: key.value}, svc.apiVersion);
+    out.innerHTML = "";
+    if (!g.ok) { toast("SAS failed: " + rbErr(g), "err"); return; }
+    const tok = g.json.accountSasToken;
+    const rows = [["SAS token", el("pre",{class:"keyval"}, "?" + tok)]];
+    ["blob","queue","table","file"].forEach(k => { if (ep[k]) rows.push([k[0].toUpperCase() + k.slice(1) + " SAS URL", el("pre",{class:"keyval"}, ep[k] + "?" + tok)]); });
+    rows.push(["Connection string", el("pre",{class:"keyval"}, (ep.blob ? "BlobEndpoint=" + ep.blob + ";" : "") + (ep.queue ? "QueueEndpoint=" + ep.queue + ";" : "") + "SharedAccessSignature=" + tok)]);
+    out.append(rbKv(rows, "Generated"));
+    recordNotif("ok","Account SAS generated", full.name);
+  }, "", "key")));
+  host.append(out);
+};
+
+// ---- Storage: Geo-replication (sku redundancy, primary/secondary, failover) ----
+SUB_RENDERERS.georeplication = async function(svc, full, host){
+  const slot = el("div",{}); host.append(slot);
+  async function fill(){
+    slot.innerHTML = "";
+    const r = await arm("GET", full.id, undefined, svc.apiVersion);
+    if (!r.ok) { slot.append(emptyState("Could not load the account: " + rbErr(r))); return; }
+    const a = r.json, p = a.properties || {}, sku = (a.sku && a.sku.name) || "";
+    const rows = [["Redundancy", sku], ["Primary location", p.primaryLocation || a.location], ["Primary status", p.statusOfPrimary || ""]];
+    if (p.secondaryLocation) rows.push(["Secondary location", p.secondaryLocation], ["Secondary status", p.statusOfSecondary || ""]);
+    else rows.push(["Secondary location", "None — " + sku + " keeps every copy in " + (p.primaryLocation || a.location)]);
+    if (p.lastGeoFailoverTime) rows.push(["Last failover", p.lastGeoFailoverTime]);
+    slot.append(rbKv(rows, "Geo-replication"));
+    const sel = rbSelect(["Standard_LRS","Standard_ZRS","Standard_GRS","Standard_RAGRS","Standard_GZRS","Standard_RAGZRS"], sku);
+    slot.append(rbForm("Change redundancy", [["Redundancy", sel]], async () => {
+      const w = await arm("PATCH", full.id, {sku:{name: sel.value}}, svc.apiVersion);
+      if (w.ok) { toast("Redundancy set to " + sel.value); recordNotif("ok","Redundancy changed", full.name + " → " + sel.value); fill(); }
+      else toast("Update failed: " + rbErr(w), "err");
+    }));
+    if (p.secondaryLocation) slot.append(el("div",{class:"blade-actions"}, rbBtn("Prepare for failover", async () => {
+      if (!confirm("Fail over " + full.name + " to " + p.secondaryLocation + "? The account becomes locally redundant in the new primary region.")) return;
+      const f = await arm("POST", full.id + "/failover", {}, svc.apiVersion);
+      if (f.ok || f.status === 200) { toast("Failed over to " + p.secondaryLocation); fill(); } else toast("Failover failed: " + rbErr(f), "err");
+    }, "sec", "swap_horiz")));
+  }
+  await fill();
+};
+
+// ---- Storage: File shares / Tables (ARM child resources) ----
+SUB_RENDERERS.fileshares = function(svc, full, host){
+  return rbChildCrud(full, host, {
+    coll: "fileServices/default/shares", apiv: svc.apiVersion, child: "File share",
+    intro: "Azure file shares in " + full.name + ".", empty: "No file shares in " + full.name + ".",
+    columns: [["properties.shareQuota","Quota (GiB)"],["properties.accessTier","Tier"],["properties.enabledProtocols","Protocol"],["properties.lastModifiedTime","Last modified"]],
+    fields: [{key:"quota", label:"Quota (GiB)", type:"number", default:"100"},
+             {key:"tier", label:"Access tier", type:"select", options:["TransactionOptimized","Hot","Cool"], default:"TransactionOptimized"},
+             {key:"proto", label:"Protocol", type:"select", options:["SMB","NFS"], default:"SMB"}],
+    body: v => ({properties:{shareQuota: v.quota, accessTier: v.tier, enabledProtocols: v.proto}}),
+  });
+};
+SUB_RENDERERS.storagetables = function(svc, full, host){
+  return rbChildCrud(full, host, {
+    coll: "tableServices/default/tables", apiv: svc.apiVersion, child: "Table",
+    intro: "Tables in " + full.name + "'s table service.", empty: "No tables in " + full.name + ".",
+    columns: [["properties.tableName","Table name"]],
+    fields: [],
+    body: () => ({properties:{}}),
+  });
+};
 // ===== REAL-BLADES:END =====
 
 function emptyState(msg){

@@ -368,6 +368,7 @@ class AzureArm:
                 rec = _apim_default_policy(type_chain, names, self.state, rid)
             if not rec:
                 return _err(404, "ResourceNotFound", f"Resource '{rid}' not found.")
+            ext_engine.after_upsert(self.state, rec)
             return _ok(_view(rec))
         if method in ("PUT", "PATCH"):
             bad = (ext_engine.validate_vm(self.state, rid, payload) if full_type.lower() == ext_engine.VM_T
@@ -503,6 +504,7 @@ class AzureArm:
             rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
         ext_engine.apply_identity(rec, payload)
         ext_engine.mark_changed(rec)
+        ext_engine.after_upsert(self.state, rec, payload)
 
         rec.setdefault("properties", {})
         rec["properties"].setdefault("provisioningState", "Succeeded")

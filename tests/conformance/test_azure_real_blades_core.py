@@ -174,7 +174,62 @@ def test_vm_blades():
     _check("NIC without deleteOption survives", call(arm, "GET", nic2["id"])[0] == 200)
 
 
-TESTS = [test_vm_blades]
+def test_storage_blades():
+    import base64, hashlib, hmac
+    from urllib.parse import parse_qs
+    arm = AzureArm()
+    acct = f"{P}/Microsoft.Storage/storageAccounts/stblades"
+    s, a = call(arm, "PUT", acct, {"location": "eastus", "sku": {"name": "Standard_LRS"}, "kind": "StorageV2"}, "2023-01-01")
+    p = a["properties"]
+    _check("account reports encryption, network ACLs and primary location",
+           p["encryption"]["services"]["blob"]["enabled"] and p["networkAcls"]["defaultAction"] == "Allow"
+           and p["primaryLocation"] == "eastus" and "secondaryLocation" not in p)
+    s, k = call(arm, "POST", acct + "/listKeys", {}, "2023-01-01")
+    seed = hashlib.sha256(b"cloudlearn-azure-stblades").digest()
+    _check("listKeys returns the account's two keys (same derivation as the data plane)",
+           [x["keyName"] for x in k["keys"]] == ["key1", "key2"] and k["keys"][0]["value"] == base64.b64encode(seed).decode())
+    s, k2 = call(arm, "POST", acct + "/regenerateKey", {"keyName": "key2"}, "2023-01-01")
+    _check("regenerateKey rotates only that key", k2["keys"][0]["value"] == k["keys"][0]["value"]
+           and k2["keys"][1]["value"] != k["keys"][1]["value"])
+    s, k3 = call(arm, "POST", acct + "/listKeys", {}, "2023-01-01")
+    _check("the rotated key persists", k3["keys"][1]["value"] == k2["keys"][1]["value"])
+    body = {"signedServices": "b", "signedResourceTypes": "sco", "signedPermission": "rl",
+            "signedExpiry": "2030-01-01T00:00:00Z", "signedProtocol": "https"}
+    s, sas = call(arm, "POST", acct + "/ListAccountSas", body, "2023-01-01")
+    q = parse_qs(sas["accountSasToken"])
+    sts = "\n".join(["stblades", "rl", "b", "sco", "", "2030-01-01T00:00:00Z", "", "https", "2022-11-02", "", ""])
+    want = base64.b64encode(hmac.new(base64.b64decode(k["keys"][0]["value"]), sts.encode(), hashlib.sha256).digest()).decode()
+    _check("account SAS is signed with key1 per the Storage SAS spec", q["sig"][0] == want and q["sv"][0] == "2022-11-02")
+    s, b = call(arm, "POST", acct + "/ListAccountSas", dict(body, signedPermission="zz"), "2023-01-01")
+    _check("invalid SAS permission rejected", s == 400)
+    s, b = call(arm, "POST", acct + "/failover", {}, "2023-01-01")
+    _check("failover refused for a locally-redundant account", s == 400)
+    s, a = call(arm, "PATCH", acct, {"sku": {"name": "Standard_RAGRS"}}, "2023-01-01")
+    _check("RA-GRS gets the paired secondary region", a["properties"]["secondaryLocation"] == "westus")
+    s, b = call(arm, "POST", acct + "/failover", {}, "2023-01-01")
+    s, a = call(arm, "GET", acct, av="2023-01-01")
+    _check("failover makes the secondary primary and the account LRS",
+           a["location"] == "westus" and a["sku"]["name"] == "Standard_LRS" and a["properties"]["lastGeoFailoverTime"])
+    s, sh = call(arm, "PUT", acct + "/fileServices/default/shares/docs", {"properties": {"shareQuota": 100}}, "2023-01-01")
+    _check("file share stored with ARM defaults", sh["properties"]["shareQuota"] == 100
+           and sh["properties"]["accessTier"] == "TransactionOptimized" and sh["properties"]["lastModifiedTime"])
+    s, ls = call(arm, "GET", acct + "/fileServices/default/shares", av="2023-01-01")
+    _check("file shares list", [x["name"] for x in ls["value"]] == ["docs"])
+    s, t = call(arm, "PUT", acct + "/tableServices/default/tables/orders", {}, "2023-01-01")
+    _check("table reports its tableName", t["properties"]["tableName"] == "orders")
+    s, es = call(arm, "PUT", acct + "/encryptionScopes/scope1", {"properties": {"source": "Microsoft.Storage"}}, "2023-01-01")
+    _check("encryption scope enabled with a creation time", es["properties"]["state"] == "Enabled" and es["properties"]["creationTime"])
+    s, mp = call(arm, "GET", acct + "/managementPolicies", av="2023-01-01")
+    _check("management policies list (empty until saved)", s == 200 and mp["value"] == [])
+    call(arm, "PUT", acct + "/managementPolicies/default", {"properties": {"policy": {"rules": [{"name": "r1"}]}}}, "2023-01-01")
+    s, mp = call(arm, "GET", acct + "/managementPolicies", av="2023-01-01")
+    _check("saved lifecycle policy listed", [x["name"] for x in mp["value"]] == ["default"])
+    call(arm, "PUT", acct + "/providers/Microsoft.Authorization/locks/ro", {"properties": {"level": "ReadOnly"}}, "2016-09-01")
+    s, b = call(arm, "POST", acct + "/listKeys", {}, "2023-01-01")
+    _check("ReadOnly lock blocks listKeys (as in Azure)", s == 409)
+
+
+TESTS = [test_vm_blades, test_storage_blades]
 
 if __name__ == "__main__":
     for t in TESTS:
