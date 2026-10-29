@@ -1,31 +1,15 @@
 {
- "at": "2026-10-29T19:51:20+00:00",
+ "at": "2026-10-29T20:51:19+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "sdk",
-   "service": "pypi:boto3",
-   "kind": "release",
-   "key": "ver:pypi:boto3:1.43.122",
-   "title": "pypi:boto3: 1.43.121 \u2192 1.43.122",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:botocore",
-   "kind": "release",
-   "key": "ver:pypi:botocore:1.43.122",
-   "title": "pypi:botocore: 1.43.121 \u2192 1.43.122",
-   "actionable": false
-  },
-  {
    "cloud": "aws",
-   "service": "DynamoDB",
+   "service": "Amazon RDS",
    "kind": "announcement",
-   "key": "feed:aws:327f4b12514c",
-   "title": "Amazon DynamoDB Accelerator (DAX) is now available in additional Regions",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/dax-additional-regions/",
-   "detail": "Amazon DynamoDB Accelerator (DAX) is now available in two additional AWS Regions: Canada (Central) and Africa (Cape Town). DAX is a fully managed, highly available, in-memory cache for Amazon DynamoDB that delivers up to ten times performance improvement, from single-digit milliseconds to microseconds, even at millions of requests per second. With DAX, you can accelerate read-intensive and bursty workloads such as real-time bidding, gaming leaderboards, and retail product catalogs, while offloading read traffic from your DynamoDB tables. DAX is API-compatible with DynamoDB, so you can add micr",
+   "key": "feed:aws:19722697d8b7",
+   "title": "Amazon RDS for Oracle and SQL Server now support storage autoscaling on additional storage volumes",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-rds-oracle-sqlserver-autoscaling-additional-storage-volumes",
+   "detail": "Amazon RDS for SQL Server and Amazon RDS for Oracle now support RDS storage autoscaling on additional storage volumes . RDS storage autoscaling automatically scales storage capacity in response to growing database workloads, with zero downtime. Additional storage volumes allow you to add up to three additional volumes to increase your storage capacity up to 256 TiB. Previously, you had to manually provision storage capacity on the additional storage volumes based on anticipated application capacity demands while autoscaling could be enabled on the primary storage volume. Under-provisioning cou",
    "actionable": false
   }
  ],
