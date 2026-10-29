@@ -1,13 +1,13 @@
 {
- "at": "2026-10-29T01:35:23+00:00",
- "commit": "622398c8946d0bdc427d2777c9885f48f1fda543",
+ "at": "2026-10-29T03:56:27+00:00",
+ "commit": "96c4fc8af8cd9680bcf1474517084b67ed6bfb55",
  "suites": [
   {
    "id": "offline-ui-crawl",
    "target": "offline",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 1337.0,
+   "duration_s": 1391.1,
    "exit_code": 0,
    "broken_services": [
     {
@@ -222,336 +222,6 @@
     {
      "target": "offline",
      "cloud": "aws",
-     "service": "EventBridge",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Tags",
-      "Rule details",
-      "Targets",
-      "Event pattern",
-      "Invocations",
-      "Dead-letter queue",
-      "Properties",
-      "Permissions"
-     ],
-     "findings": [
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: aws savings stayed $76.95 (real aws would bill this resource)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "EventBridge",
-       "state": "live",
-       "calls": 6
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Tags",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Rule details",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Targets",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Event pattern",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Invocations",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Dead-letter queue",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "aws",
-     "service": "VPC",
-     "tabs": [
-      "Overview",
-      "VPC details",
-      "Subnets",
-      "Route tables",
-      "Internet gateways",
-      "NAT gateways",
-      "Endpoints",
-      "Security groups",
-      "Network ACLs",
-      "Flow logs"
-     ],
-     "findings": [
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: aws savings stayed $79.45 (real aws would bill this resource)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "VPC",
-       "state": "live",
-       "calls": 7
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "VPC details",
-       "state": "unimplemented",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Subnets",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Route tables",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Internet gateways",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "NAT gateways",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Endpoints",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Security groups",
-       "state": "partial",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Network ACLs",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Flow logs",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "aws",
-     "service": "IAM",
-     "tabs": [
-      "Overview",
-      "Users",
-      "User groups",
-      "Roles",
-      "Policies",
-      "Identity providers",
-      "Password policy",
-      "Access Analyzer"
-     ],
-     "findings": [
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: resource_count stayed 17 after creating a resource"
-      },
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: aws savings stayed $95.88 (real aws would bill this resource)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "IAM",
-       "state": "live",
-       "calls": 6
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Users",
-       "state": "partial",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "User groups",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Roles",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Policies",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Identity providers",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Password policy",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Access Analyzer",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "aws",
      "service": "Secrets Manager",
      "tabs": [
       "Overview",
@@ -573,18 +243,6 @@
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "after create: column \"Next rotation\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"Encryption key\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: resource_count stayed 17 after creating a resource"
-      },
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: aws savings stayed $95.88 (real aws would bill this resource)"
       }
      ],
      "surfaces": [
@@ -663,114 +321,6 @@
       {
        "kind": "tab",
        "name": "Properties",
-       "state": "static",
-       "calls": 0
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "aws",
-     "service": "KMS",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Tags",
-      "General configuration",
-      "Key policy",
-      "Aliases",
-      "Key rotation",
-      "Key users",
-      "Key administrators",
-      "Grants"
-     ],
-     "findings": [
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: resource_count stayed 17 after creating a resource"
-      },
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: aws savings stayed $95.88 (real aws would bill this resource)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "KMS",
-       "state": "live",
-       "calls": 7
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Tags",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "General configuration",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Key policy",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Aliases",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Key rotation",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Key users",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Key administrators",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Grants",
        "state": "static",
        "calls": 0
       }
@@ -860,1085 +410,24 @@
       }
      ],
      "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "gcp",
-     "service": "Cloud Functions",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Permissions",
-      "Labels",
-      "Source",
-      "Trigger",
-      "Variables",
-      "Testing",
-      "Networking",
-      "Properties"
-     ],
-     "findings": [
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"STATUS\" shows \"-\"/blank in 1 row(s)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Cloud Functions",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "partial",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Labels",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Source",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Trigger",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Variables",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Testing",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Networking",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "gcp",
-     "service": "Cloud SQL",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Cloud SQL",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "gcp",
-     "service": "Firestore",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Permissions",
-      "Labels",
-      "Data",
-      "Query builder",
-      "Indexes",
-      "Security rules",
-      "Import / Export",
-      "Properties"
-     ],
-     "findings": [
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"STATE\" shows \"-\"/blank in 1 row(s)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Firestore",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "partial",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Labels",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Data",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Query builder",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Indexes",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Security rules",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Import / Export",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "gcp",
-     "service": "VPC Network",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Permissions",
-      "Labels",
-      "Subnets",
-      "Firewall rules",
-      "Routes",
-      "VPC peering",
-      "Properties",
-      "Network metrics"
-     ],
-     "findings": [
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"IPV4 RANGE\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: gcp savings stayed $134.18 (real gcp would bill this resource)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "VPC Network",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "partial",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Labels",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Subnets",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Firewall rules",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Routes",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "VPC peering",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Network metrics",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "gcp",
-     "service": "Pub/Sub",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Permissions",
-      "Labels",
-      "Subscriptions",
-      "Schema",
-      "Messages",
-      "Encryption",
-      "Properties",
-      "Metrics"
-     ],
-     "findings": [
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: resource_count stayed 9 after creating a resource"
-      },
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: gcp savings stayed $134.18 (real gcp would bill this resource)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Pub/Sub",
-       "state": "live",
-       "calls": 2
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Labels",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Subscriptions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Schema",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Messages",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Encryption",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Metrics",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "gcp",
-     "service": "API Gateway",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "API Gateway",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "gcp",
-     "service": "Eventarc",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Permissions",
-      "Labels",
-      "Event matching",
-      "Destination",
-      "Properties",
-      "Metrics",
-      "Logs"
-     ],
-     "findings": [
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: gcp savings stayed $134.18 (real gcp would bill this resource)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Eventarc",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Labels",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Event matching",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Destination",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Metrics",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Logs",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "gcp",
-     "service": "Secret Manager",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Secret Manager",
-       "state": "live",
-       "calls": 2
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "gcp",
-     "service": "Cloud KMS",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Permissions",
-      "Labels",
-      "Versions",
-      "Rotation & labels",
-      "Key policy",
-      "Import jobs",
-      "Properties",
-      "Metrics"
-     ],
-     "findings": [
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: resource_count stayed 12 after creating a resource"
-      },
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: gcp savings stayed $134.28 (real gcp would bill this resource)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Cloud KMS",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Labels",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Versions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Rotation & labels",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Key policy",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Import jobs",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Metrics",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "gcp",
-     "service": "IAM & Admin",
-     "tabs": [
-      "Overview",
-      "Members",
-      "Permissions",
-      "Keys",
-      "Properties",
-      "Activity log"
-     ],
-     "findings": [
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: gcp savings stayed $134.28 (real gcp would bill this resource)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "IAM & Admin",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Members",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Keys",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Activity log",
-       "state": "static",
-       "calls": 0
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "azure",
-     "service": "Virtual networks",
-     "tabs": [
-      "Overview",
-      "Activity log",
-      "Access control (IAM)",
-      "Tags",
-      "Diagnose and solve problems",
-      "Address space",
-      "Subnets",
-      "Connected devices",
-      "Peerings",
-      "DNS servers"
-     ],
-     "findings": [
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: azure savings stayed $95.99 (real azure would bill this resource)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Virtual networks",
-       "state": "live",
-       "calls": 24
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Activity log",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Access control (IAM)",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Tags",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Diagnose and solve problems",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Address space",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Subnets",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Connected devices",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Peerings",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "DNS servers",
-       "state": "static",
-       "calls": 0
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "azure",
-     "service": "Network Security Group",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Network Security Group",
-       "state": "live",
-       "calls": 25
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "azure",
-     "service": "Role Definition",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Role Definition",
-       "state": "live",
-       "calls": 24
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "offline",
-     "cloud": "azure",
-     "service": "Entra ID / RBAC",
-     "tabs": [
-      "Overview",
-      "JSON view",
-      "Conditions"
-     ],
-     "findings": [
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: azure savings stayed $176.9 (real azure would bill this resource)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Entra ID / RBAC",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "JSON view",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Conditions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      }
-     ],
-     "status": "broken"
     }
    ],
-   "passed": 30,
-   "failed": 22,
+   "passed": 48,
+   "failed": 4,
    "status": "fail",
-   "tail": "[offline/aws] 16 services crawled, 8 with findings\n[offline/gcp] 16 services crawled, 10 with findings\n[offline/azure] 20 services crawled, 4 with findings\nUI crawl offline: 30/52 services clean \u2192 tests/conformance/hourly/out/ui-offline.json\nConsole surfaces offline: {\"live\":333,\"static\":223,\"unimplemented\":8,\"partial\":13}"
+   "tail": "[offline/aws] 16 services crawled, 4 with findings\n[offline/gcp] 16 services crawled, 0 with findings\n[offline/azure] 20 services crawled, 0 with findings\nUI crawl offline: 48/52 services clean \u2192 tests/conformance/hourly/out/ui-offline.json\nConsole surfaces offline: {\"live\":369,\"static\":240,\"unimplemented\":3,\"partial\":10}"
   },
   {
    "id": "offline-console-actions",
    "target": "offline",
    "cloud": "all",
    "kind": "api",
-   "duration_s": 10.6,
+   "duration_s": 11.9,
    "exit_code": 1,
-   "passed": 261,
-   "failed": 20,
+   "passed": 278,
+   "failed": 15,
    "status": "fail",
-   "tail": "have 2 to 34 labels of letters, digits, underscores and hyphens, each at most 63 characters, and at\nassert False\nFAILED tests/conformance/console_actions/test_azure_console.py::test_azure_action[azure.monitor.create] - AssertionError: Azure monitor.create PUT /subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.Insights/metricAlerts/vyomi-conf-monitor \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"error\":{\"code\":\"BadRequest\",\"message\":\"The request body must contain 'properties'.\"}}\nassert False\nFAILED tests/conformance/console_actions/test_azure_console.py::test_azure_action[azure.operationalinsights.create] - AssertionError: Azure operationalinsights.create PUT /subscriptions/sim-sub/resourceGroups/cloudlearn-rg/providers/Microsoft.OperationalInsights/workspaces/vyomi-conf-operationalinsights \u2192 HTTP 400 (expected one of (200, 201, 202, 204)). Body: {\"error\":{\"code\":\"BadRequest\",\"message\":\"The 'location' property is required when creating a workspace.\"}}\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.cloudscheduler.create] - AssertionError: GCP cloudscheduler.create POST /api/gcp/cloudscheduler/jobs \u2192 HTTP 500 (expected one of (200, 201, 202, 204)). Body: Internal Server Error\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.cloudscheduler.list] - Failed: network error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.container.create] - AssertionError: GCP container.create POST /api/gcp/container/clusters \u2192 HTTP 500 (expected one of (200, 201, 202, 204)). Body: Internal Server Error\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.container.list] - Failed: network error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.iamcredentials.create] - AssertionError: GCP iamcredentials.create POST /api/gcp/iamcredentials/credentials \u2192 HTTP 500 (expected one of (200, 201, 202, 204)). Body: Internal Server Error\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.iamcredentials.list] - Failed: network error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.redis.create] - AssertionError: GCP redis.create POST /api/gcp/redis/instances \u2192 HTTP 500 (expected one of (200, 201, 202, 204)). Body: Internal Server Error\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.redis.list] - Failed: network error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))\n20 failed, 261 passed, 52 skipped in 10.17s"
+   "tail": "/console_actions/test_aws_console.py::test_aws_action[aws.ssm.list] - Failed: network error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))\nFAILED tests/conformance/console_actions/test_aws_console.py::test_aws_action[aws.stepfunctions.create] - AssertionError: AWS stepfunctions.create POST /api/stepfunctions/machines \u2192 HTTP 500 (expected one of (200, 201, 202, 204)). Body: Internal Server Error\nassert False\nFAILED tests/conformance/console_actions/test_aws_console.py::test_aws_action[aws.stepfunctions.list] - Failed: network error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.cloudscheduler.create] - AssertionError: GCP cloudscheduler.create POST /api/gcp/cloudscheduler/jobs \u2192 HTTP 500 (expected one of (200, 201, 202, 204)). Body: Internal Server Error\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.cloudscheduler.list] - Failed: network error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.container.create] - AssertionError: GCP container.create POST /api/gcp/container/clusters \u2192 HTTP 500 (expected one of (200, 201, 202, 204)). Body: Internal Server Error\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.container.list] - Failed: network error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.iamcredentials.create] - AssertionError: GCP iamcredentials.create POST /api/gcp/iamcredentials/credentials \u2192 HTTP 500 (expected one of (200, 201, 202, 204)). Body: Internal Server Error\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.iamcredentials.list] - Failed: network error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.redis.create] - AssertionError: GCP redis.create POST /api/gcp/redis/instances \u2192 HTTP 500 (expected one of (200, 201, 202, 204)). Body: Internal Server Error\nassert False\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.redis.list] - Failed: network error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))\nFAILED tests/conformance/console_actions/test_gcp_console.py::test_gcp_action[gcp.secretmanager.get] - AssertionError: GCP secretmanager.get GET /api/gcp/secrets/vyomi-conf-secret-33fd6988 \u2192 HTTP 404 (expected one of (200, 201, 202, 204)). Body: {\"ok\":false,\"error\":\"secret not found\",\"name\":\"vyomi-conf-secret-33fd6988\"}\nassert False\n15 failed, 278 passed, 40 skipped in 11.48s"
   },
   {
    "id": "offline-api-ec2-instance-detail",
@@ -1957,7 +446,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "api",
-   "duration_s": 0.3,
+   "duration_s": 0.4,
    "exit_code": 0,
    "passed": 3,
    "failed": 0,
@@ -1969,7 +458,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "api",
-   "duration_s": 0.2,
+   "duration_s": 0.3,
    "exit_code": 0,
    "passed": 6,
    "failed": 0,
@@ -1981,7 +470,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "api",
-   "duration_s": 0.4,
+   "duration_s": 0.6,
    "exit_code": 0,
    "passed": 3,
    "failed": 0,
@@ -1993,7 +482,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-python",
-   "duration_s": 4.1,
+   "duration_s": 4.5,
    "exit_code": 0,
    "passed": 88,
    "failed": 0,
@@ -2005,31 +494,31 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-go",
-   "duration_s": 54.8,
+   "duration_s": 49.6,
    "exit_code": 0,
    "passed": 14,
    "failed": 0,
    "status": "pass",
-   "tail": "PASS sqs ListQueues\nRESULT pass=14 fail=0\ngo: downloading github.com/aws/aws-sdk-go-v2 v1.30.0\ngo: downloading github.com/aws/aws-sdk-go-v2/config v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/credentials v1.17.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/dynamodb v1.32.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ec2 v1.160.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/iam v1.34.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/s3 v1.55.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sqs v1.32.0\ngo: downloading github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.15.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sso v1.19.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ssooidc v1.22.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sts v1.27.0\ngo: downloading github.com/aws/smithy-go v1.20.2\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.12\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.2\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.6\ngo: downloading github.com/jmespath/go-jmespath v0.4.0\ngo: downloading github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.8\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.8\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.12\nSDK 2026/10/29 01:11:34 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/29 01:11:34 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/29 01:11:34 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/29 01:11:34 WARN failed to close HTTP response body, this may affect connection reuse"
+   "tail": "PASS sqs ListQueues\nRESULT pass=14 fail=0\ngo: downloading github.com/aws/aws-sdk-go-v2 v1.30.0\ngo: downloading github.com/aws/aws-sdk-go-v2/config v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/credentials v1.17.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/dynamodb v1.32.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ec2 v1.160.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/iam v1.34.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/s3 v1.55.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sqs v1.32.0\ngo: downloading github.com/aws/smithy-go v1.20.2\ngo: downloading github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.15.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sso v1.19.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/ssooidc v1.22.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/sts v1.27.0\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.12\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.2\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.6\ngo: downloading github.com/jmespath/go-jmespath v0.4.0\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.10\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.12\ngo: downloading github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2\ngo: downloading github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.8\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.10\ngo: downloading github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.8\nSDK 2026/10/29 03:28:39 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/29 03:28:39 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/29 03:28:39 WARN failed to close HTTP response body, this may affect connection reuse\nSDK 2026/10/29 03:28:39 WARN failed to close HTTP response body, this may affect connection reuse"
   },
   {
    "id": "offline-sdk-go-gcp",
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-go",
-   "duration_s": 18.9,
+   "duration_s": 16.2,
    "exit_code": 0,
    "passed": 5,
    "failed": 0,
    "status": "pass",
-   "tail": "go: downloading github.com/google/uuid v1.6.0\ngo: downloading github.com/googleapis/gax-go/v2 v2.12.5\ngo: downloading golang.org/x/oauth2 v0.21.0\ngo: downloading google.golang.org/api v0.187.0\ngo: downloading google.golang.org/grpc v1.64.0\ngo: downloading google.golang.org/genproto v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/protobuf v1.34.2\ngo: downloading go.opencensus.io v0.24.0\ngo: downloading go.opentelemetry.io/otel v1.24.0\ngo: downloading go.opentelemetry.io/otel/trace v1.24.0\ngo: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/genproto/googleapis/api v0.0.0-20240617180043-68d350f18fd4\ngo: downloading cloud.google.com/go/auth v0.6.1\ngo: downloading cloud.google.com/go/auth/oauth2adapt v0.2.2\ngo: downloading go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0\ngo: downloading golang.org/x/net v0.26.0\ngo: downloading github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da\ngo: downloading github.com/go-logr/logr v1.4.1\ngo: downloading go.opentelemetry.io/otel/metric v1.24.0\ngo: downloading go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0\ngo: downloading golang.org/x/time v0.5.0\ngo: downloading github.com/google/s2a-go v0.1.7\ngo: downloading github.com/googleapis/enterprise-certificate-proxy v0.3.2\ngo: downloading golang.org/x/sys v0.21.0\ngo: downloading github.com/felixge/httpsnoop v1.0.4\ngo: downloading github.com/go-logr/stdr v1.2.2\ngo: downloading github.com/golang/protobuf v1.5.4\ngo: downloading golang.org/x/sync v0.7.0\ngo: downloading golang.org/x/crypto v0.24.0\ngo: downloading golang.org/x/text v0.16.0"
+   "tail": "go: downloading github.com/google/uuid v1.6.0\ngo: downloading github.com/googleapis/gax-go/v2 v2.12.5\ngo: downloading golang.org/x/oauth2 v0.21.0\ngo: downloading google.golang.org/api v0.187.0\ngo: downloading google.golang.org/genproto v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading google.golang.org/grpc v1.64.0\ngo: downloading google.golang.org/protobuf v1.34.2\ngo: downloading google.golang.org/genproto/googleapis/api v0.0.0-20240617180043-68d350f18fd4\ngo: downloading go.opencensus.io v0.24.0\ngo: downloading go.opentelemetry.io/otel v1.24.0\ngo: downloading go.opentelemetry.io/otel/trace v1.24.0\ngo: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d\ngo: downloading cloud.google.com/go/auth v0.6.1\ngo: downloading cloud.google.com/go/auth/oauth2adapt v0.2.2\ngo: downloading go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0\ngo: downloading golang.org/x/net v0.26.0\ngo: downloading go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0\ngo: downloading golang.org/x/time v0.5.0\ngo: downloading github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da\ngo: downloading github.com/go-logr/logr v1.4.1\ngo: downloading go.opentelemetry.io/otel/metric v1.24.0\ngo: downloading github.com/google/s2a-go v0.1.7\ngo: downloading github.com/googleapis/enterprise-certificate-proxy v0.3.2\ngo: downloading golang.org/x/sys v0.21.0\ngo: downloading github.com/go-logr/stdr v1.2.2\ngo: downloading github.com/golang/protobuf v1.5.4\ngo: downloading github.com/felixge/httpsnoop v1.0.4\ngo: downloading golang.org/x/text v0.16.0\ngo: downloading golang.org/x/sync v0.7.0\ngo: downloading golang.org/x/crypto v0.24.0"
   },
   {
    "id": "offline-sdk-go-azure",
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-go",
-   "duration_s": 13.2,
+   "duration_s": 11.1,
    "exit_code": 0,
    "passed": 14,
    "failed": 0,
@@ -2041,7 +530,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-java",
-   "duration_s": 20.2,
+   "duration_s": 11.4,
    "exit_code": 0,
    "passed": 29,
    "failed": 0,
@@ -2053,19 +542,19 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-java",
-   "duration_s": 13.4,
+   "duration_s": 5.8,
    "exit_code": 0,
    "passed": 6,
    "failed": 0,
    "status": "pass",
-   "tail": "== google-cloud-storage (Java) against http://localhost:9000 project=gcp-dev ==\nPASS buckets.insert :: java-sdk-test-1793236360099\nPASS buckets.list contains new bucket\nPASS objects.insert (upload) :: greeting.txt\nPASS objects.get (download byte-exact) :: hello-from-java-sdk\nPASS objects.delete :: true\nPASS buckets.delete :: true\nRESULT pass=6 fail=0"
+   "tail": "== google-cloud-storage (Java) against http://localhost:9000 project=gcp-dev ==\nPASS buckets.insert :: java-sdk-test-1793244564052\nPASS buckets.list contains new bucket\nPASS objects.insert (upload) :: greeting.txt\nPASS objects.get (download byte-exact) :: hello-from-java-sdk\nPASS objects.delete :: true\nPASS buckets.delete :: true\nRESULT pass=6 fail=0"
   },
   {
    "id": "offline-sdk-java-azure",
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-java",
-   "duration_s": 28.5,
+   "duration_s": 23.5,
    "exit_code": 0,
    "passed": 5,
    "failed": 0,
@@ -2077,19 +566,19 @@
    "target": "offline",
    "cloud": "all",
    "kind": "api",
-   "duration_s": 52.8,
+   "duration_s": 29.8,
    "exit_code": 1,
-   "passed": 8,
-   "failed": 3,
+   "passed": 10,
+   "failed": 1,
    "status": "fail",
-   "tail": "== aws: S3 bucket ==\nPASS: aws: creating a S3 bucket raises the space resource_count\nPASS: aws: creating a S3 bucket raises aws savings\nFAIL: aws: using the S3 bucket (5 \u00d7 2 MB uploads) raises savings :: $247.35 \u2192 $247.35 (real aws bills storage + requests)\n\n== gcp: Cloud Storage bucket ==\nPASS: gcp: creating a Cloud Storage bucket raises the space resource_count\nPASS: gcp: creating a Cloud Storage bucket raises gcp savings\nFAIL: gcp: using the Cloud Storage bucket (5 \u00d7 2 MB uploads) raises savings :: $175.32 \u2192 $175.32 (real gcp bills storage + requests)\n\n== azure: Storage account ==\nPASS: azure: creating a Storage account raises the space resource_count\nPASS: azure: creating a Storage account raises azure savings\nFAIL: azure: using the Storage account (5 \u00d7 2 MB uploads) raises savings :: $288.85 \u2192 $288.85 (real azure bills storage + requests)\n\n== azure: Virtual machine (Standard_B1s) ==\nPASS: azure: creating a VM raises the space resource_count\nPASS: azure: a Standard_B1s VM adds its 730 h list price ($7.59) to Azure savings\n\nRESULT fail=3"
+   "tail": "== aws: S3 bucket ==\nPASS: aws: creating a S3 bucket raises the space resource_count\nPASS: aws: creating a S3 bucket raises aws savings\nPASS: aws: using the S3 bucket (5 \u00d7 2 MB uploads) raises savings\n\n== gcp: Cloud Storage bucket ==\nPASS: gcp: creating a Cloud Storage bucket raises the space resource_count\nPASS: gcp: creating a Cloud Storage bucket raises gcp savings\nPASS: gcp: using the Cloud Storage bucket (5 \u00d7 2 MB uploads) raises savings\n\n== azure: Storage account ==\nPASS: azure: creating a Storage account raises the space resource_count\nPASS: azure: creating a Storage account raises azure savings\nFAIL: azure: using the Storage account (5 \u00d7 2 MB uploads) raises savings :: $290.37 \u2192 $290.37 (real azure bills storage + requests)\n\n== azure: Virtual machine (Standard_B1s) ==\nPASS: azure: creating a VM raises the space resource_count\nPASS: azure: a Standard_B1s VM adds its 730 h list price ($7.59) to Azure savings\n\nRESULT fail=1"
   },
   {
    "id": "offline-cli-aws",
    "target": "offline",
    "cloud": "aws",
    "kind": "cli",
-   "duration_s": 24.7,
+   "duration_s": 24.2,
    "exit_code": 0,
    "passed": 15,
    "failed": 0,
@@ -2101,7 +590,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "cli",
-   "duration_s": 14.6,
+   "duration_s": 20.8,
    "exit_code": 0,
    "passed": 6,
    "failed": 0,
@@ -2113,19 +602,19 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "cli",
-   "duration_s": 18.3,
-   "exit_code": 1,
-   "passed": 5,
-   "failed": 1,
-   "status": "fail",
-   "tail": "== az against http://localhost:9000 subscription=sub-001 ==\nazure-cli                         2.91.0\nswitched to Azure space: space-azure-default\nFAIL az rest PUT Microsoft.Compute/virtualMachines :: ERROR: Forbidden({\"detail\":{\"ok\":false,\"code\":\"tier_size_limit\",\"reason\":\"free tier caps vm size at 'small'; requested 'Standard_D2s_v5' is 'medium'\",\"active_tier\":\"free\",\"resource_kind\":\"vm\",\"requested_type\":\"Standard_D2s_v5\",\"requested_size\":\"medium\",\"max_size\":\"small\",\"upgrade_to\":\"pro\",\"docs\":\"https://cloudlearn.io/docs/tiers\"}})\nPASS az rest GET VM round-trip\nPASS az rest PUT Microsoft.Storage/storageAccounts\nPASS az rest PUT Microsoft.Sql/servers\nPASS az rest PUT Microsoft.Sql/.../databases (real Postgres)\nPASS az SQL DB connectionInfo surfaces real Postgres engine\nRESULT pass=5 fail=1"
+   "duration_s": 27.4,
+   "exit_code": 0,
+   "passed": 6,
+   "failed": 0,
+   "status": "pass",
+   "tail": "== az against http://localhost:9000 subscription=sub-001 ==\nazure-cli                         2.91.0\nswitched to Azure space: space-azure-default\nPASS az rest PUT Microsoft.Compute/virtualMachines\nPASS az rest GET VM round-trip\nPASS az rest PUT Microsoft.Storage/storageAccounts\nPASS az rest PUT Microsoft.Sql/servers\nPASS az rest PUT Microsoft.Sql/.../databases (real Postgres)\nPASS az SQL DB connectionInfo surfaces real Postgres engine\nRESULT pass=6 fail=0"
   },
   {
    "id": "offline-ui-core",
    "target": "offline",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 24.5,
+   "duration_s": 28.1,
    "exit_code": 0,
    "passed": 9,
    "failed": 0,
@@ -2137,22 +626,50 @@
    "target": "nano",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 1494.7,
+   "duration_s": 1615.2,
    "exit_code": 0,
    "broken_services": [
     {
      "target": "nano",
      "cloud": "aws",
      "service": "EC2",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Details",
+      "Status and alarms",
+      "Monitoring",
+      "Networking",
+      "Security",
+      "Storage",
+      "Connect"
+     ],
      "findings": [
       {
-       "type": "PAGE_ERROR",
-       "detail": "during create: Cannot set properties of null (setting 'textContent')"
+       "type": "DEAD_TAB",
+       "tab": "Monitoring",
+       "detail": "clicking the tab changes nothing"
       },
       {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Networking: column \"SECURITY GROUPS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Networking"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Security: column \"IAM ROLE\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Security"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Security: column \"STATE TRANSITION REASON\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Security"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/aws/ec2/instances/i-573ee0fb3f1838d61/connect-info \u2192 501",
+       "tab": "Connect"
       }
      ],
      "surfaces": [
@@ -2160,40 +677,79 @@
        "kind": "page",
        "name": "EC2",
        "state": "live",
-       "calls": 1
+       "calls": 64
       },
       {
        "kind": "create",
        "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "aws",
-     "service": "Lambda",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Lambda",
        "state": "live",
-       "calls": 78
+       "calls": 1
       },
       {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
        "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Details",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Status and alarms",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Monitoring",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Networking",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Security",
+       "state": "partial",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Storage",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Connect",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -2218,26 +774,6 @@
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "after create: column \"Sort key\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/dynamodb~Music~streams/get/_settings \u2192 404",
-       "tab": "Streams and triggers"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/dynamodb~Music~capacity/get/_settings \u2192 404",
-       "tab": "Read/write capacity"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/dynamodb~Music~encryption/get/_settings \u2192 404",
-       "tab": "Encryption at rest"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/dynamodb~Music~ttl/get/_settings \u2192 404",
-       "tab": "Time to live"
       }
      ],
      "surfaces": [
@@ -2298,26 +834,26 @@
       {
        "kind": "tab",
        "name": "Streams and triggers",
-       "state": "unimplemented",
-       "calls": 0
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Read/write capacity",
-       "state": "unimplemented",
-       "calls": 0
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Encryption at rest",
-       "state": "unimplemented",
-       "calls": 0
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Time to live",
-       "state": "unimplemented",
-       "calls": 0
+       "state": "live",
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -2340,19 +876,9 @@
      ],
      "findings": [
       {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/sqs~MyQueue~purge/get/_settings \u2192 404",
-       "tab": "Purge messages"
-      },
-      {
        "type": "PLACEHOLDER_CELL",
        "detail": "tab Dead-letter queue: column \"MAXIMUM RECEIVES\" shows \"-\"/blank in 1 row(s)",
        "tab": "Dead-letter queue"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/sqs~MyQueue~encryption/get/_settings \u2192 404",
-       "tab": "Encryption"
       }
      ],
      "surfaces": [
@@ -2401,8 +927,8 @@
       {
        "kind": "tab",
        "name": "Purge messages",
-       "state": "unimplemented",
-       "calls": 0
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
@@ -2419,8 +945,8 @@
       {
        "kind": "tab",
        "name": "Encryption",
-       "state": "unimplemented",
-       "calls": 0
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
@@ -2441,11 +967,28 @@
      "target": "nano",
      "cloud": "aws",
      "service": "API Gateway",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Resources",
+      "Authorizers",
+      "Models",
+      "Stages",
+      "Deployments",
+      "Settings",
+      "Resource policy"
+     ],
      "findings": [
       {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
+       "type": "HTTP_501",
+       "detail": "/api/apigateway/apis/5872c29e5f/resources \u2192 501",
+       "tab": "Resources"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/apigateway/apis/5872c29e5f/stages \u2192 501",
+       "tab": "Stages"
       }
      ],
      "surfaces": [
@@ -2458,7 +1001,73 @@
       {
        "kind": "create",
        "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Resources",
        "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Authorizers",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Models",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Stages",
+       "state": "unimplemented",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Deployments",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Settings",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Resource policy",
+       "state": "live",
        "calls": 1
       }
      ],
@@ -2468,84 +1077,28 @@
      "target": "nano",
      "cloud": "aws",
      "service": "EventBridge",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Tags",
+      "Rule details",
+      "Targets",
+      "Event pattern",
+      "Invocations",
+      "Dead-letter queue",
+      "Properties",
+      "Permissions"
+     ],
      "findings": [
       {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
+       "type": "SAVINGS_NOT_UPDATED",
+       "detail": "create: resource_count stayed 7 after creating a resource"
       }
      ],
      "surfaces": [
       {
        "kind": "page",
        "name": "EventBridge",
-       "state": "live",
-       "calls": 72
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "aws",
-     "service": "VPC",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "VPC",
-       "state": "live",
-       "calls": 78
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "aws",
-     "service": "IAM",
-     "tabs": [
-      "Overview",
-      "Users",
-      "User groups",
-      "Roles",
-      "Policies",
-      "Identity providers",
-      "Password policy",
-      "Access Analyzer"
-     ],
-     "findings": [
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: aws savings stayed $46.63 (real aws would bill this resource)"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "resource detail: /api/iam/users/new-user \u2192 404"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "IAM",
        "state": "live",
        "calls": 78
       },
@@ -2558,64 +1111,188 @@
       {
        "kind": "detail",
        "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Activity",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Tags",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Rule details",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Targets",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Event pattern",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Invocations",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Dead-letter queue",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Properties",
+       "state": "static",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "Permissions",
+       "state": "live",
+       "calls": 1
+      }
+     ],
+     "status": "broken"
+    },
+    {
+     "target": "nano",
+     "cloud": "aws",
+     "service": "VPC",
+     "tabs": [
+      "Overview",
+      "VPC details",
+      "Subnets",
+      "Route tables",
+      "Internet gateways",
+      "NAT gateways",
+      "Endpoints",
+      "Security groups",
+      "Network ACLs",
+      "Flow logs"
+     ],
+     "findings": [
+      {
+       "type": "DEAD_TAB",
+       "tab": "VPC details",
+       "detail": "clicking the tab changes nothing"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/vpc/subnets \u2192 501",
+       "tab": "Subnets"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/vpc/route-tables \u2192 501",
+       "tab": "Route tables"
+      },
+      {
+       "type": "HTTP_501",
+       "detail": "/api/vpc/internet-gateways \u2192 501",
+       "tab": "Internet gateways"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "VPC",
+       "state": "live",
+       "calls": 78
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "tab",
+       "name": "Overview",
+       "state": "live",
+       "calls": 0
+      },
+      {
+       "kind": "tab",
+       "name": "VPC details",
        "state": "unimplemented",
        "calls": 0
       },
       {
        "kind": "tab",
-       "name": "Overview",
+       "name": "Subnets",
        "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
-       "name": "Users",
+       "name": "Route tables",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
-       "name": "User groups",
+       "name": "Internet gateways",
        "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
-       "name": "Roles",
-       "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "name": "NAT gateways",
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
-       "name": "Policies",
-       "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "name": "Endpoints",
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
-       "name": "Identity providers",
-       "state": "unimplemented",
-       "calls": 1,
-       "carried": true
+       "name": "Security groups",
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
-       "name": "Password policy",
-       "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "name": "Network ACLs",
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
-       "name": "Access Analyzer",
-       "state": "unimplemented",
-       "calls": 0,
-       "carried": true
+       "name": "Flow logs",
+       "state": "live",
+       "calls": 1
       }
      ],
      "status": "broken"
@@ -2644,16 +1321,6 @@
       {
        "type": "PLACEHOLDER_CELL",
        "detail": "after create: column \"Next rotation\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/secretsmanager~my-secret~rotation/get/_settings \u2192 404",
-       "tab": "Rotation"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/secretsmanager~my-secret~kmsKey/get/_settings \u2192 404",
-       "tab": "Encryption key"
       }
      ],
      "surfaces": [
@@ -2708,8 +1375,8 @@
       {
        "kind": "tab",
        "name": "Rotation",
-       "state": "unimplemented",
-       "calls": 0
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
@@ -2726,119 +1393,14 @@
       {
        "kind": "tab",
        "name": "Encryption key",
-       "state": "unimplemented",
-       "calls": 0
+       "state": "live",
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "static",
        "calls": 0
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "aws",
-     "service": "KMS",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Tags",
-      "General configuration",
-      "Key policy",
-      "Aliases",
-      "Key rotation",
-      "Key users",
-      "Key administrators",
-      "Grants"
-     ],
-     "findings": [
-      {
-       "type": "HTTP_404",
-       "detail": "/api/aws/sub/kms~e6aba2cf35ff444baeb1eef1a469ef79~rotation/get/_settings \u2192 404",
-       "tab": "Key rotation"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "KMS",
-       "state": "live",
-       "calls": 78
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Tags",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "General configuration",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Key policy",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Aliases",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Key rotation",
-       "state": "unimplemented",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Key users",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Key administrators",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Grants",
-       "state": "live",
-       "calls": 1
       }
      ],
      "status": "broken"
@@ -2930,637 +1492,28 @@
     {
      "target": "nano",
      "cloud": "gcp",
-     "service": "Compute Engine",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Permissions",
-      "Labels",
-      "Networking",
-      "Disks",
-      "Machine size",
-      "Metadata",
-      "Startup script",
-      "Properties"
-     ],
-     "findings": [
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"ZONE\" shows \"-\"/blank in 1 row(s)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Compute Engine",
-       "state": "live",
-       "calls": 69
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "partial",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Labels",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Networking",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Disks",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Machine size",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Metadata",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Startup script",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "gcp",
-     "service": "Cloud Functions",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Permissions",
-      "Labels",
-      "Source",
-      "Trigger",
-      "Variables",
-      "Testing",
-      "Networking",
-      "Properties"
-     ],
-     "findings": [
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"STATUS\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"LAST DEPLOYED\" shows \"-\"/blank in 1 row(s)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Cloud Functions",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "partial",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Labels",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Source",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Trigger",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Variables",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Testing",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Networking",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "gcp",
-     "service": "Cloud SQL",
-     "tabs": [],
-     "findings": [
-      {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Cloud SQL",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "gcp",
-     "service": "Firestore",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Permissions",
-      "Labels",
-      "Data",
-      "Query builder",
-      "Indexes",
-      "Security rules",
-      "Import / Export",
-      "Properties"
-     ],
-     "findings": [
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"TYPE\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"LOCATION\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"STATE\" shows \"-\"/blank in 1 row(s)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Firestore",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "partial",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Labels",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Data",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Query builder",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Indexes",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Security rules",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Import / Export",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "gcp",
-     "service": "VPC Network",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Permissions",
-      "Labels",
-      "Subnets",
-      "Firewall rules",
-      "Routes",
-      "VPC peering",
-      "Properties",
-      "Network metrics"
-     ],
-     "findings": [
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"MODE\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"ROUTING MODE\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"IPV4 RANGE\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: gcp savings stayed $134.18 (real gcp would bill this resource)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "VPC Network",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "partial",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Labels",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Subnets",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Firewall rules",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Routes",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "VPC peering",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Network metrics",
-       "state": "partial",
-       "calls": 1,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "gcp",
-     "service": "Pub/Sub",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Permissions",
-      "Labels",
-      "Subscriptions",
-      "Schema",
-      "Messages",
-      "Encryption",
-      "Properties",
-      "Metrics"
-     ],
-     "findings": [
-      {
-       "type": "HTTP_501",
-       "detail": "/api/gcp/pubsub/v1/projects/nano-project/subscriptions \u2192 501"
-      },
-      {
-       "type": "HTTP_501",
-       "detail": "during create: /api/gcp/pubsub/v1/projects/nano-project/subscriptions \u2192 501"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Pub/Sub",
-       "state": "unimplemented",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Labels",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Subscriptions",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Schema",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Messages",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Encryption",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Metrics",
-       "state": "live",
-       "calls": 3,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "gcp",
      "service": "API Gateway",
-     "tabs": [],
+     "tabs": [
+      "Overview",
+      "Activity",
+      "Permissions",
+      "Labels",
+      "Configs",
+      "Routes",
+      "Properties",
+      "Metrics",
+      "Logs"
+     ],
      "findings": [
       {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Metrics: column \"API CONFIGS\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Metrics"
+      },
+      {
+       "type": "PLACEHOLDER_CELL",
+       "detail": "tab Metrics: column \"ROUTES\" shows \"-\"/blank in 1 row(s)",
+       "tab": "Metrics"
       }
      ],
      "surfaces": [
@@ -3573,48 +1526,7 @@
       {
        "kind": "create",
        "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "gcp",
-     "service": "Eventarc",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Permissions",
-      "Labels",
-      "Event matching",
-      "Destination",
-      "Properties",
-      "Metrics",
-      "Logs"
-     ],
-     "findings": [
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"REGION\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"STATE\" shows \"-\"/blank in 1 row(s)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Eventarc",
        "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "partial",
        "calls": 1
       },
       {
@@ -3627,326 +1539,76 @@
        "kind": "tab",
        "name": "Overview",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Activity",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Permissions",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Labels",
        "state": "static",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
-       "name": "Event matching",
+       "name": "Configs",
        "state": "live",
-       "calls": 1,
-       "carried": true
+       "calls": 2
       },
       {
        "kind": "tab",
-       "name": "Destination",
+       "name": "Routes",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Properties",
        "state": "live",
-       "calls": 0,
-       "carried": true
+       "calls": 0
       },
       {
        "kind": "tab",
        "name": "Metrics",
        "state": "partial",
-       "calls": 2,
-       "carried": true
+       "calls": 1
       },
       {
        "kind": "tab",
        "name": "Logs",
-       "state": "live",
-       "calls": 1,
-       "carried": true
+       "state": "static",
+       "calls": 0
       }
      ],
      "status": "broken"
     },
     {
      "target": "nano",
-     "cloud": "gcp",
-     "service": "Secret Manager",
+     "cloud": "azure",
+     "service": "Blob containers",
      "tabs": [],
      "findings": [
       {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Secret Manager",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "gcp",
-     "service": "Cloud KMS",
-     "tabs": [
-      "Overview",
-      "Activity",
-      "Permissions",
-      "Labels",
-      "Versions",
-      "Rotation & labels",
-      "Key policy",
-      "Import jobs",
-      "Properties",
-      "Metrics"
-     ],
-     "findings": [
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"KEY RING\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"ALGORITHM\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"PROTECTION LEVEL\" shows \"-\"/blank in 1 row(s)"
-      },
-      {
-       "type": "PLACEHOLDER_CELL",
-       "detail": "after create: column \"STATE\" shows \"-\"/blank in 1 row(s)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Cloud KMS",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "partial",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Activity",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Labels",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Versions",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Rotation & labels",
-       "state": "live",
-       "calls": 1,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Key policy",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Import jobs",
-       "state": "static",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "live",
-       "calls": 0,
-       "carried": true
-      },
-      {
-       "kind": "tab",
-       "name": "Metrics",
-       "state": "live",
-       "calls": 2,
-       "carried": true
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "gcp",
-     "service": "IAM & Admin",
-     "tabs": [
-      "Overview",
-      "Members",
-      "Permissions",
-      "Keys",
-      "Properties",
-      "Activity log"
-     ],
-     "findings": [
-      {
-       "type": "SAVINGS_NOT_UPDATED",
-       "detail": "create: gcp savings stayed $136.68 (real gcp would bill this resource)"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "IAM & Admin",
-       "state": "live",
-       "calls": 2
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "detail",
-       "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Members",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Permissions",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Keys",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Properties",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Activity log",
-       "state": "live",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "azure",
-     "service": "API Management",
-     "tabs": [
-      "Overview",
-      "Activity log",
-      "Access control (IAM)",
-      "Tags",
-      "Diagnose and solve problems",
-      "APIs",
-      "Products",
-      "Subscriptions",
-      "Policies",
-      "Named values"
-     ],
-     "findings": [
-      {
        "type": "HTTP_404",
-       "detail": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.ApiManagement/service/apim-cloudlearn/policies/policy?api-version=2023-05-01-preview \u2192 404",
-       "tab": "Policies"
+       "detail": "resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined/demo1?api-version=2023-01-01 \u2192 404"
       }
      ],
      "surfaces": [
       {
        "kind": "page",
-       "name": "API Management",
+       "name": "Blob containers",
        "state": "live",
-       "calls": 96
+       "calls": 101
       },
       {
        "kind": "create",
@@ -3957,67 +1619,7 @@
       {
        "kind": "detail",
        "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Activity log",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Access control (IAM)",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Tags",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Diagnose and solve problems",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "APIs",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Products",
-       "state": "live",
-       "calls": 3
-      },
-      {
-       "kind": "tab",
-       "name": "Subscriptions",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Policies",
        "state": "unimplemented",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Named values",
-       "state": "static",
        "calls": 0
       }
      ],
@@ -4026,64 +1628,20 @@
     {
      "target": "nano",
      "cloud": "azure",
-     "service": "Network Security Group",
+     "service": "Cosmos databases",
      "tabs": [],
      "findings": [
       {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
+       "type": "HTTP_404",
+       "detail": "resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined/demo1?api-version=2023-01-01 \u2192 404"
       }
      ],
      "surfaces": [
       {
        "kind": "page",
-       "name": "Network Security Group",
+       "name": "Cosmos databases",
        "state": "live",
-       "calls": 96
-      },
-      {
-       "kind": "create",
-       "name": "create with defaults",
-       "state": "unimplemented",
-       "calls": 1
-      }
-     ],
-     "status": "broken"
-    },
-    {
-     "target": "nano",
-     "cloud": "azure",
-     "service": "Key vaults",
-     "tabs": [
-      "Overview",
-      "Activity log",
-      "Access control (IAM)",
-      "Tags",
-      "Diagnose and solve problems",
-      "Secrets",
-      "Keys",
-      "Certificates",
-      "Access policies",
-      "Access configuration"
-     ],
-     "findings": [
-      {
-       "type": "HTTP_404",
-       "detail": "/azure-data/keyvault/kv-cloudlearn/secrets \u2192 404",
-       "tab": "Secrets"
-      },
-      {
-       "type": "HTTP_404",
-       "detail": "/azure-data/keyvault/kv-cloudlearn/keys \u2192 404",
-       "tab": "Keys"
-      }
-     ],
-     "surfaces": [
-      {
-       "kind": "page",
-       "name": "Key vaults",
-       "state": "live",
-       "calls": 96
+       "calls": 101
       },
       {
        "kind": "create",
@@ -4094,67 +1652,7 @@
       {
        "kind": "detail",
        "name": "resource detail",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Overview",
-       "state": "live",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Activity log",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Access control (IAM)",
-       "state": "live",
-       "calls": 1
-      },
-      {
-       "kind": "tab",
-       "name": "Tags",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Diagnose and solve problems",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Secrets",
        "state": "unimplemented",
-       "calls": 2
-      },
-      {
-       "kind": "tab",
-       "name": "Keys",
-       "state": "unimplemented",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Certificates",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Access policies",
-       "state": "static",
-       "calls": 0
-      },
-      {
-       "kind": "tab",
-       "name": "Access configuration",
-       "state": "static",
        "calls": 0
       }
      ],
@@ -4163,26 +1661,32 @@
     {
      "target": "nano",
      "cloud": "azure",
-     "service": "Role Definition",
+     "service": "Key Vault secrets",
      "tabs": [],
      "findings": [
       {
-       "type": "CREATE_NO_ROW",
-       "detail": "create with defaults added no resource to the list"
+       "type": "HTTP_404",
+       "detail": "resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined/demo1?api-version=2023-01-01 \u2192 404"
       }
      ],
      "surfaces": [
       {
        "kind": "page",
-       "name": "Role Definition",
+       "name": "Key Vault secrets",
        "state": "live",
-       "calls": 96
+       "calls": 101
       },
       {
        "kind": "create",
        "name": "create with defaults",
-       "state": "unimplemented",
+       "state": "live",
        "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "unimplemented",
+       "calls": 0
       }
      ],
      "status": "broken"
@@ -4190,7 +1694,40 @@
     {
      "target": "nano",
      "cloud": "azure",
-     "service": "Entra ID / RBAC",
+     "service": "Key Vault keys",
+     "tabs": [],
+     "findings": [
+      {
+       "type": "HTTP_404",
+       "detail": "resource detail: /subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/undefined/undefined/demo1?api-version=2023-01-01 \u2192 404"
+      }
+     ],
+     "surfaces": [
+      {
+       "kind": "page",
+       "name": "Key Vault keys",
+       "state": "live",
+       "calls": 101
+      },
+      {
+       "kind": "create",
+       "name": "create with defaults",
+       "state": "live",
+       "calls": 1
+      },
+      {
+       "kind": "detail",
+       "name": "resource detail",
+       "state": "unimplemented",
+       "calls": 0
+      }
+     ],
+     "status": "broken"
+    },
+    {
+     "target": "nano",
+     "cloud": "azure",
+     "service": "Storage queues",
      "tabs": [],
      "findings": [
       {
@@ -4201,7 +1738,7 @@
      "surfaces": [
       {
        "kind": "page",
-       "name": "Entra ID / RBAC (crawl error)",
+       "name": "Storage queues (crawl error)",
        "state": "unimplemented",
        "calls": 0
       }
@@ -4209,65 +1746,149 @@
      "status": "broken"
     }
    ],
-   "passed": 25,
-   "failed": 27,
+   "passed": 43,
+   "failed": 14,
    "status": "fail",
-   "tail": "[nano/aws] 16 services crawled, 11 with findings\n[nano/gcp] 16 services crawled, 11 with findings\n[nano/azure] 20 services crawled, 5 with findings\nUI crawl nano: 25/52 services clean \u2192 tests/conformance/hourly/out/ui-nano.json\nConsole surfaces nano: {\"live\":326,\"unimplemented\":37,\"static\":140,\"partial\":14}"
+   "tail": "[nano/aws] 16 services crawled, 8 with findings\n[nano/gcp] 16 services crawled, 1 with findings\n[nano/azure] 25 services crawled, 5 with findings\nUI crawl nano: 43/57 services clean \u2192 tests/conformance/hourly/out/ui-nano.json\nConsole surfaces nano: {\"live\":447,\"static\":152,\"unimplemented\":25,\"partial\":11}"
   },
   {
    "id": "nano-cores",
    "target": "nano",
    "cloud": "all",
    "kind": "core",
-   "duration_s": 1.4,
-   "exit_code": 3,
-   "passed": 28,
-   "failed": 1,
-   "status": "fail",
-   "tail": "INTERNALERROR>     self._register_setup_module_fixture()\nINTERNALERROR>   File \"/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/_pytest/python.py\", line 597, in _register_setup_module_fixture\nINTERNALERROR>     self.obj, (\"setUpModule\", \"setup_module\")\nINTERNALERROR>     ^^^^^^^^\nINTERNALERROR>   File \"/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/_pytest/python.py\", line 310, in obj\nINTERNALERROR>     self._obj = obj = self._getobj()\nINTERNALERROR>                       ^^^^^^^^^^^^^^\nINTERNALERROR>   File \"/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/_pytest/python.py\", line 581, in _getobj\nINTERNALERROR>     return importtestmodule(self.path, self.config)\nINTERNALERROR>            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nINTERNALERROR>   File \"/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/_pytest/python.py\", line 528, in importtestmodule\nINTERNALERROR>     mod = import_path(\nINTERNALERROR>           ^^^^^^^^^^^^\nINTERNALERROR>   File \"/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/_pytest/pathlib.py\", line 640, in import_path\nINTERNALERROR>     importlib.import_module(module_name)\nINTERNALERROR>   File \"/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/importlib/__init__.py\", line 90, in import_module\nINTERNALERROR>     return _bootstrap._gcd_import(name[level:], package, level)\nINTERNALERROR>            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nINTERNALERROR>   File \"<frozen importlib._bootstrap>\", line 1387, in _gcd_import\nINTERNALERROR>   File \"<frozen importlib._bootstrap>\", line 1360, in _find_and_load\nINTERNALERROR>   File \"<frozen importlib._bootstrap>\", line 1331, in _find_and_load_unlocked\nINTERNALERROR>   File \"<frozen importlib._bootstrap>\", line 935, in _load_unlocked\nINTERNALERROR>   File \"/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/_pytest/assertion/rewrite.py\", line 185, in exec_module\nINTERNALERROR>     exec(co, module.__dict__)\nINTERNALERROR>   File \"/home/runner/work/appliance/appliance/tests/conformance/test_azure_app_core.py\", line 112, in <module>\nINTERNALERROR>     sys.exit(1 if FAIL else 0)\nINTERNALERROR> SystemExit: 0\n\nno tests ran in 1.08s\nmainloop: caught unexpected SystemExit!"
+   "duration_s": 2.2,
+   "exit_code": 0,
+   "passed": 11,
+   "failed": 0,
+   "status": "pass",
+   "tail": "...........                                                              [100%]\n11 passed in 1.94s"
+  },
+  {
+   "id": "nano-ui-aws-lambda-row",
+   "target": "nano",
+   "cloud": "aws",
+   "kind": "ui",
+   "duration_s": 17.3,
+   "exit_code": 0,
+   "passed": 4,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] created function is listed by name [[\"\",\"Function name\",\"Runtime\",\"Handler\",\"Memory (MB)\",\"Timeout (s)\",\"Last modified\"],[\"\",\"my-function\",\"python3.12\",\"lambda_function.lambda_handler\",\"128\",\"3\",\"2026-10-29T03:31:25.000+0000\"]]\n[PASS] no placeholder cells in the row [\"\",\"my-function\",\"python3.12\",\"lambda_function.lambda_handler\",\"128\",\"3\",\"2026-10-29T03:31:25.000+0000\"]\n[PASS] function survives a console reload [\"my-function\"]\n[PASS] no page error while opening the create wizard"
+  },
+  {
+   "id": "nano-ui-aws-ec2-row",
+   "target": "nano",
+   "cloud": "aws",
+   "kind": "ui",
+   "duration_s": 16.4,
+   "exit_code": 0,
+   "passed": 5,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] launched instance is listed with an i-\u2026 id [[\"\",\"Instance ID\",\"Name\",\"Instance type\",\"State\",\"Public IPv4\",\"Private IPv4\"],[\"\",\"i-640b57fe203fce7a2\",\"my-ec2-instance\",\"t3.micro\",\"running\",\"54.120.112.102\",\"172.31.101.115\"]]\n[PASS] no placeholder cells in the row [\"\",\"i-640b57fe203fce7a2\",\"my-ec2-instance\",\"t3.micro\",\"running\",\"54.120.112.102\",\"172.31.101.115\"]\n[PASS] state is running [\"\",\"i-640b57fe203fce7a2\",\"my-ec2-instance\",\"t3.micro\",\"running\",\"54.120.112.102\",\"172.31.101.115\"]\n[PASS] instance detail by its i-\u2026 id answers 200 with the same id status 200\n[PASS] instance survives a console reload [{\"tags\":{},\"name\":\"my-ec2-instance\",\"image_id\":\"ami-amzn2023-x86_64\",\"architecture\":\"x86_64\",\"instance_type\":\"t3.micro\",\"instance_id\":\"i-640b57fe203fce7a2\",\"state\":\"running\",\"private_ip\":\"172.31.101."
+  },
+  {
+   "id": "nano-ui-aws-apigw-row",
+   "target": "nano",
+   "cloud": "aws",
+   "kind": "ui",
+   "duration_s": 16.4,
+   "exit_code": 0,
+   "passed": 4,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] created API is listed by name [[\"\",\"API ID\",\"Name\",\"Endpoint type\",\"Created\"],[\"\",\"6199c3bd2f\",\"MyApi\",\"REGIONAL\",\"2026-10-29T03:31:58.000Z\"]]\n[PASS] no placeholder cells in the row [\"\",\"6199c3bd2f\",\"MyApi\",\"REGIONAL\",\"2026-10-29T03:31:58.000Z\"]\n[PASS] API survives a console reload [\"MyApi\"]\n[PASS] no page error while opening the create wizard"
+  },
+  {
+   "id": "nano-ui-aws-vpc-row",
+   "target": "nano",
+   "cloud": "aws",
+   "kind": "ui",
+   "duration_s": 15.8,
+   "exit_code": 0,
+   "passed": 4,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] created VPC is listed by name [[\"\",\"VPC ID\",\"Name\",\"IPv4 CIDR\",\"State\",\"Subnets\"],[\"\",\"vpc-7bb262cece2e\",\"my-vpc\",\"10.0.0.0/16\",\"available\",\"0\"]]\n[PASS] no placeholder cells in the row [\"\",\"vpc-7bb262cece2e\",\"my-vpc\",\"10.0.0.0/16\",\"available\",\"0\"]\n[PASS] VPC survives a console reload [\"my-vpc\"]\n[PASS] no page error while opening the create wizard"
+  },
+  {
+   "id": "nano-ui-aws-eventbridge-row",
+   "target": "nano",
+   "cloud": "aws",
+   "kind": "ui",
+   "duration_s": 14.7,
+   "exit_code": 0,
+   "passed": 4,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] created rule is listed [[\"\",\"Name\",\"Event bus\",\"Type\",\"Status\",\"Targets\"],[\"\",\"rule-00000001\",\"default\",\"EventPattern\",\"ENABLED\",\"1\"]]\n[PASS] no placeholder cells in the row [\"\",\"rule-00000001\",\"default\",\"EventPattern\",\"ENABLED\",\"1\"]\n[PASS] rule survives a console reload [\"rule-00000001\"]\n[PASS] no page error while opening the create wizard"
+  },
+  {
+   "id": "nano-ui-aws-settings-tabs",
+   "target": "nano",
+   "cloud": "aws",
+   "kind": "ui",
+   "duration_s": 11.7,
+   "exit_code": 0,
+   "passed": 10,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] unsaved settings dynamodb~Music~ttl \u2192 200 status 200\n[PASS] unsaved settings dynamodb~Music~streams \u2192 200 status 200\n[PASS] unsaved settings dynamodb~Music~capacity \u2192 200 status 200\n[PASS] unsaved settings dynamodb~Music~encryption \u2192 200 status 200\n[PASS] unsaved settings sqs~MyQueue~encryption \u2192 200 status 200\n[PASS] unsaved settings sqs~MyQueue~purge \u2192 200 status 200\n[PASS] unsaved settings secretsmanager~my-secret~rotation \u2192 200 status 200\n[PASS] unsaved settings secretsmanager~my-secret~kmsKey \u2192 200 status 200\n[PASS] unsaved settings kms~abc~rotation \u2192 200 status 200\n[PASS] a saved settings edit survives a reload {\"ok\":true,\"name\":\"_settings\",\"ttl_enabled\":true,\"ttl_attribute\":\"expires\",\"status\":\"available\"}"
+  },
+  {
+   "id": "nano-ui-aws-iam-detail",
+   "target": "nano",
+   "cloud": "aws",
+   "kind": "ui",
+   "duration_s": 4.1,
+   "exit_code": 0,
+   "passed": 4,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] create user \n[PASS] GET /api/iam/users/new-user \u2192 200 status 200\n[PASS] detail has arn, user_id, path, groups, policies {\"ok\":true,\"user_name\":\"new-user\",\"user_id\":\"AIDA916279E84A5047FE8\",\"created\":\"2026-10-29T03:32:54.000Z\",\"arn\":\"arn:aws:iam::123456789012:user/new-user\",\"path\":\"/\",\"policies\":[],\"groups\":[]}\n[PASS] unknown user \u2192 404 status 404"
   },
   {
    "id": "nano-ui-aws-api",
    "target": "nano",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 3.9,
+   "duration_s": 3.6,
    "exit_code": 0,
-   "passed": 5,
-   "failed": 1,
-   "status": "fail",
-   "tail": "===== AWS core services \u2014 API create\u2192list round-trip =====\n  [PASS] S3         create:200 listed:true count:1 \n  [PASS] DynamoDB   create:200 listed:true count:1 \n  [PASS] SQS        create:200 listed:true count:1 \n  [FAIL] KMS        create:200 listed:false count:1 \n  [PASS] Secrets    create:200 listed:true count:1 \n  [PASS] IAM        create:200 listed:true count:1 \n\n5/6 AWS core services round-trip at the API"
+   "passed": 6,
+   "failed": 0,
+   "status": "pass",
+   "tail": "===== AWS core services \u2014 API create\u2192list round-trip =====\n  [PASS] S3         create:200 listed:true count:1 \n  [PASS] DynamoDB   create:200 listed:true count:1 \n  [PASS] SQS        create:200 listed:true count:1 \n  [PASS] KMS        create:200 listed:true count:1 \n  [PASS] Secrets    create:200 listed:true count:1 \n  [PASS] IAM        create:200 listed:true count:1 \n\n6/6 AWS core services round-trip at the API"
   },
   {
    "id": "nano-ui-aws-tabs",
    "target": "nano",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 13.4,
+   "duration_s": 12.8,
    "exit_code": 0,
    "passed": 11,
    "failed": 0,
    "status": "pass",
-   "tail": "===== AWS s3 detail tabs \u2014 content check =====\n  [OK   ] (create)                           contentLen:999 200 {\"ok\":true,\"created\":true,\"name\":\"tabtest-bucket\",\"creation_date\":\"2026-10-29T01:13:11.000Z\",\"region\":\"us-east-1\",\"versioning\":\"Disabled\",\"versioning_enabled\":f\n  [OK   ] Overview                           contentLen:150 \n  [OK   ] Activity                           contentLen:275 \n  [OK   ] Tags                               contentLen:44 \n  [OK   ] Objects                            contentLen:107 \n  [OK   ] Versions                           contentLen:126 \n  [OK   ] Bucket Versioning                  contentLen:138 \n  [OK   ] Event notifications                contentLen:223 \n  [OK   ] Lifecycle rules                    contentLen:128 \n  [OK   ] Default encryption                 contentLen:149 \n  [OK   ] Block Public Access                contentLen:178 \n\n11/11 tabs render content \u2014 NO blank tabs"
+   "tail": "===== AWS s3 detail tabs \u2014 content check =====\n  [OK   ] (create)                           contentLen:999 200 {\"ok\":true,\"created\":true,\"name\":\"tabtest-bucket\",\"creation_date\":\"2026-10-29T03:33:02.000Z\",\"region\":\"us-east-1\",\"versioning\":\"Disabled\",\"versioning_enabled\":f\n  [OK   ] Overview                           contentLen:150 \n  [OK   ] Activity                           contentLen:275 \n  [OK   ] Tags                               contentLen:44 \n  [OK   ] Objects                            contentLen:107 \n  [OK   ] Versions                           contentLen:126 \n  [OK   ] Bucket Versioning                  contentLen:138 \n  [OK   ] Event notifications                contentLen:223 \n  [OK   ] Lifecycle rules                    contentLen:128 \n  [OK   ] Default encryption                 contentLen:149 \n  [OK   ] Block Public Access                contentLen:178 \n\n11/11 tabs render content \u2014 NO blank tabs"
   },
   {
    "id": "nano-ui-gcp-tabs",
    "target": "nano",
    "cloud": "gcp",
    "kind": "ui",
-   "duration_s": 4.2,
+   "duration_s": 3.7,
    "exit_code": 0,
-   "passed": 0,
-   "failed": 1,
-   "status": "fail",
-   "tail": "RESULT boot_errors = []\nRESULT createInstance = 200\nRESULT createUser = 200\nRESULT listUsers = [\"appuser\"]\nRESULT deleteUser = 200\nRESULT listUsersAfterDelete = 0\nRESULT createDb = 200\nRESULT listDatabases = [\"appdb\"]\nRESULT createBackup = 200\nRESULT listBackups = 1\nRESULT eventsOk = true\nRESULT eventActions = [\"Create\"]\nRESULT PASS = true\n\nNO CHECKS RAN (no PASS/FAIL lines recognised)"
+   "passed": 8,
+   "failed": 0,
+   "status": "pass",
+   "tail": "RESULT boot_errors = []\nRESULT createInstance = 200\nRESULT createUser = 200\nRESULT listUsers = [\"appuser\"]\nRESULT deleteUser = 200\nRESULT listUsersAfterDelete = 0\nRESULT createDb = 200\nRESULT listDatabases = [\"appdb\"]\nRESULT createBackup = 200\nRESULT listBackups = 1\nRESULT eventsOk = true\nRESULT eventActions = [\"Create\"]\n[PASS] console boots without page errors\n[PASS] create Cloud SQL instance\n[PASS] create user\n[PASS] list users shows the new user\n[PASS] delete user\n[PASS] create database and list it\n[PASS] create backup and list it\n[PASS] cloudsim events record the Create\nRESULT PASS = true"
   },
   {
    "id": "nano-ui-gcp-pubsub-grid",
    "target": "nano",
    "cloud": "gcp",
    "kind": "ui",
-   "duration_s": 7.0,
+   "duration_s": 6.2,
    "exit_code": 0,
    "passed": 3,
    "failed": 0,
@@ -4287,23 +1908,71 @@
    "tail": "[PASS] topic row listed\n[PASS] no placeholder cells in the topic row\n[PASS] subscriptions column is a number"
   },
   {
-   "id": "offline-api-cost-savings-extras",
+   "id": "offline-api-aws-console-savings",
    "target": "offline",
    "cloud": "aws",
    "kind": "api",
-   "duration_s": 3.4,
+   "duration_s": 6.8,
+   "exit_code": 0,
+   "passed": 6,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] IAM user: resource_count rises 36 -> 37\n[PASS] Secrets Manager secret: resource_count rises 37 -> 38\n[PASS] Secrets Manager secret: aws savings rise 136.9503 -> 137.3503\n[PASS] KMS key: resource_count rises 38 -> 39\n[PASS] KMS key: aws savings rise 137.3503 -> 138.3503\n[PASS] secret lists its encryption key ('aws/secretsmanager')"
+  },
+  {
+   "id": "nano-ui-gcp-create-defaults",
+   "target": "nano",
+   "cloud": "gcp",
+   "kind": "ui",
+   "duration_s": 67.4,
+   "exit_code": 0,
+   "passed": 36,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] API Gateway: the new resource is listed\n[PASS] API Gateway: no placeholder cells\n[PASS] Secret Manager: service is on the rail\n[PASS] Secret Manager: create with defaults is accepted\n[PASS] Secret Manager: the new resource is listed\n[PASS] Secret Manager: no placeholder cells\n[PASS] Cloud Functions: service is on the rail\n[PASS] Cloud Functions: create with defaults is accepted\n[PASS] Cloud Functions: the new resource is listed\n[PASS] Cloud Functions: no placeholder cells\n[PASS] Firestore: service is on the rail\n[PASS] Firestore: create with defaults is accepted\n[PASS] Firestore: the new resource is listed\n[PASS] Firestore: no placeholder cells\n[PASS] VPC Network: service is on the rail\n[PASS] VPC Network: create with defaults is accepted\n[PASS] VPC Network: the new resource is listed\n[PASS] VPC Network: no placeholder cells\n[PASS] Cloud KMS: service is on the rail\n[PASS] Cloud KMS: create with defaults is accepted\n[PASS] Cloud KMS: the new resource is listed\n[PASS] Cloud KMS: no placeholder cells\n[PASS] Eventarc: service is on the rail\n[PASS] Eventarc: create with defaults is accepted\n[PASS] Eventarc: the new resource is listed\n[PASS] Eventarc: no placeholder cells\n[PASS] Pub/Sub: service is on the rail\n[PASS] Pub/Sub: create with defaults is accepted\n[PASS] Pub/Sub: the new resource is listed\n[PASS] Pub/Sub: no placeholder cells"
+  },
+  {
+   "id": "offline-ui-gcp-create-defaults",
+   "target": "offline",
+   "cloud": "gcp",
+   "kind": "ui",
+   "duration_s": 69.6,
+   "exit_code": 1,
+   "passed": 34,
+   "failed": 2,
+   "status": "fail",
+   "tail": "[PASS] API Gateway: the new resource is listed\n[PASS] API Gateway: no placeholder cells\n[PASS] Secret Manager: service is on the rail\n[PASS] Secret Manager: create with defaults is accepted\n[PASS] Secret Manager: the new resource is listed\n[PASS] Secret Manager: no placeholder cells\n[PASS] Cloud Functions: service is on the rail\n[PASS] Cloud Functions: create with defaults is accepted\n[PASS] Cloud Functions: the new resource is listed\n[PASS] Cloud Functions: no placeholder cells\n[PASS] Firestore: service is on the rail\n[FAIL] Firestore: create with defaults is accepted [409]\n[PASS] Firestore: the new resource is listed\n[PASS] Firestore: no placeholder cells\n[PASS] VPC Network: service is on the rail\n[PASS] VPC Network: create with defaults is accepted\n[PASS] VPC Network: the new resource is listed\n[PASS] VPC Network: no placeholder cells\n[PASS] Cloud KMS: service is on the rail\n[PASS] Cloud KMS: create with defaults is accepted\n[PASS] Cloud KMS: the new resource is listed\n[PASS] Cloud KMS: no placeholder cells\n[PASS] Eventarc: service is on the rail\n[PASS] Eventarc: create with defaults is accepted\n[PASS] Eventarc: the new resource is listed\n[PASS] Eventarc: no placeholder cells\n[PASS] Pub/Sub: service is on the rail\n[FAIL] Pub/Sub: create with defaults is accepted [409]\n[PASS] Pub/Sub: the new resource is listed\n[PASS] Pub/Sub: no placeholder cells"
+  },
+  {
+   "id": "offline-api-gcp-console-savings",
+   "target": "offline",
+   "cloud": "gcp",
+   "kind": "api",
+   "duration_s": 6.4,
    "exit_code": 0,
    "passed": 12,
    "failed": 0,
    "status": "pass",
-   "tail": "[PASS] create AWS Secrets Manager secret\n[PASS] AWS Secrets Manager secret: resource_count rises (26 -> 27)\n[PASS] AWS Secrets Manager secret: aws savings rise (2.55 -> 2.95)\n[PASS] create AWS KMS key\n[PASS] AWS KMS key: resource_count rises (27 -> 28)\n[PASS] AWS KMS key: aws savings rise (2.95 -> 3.95)\n[PASS] create GCP Secret Manager secret\n[PASS] GCP Secret Manager secret: resource_count rises (28 -> 29)\n[PASS] GCP Secret Manager secret: gcp savings rise (197.3 -> 197.36)\n[PASS] create GCP Cloud KMS key\n[PASS] GCP Cloud KMS key: resource_count rises (29 -> 30)\n[PASS] GCP Cloud KMS key: gcp savings rise (197.36 -> 197.42)"
+   "tail": "[PASS] create Pub/Sub topic\n[PASS] Pub/Sub topic: resource_count rises (36 -> 37)\n[PASS] Pub/Sub topic: gcp savings rise (226.3002 -> 226.7002)\n[PASS] create API Gateway API\n[PASS] API Gateway API: resource_count rises (37 -> 38)\n[PASS] API Gateway API: gcp savings rise (226.7002 -> 229.7002)\n[PASS] create Secret Manager secret (no value)\n[PASS] Secret Manager secret (no value): resource_count rises (38 -> 39)\n[PASS] Secret Manager secret (no value): gcp savings rise (229.7002 -> 229.7602)\n[PASS] create Cloud SQL instance (no password)\n[PASS] Cloud SQL instance (no password): resource_count rises (39 -> 40)\n[PASS] Cloud SQL instance (no password): gcp savings rise (229.7602 -> 254.7602)"
+  },
+  {
+   "id": "offline-api-cost-savings-extras",
+   "target": "offline",
+   "cloud": "aws",
+   "kind": "api",
+   "duration_s": 5.0,
+   "exit_code": 0,
+   "passed": 12,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] create AWS Secrets Manager secret\n[PASS] AWS Secrets Manager secret: resource_count rises (40 -> 41)\n[PASS] AWS Secrets Manager secret: aws savings rise (4.55 -> 4.95)\n[PASS] create AWS KMS key\n[PASS] AWS KMS key: resource_count rises (41 -> 42)\n[PASS] AWS KMS key: aws savings rise (4.95 -> 5.95)\n[PASS] create GCP Secret Manager secret\n[PASS] GCP Secret Manager secret: resource_count rises (42 -> 43)\n[PASS] GCP Secret Manager secret: gcp savings rise (254.7602 -> 254.8202)\n[PASS] create GCP Cloud KMS key\n[PASS] GCP Cloud KMS key: resource_count rises (43 -> 44)\n[PASS] GCP Cloud KMS key: gcp savings rise (254.8202 -> 254.8802)"
   },
   {
    "id": "offline-ui-aws-detail-name",
    "target": "offline",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 16.6,
+   "duration_s": 17.5,
    "exit_code": 0,
    "passed": 4,
    "failed": 0,
@@ -4315,7 +1984,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 10.6,
+   "duration_s": 10.8,
    "exit_code": 0,
    "passed": 4,
    "failed": 0,
@@ -4327,19 +1996,19 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "api",
-   "duration_s": 1.8,
+   "duration_s": 2.0,
    "exit_code": 0,
    "passed": 14,
    "failed": 0,
    "status": "pass",
-   "tail": "[PASS] create rule (defaults)\n[PASS] create rule (with target)\n[PASS] rule-3747 event_bus_name filled (default)\n[PASS] rule-3747 rule_type filled (EventPattern)\n[PASS] rule-3747 state filled (ENABLED)\n[PASS] rule-3747 target_count filled (0)\n[PASS] rule-3747 state is ENABLED\n[PASS] rule-131a event_bus_name filled (default)\n[PASS] rule-131a rule_type filled (EventPattern)\n[PASS] rule-131a state filled (ENABLED)\n[PASS] rule-131a target_count filled (1)\n[PASS] rule-131a state is ENABLED\n[PASS] target_count 0 without target\n[PASS] target_count 1 with target"
+   "tail": "[PASS] create rule (defaults)\n[PASS] create rule (with target)\n[PASS] rule-b734 event_bus_name filled (default)\n[PASS] rule-b734 rule_type filled (EventPattern)\n[PASS] rule-b734 state filled (ENABLED)\n[PASS] rule-b734 target_count filled (0)\n[PASS] rule-b734 state is ENABLED\n[PASS] rule-c5f2 event_bus_name filled (default)\n[PASS] rule-c5f2 rule_type filled (EventPattern)\n[PASS] rule-c5f2 state filled (ENABLED)\n[PASS] rule-c5f2 target_count filled (1)\n[PASS] rule-c5f2 state is ENABLED\n[PASS] target_count 0 without target\n[PASS] target_count 1 with target"
   },
   {
    "id": "nano-ui-azure-tabs",
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 18.2,
+   "duration_s": 18.8,
    "exit_code": 0,
    "passed": 71,
    "failed": 0,
@@ -4351,55 +2020,55 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 0.9,
-   "exit_code": 1,
-   "passed": 0,
-   "failed": 5,
-   "status": "fail",
-   "tail": "===== Azure data-plane page validation =====\n  [FAIL] Blob containers      undef:undefined create:undefined  | not in rail\n  [FAIL] Storage queues       undef:undefined create:undefined  | not in rail\n  [FAIL] Cosmos databases     undef:undefined create:undefined  | not in rail\n  [FAIL] Key Vault secrets    undef:undefined create:undefined  | not in rail\n  [FAIL] Key Vault keys       undef:undefined create:undefined  | not in rail\n\n0/5 data-plane pages render cleanly (no 'undefined' + Create present)"
+   "duration_s": 10.3,
+   "exit_code": 0,
+   "passed": 5,
+   "failed": 0,
+   "status": "pass",
+   "tail": "===== Azure data-plane page validation =====\n  [PASS] Blob containers      undef:false create:true  | Home \u203a Blob containers \u23ce folder \u23ce Blob containers\n  [PASS] Storage queues       undef:false create:true  | Home \u203a Storage queues \u23ce queue \u23ce Storage queues\n  [PASS] Cosmos databases     undef:false create:true  | Home \u203a Cosmos databases \u23ce storage \u23ce Cosmos databases\n  [PASS] Key Vault secrets    undef:false create:true  | Home \u203a Key Vault secrets \u23ce key \u23ce Key Vault secrets\n  [PASS] Key Vault keys       undef:false create:true  | Home \u203a Key Vault keys \u23ce lock \u23ce Key Vault keys\n\n5/5 data-plane pages render cleanly (no 'undefined' + Create present)"
   },
   {
    "id": "nano-ui-azure-home",
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 3.8,
-   "exit_code": 1,
-   "passed": 1,
-   "failed": 1,
-   "status": "fail",
-   "tail": "[PASS] home makes no requests to .../undefined\n[FAIL] data-plane services present on the home dashboard :: 0 found\n1/2 Azure home checks passed"
+   "duration_s": 4.5,
+   "exit_code": 0,
+   "passed": 7,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] home makes no requests to .../undefined\n[PASS] data-plane services present on the home dashboard\n[PASS] tile \"Blob containers\" shows its real count\n[PASS] tile \"Cosmos databases\" shows its real count\n[PASS] tile \"Key Vault secrets\" shows its real count\n[PASS] tile \"Key Vault keys\" shows its real count\n[PASS] tile \"Storage queues\" shows its real count\n7/7 Azure home checks passed"
   },
   {
    "id": "nano-ui-budget-savings",
    "target": "nano",
    "cloud": "all",
    "kind": "ui",
-   "duration_s": 31.5,
-   "exit_code": 1,
-   "passed": 3,
-   "failed": 2,
-   "status": "fail",
-   "tail": "[PASS] budget returns 200 status 200\n[PASS] budget has cpu/memory shape \n[PASS] spaces carry cost_savings {\"resource_count\":0,\"savings_usd\":0,\"by_provider\":{\"aws\":0,\"gcp\":0,\"azure\":0},\"period\":\"monthly\"}\n[FAIL] resource_count rises after create 0 \u2192 0\n[FAIL] azure savings rise after create 0 \u2192 0"
+   "duration_s": 6.0,
+   "exit_code": 0,
+   "passed": 5,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] budget returns 200 status 200\n[PASS] budget has cpu/memory shape \n[PASS] spaces carry cost_savings {\"resource_count\":0,\"savings_usd\":0,\"by_provider\":{\"aws\":0,\"gcp\":0,\"azure\":0},\"period\":\"monthly\"}\n[PASS] resource_count rises after create 0 \u2192 1\n[PASS] azure savings rise after create 0 \u2192 0.03"
   },
   {
    "id": "nano-ui-reload-backend",
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 12.8,
+   "duration_s": 12.9,
    "exit_code": 0,
    "passed": 3,
    "failed": 0,
    "status": "pass",
-   "tail": "[PASS] ARM list OK on first load status 200\n[PASS] ARM list OK right after reload #1 status 200 1518ms \n[PASS] ARM list OK right after reload #2 status 200 2023ms"
+   "tail": "[PASS] ARM list OK on first load status 200\n[PASS] ARM list OK right after reload #1 status 200 1521ms \n[PASS] ARM list OK right after reload #2 status 200 1788ms"
   },
   {
    "id": "nano-ui-azure-storage-console",
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 10.5,
+   "duration_s": 11.1,
    "exit_code": 0,
    "passed": 12,
    "failed": 0,
@@ -4411,7 +2080,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-java",
-   "duration_s": 33.3,
+   "duration_s": 33.9,
    "exit_code": 0,
    "passed": 41,
    "failed": 0,
@@ -4423,7 +2092,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-go",
-   "duration_s": 35.6,
+   "duration_s": 40.2,
    "exit_code": 0,
    "passed": 53,
    "failed": 0,
@@ -4435,7 +2104,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "cli",
-   "duration_s": 42.6,
+   "duration_s": 47.6,
    "exit_code": 0,
    "passed": 27,
    "failed": 0,
@@ -4447,7 +2116,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 29.5,
+   "duration_s": 28.4,
    "exit_code": 0,
    "passed": 24,
    "failed": 0,
@@ -4459,7 +2128,7 @@
    "target": "nano",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 25.6,
+   "duration_s": 24.9,
    "exit_code": 0,
    "passed": 24,
    "failed": 0,
@@ -4471,7 +2140,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-java",
-   "duration_s": 22.0,
+   "duration_s": 23.2,
    "exit_code": 0,
    "passed": 16,
    "failed": 0,
@@ -4483,7 +2152,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-go",
-   "duration_s": 21.9,
+   "duration_s": 24.0,
    "exit_code": 0,
    "passed": 19,
    "failed": 0,
@@ -4495,7 +2164,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "cli",
-   "duration_s": 31.7,
+   "duration_s": 32.6,
    "exit_code": 0,
    "passed": 19,
    "failed": 0,
@@ -4507,7 +2176,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 57.7,
+   "duration_s": 58.0,
    "exit_code": 0,
    "passed": 33,
    "failed": 0,
@@ -4519,7 +2188,7 @@
    "target": "nano",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 50.9,
+   "duration_s": 50.5,
    "exit_code": 0,
    "passed": 33,
    "failed": 0,
@@ -4531,7 +2200,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-java",
-   "duration_s": 17.6,
+   "duration_s": 20.8,
    "exit_code": 0,
    "passed": 33,
    "failed": 0,
@@ -4543,7 +2212,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-go",
-   "duration_s": 18.4,
+   "duration_s": 21.9,
    "exit_code": 0,
    "passed": 38,
    "failed": 0,
@@ -4555,7 +2224,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "cli",
-   "duration_s": 34.7,
+   "duration_s": 41.2,
    "exit_code": 0,
    "passed": 34,
    "failed": 0,
@@ -4567,7 +2236,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 21.5,
+   "duration_s": 21.7,
    "exit_code": 0,
    "passed": 19,
    "failed": 0,
@@ -4579,7 +2248,7 @@
    "target": "nano",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 23.1,
+   "duration_s": 23.3,
    "exit_code": 0,
    "passed": 19,
    "failed": 0,
@@ -4591,7 +2260,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-java",
-   "duration_s": 10.2,
+   "duration_s": 11.2,
    "exit_code": 0,
    "passed": 41,
    "failed": 0,
@@ -4603,7 +2272,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "sdk-go",
-   "duration_s": 8.1,
+   "duration_s": 10.8,
    "exit_code": 0,
    "passed": 39,
    "failed": 0,
@@ -4615,7 +2284,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "cli",
-   "duration_s": 22.2,
+   "duration_s": 24.3,
    "exit_code": 0,
    "passed": 26,
    "failed": 0,
@@ -4627,7 +2296,7 @@
    "target": "offline",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 22.5,
+   "duration_s": 22.9,
    "exit_code": 0,
    "passed": 22,
    "failed": 0,
@@ -4639,7 +2308,7 @@
    "target": "nano",
    "cloud": "aws",
    "kind": "ui",
-   "duration_s": 24.4,
+   "duration_s": 25.0,
    "exit_code": 0,
    "passed": 22,
    "failed": 0,
@@ -4651,7 +2320,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-java",
-   "duration_s": 10.7,
+   "duration_s": 14.2,
    "exit_code": 0,
    "passed": 12,
    "failed": 0,
@@ -4663,7 +2332,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-go",
-   "duration_s": 17.4,
+   "duration_s": 20.9,
    "exit_code": 0,
    "passed": 13,
    "failed": 0,
@@ -4675,7 +2344,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "cli",
-   "duration_s": 14.6,
+   "duration_s": 15.8,
    "exit_code": 0,
    "passed": 13,
    "failed": 0,
@@ -4687,7 +2356,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "ui",
-   "duration_s": 28.6,
+   "duration_s": 28.4,
    "exit_code": 0,
    "passed": 23,
    "failed": 0,
@@ -4699,7 +2368,7 @@
    "target": "nano",
    "cloud": "gcp",
    "kind": "ui",
-   "duration_s": 28.7,
+   "duration_s": 25.7,
    "exit_code": 0,
    "passed": 23,
    "failed": 0,
@@ -4711,7 +2380,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-java",
-   "duration_s": 7.9,
+   "duration_s": 9.7,
    "exit_code": 0,
    "passed": 14,
    "failed": 0,
@@ -4723,7 +2392,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-go",
-   "duration_s": 5.5,
+   "duration_s": 6.6,
    "exit_code": 0,
    "passed": 15,
    "failed": 0,
@@ -4735,7 +2404,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "cli",
-   "duration_s": 15.2,
+   "duration_s": 15.1,
    "exit_code": 0,
    "passed": 14,
    "failed": 0,
@@ -4747,7 +2416,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "ui",
-   "duration_s": 23.3,
+   "duration_s": 23.4,
    "exit_code": 0,
    "passed": 21,
    "failed": 0,
@@ -4759,7 +2428,7 @@
    "target": "nano",
    "cloud": "gcp",
    "kind": "ui",
-   "duration_s": 22.6,
+   "duration_s": 25.0,
    "exit_code": 0,
    "passed": 21,
    "failed": 0,
@@ -4771,31 +2440,31 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-java",
-   "duration_s": 11.5,
+   "duration_s": 12.6,
    "exit_code": 0,
    "passed": 11,
    "failed": 0,
    "status": "pass",
-   "tail": "== google-cloud-iamcredentials (Java) against http://localhost:9000 project=java-iamc-proj ==\n[PASS] IAM: create service account java-sa-116498\n[PASS] IAM: create service account java-del-116498\n[PASS] generateAccessToken (ya29 token, 10m lifetime honoured)\n[PASS] generateAccessToken with delegate chain (default 1h)\n[PASS] generateAccessToken without scope -> 400\n[PASS] unknown service account -> 403\n[PASS] generateIdToken (aud + email claims)\n[PASS] signBlob (2048-bit signature, 40-hex key id)\n[PASS] signJwt (claims preserved)\n[PASS] signJwt non-JSON payload -> 400\n[PASS] console lists the issued credentials (no secrets)\nRESULT pass=11 fail=0"
+   "tail": "== google-cloud-iamcredentials (Java) against http://localhost:9000 project=java-iamc-proj ==\n[PASS] IAM: create service account java-sa-440615\n[PASS] IAM: create service account java-del-440615\n[PASS] generateAccessToken (ya29 token, 10m lifetime honoured)\n[PASS] generateAccessToken with delegate chain (default 1h)\n[PASS] generateAccessToken without scope -> 400\n[PASS] unknown service account -> 403\n[PASS] generateIdToken (aud + email claims)\n[PASS] signBlob (2048-bit signature, 40-hex key id)\n[PASS] signJwt (claims preserved)\n[PASS] signJwt non-JSON payload -> 400\n[PASS] console lists the issued credentials (no secrets)\nRESULT pass=11 fail=0"
   },
   {
    "id": "offline-sdk-go-gcp-iamcredentials",
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-go",
-   "duration_s": 11.1,
+   "duration_s": 12.7,
    "exit_code": 0,
    "passed": 17,
    "failed": 0,
    "status": "pass",
-   "tail": "== cloud.google.com/go/iam/credentials (Go) against http://localhost:9000 project=go-iamc-proj ==\n[PASS] IAM: create service account go-sa-237125\n[PASS] IAM: create service account go-del-237125\n[PASS] GenerateAccessToken (ya29 token, ~1h expiry)\n[PASS] GenerateAccessToken lifetime honoured (10m)\n[PASS] GenerateAccessToken with delegate chain\n[PASS] GenerateAccessToken without scope -> 400\n[PASS] GenerateAccessToken lifetime > 12h -> 400\n[PASS] unknown service account -> 403 PERMISSION_DENIED\n[PASS] project other than '-' -> 400\n[PASS] unknown delegate -> 403\n[PASS] GenerateIdToken (RS256 JWT, aud + email claims)\n[PASS] GenerateIdToken without audience -> 400\n[PASS] SignBlob (2048-bit signature + 40-hex key id)\n[PASS] SignBlob is deterministic per account\n[PASS] SignJwt (claims preserved, kid = keyId)\n[PASS] SignJwt with a non-JSON payload -> 400\n[PASS] console lists the issued credentials (no secrets)\nRESULT pass=17 fail=0\ngo: downloading cloud.google.com/go/iam v1.1.13\ngo: downloading google.golang.org/genproto/googleapis/api v0.0.0-20240725223205-93522f1f2a9f"
+   "tail": "== cloud.google.com/go/iam/credentials (Go) against http://localhost:9000 project=go-iamc-proj ==\n[PASS] IAM: create service account go-sa-245450\n[PASS] IAM: create service account go-del-245450\n[PASS] GenerateAccessToken (ya29 token, ~1h expiry)\n[PASS] GenerateAccessToken lifetime honoured (10m)\n[PASS] GenerateAccessToken with delegate chain\n[PASS] GenerateAccessToken without scope -> 400\n[PASS] GenerateAccessToken lifetime > 12h -> 400\n[PASS] unknown service account -> 403 PERMISSION_DENIED\n[PASS] project other than '-' -> 400\n[PASS] unknown delegate -> 403\n[PASS] GenerateIdToken (RS256 JWT, aud + email claims)\n[PASS] GenerateIdToken without audience -> 400\n[PASS] SignBlob (2048-bit signature + 40-hex key id)\n[PASS] SignBlob is deterministic per account\n[PASS] SignJwt (claims preserved, kid = keyId)\n[PASS] SignJwt with a non-JSON payload -> 400\n[PASS] console lists the issued credentials (no secrets)\nRESULT pass=17 fail=0\ngo: downloading cloud.google.com/go/iam v1.1.13\ngo: downloading google.golang.org/genproto/googleapis/api v0.0.0-20240725223205-93522f1f2a9f"
   },
   {
    "id": "offline-cli-gcp-iamcredentials",
    "target": "offline",
    "cloud": "gcp",
    "kind": "cli",
-   "duration_s": 4.6,
+   "duration_s": 5.2,
    "exit_code": 0,
    "passed": 9,
    "failed": 0,
@@ -4807,7 +2476,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "ui",
-   "duration_s": 20.9,
+   "duration_s": 21.5,
    "exit_code": 0,
    "passed": 21,
    "failed": 0,
@@ -4819,7 +2488,7 @@
    "target": "nano",
    "cloud": "gcp",
    "kind": "ui",
-   "duration_s": 22.4,
+   "duration_s": 20.1,
    "exit_code": 0,
    "passed": 21,
    "failed": 0,
@@ -4831,7 +2500,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-java",
-   "duration_s": 10.3,
+   "duration_s": 11.5,
    "exit_code": 0,
    "passed": 15,
    "failed": 0,
@@ -4843,7 +2512,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "sdk-go",
-   "duration_s": 7.8,
+   "duration_s": 8.5,
    "exit_code": 0,
    "passed": 16,
    "failed": 0,
@@ -4855,7 +2524,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "cli",
-   "duration_s": 16.0,
+   "duration_s": 16.1,
    "exit_code": 0,
    "passed": 20,
    "failed": 0,
@@ -4867,7 +2536,7 @@
    "target": "offline",
    "cloud": "gcp",
    "kind": "ui",
-   "duration_s": 24.1,
+   "duration_s": 24.0,
    "exit_code": 0,
    "passed": 22,
    "failed": 0,
@@ -4891,7 +2560,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-java",
-   "duration_s": 28.6,
+   "duration_s": 28.8,
    "exit_code": 0,
    "passed": 15,
    "failed": 0,
@@ -4903,7 +2572,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-go",
-   "duration_s": 16.0,
+   "duration_s": 16.7,
    "exit_code": 0,
    "passed": 29,
    "failed": 0,
@@ -4915,19 +2584,19 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "cli",
-   "duration_s": 17.6,
+   "duration_s": 20.3,
    "exit_code": 0,
    "passed": 23,
    "failed": 0,
    "status": "pass",
-   "tail": "== az rest against http://localhost:9000 sub=00000000-0000-0000-0000-cloudlearn01 rg=rg-cli-app-1793237263 ==\nazure-cli                         2.91.0\n[PASS] az rest PUT managedEnvironments\n[PASS] environment has defaultDomain + staticIp\n[PASS] az rest PUT containerApps\n[PASS] app has latestRevisionName, ingress fqdn, Succeeded\n[PASS] GET hides secret values\n[PASS] POST listSecrets returns values\n[PASS] list containerApps in the resource group\n[PASS] list containerApps in the subscription\n[PASS] list revisions includes web-cli--e46af5d\n[PASS] list replicas of the revision\n[PASS] restart revision\n[PASS] stop app\n[PASS] runningStatus is Stopped\n[PASS] start app\n[PASS] az rest PUT jobs\n[PASS] start job execution\n[PASS] job executions list shows the run\n[PASS] invalid app name \u2192 ContainerAppInvalidName\n[PASS] delete environment with apps is refused\n[PASS] delete job\n[PASS] delete app\n[PASS] deleted app \u2192 ResourceNotFound\n[PASS] delete environment\n== 23 passed, 0 failed =="
+   "tail": "== az rest against http://localhost:9000 sub=00000000-0000-0000-0000-cloudlearn01 rg=rg-cli-app-1793245594 ==\nazure-cli                         2.91.0\n[PASS] az rest PUT managedEnvironments\n[PASS] environment has defaultDomain + staticIp\n[PASS] az rest PUT containerApps\n[PASS] app has latestRevisionName, ingress fqdn, Succeeded\n[PASS] GET hides secret values\n[PASS] POST listSecrets returns values\n[PASS] list containerApps in the resource group\n[PASS] list containerApps in the subscription\n[PASS] list revisions includes web-cli--597960e\n[PASS] list replicas of the revision\n[PASS] restart revision\n[PASS] stop app\n[PASS] runningStatus is Stopped\n[PASS] start app\n[PASS] az rest PUT jobs\n[PASS] start job execution\n[PASS] job executions list shows the run\n[PASS] invalid app name \u2192 ContainerAppInvalidName\n[PASS] delete environment with apps is refused\n[PASS] delete job\n[PASS] delete app\n[PASS] deleted app \u2192 ResourceNotFound\n[PASS] delete environment\n== 23 passed, 0 failed =="
   },
   {
    "id": "offline-ui-azure-app",
    "target": "offline",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 23.8,
+   "duration_s": 24.4,
    "exit_code": 0,
    "passed": 29,
    "failed": 0,
@@ -4939,19 +2608,19 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 24.0,
-   "exit_code": 0,
-   "passed": 29,
-   "failed": 0,
-   "status": "pass",
-   "tail": "[PASS] Container Apps is on the Nano Azure console rail\n[PASS] service page says what runs below the Pro tier (control plane / Docker)\n[PASS] create form has a realistic default name\n[PASS] create form defaults a container image\n[PASS] create with defaults returns 2xx\n[PASS] new container app appears in the list\n[PASS] every grid column is filled\n[PASS] cost-savings metrics updated by the create\n[PASS] detail view shows its tabs\n[PASS] tab \"Overview\" renders\n[PASS] tab \"Activity log\" renders\n[PASS] tab \"Access control (IAM)\" renders\n[PASS] tab \"Tags\" renders\n[PASS] tab \"Diagnose and solve problems\" renders\n[PASS] tab \"Revisions and replicas\" renders\n[PASS] tab \"Containers\" renders\n[PASS] tab \"Scale\" renders\n[PASS] tab \"Ingress\" renders\n[PASS] tab \"Secrets\" renders\n[PASS] tab \"Identity\" renders\n[PASS] tab \"Properties\" renders\n[PASS] tab \"Locks\" renders\n[PASS] tab \"Metrics\" renders\n[PASS] Revisions tab lists the active revision\n[PASS] Containers tab shows the image\n[PASS] Ingress tab shows the application URL\n[PASS] delete removes the app from the list\n[PASS] deleted app is gone from the ARM API\n[PASS] no API errors / page errors during the flow\nall checks passed"
+   "duration_s": 23.0,
+   "exit_code": 1,
+   "passed": 28,
+   "failed": 1,
+   "status": "fail",
+   "tail": "[PASS] Container Apps is on the Nano Azure console rail\n[FAIL] service page says what runs below the Pro tier (control plane / Docker)\n[PASS] create form has a realistic default name\n[PASS] create form defaults a container image\n[PASS] create with defaults returns 2xx\n[PASS] new container app appears in the list\n[PASS] every grid column is filled\n[PASS] cost-savings metrics updated by the create\n[PASS] detail view shows its tabs\n[PASS] tab \"Overview\" renders\n[PASS] tab \"Activity log\" renders\n[PASS] tab \"Access control (IAM)\" renders\n[PASS] tab \"Tags\" renders\n[PASS] tab \"Diagnose and solve problems\" renders\n[PASS] tab \"Revisions and replicas\" renders\n[PASS] tab \"Containers\" renders\n[PASS] tab \"Scale\" renders\n[PASS] tab \"Ingress\" renders\n[PASS] tab \"Secrets\" renders\n[PASS] tab \"Identity\" renders\n[PASS] tab \"Properties\" renders\n[PASS] tab \"Locks\" renders\n[PASS] tab \"Metrics\" renders\n[PASS] Revisions tab lists the active revision\n[PASS] Containers tab shows the image\n[PASS] Ingress tab shows the application URL\n[PASS] delete removes the app from the list\n[PASS] deleted app is gone from the ARM API\n[PASS] no API errors / page errors during the flow\n1 check(s) failed"
   },
   {
    "id": "offline-sdk-java-azure-appconfiguration",
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-java",
-   "duration_s": 46.7,
+   "duration_s": 49.9,
    "exit_code": 0,
    "passed": 28,
    "failed": 0,
@@ -4963,7 +2632,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-go",
-   "duration_s": 9.3,
+   "duration_s": 9.5,
    "exit_code": 0,
    "passed": 34,
    "failed": 0,
@@ -4975,7 +2644,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "cli",
-   "duration_s": 20.3,
+   "duration_s": 20.7,
    "exit_code": 0,
    "passed": 32,
    "failed": 0,
@@ -4987,7 +2656,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 26.6,
+   "duration_s": 26.4,
    "exit_code": 0,
    "passed": 31,
    "failed": 0,
@@ -4999,19 +2668,19 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 23.1,
-   "exit_code": 0,
-   "passed": 28,
-   "failed": 0,
-   "status": "pass",
-   "tail": "[PASS] App Configuration is on the Nano Azure console rail\n[PASS] service page explains what the service does\n[PASS] create form has a realistic default name\n[PASS] create form defaults the pricing tier to Standard\n[PASS] create with defaults returns 2xx\n[PASS] new store appears in the list\n[PASS] every grid column is filled\n[PASS] cost-savings metrics updated by the create\n[PASS] detail view shows its tabs\n[PASS] tab \"Overview\" renders\n[PASS] tab \"Activity log\" renders\n[PASS] tab \"Access control (IAM)\" renders\n[PASS] tab \"Tags\" renders\n[PASS] tab \"Diagnose and solve problems\" renders\n[PASS] tab \"Configuration explorer\" renders\n[PASS] tab \"Geo-replication\" renders\n[PASS] tab \"Access settings\" renders\n[PASS] tab \"Identity\" renders\n[PASS] tab \"Networking\" renders\n[PASS] tab \"Properties\" renders\n[PASS] tab \"Locks\" renders\n[PASS] tab \"Metrics\" renders\n[PASS] Access settings lists keys with connection strings\n[PASS] key-value created in the explorer is listed\n[PASS] \u2026and listKeyValue returns it\n[PASS] delete removes the store from the list\n[PASS] deleted store is gone from the ARM API\n[PASS] no API errors / page errors during the flow\nall checks passed"
+   "duration_s": 23.6,
+   "exit_code": 1,
+   "passed": 27,
+   "failed": 1,
+   "status": "fail",
+   "tail": "[PASS] App Configuration is on the Nano Azure console rail\n[FAIL] service page explains what the service does\n[PASS] create form has a realistic default name\n[PASS] create form defaults the pricing tier to Standard\n[PASS] create with defaults returns 2xx\n[PASS] new store appears in the list\n[PASS] every grid column is filled\n[PASS] cost-savings metrics updated by the create\n[PASS] detail view shows its tabs\n[PASS] tab \"Overview\" renders\n[PASS] tab \"Activity log\" renders\n[PASS] tab \"Access control (IAM)\" renders\n[PASS] tab \"Tags\" renders\n[PASS] tab \"Diagnose and solve problems\" renders\n[PASS] tab \"Configuration explorer\" renders\n[PASS] tab \"Geo-replication\" renders\n[PASS] tab \"Access settings\" renders\n[PASS] tab \"Identity\" renders\n[PASS] tab \"Networking\" renders\n[PASS] tab \"Properties\" renders\n[PASS] tab \"Locks\" renders\n[PASS] tab \"Metrics\" renders\n[PASS] Access settings lists keys with connection strings\n[PASS] key-value created in the explorer is listed\n[PASS] \u2026and listKeyValue returns it\n[PASS] delete removes the store from the list\n[PASS] deleted store is gone from the ARM API\n[PASS] no API errors / page errors during the flow\n1 check(s) failed"
   },
   {
    "id": "offline-sdk-java-azure-cognitiveservices",
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-java",
-   "duration_s": 13.3,
+   "duration_s": 12.6,
    "exit_code": 0,
    "passed": 28,
    "failed": 0,
@@ -5023,31 +2692,31 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-go",
-   "duration_s": 12.0,
+   "duration_s": 13.1,
    "exit_code": 0,
    "passed": 39,
    "failed": 0,
    "status": "pass",
-   "tail": "[PASS] RegenerateKey rotates key1 only\n[PASS] account ListSKUs\n[PASS] account ListUsages\n[PASS] Usages.List (location)\n[PASS] Models.List (location) has OpenAI models\n[PASS] ResourceSKUs.List\n[PASS] CheckDomainAvailability: taken\n[PASS] CheckDomainAvailability: free\n[PASS] BeginCreateOrUpdate deployment\n[PASS] Get deployment\n[PASS] deployment with unknown model \u2192 400\n[PASS] deployment over quota \u2192 InsufficientQuota\n[PASS] List deployments\n[PASS] account ListModels\n[PASS] BeginDelete deployment\n[PASS] deleted deployment \u2192 404\n[PASS] create TextAnalytics account\n[PASS] CommitmentPlans.CreateOrUpdate\n[PASS] CommitmentPlans.Get\n[PASS] deployments rejected on a non-OpenAI account \u2192 400\n[PASS] delete golanggoai237422\n[PASS] BeginDelete account\n[PASS] deleted account \u2192 404\n[PASS] DeletedAccounts.Get shows the soft-deleted account\n[PASS] re-create while soft-deleted \u2192 409\n[PASS] restore soft-deleted account (restore=true)\n[PASS] DeletedAccounts.BeginPurge\n[PASS] purged account \u2192 404\nall checks passed\ngo: downloading github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/cognitiveservices/armcognitiveservices v1.7.0"
+   "tail": "[PASS] RegenerateKey rotates key1 only\n[PASS] account ListSKUs\n[PASS] account ListUsages\n[PASS] Usages.List (location)\n[PASS] Models.List (location) has OpenAI models\n[PASS] ResourceSKUs.List\n[PASS] CheckDomainAvailability: taken\n[PASS] CheckDomainAvailability: free\n[PASS] BeginCreateOrUpdate deployment\n[PASS] Get deployment\n[PASS] deployment with unknown model \u2192 400\n[PASS] deployment over quota \u2192 InsufficientQuota\n[PASS] List deployments\n[PASS] account ListModels\n[PASS] BeginDelete deployment\n[PASS] deleted deployment \u2192 404\n[PASS] create TextAnalytics account\n[PASS] CommitmentPlans.CreateOrUpdate\n[PASS] CommitmentPlans.Get\n[PASS] deployments rejected on a non-OpenAI account \u2192 400\n[PASS] delete golanggoai245759\n[PASS] BeginDelete account\n[PASS] deleted account \u2192 404\n[PASS] DeletedAccounts.Get shows the soft-deleted account\n[PASS] re-create while soft-deleted \u2192 409\n[PASS] restore soft-deleted account (restore=true)\n[PASS] DeletedAccounts.BeginPurge\n[PASS] purged account \u2192 404\nall checks passed\ngo: downloading github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/cognitiveservices/armcognitiveservices v1.7.0"
   },
   {
    "id": "offline-cli-azure-cognitiveservices",
    "target": "offline",
    "cloud": "azure",
    "kind": "cli",
-   "duration_s": 10.3,
+   "duration_s": 11.4,
    "exit_code": 0,
    "passed": 20,
    "failed": 0,
    "status": "pass",
-   "tail": "== az against http://localhost:9000 sub=00000000-0000-0000-0000-cloudlearn01 rg=rg-cli-ai-237432 account=cliai237432 ==\nazure-cli                         2.91.0\n[PASS] create resource group\n[PASS] az rest PUT accounts\n[PASS] account has endpoint, kind OpenAI, Succeeded\n[PASS] GET account returns tags\n[PASS] list accounts in the resource group\n[PASS] list accounts in the subscription\n[PASS] listKeys returns key1 + key2\n[PASS] regenerateKey rotates key1\n[PASS] checkDomainAvailability: taken\n[PASS] unknown kind \u2192 InvalidParameter\n[PASS] create model deployment\n[PASS] list deployments\n[PASS] over-quota deployment \u2192 InsufficientQuota\n[PASS] account usages list model quotas\n[PASS] location models list\n[PASS] delete deployment\n[PASS] delete account\n[PASS] deleted account \u2192 ResourceNotFound\n[PASS] soft-deleted account is listed\n[PASS] purge soft-deleted account\n== 20 passed, 0 failed =="
+   "tail": "== az against http://localhost:9000 sub=00000000-0000-0000-0000-cloudlearn01 rg=rg-cli-ai-245771 account=cliai245771 ==\nazure-cli                         2.91.0\n[PASS] create resource group\n[PASS] az rest PUT accounts\n[PASS] account has endpoint, kind OpenAI, Succeeded\n[PASS] GET account returns tags\n[PASS] list accounts in the resource group\n[PASS] list accounts in the subscription\n[PASS] listKeys returns key1 + key2\n[PASS] regenerateKey rotates key1\n[PASS] checkDomainAvailability: taken\n[PASS] unknown kind \u2192 InvalidParameter\n[PASS] create model deployment\n[PASS] list deployments\n[PASS] over-quota deployment \u2192 InsufficientQuota\n[PASS] account usages list model quotas\n[PASS] location models list\n[PASS] delete deployment\n[PASS] delete account\n[PASS] deleted account \u2192 ResourceNotFound\n[PASS] soft-deleted account is listed\n[PASS] purge soft-deleted account\n== 20 passed, 0 failed =="
   },
   {
    "id": "offline-ui-azure-cognitiveservices",
    "target": "offline",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 26.9,
+   "duration_s": 27.5,
    "exit_code": 0,
    "passed": 31,
    "failed": 0,
@@ -5059,7 +2728,7 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 23.9,
+   "duration_s": 24.0,
    "exit_code": 0,
    "passed": 29,
    "failed": 0,
@@ -5071,7 +2740,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-java",
-   "duration_s": 26.8,
+   "duration_s": 28.5,
    "exit_code": 0,
    "passed": 20,
    "failed": 0,
@@ -5083,7 +2752,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-go",
-   "duration_s": 7.4,
+   "duration_s": 9.0,
    "exit_code": 0,
    "passed": 31,
    "failed": 0,
@@ -5095,19 +2764,19 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "cli",
-   "duration_s": 11.4,
+   "duration_s": 11.2,
    "exit_code": 0,
    "passed": 24,
    "failed": 0,
    "status": "pass",
-   "tail": "== az against http://localhost:9000 sub=00000000-0000-0000-0000-cloudlearn01 rg=rg-cli-dns-237504 zone=cli237504.example.com ==\nazure-cli                         2.91.0\n[PASS] create resource group\n[PASS] az rest PUT dnsZones\n[PASS] zone has name servers, zoneType Public, SOA+NS record sets\n[PASS] GET zone returns tags\n[PASS] list zones in the resource group\n[PASS] list zones in the subscription\n[PASS] single-label zone name \u2192 BadRequest\n[PASS] create A record set\n[PASS] create CNAME record set\n[PASS] create MX record set at the apex\n[PASS] create TXT record set\n[PASS] A next to a CNAME of the same name \u2192 Conflict\n[PASS] GET record set returns its TTL\n[PASS] PATCH record set changes TTL and keeps records\n[PASS] list record sets (SOA, NS, A, CNAME, MX, TXT)\n[PASS] list record sets by type\n[PASS] DNS query follows the CNAME to the A records\n[PASS] DNS query for a missing name \u2192 NXDOMAIN\n[PASS] DNS query outside every zone \u2192 REFUSED\n[PASS] delete record set\n[PASS] deleted record set \u2192 NotFound\n[PASS] deleting the SOA record set \u2192 BadRequest\n[PASS] delete zone\n[PASS] deleted zone \u2192 ResourceNotFound\n== 24 passed, 0 failed =="
+   "tail": "== az against http://localhost:9000 sub=00000000-0000-0000-0000-cloudlearn01 rg=rg-cli-dns-245847 zone=cli245847.example.com ==\nazure-cli                         2.91.0\n[PASS] create resource group\n[PASS] az rest PUT dnsZones\n[PASS] zone has name servers, zoneType Public, SOA+NS record sets\n[PASS] GET zone returns tags\n[PASS] list zones in the resource group\n[PASS] list zones in the subscription\n[PASS] single-label zone name \u2192 BadRequest\n[PASS] create A record set\n[PASS] create CNAME record set\n[PASS] create MX record set at the apex\n[PASS] create TXT record set\n[PASS] A next to a CNAME of the same name \u2192 Conflict\n[PASS] GET record set returns its TTL\n[PASS] PATCH record set changes TTL and keeps records\n[PASS] list record sets (SOA, NS, A, CNAME, MX, TXT)\n[PASS] list record sets by type\n[PASS] DNS query follows the CNAME to the A records\n[PASS] DNS query for a missing name \u2192 NXDOMAIN\n[PASS] DNS query outside every zone \u2192 REFUSED\n[PASS] delete record set\n[PASS] deleted record set \u2192 NotFound\n[PASS] deleting the SOA record set \u2192 BadRequest\n[PASS] delete zone\n[PASS] deleted zone \u2192 ResourceNotFound\n== 24 passed, 0 failed =="
   },
   {
    "id": "offline-ui-azure-dns",
    "target": "offline",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 26.1,
+   "duration_s": 26.2,
    "exit_code": 0,
    "passed": 30,
    "failed": 0,
@@ -5119,7 +2788,7 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 23.4,
+   "duration_s": 24.5,
    "exit_code": 0,
    "passed": 28,
    "failed": 0,
@@ -5131,7 +2800,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-java",
-   "duration_s": 13.8,
+   "duration_s": 14.1,
    "exit_code": 0,
    "passed": 20,
    "failed": 0,
@@ -5143,7 +2812,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-go",
-   "duration_s": 15.0,
+   "duration_s": 16.0,
    "exit_code": 0,
    "passed": 30,
    "failed": 0,
@@ -5155,19 +2824,19 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "cli",
-   "duration_s": 20.2,
+   "duration_s": 20.8,
    "exit_code": 0,
    "passed": 21,
    "failed": 0,
    "status": "pass",
-   "tail": "== az against http://localhost:9000 sub=00000000-0000-0000-0000-cloudlearn01 rg=rg-cli-mon-237570 ==\nazure-cli                         2.91.0\n[PASS] create resource group\n[PASS] az rest PUT actionGroups (email receiver Enabled)\n[PASS] GET action group returns tags\n[PASS] groupShortName over 12 characters \u2192 BadRequest\n[PASS] PATCH disables the action group\n[PASS] list action groups in the resource group\n[PASS] list action groups in the subscription\n[PASS] enabling an already-enabled receiver \u2192 Conflict\n[PASS] create metric alert (autoMitigate default, lastUpdatedTime)\n[PASS] GET metric alert returns the criteria\n[PASS] invalid metric alert \u2192 BadRequest\n[PASS] PATCH metric alert changes severity and keeps criteria\n[PASS] list metric alerts in the subscription\n[PASS] create activity log alert\n[PASS] activity log alert without a category \u2192 BadRequest\n[PASS] create autoscale setting\n[PASS] delete autoscale setting\n[PASS] delete activity log alert\n[PASS] delete metric alert\n[PASS] deleted metric alert \u2192 ResourceNotFound\n[PASS] delete action group\n== 21 passed, 0 failed =="
+   "tail": "== az against http://localhost:9000 sub=00000000-0000-0000-0000-cloudlearn01 rg=rg-cli-mon-245915 ==\nazure-cli                         2.91.0\n[PASS] create resource group\n[PASS] az rest PUT actionGroups (email receiver Enabled)\n[PASS] GET action group returns tags\n[PASS] groupShortName over 12 characters \u2192 BadRequest\n[PASS] PATCH disables the action group\n[PASS] list action groups in the resource group\n[PASS] list action groups in the subscription\n[PASS] enabling an already-enabled receiver \u2192 Conflict\n[PASS] create metric alert (autoMitigate default, lastUpdatedTime)\n[PASS] GET metric alert returns the criteria\n[PASS] invalid metric alert \u2192 BadRequest\n[PASS] PATCH metric alert changes severity and keeps criteria\n[PASS] list metric alerts in the subscription\n[PASS] create activity log alert\n[PASS] activity log alert without a category \u2192 BadRequest\n[PASS] create autoscale setting\n[PASS] delete autoscale setting\n[PASS] delete activity log alert\n[PASS] delete metric alert\n[PASS] deleted metric alert \u2192 ResourceNotFound\n[PASS] delete action group\n== 21 passed, 0 failed =="
   },
   {
    "id": "offline-ui-azure-monitor",
    "target": "offline",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 35.7,
+   "duration_s": 36.7,
    "exit_code": 0,
    "passed": 30,
    "failed": 0,
@@ -5179,19 +2848,19 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 28.2,
-   "exit_code": 0,
-   "passed": 29,
-   "failed": 0,
-   "status": "pass",
-   "tail": "[PASS] Monitor alerts is on the Nano Azure console rail\n[PASS] service page explains what the service does\n[PASS] create form has a realistic default alert rule name\n[PASS] create with defaults returns 2xx\n[PASS] new alert rule appears in the list\n[PASS] every grid column is filled\n[PASS] grid shows severity, evaluation frequency and the scope\n[PASS] cost-savings metrics updated by the create\n[PASS] detail view shows its tabs\n[PASS] tab \"Overview\" renders\n[PASS] tab \"Activity log\" renders\n[PASS] tab \"Access control (IAM)\" renders\n[PASS] tab \"Tags\" renders\n[PASS] tab \"Diagnose and solve problems\" renders\n[PASS] tab \"Condition\" renders\n[PASS] tab \"Action groups\" renders\n[PASS] tab \"Activity log alerts\" renders\n[PASS] tab \"Autoscale settings\" renders\n[PASS] tab \"Properties\" renders\n[PASS] tab \"Locks\" renders\n[PASS] tab \"Metrics\" renders\n[PASS] Condition shows the metric, operator, threshold and window\n[PASS] action group added in the blade is listed\n[PASS] \u2026and readable over ARM\n[PASS] activity log alert added in the blade is listed\n[PASS] autoscale setting added in the blade is listed\n[PASS] delete removes the alert rule from the list\n[PASS] deleted alert rule is gone from the ARM API\n[PASS] no API errors / page errors during the flow\nall checks passed"
+   "duration_s": 28.7,
+   "exit_code": 1,
+   "passed": 28,
+   "failed": 1,
+   "status": "fail",
+   "tail": "[PASS] Monitor alerts is on the Nano Azure console rail\n[FAIL] service page explains what the service does\n[PASS] create form has a realistic default alert rule name\n[PASS] create with defaults returns 2xx\n[PASS] new alert rule appears in the list\n[PASS] every grid column is filled\n[PASS] grid shows severity, evaluation frequency and the scope\n[PASS] cost-savings metrics updated by the create\n[PASS] detail view shows its tabs\n[PASS] tab \"Overview\" renders\n[PASS] tab \"Activity log\" renders\n[PASS] tab \"Access control (IAM)\" renders\n[PASS] tab \"Tags\" renders\n[PASS] tab \"Diagnose and solve problems\" renders\n[PASS] tab \"Condition\" renders\n[PASS] tab \"Action groups\" renders\n[PASS] tab \"Activity log alerts\" renders\n[PASS] tab \"Autoscale settings\" renders\n[PASS] tab \"Properties\" renders\n[PASS] tab \"Locks\" renders\n[PASS] tab \"Metrics\" renders\n[PASS] Condition shows the metric, operator, threshold and window\n[PASS] action group added in the blade is listed\n[PASS] \u2026and readable over ARM\n[PASS] activity log alert added in the blade is listed\n[PASS] autoscale setting added in the blade is listed\n[PASS] delete removes the alert rule from the list\n[PASS] deleted alert rule is gone from the ARM API\n[PASS] no API errors / page errors during the flow\n1 check(s) failed"
   },
   {
    "id": "offline-sdk-java-azure-operationalinsights",
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-java",
-   "duration_s": 26.1,
+   "duration_s": 25.8,
    "exit_code": 0,
    "passed": 23,
    "failed": 0,
@@ -5203,7 +2872,7 @@
    "target": "offline",
    "cloud": "azure",
    "kind": "sdk-go",
-   "duration_s": 28.2,
+   "duration_s": 27.1,
    "exit_code": 0,
    "passed": 33,
    "failed": 0,
@@ -5220,14 +2889,14 @@
    "passed": 20,
    "failed": 0,
    "status": "pass",
-   "tail": "== az against http://localhost:9000 sub=00000000-0000-0000-0000-cloudlearn01 rg=rg-cli-law-237680 ==\nazure-cli                         2.91.0\n[PASS] create resource group\n[PASS] az rest PUT workspace (retention 60, Succeeded)\n[PASS] workspace has a customerId\n[PASS] GET workspace returns tags\n[PASS] invalid workspace name \u2192 BadRequest\n[PASS] PATCH workspace retention\n[PASS] list workspaces in the resource group\n[PASS] list workspaces in the subscription\n[PASS] POST sharedKeys returns primary and secondary\n[PASS] GET usages lists DataAnalyzed\n[PASS] create saved search\n[PASS] saved search without query \u2192 BadRequest\n[PASS] list saved searches\n[PASS] built-in tables are listed\n[PASS] create custom table Orders_CL\n[PASS] PATCH table retention\n[PASS] deleting a built-in table \u2192 BadRequest\n[PASS] delete custom table\n[PASS] delete workspace\n[PASS] deleted workspace \u2192 ResourceNotFound\n== 20 passed, 0 failed =="
+   "tail": "== az against http://localhost:9000 sub=00000000-0000-0000-0000-cloudlearn01 rg=rg-cli-law-246025 ==\nazure-cli                         2.91.0\n[PASS] create resource group\n[PASS] az rest PUT workspace (retention 60, Succeeded)\n[PASS] workspace has a customerId\n[PASS] GET workspace returns tags\n[PASS] invalid workspace name \u2192 BadRequest\n[PASS] PATCH workspace retention\n[PASS] list workspaces in the resource group\n[PASS] list workspaces in the subscription\n[PASS] POST sharedKeys returns primary and secondary\n[PASS] GET usages lists DataAnalyzed\n[PASS] create saved search\n[PASS] saved search without query \u2192 BadRequest\n[PASS] list saved searches\n[PASS] built-in tables are listed\n[PASS] create custom table Orders_CL\n[PASS] PATCH table retention\n[PASS] deleting a built-in table \u2192 BadRequest\n[PASS] delete custom table\n[PASS] delete workspace\n[PASS] deleted workspace \u2192 ResourceNotFound\n== 20 passed, 0 failed =="
   },
   {
    "id": "offline-ui-azure-operationalinsights",
    "target": "offline",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 30.3,
+   "duration_s": 30.2,
    "exit_code": 0,
    "passed": 34,
    "failed": 0,
@@ -5239,12 +2908,96 @@
    "target": "nano",
    "cloud": "azure",
    "kind": "ui",
-   "duration_s": 29.2,
-   "exit_code": 1,
-   "passed": 32,
-   "failed": 1,
-   "status": "fail",
-   "tail": "[PASS] new workspace appears in the list\n[PASS] every grid column is filled\n[PASS] grid shows the pricing tier, retention and provisioning state\n[PASS] cost-savings metrics updated by the create\n[PASS] detail view shows its tabs\n[PASS] tab \"Overview\" renders\n[PASS] tab \"Activity log\" renders\n[PASS] tab \"Access control (IAM)\" renders\n[PASS] tab \"Tags\" renders\n[PASS] tab \"Diagnose and solve problems\" renders\n[PASS] tab \"Saved searches\" renders\n[PASS] tab \"Tables\" renders\n[PASS] tab \"Data sources\" renders\n[PASS] tab \"Agents (keys)\" renders\n[PASS] tab \"Usage and quota\" renders\n[PASS] tab \"Properties\" renders\n[PASS] tab \"Locks\" renders\n[PASS] tab \"Metrics\" renders\n[PASS] Tables lists the built-in tables with their plan\n[PASS] Agents tab shows the workspace ID and shared keys\n[PASS] Usage tab lists the data-analysed quota\n[PASS] saved search added in the blade is listed\n[PASS] \u2026and readable over ARM\n[PASS] custom table added in the blade is listed\n[PASS] \u2026and readable over ARM\n[PASS] data source added in the blade is listed\n[PASS] delete removes the workspace from the list\n[PASS] deleted workspace is gone from the ARM API\n[PASS] no API errors / page errors during the flow\n1 check(s) failed"
+   "duration_s": 28.0,
+   "exit_code": 0,
+   "passed": 33,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] new workspace appears in the list\n[PASS] every grid column is filled\n[PASS] grid shows the pricing tier, retention and provisioning state\n[PASS] cost-savings metrics updated by the create\n[PASS] detail view shows its tabs\n[PASS] tab \"Overview\" renders\n[PASS] tab \"Activity log\" renders\n[PASS] tab \"Access control (IAM)\" renders\n[PASS] tab \"Tags\" renders\n[PASS] tab \"Diagnose and solve problems\" renders\n[PASS] tab \"Saved searches\" renders\n[PASS] tab \"Tables\" renders\n[PASS] tab \"Data sources\" renders\n[PASS] tab \"Agents (keys)\" renders\n[PASS] tab \"Usage and quota\" renders\n[PASS] tab \"Properties\" renders\n[PASS] tab \"Locks\" renders\n[PASS] tab \"Metrics\" renders\n[PASS] Tables lists the built-in tables with their plan\n[PASS] Agents tab shows the workspace ID and shared keys\n[PASS] Usage tab lists the data-analysed quota\n[PASS] saved search added in the blade is listed\n[PASS] \u2026and readable over ARM\n[PASS] custom table added in the blade is listed\n[PASS] \u2026and readable over ARM\n[PASS] data source added in the blade is listed\n[PASS] delete removes the workspace from the list\n[PASS] deleted workspace is gone from the ARM API\n[PASS] no API errors / page errors during the flow\nall checks passed"
+  },
+  {
+   "id": "offline-ui-azure-nsg-roledef-create",
+   "target": "offline",
+   "cloud": "azure",
+   "kind": "ui",
+   "duration_s": 14.6,
+   "exit_code": 0,
+   "passed": 7,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] /Network Security Group/i: create form has a realistic default name\n[PASS] /Network Security Group/i: created resource appears in the list\n[PASS] /Network Security Group/i: grid columns are filled\n[PASS] /Role Definition/i: create form has a realistic default name\n[PASS] /Role Definition/i: created resource appears in the list\n[PASS] /Role Definition/i: grid columns are filled\n[PASS] no page errors"
+  },
+  {
+   "id": "nano-ui-azure-nsg-roledef-create",
+   "target": "nano",
+   "cloud": "azure",
+   "kind": "ui",
+   "duration_s": 12.2,
+   "exit_code": 0,
+   "passed": 7,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] /Network Security Group/i: create form has a realistic default name\n[PASS] /Network Security Group/i: created resource appears in the list\n[PASS] /Network Security Group/i: grid columns are filled\n[PASS] /Role Definition/i: create form has a realistic default name\n[PASS] /Role Definition/i: created resource appears in the list\n[PASS] /Role Definition/i: grid columns are filled\n[PASS] no page errors"
+  },
+  {
+   "id": "nano-ui-azure-keyvault-tabs",
+   "target": "nano",
+   "cloud": "azure",
+   "kind": "ui",
+   "duration_s": 21.8,
+   "exit_code": 0,
+   "passed": 12,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] vault blade has a Secrets tab\n[PASS] Secrets tab loads from the data plane\n[PASS] secret added in the blade is listed\n[PASS] secret is still listed after re-opening the tab\n[PASS] secret value is readable from the data plane\n[PASS] deleting the secret removes it from the list\n[PASS] vault blade has a Keys tab\n[PASS] Keys tab loads from the data plane\n[PASS] key added in the blade is listed as Enabled\n[PASS] disabled state survives re-opening the tab\n[PASS] deleting the key removes it from the list\n[PASS] no API errors / page errors during the flow"
+  },
+  {
+   "id": "offline-ui-azure-tags-tab",
+   "target": "offline",
+   "cloud": "azure",
+   "kind": "ui",
+   "duration_s": 92.1,
+   "exit_code": 0,
+   "passed": 36,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] sql: tag is shown again when the tab is re-opened\n[PASS] servicebus: saved tag is stored on the resource (ARM GET)\n[PASS] servicebus: tag is shown again when the tab is re-opened\n[PASS] cosmos: saved tag is stored on the resource (ARM GET)\n[PASS] cosmos: tag is shown again when the tab is re-opened\n[PASS] functionapp: saved tag is stored on the resource (ARM GET)\n[PASS] functionapp: tag is shown again when the tab is re-opened\n[PASS] apim: saved tag is stored on the resource (ARM GET)\n[PASS] apim: tag is shown again when the tab is re-opened\n[PASS] vnet: saved tag is stored on the resource (ARM GET)\n[PASS] vnet: tag is shown again when the tab is re-opened\n[PASS] nsg: saved tag is stored on the resource (ARM GET)\n[PASS] nsg: tag is shown again when the tab is re-opened\n[PASS] eventgrid: saved tag is stored on the resource (ARM GET)\n[PASS] eventgrid: tag is shown again when the tab is re-opened\n[PASS] keyvault: saved tag is stored on the resource (ARM GET)\n[PASS] keyvault: tag is shown again when the tab is re-opened\n[PASS] app: saved tag is stored on the resource (ARM GET)\n[PASS] app: tag is shown again when the tab is re-opened\n[PASS] appconfiguration: saved tag is stored on the resource (ARM GET)\n[PASS] appconfiguration: tag is shown again when the tab is re-opened\n[PASS] dns: saved tag is stored on the resource (ARM GET)\n[PASS] dns: tag is shown again when the tab is re-opened\n[PASS] monitor: saved tag is stored on the resource (ARM GET)\n[PASS] monitor: tag is shown again when the tab is re-opened\n[PASS] operationalinsights: saved tag is stored on the resource (ARM GET)\n[PASS] operationalinsights: tag is shown again when the tab is re-opened\n[PASS] cognitiveservices: saved tag is stored on the resource (ARM GET)\n[PASS] cognitiveservices: tag is shown again when the tab is re-opened\n[PASS] no page errors"
+  },
+  {
+   "id": "nano-ui-azure-tags-tab",
+   "target": "nano",
+   "cloud": "azure",
+   "kind": "ui",
+   "duration_s": 48.8,
+   "exit_code": 0,
+   "passed": 36,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] sql: tag is shown again when the tab is re-opened\n[PASS] servicebus: saved tag is stored on the resource (ARM GET)\n[PASS] servicebus: tag is shown again when the tab is re-opened\n[PASS] cosmos: saved tag is stored on the resource (ARM GET)\n[PASS] cosmos: tag is shown again when the tab is re-opened\n[PASS] functionapp: saved tag is stored on the resource (ARM GET)\n[PASS] functionapp: tag is shown again when the tab is re-opened\n[PASS] apim: saved tag is stored on the resource (ARM GET)\n[PASS] apim: tag is shown again when the tab is re-opened\n[PASS] vnet: saved tag is stored on the resource (ARM GET)\n[PASS] vnet: tag is shown again when the tab is re-opened\n[PASS] nsg: saved tag is stored on the resource (ARM GET)\n[PASS] nsg: tag is shown again when the tab is re-opened\n[PASS] eventgrid: saved tag is stored on the resource (ARM GET)\n[PASS] eventgrid: tag is shown again when the tab is re-opened\n[PASS] keyvault: saved tag is stored on the resource (ARM GET)\n[PASS] keyvault: tag is shown again when the tab is re-opened\n[PASS] app: saved tag is stored on the resource (ARM GET)\n[PASS] app: tag is shown again when the tab is re-opened\n[PASS] appconfiguration: saved tag is stored on the resource (ARM GET)\n[PASS] appconfiguration: tag is shown again when the tab is re-opened\n[PASS] dns: saved tag is stored on the resource (ARM GET)\n[PASS] dns: tag is shown again when the tab is re-opened\n[PASS] monitor: saved tag is stored on the resource (ARM GET)\n[PASS] monitor: tag is shown again when the tab is re-opened\n[PASS] operationalinsights: saved tag is stored on the resource (ARM GET)\n[PASS] operationalinsights: tag is shown again when the tab is re-opened\n[PASS] cognitiveservices: saved tag is stored on the resource (ARM GET)\n[PASS] cognitiveservices: tag is shown again when the tab is re-opened\n[PASS] no page errors"
+  },
+  {
+   "id": "offline-ui-azure-nsg-rules",
+   "target": "offline",
+   "cloud": "azure",
+   "kind": "ui",
+   "duration_s": 12.3,
+   "exit_code": 0,
+   "passed": 8,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] NSG created through ARM\n[PASS] NSG blade has a Security rules tab\n[PASS] new NSG shows no custom rules yet\n[PASS] rule added in the blade is listed with priority and port\n[PASS] rule is still listed after re-opening the tab\n[PASS] rule is readable over ARM with its values\n[PASS] deleting the rule removes it\n[PASS] no page errors"
+  },
+  {
+   "id": "nano-ui-azure-nsg-rules",
+   "target": "nano",
+   "cloud": "azure",
+   "kind": "ui",
+   "duration_s": 11.7,
+   "exit_code": 0,
+   "passed": 8,
+   "failed": 0,
+   "status": "pass",
+   "tail": "[PASS] NSG created through ARM\n[PASS] NSG blade has a Security rules tab\n[PASS] new NSG shows no custom rules yet\n[PASS] rule added in the blade is listed with priority and port\n[PASS] rule is still listed after re-opening the tab\n[PASS] rule is readable over ARM with its values\n[PASS] deleting the rule removes it\n[PASS] no page errors"
   }
  ]
 }
