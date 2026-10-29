@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-29 14:53 UTC · refreshes after every pipeline run_
+_Updated 2026-10-29 15:40 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-10-29 14:53 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 61% · Nano 75%
 - **Hourly tests:** 179 of 181 suites passing (run 14:08 UTC)
-- **Upstream watch:** 54 open changes from the real clouds to adopt
+- **Upstream watch:** 48 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -56,7 +56,7 @@ _Updated 2026-10-29 14:53 UTC · refreshes after every pipeline run_
 
 | Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|---|---|
-| EC2 | — | not audited | 🧩 6/13 · 🧩 7/13 | 0 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
+| EC2 | — | not audited | 🧩 6/13 · 🧩 7/13 | 0 · 0 | ✅ watched | before gate |
 | S3 | — | not audited | 🧩 6/13 · 🧩 11/13 | 0 · 0 | ✅ watched | before gate |
 | IAM | — | not audited | 🧩 8/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
 | RDS | — | not audited | 🧩 8/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
@@ -64,7 +64,7 @@ _Updated 2026-10-29 14:53 UTC · refreshes after every pipeline run_
 | SQS | — | not audited | 🧩 6/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
 | Lambda | — | not audited | 🧩 6/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | API Gateway | caddy · Lite | not audited | 🧩 8/13 · 🧩 10/13 | 0 · 1 | ✅ watched | before gate |
-| VPC | — | not audited | 🧩 8/13 · 🧩 12/13 | 0 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
+| VPC | — | not audited | 🧩 8/13 · 🧩 12/13 | 0 · 0 | ✅ watched | before gate |
 | EventBridge | nats · Lite | 🟡 rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered | 🧩 6/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | Secrets Manager | — | not audited | 🧩 4/13 · 🧩 9/13 | 2 · 2 | ✅ watched | before gate |
 | KMS | — | not audited | 🧩 5/13 · 🧩 11/13 | 0 · 0 | ✅ watched | before gate |
