@@ -33,6 +33,11 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amazon+Ember:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined">
 <style>
+/* Clickable things always show the hand cursor. Many console links are <a> without an href
+   (JS-handled), which browsers render with the text I-beam. First in the sheet and low
+   specificity, so later rules (cursor:not-allowed on disabled controls) still win. */
+a,[onclick],[role="link"],[role="button"],[role="tab"],[role="menuitem"],summary,label[for],select,
+button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:not(:disabled){cursor:pointer}
   :root{
     /* Updated to 2024+ AWS skin: darker navy header, AWS-blue row-selection tint. */
     --navy:#0f1b2d; --navy-d:#000a16; --navy-l:#1a2737;

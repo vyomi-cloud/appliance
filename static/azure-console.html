@@ -7,6 +7,11 @@
 <link rel="icon" href="/assets/swagger/favicon-32x32.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0">
 <style>
+/* Clickable things always show the hand cursor. Many console links are <a> without an href
+   (JS-handled), which browsers render with the text I-beam. First in the sheet and low
+   specificity, so later rules (cursor:not-allowed on disabled controls) still win. */
+a,[onclick],[role="link"],[role="button"],[role="tab"],[role="menuitem"],summary,label[for],select,
+button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:not(:disabled){cursor:pointer}
   :root{ --azblue:#0078d4; --azblue-d:#005a9e; --ink:#201f1e; --sub:#605e5c;
          --line:#e1dfdd; --bg:#faf9f8; --rail:#0b1b2b; --rail2:#16334d; }
   *{box-sizing:border-box}
