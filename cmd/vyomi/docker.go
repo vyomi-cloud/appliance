@@ -208,25 +208,44 @@ func (c *Config) invokeDockerSubstrate(action string, dcArgs []string) error {
 	// plain `up -d` never starts them (the Windows E2E found 4/12 services).
 	// Start them as a second wave, and include them in down/ps/logs/pull.
 	full := append(append([]string{}, base...), "--profile", "full")
+	lv := newLaunchView()
 	wave2 := func() {
-		progress("==> Starting the backends (S3, KMS, SQL, NoSQL, queues, eventing); the first run downloads their images...")
-		if err := run("docker", append(append([]string{}, full...), "up", "-d")...); err != nil {
-			progress("==> Warning: some backends failed to start (" + err.Error() + "); re-run `vyomi up` or check `vyomi logs`.")
+		lv.stepRun("downloads", "heavy backends (S3, KMS, SQL, NoSQL, queues) — the first run downloads their images…")
+		err := runQuietTimeout(30*time.Minute, "docker", append(append([]string{}, full...), "up", "-d")...)
+		lv.stepEnd()
+		if !err {
+			lv.stepBad("downloads", "some backends failed to start; re-run `vyomi up` or check `vyomi logs`")
+			return
 		}
+		lv.stepOK("downloads", "heavy backends (S3, KMS, SQL, NoSQL, queues) started")
 	}
 	switch action {
 	case "up", "start", "restart":
+		lv.banner(composeVersion(cf))
 		if err := ensureDockerEngine(150 * time.Second); err != nil {
+			lv.stepBad("docker", err.Error())
 			return err
 		}
+		dv, _ := capture("docker", "--version")
+		dv = strings.TrimSpace(strings.SplitN(strings.TrimPrefix(strings.TrimSpace(dv), "Docker version "), ",", 2)[0])
+		if dv != "" {
+			dv = " (" + dv + ")"
+		}
+		lv.stepOK("docker", "engine reachable"+dv)
 	}
 	switch action {
 	case "up", "start":
-		if err := run("docker", append(append([]string{}, base...), "up", "-d")...); err != nil {
+		lv.stepRun("start", "simulator + core services…")
+		if err := run("docker", append(append([]string{}, base...), "up", "-d", "--quiet-pull")...); err != nil {
+			lv.stepEnd()
+			lv.stepBad("start", "docker compose up failed: "+err.Error())
 			return err
 		}
-		progress("==> Vyomi (Docker) console starting - open http://localhost:9000 in ~30s")
+		lv.stepEnd()
+		lv.stepOK("start", "simulator "+composeVersion(cf)+" + core services")
 		wave2()
+		lv.waitReady("http://localhost:9000")
+		lv.ready("http://localhost:9000")
 		return nil
 	case "down", "stop":
 		return run("docker", append(append([]string{}, full...), "down")...)

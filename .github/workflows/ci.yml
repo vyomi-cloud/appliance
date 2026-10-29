@@ -25,6 +25,8 @@ jobs:
         run: python -c "from core import tier_policy as tp; print('tiers:', list(tp._TIER_POLICY.keys()))"
       - name: Nano relay loaders import every core they need
         run: python wasm/build_cores.py --check
+      - name: All three launchers show the same launch view
+        run: python tests/launcher/test_launch_view_consistency.py
 
   # ── Backend stack + conformance (the gate) ──────────────────────────────
   conformance:

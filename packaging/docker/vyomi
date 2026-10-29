@@ -131,6 +131,7 @@ fetch_latest_release() {
 # ── Launch view: dot-matrix banner + live steps (cosmetic, honest) ─────────────
 # Only on an interactive terminal; plain lines when piped, in CI, with NO_COLOR or
 # VYOMI_NO_BANNER=1. Every step reports what actually happened and how long it took.
+# Same view as scripts/cloud-learn and cmd/vyomi (tests/launcher/test_launch_view_consistency.py).
 VYOMI_URL="${VYOMI_URL:-http://localhost:9000}"
 _tty=0; [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${VYOMI_NO_BANNER:-}" != "1" ] && [ "${CI:-}" = "" ] && _tty=1
 case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in *UTF-8*|*utf8*|*UTF8*) _utf=1 ;; *) _utf=0 ;; esac
@@ -140,6 +141,7 @@ if [ "$_utf" = 1 ]; then _on="●"; _off="·"; _ok="✓"; _bad="✗"; _run="▸"
 
 banner() {
   [ "$_tty" = 1 ] || return 0
+  # LAUNCH-VIEW-MATRIX (keep identical across launchers)
   local rows=(
     "10001 10001 01110 10001 111"
     "10001 10001 10001 11011 010"
@@ -208,10 +210,11 @@ launch() {   # $1 = label for the banner
     step_end; step_bad "start" "docker compose up failed:"; tail -n 15 "$log" >&2; rm -f "$log"; exit 1
   fi
   rm -f "$log"; step_end
-  step_ok "start" "simulator $(pinned_ver "$COMPOSE_FILE") + core services"
+  step_ok "start" "simulator v$(pinned_ver "$COMPOSE_FILE") + core services"
   wave2_full_bg
   step_ok "downloads" "heavy backends (S3, KMS, SQL, NoSQL, queues) downloading in the background"
   wait_ready || true
+  # LAUNCH-VIEW-READY (keep identical across launchers)
   printf '\n  %sReady.%s Open %s%s%s   ·   SDK/CLI: point --endpoint-url at %s\n' "$_b" "$_z" "$_c" "$VYOMI_URL" "$_z" "$VYOMI_URL"
   printf '  %sPro tier: launch an EC2 instance in the console, then ssh ubuntu@<ip>.%s\n\n' "$_d" "$_z"
 }
