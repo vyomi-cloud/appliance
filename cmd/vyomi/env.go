@@ -176,11 +176,11 @@ func (c *Config) dispatchEnv(args []string) int {
 				for _, d := range diffs {
 					oldVal := d.Old
 					newVal := d.New
-					if !*showSecretsFlag && IsSecretKey(d.Key) {
+					if !*showSecretsFlag {
 						if !d.IsAdd {
-							oldVal = MaskValue(oldVal)
+							oldVal = MaskEnvValue(d.Key, oldVal)
 						}
-						newVal = MaskValue(newVal)
+						newVal = MaskEnvValue(d.Key, newVal)
 					}
 					if d.IsAdd {
 						fmt.Printf("  + %s = %s\n", d.Key, newVal)

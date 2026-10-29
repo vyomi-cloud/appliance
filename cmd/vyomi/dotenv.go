@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -196,6 +197,39 @@ func MaskValue(val string) string {
 		return "********"
 	}
 	return val[:2] + "********" + val[len(val)-2:]
+}
+
+var reURLUserPass = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)([^@\s]*?):([^@\s]+)@`)
+
+// MaskURLCredentials masks passwords inside URL strings such as:
+// postgresql://siftly:password123@localhost:5432/siftly or redis://:password@127.0.0.1:6379
+func MaskURLCredentials(val string) string {
+	return reURLUserPass.ReplaceAllStringFunc(val, func(m string) string {
+		parts := reURLUserPass.FindStringSubmatch(m)
+		if len(parts) == 4 {
+			scheme := parts[1]
+			user := parts[2]
+			pass := parts[3]
+			return scheme + user + ":" + MaskValue(pass) + "@"
+		}
+		return m
+	})
+}
+
+// MaskEnvValue masks secret values for dry-run output.
+// It masks embedded credentials inside URL values (e.g. DATABASE_URL or REDIS_URL),
+// and masks the entire value for sensitive keys (e.g. DB_PASSWORD).
+func MaskEnvValue(key, val string) string {
+	if val == "" {
+		return ""
+	}
+	if reURLUserPass.MatchString(val) {
+		return MaskURLCredentials(val)
+	}
+	if IsSecretKey(key) {
+		return MaskValue(val)
+	}
+	return val
 }
 
 // CheckGitTracked checks if a file is tracked by git.
