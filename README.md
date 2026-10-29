@@ -1,11 +1,11 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-29 05:25 UTC · refreshes after every pipeline run_
+_Updated 2026-10-29 05:26 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
-- **Released:** 51 services (AWS 17 · GCP 16 · Azure 18) of 1,068 the clouds publish
-- **Building now:** Amazon CloudWatch (AWS, 20/20 checks), Amazon Cognito Identity Provider (AWS, 18/18 checks), Amazon EC2 Container Service (AWS, 19/19 checks), Amazon Elastic Container Registry (AWS, 20/20 checks), Amazon ElastiCache (AWS, 20/20 checks), Amazon Kinesis (AWS, 17/18 checks), Amazon Route 53 (AWS, 20/20 checks), Amazon Simple Email Service (AWS, 17/18 checks), Amazon Simple Notification Service (AWS, 17/18 checks), AWS CloudFormation (AWS, 20/20 checks), AWS Security Token Service (AWS, 18/18 checks), Artifact Registry API (GCP, 17/18 checks), BigQuery API (GCP, 17/18 checks), Cloud DNS API (GCP, 17/18 checks), Cloud Logging API (GCP, 17/18 checks), Cloud Monitoring API (GCP, 17/18 checks), Cloud Run Admin API (GCP, 19/19 checks), Cloud Tasks API (GCP, 17/18 checks), Workflows API (GCP, 17/18 checks), applicationinsights (Azure, 16/17 checks), containerregistry (Azure, 20/20 checks), containerservice (Azure, 16/17 checks), eventhub (Azure, 16/17 checks), msi (Azure, 17/17 checks), redis (Azure, 20/20 checks)
+- **Released:** 52 services (AWS 18 · GCP 16 · Azure 18) of 1,068 the clouds publish
+- **Building now:** Amazon Cognito Identity Provider (AWS, 18/18 checks), Amazon EC2 Container Service (AWS, 19/19 checks), Amazon Elastic Container Registry (AWS, 20/20 checks), Amazon ElastiCache (AWS, 20/20 checks), Amazon Kinesis (AWS, 17/18 checks), Amazon Route 53 (AWS, 20/20 checks), Amazon Simple Email Service (AWS, 17/18 checks), Amazon Simple Notification Service (AWS, 17/18 checks), AWS CloudFormation (AWS, 20/20 checks), AWS Security Token Service (AWS, 18/18 checks), Artifact Registry API (GCP, 17/18 checks), BigQuery API (GCP, 17/18 checks), Cloud DNS API (GCP, 17/18 checks), Cloud Logging API (GCP, 17/18 checks), Cloud Monitoring API (GCP, 17/18 checks), Cloud Run Admin API (GCP, 19/19 checks), Cloud Tasks API (GCP, 17/18 checks), Workflows API (GCP, 17/18 checks), applicationinsights (Azure, 16/17 checks), containerregistry (Azure, 20/20 checks), containerservice (Azure, 16/17 checks), eventhub (Azure, 16/17 checks), msi (Azure, 17/17 checks), redis (Azure, 20/20 checks)
 - **In the gate / releasing:** nothing
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 59% · Nano 70%
@@ -16,7 +16,7 @@ _Updated 2026-10-29 05:25 UTC · refreshes after every pipeline run_
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 17 | 11 | 0 | 17 | 51% · 68% |
+| AWS | 18 | 10 | 0 | 17 | 51% · 68% |
 | GCP | 16 | 8 | 0 | 12 | 47% · 66% |
 | Azure | 18 | 6 | 0 | 12 | 75% · 75% |
 
@@ -24,7 +24,6 @@ _Updated 2026-10-29 05:25 UTC · refreshes after every pipeline run_
 
 | Service | Cloud | Stage | Checks | Real backend | Built with | Still missing |
 |---|---|---|---|---|---|---|
-| Amazon CloudWatch [#52](https://github.com/vyomi-cloud/appliance/issues/52) | AWS | 🛠 Building | 20/20 | victoriametrics · Lite · + vmalert agent | victoriametrics · 40 MB · Lite | — |
 | Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🛠 Building | 18/18 | in-process | in-process | — |
 | Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🛠 Building | 19/19 | docker · Pro · + caddy gateway | docker · Pro | — |
 | Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🛠 Building | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
@@ -77,6 +76,7 @@ _Updated 2026-10-29 05:25 UTC · refreshes after every pipeline run_
 | Systems Manager | in-process | 🟡 Parameter Store real; Run Command reports Success without running | 🧩 5/10 · 🧩 5/10 | 1 · 1 | ✅ watched | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
 | Step Functions | workflow-engine · in-process · + temporal engine | ✅ ASL interpreter runs executions and calls Lambda; Wait doesn't sleep | 🧩 8/12 · 🧩 8/12 | 0 · 0 | ✅ watched | [v3.0.13](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.13) |
 | API Gateway V2 | caddy · Lite | not audited | — | – · – | ✅ watched | [v3.0.25](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.25) |
+| Amazon CloudWatch | victoriametrics · Lite · + vmalert agent | not audited | — | – · – | ✅ watched | [v3.0.26](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.26) |
 
 ### GCP
 
@@ -290,33 +290,6 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 </details>
 
 ## Details
-
-<details><summary>Gate checks — Amazon CloudWatch (AWS)</summary>
-
-| | Check | Detail |
-|---|---|---|
-| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
-| ✅ | manifest status is ready | status=ready |
-| ✅ | engine exists in core/ | core/cloudwatch_core.py |
-| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/cloudwatch_core.py |
-| ✅ | engine listed in wasm/build_cores.py |  |
-| ✅ | service in the Nano console catalog (wasm/fixtures) | aws-catalog.json |
-| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
-| ✅ | registry entry (pending-release or released) |  |
-| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
-| ✅ | has a offline sdk-java test bed |  |
-| ✅ | has a offline sdk-go test bed |  |
-| ✅ | has a offline cli test bed |  |
-| ✅ | has a offline ui test bed |  |
-| ✅ | has a nano ui test bed |  |
-| ✅ | upstream id tracked by the hourly upstream watcher | cloudwatch |
-| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'container', 'name': 'victoriametrics', 'image': 'victoriametrics/victoria-metrics:v1.104.0', 'license': 'Apache-2.0', 'tie |
-| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: victoriametrics; chose victoriametrics |
-| ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=Apache-2.0 |
-| ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=Apache-2.0 |
-| ✅ | backend image is pinned to a version (not latest) | victoriametrics/victoria-metrics:v1.104.0 |
-
-</details>
 
 <details><summary>Gate checks — Amazon Cognito Identity Provider (AWS)</summary>
 
