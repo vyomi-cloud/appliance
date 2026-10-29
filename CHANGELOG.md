@@ -4,6 +4,106 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.33] — 2026-10-29
+
+Daily conformance release. **40 product fixes** (AWS 17, GCP 13, Azure 7, all clouds 3); 28 reach Nano and 26 reach the offline appliance; 18 test and harness improvements.
+
+### Highlights
+
+- **Metrics tabs now show real traffic.** In AWS and Azure (Nano and offline), Metrics and Monitoring tabs chart the requests, errors and latency your own calls produce instead of made-up sparklines, and AWS detail tabs are no longer cut off at 10 (VPC Metrics and Flow logs were hidden).
+- **Cloud Scheduler jobs actually run.** In the offline appliance, GCP Cloud Scheduler HTTP-target jobs send a real request (method, headers, body, bearer token) and record success, failure or timeout, and due jobs now fire on their own every 15 seconds. Nano still only records jobs.
+- **Many Nano console tabs that errored now load.** Nano no longer fails on AWS VPC subnets, route tables and internet gateways, API Gateway resources and stages, Azure Key Vault secrets and keys and data-plane detail blades, GCP Firestore Usage, and GCP Pub/Sub subscriptions, and the GCP, AWS and Azure grids now show fully populated rows.
+- **Three new EC2 operations in the offline appliance.** CreateCapacityReservationFleet (with Describe and Cancel), GetCapacityManagerSupportabilityScores and GetImageFindings are now implemented.
+- **Cost savings count more of what you create.** The offline appliance now includes IAM users, Secrets Manager secrets, KMS keys, Pub/Sub, API Gateway and storage uploads (S3, GCS, blob), and deleting a Pub/Sub topic no longer leaves its subscriptions in the count.
+- **Console fixes across all three clouds.** GCP detail-tab actions work again after breaking in v3.0.29, Azure NSG and Role Definition have detail blades and add a row when created with defaults, Secrets Manager shows Created instead of blank rotation dates, and GKE version lists are updated to 2026-R46.
+- **Packaging.** The package and assets are renamed to vyomi, and the RPM now includes the Docker Compose file.
+
+### Fixes — AWS
+
+- **[Nano + offline]** Secrets Manager grid showed '-' in Last rotated/Next rotation after create; list now shows Created (real DescribeSecret field), Nano rows carry it; validator nano-ui-aws-secrets-created
+- **[offline]** Fixes #162 — EC2 CreateCapacityReservationFleet was unimplemented; implement it with the new AvailabilityZone/AvailabilityZoneId/InstanceRequirements params plus Describe/CancelCapacityReservationFleets; test_ec2_capacity_reservation_fleet_api fails before, passes after
+- **[offline]** Fixes #161 — implement EC2 GetCapacityManagerSupportabilityScores (required-param validation, per-AZ scores); test_ec2_capacity_manager_scores_api fails before, passes after
+- **[offline]** Fixes #142 — implement EC2 GetImageFindings (known AMI -> empty findings, unknown -> InvalidAMIID.NotFound); test_ec2_get_image_findings_api fails before, passes after
+- **[Nano]** Nano EventBridge rule created from the console is ENABLED (was 'available') with its attached target count; validate-aws-eventbridge-row passes
+- **[Nano]** Re-apply Nano AWS fixes lost in the main merge — drop my duplicate API Gateway resources/stages route (main's ListResources/ListStages serve them), EC2 default security group back in launch defaults; vpc-row validator accepts main's vpcs list shape
+- **[Nano + offline]** Fixes #177 — AWS Metrics/Monitoring tabs draw measured data: request recorder middleware + GET /api/metrics/series (offline) and the same in the Nano service worker; seeded sparklines and random EC2 CloudWatch values removed; detail tabs no longer truncated at 10 (VPC Metrics/Flow logs were hidden); validate-aws-metrics (Nano + offline), test_request_metrics
+- **[Nano + offline]** AWS EC2 'Status and alarms' shows real status checks and VPC 'VPC details' shows the VPC's own config (both were copies of another tab → DEAD_TAB); validate-aws-detail-tabs (Nano + offline)
+- **[Nano]** Nano EC2 launch attaches a default security group (Networking tab 'Security groups' was blank); validate-aws-ec2-row checks it
+- **[Nano]** Nano API Gateway resources + stages list routes (were 501); validate-aws-apigw-row checks both
+- **[Nano]** Nano VPC subnets / route-tables / internet-gateways list routes (were 501 on the VPC tabs); extended validate-aws-vpc-row
+- **[Nano]** Nano EC2 detail resolves by instance id; EventBridge rules reach the census
+- **[Nano]** Nano unsaved detail-tab settings answer 200 (defaults), IAM user/role detail GET
+- **[Nano + offline]** Nano VPC list/detail/delete + EventBridge rule defaults; console extras persisted
+- **[Nano + offline]** Nano EC2/API Gateway rows populated and persisted; Lambda/API Gateway/VPC reach the census
+- **[Nano + offline]** Nano Lambda rows fully populated + compute store persisted; AWS console list guard; KMS description
+- **[offline]** Count IAM users, Secrets Manager secrets and KMS keys in cost_savings; list secret encryption key
+
+### Fixes — GCP
+
+- **[Nano]** Nano Firestore database Usage tab no longer 501s (documents list route + ListDocuments op); validator nano-ui-gcp-firestore-usage
+- **[Nano]** Restore Nano GCP console clobbered by the Artifact Registry merge (stale copy dropped metrics counts, cost card changes); keep AR rail entry + sublist tab (nano-ui-gcp-metrics-counts green)
+- **[offline]** GKE/Memorystore GetOperation was shadowed by the Artifact Registry operations route; falls through to their stores (java/go/cli gcp-container suites green)
+- **[Nano + offline]** GKE 2026-R46 versions; deprecated 1.35.8-gke.1919000 leaves channels (Fixes #158, Fixes #159, Fixes #160)
+- **[Nano + offline]** GCP detail-tab actions 404 since v3.0.29; SNS console publish/subscribe
+- **[Nano + offline]** Fixes #148 — Cloud Scheduler httpTarget jobs send a real HTTP request (method, headers, body, bearer token for oidc/oauth), map 2xx/non-2xx/timeout onto job status with retryConfig; Nano stays record-only; test_gcp_cloudscheduler_http_api fails before, passes after
+- **[offline]** Fixes #147 — Cloud Scheduler fires due jobs on a 15s background ticker (offline appliance), no read needed; ticker binds the GCP provider so Pub/Sub delivery lands in the GCP space; test_gcp_cloudscheduler_timer_api fails before, passes after
+- **[offline]** GET/DELETE /api/gcp/pubsub/v1/.../subscriptions/{sub} were 404 (aliases missing, so console-prefix deletes leaked subscriptions and resource_count); non-emulator subscription delete now syncs the resource registry; test_gcp_pubsub_savings_api now asserts each DELETE succeeds (fails before, passes after)
+- **[offline]** Deleting a Pub/Sub topic also removes its subscriptions from the cost-savings resource registry (resource_count leaked the console's default subscription); covered by test_gcp_pubsub_savings_api
+- **[Nano]** GCP VPC Mode column — regenerate Nano gcp-catalog fixture (stale 'autoCreateSubnetworks' column key lost in merge; fixes nano-ui-gcp-create-defaults), API grid-columns test reads derived Mode from autoCreateSubnetworks
+- **[offline]** GCP console-actions — Scheduler/GKE/Redis/IAM Credentials creates get form payloads and a bad body is 400 not 500; empty GCP secret is gettable; create-defaults validator is re-runnable (clears default (default) DB / my-topic) and prints failing URLs
+- **[Nano + offline]** GCP grids fully populated — VPC mode/auto range, function state, Firestore/KMS/Secret Manager/API Gateway/Eventarc/Compute columns in Nano, Nano Pub/Sub project subscriptions list (was 501); validate-gcp-create-defaults (Nano + offline); gcp-functional-tabs validator now prints real PASS/FAIL checks
+- **[offline]** GCP create-with-defaults + savings — optional Cloud SQL password / secret value / API Gateway config, Pub/Sub emulator + API Gateway + Vault-backed secrets/KMS counted in savings, debounced savings refresh after any write; crawler exempts free-by-price-list VPC/IAM from the dollar check; test_gcp_console_savings_api
+
+### Fixes — Azure
+
+- **[Nano + offline]** Fixes #179 (Azure) — Metrics tab draws measured requests/errors/latency from /api/metrics/series instead of seeded sparklines; Nano worker records ARM and azure-data requests; validate-azure-metrics (Nano + offline)
+- **[Nano]** Nano Azure census read AzureArm._state (attribute is .state) so ARM resources never reached cost_savings; add ARM-type list prices to the SW rate table; test_azure_census (fails before, passes after)
+- **[Nano]** Nano Azure data-plane detail blade no longer GETs providers/undefined/undefined (404 on Blob containers/Cosmos DBs/KV secrets/keys); uses the list record; validate-azure-dp-detail
+- **[Nano + offline]** NSG gets a real detail blade (Security rules add/list/delete via ARM) and Role Definition a detail blade; Tags-tab validators (offline+Nano) prove save+reload; crawler counts the tag editor as the resource's own data
+- **[Nano]** Nano serves /azure-data/keyvault/{vault}/secrets|keys (vault blade Secrets/Keys tabs 404'd); validator added
+- **[Nano]** Restore Azure data-plane services (blob, queue, cosmos, KV secrets/keys) in Nano catalog; build_fixtures now emits them so regen can't drop them (fixes nano-ui-azure-dp, nano-ui-azure-home)
+- **[Nano + offline]** Azure NSG and Role Definition create with defaults now adds a row; validators for offline + Nano
+
+### Fixes — all clouds
+
+- **[offline]** RPM ships docker-compose.cloudlite.yml; Max help names the vyomi command
+- **[Nano + offline]** Drop daily leftovers whose definitions the main-side merge removed
+- **[offline]** Usage-based savings — meter stored bytes + write requests for S3/GCS/blob uploads (offline-cost-savings aws+gcp now pass)
+
+<details><summary>Platform and release pipeline (1)</summary>
+
+- Rename the cloud-learn package and assets to vyomi (v3.0.33)
+
+</details>
+
+<details><summary>Test and harness improvements (18)</summary>
+
+- Crawler no longer reports a real NONE enum value (API Gateway V2 route Authorization) as a placeholder cell
+- GCP engine ops PatchJob, SetState, CreatePool, DeletePool, GetOp, PatchInstance were reported untested though the Go SDK tests call UpdateJob/Pause/ResumeJob/CreateNodePool/DeleteNodePool/GetOperation/UpdateInstance; detector now maps handler names to SDK RPCs (harness fix, 14 false entries gone)
+- Cover untested ELBv2 ops (AddListenerCertificates, DescribeListenerCertificates, RemoveListenerCertificates) in the Go SDK test; ops already worked, so passes before and after
+- Cover #149 — Cloud Scheduler pubsubTarget :run delivers data+attributes to the subscription the emulator-backed pull reads (console path already published via the Pub/Sub API, so passes before and after); test_gcp_cloudscheduler_pubsub_api added
+- Fix harness for Cloud Scheduler HTTP tests — the appliance runs in Docker and jobs now send real requests, so the API test and UI Force run target a host-reachable listener (host.docker.internal) instead of loopback/example.com; offline-api-gcp-cloudscheduler-http and offline-ui-gcp-cloudscheduler pass
+- Azure core ops (PutZone, ListStores, ...) were reported untested though the Azure Go/Java/CLI tests call them by ARM verb (CreateOrUpdate/List/Delete); detector now maps verbs per service test file (harness fix, 36 false entries gone)
+- Cover untested Logs ops (AssociateKmsKey, DisassociateKmsKey, TagLogGroup, UntagLogGroup, DescribeQueries, StopQuery) in the Go SDK test; ops already worked, so passes before and after
+- Cover the 8 uncovered /api/providers/aws/sdk/<lang>[/snippet] routes; test_aws_sdk_info_routes_api added (routes already worked, so passes before and after)
+- Azure Service Bus console + SDK-info routes were reported uncovered although test_azure_console_routes_api calls them (paths built from a variable/f-string); use literal paths so the route-coverage scan sees them; suite still passes
+- Azure-flat-create validator clears the pre-filled default name/role name before testing that an empty required field is refused (harness fix: forms now default realistic names); offline run passes
+- Gcp-grid-defaults validator applies the console's decorateGcpItems (VPC Mode is derived from autoCreateSubnetworks, not an API field) — harness reported a false blank
+- Suites.json — drop duplicate detail-tabs entries after merge
+- Console-actions Azure resource names get a per-run suffix so re-runs don't hit soft-delete conflicts
+- Register nano-ui-azure-keyvault-tabs
+- Crawler (harness) no longer expects dollar savings from resources Azure doesn't bill (VNet, NSG, RBAC); resource_count check kept
+- Script-style core tests no longer abort pytest collection (module-level sys.exit); add test_all_checks_pass — nano-cores runs again
+- Console-actions Azure creates send valid ARM bodies for app/appconfig/cognitive/dns/monitor/loganalytics (76/76); DNS zone gets a 2-label name like real Azure
+- Azure CLI smoke creates a free-tier-sized VM (Standard_B1s); tier cap rejecting D2s_v5 is intended
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.33`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.32] — 2026-10-29
 
 Daily conformance release. **46 product fixes** (AWS 18, GCP 10, Azure 7, all clouds 11); 36 reach Nano and 31 reach the offline appliance; 17 test and harness improvements.
