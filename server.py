@@ -2531,6 +2531,24 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(api, dict):
             add("aws", "apigateway", "api", api_id, api)
 
+    _iam_src = _cloudsim_service_state(space, "iam")
+    if not _iam_src.get("users") and space.get("space_id") == _spaces_state().get("active_space_id"):
+        _iam_src = _iam_state()   # IAM lives in the live (active-space) STATE, not service_states
+    for _iam_kind, _iam_coll in (("user", "users"), ("group", "groups"), ("role", "roles")):
+        for _iam_id, _iam_rec in _iam_src.get(_iam_coll, {}).items():
+            if isinstance(_iam_rec, dict):
+                add("aws", "iam", _iam_kind, str(_iam_id), _iam_rec)
+
+    try:   # Secrets Manager + KMS — the Vault-backed stores the console and SDK/CLI share
+        from core import vault_routes as _vr
+        for _sec_name in _vr._aws_secret_index_get(str(space.get("space_id") or _spaces_state().get("active_space_id") or "default")):
+            add("aws", "secretsmanager", "secret", _sec_name, {"name": _sec_name})
+        for _key_id, _key in list(_vr._kms_keys.items()):
+            if isinstance(_key, dict) and _key.get("KeyState") != "PendingDeletion":
+                add("aws", "kms", "key", _key_id, {"name": _key_id})
+    except Exception:
+        pass
+
     try:   # Systems Manager parameters — the shared wire/console store
         from core.ssm_core import shared_store as _ssm_store
         for _n in _ssm_store().parameters:
