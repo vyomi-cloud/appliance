@@ -208,7 +208,7 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
+const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,ec2:30.37,lambda:0.20,apigateway:3.50,apigatewayv2:1.00,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
@@ -229,18 +229,6 @@ async function nanoCostSavings() {
 // Each console gates on an active space whose provider matches it. We derive
 // the provider from the page making the request, so aws/gcp/azure consoles all
 // pass their gate from the same in-browser substrate.
-// Cost-savings metrics for a space: the console page's live census (written by
-// nano-boot from the in-browser cores, priced by core/cost_model) for that cloud.
-const SAVINGS_TTL = 60000;
-async function withSavings(space) {
-  try {
-    const c = await metaGet("census:" + space.provider);
-    if (c && c.cost_savings && typeof c.ts === "number" && (Date.now() - c.ts) < SAVINGS_TTL)
-      return { ...space, cost_savings: c.cost_savings };
-  } catch (_) {}
-  return space;
-}
-
 function nanoSpace(provider) {
   const acct = provider === "gcp" ? "nano-project" : provider === "azure" ? "nano-sub" : "000000000000";
   const region = provider === "gcp" ? "us-central1" : provider === "azure" ? "eastus" : "us-east-1";
@@ -882,7 +870,6 @@ self.addEventListener("fetch", (event) => {
           match = created.find((s) => s.space_id === activeId && s.provider === prov)
                || created.filter((s) => s.provider === prov).pop();
         } catch (_) {}
-        return json({ space: await withSavings(match || nanoSpace(prov)) });
         return json({ space: { ...(match || nanoSpace(prov)), cost_savings: await nanoCostSavings() } });
       }
       // Spaces list = fixture defaults + persisted user-created (deduped).
@@ -893,7 +880,6 @@ self.addEventListener("fetch", (event) => {
         for (const s of [...(fx.spaces || []), ...created])
           if (!seen.has(s.space_id)) { seen.add(s.space_id); spaces.push(s); }
         let active = fx.active_space_id; try { active = (await metaGet("active")) || active; } catch (_) {}
-        return json({ spaces: await Promise.all(spaces.map(withSavings)), active_space_id: active });
         // Every space reports the same cost_savings shape the appliance's core/cost_model
         // produces, from the live census of the one shared in-browser substrate.
         const cs = await nanoCostSavings();

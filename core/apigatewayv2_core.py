@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from urllib.parse import unquote
 
 REGION = "us-east-1"
+GATEWAY_HTTPS_PORT = 9443   # shared Caddy gateway: TLS (internal CA); plain HTTP on 9080
 ACCOUNT = "000000000000"
 _METHODS = {"ANY", "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
 
@@ -170,7 +171,7 @@ def _create_api(store, b):
     scheme = "wss" if ptype == "WEBSOCKET" else "https"
     api = {
         "apiId": api_id, "name": b["name"], "protocolType": ptype,
-        "apiEndpoint": f"{scheme}://{api_id}.execute-api.{REGION}.amazonaws.com",
+        "apiEndpoint": f"{scheme}://{api_id}.execute-api.localhost:{GATEWAY_HTTPS_PORT}",   # served by the shared Caddy gateway
         "apiKeySelectionExpression": b.get("apiKeySelectionExpression", "$request.header.x-api-key"),
         "routeSelectionExpression": b.get("routeSelectionExpression", "$request.method $request.path"),
         "createdDate": _now(), "disableExecuteApiEndpoint": bool(b.get("disableExecuteApiEndpoint", False)),
@@ -603,6 +604,17 @@ def console_view(api: dict) -> dict:
     }
 
 
+CHANGE_LISTENERS: list = []   # callables(store) fired after every successful mutation (gateway route sync)
+
+
+def _notify_changed(store):
+    for cb in list(CHANGE_LISTENERS):
+        try:
+            cb(store)
+        except Exception:
+            pass
+
+
 def _parse(body):
     try:
         d = json.loads(body.decode("utf-8")) if body else {}
@@ -630,7 +642,10 @@ def dispatch(store, method: str, path: str, query: dict | None = None,
             mt = rx.match(rel)
             if mt:
                 b = _parse(body) if method in ("POST", "PUT", "PATCH") else {}
-                return fn(store, query or {}, b, *mt.groups())
+                out = fn(store, query or {}, b, *mt.groups())
+                if method != "GET" and out.status < 300:
+                    _notify_changed(store)
+                return out
         known = any(rx.match(rel) for _, rx, _ in _ROUTES)
         return _err(_E("MethodNotAllowedException" if known else "NotFoundException",
                        f"Unsupported {method} {path}", 405 if known else 404))
@@ -670,51 +685,8 @@ def _route_match(api, method, path):
 
 
 def invoke(store, api_id, stage, method, path, headers=None, query=None, body=b"", lambda_store=None):
-    """Route a request through a deployed HTTP API. Returns an ApiGwV2Response."""
-    from core import lambda_core
-    api = store.apis.get(api_id)
-    if not api or api["protocolType"] != "HTTP":
-        return _json(404, {"message": "Not Found"})
-    st = api["stages"].get(stage) or api["stages"].get("$default")
-    if st is None or not st.get("deploymentId"):
-        return _json(404, {"message": "Not Found"})
-    method = (method or "GET").upper()
-    r, params = _route_match(api, method, path)
-    if r is None:
-        return _json(404, {"message": "Not Found"})
-    tgt = r.get("target") or ""
-    integ = api["integrations"].get(tgt.split("/", 1)[1]) if tgt.startswith("integrations/") else None
-    if integ is None:
-        return _json(500, {"message": "Internal Server Error"})
-    if integ["integrationType"] == "MOCK":
-        return ApiGwV2Response(status=200, body=b"")
-    if integ["integrationType"] in ("AWS_PROXY", "AWS"):
-        m = re.search(r"function:([A-Za-z0-9_-]+)", integ.get("integrationUri", ""))
-        fn = m.group(1) if m else integ.get("integrationUri", "").rsplit("/", 1)[-1]
-        try:
-            req_body = body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body or "")
-        except Exception:
-            req_body = ""
-        q = dict(query or {})
-        event = {
-            "version": "2.0", "routeKey": r["routeKey"], "rawPath": "/" + path.strip("/"),
-            "rawQueryString": "&".join(f"{k}={v}" for k, v in q.items()),
-            "headers": {k.lower(): v for k, v in (headers or {}).items()},
-            "queryStringParameters": q or None, "pathParameters": params or None,
-            "requestContext": {"apiId": api_id, "stage": st["stageName"], "routeKey": r["routeKey"],
-                               "http": {"method": method, "path": "/" + path.strip("/"), "protocol": "HTTP/1.1"}},
-            "body": req_body, "isBase64Encoded": False, "stageVariables": st.get("stageVariables") or None}
-        out = lambda_core.dispatch(lambda_store if lambda_store is not None else store, "POST",
-                                   f"/2015-03-31/functions/{fn}/invocations", {}, {}, json.dumps(event).encode())
-        if out.headers.get("X-Amz-Function-Error"):
-            return _json(500, {"message": "Internal Server Error"})
-        try:
-            res = json.loads(out.body.decode("utf-8"))
-        except Exception:
-            res = None
-        if isinstance(res, dict) and "statusCode" in res:
-            ob = res.get("body", "")
-            return ApiGwV2Response(status=int(res["statusCode"]), body=ob.encode() if isinstance(ob, str) else (ob or b""),
-                                   headers={str(k): str(v) for k, v in (res.get("headers") or {}).items()})
-        return ApiGwV2Response(status=200, body=(out.body or b""))   # format 2.0 auto-response
-    return _json(502, {"message": "Bad Gateway"})
+    """Route a request through a deployed HTTP API (CORS, throttling, authorizers, Lambda
+    proxy 1.0/2.0, HTTP proxy — see core/apigatewayv2_gateway.py). Returns an ApiGwV2Response."""
+    from core import apigatewayv2_gateway as gw
+    invoker = gw._default_invoker(lambda_store if lambda_store is not None else store)
+    return gw.handle(store, api_id, stage, method, path, headers, query, body, invoker=invoker)

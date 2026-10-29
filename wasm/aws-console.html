@@ -753,9 +753,7 @@ function renderRail(){
       ["Compute", ["ec2", "lambda"]],
       ["Storage", ["s3"]],
       ["Databases", ["rds", "dynamodb"]],
-      ["Application Integration", ["sqs", "apigateway", "apigatewayv2", "eventbridge"]],
-      ["Networking & Content Delivery", ["vpc"]],
-      ["Application Integration", ["sqs", "apigateway", "eventbridge", "stepfunctions"]],
+      ["Application Integration", ["sqs", "apigateway", "apigatewayv2", "eventbridge", "stepfunctions"]],
       ["Networking & Content Delivery", ["vpc", "elbv2"]],
       ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
       ["Management & Governance", ["logs", "ssm"]],
@@ -3981,6 +3979,11 @@ SUB_RENDERERS.apigw2list = function(svc, full, host, tab){
     items.forEach(it => tbl.append(el("tr",{}, ...cols.map(c => {
       const v = it[c[0]];
       return el("td",{class:/uri|id|key/i.test(c[0]) ? "mono small" : ""}, (v === undefined || v === null || v === "") ? "none" : String(v));
+    }))));
+    host.append(tbl);
+  }).catch(e => host.append(el("div",{class:"alert err"}, "Failed to load: " + e.message)));
+};
+
 // Systems Manager — parameter value (SecureString decrypted via GET), editable → PUT = new version.
 SUB_RENDERERS.ssmvalue = function(svc, full, host){
   const name = itemKey(svc, full);

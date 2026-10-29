@@ -23310,6 +23310,11 @@ try:
     _apigwv2_console.register(app, _apigwv2_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[apigatewayv2] console routes skipped: {_e}")
+try:   # API Gateway V2 data plane: the integration handler behind the shared Caddy gateway
+    from providers import aws_apigatewayv2_gateway as _apigwv2_gateway
+    _apigwv2_gateway.register(app, lambda fn, ev: _lambda_invoke_function(fn, ev, source="apigateway"))
+except Exception as _e:   # never let this break appliance boot
+    print(f"[apigatewayv2] gateway handler skipped: {_e}")
 # Systems Manager console REST (/api/ssm/*) — shares its store with the native AmazonSSM wire.
 try:
     from providers import aws_ssm_console as _ssm_console

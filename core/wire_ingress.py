@@ -140,14 +140,13 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     unified ingress (mount())."""
     from fastapi import Request, Response
 
-    from core.apigatewayv2_core import shared_store
-    r = router or AwsWireRouter(stores={"apigwv2": shared_store()})
+    from core.apigatewayv2_core import shared_store as _apigwv2_store
     from core.stepfunctions_core import shared_store as _sfn_store, set_lambda_store as _sfn_lambda
     from core.gcp_cloudscheduler_core import shared_store as _gcp_sched_store
     from core.gcp_container_core import shared_store as _gcp_gke_store
     from core.gcp_iamcredentials_core import shared_store as _gcp_iamc_store
     from core.gcp_redis_core import shared_store as _gcp_redis_store
-    r = router or AwsWireRouter(stores={"sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_redis": _gcp_redis_store()})
+    r = router or AwsWireRouter(stores={"apigwv2": _apigwv2_store(), "sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_redis": _gcp_redis_store()})
     _sfn_lambda(r.lam)   # Step Functions Task states invoke the Lambdas this router serves
 
     async def _proxy(request: Request):

@@ -85,7 +85,12 @@
   ],
   "status": "ready",
   "backend": {
-    "kind": "in-process"
+    "kind": "container",
+    "name": "caddy",
+    "image": "caddy:2.8.4-alpine",
+    "license": "Apache-2.0",
+    "tier": "lite",
+    "compose_service": "vyomi-gateway"
   },
   "blank_like_real_console": [
     {

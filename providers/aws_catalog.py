@@ -429,6 +429,9 @@ RESOURCE_CATALOG_AWS = [
             {"name": "target", "label": "Quick-create target (URL or Lambda ARN)", "default": "https://example.com"},
             {"name": "description", "label": "Description", "default": "Created from the console"},
         ],
+        "endpoints": {},
+    },
+    {
         # Systems Manager — Parameter Store in the console (core/ssm_core.py also serves
         # documents, Run Command, associations, maintenance windows and patch baselines on
         # the native AmazonSSM wire). Console REST at /api/ssm/*, same store as the SDK/CLI.
