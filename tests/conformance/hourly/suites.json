@@ -108,6 +108,7 @@
     {"id": "offline-ui-azure-operationalinsights", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-operationalinsights.mjs", "timeout": 600},
     {"id": "nano-ui-azure-operationalinsights", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-operationalinsights.mjs", "timeout": 600},
     {"id": "offline-ui-azure-nsg-roledef-create", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-nsg-roledef-create.mjs", "timeout": 300},
-    {"id": "nano-ui-azure-nsg-roledef-create", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-nsg-roledef-create.mjs", "timeout": 300}
+    {"id": "nano-ui-azure-nsg-roledef-create", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-nsg-roledef-create.mjs", "timeout": 300},
+    {"id": "nano-ui-azure-keyvault-tabs", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-keyvault-tabs.mjs", "timeout": 300}
   ]
 }
