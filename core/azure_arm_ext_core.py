@@ -993,6 +993,14 @@ def after_upsert(state, rec, payload=None) -> None:
         _sql_db_fill(state, rec)
     elif t == SQL_SERVER_T + "/failovergroups":
         _sql_failover_group_fill(state, rec)
+    elif t == "microsoft.keyvault/vaults":
+        p.setdefault("publicNetworkAccess", "Enabled")
+        acl = p.setdefault("networkAcls", {})
+        acl.setdefault("bypass", "AzureServices")
+        acl.setdefault("defaultAction", "Allow")
+        acl.setdefault("ipRules", [])
+        acl.setdefault("virtualNetworkRules", [])
+        p.setdefault("vaultUri", f"https://{rec.get('name')}.vault.azure.net/")
     elif t == WEB_T:
         _site_fill(state, rec)
     elif t == WEB_T + "/functions":

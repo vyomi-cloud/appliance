@@ -259,7 +259,7 @@ _KEYVAULT_SUB = [
     ]},
     {"group": "Settings", "items": [
         {"key": "accessPolicies","label": "Access policies",  "icon": "policy",       "type": "accessPolicies"},
-        {"key": "accessConfig", "label": "Access configuration", "icon": "tune",      "type": "stub"},
+        {"key": "accessConfig", "label": "Access configuration", "icon": "tune",      "type": "kvAccessConfig"},
         {"key": "networking",   "label": "Networking",        "icon": "lan",          "type": "networking"},
         *_settings_props_locks(),
     ]},

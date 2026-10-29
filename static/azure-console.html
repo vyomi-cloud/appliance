@@ -5086,6 +5086,36 @@ SUB_RENDERERS.deploycenter = async function(svc, full, host){
   }
   await fill();
 };
+// ---- Key vault blades ----
+// Access policies: read the vault's current policies from ARM before rendering the editor.
+const _rbVaultAccessPolicies = SUB_RENDERERS.accesspolicies;
+SUB_RENDERERS.accesspolicies = async function(svc, full, host){
+  const r = await arm("GET", full.id, undefined, svc.apiVersion);
+  if (r.ok) full.properties = r.json.properties;
+  return _rbVaultAccessPolicies(svc, full, host);
+};
+// Access configuration: permission model + resource access, and the role assignments at this vault.
+SUB_RENDERERS.kvaccessconfig = async function(svc, full, host){
+  const p = full.properties || {};
+  const model = rbSelect([["false","Vault access policy"],["true","Azure role-based access control"]], String(!!p.enableRbacAuthorization));
+  const dep = rbSelect([["false","Off"],["true","On"]], String(!!p.enabledForDeployment));
+  const disk = rbSelect([["false","Off"],["true","On"]], String(!!p.enabledForDiskEncryption));
+  const arm_ = rbSelect([["false","Off"],["true","On"]], String(!!p.enabledForTemplateDeployment));
+  host.append(rbKv([["Permission model", model], ["Azure Virtual Machines for deployment", dep], ["Azure Disk Encryption for volume encryption", disk],
+                    ["Azure Resource Manager for template deployment", arm_], ["Soft delete", p.enableSoftDelete === false ? "Disabled" : "Enabled (" + (p.softDeleteRetentionInDays || 90) + " days)"],
+                    ["Purge protection", p.enablePurgeProtection ? "Enabled" : "Disabled"]], "Access configuration — " + full.name));
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Apply", async () => {
+    const w = await arm("PATCH", full.id, {properties:{enableRbacAuthorization: model.value === "true", enabledForDeployment: dep.value === "true",
+      enabledForDiskEncryption: disk.value === "true", enabledForTemplateDeployment: arm_.value === "true"}}, svc.apiVersion);
+    if (w.ok) { full.properties = w.json.properties; toast("Access configuration saved"); recordNotif("ok","Key Vault access configuration", full.name); host.innerHTML = ""; SUB_RENDERERS.kvaccessconfig(svc, full, host); }
+    else toast("Save failed: " + rbErr(w), "err");
+  })));
+  const ra = await rbGet(full.id + "/providers/Microsoft.Authorization/roleAssignments", RB_API.auth);
+  const items = (ra.ok && ra.json.value) || [];
+  host.append(el("div",{class:"sub-info",style:"margin-top:12px"}, "Role assignments that apply to this vault" + (p.enableRbacAuthorization ? " (used for data-plane access)" : " (control plane; data access uses access policies)")));
+  if (!items.length) host.append(emptyState("No role assignments apply to " + full.name + "."));
+  else host.append(rbTable(["Principal","Role","Scope"], items.map(a => [getPath(a,"properties.principalId") || "", rbLeaf(getPath(a,"properties.roleDefinitionId")), getPath(a,"properties.scope") || ""])));
+};
 // ===== REAL-BLADES:END =====
 
 function emptyState(msg){

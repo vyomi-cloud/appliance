@@ -374,7 +374,27 @@ def test_function_app_blades():
            any("stopped" in m for m in msgs) and any("d2" in m for m in msgs) and any("appsettings" in m for m in msgs))
 
 
-TESTS = [test_vm_blades, test_storage_blades, test_sql_blades, test_cosmos_blades, test_function_app_blades]
+def test_key_vault_blades():
+    arm = AzureArm()
+    av = "2023-07-01"
+    kv = f"{P}/Microsoft.KeyVault/vaults/kvb"
+    s, v = call(arm, "PUT", kv, {"location": "eastus", "properties": {"sku": {"name": "standard"}, "enableRbacAuthorization": False}}, av)
+    _check("vault reports network ACLs and its URI", v["properties"]["networkAcls"]["defaultAction"] == "Allow"
+           and v["properties"]["vaultUri"].startswith("https://kvb."))
+    s, v = call(arm, "PATCH", kv, {"properties": {"enableRbacAuthorization": True, "enabledForDeployment": True}}, av)
+    _check("access configuration persists", v["properties"]["enableRbacAuthorization"] is True and v["properties"]["enabledForDeployment"] is True)
+    ra = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Authorization/roleAssignments/11111111-2222-3333-4444-555555555555"
+    call(arm, "PUT", ra, {"properties": {"roleDefinitionId": "/providers/Microsoft.Authorization/roleDefinitions/reader",
+                                         "principalId": "p1", "scope": f"/subscriptions/{SUB}/resourceGroups/{RG}"}}, "2022-04-01")
+    s, lst = call(arm, "GET", kv + "/providers/Microsoft.Authorization/roleAssignments", av="2022-04-01")
+    _check("role assignments inherited from the resource group apply to the vault", [x["properties"]["principalId"] for x in lst["value"]] == ["p1"])
+    call(arm, "PUT", kv + "/providers/Microsoft.Authorization/roleAssignments/aaaa", {"properties": {
+        "roleDefinitionId": "/providers/Microsoft.Authorization/roleDefinitions/kv-admin", "principalId": "p2"}}, "2022-04-01")
+    s, lst = call(arm, "GET", kv + "/providers/Microsoft.Authorization/roleAssignments", av="2022-04-01")
+    _check("a role assignment at the vault scope is listed", sorted(x["properties"]["principalId"] for x in lst["value"]) == ["p1", "p2"])
+
+
+TESTS = [test_vm_blades, test_storage_blades, test_sql_blades, test_cosmos_blades, test_function_app_blades, test_key_vault_blades]
 
 if __name__ == "__main__":
     for t in TESTS:
