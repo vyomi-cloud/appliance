@@ -1440,40 +1440,56 @@ SUB_RENDERERS.locks = function(svc, full, host){
 };
 
 SUB_RENDERERS.metrics = function(svc, full, host){
-  host.append(el("div",{class:"sub-info"},
-    "Simulated metrics — sparkline placeholders driven by the resource's lifecycle events. Wire real telemetry under Phase E."));
-  const grid = el("div",{class:"metrics-grid"});
-  const series = svc.key === "vm"
-    ? [["CPU (%)",30,90,"%"],["Memory (%)",40,75,"%"],["Disk read IOPS",100,300,""],["Disk write IOPS",80,250,""],["Network in (KB/s)",50,800,""],["Network out (KB/s)",30,500,""]]
-    : svc.key === "storage"
-    ? [["Used capacity (GB)",10,500,""],["Transactions",100,3000,""],["Ingress (KB/s)",100,1200,""],["Egress (KB/s)",100,1500,""]]
-    : svc.key === "sql"
-    ? [["CPU (%)",20,80,"%"],["DTU consumption (%)",10,70,"%"],["Connections",5,50,""],["Storage used (GB)",2,30,""]]
-    : [["Requests",100,2000,""],["Latency (ms)",10,300,""],["Errors",0,10,""]];
-  series.forEach(([label, lo, hi, suffix])=>{
-    grid.append(buildSparkline(label, lo, hi, suffix));
-  });
-  host.append(grid);
+  renderMeasuredMetrics(host, full.name || full.id || "");
 };
-function buildSparkline(label, lo, hi, suffix){
+// Measured request metrics (issue #179): charts are drawn from GET /api/metrics/series —
+// what the simulator actually served for this resource — never from a seed. An idle
+// resource shows the empty state.
+function buildSeriesChart(label, unit, pts, fields, colors){
   const card = el("div",{class:"metric-card"});
   card.append(el("div",{class:"label"}, label));
-  // Deterministic pseudo-random sparkline so the same resource shows the
-  // same shape across navigation. Seeded by label so cards differ.
-  let seed = 0; for (const c of label) seed = (seed*31 + c.charCodeAt(0)) & 0xffff;
-  const pts = []; for (let i=0;i<24;i++) {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    pts.push(lo + (hi-lo) * ((seed % 1000)/1000));
+  const W = 300, H = 90, L = 34, B = 16, T = 6, R = 4;
+  const max = Math.max(1, ...pts.flatMap(p => fields.map(f => p[f] || 0)));
+  const niceMax = max <= 4 ? Math.ceil(max) : Math.ceil(max / 5) * 5;
+  const bw = (W - L - R) / Math.max(pts.length, 1);
+  const y = v => T + (H - T - B) * (1 - v / niceMax);
+  const tl = t => new Date(t*1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${label}">`;
+  svg += `<line x1="${L}" y1="${y(0)}" x2="${W-R}" y2="${y(0)}" stroke="#d2d0ce"/><line x1="${L}" y1="${y(niceMax)}" x2="${W-R}" y2="${y(niceMax)}" stroke="#edebe9"/>`;
+  svg += `<text x="${L-4}" y="${y(niceMax)+3}" font-size="9" text-anchor="end" fill="#605e5c">${niceMax}</text><text x="${L-4}" y="${y(0)+3}" font-size="9" text-anchor="end" fill="#605e5c">0</text>`;
+  if (pts.length) svg += `<text x="${L}" y="${H-3}" font-size="9" fill="#605e5c">${tl(pts[0].t)}</text><text x="${W-R}" y="${H-3}" font-size="9" text-anchor="end" fill="#605e5c">${tl(pts[pts.length-1].t)}</text>`;
+  if (fields.length === 1) {
+    pts.forEach((p, i) => { const v = p[fields[0]] || 0; if (!v) return;
+      svg += `<rect x="${(L + i*bw + 0.5).toFixed(1)}" y="${y(v).toFixed(1)}" width="${Math.max(bw-1,1).toFixed(1)}" height="${(y(0)-y(v)).toFixed(1)}" fill="${colors[0]}"><title>${tl(p.t)} — ${v} ${unit}</title></rect>`; });
+  } else {
+    fields.forEach((f, k) => {
+      const d = pts.map((p, i) => `${i?"L":"M"}${(L + (i+0.5)*bw).toFixed(1)},${y(p[f]||0).toFixed(1)}`).join(" ");
+      svg += `<path d="${d}" fill="none" stroke="${colors[k]}" stroke-width="1.5"/>`;
+      pts.forEach((p, i) => { if (p[f]) svg += `<circle cx="${(L + (i+0.5)*bw).toFixed(1)}" cy="${y(p[f]).toFixed(1)}" r="2" fill="${colors[k]}"><title>${tl(p.t)} — ${f.replace("latency_","")} ${p[f]} ${unit}</title></circle>`; });
+    });
   }
-  const w=240, h=60, max=Math.max(...pts), min=Math.min(...pts);
-  const path = pts.map((p,i)=>`${i===0?"M":"L"}${(i*(w-4)/(pts.length-1)+2).toFixed(1)},${(h-2-((p-min)/(max-min||1))*(h-6)).toFixed(1)}`).join(" ");
-  const svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" preserveAspectRatio="none">`+
-              `<path d="${path}" fill="none" stroke="#0078d4" stroke-width="1.6"/></svg>`;
-  const chart = el("div",{class:"chart",html:svg});
-  card.append(chart);
-  const cur = pts[pts.length-1].toFixed(suffix==="%"?0:0);
-  card.append(el("div",{class:"value"}, cur + (suffix||" units")));
+  svg += `</svg>`;
+  card.append(el("div",{class:"chart",style:"height:auto",html:svg}));
+  const last = pts[pts.length-1] || {};
+  card.append(el("div",{class:"value"}, fields.length === 1
+    ? String(pts.reduce((a, p) => a + (p[fields[0]]||0), 0)) + " " + unit + " (last hour)"
+    : "p50 " + (last.latency_p50||0) + " / p95 " + (last.latency_p95||0) + " " + unit));
   return card;
+}
+function renderMeasuredMetrics(host, resource){
+  const wrap = el("div",{}); host.append(wrap);
+  const q = new URLSearchParams({provider:"azure", resource: resource||"", minutes:"60", step:"60"});
+  fetch(ORIGIN+"/api/metrics/series?"+q).then(r=>r.json()).then(d=>{
+    const pts = d.points || [];
+    wrap.append(el("div",{class:"sub-info"},
+      `Measured from the requests this simulator served for ${resource || "Azure"} in the last hour (1-minute resolution). CPU and memory are shown only where a real container backs the resource.`));
+    if (!d.total_requests) { wrap.append(emptyState("No requests in the last hour")); return; }
+    const grid = el("div",{class:"metrics-grid"});
+    grid.append(buildSeriesChart("Requests", "requests", pts, ["requests"], ["#0078d4"]));
+    grid.append(buildSeriesChart("Errors (4xx/5xx)", "errors", pts, ["errors"], ["#d13438"]));
+    grid.append(buildSeriesChart("Latency", "ms", pts, ["latency_p50","latency_p95"], ["#107c10","#ff8c00"]));
+    wrap.append(grid);
+  }).catch(e => wrap.append(el("div",{class:"alert err"}, "Failed to load metrics: " + e.message)));
 }
 
 // ---- VM-specific renderers (PC5) -------------------------------------------

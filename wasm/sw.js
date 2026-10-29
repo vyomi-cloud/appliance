@@ -858,6 +858,8 @@ function classifyReq(path) {
   const seg = path.split("/").filter(Boolean);
   if (seg[0] === "api" && seg.length >= 3 && ["aws", "gcp", "azure"].includes(seg[1])) return [seg[1], seg[2].toLowerCase()];
   if (seg[0] === "api" && seg.length >= 2 && AWS_API_KEYS.has(seg[1].toLowerCase())) return ["aws", seg[1].toLowerCase()];
+  if (seg[0] === "subscriptions") return ["azure", "arm"];
+  if (seg[0] === "azure-data" && seg.length >= 2) return ["azure", seg[1].toLowerCase()];
   return null;
 }
 async function reqLogLoad() {
