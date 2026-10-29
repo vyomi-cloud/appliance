@@ -1743,6 +1743,14 @@
       "kind": "ui",
       "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-monitoring.mjs",
       "timeout": 600
+    },
+    {
+      "id": "nano-ui-aws-secrets-created",
+      "target": "nano",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-secrets-created.mjs",
+      "timeout": 300
     }
   ]
 }
