@@ -399,8 +399,8 @@ jobs:
   # ── Snap Store publish — REMOVED ────────────────────────────────────────
   # Dropped 2026-10-23: the snap-publish job failed on every release (v3.0.x),
   # turning each otherwise-green release red for a channel nobody installs from.
-  # Linux is served by the .deb/.rpm on the GitHub Release + Homebrew. The
-  # packaging/snap/ manifest is kept in case the Snap Store is revisited.
+  # Linux is served by the .deb/.rpm on the GitHub Release + Homebrew. Snap
+  # releases are dropped for good: packaging/snap/ was deleted 2026-10-29.
 
   # ── Winget PR submission — REMOVED (2026-10-06) ─────────────────────────
   # Official winget-pkgs submissions need manual moderator review and the
