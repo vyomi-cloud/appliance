@@ -158,7 +158,12 @@ const savingsSnapshot = (page) => page.evaluate(async () => {
 
 // Every resource created must show up in the space's savings: resource_count
 // goes up, and the creating cloud's saved dollars go up (real cloud would bill it).
-function savingsFindings(cloud, before, after, stage) {
+// Services the real cloud does not bill for (Azure virtual networks, NSGs and
+// RBAC role definitions/assignments cost nothing): the resource count must still
+// move, but there are no dollars to save.
+const FREE_OF_CHARGE = { azure: /^(virtual networks?|network security group|entra id \/ rbac|role definition)$/i };
+
+function savingsFindings(cloud, before, after, stage, service = "") {
   const f = [];
   if (!before.ok || !after.ok) return [{ type: "SAVINGS_UNAVAILABLE", detail: `${stage}: /api/spaces cost_savings unreadable` }];
   if (after.count === null || after.usd === null) return [{ type: "SAVINGS_MISSING", detail: `${stage}: active space has no cost_savings metrics` }];
@@ -166,7 +171,7 @@ function savingsFindings(cloud, before, after, stage) {
     f.push({ type: "SAVINGS_NOT_UPDATED", detail: `${stage}: resource_count stayed ${before.count} after creating a resource` });
   }
   const b = before.byProvider[cloud] || 0, a = after.byProvider[cloud] || 0;
-  if (!(a > b)) f.push({ type: "SAVINGS_NOT_UPDATED", detail: `${stage}: ${cloud} savings stayed $${b} (real ${cloud} would bill this resource)` });
+  if (!(a > b) && !FREE_OF_CHARGE[cloud]?.test(service.trim())) f.push({ type: "SAVINGS_NOT_UPDATED", detail: `${stage}: ${cloud} savings stayed $${b} (real ${cloud} would bill this resource)` });
   return f;
 }
 
@@ -196,7 +201,7 @@ const rowCount = (page) => page.locator(ROW_SEL).count();
 // Create a resource accepting every form default, return to the service list
 // (create pages navigate away from it), and check the new row is there, fully
 // populated, and reflected in the space's cost savings.
-async function createWithDefaults(page, drain, cloud, backToList) {
+async function createWithDefaults(page, drain, cloud, backToList, service = "") {
   const f = [];
   const btn = page.locator("#main button, #main [role=button]").filter({ hasText: CREATE_BTN }).first();
   if (!(await btn.count())) return f;
@@ -240,7 +245,7 @@ async function createWithDefaults(page, drain, cloud, backToList) {
   f.push(...(await placeholderFindings(page, "after create")));
   if (rowsAfter > rowsBefore) {
     await sleep(1500); // savings are recomputed on the space tick after the write
-    f.push(...savingsFindings(cloud, savBefore, await savingsSnapshot(page), "create"));
+    f.push(...savingsFindings(cloud, savBefore, await savingsSnapshot(page), "create", service));
   }
   return f;
 }
@@ -356,7 +361,7 @@ async function crawlConsole(browser, base, con, needsSW) {
             await sleep(1500);
           };
           const hasCreate = await page.locator("#main button, #main [role=button]").filter({ hasText: CREATE_BTN }).count();
-          const cf = await createWithDefaults(page, drain, con.cloud, backToList);
+          const cf = await createWithDefaults(page, drain, con.cloud, backToList, svc.label || "");
           row.findings.push(...cf);
           if (hasCreate) surface("create", "create with defaults", cf, 1, "");
           // Values that identify the first resource (names, ids): a tab that
