@@ -939,6 +939,65 @@ def _iam(op: str, name: str, body: dict):
 
 
 # ---------------------------------------------------------------------------
+# API Gateway (API records in the space's gcp_apigateway state) and Eventarc triggers
+# (gcp_extras eventarc/triggers) — configs/gateways and filters/destinations through the
+# shared engine
+# ---------------------------------------------------------------------------
+def _apigateway(op: str, name: str, body: dict):
+    from routes.gcp_extras import _gcp_apigateway_state
+    project = _project()
+    api = T.short(name)
+    apis = _gcp_apigateway_state(project, "apis")
+    if api not in apis:
+        raise T.TabError(404, "NOT_FOUND", "API '%s' not found" % api)
+    if op == "getLabels":
+        return {"ok": True, "item": {"name": api, "labels": apis[api].get("labels") or {}}}
+    if op == "setLabels":
+        apis[api]["labels"] = T.validate_labels(body.get("labels", {}))
+        out = {"ok": True}
+    else:
+        out = T.apigw_op(tab_state, project, api, op, body)
+    if out is not None and not op.startswith(("get", "list")):
+        _usage("apigateway", op, api, {k: body.get(k) for k in ("name", "gateway") if body.get(k)})
+        _ctx().persist_state()
+    return out
+
+
+class _OfflineTrigger:
+    def __init__(self, name):
+        from routes.gcp_extras import _gcp_extras_state
+        self.items = _gcp_extras_state("eventarc/triggers")["items"]
+        self.name = T.short(name)
+        if self.name not in self.items:
+            raise T.TabError(404, "NOT_FOUND", "Trigger %s not found." % self.name)
+
+    def rec(self):
+        return self.items[self.name]
+
+    def update(self, patch):
+        self.items[self.name].update(patch)
+        _ctx().persist_state()
+
+    def exists(self, kind, name):
+        s = _server()
+        if kind == "bucket":
+            return name in s.gcp_storage_state.get("buckets", {})
+        if kind == "function":
+            return name in s.gcp_functions_state.get("functions", {})
+        if kind == "topic":
+            from core import gcp_pubsub_emulator as emu
+            return bool(emu.get_topic(_project(), name)) if emu.available() else name in s.gcp_pubsub_state.get("topics", {})
+        return False
+
+
+def _eventarc(op: str, name: str, body: dict):
+    out = T.eventarc_op(_OfflineTrigger(name), _project(), op, body)
+    if out is not None and not op.startswith(("get", "list")):
+        _usage("eventarc", op, T.short(name))
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Project IAM policy (every resource's Permissions tab)
 # ---------------------------------------------------------------------------
 def _iam_project(op: str, project: str, body: dict):
@@ -968,6 +1027,8 @@ _HANDLERS = {
     "secretmanager": _secretmanager,
     "kms": _kms,
     "iam": _iam,
+    "apigateway": _apigateway,
+    "eventarc": _eventarc,
 }
 
 

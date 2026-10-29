@@ -2720,6 +2720,80 @@ GT.iamkeys = async function(host, svc, item){
   });
   host.prepend(out);
 };
+
+// ---- API Gateway --------------------------------------------------------------
+const SAMPLE_OPENAPI = 'swagger: "2.0"\ninfo:\n  title: my-api\n  version: "1.0.0"\nschemes:\n  - https\nproduces:\n  - application/json\npaths:\n  /hello:\n    get:\n      operationId: hello\n      x-google-backend:\n        address: https://us-central1-' + "PROJECT" + '.cloudfunctions.net/hello\n      responses:\n        "200":\n          description: OK\n';
+GT.agconfigs = async function(host, svc, item){
+  const name = tabName(svc, item);
+  await childList(host, {
+    load: () => subGet(svc, "listConfigs", name), noun: "API config", nouns: "API configs", emptyIcon: "tune",
+    empty: name + " has no API configs. Create one from an OpenAPI 2.0 spec, then deploy it to a gateway.",
+    columns: [["name", "Config"], ["state", "Status", c => stateBadge(c.state)], ["routes", "Routes"], ["gateways", "Gateways"],
+              ["serviceConfigId", "Service config ID"], ["createTime", "Created"]],
+    create: {label: "Create API config", submit: "Create", done: "API config created",
+      fields: [{name: "name", label: "Config ID", placeholder: name + "-config-1"},
+               {name: "openapi", label: "OpenAPI 2.0 spec (YAML or JSON)", type: "textarea", rows: 14, value: SAMPLE_OPENAPI.replace("PROJECT", PROJECT)}],
+      run: v => subPost(svc, "createConfig", name, {name: v.name.trim(), openapi: v.openapi})},
+    rowActions: [
+      {label: "Deploy to gateway", icon: "rocket_launch", run: c => { const gw = prompt("Gateway name (created if new)", name + "-gw"); if (gw === null) return Promise.resolve({ok: true}); return subPost(svc, "deployConfig", name, {name: c.name, gateway: gw.trim(), region: REGION}); }},
+      {label: "Delete", icon: "delete", danger: true, when: c => !c.deployed, confirm: c => "Delete API config " + c.name + "?", run: c => subPost(svc, "deleteConfig", name, {name: c.name})}],
+  });
+};
+GT.agroutes = async function(host, svc, item){
+  const name = tabName(svc, item);
+  await childList(host, {
+    load: () => subGet(svc, "listRoutes", name), noun: "route", nouns: "routes", emptyIcon: "alt_route",
+    empty: name + " has no routes yet — they come from the paths of its API configs.",
+    columns: [["method", "Method"], ["path", "Path"], ["operationId", "Operation ID"], ["backend", "Backend"], ["gateway", "Gateway"], ["url", "URL"], ["config", "API config"]],
+  });
+};
+
+// ---- Eventarc -----------------------------------------------------------------
+const EVENT_TYPE_OPTIONS = ["google.cloud.pubsub.topic.v1.messagePublished", "google.cloud.storage.object.v1.finalized", "google.cloud.storage.object.v1.deleted",
+  "google.cloud.storage.object.v1.archived", "google.cloud.storage.object.v1.metadataUpdated", "google.cloud.audit.log.v1.written",
+  "google.cloud.firestore.document.v1.written", "google.cloud.firestore.document.v1.created"];
+GT.evmatching = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const it = ((await subGet(svc, "getMatching", name)).json || {}).item || {};
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("", [["Event provider", it.provider], ["Event type", it.eventType], ["Region", it.region],
+      ["Transport", ((it.transport || {}).pubsub || {}).topic || "Not applicable"]]));
+    wrap.append(tableOf([["attribute", "Attribute"], ["value", "Value"]], it.eventFilters || []));
+    if (!editing) { wrap.append(el("button",{class:"btn", style:"margin-top:10px", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit event matching")); return; }
+    wrap.append(inlineForm([{name: "eventType", label: "Event type", type: "select", value: it.eventType, options: EVENT_TYPE_OPTIONS},
+      {name: "bucket", label: "bucket (Cloud Storage)", width: 140}, {name: "topic", label: "topic (Pub/Sub, optional)", width: 140},
+      {name: "serviceName", label: "serviceName (audit logs)", width: 160}, {name: "methodName", label: "methodName (audit logs)", width: 160},
+      {name: "database", label: "database (Firestore)", value: "(default)", width: 110}], "Save", async v => {
+        const filters = {bucket: v.bucket, topic: v.topic, serviceName: v.serviceName, methodName: v.methodName, database: v.database};
+        const r = await subPost(svc, "setMatching", name, {eventType: v.eventType, filters});
+        if (r.ok) { toast("Event matching updated"); editing = false; paint(); } else toast("Update failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paint(); }));
+  }
+  await paint();
+};
+GT.evdestination = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const it = ((await subGet(svc, "getDestination", name)).json || {}).item || {};
+    const d = it.destination || {};
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("", [["Destination type", {"cloud-run": "Cloud Run", "function": "Cloud Functions", workflow: "Workflows", gke: "GKE", http: "HTTP endpoint"}[d.type] || d.type],
+      ["Service", d.service || "Not set"], ["URL path", d.path || "/"], ["Region", d.region], ["Service account", it.serviceAccount]]));
+    if (!editing) { wrap.append(el("button",{class:"btn", style:"margin-top:10px", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit destination")); return; }
+    wrap.append(inlineForm([{name: "type", label: "Destination type", type: "select", value: d.type || "cloud-run", options: ["cloud-run", "function", "workflow", "gke", "http"]},
+      {name: "service", label: "Service / function / URL", value: d.service || "", width: 220}, {name: "path", label: "URL path", value: d.path || "/", width: 100},
+      {name: "region", label: "Region", type: "select", value: d.region || REGION, options: GCP_REGIONS}], "Save", async v => {
+        const r = await subPost(svc, "setDestination", name, v);
+        if (r.ok) { toast("Destination updated"); editing = false; paint(); } else toast("Update failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paint(); }));
+  }
+  await paint();
+};
 // ========== END DETAIL TABS =================================================
 
 // ========== CREATE — collapsible-sections form + right summary card =========

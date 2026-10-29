@@ -1385,6 +1385,41 @@ def _iam_tab(name, op, body):
     return _T.iam_sa_op(_NanoSA(name), op, body)
 
 
+def _apigw_tab(g, op, body):
+    rec = g.get()
+    if op in ("GetLabels", "getLabels"):
+        return {"ok": True, "item": {"name": g.name, "labels": rec.get("labels") or {}}}
+    if op in ("SetLabels", "setLabels"):
+        g.update({"labels": _T.validate_labels(body.get("labels", {}))})
+        return {"ok": True}
+    return _T.apigw_op(_tab_root(), "nano-project", g.name, op, body)
+
+
+class _NanoTrigger:
+    def __init__(self, g):
+        self.g = g
+        g.get()
+
+    def rec(self):
+        return self.g.get()
+
+    def update(self, patch):
+        self.g.update(patch)
+
+    def exists(self, kind, name):
+        if kind == "bucket":
+            return _call("storage", "GET", "/storage/v1/b/%s" % name)[0] < 300
+        if kind == "topic":
+            return _call("pubsub", "GET", "/v1/projects/%s/topics/%s" % (PROJ, name))[0] < 300
+        if kind == "function":
+            return self.g.r.get("gcp", self.g.account, "functions", name) is not None
+        return False
+
+
+def _eventarc_tab(g, op, body):
+    return _T.eventarc_op(_NanoTrigger(g), "nano-project", op, body)
+
+
 def _project_policy(op, project, body):
     res = "projects/%s" % (project or PROJ)
     st, pol = _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})
@@ -1398,7 +1433,8 @@ def _project_policy(op, project, body):
 
 _TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _sql_tab, "pubsub": _pubsub_tab,
                  "vpc": _vpc_tab, "functions": _functions_tab, "firestore": _firestore_tab,
-                 "secretmanager": _secret_tab, "kms": _kms_tab, "iam": _iam_tab}
+                 "secretmanager": _secret_tab, "kms": _kms_tab, "iam": _iam_tab,
+                 "apigateway": _apigw_tab, "eventarc": _eventarc_tab}
 
 
 def tab_dispatch(svc, operation, name, body, resources=None, account="default"):

@@ -901,3 +901,83 @@ def test_iam_keys_are_real_rsa_key_files(c, sa):
     st, _ = c.sub("iam", "deleteKey", sa, {"key": kid})
     st, out = c.sub("iam", "listKeys", sa)
     assert out["items"] == []
+
+
+# ── API Gateway ───────────────────────────────────────────────────────────────
+OPENAPI = """swagger: "2.0"
+info:
+  title: orders
+  version: "1.0.0"
+paths:
+  /orders:
+    get:
+      operationId: listOrders
+      x-google-backend:
+        address: https://us-central1-proj.cloudfunctions.net/orders
+    post:
+      operationId: createOrder
+      x-google-backend:
+        address: https://orders-abc.a.run.app
+"""
+
+
+@pytest.fixture(scope="module")
+def gwapi(c):
+    name = uid("tabapi")
+    st, _ = c.create("apigateway", {"name": name})
+    assert st == 200
+    yield name
+    c.delete("apigateway", name)
+
+
+def test_apigateway_configs_routes_and_deploy(c, gwapi):
+    st, bad = c.sub("apigateway", "createConfig", gwapi, {"name": "bad", "openapi": OPENAPI.replace('"2.0"', '"3.0"')})
+    assert st == 400 and "OpenAPI 2.0" in bad["message"]
+    st, bad = c.sub("apigateway", "createConfig", gwapi, {"name": "noop", "openapi": OPENAPI.replace("operationId: createOrder", "summary: x")})
+    assert st == 400 and "operationId" in bad["message"]
+    st, _ = c.sub("apigateway", "createConfig", gwapi, {"name": "v1", "openapi": OPENAPI})
+    assert st == 200
+    st, out = c.sub("apigateway", "listRoutes", gwapi)
+    assert sorted((r["method"], r["path"]) for r in out["items"]) == [("GET", "/orders"), ("POST", "/orders")]
+    assert all(r["gateway"] == "Not deployed" for r in out["items"])
+    st, out = c.sub("apigateway", "deployConfig", gwapi, {"name": "v1", "gateway": "orders-gw"})
+    assert st == 200 and out["defaultHostname"].endswith(".gateway.dev")
+    st, out = c.sub("apigateway", "listRoutes", gwapi)
+    assert {r["url"] for r in out["items"]} == {"https://%s/orders" % out["items"][0]["url"].split("/")[2]}
+    st, out = c.sub("apigateway", "listConfigs", gwapi)
+    assert out["items"][0]["routes"] == 2 and out["items"][0]["gateways"] == "orders-gw"
+    st, bad = c.sub("apigateway", "deleteConfig", gwapi, {"name": "v1"})
+    assert st == 400                                            # in use by a gateway
+    st, _ = c.sub("apigateway", "setLabels", gwapi, {"labels": {"team": "orders"}})
+    st, out = c.sub("apigateway", "getLabels", gwapi)
+    assert out["item"]["labels"] == {"team": "orders"}
+
+
+# ── Eventarc ──────────────────────────────────────────────────────────────────
+@pytest.fixture(scope="module")
+def trigger(c):
+    name = uid("tabtrg")
+    st, _ = c.create("eventarc", {"name": name, "event_provider": "google.cloud.pubsub.topic.v1.messagePublished",
+                                  "destination_type": "cloud-run", "destination": "orders-svc"})
+    assert st == 200
+    yield name
+    c.delete("eventarc", name)
+
+
+def test_eventarc_matching_and_destination(c, trigger):
+    st, out = c.sub("eventarc", "getMatching", trigger)
+    assert out["item"]["eventType"] == "google.cloud.pubsub.topic.v1.messagePublished"
+    st, bad = c.sub("eventarc", "setMatching", trigger, {"eventType": "google.cloud.storage.object.v1.finalized", "filters": {}})
+    assert st == 400 and "bucket" in bad["message"]
+    bkt = uid("tabevb")
+    assert c.create("storage", {"name": bkt})[0] == 200
+    st, _ = c.sub("eventarc", "setMatching", trigger, {"eventType": "google.cloud.storage.object.v1.finalized", "filters": {"bucket": bkt}})
+    assert st == 200
+    st, out = c.sub("eventarc", "getMatching", trigger)
+    assert {"attribute": "bucket", "value": bkt} in out["item"]["eventFilters"] and out["item"]["provider"] == "Cloud Storage"
+    st, bad = c.sub("eventarc", "setDestination", trigger, {"type": "function", "service": uid("nofn")})
+    assert st == 400
+    st, _ = c.sub("eventarc", "setDestination", trigger, {"type": "cloud-run", "service": "billing", "path": "/events", "region": "europe-west1"})
+    assert st == 200
+    st, out = c.sub("eventarc", "getDestination", trigger)
+    assert out["item"]["destination"] == {"type": "cloud-run", "service": "billing", "path": "/events", "region": "europe-west1"}

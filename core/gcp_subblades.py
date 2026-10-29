@@ -179,13 +179,13 @@ _FUNCTIONS_SUB = [
 _APIGW_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Configuration", "items": [
-        {"key": "apiConfigs",  "label": "Configs",          "icon": "tune",       "type": "stub"},
-        {"key": "routes",      "label": "Routes",           "icon": "alt_route",  "type": "stub"},
+        {"key": "apiConfigs",  "label": "Configs",          "icon": "tune",       "type": "agConfigs"},
+        {"key": "routes",      "label": "Routes",           "icon": "alt_route",  "type": "agRoutes"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",     "label": "Metrics",          "icon": "show_chart", "type": "metrics"},
-        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "stub"},
+        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "logs"},
     ]},
 ]
 
@@ -235,13 +235,13 @@ _IAM_SUB = [
 _EVENTARC_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Trigger", "items": [
-        {"key": "matching",    "label": "Event matching",   "icon": "filter_alt", "type": "stub"},
-        {"key": "destination", "label": "Destination",      "icon": "send",       "type": "stub"},
+        {"key": "matching",    "label": "Event matching",   "icon": "filter_alt", "type": "evMatching"},
+        {"key": "destination", "label": "Destination",      "icon": "send",       "type": "evDestination"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",     "label": "Metrics",          "icon": "show_chart", "type": "metrics"},
-        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "stub"},
+        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "logs"},
     ]},
 ]
 

@@ -1439,6 +1439,237 @@ def iam_sa_op(be, op: str, body: dict):
     return None
 
 
+# ---------------------------------------------------------------------------
+# API Gateway — API configs (OpenAPI 2.0), their routes, gateways serving them
+# ---------------------------------------------------------------------------
+def _yaml_scalar(s: str):
+    s = s.strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in "'\"":
+        return s[1:-1]
+    if s in ("true", "false"):
+        return s == "true"
+    if re.match(r"^-?\d+$", s):
+        return int(s)
+    return s
+
+
+def parse_openapi(text: str) -> dict:
+    """An OpenAPI document as JSON, or the block-style YAML subset API specs use
+    (nested maps, `- item` lists, scalars, comments)."""
+    import json as _json
+    text = str(text or "")
+    try:
+        return _json.loads(text)
+    except ValueError:
+        pass
+    lines = [ln.rstrip() for ln in text.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
+    root: dict = {}
+    stack = [(-1, root)]
+    for i, ln in enumerate(lines):
+        ind = len(ln) - len(ln.lstrip())
+        body = ln.strip()
+        while stack and stack[-1][0] >= ind:
+            stack.pop()
+        parent = stack[-1][1]
+        if body.startswith("- "):
+            item = body[2:]
+            if not isinstance(parent, list):
+                raise TabError(400, "INVALID_ARGUMENT", "Cannot parse the OpenAPI document: unexpected list at line %d." % (i + 1))
+            if ":" in item and not item.startswith(("'", '"')):
+                k, _, v = item.partition(":")
+                d = {k.strip(): _yaml_scalar(v) if v.strip() else {}}
+                parent.append(d)
+                stack.append((ind, d))
+            else:
+                parent.append(_yaml_scalar(item))
+            continue
+        if ":" not in body:
+            raise TabError(400, "INVALID_ARGUMENT", "Cannot parse the OpenAPI document at line %d: '%s'." % (i + 1, body))
+        k, _, v = body.partition(":")
+        k = k.strip().strip("'\"")
+        if not isinstance(parent, dict):
+            raise TabError(400, "INVALID_ARGUMENT", "Cannot parse the OpenAPI document at line %d." % (i + 1))
+        if v.strip():
+            parent[k] = _yaml_scalar(v)
+        else:
+            nxt = lines[i + 1] if i + 1 < len(lines) else ""
+            child = [] if nxt.strip().startswith("- ") and len(nxt) - len(nxt.lstrip()) >= ind else {}
+            parent[k] = child
+            stack.append((ind, child))
+    return root
+
+
+def openapi_routes(doc: dict) -> list:
+    """Validate an API config's OpenAPI 2.0 document → its routes [{method, path, operationId, backend}]."""
+    if str(doc.get("swagger") or "") != "2.0":
+        raise TabError(400, "INVALID_ARGUMENT", "Cannot convert to service config: API Gateway requires an OpenAPI 2.0 document ('swagger: \"2.0\"').")
+    if not (doc.get("info") or {}).get("title"):
+        raise TabError(400, "INVALID_ARGUMENT", "Cannot convert to service config: 'info.title' is required.")
+    paths = doc.get("paths") or {}
+    if not isinstance(paths, dict) or not paths:
+        raise TabError(400, "INVALID_ARGUMENT", "Cannot convert to service config: the document defines no paths.")
+    default_backend = (doc.get("x-google-backend") or {}).get("address", "")
+    out, seen = [], set()
+    for path, ops in paths.items():
+        if not str(path).startswith("/"):
+            raise TabError(400, "INVALID_ARGUMENT", "Path '%s' must start with '/'." % path)
+        for method, op in (ops or {}).items():
+            if method.lower() not in ("get", "put", "post", "delete", "patch", "options", "head"):
+                continue
+            op = op or {}
+            oid = op.get("operationId")
+            if not oid:
+                raise TabError(400, "INVALID_ARGUMENT", "Cannot convert to service config: %s %s has no operationId." % (method.upper(), path))
+            if oid in seen:
+                raise TabError(400, "INVALID_ARGUMENT", "Cannot convert to service config: duplicate operationId '%s'." % oid)
+            seen.add(oid)
+            backend = (op.get("x-google-backend") or {}).get("address") or default_backend
+            if not backend or not str(backend).startswith("https://"):
+                raise TabError(400, "INVALID_ARGUMENT", "%s %s needs an x-google-backend address (an https:// URL)." % (method.upper(), path))
+            out.append({"method": method.upper(), "path": path, "operationId": oid, "backend": backend})
+    if not out:
+        raise TabError(400, "INVALID_ARGUMENT", "Cannot convert to service config: no operations under paths.")
+    return out
+
+
+def apigw_op(root: dict, project: str, api: str, op: str, body: dict):
+    op = op[0].lower() + op[1:]
+    configs = children(root, "apigateway", api, "configs", create=True)
+    gws = children(root, "apigateway", api, "gateways", create=True)
+    if op == "listConfigs":
+        deployed = {g["apiConfig"] for g in gws.values()}
+        return {"ok": True, "items": [{**{k: v for k, v in c.items() if k != "openapi"}, "routes": len(c["routes"]),
+                                       "gateways": ", ".join(g["name"] for g in gws.values() if g["apiConfig"] == c["name"]) or "Not deployed",
+                                       "deployed": c["name"] in deployed} for c in sorted(configs.values(), key=lambda c: c["createTime"])]}
+    if op == "createConfig":
+        cid = str(body.get("name") or "").strip()
+        if not re.match(r"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$", cid):
+            raise TabError(400, "INVALID_ARGUMENT", "Invalid API config ID '%s': lowercase letters, digits and hyphens, up to 63." % cid)
+        if cid in configs:
+            raise TabError(409, "ALREADY_EXISTS", "API config %s already exists." % cid)
+        routes = openapi_routes(parse_openapi(body.get("openapi")))
+        configs[cid] = {"name": cid, "displayName": cid, "state": "ACTIVE", "createTime": now_iso(),
+                        "serviceConfigId": "%s-%s" % (cid, hashlib.sha256((cid + now_iso()).encode()).hexdigest()[:6]),
+                        "openapi": str(body.get("openapi")), "routes": routes,
+                        "fullName": "projects/%s/locations/global/apis/%s/configs/%s" % (project, api, cid)}
+        return {"ok": True, "name": cid}
+    if op == "deleteConfig":
+        cid = str(body.get("name") or "")
+        if cid not in configs:
+            raise TabError(404, "NOT_FOUND", "API config %s not found." % cid)
+        users = [g["name"] for g in gws.values() if g["apiConfig"] == cid]
+        if users:
+            raise TabError(400, "FAILED_PRECONDITION", "API config %s is in use by gateway %s." % (cid, ", ".join(users)))
+        configs.pop(cid)
+        return {"ok": True}
+    if op == "deployConfig":
+        cid, gw = str(body.get("name") or ""), str(body.get("gateway") or "").strip()
+        if cid not in configs:
+            raise TabError(404, "NOT_FOUND", "API config %s not found." % cid)
+        validate_name(gw, "gateway")
+        region = str(body.get("region") or "us-central1")
+        cur = gws.get(gw) or {"name": gw, "region": region, "createTime": now_iso(),
+                              "defaultHostname": "%s-%s.%s.gateway.dev" % (gw, hashlib.sha256((project + gw).encode()).hexdigest()[:8],
+                                                                           {"us-central1": "uc", "us-east1": "ue", "europe-west1": "ew", "asia-northeast1": "an"}.get(region, "uc"))}
+        gws[gw] = {**cur, "apiConfig": cid, "state": "ACTIVE", "updateTime": now_iso()}
+        return {"ok": True, "gateway": gw, "defaultHostname": gws[gw]["defaultHostname"]}
+    if op == "listRoutes":
+        out = []
+        for g in gws.values():
+            c = configs.get(g["apiConfig"])
+            for r in (c or {}).get("routes", []):
+                out.append({**r, "gateway": g["name"], "url": "https://%s%s" % (g["defaultHostname"], r["path"]), "config": c["name"]})
+        if not out:   # nothing deployed yet: the routes each config would serve
+            for c in configs.values():
+                out += [{**r, "gateway": "Not deployed", "url": "Deploy the config to a gateway", "config": c["name"]} for r in c["routes"]]
+        return {"ok": True, "items": out}
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Eventarc — event matching (filters) and destination
+# ---------------------------------------------------------------------------
+EVENT_TYPES = {
+    "google.cloud.pubsub.topic.v1.messagePublished": {"provider": "Cloud Pub/Sub", "filters": [], "needs": "topic"},
+    "google.cloud.storage.object.v1.finalized": {"provider": "Cloud Storage", "filters": ["bucket"]},
+    "google.cloud.storage.object.v1.deleted": {"provider": "Cloud Storage", "filters": ["bucket"]},
+    "google.cloud.storage.object.v1.archived": {"provider": "Cloud Storage", "filters": ["bucket"]},
+    "google.cloud.storage.object.v1.metadataUpdated": {"provider": "Cloud Storage", "filters": ["bucket"]},
+    "google.cloud.audit.log.v1.written": {"provider": "Cloud Audit Logs", "filters": ["serviceName", "methodName"]},
+    "google.cloud.firestore.document.v1.written": {"provider": "Cloud Firestore", "filters": ["database"]},
+    "google.cloud.firestore.document.v1.created": {"provider": "Cloud Firestore", "filters": ["database"]},
+}
+DESTINATION_TYPES = ("cloud-run", "function", "workflow", "gke", "http")
+
+
+def eventarc_view(rec: dict, project: str) -> dict:
+    """A trigger record (console form fields or API shape) → its eventFilters/destination."""
+    et = rec.get("eventType") or rec.get("event_provider") or "google.cloud.pubsub.topic.v1.messagePublished"
+    filters = rec.get("eventFilters") or [{"attribute": "type", "value": et}]
+    dest = rec.get("destinationSpec") or {"type": rec.get("destination_type") or "cloud-run",
+                                           "service": rec.get("destination") or "", "path": "/",
+                                           "region": rec.get("region") or "us-central1"}
+    sa = rec.get("serviceAccount") or rec.get("service_account") or "%s-compute@developer.gserviceaccount.com" % numeric_id(project)[:12]
+    return {"eventType": et, "provider": EVENT_TYPES.get(et, {}).get("provider", "Custom"), "eventFilters": filters,
+            "transport": rec.get("transport") or ({"pubsub": {"topic": "projects/%s/topics/eventarc-%s" % (project, short(rec.get("name") or ""))}}
+                                                   if "pubsub" in et else {}),
+            "destination": dest, "serviceAccount": sa, "region": rec.get("region") or "us-central1"}
+
+
+def eventarc_op(be, project: str, op: str, body: dict):
+    """be: rec() (the trigger), update(patch), exists(kind, name) for destination/topic/bucket checks."""
+    op = op[0].lower() + op[1:]
+    v = eventarc_view(be.rec(), project)
+    if op in ("getMatching", "getDestination"):
+        return {"ok": True, "item": {"name": be.rec().get("name"), **v}}
+    if op == "setMatching":
+        et = str(body.get("eventType") or "")
+        spec = EVENT_TYPES.get(et)
+        if not spec:
+            raise TabError(400, "INVALID_ARGUMENT", "The request was invalid: unsupported event type '%s'." % et)
+        filters = [{"attribute": "type", "value": et}]
+        for attr in spec["filters"]:
+            val = str((body.get("filters") or {}).get(attr) or "").strip()
+            if not val:
+                raise TabError(400, "INVALID_ARGUMENT", "The request was invalid: event type %s requires the '%s' filter." % (et, attr))
+            if attr == "bucket" and not be.exists("bucket", val):
+                raise TabError(400, "INVALID_ARGUMENT", "The request was invalid: bucket '%s' does not exist." % val)
+            filters.append({"attribute": attr, "value": val})
+        patch = {"eventType": et, "event_provider": et, "eventFilters": filters}
+        if spec.get("needs") == "topic":
+            topic = str((body.get("filters") or {}).get("topic") or "").strip()
+            if topic:
+                if not be.exists("topic", short(topic)):
+                    raise TabError(400, "INVALID_ARGUMENT", "The request was invalid: topic '%s' does not exist." % topic)
+                patch["transport"] = {"pubsub": {"topic": "projects/%s/topics/%s" % (project, short(topic))}}
+        be.update(patch)
+        return {"ok": True}
+    if op == "setDestination":
+        dt = str(body.get("type") or "cloud-run")
+        if dt not in DESTINATION_TYPES:
+            raise TabError(400, "INVALID_ARGUMENT", "Unsupported destination type %s." % dt)
+        target = str(body.get("service") or "").strip()
+        if dt == "http":
+            if not target.startswith(("https://", "http://")):
+                raise TabError(400, "INVALID_ARGUMENT", "An HTTP endpoint destination needs a URL.")
+        else:
+            validate_name(target, "destination")
+            if dt == "function" and not be.exists("function", target):
+                raise TabError(400, "INVALID_ARGUMENT", "The request was invalid: Cloud Function '%s' not found." % target)
+        path = str(body.get("path") or "/")
+        if not path.startswith("/"):
+            raise TabError(400, "INVALID_ARGUMENT", "The destination path must start with '/'.")
+        be.update({"destinationSpec": {"type": dt, "service": target, "path": path, "region": str(body.get("region") or v["region"])},
+                   "destination_type": dt, "destination": target})
+        return {"ok": True}
+    if op == "setLabels":
+        be.update({"labels": validate_labels(body.get("labels", {}))})
+        return {"ok": True}
+    if op == "getLabels":
+        return {"ok": True, "item": {"name": be.rec().get("name"), "labels": be.rec().get("labels") or {}}}
+    return None
+
+
 def auto_subnet_second_octet(region: str) -> int:
     for r, cidr in AUTO_SUBNETS:
         if r == region:
