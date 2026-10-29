@@ -657,6 +657,7 @@ function renderRail(){
     ["INTEGRATION",   ["pubsub", "apigateway", "eventarc", "cloudscheduler"]],
     ["SECURITY",      ["secretmanager", "kms"]],
     ["IAM & ADMIN",   ["iam", "iamcredentials"]],
+    ["OPERATIONS",    ["monitoring"]],
   ];
   groups.forEach(([label, keys]) => {
     rail.append(el("div",{class:"group"}, label));
@@ -762,6 +763,7 @@ async function renderList(main){
                      : svc.key === "container" ? "Create cluster"
                      : svc.key === "redis" ? "Create instance"
                      : svc.key === "iamcredentials" ? "Create credential"
+                     : svc.key === "monitoring" ? "Create policy"
                      : "Create";
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
     icon("add"), primaryLabel));
@@ -841,7 +843,9 @@ async function renderList(main){
       const path = svc.columns[state.sortBy][0];
       filtered.sort((a,b) => String(getPath(a,path)||"").localeCompare(String(getPath(b,path)||"")) * state.sortDir);
     }
-    const chip = document.getElementById("countChip"); if (chip) chip.textContent = filtered.length ? `(${filtered.length})` : "";
+    const chip = document.getElementById("countChip");
+    if (!chip) return;   // the view navigated away (e.g. into Create) while the list was still loading
+    chip.textContent = filtered.length ? `(${filtered.length})` : "";
     stats.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;
@@ -935,6 +939,12 @@ async function renderDetail(main){
         else toast(act+" failed ("+r.status+")", "err");
       }}, icon(act === "pause" ? "pause" : act === "resume" ? "play_arrow" : "bolt"),
          act === "pause" ? "Pause" : act === "resume" ? "Resume" : "Force run")) : []),
+      ...(svc.key === "monitoring" ? [(STATE.item && STATE.item.state === "Disabled") ? "enable" : "disable"].map(act => el("button",{class:"btn",onclick:async()=>{
+        const ap = (svc.api_paths||{})[act];
+        const r = await api(ap.method, fillCommon(ap.path, {name}));
+        if (r.ok) { toast("Policy "+name+": "+act+"d"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
+        else toast(act+" failed ("+r.status+")", "err");
+      }}, icon(act === "enable" ? "notifications_active" : "notifications_off"), act === "enable" ? "Enable" : "Disable")) : []),
       ...(svc.key === "redis" ? [el("button",{class:"btn",onclick:async()=>{
         const n = prompt("Capacity in GB", String(parseInt(STATE.item.capacity, 10) || 1));
         if (n === null) return;

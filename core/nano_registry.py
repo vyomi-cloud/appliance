@@ -42,6 +42,7 @@ from core.azure_arm_core import AzureArm
 
 import types
 from core.cloudwatch_core import CloudWatchStore
+from core.gcp_monitoring_core import MonitoringStore
 
 _REG: dict | None = None
 
@@ -79,6 +80,7 @@ def get() -> dict:
             "gcp_kms": InMemoryKeyStore(),
             "gcp_sec": InMemoryKvStore(),
             "gcp_gke": ContainerStore(),   # Kubernetes Engine clusters
+            "gcp_mon": MonitoringStore(),   # Cloud Monitoring (policies, channels, metrics, series)
             "gcp_redis": RedisStore(),   # Memorystore for Redis instances
             "gcp_iamc": IamCredentialsStore(),   # IAM Credentials issue log
             "gcp_sched": CloudSchedulerStore(),   # Cloud Scheduler jobs

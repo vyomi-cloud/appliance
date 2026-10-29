@@ -209,7 +209,7 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,sns:0.50,iam:0,rds:25.55,elbv2:16.43,logs:2.53,cloudwatch:0.10,ec2:30.37,lambda:0.20,apigateway:3.50,apigatewayv2:1.00,vpc:0,ssm:0.05,stepfunctions:2.50,kinesis:10.95,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
+const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,sns:0.50,iam:0,rds:25.55,elbv2:16.43,logs:2.53,cloudwatch:0.10,ec2:30.37,lambda:0.20,apigateway:3.50,apigatewayv2:1.00,vpc:0,ssm:0.05,stepfunctions:2.50,kinesis:10.95,cloudscheduler:0.10,monitoring:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
 NANO_RATE.artifactregistry = 0.50;   // core/cost_model.py gcp.artifactregistry
 async function nanoCostSavings() {
   const now = Date.now();

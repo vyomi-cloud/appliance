@@ -2594,6 +2594,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
+    try:   # Cloud Monitoring — alert policies from the shared wire/console store
+        from core.gcp_monitoring_core import shared_store as _mon_store
+        for _pn, _pol in _mon_store().alert_policies.items():
+            add("gcp", "monitoring", "policy", _pn.rsplit("/", 1)[-1],
+                {"name": _pn.rsplit("/", 1)[-1], "created": (_pol.get("creationRecord") or {}).get("mutateTime", "")})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -23454,6 +23462,23 @@ try:
     _iamc_console.register(app, _iamc_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[iamcredentials] routes skipped: {_e}")
+
+# Cloud Monitoring: native /v3/projects/* wire + console REST (/api/gcp/monitoring/*).
+try:
+    from providers import gcp_monitoring_console as _mon_console
+
+    def _mon_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "monitoring", "policy", payload, {}, None, action="delete")
+            _record_usage("gcp.monitoring.delete_policy", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "monitoring", "policy", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("state", "Enabled")}, None,
+                                            region="global")
+            _record_usage("gcp.monitoring.create_policy", {"name": payload["id"]})
+    _mon_console.register(app, _mon_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[monitoring] routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)

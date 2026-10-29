@@ -61,6 +61,7 @@ from core import gcp_cloudsql_core as gcp_sql
 from core import gcp_cloudscheduler_core as gcp_sched
 from core import gcp_container_core as gcp_gke
 from core import gcp_iamcredentials_core as gcp_iamc
+from core import gcp_monitoring_core as gcp_mon
 from core import gcp_redis_core as gcp_redis
 from core import gcp_artifactregistry_core as gcp_ar
 
@@ -72,6 +73,8 @@ def _gcp_service(path):
         return "gcp-gcs"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
         return "gcp-cloudsql"
+    if path.startswith("/v3/projects/") or path == "/v3/uptimeCheckIps":   # Cloud Monitoring API v3
+        return "gcp-monitoring"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if "/projects/" in path:
@@ -262,6 +265,7 @@ class AwsWireRouter:
         self.gcp_gke = s.get("gcp_gke") or gcp_gke.ContainerStore()   # Kubernetes Engine clusters
         self.gcp_redis = s.get("gcp_redis") or gcp_redis.RedisStore()   # Memorystore for Redis instances
         self.gcp_iamc = s.get("gcp_iamc") or gcp_iamc.IamCredentialsStore()   # IAM Service Account Credentials issue log
+        self.gcp_mon = s.get("gcp_mon") or gcp_mon.MonitoringStore()   # Cloud Monitoring (policies, channels, metrics, series)
         self.gcp_ar = s.get("gcp_ar") or gcp_ar.ArtifactRegistryStore()
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
@@ -493,6 +497,7 @@ class AwsWireRouter:
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
                 "gcp-container": (gcp_gke, self.gcp_gke), "gcp-iamcredentials": (gcp_iamc, self.gcp_iamc),
+                "gcp-monitoring": (gcp_mon, self.gcp_mon),
                 "gcp-redis": (gcp_redis, self.gcp_redis),
                 "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
             }[svc]
