@@ -25,6 +25,7 @@ try {
   const id = row && row.find((c) => /^i-/.test(c));
   const det = await page.evaluate(async (id) => { const r = await fetch("/api/ec2/instances/" + id); return { status: r.status, body: await r.json().catch(() => null) }; }, id);
   check("instance detail by its i-… id answers 200 with the same id", det.status === 200 && det.body && det.body.instance_id === id, `status ${det.status}`);
+  check("instance carries its default security group", !!(det.body && (det.body.security_groups || []).length && /^sg-/.test(det.body.security_groups[0])), JSON.stringify(det.body && det.body.security_groups));
   await sleep(1500);
   await page.goto(base + "/aws-console.html");
   await sleep(6000);

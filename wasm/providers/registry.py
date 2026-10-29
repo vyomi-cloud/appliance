@@ -220,6 +220,7 @@ def _ec2_launch_defaults(body: dict) -> dict:
     rec.setdefault("vpc_id", "vpc-" + seed[17:25])
     rec.setdefault("subnet_id", "subnet-" + seed[25:33])
     rec.setdefault("key_name", "")
+    rec.setdefault("security_groups", ["sg-" + seed[33:41]])   # the VPC's default group, as RunInstances attaches it
     rec.setdefault("architecture", "x86_64")
     rec.setdefault("launch_time", datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"))
     return rec
