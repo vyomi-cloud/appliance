@@ -123,3 +123,4 @@
 | 2026-10-29T08:06Z | #71 | gcp/dns | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40839247307) |
 | 2026-10-29T08:13Z | #73 | gcp/logging | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40840024574) |
 | 2026-10-29T08:35Z | #74 | gcp/monitoring | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40840853428) |
+| 2026-10-29T08:43Z | #76 | gcp/run | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40843487186) |
