@@ -5,7 +5,7 @@ adapters over core/gcp_cloudscheduler_core.py on the SAME shared store, so a job
 in the console is visible to the SDK/CLI and vice-versa.
 
 Pub/Sub targets are published into the appliance's Pub/Sub topic when a job fires
-(`:run`, or lazily when its schedule is due)."""
+(`:run`, or when its schedule is due: a 15 s background ticker fires it)."""
 from __future__ import annotations
 
 import json
@@ -16,6 +16,7 @@ from core import gcp_cloudscheduler_core as core
 
 DEFAULT_PROJECT = "demo"
 DEFAULT_REGION = "us-central1"
+TICK_SECONDS = 15
 
 
 async def _json_body(request):
@@ -91,6 +92,36 @@ def register(app, on_change=None):
         r = core.dispatch(store(), method, path, query or {}, headers or {}, body, invoker=_queue_invoker(pending))
         await _drain(pending, store())
         return r
+
+    # ── background timer ─────────────────────────────────────────────────
+    # Real Cloud Scheduler fires on time with nobody calling it; the core is lazy, so the
+    # appliance drives it. Each tick fires a due ENABLED job at most once (_advance moves
+    # scheduleTime forward) and missed ticks are not replayed.
+    async def tick():
+        # No request here, so bind the GCP provider like the alias middleware does: the
+        # Pub/Sub state is space-scoped by REQUEST_PROVIDER (default "aws").
+        from core.app_context import REQUEST_PROVIDER
+        token = REQUEST_PROVIDER.set("gcp")
+        try:
+            pending: list = []
+            core._advance(store(), invoker=_queue_invoker(pending))
+            await _drain(pending, store())
+        finally:
+            REQUEST_PROVIDER.reset(token)
+
+    async def _ticker():
+        import asyncio
+        while True:
+            await asyncio.sleep(TICK_SECONDS)
+            try:
+                await tick()
+            except Exception as e:   # noqa: BLE001 — a bad job must not stop the timer
+                print(f"[cloudscheduler] tick failed: {e!r}")
+
+    @app.on_event("startup")
+    async def _start_scheduler_ticker():
+        import asyncio
+        app.state.cloudscheduler_ticker = asyncio.create_task(_ticker())
 
     # ── native wire ───────────────────────────────────────────────────────
     async def native(request: Request):
