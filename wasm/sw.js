@@ -209,10 +209,11 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,cloudwatch:0.10,ec2:30.37,lambda:0.20,apigateway:3.50,apigatewayv2:1.00,vpc:0,ssm:0.05,stepfunctions:2.50,kinesis:10.95,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
+const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,sns:0.50,iam:0,rds:25.55,elbv2:16.43,logs:2.53,cloudwatch:0.10,ec2:30.37,lambda:0.20,apigateway:3.50,apigatewayv2:1.00,vpc:0,ssm:0.05,stepfunctions:2.50,kinesis:10.95,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
+  const by_service = {};     // "<cloud>.<service>" -> USD/month, same keys as the appliance's cost_savings
   let resource_count = 0;
   for (const p of ["aws", "gcp", "azure"]) {
     let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
@@ -220,11 +221,15 @@ async function nanoCostSavings() {
     resource_count += c.resources || 0;
     const bs = c.by_service || {};
     let usd = 0;
-    for (const k in bs) usd += (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+    for (const k in bs) {
+      const svcUsd = (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+      usd += svcUsd;
+      by_service[p + "." + k] = Math.round(svcUsd * 100) / 100;
+    }
     by_provider[p] = Math.round(usd * 100) / 100;
   }
   const savings_usd = Math.round((by_provider.aws + by_provider.gcp + by_provider.azure) * 100) / 100;
-  return { resource_count, savings_usd, by_provider, period: "monthly" };
+  return { resource_count, savings_usd, by_provider, by_service, period: "monthly" };
 }
 
 // Each console gates on an active space whose provider matches it. We derive
@@ -703,6 +708,10 @@ async function route(method, path, body, query) {
   if (m && method === "POST") return { tuple: ["aws", "elbv2", "CreateChild", { ...(body || {}), kind: m[1] }] };
   m = path.match(/^\/api\/aws\/elbv2\/(target-groups|listeners)\/([^/]+)$/);
   if (m && method === "DELETE") return { tuple: ["aws", "elbv2", "DeleteChild", { kind: m[1], name: dec(m[2]) }] };
+  // Amazon SNS (core/sns_core.py) — topics, subscriptions, platform applications, message log
+  if (path.startsWith("/api/aws/sns/") && (method === "GET" || method === "POST" || method === "DELETE" || method === "PATCH"))
+    return { tuple: ["aws", "sns", method === "GET" ? "GetSnsResource" : "WriteSnsResource",
+                     { method, path, query: query || {}, body: body || {} }] };
   // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
   if (path === "/api/eventbridge/rules") {
     if (method === "GET")  return { tuple: ["aws", "eventbridge", "ListRules", {}] };

@@ -161,6 +161,9 @@ class Aws(CloudProvider):
             ("elbv2", "ListChildren"):       lambda b, a, p: D.elb_children(p),
             ("elbv2", "CreateChild"):        lambda b, a, p: D.elb_child_create(p),
             ("elbv2", "DeleteChild"):        lambda b, a, p: D.elb_child_delete(p),
+            # Amazon SNS — topics, subscriptions, platform applications (core/sns_core.py)
+            ("sns", "GetSnsResource"):   lambda b, a, p: D.sns_console(p),
+            ("sns", "WriteSnsResource"): lambda b, a, p: D.sns_console(p),
             # EventBridge — rules → SQS delivery, via core/eventbridge_core.py
             ("eventbridge", "ListRules"): lambda b, a, p: D.eb_list(p),
             ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),

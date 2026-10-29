@@ -831,3 +831,12 @@ def sfn_children(p):
     if not sm:
         return {"ok": False, "code": "StateMachineDoesNotExist"}
     return {"ok": True, **stepfunctions_core.children(_sfn(), sm, p.get("kind"))}
+# ── Amazon SNS (core/sns_core.py) — shares the messaging store with SQS + the native wire ──
+def sns_console(p):
+    from core import nano_registry, sns_core
+    store = nano_registry.get()["msg"]
+    status, out = sns_core.console_dispatch(store, str(p.get("method") or "GET"), str(p.get("path") or ""),
+                                            dict(p.get("query") or {}), dict(p.get("body") or {}))
+    if status >= 400:
+        return {"ok": False, "code": out.get("code", "Error"), "message": out.get("error", ""), "status": status}
+    return out

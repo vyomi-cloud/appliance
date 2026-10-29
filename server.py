@@ -191,12 +191,12 @@ register_azure_routes(app, None)
 # ── Route module registration ────────────────────────────────────────
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
-from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2
+from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
 from routes import lazy_backends, shared, console_next, aws_logs, aws_cloudwatch, aws_kinesis
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
-            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2,
+            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
             lazy_backends, shared, console_next, aws_logs, aws_cloudwatch, aws_kinesis]:
     mod.register(app)
 
@@ -2616,6 +2616,11 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             add("aws", "cloudwatch", "alarm", _row["arn"], _row)
     except Exception:
         pass
+    aws_sns_state = _cloudsim_service_state(space, "sns")
+    for topic_arn, topic in aws_sns_state.get("topics", {}).items():
+        if isinstance(topic, dict):
+            add("aws", "sns", "topic", topic.get("name", topic_arn),
+                {**topic, "state": "active", "created": topic.get("created", "")})
 
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():
