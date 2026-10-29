@@ -84,8 +84,6 @@ CORES = [
 # Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
 # Nano copy of a new service's engine to be identical to core/.
 VERBATIM = {"cloudwatch_core.py", "apigatewayv2_core.py", "logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py"}
-# Cores vendored as an exact copy (no generated-file header).
-VERBATIM = {"sns_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
@@ -193,9 +191,6 @@ def main():
             src = f.read()
         with open(os.path.join(OUT, name), "w") as f:
             f.write(src if name in verbatim else HEADER + src)
-            # New services are vendored byte-identical (the service gate compares
-            # core/ and wasm/core/ verbatim); legacy cores keep the generated header.
-            f.write(src if name in VERBATIM else HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
     check_relay_cores()   # fail loudly if a relay loader lags the cores
 

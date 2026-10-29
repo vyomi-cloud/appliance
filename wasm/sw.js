@@ -209,7 +209,7 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,cloudwatch:0.10,ec2:30.37,lambda:0.20,apigateway:3.50,apigatewayv2:1.00,vpc:0,ssm:0.05,stepfunctions:2.50,kinesis:10.95,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
+const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,sns:0.50,iam:0,rds:25.55,elbv2:16.43,logs:2.53,cloudwatch:0.10,ec2:30.37,lambda:0.20,apigateway:3.50,apigatewayv2:1.00,vpc:0,ssm:0.05,stepfunctions:2.50,kinesis:10.95,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
@@ -235,35 +235,6 @@ function nanoSpace(provider) {
   const region = provider === "gcp" ? "us-central1" : provider === "azure" ? "eastus" : "us-east-1";
   return { space_id: "nano-" + provider, name: "Nano " + provider.toUpperCase(), provider,
            status: "running", active_region: region, active_account: acct };
-}
-
-// Per-service monthly list prices (mirror core/cost_model.py and the consoles'
-// _NANO_RATE) — Nano resources are priced from the live per-console census.
-const NANO_RATE = {
-  s3: 0.50, dynamodb: 1.25, kms: 1.00, secretsmanager: 0.40, sqs: 0.40, iam: 0, rds: 25.55, sns: 0.50, ec2: 30.37, lambda: 0.20, apigateway: 3.50, vpc: 0,
-  compute: 24.53, storage: 0.50, cloudsql: 25.00, pubsub: 0.40, firestore: 0.18, functions: 0.20, secretmanager: 0.18,
-  "microsoft.compute/virtualmachines": 30.37, "microsoft.sql/servers": 4.99, "microsoft.storage/storageaccounts": 0.50,
-  "microsoft.documentdb/databaseaccounts": 24.48, "microsoft.web/sites": 0.20, "microsoft.servicebus/namespaces": 9.81, "microsoft.keyvault/vaults": 0.03,
-};
-// Same shape the appliance puts on a space (/api/spaces → cost_savings), so the
-// dashboard, the crawler and the gate see identical metrics offline and in Nano.
-async function nanoCostSavings() {
-  const now = Date.now();
-  const by_provider = {}, by_service = {};
-  let total = 0, count = 0;
-  for (const p of ["aws", "gcp", "azure"]) {
-    let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
-    if (!c || typeof c.ts !== "number" || (now - c.ts) >= 60000) continue;
-    for (const [k, n] of Object.entries(c.by_service || {})) {
-      const cnt = Number(n) || 0, usd = cnt * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
-      by_provider[p] = Math.round(((by_provider[p] || 0) + usd) * 100) / 100;
-      by_service[p + "." + k] = Math.round(usd * 100) / 100;
-      total += usd; count += cnt;
-    }
-  }
-  total = Math.round(total * 100) / 100;
-  return { real_cloud_cost_usd: total, simulator_cost_usd: 0.0, savings_usd: total,
-           savings_pct: total > 0 ? 100.0 : 0.0, by_provider, by_service, resource_count: count };
 }
 
 // ── User-created spaces (persisted) ───────────────────────────────────
@@ -938,8 +909,6 @@ self.addEventListener("fetch", (event) => {
         const cs = await nanoCostSavings();
         for (const s of spaces) s.cost_savings = cs;
         return json({ spaces, active_space_id: active });
-        const cost_savings = await nanoCostSavings();
-        return json({ spaces: spaces.map((s) => ({ ...s, cost_savings })), active_space_id: active });
       }
       // Appliance-health pies: per-cloud distribution computed live from the
       // in-browser spaces (the only CENTRAL resource data — the cores' resources
