@@ -101,3 +101,4 @@
 | 2026-10-29T03:22Z | #181 | / | success | n/a | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40807144257) |
 | 2026-10-29T03:37Z | #187 | / | success | n/a | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40811999410) |
 | 2026-10-29T04:02Z | #182 | / | success | n/a | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40813366105) |
+| 2026-10-29T04:40Z | #50 | aws/apigatewayv2 | success | in-review | no | [run](https://github.com/vyomi-cloud/appliance/actions/runs/40815699669) |
