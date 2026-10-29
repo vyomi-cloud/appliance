@@ -1348,6 +1348,57 @@ def secret_op(be, op: str, body: dict):
     return {"ok": True}
 
 
+# ---------------------------------------------------------------------------
+# Cloud KMS — key versions, primary, rotation, import jobs
+# ---------------------------------------------------------------------------
+def kms_op(be, op: str, body: dict):
+    """One CryptoKey's detail-tab op over `be`: meta() (primary, versions{v: {...}},
+    rotationPeriod, nextRotationTime, labels), versions() -> [{version, state, ...}],
+    create_version() -> version, version_action(ver, action), set_primary(ver),
+    set_rotation(fields), set_labels(labels), import_jobs() / create_import_job(id, body)."""
+    from core import gcp_kms_core as kc
+    op = op[0].lower() + op[1:]
+    try:
+        if op in ("getRotation", "getLabels"):
+            m = be.meta()
+            keep = ("rotationPeriod", "nextRotationTime", "primary", "purpose") if op == "getRotation" else ("labels",)
+            return {"ok": True, "item": {"name": be.name, **{k: m[k] for k in keep if m.get(k)}}}
+        if op == "listVersions":
+            prim = str(be.meta().get("primary") or "1")
+            return {"ok": True, "items": [{**v, "primary": v["version"] == prim}
+                                          for v in sorted(be.versions(), key=lambda v: -int(v["version"]))]}
+        if op in ("createVersion", "rotateNow"):
+            ver = be.create_version()
+            if op == "rotateNow" or body.get("makePrimary"):
+                be.set_primary(ver)
+            return {"ok": True, "version": ver}
+        if op in ("enableVersion", "disableVersion", "destroyVersion", "restoreVersion"):
+            ver = str(body.get("version") or "")
+            be.version_action(ver, op[:-7])
+            return {"ok": True, "version": ver}
+        if op == "setPrimary":
+            be.set_primary(str(body.get("version") or ""))
+            return {"ok": True}
+        if op == "setRotation":
+            if body.get("enabled") is False:
+                be.set_rotation({})
+            else:
+                days = body.get("rotationPeriodDays")
+                be.set_rotation(kc.validate_rotation("%ds" % int(float(days) * 86400) if days not in (None, "") else None,
+                                                     body.get("nextRotationTime")))
+            return {"ok": True}
+        if op == "setLabels":
+            be.set_labels(validate_labels(body.get("labels", {})))
+            return {"ok": True}
+        if op == "listImportJobs":
+            return {"ok": True, "items": be.import_jobs()}
+        if op == "createImportJob":
+            return {"ok": True, "item": be.create_import_job(str(body.get("id") or ""), body)}
+    except kc.KmsTabError as e:
+        raise TabError(e.status, e.gcp_status, e.message)
+    return None
+
+
 def auto_subnet_second_octet(region: str) -> int:
     for r, cidr in AUTO_SUBNETS:
         if r == region:

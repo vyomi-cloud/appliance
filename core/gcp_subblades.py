@@ -270,12 +270,12 @@ _SECRETMANAGER_SUB = [
 _KMS_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Key", "items": [
-        {"key": "versions",    "label": "Versions",         "icon": "history",    "type": "stub"},
-        {"key": "rotation",    "label": "Rotation & labels","icon": "autorenew",  "type": "kmsconfig"},
+        {"key": "versions",    "label": "Versions",         "icon": "history",    "type": "kmsVersions"},
+        {"key": "rotation",    "label": "Rotation",         "icon": "autorenew",  "type": "kmsconfig"},
         {"key": "policy",      "label": "Key policy",       "icon": "policy",     "type": "iam"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "imports",     "label": "Import jobs",      "icon": "upload",     "type": "stub"},
+        {"key": "imports",     "label": "Import jobs",      "icon": "upload",     "type": "kmsImportJobs"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [

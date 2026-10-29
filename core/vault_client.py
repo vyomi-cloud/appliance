@@ -189,18 +189,54 @@ def transit_create_key(provider: str, space_id: str, key: str,
         return False
 
 
-def transit_encrypt(provider: str, space_id: str, key: str, plaintext_b64: str) -> str | None:
-    """Encrypt — returns Vault ciphertext (``vault:v1:<base64>``) or None."""
+def transit_encrypt(provider: str, space_id: str, key: str, plaintext_b64: str,
+                    key_version: int | None = None) -> str | None:
+    """Encrypt — returns Vault ciphertext (``vault:vN:<base64>``) or None. `key_version`
+    pins the key version (default: the latest)."""
     c = _client()
     if c is None:
         return None
     name = _transit_key_name(provider, space_id, key)
     try:
+        kwargs = {"key_version": int(key_version)} if key_version else {}
         r = c.secrets.transit.encrypt_data(name=name, plaintext=plaintext_b64,
-                                           mount_point=_TRANSIT_MOUNT)
+                                           mount_point=_TRANSIT_MOUNT, **kwargs)
         return r["data"]["ciphertext"]
     except Exception:
         return None
+
+
+def transit_rotate(provider: str, space_id: str, key: str) -> int | None:
+    """Rotate a transit key (new key version); returns the new latest version or None."""
+    c = _client()
+    if c is None:
+        return None
+    name = _transit_key_name(provider, space_id, key)
+    try:
+        c.secrets.transit.rotate_key(name=name, mount_point=_TRANSIT_MOUNT)
+        return int(c.secrets.transit.read_key(name=name, mount_point=_TRANSIT_MOUNT)["data"]["latest_version"])
+    except Exception:
+        return None
+
+
+def transit_key_versions(provider: str, space_id: str, key: str) -> dict:
+    """{version: creation time} of a transit key ({} when Vault is down or the key is unknown)."""
+    c = _client()
+    if c is None:
+        return {}
+    name = _transit_key_name(provider, space_id, key)
+    try:
+        keys = c.secrets.transit.read_key(name=name, mount_point=_TRANSIT_MOUNT)["data"].get("keys") or {}
+        import time as _t
+        def _iso(t):
+            if isinstance(t, (int, float)):
+                return _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime(t))
+            if isinstance(t, dict):
+                return str(t.get("creation_time") or "")
+            return str(t or "")
+        return {int(v): _iso(t) for v, t in keys.items()}
+    except Exception:
+        return {}
 
 
 def transit_decrypt(provider: str, space_id: str, key: str, ciphertext: str) -> str | None:

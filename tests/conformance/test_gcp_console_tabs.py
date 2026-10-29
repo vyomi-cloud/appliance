@@ -767,3 +767,87 @@ def test_secret_replication_encryption_labels(c, secret):
     assert st == 200
     st, out = c.sub("secretmanager", "getLabels", secret)
     assert out["item"]["labels"] == {"owner": "payments"}
+
+
+# ── Cloud KMS ─────────────────────────────────────────────────────────────────
+@pytest.fixture(scope="module")
+def cryptokey(c):
+    name = uid("tabkey")
+    st, _ = c.create("kms", {"name": name, "keyring": "tabring", "purpose": "ENCRYPT_DECRYPT"})
+    assert st == 200
+    yield name
+    c.delete("kms", name)
+
+
+def test_kms_versions_rotate_primary_and_states(c, cryptokey):
+    st, out = c.sub("kms", "listVersions", cryptokey)
+    assert [(v["version"], v["state"], v["primary"]) for v in out["items"]] == [("1", "ENABLED", True)]
+    st, out = c.sub("kms", "rotateNow", cryptokey, {})
+    assert st == 200
+    v2 = out["version"]
+    st, out = c.sub("kms", "listVersions", cryptokey)
+    assert [v["version"] for v in out["items"] if v["primary"]] == [v2] and len(out["items"]) == 2
+    st, bad = c.sub("kms", "disableVersion", cryptokey, {"version": "1"})
+    assert st == 200
+    st, bad = c.sub("kms", "setPrimary", cryptokey, {"version": "1"})
+    assert st == 400                                            # the primary must be ENABLED
+    st, _ = c.sub("kms", "destroyVersion", cryptokey, {"version": "1"})
+    st, out = c.sub("kms", "listVersions", cryptokey)
+    v1 = next(v for v in out["items"] if v["version"] == "1")
+    assert v1["state"] == "DESTROY_SCHEDULED" and v1["destroyTime"]
+    st, _ = c.sub("kms", "restoreVersion", cryptokey, {"version": "1"})
+    st, out = c.sub("kms", "listVersions", cryptokey)
+    assert next(v for v in out["items"] if v["version"] == "1")["state"] == "DISABLED"   # restore → DISABLED
+    st, bad = c.sub("kms", "restoreVersion", cryptokey, {"version": "1"})
+    assert st == 400
+
+
+def test_kms_rotation_schedule_and_labels(c, cryptokey):
+    st, bad = c.sub("kms", "setRotation", cryptokey, {"rotationPeriodDays": 0.5})
+    assert st == 400                                            # at least 24 hours
+    st, _ = c.sub("kms", "setRotation", cryptokey, {"rotationPeriodDays": 90})
+    assert st == 200
+    st, out = c.sub("kms", "getRotation", cryptokey)
+    assert out["item"]["rotationPeriod"] == "7776000s" and out["item"]["nextRotationTime"]
+    st, _ = c.sub("kms", "setRotation", cryptokey, {"enabled": False})
+    st, out = c.sub("kms", "getRotation", cryptokey)
+    assert "rotationPeriod" not in out["item"]
+    st, _ = c.sub("kms", "setLabels", cryptokey, {"labels": {"env": "prod"}})
+    st, out = c.sub("kms", "getLabels", cryptokey)
+    assert out["item"]["labels"] == {"env": "prod"}
+
+
+def test_kms_import_job_gets_a_real_rsa_wrapping_key(c, cryptokey):
+    jid = uid("imp")
+    st, bad = c.sub("kms", "createImportJob", cryptokey, {"id": jid, "importMethod": "RSA_OAEP_1024"})
+    assert st == 400
+    st, out = c.sub("kms", "createImportJob", cryptokey, {"id": jid, "importMethod": "RSA_OAEP_3072_SHA256", "protectionLevel": "SOFTWARE"})
+    assert st == 200
+    job = _wait(lambda: next(j for j in c.sub("kms", "listImportJobs", cryptokey)[1]["items"] if j["name"].endswith("/" + jid)),
+                lambda j: j["state"] == "ACTIVE", tries=200)
+    assert job["state"] == "ACTIVE" and job["publicKey"]["pem"].startswith("-----BEGIN PUBLIC KEY-----")
+    import base64 as b64
+    der = b64.b64decode("".join(job["publicKey"]["pem"].strip().splitlines()[1:-1]))
+    assert len(der) > 380                                       # a 3072-bit modulus (~398-byte SPKI)
+
+
+def test_kms_engine_decrypt_refuses_a_disabled_version():
+    from core import gcp_kms_core as kc
+    from core.kms_keystore import InMemoryKeyStore
+    import base64 as b64
+    st = InMemoryKeyStore()
+    call = lambda m, p, q=None, b=None: kc.dispatch(st, m, p, q or {}, {}, json.dumps(b).encode() if b is not None else b"")
+    ring = "/v1/projects/p/locations/global/keyRings/r"
+    call("POST", "/v1/projects/p/locations/global/keyRings", {"keyRingId": "r"})
+    call("POST", ring + "/cryptoKeys", {"cryptoKeyId": "k"}, {"purpose": "ENCRYPT_DECRYPT"})
+    key = ring + "/cryptoKeys/k"
+    ct1 = json.loads(call("POST", key + ":encrypt", None, {"plaintext": b64.b64encode(b"v1 data").decode()}).body)["ciphertext"]
+    v2 = json.loads(call("POST", key + "/cryptoKeyVersions", None, {}).body)["name"].rsplit("/", 1)[-1]
+    call("POST", key + ":updatePrimaryVersion", None, {"cryptoKeyVersionId": v2})
+    ct2 = json.loads(call("POST", key + ":encrypt", None, {"plaintext": b64.b64encode(b"v2 data").decode()}).body)["ciphertext"]
+    assert b64.b64decode(json.loads(call("POST", key + ":decrypt", None, {"ciphertext": ct1}).body)["plaintext"]) == b"v1 data"
+    assert b64.b64decode(json.loads(call("POST", key + ":decrypt", None, {"ciphertext": ct2}).body)["plaintext"]) == b"v2 data"
+    call("PATCH", key + "/cryptoKeyVersions/1", {"updateMask": "state"}, {"state": "DISABLED"})
+    r = call("POST", key + ":decrypt", None, {"ciphertext": ct1})
+    assert r.status == 400 and b"not enabled" in r.body
+    assert call("POST", key + ":decrypt", None, {"ciphertext": ct2}).status == 200

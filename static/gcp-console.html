@@ -2595,6 +2595,68 @@ GT.smencryption = async function(host, svc, item){
     ["Cloud KMS key", cmek.join(", ") || "Google-managed (no key to manage)"]]));
   host.append(el("div",{style:"font-size:12px;color:var(--sub);margin-top:8px"}, "Secret encryption comes from the replication policy chosen at creation."));
 };
+
+// ---- Cloud KMS ------------------------------------------------------------------
+GT.kmsversions = async function(host, svc, item){
+  const name = tabName(svc, item);
+  const label = s => ({ENABLED: "Enabled", DISABLED: "Disabled", DESTROY_SCHEDULED: "Scheduled for destruction", DESTROYED: "Destroyed"}[s] || s);
+  await childList(host, {
+    load: () => subGet(svc, "listVersions", name), noun: "key version", nouns: "key versions", emptyIcon: "history",
+    empty: name + " has no key versions.",
+    columns: [["version", "Version", v => v.version + (v.primary ? " (primary)" : "")], ["state", "Status", v => stateBadge(label(v.state))],
+              ["algorithm", "Algorithm"], ["protectionLevel", "Protection level"], ["createTime", "Created"],
+              ["destroyTime", "Scheduled destruction", v => v.destroyEventTime ? "Destroyed " + v.destroyEventTime : (v.destroyTime || "Not scheduled")]],
+    create: {label: "Rotate key", icon: "autorenew", submit: "Rotate now", done: "Rotated",
+      fields: [{name: "makePrimary", label: "Make the new version primary", type: "checkbox", value: true}],
+      run: v => subPost(svc, v.makePrimary ? "rotateNow" : "createVersion", name, {})},
+    rowActions: [
+      {label: "Make primary", icon: "star", when: v => !v.primary && v.state === "ENABLED", run: v => subPost(svc, "setPrimary", name, {version: v.version})},
+      {label: "Disable", icon: "block", when: v => v.state === "ENABLED", run: v => subPost(svc, "disableVersion", name, {version: v.version})},
+      {label: "Enable", icon: "check_circle", when: v => v.state === "DISABLED", run: v => subPost(svc, "enableVersion", name, {version: v.version})},
+      {label: "Destroy", icon: "delete_forever", danger: true, when: v => v.state === "ENABLED" || v.state === "DISABLED",
+       confirm: v => "Schedule version " + v.version + " for destruction? Data encrypted with it can't be decrypted once destroyed.",
+       run: v => subPost(svc, "destroyVersion", name, {version: v.version})},
+      {label: "Restore", icon: "restore", when: v => v.state === "DESTROY_SCHEDULED", run: v => subPost(svc, "restoreVersion", name, {version: v.version})}],
+  });
+};
+GT.kmsconfig = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const it = ((await subGet(svc, "getRotation", name)).json || {}).item || {};
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("Rotation", [["Rotation period", it.rotationPeriod ? secsHuman(String(it.rotationPeriod).replace(/s$/, "")) : "Never (manual rotation)"],
+      ["Next rotation", it.nextRotationTime || "Not scheduled"], ["Primary version", it.primary || "1"], ["Purpose", it.purpose || "ENCRYPT_DECRYPT"]]));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0"});
+    bar.append(el("button",{class:"btn", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit rotation period"));
+    if (it.rotationPeriod) bar.append(el("button",{class:"btn", onclick: async ()=>{ const r = await subPost(svc, "setRotation", name, {enabled: false}); if (r.ok) { toast("Automatic rotation turned off"); paint(); } else toast("Failed: " + errMsg(r), "err"); }}, icon("event_busy"), "Turn off rotation"));
+    wrap.append(bar);
+    if (editing) wrap.append(inlineForm([{name: "rotationPeriodDays", label: "Rotation period (days)", type: "number", value: it.rotationPeriod ? Math.round(parseInt(it.rotationPeriod, 10) / 86400) : 90, width: 110}], "Save", async v => {
+      const r = await subPost(svc, "setRotation", name, {rotationPeriodDays: Number(v.rotationPeriodDays)});
+      if (r.ok) { toast("Rotation schedule saved"); editing = false; paint(); } else toast("Failed: " + errMsg(r), "err");
+    }, ()=>{ editing = false; paint(); }));
+  }
+  await paint();
+};
+GT.kmsimportjobs = async function(host, svc, item){
+  const name = tabName(svc, item);
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin-bottom:10px"}, "Import jobs of this key ring — each holds an RSA wrapping key for importing your own key material."));
+  await childList(host, {
+    load: () => subGet(svc, "listImportJobs", name), noun: "import job", nouns: "import jobs", emptyIcon: "upload",
+    empty: "No import jobs in this key ring.",
+    columns: [["name", "Import job", j => lastSeg(j.name)], ["importMethod", "Import method"], ["protectionLevel", "Protection level"],
+              ["state", "Status", j => stateBadge(j.state === "ACTIVE" ? "Active" : j.state === "PENDING_GENERATION" ? "Generating key" : j.state)],
+              ["expireTime", "Expires"], ["publicKey", "Wrapping public key", j => j.publicKey ? j.publicKey.pem.split("\n")[1].slice(0, 24) + "… (" + (j.importMethod.includes("4096") ? 4096 : 3072) + "-bit RSA)" : "Generating"]],
+    actions: [{label: "Refresh", icon: "refresh", run: async () => ({ok: true})}],
+    create: {label: "Create import job", submit: "Create", done: "Import job created",
+      fields: [{name: "id", label: "Import job name", placeholder: "import-1"},
+               {name: "importMethod", label: "Import method", type: "select", value: "RSA_OAEP_3072_SHA256_AES_256",
+                options: ["RSA_OAEP_3072_SHA256_AES_256", "RSA_OAEP_4096_SHA256_AES_256", "RSA_OAEP_3072_SHA256", "RSA_OAEP_4096_SHA256", "RSA_OAEP_3072_SHA1_AES_256", "RSA_OAEP_4096_SHA1_AES_256"]},
+               {name: "protectionLevel", label: "Protection level", type: "select", value: "SOFTWARE", options: ["SOFTWARE", "HSM"]}],
+      run: v => subPost(svc, "createImportJob", name, {...v, id: v.id.trim()})},
+  });
+};
 // ========== END DETAIL TABS =================================================
 
 // ========== CREATE — collapsible-sections form + right summary card =========

@@ -1273,6 +1273,71 @@ def _secret_tab(name, op, body):
     return _T.secret_op(_NanoSecret(name), op, body)
 
 
+class _NanoKey:
+    """Cloud KMS storage for core/gcp_console_tabs.kms_op over core/gcp_kms_core."""
+
+    def __init__(self, name):
+        self.key = _short(name)
+        self.ring = "projects/%s/locations/%s/keyRings/%s" % (PROJ, LOC, RING)
+        self.name = "%s/cryptoKeys/%s" % (self.ring, self.key)
+        self._m = None
+        if self.get() is None:
+            raise _T.TabError(404, "NOT_FOUND", "CryptoKey %s not found." % self.name)
+
+    def _ok(self, st, out):
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "FAILED_PRECONDITION", err.get("message") or "Request failed")
+        return out
+
+    def get(self):
+        st, _ = _call("kms", "GET", "/v1/" + self.name)   # applies due rotations / destructions
+        return _STORES["kms"].get_key(self.name) if st < 300 else None
+
+    def meta(self):
+        return self.get() or {}
+
+    def versions(self):
+        st, out = _call("kms", "GET", "/v1/%s/cryptoKeyVersions" % self.name)
+        return [{"version": v["name"].rsplit("/", 1)[-1], **{k: v[k] for k in ("state", "createTime", "algorithm", "protectionLevel",
+                                                                              "destroyTime", "destroyEventTime") if k in v}}
+                for v in (out or {}).get("cryptoKeyVersions", [])]
+
+    def create_version(self):
+        out = self._ok(*_call("kms", "POST", "/v1/%s/cryptoKeyVersions" % self.name, {}, {}))
+        return out["name"].rsplit("/", 1)[-1]
+
+    def version_action(self, ver, action):
+        path = "/v1/%s/cryptoKeyVersions/%s" % (self.name, ver)
+        if action in ("destroy", "restore"):
+            self._ok(*_call("kms", "POST", path + ":" + action, {}, {}))
+        else:
+            self._ok(*_call("kms", "PATCH", path, {"updateMask": "state"}, {"state": "ENABLED" if action == "enable" else "DISABLED"}))
+
+    def set_primary(self, ver):
+        self._ok(*_call("kms", "POST", "/v1/%s:updatePrimaryVersion" % self.name, {}, {"cryptoKeyVersionId": ver}))
+
+    def set_rotation(self, fields):
+        self._ok(*_call("kms", "PATCH", "/v1/" + self.name, {"updateMask": "rotationPeriod,nextRotationTime"},
+                        {"rotationPeriod": fields.get("rotationPeriod"), "nextRotationTime": fields.get("nextRotationTime")}))
+
+    def set_labels(self, labels):
+        self._ok(*_call("kms", "PATCH", "/v1/" + self.name, {"updateMask": "labels"}, {"labels": labels}))
+
+    def import_jobs(self):
+        st, out = _call("kms", "GET", "/v1/%s/importJobs" % self.ring, {"_keygen_budget_s": "0.8"})
+        return (out or {}).get("importJobs", [])
+
+    def create_import_job(self, jid, body):
+        return self._ok(*_call("kms", "POST", "/v1/%s/importJobs" % self.ring, {"importJobId": jid, "_keygen_budget_s": "0.8"},
+                               {"importMethod": body.get("importMethod"), "protectionLevel": body.get("protectionLevel") or "SOFTWARE"}))
+
+
+def _kms_tab(name, op, body):
+    _ensure_keyring()
+    return _T.kms_op(_NanoKey(name), op, body)
+
+
 def _project_policy(op, project, body):
     res = "projects/%s" % (project or PROJ)
     st, pol = _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})
@@ -1286,7 +1351,7 @@ def _project_policy(op, project, body):
 
 _TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _sql_tab, "pubsub": _pubsub_tab,
                  "vpc": _vpc_tab, "functions": _functions_tab, "firestore": _firestore_tab,
-                 "secretmanager": _secret_tab}
+                 "secretmanager": _secret_tab, "kms": _kms_tab}
 
 
 def tab_dispatch(svc, operation, name, body, resources=None, account="default"):

@@ -803,6 +803,90 @@ def _secretmanager(op: str, name: str, body: dict):
 
 
 # ---------------------------------------------------------------------------
+# Cloud KMS — key versions are Vault transit key versions; states / primary / rotation /
+# labels in the key's KV meta (core/vault_routes, shared with the native /v1 API)
+# ---------------------------------------------------------------------------
+class _OfflineKey:
+    def __init__(self, name):
+        from core import gcp_kms_core as kc
+        from core import vault_client as vc
+        from core import vault_routes as vr
+        self.kc, self.vc, self.vr = kc, vc, vr
+        self.space = vr._active_space_id(None)
+        self.key = T.short(name)
+        if not any(e.split("/")[-1] == self.key for e in vr._gcp_idx_get(self.space, "kms")):
+            raise T.TabError(404, "NOT_FOUND", "CryptoKey %s not found." % self.key)
+        self.ring = vr.gcp_kms_ring_of(self.space, self.key)
+        self.name = "projects/%s/locations/global/keyRings/%s/cryptoKeys/%s" % (_project(), self.ring, self.key)
+        self._m = vr.gcp_kms_sync(self.space, self.ring, self.key)
+
+    def _save(self):
+        self.vr.gcp_kms_key_meta_put(self.space, self.key, self._m)
+
+    def meta(self):
+        return self._m
+
+    def versions(self):
+        return [{"version": v, "state": d.get("state", "ENABLED"), "createTime": d.get("createTime", ""),
+                 "algorithm": "GOOGLE_SYMMETRIC_ENCRYPTION", "protectionLevel": "SOFTWARE",
+                 **{k: d[k] for k in ("destroyTime", "destroyEventTime") if d.get(k)}}
+                for v, d in (self._m.get("versions") or {}).items()]
+
+    def create_version(self):
+        nv = self.vc.transit_rotate("gcp", self.space, "%s__%s" % (self.ring, self.key))
+        if not nv:
+            raise T.TabError(503, "UNAVAILABLE", "The key store (Vault transit) is unavailable.")
+        self._m.setdefault("versions", {})[str(nv)] = {"state": "ENABLED", "createTime": T.now_iso()}
+        self._save()
+        return str(nv)
+
+    def version_action(self, ver, action):
+        self.kc.set_version_state(self._m, ver, action)
+        self._save()
+
+    def set_primary(self, ver):
+        self.kc.set_primary(self._m, ver)
+        self._save()
+
+    def set_rotation(self, fields):
+        self._m.pop("rotationPeriod", None)
+        self._m.pop("nextRotationTime", None)
+        self._m.update(fields)
+        self._m["rotation_period"] = fields.get("rotationPeriod", "")   # the console's key view reads this
+        self._save()
+
+    def set_labels(self, labels):
+        self._m["labels"] = labels
+        self._save()
+
+    def _jobs(self):
+        return self.vr._kv_dict(self.space, "__kmsimport__%s" % self.ring)
+
+    def import_jobs(self):
+        jobs = self._jobs()
+        out = self.kc.import_job_list(jobs, self._ring_name(), 5.0)
+        self.vc.kv_put("gcp", self.space, "__kmsimport__%s" % self.ring, jobs or {"_": ""})
+        return out
+
+    def create_import_job(self, jid, body):
+        jobs = self._jobs()
+        jobs.pop("_", None)
+        view = self.kc.import_job_create(jobs, self._ring_name(), jid, body, 30.0)
+        self.vc.kv_put("gcp", self.space, "__kmsimport__%s" % self.ring, jobs)
+        return view
+
+    def _ring_name(self):
+        return "projects/%s/locations/global/keyRings/%s" % (_project(), self.ring)
+
+
+def _kms(op: str, name: str, body: dict):
+    out = T.kms_op(_OfflineKey(name), op, body)
+    if out is not None and not op.startswith(("get", "list")):
+        _usage("kms", op, T.short(name), {k: body.get(k) for k in ("version", "id") if body.get(k)})
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Project IAM policy (every resource's Permissions tab)
 # ---------------------------------------------------------------------------
 def _iam_project(op: str, project: str, body: dict):
@@ -830,6 +914,7 @@ _HANDLERS = {
     "functions": _functions,
     "firestore": _firestore,
     "secretmanager": _secretmanager,
+    "kms": _kms,
 }
 
 
