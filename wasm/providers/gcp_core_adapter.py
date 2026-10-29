@@ -1338,6 +1338,53 @@ def _kms_tab(name, op, body):
     return _T.kms_op(_NanoKey(name), op, body)
 
 
+class _NanoSA:
+    """IAM service-account tabs over core/gcp_iam_core (account policy, project policy, keys)."""
+
+    def __init__(self, name):
+        st, sa = _call("iam", "GET", "%s/serviceAccounts/%s" % (_P, _short(name)))
+        if st >= 300:
+            raise _T.TabError(404, "NOT_FOUND", "Unknown service account: %s" % _short(name))
+        self.email = sa["email"]
+        self.res = "projects/%s/serviceAccounts/%s" % (PROJ, self.email)
+
+    def _pol(self, res):
+        return _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})[1]
+
+    def sa_policy(self):
+        return self._pol(self.res)
+
+    def set_sa_policy(self, pol):
+        _call("iam", "POST", "/v1/%s:setIamPolicy" % self.res, {}, {"policy": pol})
+
+    def project_policy(self):
+        return self._pol("projects/nano-project")
+
+    def set_project_policy(self, pol):
+        _call("iam", "POST", "/v1/projects/nano-project:setIamPolicy", {}, {"policy": pol})
+
+    def keys(self):
+        return _call("iam", "GET", "/v1/%s/keys" % self.res)[1].get("keys", [])
+
+    def create_key(self):
+        st, out = _call("iam", "POST", "/v1/%s/keys" % self.res, {}, {})
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "FAILED_PRECONDITION", err.get("message") or "Key creation failed")
+        return out
+
+    def key_action(self, kid, action):
+        path = "/v1/%s/keys/%s" % (self.res, kid)
+        if action == "delete":
+            _call("iam", "DELETE", path)
+        else:
+            _call("iam", "POST", path + ":" + action, {}, {})
+
+
+def _iam_tab(name, op, body):
+    return _T.iam_sa_op(_NanoSA(name), op, body)
+
+
 def _project_policy(op, project, body):
     res = "projects/%s" % (project or PROJ)
     st, pol = _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})
@@ -1351,7 +1398,7 @@ def _project_policy(op, project, body):
 
 _TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _sql_tab, "pubsub": _pubsub_tab,
                  "vpc": _vpc_tab, "functions": _functions_tab, "firestore": _firestore_tab,
-                 "secretmanager": _secret_tab, "kms": _kms_tab}
+                 "secretmanager": _secret_tab, "kms": _kms_tab, "iam": _iam_tab}
 
 
 def tab_dispatch(svc, operation, name, body, resources=None, account="default"):

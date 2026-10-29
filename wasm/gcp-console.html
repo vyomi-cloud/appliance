@@ -2684,6 +2684,69 @@ GT.kmsimportjobs = async function(host, svc, item){
       run: v => subPost(svc, "createImportJob", name, {...v, id: v.id.trim()})},
   });
 };
+
+// ---- IAM — service accounts ---------------------------------------------------
+GT.iammembers = async function(host, svc, item){
+  const name = tabName(svc, item);
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin-bottom:10px"}, "Principals with access to " + name + " — who can act as, mint tokens for or administer this service account."));
+  await childList(host, {
+    load: () => subGet(svc, "listMembers", name), noun: "principal", nouns: "principals", emptyIcon: "group",
+    empty: "No principals have access to " + name + " itself (project-level roles still apply).",
+    columns: [["member", "Principal"], ["role", "Role"]],
+    create: {label: "Grant access", icon: "person_add", submit: "Save", done: "Access granted",
+      fields: [{name: "member", label: "New principal", placeholder: "user:dev@example.com", width: 240},
+               {name: "role", label: "Role", type: "select", value: "roles/iam.serviceAccountUser",
+                options: ["roles/iam.serviceAccountUser", "roles/iam.serviceAccountTokenCreator", "roles/iam.serviceAccountAdmin",
+                          "roles/iam.serviceAccountKeyAdmin", "roles/iam.workloadIdentityUser"]}],
+      run: v => subPost(svc, "grantMember", name, {member: v.member.trim(), role: v.role})},
+    rowActions: [{label: "Remove", icon: "delete", danger: true, confirm: m => "Remove " + m.role + " from " + m.member + "?",
+      run: m => subPost(svc, "revokeMember", name, {member: m.member, role: m.role})}],
+  });
+};
+GT.iampermissions = async function(host, svc, item){
+  const name = tabName(svc, item);
+  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin-bottom:10px"}, "Roles " + name + " holds on project " + PROJECT + "."));
+  await childList(host, {
+    load: () => subGet(svc, "listPermissions", name), noun: "role", nouns: "roles", emptyIcon: "policy",
+    empty: name + " holds no roles on project " + PROJECT + " — it can't access any resources yet.",
+    columns: [["role", "Role"], ["scope", "Granted on", r => r.scope + " " + PROJECT]],
+    create: {label: "Grant a role", submit: "Save", done: "Role granted",
+      fields: [{name: "role", label: "Role", type: "select", value: "roles/viewer",
+                options: ["roles/viewer", "roles/editor", "roles/storage.objectViewer", "roles/storage.objectAdmin", "roles/pubsub.publisher",
+                          "roles/pubsub.subscriber", "roles/secretmanager.secretAccessor", "roles/cloudsql.client", "roles/datastore.user",
+                          "roles/cloudkms.cryptoKeyEncrypterDecrypter", "roles/logging.logWriter", "roles/run.invoker"]}],
+      run: v => subPost(svc, "grantRole", name, {role: v.role})},
+    rowActions: [{label: "Remove", icon: "delete", danger: true, confirm: r => "Remove " + r.role + " from " + name + "?",
+      run: r => subPost(svc, "revokeRole", name, {role: r.role})}],
+  });
+};
+GT.iamkeys = async function(host, svc, item){
+  const name = tabName(svc, item);
+  const out = el("div",{});
+  await childList(host, {
+    load: () => subGet(svc, "listKeys", name), noun: "key", nouns: "keys", emptyIcon: "vpn_key",
+    empty: name + " has no user-managed keys.",
+    columns: [["id", "Key ID"], ["status", "Status", k => stateBadge(k.status)], ["keyAlgorithm", "Algorithm"],
+              ["validAfterTime", "Key creation date"], ["validBeforeTime", "Key expiration date", k => k.validBeforeTime && k.validBeforeTime.startsWith("9999") ? "Never" : k.validBeforeTime]],
+    actions: [{label: "Create new key", icon: "add", run: async () => {
+      const r = await subPost(svc, "createKey", name, {});
+      out.innerHTML = "";
+      if (r.ok) {
+        const file = atob(r.json.privateKeyData || "");
+        const blob = new Blob([file], {type: "application/json"});
+        out.append(el("div",{class:"kv-card"}, el("div",{style:"font-weight:500;margin-bottom:6px"}, "Private key saved to your computer"),
+          el("div",{style:"font-size:12.5px;color:var(--sub);margin-bottom:8px"}, "This is the only time the key file is available — store it securely."),
+          el("a",{href: URL.createObjectURL(blob), download: name.split("@")[0] + "-" + lastSeg(r.json.name).slice(0, 12) + ".json", class:"btn"}, icon("download"), "Download JSON key file")));
+      }
+      return r;
+    }}],
+    rowActions: [
+      {label: "Disable", icon: "block", when: k => k.status === "Active", run: k => subPost(svc, "disableKey", name, {key: k.id})},
+      {label: "Enable", icon: "check_circle", when: k => k.status === "Disabled", run: k => subPost(svc, "enableKey", name, {key: k.id})},
+      {label: "Delete", icon: "delete", danger: true, confirm: k => "Delete key " + k.id + "? Apps using it stop authenticating.", run: k => subPost(svc, "deleteKey", name, {key: k.id})}],
+  });
+  host.prepend(out);
+};
 // ========== END DETAIL TABS =================================================
 
 // ========== CREATE — collapsible-sections form + right summary card =========

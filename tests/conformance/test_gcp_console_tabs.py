@@ -851,3 +851,53 @@ def test_kms_engine_decrypt_refuses_a_disabled_version():
     r = call("POST", key + ":decrypt", None, {"ciphertext": ct1})
     assert r.status == 400 and b"not enabled" in r.body
     assert call("POST", key + ":decrypt", None, {"ciphertext": ct2}).status == 200
+
+
+# ── IAM (service accounts) ────────────────────────────────────────────────────
+@pytest.fixture(scope="module")
+def sa(c):
+    acct = "tabsa-" + uuid.uuid4().hex[:6]
+    st, out = c.create("iam", {"name": acct, "accountId": acct, "displayName": acct})
+    assert st == 200
+    st, lst = c._d("List", {"service": "iam"}) if c.mode == "nano" else c._j(c.s.get(BASE + c._fill(c._svc("iam")["collection_path"]), timeout=30))
+    items = lst.get("items") or lst.get("accounts") or []
+    email = next(str(x.get("email") or x.get("name")).rsplit("/", 1)[-1] for x in items if acct in str(x.get("email") or x.get("name")))
+    yield email
+    c.delete("iam", email)
+
+
+def test_iam_members_permissions(c, sa):
+    st, _ = c.sub("iam", "grantMember", sa, {"member": "user:ops@example.com", "role": "roles/iam.serviceAccountUser"})
+    assert st == 200
+    st, out = c.sub("iam", "listMembers", sa)
+    assert {"member": "user:ops@example.com", "role": "roles/iam.serviceAccountUser"} in out["items"]
+    st, _ = c.sub("iam", "revokeMember", sa, {"member": "user:ops@example.com", "role": "roles/iam.serviceAccountUser"})
+    st, out = c.sub("iam", "listMembers", sa)
+    assert out["items"] == []
+    st, _ = c.sub("iam", "grantRole", sa, {"role": "roles/storage.objectViewer"})
+    assert st == 200
+    st, out = c.sub("iam", "listPermissions", sa)
+    assert [r["role"] for r in out["items"]] == ["roles/storage.objectViewer"]
+    st, pol = c.sub("iam", "getProjectPolicy", c.project)   # it is a real project binding
+    assert any("serviceAccount:" + sa in b["members"] for b in pol["bindings"] if b["role"] == "roles/storage.objectViewer")
+    st, _ = c.sub("iam", "revokeRole", sa, {"role": "roles/storage.objectViewer"})
+    st, out = c.sub("iam", "listPermissions", sa)
+    assert out["items"] == []
+
+
+def test_iam_keys_are_real_rsa_key_files(c, sa):
+    import base64 as b64
+    st, out = c.sub("iam", "createKey", sa, {})
+    assert st == 200
+    keyfile = json.loads(b64.b64decode(out["privateKeyData"]))
+    assert keyfile["type"] == "service_account" and keyfile["client_email"] == sa
+    assert keyfile["private_key"].startswith("-----BEGIN PRIVATE KEY-----") and len(keyfile["private_key"]) > 1500
+    kid = keyfile["private_key_id"]
+    st, out = c.sub("iam", "listKeys", sa)
+    assert [(k["id"], k["status"]) for k in out["items"]] == [(kid, "Active")]
+    st, _ = c.sub("iam", "disableKey", sa, {"key": kid})
+    st, out = c.sub("iam", "listKeys", sa)
+    assert out["items"][0]["status"] == "Disabled"
+    st, _ = c.sub("iam", "deleteKey", sa, {"key": kid})
+    st, out = c.sub("iam", "listKeys", sa)
+    assert out["items"] == []

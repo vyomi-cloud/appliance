@@ -309,6 +309,34 @@ def rsa_public_pem(n: int, e: int) -> str:
     return "-----BEGIN PUBLIC KEY-----\n" + "\n".join(b64[i:i + 64] for i in range(0, len(b64), 64)) + "\n-----END PUBLIC KEY-----\n"
 
 
+def rsa_generate(bits: int) -> dict:
+    """A real RSA key pair {n, e, d, p, q} (`cryptography` when available, else pure Python)."""
+    import os
+    try:
+        from cryptography.hazmat.primitives.asymmetric import rsa as _rsa
+        nums = _rsa.generate_private_key(public_exponent=65537, key_size=bits).private_numbers()
+        return {"n": nums.public_numbers.n, "e": 65537, "d": nums.d, "p": nums.p, "q": nums.q}
+    except Exception:
+        pass
+    primes = []
+    while len(primes) < 2:
+        c = int.from_bytes(os.urandom(bits // 16), "big") | (3 << (bits // 2 - 2)) | 1
+        if (c - 1) % 65537 and _probable_prime(c) and c not in primes:
+            primes.append(c)
+    p, q = primes
+    return {"n": p * q, "e": 65537, "d": pow(65537, -1, (p - 1) * (q - 1)), "p": p, "q": q}
+
+
+def rsa_private_pem(k: dict) -> str:
+    """PKCS#8 PEM ('BEGIN PRIVATE KEY', what Google key files carry) of an RSA key."""
+    n, e, d, p, q = (int(k[x]) for x in ("n", "e", "d", "p", "q"))
+    rsa_der = _der(0x30, b"".join(_der_int(v) for v in (0, n, e, d, p, q, d % (p - 1), d % (q - 1), pow(q, -1, p))))
+    algo = _der(0x30, _der(0x06, bytes.fromhex("2a864886f70d010101")) + b"\x05\x00")
+    pk8 = _der(0x30, _der_int(0) + algo + _der(0x04, rsa_der))
+    b64 = base64.b64encode(pk8).decode()
+    return "-----BEGIN PRIVATE KEY-----\n" + "\n".join(b64[i:i + 64] for i in range(0, len(b64), 64)) + "\n-----END PRIVATE KEY-----\n"
+
+
 def _advance_keygen(job: dict, budget_s: float) -> None:
     """Grow the job's RSA key: (cryptography) at once, else prime search within the budget."""
     import os

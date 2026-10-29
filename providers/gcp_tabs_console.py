@@ -887,6 +887,58 @@ def _kms(op: str, name: str, body: dict):
 
 
 # ---------------------------------------------------------------------------
+# IAM — service accounts (gcp_iam_state), their own IAM policy, project roles, keys
+# ---------------------------------------------------------------------------
+class _OfflineSA:
+    def __init__(self, name):
+        from providers import gcp_iam as gi
+        self.s, self.gi = _server(), gi
+        self.project = self.s._gcp_project_name(_project())
+        self.sa = gi._iam_find_sa(self.project, T.short(name))
+        if not isinstance(self.sa, dict):
+            raise T.TabError(404, "NOT_FOUND", "Unknown service account: %s" % T.short(name))
+        self.email = self.sa.get("email")
+
+    def sa_policy(self):
+        return dict(self.s.gcp_iam_state.setdefault("sa_policies", {}).get(self.email) or {"version": 1, "bindings": []})
+
+    def set_sa_policy(self, pol):
+        self.s.gcp_iam_state.setdefault("sa_policies", {})[self.email] = pol
+
+    def project_policy(self):
+        return self.s._gcp_iam_policy_view(self.project)
+
+    def set_project_policy(self, pol):
+        self.s._gcp_iam_set_policy(self.project, pol)
+
+    def keys(self):
+        return list(self.sa.get("keys", {}).values())
+
+    def create_key(self):
+        from core import gcp_iam_core as iamc
+        keys = self.sa.setdefault("keys", {})
+        if sum(1 for k in keys.values() if k.get("keyType") == "USER_MANAGED") >= iamc.MAX_USER_KEYS:
+            raise T.TabError(400, "FAILED_PRECONDITION", "Precondition check failed: the service account has the maximum of 10 keys.")
+        rec, created = iamc.new_key_record(self.project, self.email, str(self.sa.get("uniqueId") or ""))
+        keys[T.short(rec["name"])] = rec
+        return created
+
+    def key_action(self, kid, action):
+        keys = self.sa.setdefault("keys", {})
+        if action == "delete":
+            keys.pop(kid, None)
+        else:
+            keys[kid]["disabled"] = action == "disable"
+
+
+def _iam(op: str, name: str, body: dict):
+    out = T.iam_sa_op(_OfflineSA(name), op, body)
+    if out is not None and not op.startswith(("get", "list")):
+        _usage("iam", op, T.short(name), {k: body.get(k) for k in ("role", "member", "key") if body.get(k)})
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Project IAM policy (every resource's Permissions tab)
 # ---------------------------------------------------------------------------
 def _iam_project(op: str, project: str, body: dict):
@@ -915,6 +967,7 @@ _HANDLERS = {
     "firestore": _firestore,
     "secretmanager": _secretmanager,
     "kms": _kms,
+    "iam": _iam,
 }
 
 

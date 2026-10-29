@@ -42,6 +42,7 @@ import base64
 import json
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from urllib.parse import unquote
 
 from core.iam_store import IamStore, InMemoryIamStore
@@ -304,6 +305,10 @@ def dispatch(store: IamStore, method: str, path: str,
             break
     p = p.strip("/")
 
+    # ---- service-account keys: projects/{p}/serviceAccounts/{sa}/keys[/{key}][:disable|:enable] ----
+    if "/keys" in p and "/serviceAccounts/" in p:
+        return _sa_keys(store, method, p, _body())
+
     # ---- resource IAM policy verbs (colon methods) ----
     # These live on the LAST path segment: "{resource}:getIamPolicy"
     if ":" in p:
@@ -336,9 +341,94 @@ def dispatch(store: IamStore, method: str, path: str,
             return _get_service_account(store, project, ident)
         if method == "DELETE":
             return _delete_service_account(store, project, ident)
+        if method == "PATCH":                      # serviceAccounts.patch {serviceAccount, updateMask}
+            sa = _sa_ns(store).get(ident if "@" in ident else _sa_email(ident, project))
+            if sa is None:
+                return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
+            b = _body()
+            spec = b.get("serviceAccount") if isinstance(b.get("serviceAccount"), dict) else b
+            mask = [m.strip() for m in str(b.get("updateMask") or "").split(",") if m.strip()] or \
+                [k for k in ("displayName", "description") if k in spec]
+            for m in mask:
+                if m not in ("displayName", "description"):
+                    return _err(400, f"Invalid update_mask field: {m}", "INVALID_ARGUMENT")
+                if m == "displayName" and len(str(spec.get(m) or "")) > 100:
+                    return _err(400, "displayName must be at most 100 characters.", "INVALID_ARGUMENT")
+                sa[m] = str(spec.get(m) or "")
+            sa["etag"] = _etag()
+            store.persist()
+            return _json(200, _sa_view(sa))
         return _err(400, f"Unsupported method {method} on serviceAccount", "INVALID_ARGUMENT")
 
     return _err(404, f"Unknown path: {path}", "NOT_FOUND")
+
+
+# ── service-account keys (real RSA-2048 key files, like keys.create returns) ──
+MAX_USER_KEYS = 10
+
+
+def _key_public(k: dict) -> dict:
+    return {f: k[f] for f in ("name", "validAfterTime", "validBeforeTime", "keyAlgorithm", "keyOrigin", "keyType", "disabled")
+            if f in k}
+
+
+def new_key_record(project: str, email: str, client_id: str) -> tuple[dict, dict]:
+    """(stored key record, keys.create response) for a new USER_MANAGED key of `email`."""
+    from core import gcp_kms_core as _kc   # the RSA generator (lazy: not needed to load this core)
+    rsa = _kc.rsa_generate(2048)
+    key_id = uuid.uuid4().hex[:40]
+    name = f"projects/{project}/serviceAccounts/{email}/keys/{key_id}"
+    now = datetime.now(timezone.utc)
+    rec = {"name": name, "validAfterTime": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "validBeforeTime": "9999-12-31T23:59:59Z",
+           "keyAlgorithm": "KEY_ALG_RSA_2048", "keyOrigin": "GOOGLE_PROVIDED", "keyType": "USER_MANAGED", "disabled": False,
+           "publicKeyPem": _kc.rsa_public_pem(int(rsa["n"]), 65537)}
+    keyfile = {"type": "service_account", "project_id": project, "private_key_id": key_id,
+               "private_key": _kc.rsa_private_pem(rsa), "client_email": email, "client_id": client_id,
+               "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token",
+               "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+               "universe_domain": "googleapis.com"}
+    created = {**_key_public(rec), "privateKeyType": "TYPE_GOOGLE_CREDENTIALS_FILE",
+               "privateKeyData": base64.b64encode(json.dumps(keyfile).encode()).decode()}
+    return rec, created
+
+
+def _sa_keys(store, method, p, body) -> GcpIamResponse:
+    verb = ""
+    if ":" in p.rsplit("/", 1)[-1]:
+        p, verb = p.rsplit(":", 1)
+    segs = [unquote(s) for s in p.split("/") if s]
+    if len(segs) < 5 or segs[0] != "projects" or segs[2] != "serviceAccounts" or segs[4] != "keys":
+        return _err(404, "Unknown path", "NOT_FOUND")
+    project, ident = segs[1], segs[3]
+    sa = _sa_ns(store).get(ident if "@" in ident else _sa_email(ident, project))
+    if sa is None:
+        return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
+    keys = sa.setdefault("keys", {})
+    if len(segs) == 5:
+        if method == "GET":
+            return _json(200, {"keys": [_key_public(k) for k in keys.values()]})
+        if method == "POST":
+            if sum(1 for k in keys.values() if k.get("keyType") == "USER_MANAGED") >= MAX_USER_KEYS:
+                return _err(400, "Precondition check failed: the service account has the maximum of 10 keys.", "FAILED_PRECONDITION")
+            rec, created = new_key_record(project, sa["email"], sa["uniqueId"])
+            keys[rec["name"].rsplit("/", 1)[-1]] = rec
+            store.persist()
+            return _json(200, created)
+    if len(segs) == 6:
+        k = keys.get(segs[5])
+        if k is None:
+            return _err(404, f"Unknown key: {segs[5]}", "NOT_FOUND")
+        if method == "GET" and not verb:
+            return _json(200, _key_public(k))
+        if method == "DELETE" and not verb:
+            keys.pop(segs[5])
+            store.persist()
+            return _json(200, {})
+        if method == "POST" and verb in ("disable", "enable"):
+            k["disabled"] = verb == "disable"
+            store.persist()
+            return _json(200, {})
+    return _err(400, f"Unsupported request on keys", "INVALID_ARGUMENT")
 
 
 # ── decision helper (not a native verb — for in-tab enforcement / console) ──

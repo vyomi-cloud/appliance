@@ -1401,6 +1401,44 @@ def kms_op(be, op: str, body: dict):
     return None
 
 
+# ---------------------------------------------------------------------------
+# IAM — service account: who can act as it, what it can do, its keys
+# ---------------------------------------------------------------------------
+def iam_sa_op(be, op: str, body: dict):
+    """One service account's tab op over `be`: email, sa_policy()/set_sa_policy(p) (the
+    account's own IAM policy), project_policy()/set_project_policy(p), keys(),
+    create_key() -> keys.create response, key_action(key_id, 'disable'|'enable'|'delete')."""
+    op = op[0].lower() + op[1:]
+    me = "serviceAccount:" + be.email
+    if op == "listMembers":
+        return {"ok": True, "items": [{"member": m, "role": b["role"]} for b in be.sa_policy().get("bindings") or []
+                                      for m in b.get("members") or []]}
+    if op in ("grantMember", "revokeMember"):
+        fn = policy_grant if op == "grantMember" else policy_revoke
+        be.set_sa_policy(fn(be.sa_policy(), body.get("role"), body.get("member")))
+        return {"ok": True}
+    if op == "listPermissions":
+        return {"ok": True, "items": [{"role": b["role"], "scope": "Project", "member": me}
+                                      for b in be.project_policy().get("bindings") or [] if me in (b.get("members") or [])]}
+    if op in ("grantRole", "revokeRole"):
+        fn = policy_grant if op == "grantRole" else policy_revoke
+        be.set_project_policy(fn(be.project_policy(), body.get("role"), me))
+        return {"ok": True}
+    if op == "listKeys":
+        return {"ok": True, "items": [{"id": short(k.get("name")), "keyType": k.get("keyType"), "keyAlgorithm": k.get("keyAlgorithm"),
+                                       "validAfterTime": k.get("validAfterTime"), "validBeforeTime": k.get("validBeforeTime"),
+                                       "status": "Disabled" if k.get("disabled") else "Active"} for k in be.keys()]}
+    if op == "createKey":
+        return {"ok": True, **be.create_key()}
+    if op in ("disableKey", "enableKey", "deleteKey"):
+        kid = short(body.get("key"))
+        if kid not in [short(k.get("name")) for k in be.keys()]:
+            raise TabError(404, "NOT_FOUND", "Unknown key: %s" % kid)
+        be.key_action(kid, op[:-3])
+        return {"ok": True, "key": kid}
+    return None
+
+
 def auto_subnet_second_octet(region: str) -> int:
     for r, cidr in AUTO_SUBNETS:
         if r == region:
