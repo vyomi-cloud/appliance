@@ -767,6 +767,9 @@ self.addEventListener("fetch", (event) => {
   // We own /api/* (console REST) AND /subscriptions/* (native Azure ARM).
   const inApi = url.pathname.startsWith(BASE + "/api/");
   const inArm = url.pathname.startsWith(BASE + "/subscriptions/");
+  // ACR image data plane: Nano is control-plane only, so answer the console's catalog probe.
+  const inAcr = /^\/azure-data\/acr\/[^/]+\/v2\/_catalog$/.test(url.pathname.slice(BASE.length));
+  if (url.origin === self.location.origin && inAcr) { event.respondWith(json({ repositories: [] })); return; }
   if (url.origin !== self.location.origin || !(inApi || inArm)) return;
   // Strip the mount prefix so all routing below is written against "/api/..."
   // or "/subscriptions/...".
