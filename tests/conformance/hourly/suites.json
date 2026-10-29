@@ -170,6 +170,7 @@
     {"id": "offline-sdk-go-aws-sesv2", "target": "offline", "cloud": "aws", "kind": "sdk-go", "cwd": "tests/conformance/aws-sdk-go-sesv2", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-aws-sesv2", "target": "offline", "cloud": "aws", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-sesv2-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-aws-sesv2", "target": "offline", "cloud": "aws", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-sesv2.mjs", "timeout": 600},
-    {"id": "nano-ui-aws-sesv2", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-sesv2.mjs", "timeout": 600}
+    {"id": "nano-ui-aws-sesv2", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-sesv2.mjs", "timeout": 600},
+    {"id": "offline-api-aws-sesv2-mail", "target": "offline", "cloud": "aws", "kind": "api", "cmd": "VYOMI_BASE_URL={ENDPOINT} MAILPIT_URL=http://localhost:8025 python3 tests/conformance/test_aws_sesv2_mail_api.py", "timeout": 600}
   ]
 }

@@ -171,7 +171,14 @@ class SesMail:
                             aws_access_key_id="vyomi", aws_secret_access_key="vyomi")
 
     def publish_sns(self, topic_arn: str, payload: dict) -> None:
-        self._boto("sns").publish(TopicArn=topic_arn, Message=json.dumps(payload))
+        """Fire-and-forget (SES publishes events asynchronously; and this process serves the
+        SNS endpoint itself, so a synchronous call from a request handler could deadlock)."""
+        def go():
+            try:
+                self._boto("sns").publish(TopicArn=topic_arn, Message=json.dumps(payload))
+            except Exception as e:
+                log.warning("SES event to SNS %s failed: %s", topic_arn, e)
+        threading.Thread(target=go, daemon=True).start()
 
     # ── TLS material for STARTTLS ──────────────────────────────────────
     def _tls_context(self) -> ssl.SSLContext:

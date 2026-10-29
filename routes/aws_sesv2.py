@@ -13,6 +13,7 @@ from typing import Any
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from core import app_context as ctx
 from core import sesv2_core as ses
@@ -87,7 +88,7 @@ def register(app: FastAPI) -> None:
                 body = await request.json()
             except Exception:
                 body = {}
-        status, out = ses.console_dispatch(STORE, request.method, "/api/aws/sesv2/" + rest, _query(request), body)
+        status, out = await run_in_threadpool(ses.console_dispatch, STORE, request.method, "/api/aws/sesv2/" + rest, _query(request), body)
         if status >= 400:
             return JSONResponse({"detail": f"{out.get('code', 'Error')}: {out.get('error', '')}"}, status_code=status)
         return JSONResponse(out)
@@ -97,5 +98,5 @@ def register(app: FastAPI) -> None:
     @app.api_route("/v2/email/{rest:path}", methods=["GET", "POST", "DELETE", "PUT"], include_in_schema=False)
     async def sesv2_wire(request: Request, rest: str = "") -> Response:
         body = await request.body()
-        r = ses.dispatch(STORE, request.method, request.url.path, _query(request), dict(request.headers), body)
+        r = await run_in_threadpool(ses.dispatch, STORE, request.method, request.url.path, _query(request), dict(request.headers), body)
         return Response(content=r.body, status_code=r.status, headers=dict(r.headers), media_type=r.media_type)
