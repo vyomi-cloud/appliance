@@ -4,6 +4,36 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.27] — 2026-10-29
+
+New service release. **7 product fixes** (AWS 7); 5 reach Nano and 5 reach the offline appliance.
+
+### Highlights
+
+- **Amazon Kinesis Data Streams is now available.** The offline appliance includes a new Kinesis Data Streams engine, and it is wired into the console, service catalog and cost model in both Nano and the offline appliance.
+- **Kinesis works with the Java SDK, Go SDK and AWS CLI.** The simulator now speaks the CBOR wire format the Java SDK uses, and Java, Go and CLI clients are covered by test beds.
+- **Nano counts Kinesis streams in its census and prices them.** Streams show up in the Nano census, and list prices are applied so the savings figure updates with them.
+- **Nano activity events show real detail.** Each event in the Nano activity feed now carries a meaningful Detail instead of a blank one.
+
+### New services
+
+- **AWS Kinesis Data Streams**
+
+### Fixes — AWS
+
+- **[Nano]** Count streams in Nano census + list price so savings update
+- **[Nano]** Nano activity events carry a real Detail
+- **[offline]** Register test beds in the hourly suites, manifest ready
+- **[Nano + offline]** CBOR wire for the Java SDK, Java + CLI test beds
+- **[Nano + offline]** Go SDK test bed, offline console test, manifest, registry, upstream tracking
+- **[Nano + offline]** Offline wire + console routes, Nano wiring, catalog, cost model
+- **[offline]** Kinesis Data Streams engine + core conformance
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.27`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.26] — 2026-10-29
 
 New service release. **4 product fixes** (AWS 4); 4 reach Nano and 4 reach the offline appliance; 1 test and harness improvements.

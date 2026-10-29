@@ -422,7 +422,8 @@
    "key": "kinesis",
    "name": "Kinesis Data Streams",
    "upstream": "kinesis",
-   "status": "pending-release"
+   "status": "released",
+   "released_in": "3.0.27"
   }
  ]
 }
