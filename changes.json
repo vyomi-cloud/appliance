@@ -1,17 +1,17 @@
 {
- "at": "2026-10-29T08:51:06+00:00",
+ "at": "2026-10-29T09:51:06+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:fd389969f2ca",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStartRequest",
-     "now": "WorkloadCapturesStartRequest"
+     "was": "WorkloadCapturesStartRequest",
+     "now": "SqlWorkloadCapturesStartRequest"
     }
    },
    "actionable": true
@@ -20,12 +20,12 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:f421c3d61dc0",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStartReplayRequest",
-     "now": "WorkloadCapturesStartReplayRequest"
+     "was": "WorkloadCapturesStartReplayRequest",
+     "now": "SqlWorkloadCapturesStartReplayRequest"
     }
    },
    "actionable": true
@@ -34,12 +34,12 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:c8c00d855f73",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStopRequest",
-     "now": "WorkloadCapturesStopRequest"
+     "was": "WorkloadCapturesStopRequest",
+     "now": "SqlWorkloadCapturesStopRequest"
     }
    },
    "actionable": true
@@ -48,15 +48,25 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:acd5b7e919b1",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStopReplayRequest",
-     "now": "WorkloadCapturesStopReplayRequest"
+     "was": "WorkloadCapturesStopReplayRequest",
+     "now": "SqlWorkloadCapturesStopReplayRequest"
     }
    },
    "actionable": true
+  },
+  {
+   "cloud": "gcp",
+   "service": "Cloud Monitoring",
+   "kind": "announcement",
+   "key": "feed:gcp:cd3bad821242",
+   "title": "Cloud Monitoring: Fixed (October 23, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_23_2026",
+   "detail": "Ops Agent version 2.73.0 includes patches for a Go vulnerability involving system root certificates, CVE-2026-111943 . For more information, see Ops Agent 2.73.0 notes .",
+   "actionable": false
   }
  ],
  "errors": []
