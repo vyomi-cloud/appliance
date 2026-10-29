@@ -1,11 +1,11 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-29 07:33 UTC · refreshes after every pipeline run_
+_Updated 2026-10-29 07:39 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
-- **Released:** 53 services (AWS 19 · GCP 16 · Azure 18) of 1,068 the clouds publish
-- **Building now:** Amazon Cognito Identity Provider (AWS, 18/18 checks), Amazon EC2 Container Service (AWS, 19/19 checks), Amazon Elastic Container Registry (AWS, 20/20 checks), Amazon ElastiCache (AWS, 20/20 checks), Amazon Kinesis (AWS, 20/20 checks), Amazon Route 53 (AWS, 20/20 checks), Amazon Simple Email Service (AWS, 20/20 checks), AWS CloudFormation (AWS, 20/20 checks), AWS Security Token Service (AWS, 18/18 checks), Artifact Registry API (GCP, 20/20 checks), BigQuery API (GCP, 17/18 checks), Cloud DNS API (GCP, 17/18 checks), Cloud Logging API (GCP, 17/18 checks), Cloud Monitoring API (GCP, 17/18 checks), Cloud Run Admin API (GCP, 19/19 checks), Cloud Tasks API (GCP, 17/18 checks), Workflows API (GCP, 17/18 checks), applicationinsights (Azure, 16/17 checks), containerregistry (Azure, 20/20 checks), containerservice (Azure, 16/17 checks), eventhub (Azure, 16/17 checks), msi (Azure, 17/17 checks), redis (Azure, 20/20 checks)
+- **Released:** 54 services (AWS 19 · GCP 17 · Azure 18) of 1,068 the clouds publish
+- **Building now:** Amazon Cognito Identity Provider (AWS, 18/18 checks), Amazon EC2 Container Service (AWS, 19/19 checks), Amazon Elastic Container Registry (AWS, 20/20 checks), Amazon ElastiCache (AWS, 20/20 checks), Amazon Kinesis (AWS, 20/20 checks), Amazon Route 53 (AWS, 20/20 checks), Amazon Simple Email Service (AWS, 20/20 checks), AWS CloudFormation (AWS, 20/20 checks), AWS Security Token Service (AWS, 18/18 checks), BigQuery API (GCP, 17/18 checks), Cloud DNS API (GCP, 17/18 checks), Cloud Logging API (GCP, 17/18 checks), Cloud Monitoring API (GCP, 17/18 checks), Cloud Run Admin API (GCP, 19/19 checks), Cloud Tasks API (GCP, 17/18 checks), Workflows API (GCP, 17/18 checks), applicationinsights (Azure, 16/17 checks), containerregistry (Azure, 20/20 checks), containerservice (Azure, 16/17 checks), eventhub (Azure, 16/17 checks), msi (Azure, 17/17 checks), redis (Azure, 20/20 checks)
 - **In the gate / releasing:** nothing
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 61% · Nano 75%
@@ -17,7 +17,7 @@ _Updated 2026-10-29 07:33 UTC · refreshes after every pipeline run_
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
 | AWS | 19 | 9 | 0 | 17 | 53% · 76% |
-| GCP | 16 | 8 | 0 | 12 | 47% · 67% |
+| GCP | 17 | 7 | 0 | 12 | 47% · 67% |
 | Azure | 18 | 6 | 0 | 12 | 78% · 79% |
 
 ## In progress
@@ -33,7 +33,6 @@ _Updated 2026-10-29 07:33 UTC · refreshes after every pipeline run_
 | Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🛠 Building | 20/20 | mailpit · Lite | mailpit · 15 MB · Lite | — |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🛠 Building | 20/20 | iac-engine · in-process | in-process | — |
 | AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🛠 Building | 18/18 | in-process | in-process | — |
-| Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🛠 Building | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
 | BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🛠 Building | 17/18 | duckdb · in-process | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🛠 Building | 17/18 | coredns · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🛠 Building | 17/18 | logstore · in-process · + fluent-bit agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
@@ -98,6 +97,7 @@ _Updated 2026-10-29 07:33 UTC · refreshes after every pipeline run_
 | Kubernetes Engine | k3s · Max | ⚪ no Kubernetes API; kubectl can't connect (k3s not wired) | 🧩 7/11 · 🧩 8/11 | 0 · 0 | ✅ watched | [v3.0.15](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.15) |
 | IAM Service Account Credentials | in-process | ✅ real RS256-signed tokens, JWTs and blobs | 🧩 7/11 · 🧩 9/11 | 0 · 0 | ✅ watched | [v3.0.16](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.16) |
 | Memorystore for Redis | valkey · Lite | 🟡 one shared 64 MB Valkey; port not published, no per-instance AUTH | 🧩 9/11 · 🧩 8/11 | 0 · 0 | ✅ watched | [v3.0.17](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.17) |
+| Artifact Registry | registry · Lite | not audited | — | – · – | ✅ watched | [v3.0.29](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.29) |
 
 ### Azure
 
@@ -526,33 +526,6 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
 | ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: in-process; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
-
-</details>
-
-<details><summary>Gate checks — Artifact Registry API (GCP)</summary>
-
-| | Check | Detail |
-|---|---|---|
-| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
-| ✅ | manifest status is ready | status=ready |
-| ✅ | engine exists in core/ | core/gcp_artifactregistry_core.py |
-| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/gcp_artifactregistry_core.py |
-| ✅ | engine listed in wasm/build_cores.py |  |
-| ✅ | service in the Nano console catalog (wasm/fixtures) | gcp-catalog.json |
-| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
-| ✅ | registry entry (pending-release or released) |  |
-| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
-| ✅ | has a offline sdk-java test bed |  |
-| ✅ | has a offline sdk-go test bed |  |
-| ✅ | has a offline cli test bed |  |
-| ✅ | has a offline ui test bed |  |
-| ✅ | has a nano ui test bed |  |
-| ✅ | upstream id tracked by the hourly upstream watcher | artifactregistry/v1 |
-| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'container', 'name': 'registry', 'image': 'registry:2.8.3', 'license': 'Apache-2.0', 'tier': 'lite', 'compose_service': 'vy |
-| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: registry; chose registry |
-| ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=Apache-2.0 |
-| ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=Apache-2.0 |
-| ✅ | backend image is pinned to a version (not latest) | registry:2.8.3 |
 
 </details>
 
