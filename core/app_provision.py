@@ -158,6 +158,19 @@ def discover_endpoints() -> dict[str, Any]:
     return endpoints
 
 
+def _servicebus_store() -> Any:
+    """Service Bus topic store: the shared runtime store when the AMQP stack is
+    present, otherwise the durable store the wire router uses on main."""
+    try:
+        from core import azure_servicebus_runtime as _sbr
+        return _sbr.get_store()
+    except ImportError:
+        from core.persistent_store import PersistentMessagingStore, SqliteStateBackend
+        return PersistentMessagingStore(
+            SqliteStateBackend(os.environ.get("VYOMI_AZSB_DB", "/tmp/vyomi-azsb.sqlite")),
+            store_id="azsb")
+
+
 def provision_app_resources(app_name: str, resources: dict[str, Any],
                             store: app_state.AppStateStore | None = None) -> dict[str, Any]:
     """Execute resource creation for an app profile (AE3)."""
@@ -283,8 +296,7 @@ def provision_app_resources(app_name: str, resources: dict[str, Any],
             topics = sb_cfg.get("topics", [])
             try:
                 from core import azure_servicebus_core as _sbcore
-                from core import azure_servicebus_runtime as _sbr
-                st_sb = _sbr.get_store()
+                st_sb = _servicebus_store()
                 for t in topics:
                     t_name = t["name"]
                     resp = _sbcore.dispatch(st_sb, "PUT", f"/{t_name}")
