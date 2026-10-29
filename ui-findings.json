@@ -1,7 +1,7 @@
 {
  "nano": {
   "target": "nano",
-  "at": "2026-10-29T17:15:51.552Z",
+  "at": "2026-10-29T19:29:53.830Z",
   "services": [
    {
     "target": "nano",
@@ -25,7 +25,7 @@
       "kind": "page",
       "name": "EC2",
       "state": "live",
-      "calls": 93
+      "calls": 91
      },
      {
       "kind": "create",
@@ -235,9 +235,25 @@
      "Event notifications",
      "Lifecycle rules",
      "Default encryption",
-     "Block Public Access"
+     "Block Public Access",
+     "Bucket Policy",
+     "Cross-origin resource sharing (CORS)",
+     "Metrics",
+     "Properties",
+     "Permissions"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Bucket Versioning",
+      "detail": "tab 'Bucket Versioning' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Properties",
+      "detail": "tab 'Properties' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -316,9 +332,39 @@
       "name": "Block Public Access",
       "state": "live",
       "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Bucket Policy",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Cross-origin resource sharing (CORS)",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
+      "state": "live",
+      "calls": 2
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -334,15 +380,31 @@
      "Configuration",
      "Modify",
      "Parameter groups",
-     "Snapshots"
+     "Snapshots",
+     "Automated backups",
+     "Maintenance",
+     "Monitoring",
+     "Logs & events",
+     "Performance Insights"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Endpoints",
+      "detail": "tab 'Endpoints' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Networking",
+      "detail": "tab 'Networking' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
       "name": "RDS",
       "state": "live",
-      "calls": 104
+      "calls": 103
      },
      {
       "kind": "create",
@@ -415,9 +477,39 @@
       "name": "Snapshots",
       "state": "live",
       "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Automated backups",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Maintenance",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Monitoring",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Logs & events",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "tab",
+      "name": "Performance Insights",
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -446,7 +538,7 @@
       "kind": "page",
       "name": "DynamoDB",
       "state": "live",
-      "calls": 104
+      "calls": 103
      },
      {
       "kind": "create",
@@ -679,43 +771,50 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Subscriptions",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Publish message",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Access policy",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -734,13 +833,20 @@
      "Stages",
      "Deployments",
      "Settings",
-     "Resource policy"
+     "Resource policy",
+     "Dashboard",
+     "Logs/Tracing"
     ],
     "findings": [
      {
       "type": "PLACEHOLDER_CELL",
       "detail": "tab Stages: column \"Description\" shows \"-\"/blank in 1 row(s)",
       "tab": "Stages"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Settings",
+      "detail": "tab 'Settings' shows no backend data and nothing about this resource"
      }
     ],
     "surfaces": [
@@ -821,6 +927,18 @@
       "name": "Resource policy",
       "state": "live",
       "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Dashboard",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Logs/Tracing",
+      "state": "live",
+      "calls": 1
      }
     ],
     "status": "broken"
@@ -841,13 +959,7 @@
      "Properties",
      "Monitoring"
     ],
-    "findings": [
-     {
-      "type": "PLACEHOLDER_CELL",
-      "detail": "tab Routes: column \"Authorization\" shows \"-\"/blank in 1 row(s)",
-      "tab": "Routes"
-     }
-    ],
+    "findings": [],
     "surfaces": [
      {
       "kind": "page",
@@ -871,64 +983,74 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Routes",
       "state": "partial",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Integrations",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Authorization",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Stages",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Deployments",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Monitoring",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
-    "status": "broken"
+    "status": "ok"
    },
    {
     "target": "nano",
@@ -944,9 +1066,22 @@
      "Invocations",
      "Dead-letter queue",
      "Properties",
-     "Permissions"
+     "Permissions",
+     "Metrics",
+     "Trace logs"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Rule details",
+      "detail": "tab 'Rule details' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Properties",
+      "detail": "tab 'Properties' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -1025,9 +1160,21 @@
       "name": "Permissions",
       "state": "live",
       "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Trace logs",
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -1165,31 +1312,36 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Configuration",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Shards and consumers",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -1208,9 +1360,16 @@
      "Endpoints",
      "Security groups",
      "Network ACLs",
-     "Flow logs"
+     "Flow logs",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "VPC details",
+      "detail": "tab 'VPC details' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -1289,9 +1448,15 @@
       "name": "Flow logs",
       "state": "live",
       "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -1881,49 +2046,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Details",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "History",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Actions",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -1942,15 +2115,61 @@
      "Machine size",
      "Metadata",
      "Startup script",
-     "Properties"
+     "Properties",
+     "Connect",
+     "Scheduling",
+     "Snapshots",
+     "Metrics",
+     "Logs"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Permissions",
+      "detail": "tab 'Permissions' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Labels",
+      "detail": "tab 'Labels' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Networking",
+      "detail": "tab 'Networking' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metadata",
+      "detail": "tab 'Metadata' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Startup script",
+      "detail": "tab 'Startup script' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Connect",
+      "detail": "tab 'Connect' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Scheduling",
+      "detail": "tab 'Scheduling' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Logs",
+      "detail": "tab 'Logs' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
       "name": "Compute Engine",
       "state": "live",
-      "calls": 76
+      "calls": 2
      },
      {
       "kind": "create",
@@ -1973,8 +2192,8 @@
      {
       "kind": "tab",
       "name": "Activity",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      },
      {
       "kind": "tab",
@@ -1997,13 +2216,13 @@
      {
       "kind": "tab",
       "name": "Disks",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Machine size",
-      "state": "static",
+      "state": "live",
       "calls": 0
      },
      {
@@ -2015,17 +2234,47 @@
      {
       "kind": "tab",
       "name": "Startup script",
-      "state": "live",
-      "calls": 1
+      "state": "static",
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Connect",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Scheduling",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Snapshots",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Logs",
+      "state": "static",
       "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -2061,7 +2310,7 @@
       "kind": "detail",
       "name": "resource detail",
       "state": "live",
-      "calls": 1
+      "calls": 0
      },
      {
       "kind": "tab",
@@ -2150,7 +2399,23 @@
      "JSON",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Details",
+      "detail": "tab 'Details' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Networking",
+      "detail": "tab 'Networking' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Observability",
+      "detail": "tab 'Observability' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -2215,11 +2480,11 @@
      {
       "kind": "tab",
       "name": "Metrics",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -2350,7 +2615,7 @@
       "kind": "page",
       "name": "Artifact Registry",
       "state": "live",
-      "calls": 3
+      "calls": 1
      },
      {
       "kind": "create",
@@ -2368,49 +2633,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Images",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Packages",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Versions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Labels",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -2429,9 +2702,44 @@
      "Backups",
      "Replicas",
      "Connectivity",
-     "Flags"
+     "Flags",
+     "Logging",
+     "Properties",
+     "Metrics",
+     "Query Insights"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Permissions",
+      "detail": "tab 'Permissions' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Labels",
+      "detail": "tab 'Labels' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Connectivity",
+      "detail": "tab 'Connectivity' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Flags",
+      "detail": "tab 'Flags' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Logging",
+      "detail": "tab 'Logging' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Query Insights",
+      "detail": "tab 'Query Insights' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -2460,14 +2768,14 @@
      {
       "kind": "tab",
       "name": "Activity",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Permissions",
-      "state": "live",
-      "calls": 1
+      "state": "static",
+      "calls": 0
      },
      {
       "kind": "tab",
@@ -2478,26 +2786,26 @@
      {
       "kind": "tab",
       "name": "Databases",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Users",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Backups",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Replicas",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      },
      {
       "kind": "tab",
@@ -2510,9 +2818,33 @@
       "name": "Flags",
       "state": "static",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Logging",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 5
+     },
+     {
+      "kind": "tab",
+      "name": "Query Insights",
+      "state": "static",
+      "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -2528,9 +2860,46 @@
      "Indexes",
      "Security rules",
      "Import / Export",
-     "Properties"
+     "Properties",
+     "Usage"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Permissions",
+      "detail": "tab 'Permissions' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Labels",
+      "detail": "tab 'Labels' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Data",
+      "detail": "tab 'Data' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Query builder",
+      "detail": "tab 'Query builder' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Indexes",
+      "detail": "tab 'Indexes' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Security rules",
+      "detail": "tab 'Security rules' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Import / Export",
+      "detail": "tab 'Import / Export' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -2559,8 +2928,8 @@
      {
       "kind": "tab",
       "name": "Activity",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      },
      {
       "kind": "tab",
@@ -2609,9 +2978,15 @@
       "name": "Properties",
       "state": "live",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Usage",
+      "state": "live",
+      "calls": 2
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -2627,7 +3002,23 @@
      "JSON",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Details",
+      "detail": "tab 'Details' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Connection",
+      "detail": "tab 'Connection' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Configuration",
+      "detail": "tab 'Configuration' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -2692,11 +3083,11 @@
      {
       "kind": "tab",
       "name": "Metrics",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -2823,7 +3214,23 @@
      "Properties",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Permissions",
+      "detail": "tab 'Permissions' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Messages",
+      "detail": "tab 'Messages' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Encryption",
+      "detail": "tab 'Encryption' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -2852,8 +3259,8 @@
      {
       "kind": "tab",
       "name": "Activity",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      },
      {
       "kind": "tab",
@@ -2864,14 +3271,14 @@
      {
       "kind": "tab",
       "name": "Labels",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Subscriptions",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      },
      {
       "kind": "tab",
@@ -2900,11 +3307,11 @@
      {
       "kind": "tab",
       "name": "Metrics",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 3
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -3022,7 +3429,23 @@
      "Metrics",
      "Logs"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Permissions",
+      "detail": "tab 'Permissions' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Labels",
+      "detail": "tab 'Labels' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Logs",
+      "detail": "tab 'Logs' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -3051,8 +3474,8 @@
      {
       "kind": "tab",
       "name": "Activity",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      },
      {
       "kind": "tab",
@@ -3069,13 +3492,13 @@
      {
       "kind": "tab",
       "name": "Event matching",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Destination",
-      "state": "static",
+      "state": "live",
       "calls": 0
      },
      {
@@ -3087,8 +3510,8 @@
      {
       "kind": "tab",
       "name": "Metrics",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 2
      },
      {
       "kind": "tab",
@@ -3097,7 +3520,7 @@
       "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -3113,7 +3536,18 @@
      "JSON",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Last execution",
+      "detail": "tab 'Last execution' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Retry policy",
+      "detail": "tab 'Retry policy' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -3167,22 +3601,22 @@
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 1
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Metrics",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -3493,7 +3927,23 @@
      "JSON",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Credential",
+      "detail": "tab 'Credential' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Delegation",
+      "detail": "tab 'Delegation' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Signing",
+      "detail": "tab 'Signing' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -3553,7 +4003,7 @@
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 0
+      "calls": 1
      },
      {
       "kind": "tab",
@@ -3562,7 +4012,7 @@
       "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -3602,49 +4052,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Conditions",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Notifications",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Documentation",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "History",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -3685,9 +4143,64 @@
      "Connect",
      "Disks",
      "Size",
-     "Identity"
+     "Identity",
+     "Properties",
+     "Locks",
+     "Auto-shutdown",
+     "Backup",
+     "Extensions + applications",
+     "Run command",
+     "Insights",
+     "Alerts",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Diagnose and solve problems"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Networking"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Connect",
+      "detail": "tab 'Connect' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Identity"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Locks"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Backup",
+      "detail": "tab 'Backup' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Extensions + applications",
+      "detail": "tab 'Extensions + applications' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Run command",
+      "detail": "tab 'Run command' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Alerts",
+      "detail": "tab 'Alerts' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -3717,13 +4230,13 @@
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 3
+      "calls": 2
      },
      {
       "kind": "tab",
@@ -3734,13 +4247,13 @@
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Networking",
-      "state": "live",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -3764,11 +4277,65 @@
      {
       "kind": "tab",
       "name": "Identity",
+      "state": "unimplemented",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Locks",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Auto-shutdown",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "tab",
+      "name": "Backup",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Extensions + applications",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Run command",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Insights",
       "state": "live",
       "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Alerts",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -4002,9 +4569,39 @@
      "Topics",
      "Shared access policies",
      "Geo-recovery",
-     "Networking"
+     "Networking",
+     "Identity",
+     "Properties",
+     "Locks",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Diagnose and solve problems"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Geo-recovery",
+      "detail": "tab 'Geo-recovery' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Networking",
+      "detail": "tab 'Networking' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Identity"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Locks"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -4051,7 +4648,7 @@
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -4064,13 +4661,13 @@
       "kind": "tab",
       "name": "Topics",
       "state": "live",
-      "calls": 1
+      "calls": 3
      },
      {
       "kind": "tab",
       "name": "Shared access policies",
       "state": "live",
-      "calls": 2
+      "calls": 0
      },
      {
       "kind": "tab",
@@ -4083,9 +4680,33 @@
       "name": "Networking",
       "state": "static",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Identity",
+      "state": "unimplemented",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Locks",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -4210,9 +4831,75 @@
      "App keys",
      "Environment variables",
      "Authentication",
-     "Identity"
+     "Identity",
+     "Networking",
+     "TLS/SSL settings",
+     "Scale up (App Service plan)",
+     "Properties",
+     "Locks",
+     "Deployment slots",
+     "Deployment Center",
+     "Application Insights",
+     "Log stream",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Diagnose and solve problems"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "App keys",
+      "detail": "tab 'App keys' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Environment variables",
+      "detail": "tab 'Environment variables' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Authentication",
+      "detail": "tab 'Authentication' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Identity",
+      "detail": "tab 'Identity' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Networking",
+      "detail": "tab 'Networking' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "TLS/SSL settings",
+      "detail": "tab 'TLS/SSL settings' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Scale up (App Service plan)",
+      "detail": "tab 'Scale up (App Service plan)' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Locks"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Deployment Center",
+      "detail": "tab 'Deployment Center' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Log stream",
+      "detail": "tab 'Log stream' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -4259,20 +4946,20 @@
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Functions",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "App keys",
-      "state": "live",
-      "calls": 2
+      "state": "static",
+      "calls": 0
      },
      {
       "kind": "tab",
@@ -4291,9 +4978,69 @@
       "name": "Identity",
       "state": "static",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "TLS/SSL settings",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Scale up (App Service plan)",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Locks",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Deployment slots",
+      "state": "live",
+      "calls": 3
+     },
+     {
+      "kind": "tab",
+      "name": "Deployment Center",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Application Insights",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Log stream",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -4628,7 +5375,7 @@
       "kind": "page",
       "name": "Event Grid topics",
       "state": "live",
-      "calls": 107
+      "calls": 108
      },
      {
       "kind": "create",
@@ -4838,9 +5585,44 @@
      "Containers",
      "Scale",
      "Ingress",
-     "Secrets"
+     "Secrets",
+     "Identity",
+     "Properties",
+     "Locks",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Diagnose and solve problems"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Containers",
+      "detail": "tab 'Containers' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Scale",
+      "detail": "tab 'Scale' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Secrets",
+      "detail": "tab 'Secrets' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Identity",
+      "detail": "tab 'Identity' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Locks"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -4887,7 +5669,7 @@
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -4919,9 +5701,33 @@
       "name": "Secrets",
       "state": "static",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Identity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Locks",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -4945,7 +5751,7 @@
       "kind": "page",
       "name": "App Configuration",
       "state": "live",
-      "calls": 106
+      "calls": 108
      },
      {
       "kind": "create",
@@ -5046,15 +5852,32 @@
      "Name servers",
      "Test query",
      "Properties",
-     "Locks"
+     "Locks",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Diagnose and solve problems"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Name servers",
+      "detail": "tab 'Name servers' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Locks"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
       "name": "DNS zones",
       "state": "live",
-      "calls": 107
+      "calls": 101
      },
      {
       "kind": "create",
@@ -5095,7 +5918,7 @@
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -5125,11 +5948,17 @@
      {
       "kind": "tab",
       "name": "Locks",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -5254,9 +6083,23 @@
      "Tables",
      "Data sources",
      "Agents (keys)",
-     "Usage and quota"
+     "Usage and quota",
+     "Properties",
+     "Locks",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Diagnose and solve problems"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Locks"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -5303,7 +6146,7 @@
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -5335,9 +6178,27 @@
       "name": "Usage and quota",
       "state": "live",
       "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Locks",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -5361,7 +6222,7 @@
       "kind": "page",
       "name": "Azure AI services",
       "state": "live",
-      "calls": 106
+      "calls": 108
      },
      {
       "kind": "create",
@@ -5463,7 +6324,7 @@
       "kind": "page",
       "name": "Role Definition",
       "state": "live",
-      "calls": 107
+      "calls": 108
      },
      {
       "kind": "create",
@@ -5510,13 +6371,19 @@
      "JSON view",
      "Conditions"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Conditions",
+      "detail": "tab 'Conditions' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
       "name": "Entra ID / RBAC",
       "state": "live",
-      "calls": 107
+      "calls": 108
      },
      {
       "kind": "create",
@@ -5549,7 +6416,7 @@
       "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -5590,7 +6457,7 @@
       "kind": "page",
       "name": "Cosmos databases",
       "state": "live",
-      "calls": 107
+      "calls": 108
      },
      {
       "kind": "create",
@@ -5695,7 +6562,7 @@
  },
  "offline": {
   "target": "offline",
-  "at": "2026-10-29T17:15:09.536Z",
+  "at": "2026-10-29T19:29:46.471Z",
   "services": [
    {
     "target": "offline",
@@ -5929,9 +6796,60 @@
      "Event notifications",
      "Lifecycle rules",
      "Default encryption",
-     "Block Public Access"
+     "Block Public Access",
+     "Bucket Policy",
+     "Cross-origin resource sharing (CORS)",
+     "Metrics",
+     "Properties",
+     "Permissions"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Versions"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Bucket Versioning",
+      "detail": "tab 'Bucket Versioning' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Event notifications",
+      "detail": "tab 'Event notifications' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Lifecycle rules"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Default encryption"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Block Public Access"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Bucket Policy",
+      "detail": "tab 'Bucket Policy' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Cross-origin resource sharing (CORS)"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Permissions",
+      "detail": "tab 'Permissions' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -5978,7 +6896,7 @@
      {
       "kind": "tab",
       "name": "Versions",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -5996,23 +6914,53 @@
      {
       "kind": "tab",
       "name": "Lifecycle rules",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Default encryption",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Block Public Access",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Bucket Policy",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Cross-origin resource sharing (CORS)",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Permissions",
       "state": "static",
       "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -6028,9 +6976,55 @@
      "Configuration",
      "Modify",
      "Parameter groups",
-     "Snapshots"
+     "Snapshots",
+     "Automated backups",
+     "Maintenance",
+     "Monitoring",
+     "Logs & events",
+     "Performance Insights"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Endpoints",
+      "detail": "tab 'Endpoints' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Networking",
+      "detail": "tab 'Networking' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Permissions",
+      "detail": "tab 'Permissions' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Modify"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Automated backups"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Maintenance"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Logs & events"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Performance Insights"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -6095,7 +7089,7 @@
      {
       "kind": "tab",
       "name": "Modify",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -6109,9 +7103,39 @@
       "name": "Snapshots",
       "state": "live",
       "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Automated backups",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Maintenance",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Monitoring",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Logs & events",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Performance Insights",
+      "state": "unimplemented",
+      "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -6373,43 +7397,50 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Subscriptions",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Publish message",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Access policy",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -6428,15 +7459,43 @@
      "Stages",
      "Deployments",
      "Settings",
-     "Resource policy"
+     "Resource policy",
+     "Dashboard",
+     "Logs/Tracing"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Authorizers"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Models"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Deployments"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Resource policy",
+      "detail": "tab 'Resource policy' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Logs/Tracing"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
       "name": "API Gateway",
       "state": "live",
-      "calls": 26
+      "calls": 25
      },
      {
       "kind": "create",
@@ -6477,13 +7536,13 @@
      {
       "kind": "tab",
       "name": "Authorizers",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Models",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -6495,7 +7554,7 @@
      {
       "kind": "tab",
       "name": "Deployments",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -6509,9 +7568,21 @@
       "name": "Resource policy",
       "state": "static",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Dashboard",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Logs/Tracing",
+      "state": "unimplemented",
+      "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -6529,13 +7600,7 @@
      "Properties",
      "Monitoring"
     ],
-    "findings": [
-     {
-      "type": "PLACEHOLDER_CELL",
-      "detail": "tab Routes: column \"Authorization\" shows \"-\"/blank in 1 row(s)",
-      "tab": "Routes"
-     }
-    ],
+    "findings": [],
     "surfaces": [
      {
       "kind": "page",
@@ -6559,64 +7624,74 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Routes",
       "state": "partial",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Integrations",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Authorization",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Stages",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Deployments",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Monitoring",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
-    "status": "broken"
+    "status": "ok"
    },
    {
     "target": "offline",
@@ -6632,15 +7707,53 @@
      "Invocations",
      "Dead-letter queue",
      "Properties",
-     "Permissions"
+     "Permissions",
+     "Metrics",
+     "Trace logs"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Rule details",
+      "detail": "tab 'Rule details' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Targets"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Event pattern"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Dead-letter queue"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Properties",
+      "detail": "tab 'Properties' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Permissions",
+      "detail": "tab 'Permissions' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Trace logs"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
       "name": "EventBridge",
       "state": "live",
-      "calls": 26
+      "calls": 25
      },
      {
       "kind": "create",
@@ -6681,13 +7794,13 @@
      {
       "kind": "tab",
       "name": "Targets",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Event pattern",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -6699,7 +7812,7 @@
      {
       "kind": "tab",
       "name": "Dead-letter queue",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -6713,9 +7826,21 @@
       "name": "Permissions",
       "state": "static",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Trace logs",
+      "state": "unimplemented",
+      "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -6853,31 +7978,36 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Configuration",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Shards and consumers",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -6896,15 +8026,42 @@
      "Endpoints",
      "Security groups",
      "Network ACLs",
-     "Flow logs"
+     "Flow logs",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "VPC details",
+      "detail": "tab 'VPC details' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "NAT gateways"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Endpoints"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Network ACLs"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Flow logs"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
       "name": "VPC",
       "state": "live",
-      "calls": 26
+      "calls": 25
      },
      {
       "kind": "create",
@@ -6951,13 +8108,13 @@
      {
       "kind": "tab",
       "name": "NAT gateways",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Endpoints",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -6969,17 +8126,23 @@
      {
       "kind": "tab",
       "name": "Network ACLs",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Flow logs",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -7064,7 +8227,23 @@
      "Password policy",
      "Access Analyzer"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Identity providers"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Password policy"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Access Analyzer"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -7117,23 +8296,23 @@
      {
       "kind": "tab",
       "name": "Identity providers",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Password policy",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Access Analyzer",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -7574,49 +8753,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Details",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "History",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Actions",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      }
     ],
     "status": "broken"
@@ -7635,9 +8822,80 @@
      "Machine size",
      "Metadata",
      "Startup script",
-     "Properties"
+     "Properties",
+     "Connect",
+     "Scheduling",
+     "Snapshots",
+     "Metrics",
+     "Logs"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fixed Activity text instead of this resource's events",
+      "tab": "Activity"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fixed Permissions text instead of the IAM bindings",
+      "tab": "Permissions"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Labels",
+      "detail": "tab 'Labels' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Networking"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Disks"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Machine size"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Metadata"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Startup script"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Connect"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Scheduling"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Snapshots"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metrics",
+      "detail": "tab 'Metrics' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Logs"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -7666,13 +8924,13 @@
      {
       "kind": "tab",
       "name": "Activity",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Permissions",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -7684,31 +8942,31 @@
      {
       "kind": "tab",
       "name": "Networking",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Disks",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Machine size",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Metadata",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Startup script",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -7716,9 +8974,39 @@
       "name": "Properties",
       "state": "live",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Connect",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Scheduling",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Snapshots",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Logs",
+      "state": "unimplemented",
+      "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -7754,7 +9042,7 @@
       "kind": "detail",
       "name": "resource detail",
       "state": "live",
-      "calls": 1
+      "calls": 0
      },
      {
       "kind": "tab",
@@ -7843,7 +9131,28 @@
      "JSON",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Details",
+      "detail": "tab 'Details' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Networking",
+      "detail": "tab 'Networking' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Observability",
+      "detail": "tab 'Observability' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metrics",
+      "detail": "tab 'Metrics' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -7912,7 +9221,7 @@
       "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -8061,49 +9370,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Images",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Packages",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Versions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Labels",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -8122,9 +9439,74 @@
      "Backups",
      "Replicas",
      "Connectivity",
-     "Flags"
+     "Flags",
+     "Logging",
+     "Properties",
+     "Metrics",
+     "Query Insights"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fixed Activity text instead of this resource's events",
+      "tab": "Activity"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fixed Permissions text instead of the IAM bindings",
+      "tab": "Permissions"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Labels",
+      "detail": "tab 'Labels' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Databases"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Users"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Backups"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Replicas"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Connectivity"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Flags"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Logging"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metrics",
+      "detail": "tab 'Metrics' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Query Insights"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -8153,59 +9535,83 @@
      {
       "kind": "tab",
       "name": "Activity",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Permissions",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Labels",
-      "state": "live",
-      "calls": 1
+      "state": "static",
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Databases",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Users",
-      "state": "static",
-      "calls": 0
+      "state": "unimplemented",
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Backups",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Replicas",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Connectivity",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Flags",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Logging",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
       "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Query Insights",
+      "state": "unimplemented",
       "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -8221,9 +9627,56 @@
      "Indexes",
      "Security rules",
      "Import / Export",
-     "Properties"
+     "Properties",
+     "Usage"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fixed Activity text instead of this resource's events",
+      "tab": "Activity"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fixed Permissions text instead of the IAM bindings",
+      "tab": "Permissions"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Labels",
+      "detail": "tab 'Labels' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Data"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Query builder"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Indexes"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Security rules"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Import / Export"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Usage",
+      "detail": "tab 'Usage' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -8252,13 +9705,13 @@
      {
       "kind": "tab",
       "name": "Activity",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Permissions",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -8270,31 +9723,31 @@
      {
       "kind": "tab",
       "name": "Data",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Query builder",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Indexes",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Security rules",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Import / Export",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -8302,9 +9755,15 @@
       "name": "Properties",
       "state": "live",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Usage",
+      "state": "static",
+      "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -8320,13 +9779,24 @@
      "JSON",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Configuration",
+      "detail": "tab 'Configuration' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metrics",
+      "detail": "tab 'Metrics' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
       "name": "Memorystore for Redis",
       "state": "live",
-      "calls": 1
+      "calls": 2
      },
      {
       "kind": "create",
@@ -8389,7 +9859,7 @@
       "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -8516,7 +9986,48 @@
      "Properties",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fixed Activity text instead of this resource's events",
+      "tab": "Activity"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fixed Permissions text instead of the IAM bindings",
+      "tab": "Permissions"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Labels",
+      "detail": "tab 'Labels' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Subscriptions"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Schema"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Messages"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Encryption"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metrics",
+      "detail": "tab 'Metrics' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -8545,13 +10056,13 @@
      {
       "kind": "tab",
       "name": "Activity",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Permissions",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -8563,25 +10074,25 @@
      {
       "kind": "tab",
       "name": "Subscriptions",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Schema",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Messages",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Encryption",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -8597,7 +10108,7 @@
       "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -8715,7 +10226,43 @@
      "Metrics",
      "Logs"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fixed Activity text instead of this resource's events",
+      "tab": "Activity"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fixed Permissions text instead of the IAM bindings",
+      "tab": "Permissions"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Labels",
+      "detail": "tab 'Labels' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Event matching"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Destination"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metrics",
+      "detail": "tab 'Metrics' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Logs"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -8744,13 +10291,13 @@
      {
       "kind": "tab",
       "name": "Activity",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Permissions",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -8762,13 +10309,13 @@
      {
       "kind": "tab",
       "name": "Event matching",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Destination",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -8786,11 +10333,11 @@
      {
       "kind": "tab",
       "name": "Logs",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -8806,7 +10353,18 @@
      "JSON",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Last execution",
+      "detail": "tab 'Last execution' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metrics",
+      "detail": "tab 'Metrics' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -8847,8 +10405,8 @@
      {
       "kind": "tab",
       "name": "Retry policy",
-      "state": "static",
-      "calls": 0
+      "state": "live",
+      "calls": 1
      },
      {
       "kind": "tab",
@@ -8871,11 +10429,11 @@
      {
       "kind": "tab",
       "name": "Metrics",
-      "state": "live",
-      "calls": 1
+      "state": "static",
+      "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -9125,7 +10683,7 @@
       "kind": "detail",
       "name": "resource detail",
       "state": "live",
-      "calls": 1
+      "calls": 0
      },
      {
       "kind": "tab",
@@ -9186,7 +10744,28 @@
      "JSON",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Credential",
+      "detail": "tab 'Credential' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Delegation",
+      "detail": "tab 'Delegation' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Signing",
+      "detail": "tab 'Signing' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metrics",
+      "detail": "tab 'Metrics' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -9255,7 +10834,7 @@
       "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -9295,49 +10874,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Conditions",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Notifications",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Documentation",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "History",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -9353,7 +10940,7 @@
       "kind": "page",
       "name": "Resource groups",
       "state": "live",
-      "calls": 5
+      "calls": 6
      },
      {
       "kind": "detail",
@@ -9378,9 +10965,69 @@
      "Connect",
      "Disks",
      "Size",
-     "Identity"
+     "Identity",
+     "Properties",
+     "Locks",
+     "Auto-shutdown",
+     "Backup",
+     "Extensions + applications",
+     "Run command",
+     "Insights",
+     "Alerts",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Diagnose and solve problems"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Networking"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Connect",
+      "detail": "tab 'Connect' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Identity"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Locks"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Auto-shutdown",
+      "detail": "tab 'Auto-shutdown' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Backup"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Extensions + applications"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Run command"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Alerts"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -9427,13 +11074,13 @@
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
-      "state": "live",
+      "state": "unimplemented",
       "calls": 1
      },
      {
       "kind": "tab",
       "name": "Networking",
-      "state": "live",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -9457,11 +11104,65 @@
      {
       "kind": "tab",
       "name": "Identity",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Locks",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Auto-shutdown",
       "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Backup",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Extensions + applications",
+      "state": "unimplemented",
+      "calls": 2
+     },
+     {
+      "kind": "tab",
+      "name": "Run command",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Insights",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Alerts",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
       "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -9695,9 +11396,39 @@
      "Topics",
      "Shared access policies",
      "Geo-recovery",
-     "Networking"
+     "Networking",
+     "Identity",
+     "Properties",
+     "Locks",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Diagnose and solve problems"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Geo-recovery"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Networking",
+      "detail": "tab 'Networking' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Identity"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Locks"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -9744,7 +11475,7 @@
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -9768,7 +11499,7 @@
      {
       "kind": "tab",
       "name": "Geo-recovery",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -9776,9 +11507,33 @@
       "name": "Networking",
       "state": "static",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Identity",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Locks",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -9802,7 +11557,7 @@
       "kind": "page",
       "name": "Cosmos DB",
       "state": "live",
-      "calls": 24
+      "calls": 25
      },
      {
       "kind": "create",
@@ -9903,9 +11658,80 @@
      "App keys",
      "Environment variables",
      "Authentication",
-     "Identity"
+     "Identity",
+     "Networking",
+     "TLS/SSL settings",
+     "Scale up (App Service plan)",
+     "Properties",
+     "Locks",
+     "Deployment slots",
+     "Deployment Center",
+     "Application Insights",
+     "Log stream",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Diagnose and solve problems"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Functions"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "App keys"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Environment variables",
+      "detail": "tab 'Environment variables' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Authentication",
+      "detail": "tab 'Authentication' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Identity",
+      "detail": "tab 'Identity' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Networking",
+      "detail": "tab 'Networking' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "TLS/SSL settings"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Scale up (App Service plan)"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Locks"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Deployment Center",
+      "detail": "tab 'Deployment Center' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Log stream"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -9952,19 +11778,19 @@
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "Functions",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
       "kind": "tab",
       "name": "App keys",
-      "state": "live",
+      "state": "unimplemented",
       "calls": 1
      },
      {
@@ -9984,9 +11810,69 @@
       "name": "Identity",
       "state": "static",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "TLS/SSL settings",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Scale up (App Service plan)",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Locks",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Deployment slots",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Deployment Center",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Application Insights",
+      "state": "live",
+      "calls": 3
+     },
+     {
+      "kind": "tab",
+      "name": "Log stream",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -10010,7 +11896,7 @@
       "kind": "page",
       "name": "API Management",
       "state": "live",
-      "calls": 25
+      "calls": 24
      },
      {
       "kind": "create",
@@ -10531,9 +12417,44 @@
      "Containers",
      "Scale",
      "Ingress",
-     "Secrets"
+     "Secrets",
+     "Identity",
+     "Properties",
+     "Locks",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Diagnose and solve problems"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Containers",
+      "detail": "tab 'Containers' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Scale",
+      "detail": "tab 'Scale' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Secrets",
+      "detail": "tab 'Secrets' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Identity",
+      "detail": "tab 'Identity' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Locks"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -10580,7 +12501,7 @@
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -10612,9 +12533,33 @@
       "name": "Secrets",
       "state": "static",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Identity",
+      "state": "static",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Locks",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -10638,7 +12583,7 @@
       "kind": "page",
       "name": "App Configuration",
       "state": "live",
-      "calls": 24
+      "calls": 25
      },
      {
       "kind": "create",
@@ -10739,9 +12684,26 @@
      "Name servers",
      "Test query",
      "Properties",
-     "Locks"
+     "Locks",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Diagnose and solve problems"
+     },
+     {
+      "type": "STATIC_TAB",
+      "tab": "Name servers",
+      "detail": "tab 'Name servers' shows no backend data and nothing about this resource"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Locks"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -10788,7 +12750,7 @@
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -10818,11 +12780,17 @@
      {
       "kind": "tab",
       "name": "Locks",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -10947,9 +12915,23 @@
      "Tables",
      "Data sources",
      "Agents (keys)",
-     "Usage and quota"
+     "Usage and quota",
+     "Properties",
+     "Locks",
+     "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Diagnose and solve problems"
+     },
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "fabricated value marked 'simulated'",
+      "tab": "Locks"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -10996,7 +12978,7 @@
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      },
      {
@@ -11028,9 +13010,27 @@
       "name": "Usage and quota",
       "state": "live",
       "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Locks",
+      "state": "unimplemented",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "live",
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -11054,7 +13054,7 @@
       "kind": "page",
       "name": "Azure AI services",
       "state": "live",
-      "calls": 24
+      "calls": 25
      },
      {
       "kind": "create",
@@ -11203,7 +13203,13 @@
      "JSON view",
      "Conditions"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "PLACEHOLDER_PANE",
+      "detail": "placeholder pane ('This pane mirrors \u2026 view')",
+      "tab": "Conditions"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -11238,11 +13244,11 @@
      {
       "kind": "tab",
       "name": "Conditions",
-      "state": "static",
+      "state": "unimplemented",
       "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    }
   ]
  }

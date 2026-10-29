@@ -1,18 +1,18 @@
 # Vyomi Conformance — hourly report
 
-Run **2026-10-29T17:38:33+00:00** · commit `8d200a007397` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
+Run **2026-10-29T19:55:18+00:00** · commit `5a0fef79690b` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
 
 | Suites green | Checks passing | Checks failing | Nano UI clean | Offline UI clean | Open UI findings | API routes with tests |
 |---|---|---|---|---|---|---|
-| 203/215 | 4682 | 78 | 60/63 | 55/58 | 6 | 42.6% (145/340) |
+| 207/216 | 4653 | 111 | 41/63 | 34/58 | 224 | 42.6% (145/340) |
 
 ## By cloud
 
 | Cloud | Suites green | Checks ✓ | Checks ✗ | Nano UI clean | Offline UI clean | Open findings |
 |---|---|---|---|---|---|---|
-| [AWS](#aws) | 88/92 | 1707 | 55 | 17/20 | 17/20 | 6 |
-| [GCP](#gcp) | 53/58 | 878 | 15 | 18/18 | 18/18 | 0 |
-| [Azure](#azure) | 58/58 | 1246 | 0 | 25/25 | 20/20 | 0 |
+| [AWS](#aws) | 88/92 | 1707 | 55 | 14/20 | 12/20 | 49 |
+| [GCP](#gcp) | 58/59 | 891 | 6 | 9/18 | 9/18 | 99 |
+| [Azure](#azure) | 57/58 | 1244 | 2 | 18/25 | 13/20 | 76 |
 
 <a id="aws"></a>
 ## AWS
@@ -20,97 +20,97 @@ Run **2026-10-29T17:38:33+00:00** · commit `8d200a007397` · Nano (in-browser) 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
 | ❌ | `offline-cli-aws-cloudwatch` | offline | cli | 17 | 14 | 36.3 |
-| ❌ | `offline-sdk-go-aws-cloudwatch` | offline | sdk-go | 16 | 21 | 81.1 |
-| ❌ | `offline-sdk-java-aws-cloudwatch` | offline | sdk-java | 11 | 15 | 8.7 |
+| ❌ | `offline-sdk-go-aws-cloudwatch` | offline | sdk-go | 16 | 21 | 66.4 |
+| ❌ | `offline-sdk-java-aws-cloudwatch` | offline | sdk-java | 11 | 15 | 10.4 |
 | ❌ | `offline-ui-aws-cloudwatch` | offline | ui | 3 | 5 | 11.9 |
 | ✅ | `nano-aws-ec2-launch` | nano | core | 13 | 0 | 0.1 |
 | ✅ | `nano-aws-iam-detail` | nano | core | 8 | 0 | 0.3 |
-| ✅ | `nano-ui-aws-api` | nano | ui | 6 | 0 | 4.0 |
-| ✅ | `nano-ui-aws-apigatewayv2` | nano | ui | 21 | 0 | 23.0 |
-| ✅ | `nano-ui-aws-apigw-row` | nano | ui | 6 | 0 | 14.9 |
-| ✅ | `nano-ui-aws-cloudwatch` | nano | ui | 21 | 0 | 16.4 |
-| ✅ | `nano-ui-aws-compute-reload` | nano | ui | 4 | 0 | 8.7 |
-| ✅ | `nano-ui-aws-compute-savings` | nano | ui | 6 | 0 | 10.0 |
-| ✅ | `nano-ui-aws-detail-tabs` | nano | ui | 6 | 0 | 23.8 |
-| ✅ | `nano-ui-aws-ec2-detail-tabs` | nano | ui | 5 | 0 | 12.4 |
-| ✅ | `nano-ui-aws-ec2-row` | nano | ui | 6 | 0 | 16.1 |
-| ✅ | `nano-ui-aws-elbv2` | nano | ui | 24 | 0 | 24.8 |
-| ✅ | `nano-ui-aws-eventbridge-row` | nano | ui | 4 | 0 | 15.0 |
-| ✅ | `nano-ui-aws-iam-detail` | nano | ui | 4 | 0 | 4.3 |
-| ✅ | `nano-ui-aws-kinesis` | nano | ui | 19 | 0 | 40.3 |
-| ✅ | `nano-ui-aws-lambda-row` | nano | ui | 4 | 0 | 16.4 |
-| ✅ | `nano-ui-aws-logs` | nano | ui | 33 | 0 | 50.2 |
-| ✅ | `nano-ui-aws-metrics` | nano | ui | 10 | 0 | 13.2 |
-| ✅ | `nano-ui-aws-rds-connectivity-tabs` | nano | ui | 3 | 0 | 11.0 |
-| ✅ | `nano-ui-aws-secrets-created` | nano | ui | 3 | 0 | 3.9 |
-| ✅ | `nano-ui-aws-settings-tabs` | nano | ui | 10 | 0 | 11.9 |
-| ✅ | `nano-ui-aws-sns` | nano | ui | 36 | 0 | 31.2 |
-| ✅ | `nano-ui-aws-sqs-dlq-tab` | nano | ui | 2 | 0 | 9.4 |
-| ✅ | `nano-ui-aws-ssm` | nano | ui | 19 | 0 | 22.1 |
-| ✅ | `nano-ui-aws-stepfunctions` | nano | ui | 22 | 0 | 23.9 |
-| ✅ | `nano-ui-aws-tabs` | nano | ui | 16 | 0 | 15.4 |
-| ✅ | `nano-ui-aws-vpc-apigw-lists` | nano | ui | 5 | 0 | 4.1 |
-| ✅ | `nano-ui-aws-vpc-details-tab` | nano | ui | 2 | 0 | 11.0 |
-| ✅ | `nano-ui-aws-vpc-row` | nano | ui | 7 | 0 | 16.4 |
-| ✅ | `nano-ui-aws-vpc-sg-iam-cells` | nano | ui | 3 | 0 | 9.5 |
-| ✅ | `offline-api-aws-console-savings` | offline | api | 12 | 0 | 7.1 |
-| ✅ | `offline-api-aws-eventbridge-rule-defaults` | offline | api | 14 | 0 | 2.6 |
-| ✅ | `offline-api-aws-provider-connect` | offline | api | 11 | 0 | 0.1 |
-| ✅ | `offline-api-aws-sdk-info-extras-config` | offline | api | 11 | 0 | 1.5 |
+| ✅ | `nano-ui-aws-api` | nano | ui | 6 | 0 | 3.8 |
+| ✅ | `nano-ui-aws-apigatewayv2` | nano | ui | 21 | 0 | 21.8 |
+| ✅ | `nano-ui-aws-apigw-row` | nano | ui | 6 | 0 | 14.1 |
+| ✅ | `nano-ui-aws-cloudwatch` | nano | ui | 21 | 0 | 15.3 |
+| ✅ | `nano-ui-aws-compute-reload` | nano | ui | 4 | 0 | 7.3 |
+| ✅ | `nano-ui-aws-compute-savings` | nano | ui | 6 | 0 | 9.2 |
+| ✅ | `nano-ui-aws-detail-tabs` | nano | ui | 6 | 0 | 21.1 |
+| ✅ | `nano-ui-aws-ec2-detail-tabs` | nano | ui | 5 | 0 | 11.6 |
+| ✅ | `nano-ui-aws-ec2-row` | nano | ui | 6 | 0 | 14.1 |
+| ✅ | `nano-ui-aws-elbv2` | nano | ui | 24 | 0 | 23.7 |
+| ✅ | `nano-ui-aws-eventbridge-row` | nano | ui | 4 | 0 | 15.5 |
+| ✅ | `nano-ui-aws-iam-detail` | nano | ui | 4 | 0 | 3.5 |
+| ✅ | `nano-ui-aws-kinesis` | nano | ui | 19 | 0 | 39.8 |
+| ✅ | `nano-ui-aws-lambda-row` | nano | ui | 4 | 0 | 15.5 |
+| ✅ | `nano-ui-aws-logs` | nano | ui | 33 | 0 | 49.4 |
+| ✅ | `nano-ui-aws-metrics` | nano | ui | 10 | 0 | 12.0 |
+| ✅ | `nano-ui-aws-rds-connectivity-tabs` | nano | ui | 3 | 0 | 10.7 |
+| ✅ | `nano-ui-aws-secrets-created` | nano | ui | 3 | 0 | 3.0 |
+| ✅ | `nano-ui-aws-settings-tabs` | nano | ui | 10 | 0 | 10.9 |
+| ✅ | `nano-ui-aws-sns` | nano | ui | 36 | 0 | 30.5 |
+| ✅ | `nano-ui-aws-sqs-dlq-tab` | nano | ui | 2 | 0 | 8.8 |
+| ✅ | `nano-ui-aws-ssm` | nano | ui | 19 | 0 | 19.9 |
+| ✅ | `nano-ui-aws-stepfunctions` | nano | ui | 22 | 0 | 21.8 |
+| ✅ | `nano-ui-aws-tabs` | nano | ui | 16 | 0 | 15.0 |
+| ✅ | `nano-ui-aws-vpc-apigw-lists` | nano | ui | 5 | 0 | 3.1 |
+| ✅ | `nano-ui-aws-vpc-details-tab` | nano | ui | 2 | 0 | 10.3 |
+| ✅ | `nano-ui-aws-vpc-row` | nano | ui | 7 | 0 | 15.5 |
+| ✅ | `nano-ui-aws-vpc-sg-iam-cells` | nano | ui | 3 | 0 | 8.5 |
+| ✅ | `offline-api-aws-console-savings` | offline | api | 12 | 0 | 7.9 |
+| ✅ | `offline-api-aws-eventbridge-rule-defaults` | offline | api | 14 | 0 | 3.1 |
+| ✅ | `offline-api-aws-provider-connect` | offline | api | 11 | 0 | 0.2 |
+| ✅ | `offline-api-aws-sdk-info-extras-config` | offline | api | 11 | 0 | 1.8 |
 | ✅ | `offline-api-aws-sdk-info-routes` | offline | api | 8 | 0 | 0.1 |
-| ✅ | `offline-api-aws-wire-routes` | offline | api | 7 | 0 | 1.3 |
-| ✅ | `offline-api-cost-savings-extras` | offline | api | 12 | 0 | 5.6 |
+| ✅ | `offline-api-aws-wire-routes` | offline | api | 7 | 0 | 1.6 |
+| ✅ | `offline-api-cost-savings-extras` | offline | api | 12 | 0 | 6.8 |
 | ✅ | `offline-api-ec2-capacity-manager-scores` | offline | api | 6 | 0 | 0.2 |
-| ✅ | `offline-api-ec2-capacity-reservation-fleet` | offline | api | 9 | 0 | 0.2 |
-| ✅ | `offline-api-ec2-default-public-ip` | offline | api | 3 | 0 | 0.6 |
-| ✅ | `offline-api-ec2-get-image-findings` | offline | api | 4 | 0 | 0.2 |
-| ✅ | `offline-api-ec2-instance-detail` | offline | api | 3 | 0 | 0.2 |
+| ✅ | `offline-api-ec2-capacity-reservation-fleet` | offline | api | 9 | 0 | 0.3 |
+| ✅ | `offline-api-ec2-default-public-ip` | offline | api | 3 | 0 | 0.3 |
+| ✅ | `offline-api-ec2-get-image-findings` | offline | api | 4 | 0 | 0.1 |
+| ✅ | `offline-api-ec2-instance-detail` | offline | api | 3 | 0 | 0.3 |
 | ✅ | `offline-api-s3-bucket-creation-date` | offline | api | 3 | 0 | 0.3 |
-| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 20.2 |
-| ✅ | `offline-cli-aws-apigatewayv2` | offline | cli | 40 | 0 | 28.4 |
-| ✅ | `offline-cli-aws-elbv2` | offline | cli | 27 | 0 | 44.1 |
-| ✅ | `offline-cli-aws-kinesis` | offline | cli | 20 | 0 | 22.3 |
-| ✅ | `offline-cli-aws-logs` | offline | cli | 19 | 0 | 32.3 |
-| ✅ | `offline-cli-aws-sns` | offline | cli | 76 | 0 | 163.0 |
-| ✅ | `offline-cli-aws-ssm` | offline | cli | 34 | 0 | 29.3 |
-| ✅ | `offline-cli-aws-stepfunctions` | offline | cli | 26 | 0 | 14.4 |
+| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 25.4 |
+| ✅ | `offline-cli-aws-apigatewayv2` | offline | cli | 40 | 0 | 34.7 |
+| ✅ | `offline-cli-aws-elbv2` | offline | cli | 27 | 0 | 50.4 |
+| ✅ | `offline-cli-aws-kinesis` | offline | cli | 20 | 0 | 24.8 |
+| ✅ | `offline-cli-aws-logs` | offline | cli | 19 | 0 | 35.6 |
+| ✅ | `offline-cli-aws-sns` | offline | cli | 76 | 0 | 196.1 |
+| ✅ | `offline-cli-aws-ssm` | offline | cli | 34 | 0 | 33.2 |
+| ✅ | `offline-cli-aws-stepfunctions` | offline | cli | 26 | 0 | 17.5 |
 | ✅ | `offline-request-metrics` | offline | core | 4 | 0 | 0.2 |
-| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 34.2 |
-| ✅ | `offline-sdk-go-aws-apigatewayv2` | offline | sdk-go | 39 | 0 | 4.8 |
-| ✅ | `offline-sdk-go-aws-elbv2` | offline | sdk-go | 60 | 0 | 45.6 |
-| ✅ | `offline-sdk-go-aws-kinesis` | offline | sdk-go | 26 | 0 | 17.4 |
-| ✅ | `offline-sdk-go-aws-logs` | offline | sdk-go | 29 | 0 | 32.7 |
-| ✅ | `offline-sdk-go-aws-sns` | offline | sdk-go | 71 | 0 | 71.4 |
-| ✅ | `offline-sdk-go-aws-ssm` | offline | sdk-go | 38 | 0 | 18.9 |
-| ✅ | `offline-sdk-go-aws-stepfunctions` | offline | sdk-go | 39 | 0 | 6.4 |
-| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 29 | 0 | 10.0 |
-| ✅ | `offline-sdk-java-aws-apigatewayv2` | offline | sdk-java | 46 | 0 | 6.1 |
-| ✅ | `offline-sdk-java-aws-elbv2` | offline | sdk-java | 41 | 0 | 37.9 |
-| ✅ | `offline-sdk-java-aws-kinesis` | offline | sdk-java | 34 | 0 | 30.7 |
-| ✅ | `offline-sdk-java-aws-logs` | offline | sdk-java | 16 | 0 | 23.2 |
-| ✅ | `offline-sdk-java-aws-sns` | offline | sdk-java | 73 | 0 | 73.9 |
-| ✅ | `offline-sdk-java-aws-ssm` | offline | sdk-java | 33 | 0 | 16.8 |
-| ✅ | `offline-sdk-java-aws-stepfunctions` | offline | sdk-java | 41 | 0 | 7.4 |
-| ✅ | `offline-sdk-python-aws` | offline | sdk-python | 88 | 0 | 3.8 |
+| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 35.1 |
+| ✅ | `offline-sdk-go-aws-apigatewayv2` | offline | sdk-go | 39 | 0 | 6.8 |
+| ✅ | `offline-sdk-go-aws-elbv2` | offline | sdk-go | 60 | 0 | 52.4 |
+| ✅ | `offline-sdk-go-aws-kinesis` | offline | sdk-go | 26 | 0 | 21.2 |
+| ✅ | `offline-sdk-go-aws-logs` | offline | sdk-go | 29 | 0 | 37.1 |
+| ✅ | `offline-sdk-go-aws-sns` | offline | sdk-go | 71 | 0 | 83.8 |
+| ✅ | `offline-sdk-go-aws-ssm` | offline | sdk-go | 38 | 0 | 21.8 |
+| ✅ | `offline-sdk-go-aws-stepfunctions` | offline | sdk-go | 39 | 0 | 7.4 |
+| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 29 | 0 | 13.3 |
+| ✅ | `offline-sdk-java-aws-apigatewayv2` | offline | sdk-java | 46 | 0 | 8.3 |
+| ✅ | `offline-sdk-java-aws-elbv2` | offline | sdk-java | 41 | 0 | 41.7 |
+| ✅ | `offline-sdk-java-aws-kinesis` | offline | sdk-java | 34 | 0 | 33.7 |
+| ✅ | `offline-sdk-java-aws-logs` | offline | sdk-java | 16 | 0 | 26.2 |
+| ✅ | `offline-sdk-java-aws-sns` | offline | sdk-java | 73 | 0 | 84.8 |
+| ✅ | `offline-sdk-java-aws-ssm` | offline | sdk-java | 33 | 0 | 19.2 |
+| ✅ | `offline-sdk-java-aws-stepfunctions` | offline | sdk-java | 41 | 0 | 9.8 |
+| ✅ | `offline-sdk-python-aws` | offline | sdk-python | 88 | 0 | 3.4 |
 | ✅ | `offline-sdk-python-aws-kms-kem` | offline | sdk-python | 6 | 0 | 0.4 |
-| ✅ | `offline-sdk-python-aws-ops` | offline | sdk-python | 12 | 0 | 1.9 |
+| ✅ | `offline-sdk-python-aws-ops` | offline | sdk-python | 12 | 0 | 1.6 |
 | ✅ | `offline-sdk-python-aws-ops2` | offline | sdk-python | 20 | 0 | 1.1 |
-| ✅ | `offline-ui-aws-apigatewayv2` | offline | ui | 21 | 0 | 22.3 |
-| ✅ | `offline-ui-aws-apigw-tabs` | offline | ui | 4 | 0 | 11.1 |
-| ✅ | `offline-ui-aws-detail-name` | offline | ui | 4 | 0 | 17.4 |
-| ✅ | `offline-ui-aws-detail-tabs` | offline | ui | 6 | 0 | 22.5 |
+| ✅ | `offline-ui-aws-apigatewayv2` | offline | ui | 21 | 0 | 23.6 |
+| ✅ | `offline-ui-aws-apigw-tabs` | offline | ui | 4 | 0 | 11.8 |
+| ✅ | `offline-ui-aws-detail-name` | offline | ui | 4 | 0 | 18.3 |
+| ✅ | `offline-ui-aws-detail-tabs` | offline | ui | 6 | 0 | 23.2 |
 | ✅ | `offline-ui-aws-ec2-detail-tabs` | offline | ui | 5 | 0 | 11.4 |
-| ✅ | `offline-ui-aws-elbv2` | offline | ui | 24 | 0 | 32.5 |
-| ✅ | `offline-ui-aws-kinesis` | offline | ui | 19 | 0 | 45.9 |
-| ✅ | `offline-ui-aws-logs` | offline | ui | 33 | 0 | 59.6 |
-| ✅ | `offline-ui-aws-metrics` | offline | ui | 10 | 0 | 18.2 |
-| ✅ | `offline-ui-aws-rds-connectivity-tabs` | offline | ui | 3 | 0 | 11.2 |
-| ✅ | `offline-ui-aws-sns` | offline | ui | 36 | 0 | 54.6 |
-| ✅ | `offline-ui-aws-sqs-dlq-tab` | offline | ui | 2 | 0 | 11.5 |
-| ✅ | `offline-ui-aws-ssm` | offline | ui | 19 | 0 | 22.9 |
-| ✅ | `offline-ui-aws-stepfunctions` | offline | ui | 22 | 0 | 22.4 |
+| ✅ | `offline-ui-aws-elbv2` | offline | ui | 24 | 0 | 33.8 |
+| ✅ | `offline-ui-aws-kinesis` | offline | ui | 19 | 0 | 48.8 |
+| ✅ | `offline-ui-aws-logs` | offline | ui | 33 | 0 | 61.2 |
+| ✅ | `offline-ui-aws-metrics` | offline | ui | 10 | 0 | 18.7 |
+| ✅ | `offline-ui-aws-rds-connectivity-tabs` | offline | ui | 3 | 0 | 9.9 |
+| ✅ | `offline-ui-aws-sns` | offline | ui | 36 | 0 | 57.0 |
+| ✅ | `offline-ui-aws-sqs-dlq-tab` | offline | ui | 2 | 0 | 10.0 |
+| ✅ | `offline-ui-aws-ssm` | offline | ui | 19 | 0 | 23.3 |
+| ✅ | `offline-ui-aws-stepfunctions` | offline | ui | 22 | 0 | 23.1 |
 | ✅ | `offline-ui-aws-vpc-details-tab` | offline | ui | 2 | 0 | 9.8 |
-| ✅ | `offline-ui-aws-vpc-sg-iam-cells` | offline | ui | 3 | 0 | 10.2 |
+| ✅ | `offline-ui-aws-vpc-sg-iam-cells` | offline | ui | 3 | 0 | 10.3 |
 
 <details><summary>❌ <code>offline-sdk-java-aws-cloudwatch</code> log</summary>
 
@@ -177,8 +177,8 @@ go: downloading github.com/aws/aws-sdk-go-v2/service/ssooidc v1.29.1
 go: downloading github.com/aws/aws-sdk-go-v2/service/sts v1.33.17
 go: downloading github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.34
 go: downloading github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.34
-go: downloading github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.15
 go: downloading github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.12.3
+go: downloading github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.15
 exit status 1
 ```
 
@@ -208,7 +208,7 @@ aws: [ERROR]: An error occurred (500) when calling the PutDashboard operation (r
 [PASS] get-dashboard
 [PASS] list-dashboards
 [FAIL] delete-dashboards :: 
-aws: [ERROR]: An error occurred (ResourceNotFound) when calling the DeleteDashboards operation: Dashboards ['cli-dash-43808'] do not exist
+aws: [ERROR]: An error occurred (ResourceNotFound) when calling the DeleteDashboards operation: Dashboards ['cli-dash-44598'] do not exist
 [PASS] get-dashboard after delete → ResourceNotFound
 [PASS] delete-alarms keeps an alarm a composite uses
 [FAIL] delete-alarms :: 
@@ -236,7 +236,122 @@ aws: [ERROR]: An error occurred (500) when calling the DeleteAlarms operation (r
 
 </details>
 
-**UI findings: 6**
+**UI findings: 49**
+
+<details><summary><b>S3</b> (offline) — 9 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Versions | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Bucket Versioning | tab 'Bucket Versioning' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Event notifications | tab 'Event notifications' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Lifecycle rules | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Default encryption | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Block Public Access | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Bucket Policy | tab 'Bucket Policy' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Cross-origin resource sharing (CORS) | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Permissions | tab 'Permissions' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>RDS</b> (offline) — 8 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Endpoints | tab 'Endpoints' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Networking | tab 'Networking' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Permissions | tab 'Permissions' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Modify | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Automated backups | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Maintenance | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Logs & events | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Performance Insights | placeholder pane ('This pane mirrors … view') |
+
+</details>
+
+<details><summary><b>EventBridge</b> (offline) — 7 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Rule details | tab 'Rule details' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Targets | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Event pattern | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Dead-letter queue | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Properties | tab 'Properties' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Permissions | tab 'Permissions' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Trace logs | placeholder pane ('This pane mirrors … view') |
+
+</details>
+
+<details><summary><b>API Gateway</b> (offline) — 5 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Authorizers | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Models | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Deployments | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Resource policy | tab 'Resource policy' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Logs/Tracing | placeholder pane ('This pane mirrors … view') |
+
+</details>
+
+<details><summary><b>VPC</b> (offline) — 5 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | VPC details | tab 'VPC details' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | NAT gateways | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Endpoints | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Network ACLs | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Flow logs | placeholder pane ('This pane mirrors … view') |
+
+</details>
+
+<details><summary><b>IAM</b> (offline) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Identity providers | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Password policy | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Access Analyzer | placeholder pane ('This pane mirrors … view') |
+
+</details>
+
+<details><summary><b>S3</b> (nano) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Bucket Versioning | tab 'Bucket Versioning' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Properties | tab 'Properties' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>RDS</b> (nano) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Endpoints | tab 'Endpoints' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Networking | tab 'Networking' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>API Gateway</b> (nano) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` | Stages | tab Stages: column "Description" shows "-"/blank in 1 row(s) |
+| `STATIC_TAB` | Settings | tab 'Settings' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>EventBridge</b> (nano) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Rule details | tab 'Rule details' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Properties | tab 'Properties' shows no backend data and nothing about this resource |
+
+</details>
 
 <details><summary><b>DynamoDB</b> (nano) — 1 finding(s)</summary>
 
@@ -246,19 +361,11 @@ aws: [ERROR]: An error occurred (500) when calling the DeleteAlarms operation (r
 
 </details>
 
-<details><summary><b>API Gateway</b> (nano) — 1 finding(s)</summary>
+<details><summary><b>VPC</b> (nano) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` | Stages | tab Stages: column "Description" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>API Gateway V2</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | Routes | tab Routes: column "Authorization" shows "-"/blank in 1 row(s) |
+| `STATIC_TAB` | VPC details | tab 'VPC details' shows no backend data and nothing about this resource |
 
 </details>
 
@@ -267,14 +374,6 @@ aws: [ERROR]: An error occurred (500) when calling the DeleteAlarms operation (r
 | Problem | Tab | Detail |
 |---|---|---|
 | `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>API Gateway V2</b> (offline) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | Routes | tab Routes: column "Authorization" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -291,157 +390,65 @@ aws: [ERROR]: An error occurred (500) when calling the DeleteAlarms operation (r
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-gcp-metrics-counts` | nano | ui | 0 | 1 | 2.4 |
-| ❌ | `offline-cli-gcp-container` | offline | cli | 8 | 6 | 99.1 |
-| ❌ | `offline-sdk-go-gcp-container` | offline | sdk-go | 14 | 1 | 1.8 |
-| ❌ | `offline-sdk-java-gcp-container` | offline | sdk-java | 13 | 1 | 3.1 |
-| ❌ | `offline-ui-gcp-artifactregistry` | offline | ui | 1 | 6 | 23.0 |
-| ✅ | `nano-ui-gcp-activity-detail` | nano | ui | 2 | 0 | 2.3 |
-| ✅ | `nano-ui-gcp-artifactregistry` | nano | ui | 15 | 0 | 17.9 |
+| ❌ | `offline-ui-gcp-artifactregistry` | offline | ui | 1 | 6 | 23.2 |
+| ✅ | `nano-ui-gcp-activity-detail` | nano | ui | 2 | 0 | 3.1 |
+| ✅ | `nano-ui-gcp-artifactregistry` | nano | ui | 15 | 0 | 18.4 |
 | ✅ | `nano-ui-gcp-cloudscheduler` | nano | ui | 23 | 0 | 25.0 |
-| ✅ | `nano-ui-gcp-container` | nano | ui | 21 | 0 | 21.8 |
-| ✅ | `nano-ui-gcp-create-defaults` | nano | ui | 36 | 0 | 66.1 |
-| ✅ | `nano-ui-gcp-grid-defaults` | nano | ui | 39 | 0 | 2.4 |
-| ✅ | `nano-ui-gcp-iamcredentials` | nano | ui | 21 | 0 | 19.1 |
-| ✅ | `nano-ui-gcp-monitoring` | nano | ui | 23 | 0 | 23.4 |
-| ✅ | `nano-ui-gcp-pubsub-grid` | nano | ui | 3 | 0 | 4.9 |
-| ✅ | `nano-ui-gcp-pubsub-subscriptions` | nano | ui | 3 | 0 | 2.3 |
-| ✅ | `nano-ui-gcp-redis` | nano | ui | 22 | 0 | 22.4 |
-| ✅ | `nano-ui-gcp-tabs` | nano | ui | 6 | 0 | 2.4 |
-| ✅ | `offline-api-gcp-apigateway-savings` | offline | api | 5 | 0 | 0.5 |
-| ✅ | `offline-api-gcp-cloudscheduler-http` | offline | api | 10 | 0 | 0.7 |
-| ✅ | `offline-api-gcp-cloudscheduler-pubsub` | offline | api | 7 | 0 | 0.3 |
-| ✅ | `offline-api-gcp-cloudscheduler-timer` | offline | api | 9 | 0 | 34.6 |
-| ✅ | `offline-api-gcp-console-next` | offline | api | 28 | 0 | 0.2 |
-| ✅ | `offline-api-gcp-console-pubsub-lens` | offline | api | 16 | 0 | 0.1 |
-| ✅ | `offline-api-gcp-console-savings` | offline | api | 12 | 0 | 0.5 |
-| ✅ | `offline-api-gcp-console-vault-lens` | offline | api | 15 | 0 | 0.1 |
-| ✅ | `offline-api-gcp-eventarc-trigger-defaults` | offline | api | 6 | 0 | 0.2 |
-| ✅ | `offline-api-gcp-grid-columns` | offline | api | 19 | 0 | 0.1 |
-| ✅ | `offline-api-gcp-pubsub-savings` | offline | api | 11 | 0 | 0.5 |
-| ✅ | `offline-api-gcp-vault-console-secrets` | offline | api | 9 | 0 | 0.2 |
-| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 11.7 |
-| ✅ | `offline-cli-gcp-artifactregistry` | offline | cli | 11 | 0 | 6.5 |
-| ✅ | `offline-cli-gcp-cloudscheduler` | offline | cli | 13 | 0 | 6.6 |
-| ✅ | `offline-cli-gcp-iamcredentials` | offline | cli | 9 | 0 | 1.4 |
-| ✅ | `offline-cli-gcp-monitoring` | offline | cli | 15 | 0 | 6.3 |
-| ✅ | `offline-cli-gcp-redis` | offline | cli | 20 | 0 | 7.0 |
-| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 18.2 |
-| ✅ | `offline-sdk-go-gcp-admin` | offline | sdk-go | 26 | 0 | 12.9 |
-| ✅ | `offline-sdk-go-gcp-artifactregistry` | offline | sdk-go | 21 | 0 | 11.2 |
-| ✅ | `offline-sdk-go-gcp-cloudscheduler` | offline | sdk-go | 13 | 0 | 14.6 |
-| ✅ | `offline-sdk-go-gcp-iamcredentials` | offline | sdk-go | 17 | 0 | 1.7 |
-| ✅ | `offline-sdk-go-gcp-monitoring` | offline | sdk-go | 34 | 0 | 1.1 |
-| ✅ | `offline-sdk-go-gcp-redis` | offline | sdk-go | 16 | 0 | 1.5 |
-| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 7.3 |
-| ✅ | `offline-sdk-java-gcp-artifactregistry` | offline | sdk-java | 13 | 0 | 3.9 |
-| ✅ | `offline-sdk-java-gcp-cloudscheduler` | offline | sdk-java | 12 | 0 | 3.5 |
-| ✅ | `offline-sdk-java-gcp-iamcredentials` | offline | sdk-java | 11 | 0 | 3.6 |
-| ✅ | `offline-sdk-java-gcp-monitoring` | offline | sdk-java | 24 | 0 | 3.1 |
-| ✅ | `offline-sdk-java-gcp-redis` | offline | sdk-java | 15 | 0 | 3.4 |
-| ✅ | `offline-ui-gcp-activity-detail` | offline | ui | 2 | 0 | 0.6 |
-| ✅ | `offline-ui-gcp-cloudscheduler` | offline | ui | 24 | 0 | 23.8 |
-| ✅ | `offline-ui-gcp-container` | offline | ui | 21 | 0 | 20.7 |
-| ✅ | `offline-ui-gcp-create-defaults` | offline | ui | 36 | 0 | 65.8 |
-| ✅ | `offline-ui-gcp-grid-defaults` | offline | ui | 39 | 0 | 0.6 |
-| ✅ | `offline-ui-gcp-iamcredentials` | offline | ui | 21 | 0 | 19.9 |
-| ✅ | `offline-ui-gcp-monitoring` | offline | ui | 23 | 0 | 22.3 |
-| ✅ | `offline-ui-gcp-pubsub-grid` | offline | ui | 3 | 0 | 3.0 |
-| ✅ | `offline-ui-gcp-pubsub-subscriptions` | offline | ui | 3 | 0 | 0.5 |
-| ✅ | `offline-ui-gcp-redis` | offline | ui | 22 | 0 | 21.3 |
-
-<details><summary>❌ <code>nano-ui-gcp-metrics-counts</code> log</summary>
-
-```
-[FAIL] run Error: page.evaluate: ReferenceError: _recordFieldCount is not defined
-```
-
-</details>
-
-<details><summary>❌ <code>offline-sdk-java-gcp-container</code> log</summary>
-
-```
-== google-cloud-container (Java) against http://localhost:9000 project=java-gke-proj ==
-[PASS] CreateCluster -> CREATE_CLUSTER operation, DONE
-[PASS] CreateCluster duplicate -> ALREADY_EXISTS
-[PASS] CreateCluster bad name -> INVALID_ARGUMENT
-[PASS] GetCluster (RUNNING, endpoint, version, pool)
-[PASS] GetCluster missing -> NOT_FOUND
-[PASS] ListClusters contains the cluster
-[PASS] CreateNodePool + GetNodePool
-[PASS] SetNodePoolSize persisted
-[PASS] ListNodePools (2 pools)
-[PASS] SetLabels persisted
-[PASS] UpdateCluster (upgrade master)
-[FAIL] ListOperations + GetOperation :: com.google.api.gax.rpc.NotFoundException: Not Found
-[PASS] GetServerConfig
-[PASS] DeleteNodePool + DeleteCluster
-RESULT pass=13 fail=1
-```
-
-</details>
-
-<details><summary>❌ <code>offline-sdk-go-gcp-container</code> log</summary>
-
-```
-== cloud.google.com/go/container (Go) against http://localhost:9000 project=go-gke-proj ==
-[PASS] CreateCluster -> CREATE_CLUSTER operation, DONE
-[PASS] CreateCluster duplicate -> 409 ALREADY_EXISTS
-[PASS] CreateCluster bad name -> 400 INVALID_ARGUMENT
-[PASS] GetCluster (RUNNING, endpoint, channel, machine type)
-[PASS] GetCluster missing -> 404 NOT_FOUND
-[PASS] ListClusters contains the cluster
-[PASS] CreateNodePool + GetNodePool (autoscaling)
-[PASS] SetNodePoolSize persisted
-[PASS] ListNodePools (2 pools)
-[PASS] SetLabels persisted
-[PASS] SetLabels stale fingerprint -> 409
-[PASS] UpdateCluster (upgrade master)
-[FAIL] ListOperations + GetOperation :: <nil>
-[PASS] GetServerConfig
-[PASS] DeleteNodePool + DeleteCluster
-RESULT pass=14 fail=1
-go: downloading cloud.google.com/go/container v1.39.0
-exit status 1
-```
-
-</details>
-
-<details><summary>❌ <code>offline-cli-gcp-container</code> log</summary>
-
-```
-== gcloud container against http://localhost:9000 project=cli-gke-proj ==
-[FAIL] gcloud container clusters create :: Note: Your Pod address range (`--cluster-ipv4-cidr`) can accommodate at most 1008 node(s).
-Creating cluster cli-gke-1793293361 in us-central1...
-...........................................................................failed.
-ERROR: (gcloud.container.clusters.create) ResponseError: code=404, message=Operation "projects/cli-gke-proj/locations/us-central1/operations/operation-16-f233789d" not found.
-[PASS] describe (RUNNING, default-pool, machineType)
-[PASS] clusters list contains the cluster
-[FAIL] gcloud container node-pools create :: Creating node pool pool-2...
-...........................................................................failed.
-ERROR: (gcloud.container.node-pools.create) ResponseError: code=404, message=Operation "projects/cli-gke-proj/locations/us-central1/operations/operation-17-26d0e8da" not found.
-[PASS] node-pools list shows both pools
-[FAIL] gcloud container clusters resize :: Resizing cli-gke-1793293361...
-...........................................................................failed.
-ERROR: (gcloud.container.clusters.resize) ResponseError: code=404, message=Operation "projects/cli-gke-proj/locations/us-central1/operations/operation-18-82e3ccde" not found.
-[PASS] resize persisted (3 nodes)
-[FAIL] gcloud container clusters update --update-labels :: Updating cli-gke-1793293361...
-...........................................................................failed.
-ERROR: (gcloud.container.clusters.update) ResponseError: code=404, message=Operation "projects/cli-gke-proj/locations/us-central1/operations/operation-19-db82f3c7" not found.
-[PASS] labels persisted
-[PASS] gcloud container operations list
-[PASS] gcloud container get-server-config
-[FAIL] gcloud container node-pools delete :: Deleting node pool pool-2...
-...........................................................................failed.
-ERROR: (gcloud.container.node-pools.delete) ResponseError: code=404, message=Operation "projects/cli-gke-proj/locations/us-central1/operations/operation-20-e958f8af" not found.
-[FAIL] gcloud container clusters delete :: Deleting cluster cli-gke-1793293361...
-...........................................................................failed.
-ERROR: (gcloud.container.clusters.delete) ResponseError: code=404, message=Operation "projects/cli-gke-proj/locations/us-central1/operations/operation-21-854a978f" not found.
-[PASS] deleted cluster is gone (NOT_FOUND)
-RESULT pass=8 fail=6
-```
-
-</details>
+| ✅ | `nano-ui-gcp-container` | nano | ui | 21 | 0 | 22.0 |
+| ✅ | `nano-ui-gcp-create-defaults` | nano | ui | 36 | 0 | 66.0 |
+| ✅ | `nano-ui-gcp-firestore-usage` | nano | ui | 2 | 0 | 3.0 |
+| ✅ | `nano-ui-gcp-grid-defaults` | nano | ui | 39 | 0 | 3.0 |
+| ✅ | `nano-ui-gcp-iamcredentials` | nano | ui | 21 | 0 | 19.3 |
+| ✅ | `nano-ui-gcp-metrics-counts` | nano | ui | 3 | 0 | 3.0 |
+| ✅ | `nano-ui-gcp-monitoring` | nano | ui | 23 | 0 | 23.9 |
+| ✅ | `nano-ui-gcp-pubsub-grid` | nano | ui | 3 | 0 | 5.7 |
+| ✅ | `nano-ui-gcp-pubsub-subscriptions` | nano | ui | 3 | 0 | 2.9 |
+| ✅ | `nano-ui-gcp-redis` | nano | ui | 22 | 0 | 22.7 |
+| ✅ | `nano-ui-gcp-tabs` | nano | ui | 6 | 0 | 3.1 |
+| ✅ | `offline-api-gcp-apigateway-savings` | offline | api | 5 | 0 | 0.6 |
+| ✅ | `offline-api-gcp-cloudscheduler-http` | offline | api | 10 | 0 | 0.8 |
+| ✅ | `offline-api-gcp-cloudscheduler-pubsub` | offline | api | 7 | 0 | 0.4 |
+| ✅ | `offline-api-gcp-cloudscheduler-timer` | offline | api | 9 | 0 | 50.8 |
+| ✅ | `offline-api-gcp-console-next` | offline | api | 28 | 0 | 0.4 |
+| ✅ | `offline-api-gcp-console-pubsub-lens` | offline | api | 16 | 0 | 0.3 |
+| ✅ | `offline-api-gcp-console-savings` | offline | api | 12 | 0 | 0.8 |
+| ✅ | `offline-api-gcp-console-vault-lens` | offline | api | 15 | 0 | 0.3 |
+| ✅ | `offline-api-gcp-eventarc-trigger-defaults` | offline | api | 6 | 0 | 0.3 |
+| ✅ | `offline-api-gcp-grid-columns` | offline | api | 19 | 0 | 0.2 |
+| ✅ | `offline-api-gcp-pubsub-savings` | offline | api | 11 | 0 | 0.8 |
+| ✅ | `offline-api-gcp-vault-console-secrets` | offline | api | 9 | 0 | 0.3 |
+| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 12.4 |
+| ✅ | `offline-cli-gcp-artifactregistry` | offline | cli | 11 | 0 | 9.3 |
+| ✅ | `offline-cli-gcp-cloudscheduler` | offline | cli | 13 | 0 | 9.5 |
+| ✅ | `offline-cli-gcp-container` | offline | cli | 14 | 0 | 13.4 |
+| ✅ | `offline-cli-gcp-iamcredentials` | offline | cli | 9 | 0 | 1.9 |
+| ✅ | `offline-cli-gcp-monitoring` | offline | cli | 15 | 0 | 8.3 |
+| ✅ | `offline-cli-gcp-redis` | offline | cli | 20 | 0 | 11.5 |
+| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 26.2 |
+| ✅ | `offline-sdk-go-gcp-admin` | offline | sdk-go | 26 | 0 | 15.7 |
+| ✅ | `offline-sdk-go-gcp-artifactregistry` | offline | sdk-go | 21 | 0 | 13.5 |
+| ✅ | `offline-sdk-go-gcp-cloudscheduler` | offline | sdk-go | 13 | 0 | 17.1 |
+| ✅ | `offline-sdk-go-gcp-container` | offline | sdk-go | 15 | 0 | 2.4 |
+| ✅ | `offline-sdk-go-gcp-iamcredentials` | offline | sdk-go | 17 | 0 | 1.8 |
+| ✅ | `offline-sdk-go-gcp-monitoring` | offline | sdk-go | 34 | 0 | 1.8 |
+| ✅ | `offline-sdk-go-gcp-redis` | offline | sdk-go | 16 | 0 | 1.9 |
+| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 10.2 |
+| ✅ | `offline-sdk-java-gcp-artifactregistry` | offline | sdk-java | 13 | 0 | 5.8 |
+| ✅ | `offline-sdk-java-gcp-cloudscheduler` | offline | sdk-java | 12 | 0 | 5.2 |
+| ✅ | `offline-sdk-java-gcp-container` | offline | sdk-java | 14 | 0 | 5.4 |
+| ✅ | `offline-sdk-java-gcp-iamcredentials` | offline | sdk-java | 11 | 0 | 5.4 |
+| ✅ | `offline-sdk-java-gcp-monitoring` | offline | sdk-java | 24 | 0 | 4.8 |
+| ✅ | `offline-sdk-java-gcp-redis` | offline | sdk-java | 15 | 0 | 5.6 |
+| ✅ | `offline-ui-gcp-activity-detail` | offline | ui | 2 | 0 | 0.8 |
+| ✅ | `offline-ui-gcp-cloudscheduler` | offline | ui | 24 | 0 | 24.4 |
+| ✅ | `offline-ui-gcp-container` | offline | ui | 21 | 0 | 21.1 |
+| ✅ | `offline-ui-gcp-create-defaults` | offline | ui | 36 | 0 | 66.2 |
+| ✅ | `offline-ui-gcp-grid-defaults` | offline | ui | 39 | 0 | 0.9 |
+| ✅ | `offline-ui-gcp-iamcredentials` | offline | ui | 21 | 0 | 20.2 |
+| ✅ | `offline-ui-gcp-monitoring` | offline | ui | 23 | 0 | 22.7 |
+| ✅ | `offline-ui-gcp-pubsub-grid` | offline | ui | 3 | 0 | 3.2 |
+| ✅ | `offline-ui-gcp-pubsub-subscriptions` | offline | ui | 3 | 0 | 0.8 |
+| ✅ | `offline-ui-gcp-redis` | offline | ui | 22 | 0 | 21.8 |
 
 <details><summary>❌ <code>offline-ui-gcp-artifactregistry</code> log</summary>
 
@@ -458,103 +465,514 @@ RESULT pass=8 fail=6
 
 </details>
 
-**UI findings: 0**
+**UI findings: 99**
 
-No open UI findings.
+<details><summary><b>Compute Engine</b> (offline) — 13 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Activity | fixed Activity text instead of this resource's events |
+| `PLACEHOLDER_PANE` | Permissions | fixed Permissions text instead of the IAM bindings |
+| `STATIC_TAB` | Labels | tab 'Labels' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Networking | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Disks | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Machine size | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Metadata | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Startup script | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Connect | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Scheduling | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Snapshots | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Metrics | tab 'Metrics' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Logs | placeholder pane ('This pane mirrors … view') |
+
+</details>
+
+<details><summary><b>Cloud SQL</b> (offline) — 12 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Activity | fixed Activity text instead of this resource's events |
+| `PLACEHOLDER_PANE` | Permissions | fixed Permissions text instead of the IAM bindings |
+| `STATIC_TAB` | Labels | tab 'Labels' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Databases | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Users | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Backups | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Replicas | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Connectivity | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Flags | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Logging | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Metrics | tab 'Metrics' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Query Insights | placeholder pane ('This pane mirrors … view') |
+
+</details>
+
+<details><summary><b>Firestore</b> (offline) — 9 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Activity | fixed Activity text instead of this resource's events |
+| `PLACEHOLDER_PANE` | Permissions | fixed Permissions text instead of the IAM bindings |
+| `STATIC_TAB` | Labels | tab 'Labels' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Data | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Query builder | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Indexes | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Security rules | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Import / Export | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Usage | tab 'Usage' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Compute Engine</b> (nano) — 8 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Permissions | tab 'Permissions' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Labels | tab 'Labels' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Networking | tab 'Networking' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Metadata | tab 'Metadata' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Startup script | tab 'Startup script' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Connect | tab 'Connect' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Scheduling | tab 'Scheduling' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Logs | tab 'Logs' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Pub/Sub</b> (offline) — 8 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Activity | fixed Activity text instead of this resource's events |
+| `PLACEHOLDER_PANE` | Permissions | fixed Permissions text instead of the IAM bindings |
+| `STATIC_TAB` | Labels | tab 'Labels' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Subscriptions | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Schema | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Messages | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Encryption | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Metrics | tab 'Metrics' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Firestore</b> (nano) — 7 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Permissions | tab 'Permissions' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Labels | tab 'Labels' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Data | tab 'Data' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Query builder | tab 'Query builder' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Indexes | tab 'Indexes' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Security rules | tab 'Security rules' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Import / Export | tab 'Import / Export' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Eventarc</b> (offline) — 7 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Activity | fixed Activity text instead of this resource's events |
+| `PLACEHOLDER_PANE` | Permissions | fixed Permissions text instead of the IAM bindings |
+| `STATIC_TAB` | Labels | tab 'Labels' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Event matching | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Destination | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Metrics | tab 'Metrics' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Logs | placeholder pane ('This pane mirrors … view') |
+
+</details>
+
+<details><summary><b>Cloud SQL</b> (nano) — 6 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Permissions | tab 'Permissions' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Labels | tab 'Labels' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Connectivity | tab 'Connectivity' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Flags | tab 'Flags' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Logging | tab 'Logging' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Query Insights | tab 'Query Insights' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Kubernetes Engine</b> (offline) — 4 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Details | tab 'Details' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Networking | tab 'Networking' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Observability | tab 'Observability' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Metrics | tab 'Metrics' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>IAM Service Account Credentials</b> (offline) — 4 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Credential | tab 'Credential' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Delegation | tab 'Delegation' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Signing | tab 'Signing' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Metrics | tab 'Metrics' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Kubernetes Engine</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Details | tab 'Details' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Networking | tab 'Networking' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Observability | tab 'Observability' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Memorystore for Redis</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Details | tab 'Details' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Connection | tab 'Connection' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Configuration | tab 'Configuration' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Pub/Sub</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Permissions | tab 'Permissions' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Messages | tab 'Messages' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Encryption | tab 'Encryption' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Eventarc</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Permissions | tab 'Permissions' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Labels | tab 'Labels' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Logs | tab 'Logs' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>IAM Service Account Credentials</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Credential | tab 'Credential' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Delegation | tab 'Delegation' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Signing | tab 'Signing' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Cloud Scheduler</b> (nano) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Last execution | tab 'Last execution' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Retry policy | tab 'Retry policy' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Memorystore for Redis</b> (offline) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Configuration | tab 'Configuration' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Metrics | tab 'Metrics' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Cloud Scheduler</b> (offline) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Last execution | tab 'Last execution' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Metrics | tab 'Metrics' shows no backend data and nothing about this resource |
+
+</details>
 
 <a id="azure"></a>
 ## Azure
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ✅ | `nano-ui-azure-app` | nano | ui | 29 | 0 | 20.4 |
-| ✅ | `nano-ui-azure-appconfiguration` | nano | ui | 28 | 0 | 22.1 |
-| ✅ | `nano-ui-azure-cognitiveservices` | nano | ui | 29 | 0 | 22.8 |
-| ✅ | `nano-ui-azure-dns` | nano | ui | 28 | 0 | 22.7 |
-| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 10.0 |
-| ✅ | `nano-ui-azure-dp-detail` | nano | ui | 12 | 0 | 25.9 |
-| ✅ | `nano-ui-azure-flat-create` | nano | ui | 8 | 0 | 17.2 |
-| ✅ | `nano-ui-azure-home` | nano | ui | 7 | 0 | 3.6 |
-| ✅ | `nano-ui-azure-keyvault-tabs` | nano | ui | 9 | 0 | 2.9 |
-| ✅ | `nano-ui-azure-metrics` | nano | ui | 12 | 0 | 11.7 |
-| ✅ | `nano-ui-azure-monitor` | nano | ui | 29 | 0 | 26.8 |
-| ✅ | `nano-ui-azure-nsg-roledef-create` | nano | ui | 7 | 0 | 10.0 |
-| ✅ | `nano-ui-azure-nsg-rules` | nano | ui | 8 | 0 | 9.5 |
-| ✅ | `nano-ui-azure-operationalinsights` | nano | ui | 33 | 0 | 26.6 |
-| ✅ | `nano-ui-azure-rail-last` | nano | ui | 3 | 0 | 2.9 |
-| ✅ | `nano-ui-azure-rg-nav` | nano | ui | 3 | 0 | 5.2 |
-| ✅ | `nano-ui-azure-savings` | nano | ui | 8 | 0 | 7.2 |
-| ✅ | `nano-ui-azure-storage-console` | nano | ui | 12 | 0 | 6.7 |
-| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 16.9 |
-| ✅ | `nano-ui-azure-tags-tab` | nano | ui | 36 | 0 | 46.2 |
-| ✅ | `nano-ui-reload-backend` | nano | ui | 3 | 0 | 7.4 |
+| ❌ | `offline-ui-azure-nsg-rules` | offline | ui | 6 | 2 | 12.0 |
+| ✅ | `nano-ui-azure-app` | nano | ui | 29 | 0 | 21.8 |
+| ✅ | `nano-ui-azure-appconfiguration` | nano | ui | 28 | 0 | 22.5 |
+| ✅ | `nano-ui-azure-cognitiveservices` | nano | ui | 29 | 0 | 24.1 |
+| ✅ | `nano-ui-azure-dns` | nano | ui | 28 | 0 | 23.9 |
+| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 9.8 |
+| ✅ | `nano-ui-azure-dp-detail` | nano | ui | 12 | 0 | 26.9 |
+| ✅ | `nano-ui-azure-flat-create` | nano | ui | 8 | 0 | 18.1 |
+| ✅ | `nano-ui-azure-home` | nano | ui | 7 | 0 | 3.8 |
+| ✅ | `nano-ui-azure-keyvault-tabs` | nano | ui | 9 | 0 | 3.8 |
+| ✅ | `nano-ui-azure-metrics` | nano | ui | 12 | 0 | 13.0 |
+| ✅ | `nano-ui-azure-monitor` | nano | ui | 29 | 0 | 28.3 |
+| ✅ | `nano-ui-azure-nsg-roledef-create` | nano | ui | 7 | 0 | 11.0 |
+| ✅ | `nano-ui-azure-nsg-rules` | nano | ui | 8 | 0 | 10.5 |
+| ✅ | `nano-ui-azure-operationalinsights` | nano | ui | 33 | 0 | 27.9 |
+| ✅ | `nano-ui-azure-rail-last` | nano | ui | 3 | 0 | 3.7 |
+| ✅ | `nano-ui-azure-rg-nav` | nano | ui | 3 | 0 | 5.1 |
+| ✅ | `nano-ui-azure-savings` | nano | ui | 8 | 0 | 8.3 |
+| ✅ | `nano-ui-azure-storage-console` | nano | ui | 12 | 0 | 9.0 |
+| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 17.9 |
+| ✅ | `nano-ui-azure-tags-tab` | nano | ui | 36 | 0 | 47.3 |
+| ✅ | `nano-ui-reload-backend` | nano | ui | 3 | 0 | 10.7 |
 | ✅ | `offline-api-azure-console-data-planes` | offline | api | 36 | 0 | 0.4 |
-| ✅ | `offline-api-azure-console-lens` | offline | api | 33 | 0 | 0.5 |
+| ✅ | `offline-api-azure-console-lens` | offline | api | 33 | 0 | 0.6 |
 | ✅ | `offline-api-azure-console-routes` | offline | api | 35 | 0 | 0.4 |
-| ✅ | `offline-cli-azure` | offline | cli | 6 | 0 | 6.1 |
-| ✅ | `offline-cli-azure-app` | offline | cli | 23 | 0 | 7.5 |
-| ✅ | `offline-cli-azure-appconfiguration` | offline | cli | 32 | 0 | 13.2 |
+| ✅ | `offline-cli-azure` | offline | cli | 6 | 0 | 9.7 |
+| ✅ | `offline-cli-azure-app` | offline | cli | 23 | 0 | 8.0 |
+| ✅ | `offline-cli-azure-appconfiguration` | offline | cli | 32 | 0 | 14.1 |
 | ✅ | `offline-cli-azure-cognitiveservices` | offline | cli | 20 | 0 | 6.4 |
-| ✅ | `offline-cli-azure-dns` | offline | cli | 24 | 0 | 6.9 |
-| ✅ | `offline-cli-azure-monitor` | offline | cli | 21 | 0 | 7.8 |
-| ✅ | `offline-cli-azure-operationalinsights` | offline | cli | 20 | 0 | 6.7 |
-| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 23.5 |
-| ✅ | `offline-sdk-go-azure-app` | offline | sdk-go | 29 | 0 | 3.8 |
-| ✅ | `offline-sdk-go-azure-appconfiguration` | offline | sdk-go | 34 | 0 | 2.8 |
-| ✅ | `offline-sdk-go-azure-cognitiveservices` | offline | sdk-go | 39 | 0 | 3.0 |
-| ✅ | `offline-sdk-go-azure-dns` | offline | sdk-go | 31 | 0 | 1.3 |
-| ✅ | `offline-sdk-go-azure-monitor` | offline | sdk-go | 30 | 0 | 3.6 |
-| ✅ | `offline-sdk-go-azure-operationalinsights` | offline | sdk-go | 33 | 0 | 24.2 |
-| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 28.1 |
+| ✅ | `offline-cli-azure-dns` | offline | cli | 24 | 0 | 7.0 |
+| ✅ | `offline-cli-azure-monitor` | offline | cli | 21 | 0 | 8.1 |
+| ✅ | `offline-cli-azure-operationalinsights` | offline | cli | 20 | 0 | 6.8 |
+| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 21.3 |
+| ✅ | `offline-sdk-go-azure-app` | offline | sdk-go | 29 | 0 | 3.4 |
+| ✅ | `offline-sdk-go-azure-appconfiguration` | offline | sdk-go | 34 | 0 | 2.0 |
+| ✅ | `offline-sdk-go-azure-cognitiveservices` | offline | sdk-go | 39 | 0 | 3.1 |
+| ✅ | `offline-sdk-go-azure-dns` | offline | sdk-go | 31 | 0 | 1.2 |
+| ✅ | `offline-sdk-go-azure-monitor` | offline | sdk-go | 30 | 0 | 3.5 |
+| ✅ | `offline-sdk-go-azure-operationalinsights` | offline | sdk-go | 33 | 0 | 21.2 |
+| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 31.9 |
 | ✅ | `offline-sdk-java-azure-app` | offline | sdk-java | 15 | 0 | 20.2 |
-| ✅ | `offline-sdk-java-azure-appconfiguration` | offline | sdk-java | 28 | 0 | 6.9 |
-| ✅ | `offline-sdk-java-azure-cognitiveservices` | offline | sdk-java | 28 | 0 | 5.2 |
-| ✅ | `offline-sdk-java-azure-dns` | offline | sdk-java | 20 | 0 | 20.3 |
-| ✅ | `offline-sdk-java-azure-monitor` | offline | sdk-java | 20 | 0 | 5.4 |
-| ✅ | `offline-sdk-java-azure-operationalinsights` | offline | sdk-java | 23 | 0 | 20.0 |
-| ✅ | `offline-sdk-python-azure-ops` | offline | sdk-python | 8 | 0 | 1.0 |
-| ✅ | `offline-ui-azure-app` | offline | ui | 29 | 0 | 19.9 |
-| ✅ | `offline-ui-azure-appconfiguration` | offline | ui | 31 | 0 | 23.0 |
-| ✅ | `offline-ui-azure-cognitiveservices` | offline | ui | 31 | 0 | 23.8 |
+| ✅ | `offline-sdk-java-azure-appconfiguration` | offline | sdk-java | 28 | 0 | 7.2 |
+| ✅ | `offline-sdk-java-azure-cognitiveservices` | offline | sdk-java | 28 | 0 | 5.3 |
+| ✅ | `offline-sdk-java-azure-dns` | offline | sdk-java | 20 | 0 | 20.5 |
+| ✅ | `offline-sdk-java-azure-monitor` | offline | sdk-java | 20 | 0 | 5.9 |
+| ✅ | `offline-sdk-java-azure-operationalinsights` | offline | sdk-java | 23 | 0 | 20.1 |
+| ✅ | `offline-sdk-python-azure-ops` | offline | sdk-python | 8 | 0 | 1.1 |
+| ✅ | `offline-ui-azure-app` | offline | ui | 29 | 0 | 19.7 |
+| ✅ | `offline-ui-azure-appconfiguration` | offline | ui | 31 | 0 | 23.1 |
+| ✅ | `offline-ui-azure-cognitiveservices` | offline | ui | 31 | 0 | 23.7 |
 | ✅ | `offline-ui-azure-dns` | offline | ui | 30 | 0 | 23.5 |
-| ✅ | `offline-ui-azure-flat-create` | offline | ui | 8 | 0 | 17.9 |
-| ✅ | `offline-ui-azure-metrics` | offline | ui | 12 | 0 | 9.9 |
-| ✅ | `offline-ui-azure-monitor` | offline | ui | 30 | 0 | 28.1 |
-| ✅ | `offline-ui-azure-nsg-roledef-create` | offline | ui | 7 | 0 | 10.9 |
-| ✅ | `offline-ui-azure-nsg-rules` | offline | ui | 8 | 0 | 10.4 |
+| ✅ | `offline-ui-azure-flat-create` | offline | ui | 8 | 0 | 17.3 |
+| ✅ | `offline-ui-azure-metrics` | offline | ui | 12 | 0 | 10.0 |
+| ✅ | `offline-ui-azure-monitor` | offline | ui | 30 | 0 | 28.3 |
+| ✅ | `offline-ui-azure-nsg-roledef-create` | offline | ui | 7 | 0 | 10.7 |
 | ✅ | `offline-ui-azure-operationalinsights` | offline | ui | 34 | 0 | 27.6 |
-| ✅ | `offline-ui-azure-rg-nav` | offline | ui | 3 | 0 | 4.9 |
-| ✅ | `offline-ui-azure-tags-tab` | offline | ui | 36 | 0 | 49.7 |
+| ✅ | `offline-ui-azure-rg-nav` | offline | ui | 3 | 0 | 4.7 |
+| ✅ | `offline-ui-azure-tags-tab` | offline | ui | 36 | 0 | 54.5 |
 
-**UI findings: 0**
+<details><summary>❌ <code>offline-ui-azure-nsg-rules</code> log</summary>
 
-No open UI findings.
+```
+[PASS] NSG created through ARM
+[PASS] NSG blade has a Security rules tab
+[PASS] new NSG shows no custom rules yet
+[FAIL] rule added in the blade is listed with priority and port :: Security rules
+Security rules allow or deny network traffic to this network security group. Rules are evaluated by priority (lowest number first). Real ARM PUT 
+[FAIL] rule is still listed after re-opening the tab
+[PASS] rule is readable over ARM with its values
+[PASS] deleting the rule removes it
+[PASS] no page errors
+```
+
+</details>
+
+**UI findings: 76**
+
+<details><summary><b>Function apps</b> (offline) — 12 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Diagnose and solve problems | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Functions | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | App keys | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Environment variables | tab 'Environment variables' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Authentication | tab 'Authentication' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Identity | tab 'Identity' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Networking | tab 'Networking' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | TLS/SSL settings | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Scale up (App Service plan) | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Locks | fabricated value marked 'simulated' |
+| `STATIC_TAB` | Deployment Center | tab 'Deployment Center' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Log stream | placeholder pane ('This pane mirrors … view') |
+
+</details>
+
+<details><summary><b>Function apps</b> (nano) — 11 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Diagnose and solve problems | fabricated value marked 'simulated' |
+| `STATIC_TAB` | App keys | tab 'App keys' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Environment variables | tab 'Environment variables' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Authentication | tab 'Authentication' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Identity | tab 'Identity' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Networking | tab 'Networking' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | TLS/SSL settings | tab 'TLS/SSL settings' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Scale up (App Service plan) | tab 'Scale up (App Service plan)' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Locks | fabricated value marked 'simulated' |
+| `STATIC_TAB` | Deployment Center | tab 'Deployment Center' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Log stream | tab 'Log stream' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Virtual Machines</b> (offline) — 10 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Diagnose and solve problems | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Networking | fabricated value marked 'simulated' |
+| `STATIC_TAB` | Connect | tab 'Connect' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Identity | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Locks | fabricated value marked 'simulated' |
+| `STATIC_TAB` | Auto-shutdown | tab 'Auto-shutdown' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Backup | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Extensions + applications | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Run command | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Alerts | placeholder pane ('This pane mirrors … view') |
+
+</details>
+
+<details><summary><b>Virtual Machines</b> (nano) — 9 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Diagnose and solve problems | fabricated value marked 'simulated' |
+| `PLACEHOLDER_PANE` | Networking | fabricated value marked 'simulated' |
+| `STATIC_TAB` | Connect | tab 'Connect' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Identity | fabricated value marked 'simulated' |
+| `PLACEHOLDER_PANE` | Locks | fabricated value marked 'simulated' |
+| `STATIC_TAB` | Backup | tab 'Backup' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Extensions + applications | tab 'Extensions + applications' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Run command | tab 'Run command' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Alerts | tab 'Alerts' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Container Apps</b> (nano) — 6 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Diagnose and solve problems | fabricated value marked 'simulated' |
+| `STATIC_TAB` | Containers | tab 'Containers' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Scale | tab 'Scale' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Secrets | tab 'Secrets' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Identity | tab 'Identity' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Locks | fabricated value marked 'simulated' |
+
+</details>
+
+<details><summary><b>Container Apps</b> (offline) — 6 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Diagnose and solve problems | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Containers | tab 'Containers' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Scale | tab 'Scale' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Secrets | tab 'Secrets' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Identity | tab 'Identity' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Locks | fabricated value marked 'simulated' |
+
+</details>
+
+<details><summary><b>Service Bus</b> (nano) — 5 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Diagnose and solve problems | fabricated value marked 'simulated' |
+| `STATIC_TAB` | Geo-recovery | tab 'Geo-recovery' shows no backend data and nothing about this resource |
+| `STATIC_TAB` | Networking | tab 'Networking' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Identity | fabricated value marked 'simulated' |
+| `PLACEHOLDER_PANE` | Locks | fabricated value marked 'simulated' |
+
+</details>
+
+<details><summary><b>Service Bus</b> (offline) — 5 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Diagnose and solve problems | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Geo-recovery | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Networking | tab 'Networking' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Identity | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Locks | fabricated value marked 'simulated' |
+
+</details>
+
+<details><summary><b>DNS zones</b> (nano) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Diagnose and solve problems | fabricated value marked 'simulated' |
+| `STATIC_TAB` | Name servers | tab 'Name servers' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Locks | fabricated value marked 'simulated' |
+
+</details>
+
+<details><summary><b>DNS zones</b> (offline) — 3 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Diagnose and solve problems | placeholder pane ('This pane mirrors … view') |
+| `STATIC_TAB` | Name servers | tab 'Name servers' shows no backend data and nothing about this resource |
+| `PLACEHOLDER_PANE` | Locks | fabricated value marked 'simulated' |
+
+</details>
+
+<details><summary><b>Log Analytics</b> (nano) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Diagnose and solve problems | fabricated value marked 'simulated' |
+| `PLACEHOLDER_PANE` | Locks | fabricated value marked 'simulated' |
+
+</details>
+
+<details><summary><b>Log Analytics</b> (offline) — 2 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Diagnose and solve problems | placeholder pane ('This pane mirrors … view') |
+| `PLACEHOLDER_PANE` | Locks | fabricated value marked 'simulated' |
+
+</details>
+
+<details><summary><b>Entra ID / RBAC</b> (nano) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `STATIC_TAB` | Conditions | tab 'Conditions' shows no backend data and nothing about this resource |
+
+</details>
+
+<details><summary><b>Entra ID / RBAC</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_PANE` | Conditions | placeholder pane ('This pane mirrors … view') |
+
+</details>
 
 <a id="all"></a>
 ## Cross-cloud
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-crawl` | nano | ui | 60 | 3 | 1204.0 |
-| ❌ | `offline-console-actions` | offline | api | 367 | 2 | 15.3 |
-| ❌ | `offline-ui-crawl` | offline | ui | 55 | 3 | 1132.3 |
-| ✅ | `nano-cores` | nano | core | 344 | 0 | 4.4 |
-| ✅ | `nano-ui-budget-savings` | nano | ui | 5 | 0 | 5.4 |
-| ✅ | `offline-cost-savings` | offline | api | 11 | 0 | 24.2 |
-| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 24.2 |
+| ❌ | `nano-ui-crawl` | nano | ui | 41 | 22 | 1162.6 |
+| ❌ | `offline-console-actions` | offline | api | 367 | 2 | 12.0 |
+| ❌ | `offline-ui-crawl` | offline | ui | 34 | 24 | 1118.6 |
+| ✅ | `nano-cores` | nano | core | 344 | 0 | 4.9 |
+| ✅ | `nano-ui-budget-savings` | nano | ui | 5 | 0 | 4.4 |
+| ✅ | `offline-cost-savings` | offline | api | 11 | 0 | 25.9 |
+| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 24.8 |
 
 <details><summary>❌ <code>offline-ui-crawl</code> log</summary>
 
 ```
-[offline/aws] 20 services crawled, 3 with findings
-UI crawl offline: 17/20 services clean → tests/conformance/hourly/out/ui-offline-aws.json
-Console surfaces offline: {"static":92,"live":140,"partial":4,"unimplemented":1}
-[offline/azure] 20 services crawled, 0 with findings
-UI crawl offline: 20/20 services clean → tests/conformance/hourly/out/ui-offline-azure.json
-Console surfaces offline: {"live":183,"static":50}
-[offline/gcp] 18 services crawled, 0 with findings
-UI crawl offline: 18/18 services clean → tests/conformance/hourly/out/ui-offline-gcp.json
-Console surfaces offline: {"live":111,"static":105}
+[offline/aws] 20 services crawled, 8 with findings
+UI crawl offline: 12/20 services clean → tests/conformance/hourly/out/ui-offline-aws.json
+Console surfaces offline: {"static":76,"live":146,"partial":4,"unimplemented":26}
+[offline/azure] 20 services crawled, 7 with findings
+UI crawl offline: 13/20 services clean → tests/conformance/hourly/out/ui-offline-azure.json
+Console surfaces offline: {"live":194,"unimplemented":26,"static":44}
+[offline/gcp] 18 services crawled, 9 with findings
+UI crawl offline: 9/18 services clean → tests/conformance/hourly/out/ui-offline-gcp.json
+Console surfaces offline: {"live":111,"unimplemented":39,"static":76}
 ```
 
 </details>
@@ -591,7 +1009,7 @@ E   Failed: network error: ('Connection aborted.', RemoteDisconnected('Remote en
 FAILED tests/conformance/console_actions/test_aws_console.py::test_aws_action[aws.cloudwatch.create] - AssertionError: AWS cloudwatch.create POST /api/aws/cloudwatch/alarms → HTTP 500 (expected one of (200, 201, 202, 204)). Body: Internal Server Error
 assert False
 FAILED tests/conformance/console_actions/test_aws_console.py::test_aws_action[aws.cloudwatch.list] - Failed: network error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
-2 failed, 367 passed, 12 skipped in 14.99s
+2 failed, 367 passed, 12 skipped in 11.69s
 ```
 
 </details>
@@ -599,123 +1017,22 @@ FAILED tests/conformance/console_actions/test_aws_console.py::test_aws_action[aw
 <details><summary>❌ <code>nano-ui-crawl</code> log</summary>
 
 ```
-[nano/aws] 20 services crawled, 3 with findings
-UI crawl nano: 17/20 services clean → tests/conformance/hourly/out/ui-nano-aws.json
-Console surfaces nano: {"live":187,"static":45,"partial":5}
-[nano/azure] 25 services crawled, 0 with findings
-UI crawl nano: 25/25 services clean → tests/conformance/hourly/out/ui-nano-azure.json
-Console surfaces nano: {"live":198,"static":50}
-[nano/gcp] 18 services crawled, 0 with findings
-UI crawl nano: 18/18 services clean → tests/conformance/hourly/out/ui-nano-gcp.json
-Console surfaces nano: {"live":129,"static":87}
+[nano/aws] 20 services crawled, 6 with findings
+UI crawl nano: 14/20 services clean → tests/conformance/hourly/out/ui-nano-aws.json
+Console surfaces nano: {"live":201,"static":46,"partial":5}
+[nano/azure] 25 services crawled, 7 with findings
+UI crawl nano: 18/25 services clean → tests/conformance/hourly/out/ui-nano-azure.json
+Console surfaces nano: {"live":211,"static":53,"unimplemented":15}
+[nano/gcp] 18 services crawled, 9 with findings
+UI crawl nano: 9/18 services clean → tests/conformance/hourly/out/ui-nano-gcp.json
+Console surfaces nano: {"live":152,"static":74}
 ```
 
 </details>
 
 ## New features since the last run
 
-| Target | Cloud | Service | Kind | Feature | SDK test |
-|---|---|---|---|---|---|
-| offline | AWS | Amazon SNS | service | Amazon SNS | — |
-| offline | AWS | Amazon SNS | tab | Overview | — |
-| offline | AWS | Amazon SNS | tab | Activity | — |
-| offline | AWS | Amazon SNS | tab | Tags | — |
-| offline | AWS | Amazon SNS | tab | Subscriptions | — |
-| offline | AWS | Amazon SNS | tab | Publish message | — |
-| offline | AWS | Amazon SNS | tab | Access policy | — |
-| offline | AWS | Amazon SNS | tab | Properties | — |
-| offline | AWS | Amazon SNS | create_field | Topic name | — |
-| offline | AWS | Amazon SNS | create_field | Type | — |
-| offline | AWS | Amazon SNS | create_field | Display name | — |
-| offline | AWS | Amazon SNS | column | Name | — |
-| offline | AWS | Amazon SNS | column | Type | — |
-| offline | AWS | Amazon SNS | column | ARN | — |
-| offline | AWS | Amazon SNS | column | Subscriptions confirmed | — |
-| offline | AWS | Amazon SNS | column | Subscriptions pending | — |
-| offline | AWS | Amazon SNS | column | Display name | — |
-| offline | AWS | Amazon SNS | column | Encryption | — |
-| offline | AWS | Amazon SNS | column | Created | — |
-| offline | AWS | Amazon SNS | action | topics | — |
-| offline | AWS | Amazon SNS | action | subscriptions | — |
-| offline | AWS | Amazon SNS | action | platform-applications | — |
-| offline | AWS | Amazon SNS | action | deliveries | — |
-| offline | AWS | Amazon SNS | action | sms-sandbox | — |
-| offline | AWS | Amazon SNS | action | publish | — |
-| offline | AWS | Amazon SNS | action | subscribe | — |
-| offline | AWS | Amazon SNS | action | delete | — |
-| offline | AWS | API Gateway V2 | service | API Gateway V2 | — |
-| offline | AWS | API Gateway V2 | tab | Overview | — |
-| offline | AWS | API Gateway V2 | tab | Activity | — |
-| offline | AWS | API Gateway V2 | tab | Tags | — |
-| offline | AWS | API Gateway V2 | tab | Routes | — |
-| offline | AWS | API Gateway V2 | tab | Integrations | — |
-| offline | AWS | API Gateway V2 | tab | Authorization | — |
-| offline | AWS | API Gateway V2 | tab | Stages | — |
-| offline | AWS | API Gateway V2 | tab | Deployments | — |
-| offline | AWS | API Gateway V2 | tab | Properties | — |
-| offline | AWS | API Gateway V2 | tab | Monitoring | — |
-| offline | AWS | API Gateway V2 | create_field | API name | — |
-| offline | AWS | API Gateway V2 | create_field | Protocol (HTTP or WEBSOCKET) | — |
-| offline | AWS | API Gateway V2 | create_field | Quick-create target (URL or Lambda ARN) | — |
-| offline | AWS | API Gateway V2 | create_field | Description | — |
-| offline | AWS | API Gateway V2 | column | API ID | — |
-| offline | AWS | API Gateway V2 | column | Name | — |
-| offline | AWS | API Gateway V2 | column | Protocol | — |
-| offline | AWS | API Gateway V2 | column | Invoke URL | — |
-| offline | AWS | API Gateway V2 | column | Routes | — |
-| offline | AWS | API Gateway V2 | column | Created | — |
-| offline | AWS | API Gateway V2 | action | routes | — |
-| offline | AWS | API Gateway V2 | action | integrations | — |
-| offline | AWS | API Gateway V2 | action | stages | — |
-| offline | AWS | API Gateway V2 | action | deployments | — |
-| offline | AWS | API Gateway V2 | action | authorizers | — |
-| offline | AWS | API Gateway V2 | action | models | — |
-| offline | AWS | API Gateway V2 | action | delete | — |
-| offline | AWS | Secrets Manager | column | Created | — |
-| offline | AWS | CloudWatch | service | CloudWatch | — |
-| offline | AWS | CloudWatch | tab | Overview | — |
-| offline | AWS | CloudWatch | tab | Activity | — |
-| offline | AWS | CloudWatch | tab | Tags | — |
-| offline | AWS | CloudWatch | tab | Details | — |
-| offline | AWS | CloudWatch | tab | History | — |
-| offline | AWS | CloudWatch | tab | Actions | — |
-| offline | AWS | CloudWatch | tab | Properties | — |
-| offline | AWS | CloudWatch | tab | Permissions | — |
-| offline | AWS | CloudWatch | create_field | Alarm name | — |
-| offline | AWS | CloudWatch | create_field | Namespace | — |
-| offline | AWS | CloudWatch | create_field | Metric name | — |
-| offline | AWS | CloudWatch | create_field | Dimensions (Name=Value, ...) | — |
-| offline | AWS | CloudWatch | create_field | Statistic | — |
-| offline | AWS | CloudWatch | create_field | Period (seconds) | — |
-| offline | AWS | CloudWatch | create_field | Threshold | — |
-| offline | AWS | CloudWatch | create_field | Comparison operator | — |
-| offline | AWS | CloudWatch | create_field | Evaluation periods | — |
-| offline | AWS | CloudWatch | create_field | Alarm action (SNS topic ARN) | — |
-| offline | AWS | CloudWatch | column | Alarm name | — |
-| offline | AWS | CloudWatch | column | State | — |
-| offline | AWS | CloudWatch | column | Metric | — |
-| offline | AWS | CloudWatch | column | Conditions | — |
-| offline | AWS | CloudWatch | column | Period | — |
-| offline | AWS | CloudWatch | column | Actions | — |
-| offline | AWS | CloudWatch | column | Last state update | — |
-| offline | AWS | CloudWatch | action | alarms | — |
-| offline | AWS | CloudWatch | action | delete | — |
-| offline | AWS | Kinesis | service | Kinesis | — |
-| offline | AWS | Kinesis | tab | Overview | — |
-| offline | AWS | Kinesis | tab | Activity | — |
-| offline | AWS | Kinesis | tab | Tags | — |
-| offline | AWS | Kinesis | tab | Configuration | — |
-| offline | AWS | Kinesis | tab | Shards and consumers | — |
-| offline | AWS | Kinesis | create_field | Data stream name | — |
-| offline | AWS | Kinesis | create_field | Capacity mode | — |
-| offline | AWS | Kinesis | create_field | Provisioned shards | — |
-| offline | AWS | Kinesis | create_field | Data retention (hours) | — |
-| offline | AWS | Kinesis | column | Name | — |
-| offline | AWS | Kinesis | column | Status | — |
-| offline | AWS | Kinesis | column | Capacity mode | — |
-| offline | AWS | Kinesis | column | Open shards | — |
-| offline | AWS | Kinesis | column | Data retention | — |
-| offline | AWS | Kinesis | column | Encryption | — |
+None.
 
 ## Upstream changes (AWS / GCP / Azure backlog)
 
@@ -723,8 +1040,12 @@ Console surfaces nano: {"live":129,"static":87}
 
 | Issue | Cloud | Kind | Change | Opened |
 |---|---|---|---|---|
-| #235 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed | 2026-10-29 |
+| #239 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed | 2026-10-29 |
+| #240 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed | 2026-10-29 |
+| #237 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed | 2026-10-29 |
+| #238 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed | 2026-10-29 |
 | #234 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed | 2026-10-29 |
+| #235 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed | 2026-10-29 |
 | #233 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed | 2026-10-29 |
 | #232 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed | 2026-10-29 |
 | #231 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed | 2026-10-29 |
@@ -744,7 +1065,6 @@ Console surfaces nano: {"live":129,"static":87}
 | #185 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed | 2026-10-29 |
 | #183 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed | 2026-10-29 |
 | #180 | Cross-cloud |  | [shared] Conformance crawl must catch: fake charts, page errors under real tiers, cross-cloud layout drift | 2026-10-29 |
-| #179 | Azure |  | [azure] Console Metrics/Monitoring: real charts for every service from measured requests | 2026-10-29 |
 | #178 | GCP |  | [gcp] Console Metrics tabs: real charts for every service (replace seeded fake sparklines) | 2026-10-29 |
 | #171 | AWS |  | [aws] EventBridge: deliver to every target type through NATS (today only SQS targets) | 2026-10-28 |
 | #169 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed | 2026-10-28 |
@@ -755,9 +1075,6 @@ Console surfaces nano: {"live":129,"static":87}
 | #166 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed | 2026-10-28 |
 | #163 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed | 2026-10-28 |
 | #164 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed | 2026-10-28 |
-| #160 | GCP | lifecycle | Google Kubernetes Engine: Change (October 27, 2026) | 2026-10-28 |
-| #159 | GCP | lifecycle | Google Kubernetes Engine: No channel (deprecated) (October 27, 2026) | 2026-10-28 |
-| #158 | GCP | lifecycle | Google Kubernetes Engine: Regular channel (October 27, 2026) | 2026-10-28 |
 | #156 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed | 2026-10-27 |
 | #157 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed | 2026-10-27 |
 | #155 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed | 2026-10-27 |
@@ -883,6 +1200,7 @@ CreateChannel, CreateDescriptor, CreateUptime, DeleteChannel, DeleteDescriptor, 
 
 | Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |
 |---|---|---|---|---|---|---|
+| 2026-10-29T19:55:18+00:00 | 207/216 | 4653 | 111 | 224 | 42.6% |  |
 | 2026-10-29T17:38:33+00:00 | 203/215 | 4682 | 78 | 6 | 42.6% |  |
 | 2026-10-29T15:43:50+00:00 | 180/182 | 3721 | 6 | 8 | 42.1% |  |
 | 2026-10-29T14:08:26+00:00 | 179/181 | 3708 | 5 | 7 | 42.1% |  |
@@ -906,6 +1224,5 @@ CreateChannel, CreateDescriptor, CreateUptime, DeleteChannel, DeleteDescriptor, 
 |  | 0/0 | 0 | 0 | 78 | 14.3% |  |
 |  | 0/0 | 0 | 0 | 86 | 14.3% |  |
 |  | 0/0 | 0 | 0 | 106 | 14.3% |  |
-|  | 0/0 | 0 | 0 | 97 | 14.3% |  |
 
 Raw data in this branch: `results.json`, `ui-findings.json`, `history.json`.
