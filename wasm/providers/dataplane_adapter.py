@@ -99,11 +99,26 @@ def lambda_invoke(p):
 
 
 # ── API Gateway ─────────────────────────────────────────────────────────────
+def _api_row(a):
+    """Console row: the same snake_case fields the appliance's /api/apigateway/apis returns."""
+    stages = list(a["deployments"].keys())
+    return {"id": a["id"], "rest_api_id": a["id"], "name": a["name"], "description": a.get("description", ""),
+            "endpoint_type": "REGIONAL", "created": a.get("created", ""), "status": "available",
+            "routes": len(a["resources"]) - 1, "resource_count": len(a["resources"]),
+            "stage_count": len(stages), "stages": stages, "latest_stage": stages[-1] if stages else "",
+            "invoke_url": f"/api/apigateway/invoke/{a['id']}"}
+
+
 def apigw_list(p=None):
     apis = getattr(_COMPUTE, "_apigateway_apis", {})
-    return {"ok": True, "apis": [{"id": a["id"], "name": a["name"],
-                                  "routes": len(a["resources"]) - 1,
-                                  "stages": list(a["deployments"].keys())} for a in apis.values()]}
+    return {"ok": True, "apis": [_api_row(a) for a in apis.values()]}
+
+
+def apigw_get(p):
+    apis = getattr(_COMPUTE, "_apigateway_apis", {})
+    key = str(p.get("name") or p.get("id") or "")
+    a = apis.get(key) or next((x for x in apis.values() if x["name"] == key), None)
+    return {"ok": True, **_api_row(a)} if a else {"ok": False, "code": "NotFoundException"}
 
 
 def apigw_create(p):
@@ -126,12 +141,14 @@ def apigw_create(p):
                              {}, {}, json.dumps(integ).encode())
     apigateway_core.dispatch(_COMPUTE, "POST", f"/restapis/{api_id}/deployments",
                              {}, {}, json.dumps({"stageName": p.get("stage", "prod")}).encode())
-    return {"ok": True, "id": api_id, "name": name,
+    return {"ok": True, **_api_row(_COMPUTE._apigateway_apis[api_id]), "id": api_id, "name": name,
             "endpoint": f"/{p.get('stage','prod')}/{path_part}", "method": method}
 
 
 def apigw_delete(p):
-    getattr(_COMPUTE, "_apigateway_apis", {}).pop(str(p.get("name") or p.get("id") or ""), None)
+    apis = getattr(_COMPUTE, "_apigateway_apis", {})
+    key = str(p.get("name") or p.get("id") or "")
+    apis.pop(key if key in apis else next((i for i, a in apis.items() if a["name"] == key), key), None)
     return {"ok": True}
 
 

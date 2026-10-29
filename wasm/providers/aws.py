@@ -90,6 +90,7 @@ class Aws(CloudProvider):
             # API Gateway — APIs + MOCK/Lambda-proxy + invoke, via core/apigateway_core.py
             ("apigateway", "ListApis"):   lambda b, a, p: D.apigw_list(p),
             ("apigateway", "CreateApi"):  lambda b, a, p: D.apigw_create(p),
+            ("apigateway", "GetApi"):     lambda b, a, p: D.apigw_get(p),
             ("apigateway", "DeleteApi"):  lambda b, a, p: D.apigw_delete(p),
             ("apigateway", "Invoke"):     lambda b, a, p: D.apigw_invoke(p),
             # Systems Manager Parameter Store, via core/ssm_core.py (shared registry store)

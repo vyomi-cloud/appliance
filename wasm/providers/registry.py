@@ -126,6 +126,8 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
     if operation == "List":
         return {"ok": True, "items": r.list(provider, account, svc)}
     if operation == "Create":
+        if provider == "aws" and svc == "ec2":
+            body = _ec2_launch_defaults(body)
         return {"ok": True, **r.create(provider, account, svc, body)}
     if operation == "Get":
         rec = r.get(provider, account, svc, name)
@@ -156,6 +158,30 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
         ok = r.delete(provider, account, svc, name)
         return {"ok": ok, "code": None if ok else "NotFound", "name": name}
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation}
+
+
+def _ec2_launch_defaults(body: dict) -> dict:
+    """What RunInstances returns for a fresh instance: id, running state, addresses,
+    placement, launch time — so the grid never shows an unfilled cell."""
+    import datetime
+    import hashlib
+    rec = dict(body)
+    seed = hashlib.sha256(repr(sorted((k, str(v)) for k, v in body.items())).encode() + str(datetime.datetime.now().timestamp()).encode()).hexdigest()
+    octet = int(seed[:4], 16)
+    rec.setdefault("instance_id", "i-" + seed[:17])
+    rec.setdefault("state", "running")
+    rec.setdefault("instance_type", "t3.micro")
+    rec.setdefault("private_ip", f"172.31.{(octet >> 8) % 250 + 1}.{octet % 250 + 4}")
+    rec.setdefault("public_ip", f"54.{(octet >> 8) % 200 + 20}.{octet % 250 + 1}.{(octet >> 4) % 250 + 2}")
+    rec.setdefault("private_dns", "ip-" + rec["private_ip"].replace(".", "-") + ".ec2.internal")
+    rec.setdefault("public_dns", "ec2-" + rec["public_ip"].replace(".", "-") + ".compute-1.amazonaws.com")
+    rec.setdefault("availability_zone", "us-east-1a")
+    rec.setdefault("vpc_id", "vpc-" + seed[17:25])
+    rec.setdefault("subnet_id", "subnet-" + seed[25:33])
+    rec.setdefault("key_name", "")
+    rec.setdefault("architecture", "x86_64")
+    rec.setdefault("launch_time", datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"))
+    return rec
 
 
 def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
@@ -258,6 +284,13 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
             try:   # Step Functions lives in the shared registry store (console + relay wire)
                 from core import nano_registry
                 aws_counts["stepfunctions"] = len(nano_registry.get()["sfn"].machines)
+            except Exception:
+                pass
+            try:   # Lambda + API Gateway + VPC live in the shared registry's compute store
+                from . import dataplane_adapter as DP
+                aws_counts["lambda"] = len(DP.lambda_list().get("functions", []))
+                aws_counts["apigateway"] = len(DP.apigw_list().get("apis", []))
+                aws_counts["vpc"] = len(DP.vpc_list().get("vpcs", []))
             except Exception:
                 pass
             for svc, n in aws_counts.items():
