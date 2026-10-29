@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-29 01:59 UTC · refreshes after every pipeline run_
+_Updated 2026-10-29 02:02 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -185,6 +185,90 @@ _Updated 2026-10-29 01:59 UTC · refreshes after every pipeline run_
 | servicefabric | P2 | not filed | in-process |
 | signalr | P2 | not filed | in-process |
 | synapse | P2 | not filed | duckdb · in-process |
+
+</details>
+
+## Real backends and vyomi-libs
+
+Every service must run on a real backend, so a created resource really works. Shared engines become `vyomi-<lib>` packages, one per capability across all three clouds.
+
+| Lib | Cloud services | Real backends it drives | Nano | Phase |
+|---|---|---|---|---|
+| **vyomi-iam** | Shared IAM enforcement (#172-#175), AWS STS, GCP IAM Credentials, Azure managed-identity tokens | in-process | yes | 3 |
+| **vyomi-identity** | Cognito user + identity pools, GCP Identity Platform, Entra External ID / B2C | in-process | yes | 3 |
+| **vyomi-workflow** | Step Functions, GCP Workflows, Logic Apps | temporal, workflow-engine | yes | 1 |
+| **vyomi-iac** | CloudFormation + Cloud Control, ARM/Bicep, Deployment Manager, Infrastructure Manager | iac-engine, opentofu | in-process part | 5 |
+| **vyomi-logs** | CloudWatch Logs, Cloud Logging, Log Analytics, Application Insights | fluent-bit, logstore, victorialogs | yes | 2 |
+| **vyomi-metrics** | CloudWatch metrics + alarms, Cloud Monitoring, Azure Monitor, managed Prometheus | victoriametrics, vmalert | subset | 5 |
+| **vyomi-messaging** | Service Bus, SNS, EventBridge, Cloud Tasks, Kinesis, Event Hubs, Cloud Scheduler, Amazon MQ; later SQS and Pub/Sub | amqp, kafka, messaging-core, nats, rabbitmq | subset | 2 |
+| **vyomi-gateway** | API Gateway v1/v2, ELB/ALB, GCP API Gateway, API Management, Front Door | caddy | control plane | 4 |
+| **vyomi-containers** | Cloud Run, Container Apps, App Runner, ECS | docker, knative | control plane | 5 |
+| **vyomi-kubernetes** | GKE, AKS, EKS | k3s | control plane | 5 |
+| **vyomi-mail** | SES (v1 receipt rules + v2), alert email | mailpit | control plane | 4 |
+| **vyomi-dns** | Route 53, Cloud DNS, Azure DNS | coredns | control plane | 4 |
+| **vyomi-cache** | ElastiCache, Memorystore, Azure Cache for Redis | valkey | control plane | 4 |
+| **vyomi-registry** | ECR, Artifact Registry, ACR | registry | control plane | 4 |
+| **vyomi-ai** | Bedrock, Vertex AI, Azure AI services | ollama | control plane | 5 |
+
+<details><summary><b>Shared backends</b> — what each one is and what it serves</summary>
+
+| Backend | Kind | Tier | Idle RAM | Lib | Serves |
+|---|---|---|---|---|---|
+| valkey | container | Lite | 8 MB | vyomi-cache | aws:elasticache, azure:redis, gcp:redis/v1 |
+| registry | container | Lite | 10 MB | vyomi-registry | aws:ecr, azure:containerregistry, gcp:artifactregistry/v1 |
+| coredns | container | Lite | 15 MB | vyomi-dns | aws:route53, azure:dns, azure:privatedns, gcp:dns/v1 |
+| mailpit | container | Lite | 15 MB | vyomi-mail | aws:ses, aws:sesv2 |
+| messaging-core | in-process | All | 0 MB | vyomi-messaging | azure:Microsoft.ServiceBus, azure:servicebus |
+| nats | container | Lite | 10 MB | vyomi-messaging | aws:events, aws:firehose, aws:kinesis, aws:sns, azure:Microsoft.ServiceBus, azure:eventhub, azure:servicebus, gcp:cloudtasks/v2 |
+| caddy | gateway | Lite | 15 MB | vyomi-gateway | aws:apigateway, aws:apigatewaymanagementapi, aws:apigatewayv2, aws:apprunner, aws:ecs, aws:elbv2, azure:Microsoft.ApiManagement, azure:apimanagement, azure:app, azure:cdn, azure:frontdoor, gcp:apigateway/v1, gcp:run/v2 |
+| workflow-engine | in-process | All | 0 MB | vyomi-workflow | aws:stepfunctions, azure:logic, gcp:workflows/v1 |
+| iac-engine | in-process | All | 0 MB | vyomi-iac | aws:cloudcontrol, aws:cloudformation, azure:resources, gcp:deploymentmanager/v2 |
+| logstore | in-process | All | 0 MB | vyomi-logs | aws:logs, azure:applicationinsights, azure:operationalinsights, gcp:logging/v2 |
+| duckdb | in-process | All | — MB | — | aws:athena, aws:glue, azure:synapse, gcp:bigquery/v2 |
+| docker | substrate | Pro | — MB | vyomi-containers | aws:apprunner, aws:batch, aws:codebuild, aws:ecs, azure:app, azure:batch, gcp:batch/v1, gcp:cloudbuild/v1, gcp:run/v2 |
+| k3s | container | Max | 500 MB | vyomi-kubernetes | aws:eks, azure:containerservice, gcp:container/v1 |
+| postgres | container | Lite | 40 MB | — | azure:postgresql |
+| mariadb | container | Pro | 90 MB | — | azure:mysql |
+| kafka | container | Max | 400 MB | vyomi-messaging | aws:kafka |
+| opensearch | container | Max | 700 MB | — | aws:opensearch |
+| rabbitmq | container | Pro | 100 MB | vyomi-messaging | aws:mq |
+| spanner-emulator | container | Pro | 150 MB | — | gcp:spanner/v1 |
+| ollama | container | Max | 50 MB | vyomi-ai | aws:bedrock-runtime, azure:cognitiveservices, gcp:aiplatform/v1 |
+| fluent-bit | agent | Lite | 5 MB | vyomi-logs | aws:logs, azure:applicationinsights, azure:operationalinsights, gcp:logging/v2 |
+| victorialogs | optional | Max | 30 MB | vyomi-logs | aws:logs, azure:applicationinsights, azure:operationalinsights, gcp:logging/v2 |
+| victoriametrics | container | Lite | 40 MB | vyomi-metrics | aws:amp, aws:cloudwatch, azure:monitor, gcp:monitoring/v3 |
+| vmalert | agent | Lite | 10 MB | vyomi-metrics | aws:amp, aws:cloudwatch, azure:monitor, gcp:monitoring/v3 |
+| knative | optional | Max | 400 MB | vyomi-containers | azure:app, gcp:run/v2 |
+| temporal | engine | Pro | 150 MB | vyomi-workflow | aws:stepfunctions, azure:logic, gcp:workflows/v1 |
+| opentofu | container | Lite | 0 MB | vyomi-iac | gcp:config/v1 |
+| amqp | protocol | All | 0 MB | vyomi-messaging | aws:mq, azure:Microsoft.ServiceBus, azure:eventhub, azure:servicebus |
+
+</details>
+
+<details><summary><b>vyomi-messaging layers</b> — one core, a protocol adapter per wire format</summary>
+
+| Layer | Serves |
+|---|---|
+| Protocol adapter: AMQP 1.0 (Rohith's stack #34-#45) | Azure Service Bus, Event Hubs; Amazon MQ for ActiveMQ |
+| Protocol adapter: HTTP Query / JSON | SQS, SNS, Kinesis, EventBridge |
+| Protocol adapter: HTTP / gRPC | GCP Pub/Sub, Cloud Tasks |
+| Protocol adapter: Kafka (later) | Event Hubs Kafka endpoint, Amazon MSK |
+| Shared core: queues, topics, subscriptions, leases/locks, redelivery, DLQ, ordering, dedup | all of the above |
+| Durable delivery: NATS JetStream | all of the above |
+
+AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ (ActiveMQ) speak it; AWS SQS/SNS/Kinesis and GCP Pub/Sub SDKs use HTTP or gRPC. Amazon MQ for RabbitMQ (AMQP 0-9-1) keeps real RabbitMQ.
+
+</details>
+
+<details><summary><b>vyomi-libs design</b> — shape, Nano wheels, contract, release, migration</summary>
+
+- **Shape:** one Python package per lib, three ways to run it: a **core wheel** (`vyomi-<lib>`, pure `py3-none-any`, no server deps; what Nano loads), a **service image** `vyomi/<lib>:<version>` (core + ASGI server + controller for the open-source backend it drives; multi-arch, pinned), and **embedded mode** (the appliance imports the wheel in-process, for the Free/Lite RAM budgets).
+- **Nano gets wheels, not images:** pinned wheels are vendored into the Nano bundle (`wasm/wheels/` → portal `app/nano/wheels/`, same-origin, service-worker cached) and installed with `micropip`, sha256-checked against `libs.lock.json`; never fetched from PyPI at runtime. Each lib's CI also runs its contract tests in Pyodide.
+- **Contract v1:** the `dispatch(store, method, path, query, headers, body)` shape today's engines use; context headers from the appliance (`X-Vyomi-Space`, `-Principal`, `-Request-Id`, `-Tier`); each lib owns its storage (with export/import); cross-service calls go back through the front door so IAM applies; one event schema on NATS; `/healthz` `/readyz` `/metrics` `/version`; contract tests every lib must pass.
+- **Release:** libs start in this repo under `libs/<lib>/` with their own CODEOWNERS, CI, changelog and tag (`vyomi-logs/v1.4.0` publishes the image, wheel and sdist). The appliance pins versions in `libs.lock.json`; a lib bump is a one-line PR that runs full conformance. A lib can move to its own repo later with no change to the appliance.
+- **Runtime:** libs start on demand (`core/backend_provisioner.py`) when a service is first used; the dashboard lists each cloud service with its lib, version and live state, and each lib/backend with its health.
+- **Migration:** phase 0 framework (contract, scaffold, release workflow, lock file, Pyodide harness, Nano wheel loader); 1 vyomi-workflow (the Step Functions engine moves unchanged); 2 vyomi-logs + vyomi-messaging (Rohith's Service Bus stack #34-#45 first, gated on Siftly A1-A9 and every SQS suite); 3 vyomi-iam + vyomi-identity; 4 gateway, dns, cache, mail, registry; 5 metrics, iac, containers, kubernetes, ai. The in-process engine stays as the fallback until its lib passes the same tests.
+- **Open decisions:** embedded mode on Free/Lite; tiers for heavy backends (k3s, Temporal, Ollama, VictoriaLogs); Azure AI services backend; monorepo first then split; image names; publishing wheels on public PyPI.
 
 </details>
 
