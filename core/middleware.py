@@ -409,7 +409,62 @@ async def azure_blob_dispatch_middleware(request, call_next):
     return await call_next(request)
 
 
+_METER_TIMER = None
+
+
+def _storage_write_provider(request, path: str) -> str:
+    """Provider whose object-storage data plane this request writes to ('' if none)."""
+    if request.method not in ("PUT", "POST"):
+        return ""
+    if path.startswith("/upload/storage/v1/"):
+        return "gcp"
+    if path.startswith("/azure-data/blob"):
+        return "azure"
+    if "/s3/aws4_request" in (request.headers.get("authorization") or ""):
+        return "aws"
+    return ""
+
+
+def _meter_storage_write(request, response, orig_path: str) -> None:
+    """Meter bytes stored + a write request so savings include real storage billing."""
+    try:
+        if response.status_code >= 300:
+            return
+        provider = _storage_write_provider(request, request.scope.get("path", "") or orig_path)
+        if not provider:
+            return
+        try:
+            nbytes = int(request.headers.get("x-amz-decoded-content-length")
+                         or request.headers.get("content-length") or 0)
+        except ValueError:
+            nbytes = 0
+        from core import usage_meter
+        from core.app_context import STATE
+        space_id = (STATE.get("spaces") or {}).get("active_space_id", "")
+        usage_meter.record(space_id, provider, nbytes)
+        global _METER_TIMER
+        import threading
+        if _METER_TIMER is None or not _METER_TIMER.is_alive():
+            def _refresh():
+                try:
+                    from server import _cloudsim_refresh_bridge
+                    _cloudsim_refresh_bridge("usage.storage_write", {})
+                except Exception:
+                    pass
+            _METER_TIMER = threading.Timer(1.0, _refresh)
+            _METER_TIMER.daemon = True
+            _METER_TIMER.start()
+    except Exception:
+        pass
+
+
 async def provider_api_alias_middleware(request, call_next):
+    response = await _provider_api_alias(request, call_next)
+    _meter_storage_write(request, response, request.scope.get("path", ""))
+    return response
+
+
+async def _provider_api_alias(request, call_next):
     path = request.scope.get("path", "")
     _gcp_capture_public_base(request)
     if _is_azure_native_path(path):

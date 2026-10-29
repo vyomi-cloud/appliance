@@ -2731,7 +2731,8 @@ def _cloudsim_refresh_bridge(reason: str, detail: dict | None = None) -> None:
         nodes, counts, runtime_instances = _cloudsim_collect_resources(source_space)
         try:
             from core import cost_model as _cm
-            _savings = _cm.estimate_space_savings(nodes)
+            from core import usage_meter as _um
+            _savings = _cm.estimate_space_savings(nodes, usage=_um.snapshot(active_id))
         except Exception:
             _savings = {"real_cloud_cost_usd": 0.0, "simulator_cost_usd": 0.0, "savings_usd": 0.0, "savings_pct": 0.0, "by_provider": {}, "by_service": {}, "resource_count": 0}
         if detail is None:

@@ -211,7 +211,8 @@ def estimate_resource_cost(provider: str, service: str, kind: str,
 
 
 def estimate_space_savings(nodes: list[dict],
-                           uptime_hours: float = HOURS_PER_MONTH) -> dict:
+                           uptime_hours: float = HOURS_PER_MONTH,
+                           usage: dict | None = None) -> dict:
     """Given resource nodes from _cloudsim_collect_resources, compute total
     real-cloud cost and savings (simulator cost = $0).
 
@@ -251,10 +252,21 @@ def estimate_space_savings(nodes: list[dict],
             "hourly_rate_usd": cost["hourly_usd"],
         })
 
+    # Usage-based billing: bytes stored + write requests metered per provider.
+    if usage:
+        from core.usage_meter import usage_cost
+        for provider, u in usage.items():
+            usd = usage_cost(provider, u)
+            total += usd
+            by_provider[provider] = by_provider.get(provider, 0.0) + usd
+            by_service[f"{provider}.usage"] = by_service.get(f"{provider}.usage", 0.0) + usd
+    by_provider = {k: round(v, 4) for k, v in by_provider.items()}
+    by_service = {k: round(v, 4) for k, v in by_service.items()}
+
     return {
-        "real_cloud_cost_usd": round(total, 2),
+        "real_cloud_cost_usd": round(total, 4),
         "simulator_cost_usd": 0.0,
-        "savings_usd": round(total, 2),
+        "savings_usd": round(total, 4),
         "savings_pct": 100.0 if total > 0 else 0.0,
         "uptime_hours": uptime_hours,
         "resource_count": len(nodes),
