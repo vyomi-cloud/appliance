@@ -27,7 +27,8 @@ const { startServer, bootConsole, chromium, sleep, RAIL_SEL } = await import("..
 
 const OUT = process.env.OUT || resolve(HERE, `out/ui-${TARGET}.json`);
 const MAX_SERVICES = +(process.env.MAX_SERVICES || 80);
-const MAX_TABS = +(process.env.MAX_TABS || 10);
+// Every tab: a cap silently skipped the later ones (Compute Engine has 19).
+const MAX_TABS = +(process.env.MAX_TABS || 60);
 const CREATE = (process.env.CREATE ?? "1") !== "0";
 // Walking every detail tab of every service takes ~40 min per console, so the
 // hourly run walks tabs for 1/TAB_SHARDS of the services (rotating by UTC
@@ -66,6 +67,17 @@ const BAD_TEXT = [
   [/coming soon/i, "says coming soon"],
   [/traceback \(most recent call last\)/i, "shows a Python traceback"],
 ];
+// Placeholder panes and fixed sentences the consoles render instead of data (all
+// three clouds, offline + Nano). Each is a PLACEHOLDER_PANE finding: the tab has
+// to show this resource's real data from the backend.
+const PLACEHOLDER_TEXT = [
+  [/this pane mirrors/i, "placeholder pane ('This pane mirrors … view')"],
+  [/wiring lands in|rendering is the next step/i, "placeholder pane ('Wiring lands in …')"],
+  [/not yet wired|placeholder for (portal )?parity/i, "placeholder pane ('Not yet wired')"],
+  [/activity log derived from \/api\//i, "fixed Activity text instead of this resource's events"],
+  [/permissions inherited from project-level iam bindings\.?$/im, "fixed Permissions text instead of the IAM bindings"],
+  [/\(simulated\)|healthy by construction|none set on simulated resources/i, "fabricated value marked 'simulated'"],
+];
 
 // Snapshot of the main panel, used to detect empty panels and dead tabs.
 const snap = (page) => page.evaluate(() => {
@@ -83,7 +95,7 @@ const snap = (page) => page.evaluate(() => {
 //   live           loaded data from the API, or shows this resource's own data
 //   static         rendered without any API call and nothing specific to the
 //                  resource (hard-coded or permanently empty)
-const UNIMPL = new Set(["HTTP_501", "HTTP_404", "HTTP_5XX", "PAGE_ERROR", "BAD_TEXT", "EMPTY_PANEL", "DEAD_TAB",
+const UNIMPL = new Set(["HTTP_501", "HTTP_404", "HTTP_5XX", "PAGE_ERROR", "BAD_TEXT", "PLACEHOLDER_PANE", "EMPTY_PANEL", "DEAD_TAB",
   "CRAWL_ERROR", "CREATE_FAILED", "CREATE_NO_SUBMIT", "CREATE_NO_ROW", "CREATE_REJECTED"]);
 function classify(findings, calls, text, tokens) {
   const api404 = (f) => f.type !== "HTTP_404" || !/\.(m?js|css|png|svg|ico|woff2?)(\s|$|\?)/.test(f.detail || "");
@@ -94,7 +106,8 @@ function classify(findings, calls, text, tokens) {
 }
 
 function textFindings(text) {
-  return BAD_TEXT.filter(([re]) => re.test(text)).map(([, why]) => ({ type: "BAD_TEXT", detail: why }));
+  return [...BAD_TEXT.filter(([re]) => re.test(text)).map(([, why]) => ({ type: "BAD_TEXT", detail: why })),
+          ...PLACEHOLDER_TEXT.filter(([re]) => re.test(text)).slice(0, 1).map(([, why]) => ({ type: "PLACEHOLDER_PANE", detail: why }))];
 }
 
 // Grid cells that render a placeholder instead of real data ("-", "—", "–",
@@ -377,7 +390,16 @@ async function crawlConsole(browser, base, con, needsSW) {
       if (seen.has(svc.label) || seen.size >= MAX_SERVICES || (ONLY && !ONLY.test(svc.label))) continue;
       seen.add(svc.label);
       const row = { target: TARGET, cloud: con.cloud, service: svc.label, tabs: [], findings: [], surfaces: [] };
-      const surface = (kind, name, f, n, text, tokens) => row.surfaces.push({ kind, name, state: classify(f, n, text, tokens), calls: n });
+      // A tab / resource detail classified "static" (no API call, nothing about this
+      // resource) is a finding, not just a label: it reaches the fixers. An editable,
+      // empty collection (a Labels/Tags editor with an Add control) is real UI.
+      const surface = (kind, name, f, n, text, tokens, editable) => {
+        const state = classify(f, n, text, tokens);
+        row.surfaces.push({ kind, name, state, calls: n });
+        if (state === "static" && (kind === "tab" || kind === "detail") && !editable)
+          row.findings.push({ type: kind === "tab" ? "STATIC_TAB" : "STATIC_DETAIL", tab: kind === "tab" ? name : undefined,
+                              detail: `${kind === "tab" ? "tab '" + name + "'" : "resource detail"} shows no backend data and nothing about this resource` });
+      };
       let tokens = [];
       try {
         await dismissPopups(page);
@@ -462,7 +484,9 @@ async function crawlConsole(browser, base, con, needsSW) {
           // A Tags tab holding the editable tag grid renders this resource's own tags (the
           // grid's inputs aren't part of innerText); validated by azure-tags-tab (save + reload).
           const tagEditor = /^tags$/i.test(label) && (await page.locator(".tags-grid input").count().catch(() => 0)) >= 2 ? 1 : 0;
-          surface("tab", label, tf, calls() + tagEditor, added, tokens);
+          const editable = /^(labels|tags)$/i.test(label) &&
+            (await page.locator("#main button, #blade button").filter({ hasText: /add|edit/i }).count().catch(() => 0)) > 0;
+          surface("tab", label, tf, calls() + tagEditor, added, tokens, editable);
           if (process.env.DEBUG_CRAWL && row.surfaces.at(-1).state === "static") console.log(`[debug] ${svc.label}/${label} static: ${JSON.stringify(added.slice(0, 160))}`);
         }
       } catch (e) {
