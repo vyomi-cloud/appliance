@@ -155,6 +155,12 @@
     {"id": "offline-sdk-go-azure-operationalinsights", "target": "offline", "cloud": "azure", "kind": "sdk-go", "cwd": "tests/conformance/azure-sdk-go-operationalinsights", "cmd": "ENDPOINT={ENDPOINT} GOFLAGS=-mod=mod go run .", "timeout": 600},
     {"id": "offline-cli-azure-operationalinsights", "target": "offline", "cloud": "azure", "kind": "cli", "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/azure-operationalinsights-cli-smoke.sh", "timeout": 300},
     {"id": "offline-ui-azure-operationalinsights", "target": "offline", "cloud": "azure", "kind": "ui", "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-operationalinsights.mjs", "timeout": 600},
-    {"id": "nano-ui-azure-operationalinsights", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-operationalinsights.mjs", "timeout": 600}
+    {"id": "nano-ui-azure-operationalinsights", "target": "nano", "cloud": "azure", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-operationalinsights.mjs", "timeout": 600},
+    {"id": "offline-api-issue-report-core", "target": "offline", "cloud": "all", "kind": "core", "cmd": "python3 tests/conformance/test_issue_report_core.py", "timeout": 120},
+    {"id": "offline-api-issue-report-middleware", "target": "offline", "cloud": "all", "kind": "api", "cmd": "python3 tests/conformance/test_issue_report_middleware.py", "timeout": 180},
+    {"id": "nano-issue-reporter-js", "target": "nano", "cloud": "all", "kind": "core", "cmd": "node tests/conformance/test_issue_reporter_js.mjs", "timeout": 120},
+    {"id": "nano-sw-issue-reporting", "target": "nano", "cloud": "all", "kind": "core", "cmd": "node tests/conformance/test_nano_sw_issue_reporting.mjs", "timeout": 120},
+    {"id": "offline-ui-issue-reporting", "target": "offline", "cloud": "all", "kind": "ui", "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/aws node wasm/ui-tests/validate-issue-reporting.mjs", "timeout": 300},
+    {"id": "nano-ui-issue-reporting", "target": "nano", "cloud": "all", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-issue-reporting.mjs", "timeout": 600}
   ]
 }

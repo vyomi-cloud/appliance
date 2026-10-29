@@ -192,12 +192,12 @@ register_azure_routes(app, None)
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2
-from routes import lazy_backends, shared, console_next, aws_logs
+from routes import lazy_backends, shared, console_next, aws_logs, issue_reporting
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2,
-            lazy_backends, shared, console_next, aws_logs]:
+            lazy_backends, shared, console_next, aws_logs, issue_reporting]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -219,6 +219,12 @@ app.add_middleware(HeaderAliasMiddleware)
 # an in-memory buffer the Inspector streams over SSE. Zero persistence.
 from core.glassbox import GlassBoxCaptureMiddleware
 app.add_middleware(GlassBoxCaptureMiddleware)
+
+# ── Automatic issue reporting (platform feature) ──────────────────────
+# Observe-only: a 5xx / unhandled exception is scrubbed and reported to the portal
+# (user's GitHub account if they consented, Vyomi bot otherwise). Outermost.
+from core.issue_report_runtime import IssueReportMiddleware
+app.add_middleware(IssueReportMiddleware)
 
 # ── Azure state injection ────────────────────────────────────────────
 init_azure_state()
