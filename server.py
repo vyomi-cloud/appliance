@@ -12763,6 +12763,153 @@ def _ec2_query_get_capacity_manager_supportability_scores(params: dict[str, Any]
     return _ec2_success_response("GetCapacityManagerSupportabilityScoresResponse", build)
 
 
+_EC2_CAPACITY_RESERVATION_FLEETS: dict[str, dict[str, Any]] = {}
+
+
+def _ec2_capacity_fleet_xml(parent: ET.Element, fleet: dict[str, Any]) -> None:
+    _ec2_sub(parent, "capacityReservationFleetId", fleet["id"])
+    _ec2_sub(parent, "capacityReservationFleetArn", fleet["arn"])
+    _ec2_sub(parent, "state", fleet["state"])
+    _ec2_sub(parent, "totalTargetCapacity", str(fleet["target"]))
+    _ec2_sub(parent, "totalFulfilledCapacity", str(fleet["fulfilled"]))
+    _ec2_sub(parent, "tenancy", fleet["tenancy"])
+    if fleet["end_date"]:
+        _ec2_sub(parent, "endDate", fleet["end_date"])
+    _ec2_sub(parent, "createTime", fleet["create_time"])
+    _ec2_sub(parent, "instanceMatchCriteria", fleet["match"])
+    _ec2_sub(parent, "allocationStrategy", fleet["strategy"])
+    tags = _ec2_sub(parent, "tagSet")
+    for tag in fleet["tags"]:
+        item = _ec2_sub(tags, "item")
+        _ec2_sub(item, "key", tag["key"])
+        _ec2_sub(item, "value", tag["value"])
+    reservations = _ec2_sub(parent, "instanceTypeSpecificationSet")
+    for spec in fleet["specs"]:
+        item = _ec2_sub(reservations, "item")
+        _ec2_sub(item, "instanceType", spec["instance_type"])
+        _ec2_sub(item, "instancePlatform", spec["platform"])
+        _ec2_sub(item, "availabilityZone", spec["az"])
+        _ec2_sub(item, "availabilityZoneId", spec["az_id"])
+
+
+def _ec2_query_create_capacity_reservation_fleet(params: dict[str, Any]) -> Response:
+    target = str(params.get("TotalTargetCapacity", "")).strip()
+    if not target:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter TotalTargetCapacity", 400)
+    if not target.isdigit() or int(target) < 1:
+        return _ec2_error_response("InvalidParameterValue", "Value for parameter TotalTargetCapacity must be a positive integer", 400)
+    has_requirements = any(k.startswith("InstanceRequirements.") for k in params)
+    spec_idx = sorted({m.group(1) for k in params if (m := re.match(r"^InstanceTypeSpecification\.(\d+)\.", k))}, key=int)
+    if not spec_idx and not has_requirements:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter InstanceTypeSpecification", 400)
+    region = str(params.get("Region", "") or "us-east-1")
+    fleet_az = str(params.get("AvailabilityZone", "")).strip()
+    fleet_az_id = str(params.get("AvailabilityZoneId", "")).strip()
+    specs = []
+    for i in spec_idx:
+        pre = f"InstanceTypeSpecification.{i}."
+        specs.append({
+            "instance_type": str(params.get(pre + "InstanceType", "")).strip() or "m5.large",
+            "platform": str(params.get(pre + "InstancePlatform", "")).strip() or "Linux/UNIX",
+            "az": str(params.get(pre + "AvailabilityZone", "")).strip() or fleet_az or f"{region}a",
+            "az_id": str(params.get(pre + "AvailabilityZoneId", "")).strip() or fleet_az_id or "use1-az1",
+        })
+    if not specs:
+        specs.append({"instance_type": "m5.large", "platform": "Linux/UNIX", "az": fleet_az or f"{region}a", "az_id": fleet_az_id or "use1-az1"})
+    fleet_id = f"crf-{secrets.token_hex(8)}"
+    end_date = str(params.get("EndDate", "")).strip()
+    fleet = {
+        "id": fleet_id,
+        "arn": f"arn:aws:ec2:{region}:123456789012:capacity-reservation-fleet/{fleet_id}",
+        "state": "active",
+        "target": int(target),
+        "fulfilled": int(target),
+        "tenancy": str(params.get("Tenancy", "")).strip() or "default",
+        "end_date": end_date,
+        "create_time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "match": str(params.get("InstanceMatchCriteria", "")).strip() or "open",
+        "strategy": str(params.get("AllocationStrategy", "")).strip() or "prioritized",
+        "tags": _vpc_parse_tag_specifications(params, "capacity-reservation-fleet"),
+        "specs": specs,
+    }
+    if str(params.get("DryRun", "")).lower() == "true":
+        return _ec2_error_response("DryRunOperation", "Request would have succeeded, but DryRun flag is set.", 412)
+    _EC2_CAPACITY_RESERVATION_FLEETS[fleet_id] = fleet
+
+    def build(root: ET.Element) -> None:
+        _ec2_sub(root, "capacityReservationFleetId", fleet_id)
+        _ec2_sub(root, "state", "submitted")
+        _ec2_sub(root, "totalTargetCapacity", str(fleet["target"]))
+        _ec2_sub(root, "totalFulfilledCapacity", "0")
+        _ec2_sub(root, "instanceMatchCriteria", fleet["match"])
+        _ec2_sub(root, "allocationStrategy", fleet["strategy"])
+        _ec2_sub(root, "createTime", fleet["create_time"])
+        if end_date:
+            _ec2_sub(root, "endDate", end_date)
+        _ec2_sub(root, "tenancy", fleet["tenancy"])
+        reservations = _ec2_sub(root, "fleetCapacityReservationSet")
+        per = max(1, fleet["target"] // len(specs))
+        for spec in specs:
+            item = _ec2_sub(reservations, "item")
+            _ec2_sub(item, "capacityReservationId", f"cr-{secrets.token_hex(8)}")
+            _ec2_sub(item, "availabilityZoneId", spec["az_id"])
+            _ec2_sub(item, "instanceType", spec["instance_type"])
+            _ec2_sub(item, "instancePlatform", spec["platform"])
+            _ec2_sub(item, "availabilityZone", spec["az"])
+            _ec2_sub(item, "totalInstanceCount", str(per))
+            _ec2_sub(item, "fulfilledCapacity", "0")
+            _ec2_sub(item, "ebsOptimized", "false")
+            _ec2_sub(item, "createTime", fleet["create_time"])
+        tags = _ec2_sub(root, "tagSet")
+        for tag in fleet["tags"]:
+            item = _ec2_sub(tags, "item")
+            _ec2_sub(item, "key", tag["key"])
+            _ec2_sub(item, "value", tag["value"])
+
+    return _ec2_success_response("CreateCapacityReservationFleetResponse", build)
+
+
+def _ec2_query_describe_capacity_reservation_fleets(params: dict[str, Any]) -> Response:
+    ids = [str(v) for k, v in sorted(params.items()) if k.startswith("CapacityReservationFleetId.")]
+    for fid in ids:
+        if fid not in _EC2_CAPACITY_RESERVATION_FLEETS:
+            return _ec2_error_response("InvalidCapacityReservationFleetId.NotFound", f"The capacity reservation fleet '{fid}' does not exist", 400)
+    fleets = [_EC2_CAPACITY_RESERVATION_FLEETS[i] for i in ids] if ids else list(_EC2_CAPACITY_RESERVATION_FLEETS.values())
+
+    def build(root: ET.Element) -> None:
+        fleet_set = _ec2_sub(root, "capacityReservationFleetSet")
+        for fleet in fleets:
+            _ec2_capacity_fleet_xml(_ec2_sub(fleet_set, "item"), fleet)
+
+    return _ec2_success_response("DescribeCapacityReservationFleetsResponse", build)
+
+
+def _ec2_query_cancel_capacity_reservation_fleets(params: dict[str, Any]) -> Response:
+    ids = [str(v) for k, v in sorted(params.items()) if k.startswith("CapacityReservationFleetId.")]
+    if not ids:
+        return _ec2_error_response("MissingParameter", "The request must contain the parameter CapacityReservationFleetId", 400)
+
+    def build(root: ET.Element) -> None:
+        ok = _ec2_sub(root, "successfulFleetCancellationSet")
+        bad = _ec2_sub(root, "failedFleetCancellationSet")
+        for fid in ids:
+            fleet = _EC2_CAPACITY_RESERVATION_FLEETS.get(fid)
+            if fleet is None:
+                item = _ec2_sub(bad, "item")
+                _ec2_sub(item, "capacityReservationFleetId", fid)
+                err = _ec2_sub(item, "cancelCapacityReservationFleetError")
+                _ec2_sub(err, "code", "capacity-reservation-fleet-not-found")
+                _ec2_sub(err, "message", f"The capacity reservation fleet '{fid}' does not exist")
+                continue
+            item = _ec2_sub(ok, "item")
+            _ec2_sub(item, "capacityReservationFleetId", fid)
+            _ec2_sub(item, "previousFleetState", fleet["state"])
+            _ec2_sub(item, "currentFleetState", "cancelled")
+            fleet["state"] = "cancelled"
+
+    return _ec2_success_response("CancelCapacityReservationFleetsResponse", build)
+
+
 def _ec2_query_describe_instance_status(params: dict[str, Any]) -> Response:
     instances = _ec2_query_filter_instances(params)
 
@@ -13720,6 +13867,12 @@ async def api_ec2_query(request: Request):
             return _ec2_query_describe_images(params)
         if action == "GetImageFindings":
             return _ec2_query_get_image_findings(params)
+        if action == "CreateCapacityReservationFleet":
+            return _ec2_query_create_capacity_reservation_fleet(params)
+        if action == "DescribeCapacityReservationFleets":
+            return _ec2_query_describe_capacity_reservation_fleets(params)
+        if action == "CancelCapacityReservationFleets":
+            return _ec2_query_cancel_capacity_reservation_fleets(params)
         if action == "GetCapacityManagerSupportabilityScores":
             return _ec2_query_get_capacity_manager_supportability_scores(params)
         if action == "DescribeInstanceStatus":
