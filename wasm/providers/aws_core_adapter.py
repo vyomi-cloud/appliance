@@ -337,9 +337,16 @@ def kms_list_aliases(p=None):
 
 
 # ── Secrets Manager (JSON wire — core/secrets_core.py) ──────────────────────
+def _iso_secs(ts) -> str:
+    import datetime as _dt
+    if not ts:
+        return ""
+    return _dt.datetime.fromtimestamp(float(ts), _dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _secret_row(meta: dict) -> dict:
     return {"name": meta.get("Name", ""), "arn": meta.get("ARN", ""),
-            "secret_type": "SecretString", "last_rotated": "", "next_rotation": "",
+            "secret_type": "SecretString", "created": _iso_secs(meta.get("CreatedDate")),
             "kms_key_id": "alias/aws/secretsmanager"}
 
 
